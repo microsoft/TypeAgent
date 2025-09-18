@@ -540,6 +540,11 @@ class EntityGraphView {
             console.timeEnd('[Perf] Fetch global data');
             console.log(`[Perf] Data stats: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`);
 
+            // Populate the global cache for intelligent graph extraction
+            if (globalData.statistics.totalEntities > 0) {
+                this.entityGraphService.populateGlobalCache(globalData);
+            }
+
             if (globalData.statistics.totalEntities === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
@@ -571,9 +576,7 @@ class EntityGraphView {
             const status = await (extensionService as any).sendMessage({ type: "getKnowledgeGraphStatus" });
             console.timeEnd('[Perf] Get status');
 
-            console.time('[Perf] Get relationships');
             const relationships = await (extensionService as any).sendMessage({ type: "getAllRelationships" });
-            console.timeEnd('[Perf] Get relationships');
             console.log(`[Perf] Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`);
 
             console.time('[Perf] Get communities');
@@ -955,7 +958,7 @@ class EntityGraphView {
                     centerEntity: graphData.centerEntity,
                     entities: allEntities,
                     relationships: validatedRelationships,
-                });
+                }, graphData.centerEntity);
                 console.timeEnd('[Perf] Entity graph visualization');
 
                 // Find the center entity from allEntities (should be first)

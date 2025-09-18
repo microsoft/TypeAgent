@@ -1294,6 +1294,16 @@ export interface EntityGraphServices {
     searchByEntity(entityName: string, options?: any): Promise<any>;
     getEntityGraph(centerEntity: string, depth: number): Promise<any>;
     refreshEntityData(entityName: string): Promise<any>;
+    populateGlobalCache(globalData: {
+        entities: any[];
+        relationships: any[];
+        communities: any[];
+        statistics: {
+            totalEntities: number;
+            totalRelationships: number;
+            totalCommunities: number;
+        };
+    }): void;
 }
 
 
@@ -1475,13 +1485,10 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
 
     async getEntityGraph(centerEntity: string, depth: number): Promise<any> {
         try {
-            console.time('[Perf] getEntityGraph total');
             console.log(`Getting graph for ${centerEntity} (depth: ${depth})`);
 
             // Cache-first approach - analyze what data we have available
-            console.time('[Perf] cache analysis');
             const cacheStrategy = this.analyzeCacheAvailability(centerEntity, depth);
-            console.timeEnd('[Perf] cache analysis');
 
             // Use intelligent extraction strategy based on cache availability
             const options = {
@@ -1490,42 +1497,34 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
                 maxNodes: depth > 1 ? 500 : 200
             };
 
-            console.time('[Perf] intelligent extraction');
             const result = await this.intelligentExtractor.getEntityNeighborhood(
                 centerEntity,
                 depth,
                 options
             );
-            console.timeEnd('[Perf] intelligent extraction');
 
             if (!this.extensionService) {
                 console.warn(
                     "ChromeExtensionService not available, using cached result",
                 );
-                console.timeEnd('[Perf] getEntityGraph total');
                 return result || { centerEntity, entities: [], relationships: [] };
             }
 
             // If intelligent extraction didn't find neighborhood data (only center entity), fall back to search
             if (!result || result.entities.length <= 1 && result.relationships.length === 0) {
-                console.time('[Perf] performEntitySearchWithFallback');
                 const primarySearch = await this.performEntitySearchWithFallback(
                     centerEntity,
                     { maxResults: 15 },
                 );
-                console.timeEnd('[Perf] performEntitySearchWithFallback');
 
                 // Convert search results to the expected format and cache them
                 const searchResult = await this.convertSearchToGraphFormat(primarySearch, centerEntity, depth);
-                console.timeEnd('[Perf] getEntityGraph total');
                 return searchResult;
             }
 
-            console.timeEnd('[Perf] getEntityGraph total');
             return result;
         } catch (error) {
             console.error("Entity graph retrieval failed:", error);
-            console.timeEnd('[Perf] getEntityGraph total');
             return {
                 centerEntity,
                 entities: [],
@@ -1666,6 +1665,84 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
     }
 
     /**
+     * Populate the global graph cache with loaded data
+     */
+    populateGlobalCache(globalData: {
+        entities: any[];
+        relationships: any[];
+        communities: any[];
+        statistics: {
+            totalEntities: number;
+            totalRelationships: number;
+            totalCommunities: number;
+        };
+    }): void {
+        console.time('[Perf] populate global cache');
+
+        // Convert arrays to Maps for efficient lookup
+        const entityMap = new Map<string, EntityNode>();
+        const relationshipMap = new Map<string, RelationshipEdge>();
+        const communityMap = new Map<string, Community>();
+
+        // Process entities
+        globalData.entities.forEach((entity: any, index: number) => {
+            const entityNode: EntityNode = {
+                id: entity.id || entity.name || `entity_${index}`,
+                name: entity.name || entity.id || `Entity ${index}`,
+                type: entity.type || 'entity',
+                confidence: entity.confidence || entity.metrics?.pagerank || 0.5,
+                properties: {
+                    ...entity,
+                    metrics: entity.metrics,
+                    community: entity.community
+                }
+            };
+            entityMap.set(entityNode.name.toLowerCase(), entityNode);
+        });
+
+        // Process relationships
+        globalData.relationships.forEach((rel: any, index: number) => {
+            const relationshipEdge: RelationshipEdge = {
+                id: rel.id || `rel_${index}`,
+                from: rel.from || rel.source,
+                to: rel.to || rel.target,
+                type: rel.type || 'connected',
+                strength: rel.strength || rel.weight || 0.5,
+                properties: {
+                    ...rel,
+                    weight: rel.weight,
+                    confidence: rel.confidence
+                }
+            };
+            relationshipMap.set(relationshipEdge.id, relationshipEdge);
+        });
+
+        // Process communities (use existing interface)
+        globalData.communities.forEach((community: any) => {
+            communityMap.set(community.id, community);
+        });
+
+        // Create global graph data
+        const globalGraphData: GlobalGraphData = {
+            entities: entityMap,
+            relationships: relationshipMap,
+            communities: communityMap,
+            metadata: {
+                totalNodes: globalData.statistics.totalEntities,
+                lastUpdated: Date.now(),
+                source: 'full'
+            }
+        };
+
+        // Update cache manager
+        this.cacheManager.globalGraph = globalGraphData;
+        this.cacheManager.cacheTimestamps.set('global', Date.now());
+
+        console.timeEnd('[Perf] populate global cache');
+        console.log(`✅ Global cache populated: ${entityMap.size} entities, ${relationshipMap.size} relationships, ${communityMap.size} communities`);
+    }
+
+    /**
      * Smart entity search with fallback strategy
      */
     private async performEntitySearchWithFallback(
@@ -1679,13 +1756,11 @@ export class DefaultEntityGraphServices implements EntityGraphServices {
         const maxResults = options?.maxResults || 10;
 
         try {
-            console.time('[Perf] searchByEntities');
             const entityResults = await this.extensionService.searchByEntities(
                 [entityName],
                 "",
                 maxResults,
             );
-            console.timeEnd('[Perf] searchByEntities');
 
             if (entityResults && entityResults.websites && entityResults.websites.length > 0) {
                 console.log(
@@ -1914,7 +1989,6 @@ class IntelligentGraphExtractor {
                 console.timeEnd('[Perf] extract from global');
                 // Only consider successful if we have more than just the center entity or relationships
                 if (result.entities.length > 1 || result.relationships.length > 0) {
-                    console.timeEnd('[Perf] neighborhood extraction');
                     return result;
                 }
             }
@@ -1927,7 +2001,6 @@ class IntelligentGraphExtractor {
                 console.timeEnd('[Perf] merge neighbor caches');
                 // Only consider successful if we have more than just the center entity or relationships
                 if (result.entities.length > 1 || result.relationships.length > 0) {
-                    console.timeEnd('[Perf] neighborhood extraction');
                     return result;
                 }
             }
@@ -1939,7 +2012,6 @@ class IntelligentGraphExtractor {
                 console.timeEnd('[Perf] partial graph build');
                 // Only consider successful if we have more than just the center entity or relationships
                 if (result.entities.length > 1 || result.relationships.length > 0) {
-                    console.timeEnd('[Perf] neighborhood extraction');
                     return result;
                 }
             }
@@ -1999,13 +2071,19 @@ class IntelligentGraphExtractor {
 
                 // Find relationships from this entity
                 globalGraph.relationships.forEach((rel, relId) => {
-                    if (rel.from.toLowerCase() === entity || rel.to.toLowerCase() === entity) {
+                    // Safety check for undefined values
+                    if (!rel.from || !rel.to) return;
+
+                    const fromLower = rel.from.toLowerCase();
+                    const toLower = rel.to.toLowerCase();
+
+                    if (fromLower === entity || toLower === entity) {
                         relationships.push(rel);
 
                         // Add connected entities to queue for next depth level
                         if (currentDepth < depth) {
-                            const connected = rel.from.toLowerCase() === entity ? rel.to : rel.from;
-                            if (!visited.has(connected.toLowerCase())) {
+                            const connected = fromLower === entity ? rel.to : rel.from;
+                            if (connected && !visited.has(connected.toLowerCase())) {
                                 queue.push({ entity: connected.toLowerCase(), currentDepth: currentDepth + 1 });
                             }
                         }

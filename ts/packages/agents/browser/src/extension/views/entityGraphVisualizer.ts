@@ -458,7 +458,7 @@ export class EntityGraphVisualizer {
     /**
      * Load entity graph data
      */
-    async loadEntityGraph(graphData: GraphData): Promise<void> {
+    async loadEntityGraph(graphData: GraphData, centerEntityName?: string): Promise<void> {
         if (!this.cy) return;
 
         console.time('[Perf] Entity clear elements');
@@ -486,6 +486,11 @@ export class EntityGraphVisualizer {
         // Fit to view
         this.cy.fit();
         console.timeEnd('[Perf] Entity fit to view');
+
+        // Center on entity and show labels if specified
+        if (centerEntityName) {
+            this.centerOnEntityWithLabels(centerEntityName);
+        }
     }
 
     async loadGlobalGraph(globalData: any): Promise<void> {
@@ -511,9 +516,7 @@ export class EntityGraphVisualizer {
         this.cy.add(elements);
         console.timeEnd('[Perf] Add elements to Cytoscape');
 
-        console.time('[Perf] Apply layout');
         await this.applyLayoutWithCache('initial');
-        console.timeEnd('[Perf] Apply layout');
 
         this.setupEnhancedZoomInteractions();
 
@@ -968,9 +971,6 @@ export class EntityGraphVisualizer {
                     validRelationships++;
                 } else {
                     invalidRelationships++;
-                    if (invalidRelationships <= 5) {
-                        console.log(`[Graph Debug] Missing entity for relationship: ${sourceId} -> ${targetId}, has source: ${nodeIds.has(sourceId)}, has target: ${nodeIds.has(targetId)}`);
-                    }
                 }
             });
 
@@ -1091,7 +1091,6 @@ export class EntityGraphVisualizer {
         tooltip.innerHTML = `
             <div class="tooltip-header">${data.name}</div>
             <div class="tooltip-type">${data.type}</div>
-            <div class="tooltip-confidence">Confidence: ${(data.confidence * 100).toFixed(0)}%</div>
         `;
 
         tooltip.style.left = `${position.x + 10}px`;
@@ -1292,6 +1291,100 @@ export class EntityGraphVisualizer {
             });
         }
         return "";
+    }
+
+    /**
+     * Center on specific entity and show labels for neighborhood
+     */
+    private centerOnEntityWithLabels(entityName: string): void {
+        if (!this.cy) return;
+
+        const node = this.cy.getElementById(entityName);
+        if (node.length === 0) {
+            console.warn(`Entity "${entityName}" not found in graph`);
+            return;
+        }
+
+        // Pan to center the entity
+        this.cy.center(node);
+
+        // Show labels for the center node and its 2-degree neighborhood
+        this.showLabelsForEntityNeighborhood(entityName, 2);
+    }
+
+    /**
+     * Show labels for entity and its neighborhood within specified degrees
+     */
+    private showLabelsForEntityNeighborhood(entityName: string, maxDegree: number): void {
+        if (!this.cy) return;
+
+        const centerNode = this.cy.getElementById(entityName);
+        if (centerNode.length === 0) {
+            console.warn(`Entity "${entityName}" not found for label enhancement`);
+            return;
+        }
+
+        // First clear all labels to ensure clean state
+        this.cy.nodes().style('text-opacity', 0);
+
+        // Show label for center node with enhanced styling
+        centerNode.style({
+            'text-opacity': 1,
+            'font-weight': 'bold',
+            'font-size': '14px',
+            'color': '#000',
+            'text-background-color': '#ffff99',
+            'text-background-opacity': 0.8,
+            'text-background-padding': '3px'
+        });
+
+        // Find and label nodes within the specified degree range
+        const labeledNodes = new Set<string>();
+        labeledNodes.add(entityName);
+
+        for (let degree = 1; degree <= maxDegree; degree++) {
+            // Get nodes at current degree
+            const nodesAtDegree = centerNode.neighborhood().nodes().filter((node: any) => {
+                // Simple BFS-style degree calculation
+                const distance = centerNode.edgesWith(node).length > 0 ? 1 :
+                                centerNode.neighborhood().nodes().some((neighbor: any) =>
+                                    neighbor.edgesWith(node).length > 0) ? 2 : 999;
+                return distance === degree;
+            });
+
+            // Style nodes at this degree
+            nodesAtDegree.forEach((node: any) => {
+                const nodeId = node.id();
+                if (!labeledNodes.has(nodeId)) {
+                    labeledNodes.add(nodeId);
+
+                    // Different styling based on degree
+                    if (degree === 1) {
+                        // First degree neighbors - prominent labels
+                        node.style({
+                            'text-opacity': 1,
+                            'font-weight': 'bold',
+                            'font-size': '12px',
+                            'color': '#333',
+                            'text-background-color': '#e6f3ff',
+                            'text-background-opacity': 0.7,
+                            'text-background-padding': '2px'
+                        });
+                    } else if (degree === 2) {
+                        // Second degree neighbors - subtle labels
+                        node.style({
+                            'text-opacity': 1,
+                            'font-weight': 'normal',
+                            'font-size': '10px',
+                            'color': '#666',
+                            'text-background-color': '#f0f0f0',
+                            'text-background-opacity': 0.5,
+                            'text-background-padding': '1px'
+                        });
+                    }
+                }
+            });
+        }
     }
 
     /**
