@@ -1242,6 +1242,17 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
     );
 }
 
+export function getShellWindowForIpcEvent(
+    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+): ShellWindow | undefined {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (mainWindow === undefined) {
+        return undefined;
+    }
+    const shellWindow = ShellWindow.getInstance();
+    return shellWindow?.mainWindow === mainWindow ? shellWindow : undefined;
+}
+
 export function getShellWindowForMainWindowIpcEvent(
     event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
 ): ShellWindow | undefined {

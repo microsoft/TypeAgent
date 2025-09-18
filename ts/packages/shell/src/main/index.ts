@@ -50,7 +50,6 @@ import {
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
-import { BrowserControl } from "browser-typeagent/agent/types";
 import { initializeSearchMenuUI } from "./electronSearchMenuUI.js";
 import { initializePen } from "./commands/pen.js";
 import { initializeSpeech, triggerRecognitionOnce } from "./speech.js";
@@ -163,9 +162,13 @@ async function initializeDispatcher(
         const clientIOChannel = createGenericChannel((message: any) => {
             shellWindow.chatView.webContents.send("clientio-rpc-call", message);
         });
-        ipcMain.on("clientio-rpc-reply", (_event, message) => {
+        const onClientIORpcReply = (event, message) => {
+            if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
+                return;
+            }
             clientIOChannel.message(message);
-        });
+        };
+        ipcMain.on("clientio-rpc-reply", onClientIORpcReply);
 
         const newClientIO = createClientIORpcClient(clientIOChannel.channel);
         const clientIO: ClientIO = {
@@ -221,10 +224,7 @@ async function initializeDispatcher(
             },
         };
 
-        let browserControl: BrowserControl | undefined;
-        try {
-            browserControl = createInlineBrowserControl(shellWindow);
-        } catch {}
+        const browserControl = createInlineBrowserControl(shellWindow);
 
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {
@@ -233,7 +233,7 @@ async function initializeDispatcher(
                 ...getDefaultAppAgentProviders(instanceDir),
             ],
             agentInitOptions: {
-                browser: browserControl,
+                browser: browserControl.control,
             },
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
             persistSession: true,
@@ -287,6 +287,20 @@ async function initializeDispatcher(
         const dispatcher = {
             ...newDispatcher,
             processCommand: processShellRequest,
+            close: async () => {
+                ipcMain.removeListener(
+                    "dispatcher-rpc-call",
+                    onDispatcherRpcCall,
+                );
+                dispatcherChannel.disconnect();
+                await newDispatcher.close();
+                clientIOChannel.disconnect();
+                ipcMain.removeListener(
+                    "clientio-rpc-reply",
+                    onClientIORpcReply,
+                );
+                browserControl.close();
+            },
         };
 
         // Set up the RPC
@@ -296,9 +310,13 @@ async function initializeDispatcher(
                 message,
             );
         });
-        ipcMain.on("dispatcher-rpc-call", (_event, message) => {
+        const onDispatcherRpcCall = (event, message) => {
+            if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
+                return;
+            }
             dispatcherChannel.message(message);
-        });
+        };
+        ipcMain.on("dispatcher-rpc-call", onDispatcherRpcCall);
         createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
 
         setupQuit(dispatcher);
