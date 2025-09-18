@@ -31,32 +31,32 @@ export class BrowserAgentIpc {
         return BrowserAgentIpc.instance;
     };
 
-    public async ensureWebsocketConnected() {
+    public async ensureWebsocketConnected(): Promise<WebSocket | undefined> {
         // if there's a pending websocket promise, return it
         if (this.webSocketPromise) {
             return this.webSocketPromise;
         }
 
+        if (this.webSocket) {
+            if (this.webSocket.readyState === WebSocket.OPEN) {
+                return this.webSocket;
+            }
+            try {
+                this.webSocket.close();
+                this.webSocket = undefined;
+            } catch {}
+        }
+
         //create a new promise to establish the websocket connection
         this.webSocketPromise = new Promise<WebSocket | undefined>(
             async (resolve) => {
-                if (this.webSocket) {
-                    if (this.webSocket.readyState === WebSocket.OPEN) {
-                        resolve(this.webSocket);
-                        return;
-                    }
-                    try {
-                        this.webSocket.close();
-                        this.webSocket = undefined;
-                    } catch {}
-                }
-
                 this.webSocket = await createWebSocket(
                     "browser",
                     "client",
                     "inlineBrowser",
                 );
                 if (!this.webSocket) {
+                    this.webSocketPromise = null;
                     resolve(undefined);
                     return;
                 }
@@ -90,7 +90,7 @@ export class BrowserAgentIpc {
                 };
 
                 this.webSocket.onclose = () => {
-                    console.log("websocket connection closed");
+                    debugBrowserIPC("websocket connection closed");
                     this.webSocket = undefined;
                     this.reconnectWebSocket();
                 };
@@ -119,10 +119,10 @@ export class BrowserAgentIpc {
                 this.webSocket &&
                 this.webSocket.readyState === WebSocket.OPEN
             ) {
-                console.log("Clearing reconnect retry interval");
+                debugBrowserIPC("Clearing reconnect retry interval");
                 clearInterval(connectionCheckIntervalId);
             } else {
-                console.log("Retrying connection");
+                debugBrowserIPC("Retrying connection");
                 await this.ensureWebsocketConnected();
             }
 
@@ -132,9 +132,12 @@ export class BrowserAgentIpc {
     }
 
     public async send(message: WebSocketMessageV2) {
-        await this.ensureWebsocketConnected();
+        const webSocket = await this.ensureWebsocketConnected();
+        if (!webSocket) {
+            throw new Error("WebSocket not connected");
+        }
         debugBrowserIPC("Browser -> Dispatcher", message);
-        this.webSocket.send(JSON.stringify(message));
+        webSocket.send(JSON.stringify(message));
     }
 
     public isConnected(): boolean {
