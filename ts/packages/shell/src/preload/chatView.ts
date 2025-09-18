@@ -61,7 +61,7 @@ function registerClient(client: Client) {
     });
 
     // Signal the main process that the client has been registered
-    ipcRenderer.send("dom ready");
+    ipcRenderer.send("chat-view-ready");
 }
 
 const api: ClientAPI = {

@@ -70,11 +70,6 @@ type OverlayData = BottomAlignedPosition & {
 };
 
 export class ShellWindow {
-    public static getInstance(): ShellWindow | undefined {
-        return this.instance;
-    }
-    private static instance: ShellWindow | undefined;
-
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
     private readonly overlayWebContentsViews: Map<
@@ -112,10 +107,6 @@ export class ShellWindow {
     }
 
     constructor(private readonly settings: ShellSettingManager) {
-        if (ShellWindow.instance !== undefined) {
-            throw new Error("ShellWindow already created");
-        }
-
         const state = this.settings.window;
         this.chatWidth = state.chatWidth;
         this.chatHeight = state.chatHeight;
@@ -176,10 +167,6 @@ export class ShellWindow {
             this.browserViewManager.closeAllTabs();
         });
 
-        mainWindow.on("closed", () => {
-            ShellWindow.instance = undefined;
-        });
-
         const chatView = createChatView(state);
         this.setupZoomHandlers(chatView.webContents, (zoomFactor) => {
             this.updateOverlayBounds();
@@ -195,7 +182,7 @@ export class ShellWindow {
         this.mainWindow = mainWindow;
         this.chatView = chatView;
 
-        this.installHandler("dom ready", () => {
+        this.installHandler("chat-view-ready", () => {
             this.ready();
         });
 
@@ -257,7 +244,6 @@ export class ShellWindow {
             loadLocalWebContents(mainWindow.webContents, "viewHost.html"),
         );
         this.contentLoadP = contentLoadP;
-        ShellWindow.instance = this;
     }
 
     public async waitForContentLoaded() {
@@ -376,6 +362,20 @@ export class ShellWindow {
         globalShortcut.unregister("Alt+Right");
         globalShortcut.unregister("CommandOrControl+L");
         globalShortcut.unregister("CommandOrControl+E");
+    }
+
+    public async close() {
+        if (this.mainWindow.isDestroyed()) {
+            return;
+        }
+        if (!this.closing) {
+            this.mainWindow.close();
+        }
+        return new Promise<void>((resolve) => {
+            this.mainWindow.once("closed", () => {
+                resolve();
+            });
+        });
     }
 
     public sendMessageToInlineWebContent(message: WebSocketMessageV2) {
@@ -1240,34 +1240,4 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
             return false;
         },
     );
-}
-
-export function getShellWindowForIpcEvent(
-    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
-): ShellWindow | undefined {
-    const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    if (mainWindow === undefined) {
-        return undefined;
-    }
-    const shellWindow = ShellWindow.getInstance();
-    return shellWindow?.mainWindow === mainWindow ? shellWindow : undefined;
-}
-
-export function getShellWindowForMainWindowIpcEvent(
-    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
-): ShellWindow | undefined {
-    const shellWindow = ShellWindow.getInstance();
-    return event.sender === shellWindow?.mainWindow.webContents
-        ? shellWindow
-        : undefined;
-}
-
-// Returns the shell window for IPC events from the current chat view.
-export function getShellWindowForChatViewIpcEvent(
-    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
-): ShellWindow | undefined {
-    const shellWindow = ShellWindow.getInstance();
-    return event.sender === shellWindow?.chatView.webContents
-        ? shellWindow
-        : undefined;
 }
