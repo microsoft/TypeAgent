@@ -8,7 +8,7 @@ public class SemanticRef
     [JsonPropertyName("semanticRefOrdinal")]
     public int SemanticRefOrdinal { get; set; }
 
-   // [JsonPropertyName("range")]
+    [JsonPropertyName("range")]
     public TextRange Range { get; set; }
 
    // [JsonPropertyName("knowledgeType")]
