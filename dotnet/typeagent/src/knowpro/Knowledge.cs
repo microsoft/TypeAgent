@@ -1,10 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json.Serialization;
+
 namespace TypeAgent.KnowPro;
 
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(ConcreteEntity), "entity")]
+[JsonDerivedType(typeof(Action), "action")]
+[JsonDerivedType(typeof(Topic), "topic")]
+[JsonDerivedType(typeof(Tag), "tag")]
+[JsonDerivedType(typeof(StructuredTag), "structuredTag")]
 public abstract class Knowledge
 {
+    public Knowledge() { }
 }
 
 public interface IKnowledgeSource
@@ -15,10 +24,7 @@ public interface IKnowledgeSource
 
 public class ConcreteEntity : Knowledge
 {
-    public ConcreteEntity()
-    {
-
-    }
+    public ConcreteEntity() { }
 
     public ConcreteEntity(string name, string type)
     {
