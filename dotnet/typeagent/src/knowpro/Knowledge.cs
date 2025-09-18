@@ -14,6 +14,17 @@ public interface IKnowledgeSource
 
 public class ConcreteEntity : IKnowledge
 {
+    public ConcreteEntity()
+    {
+
+    }
+
+    public ConcreteEntity(string name, string type)
+    {
+        this.Name = name;
+        this.Type = [type];
+    }
+
     [JsonPropertyName("name")]
     public string Name { get; set; }
     [JsonPropertyName("type")]
@@ -39,13 +50,13 @@ public class Action : IKnowledge
 public class KnowledgeResponse
 {
     [JsonPropertyName("entities")]
-    public ConcreteEntity[] Entities { get; set; }
+    public IList<ConcreteEntity> Entities { get; set; }
     [JsonPropertyName("actions")]
-    public Action[] Actions { get; set; }
+    public IList<Action> Actions { get; set; }
     [JsonPropertyName("inverseActions")]
-    public Action[] InverseActions { get; set; }
+    public IList<Action> InverseActions { get; set; }
     [JsonPropertyName("topics")]
-    public string[] Topic { get; set; }
+    public IList<string> Topic { get; set; }
 }
 
 public class Topic : IKnowledge
