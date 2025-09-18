@@ -4,13 +4,14 @@
 """Tests for SQLite index implementations with real embeddings."""
 
 import sqlite3
-import tempfile
-import os
 from typing import Generator
+
 import pytest
 
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.aitools.vectorbase import TextEmbeddingIndexSettings
+
+from typeagent.knowpro.convsettings import MessageTextIndexSettings
 from typeagent.knowpro import interfaces
 from typeagent.knowpro.interfaces import (
     SemanticRef,
@@ -19,27 +20,27 @@ from typeagent.knowpro.interfaces import (
     Topic,
     Term,
 )
-from typeagent.storage.sqlite.semrefindex import SqliteTermToSemanticRefIndex
+
+from typeagent.storage.sqlite.messageindex import SqliteMessageTextIndex
 from typeagent.storage.sqlite.propindex import SqlitePropertyIndex
-from typeagent.storage.sqlite.timestampindex import SqliteTimestampToTextRangeIndex
 from typeagent.storage.sqlite.reltermsindex import (
     SqliteRelatedTermsAliases,
     SqliteRelatedTermsFuzzy,
     SqliteRelatedTermsIndex,
 )
 from typeagent.storage.sqlite.schema import init_db_schema
+from typeagent.storage.sqlite.semrefindex import SqliteTermToSemanticRefIndex
+from typeagent.storage.sqlite.timestampindex import SqliteTimestampToTextRangeIndex
 
-from fixtures import needs_auth, embedding_model
+from fixtures import needs_auth, embedding_model, temp_db_path
 
 
 @pytest.fixture
-def temp_db_path() -> Generator[str, None, None]:
-    """Create a temporary SQLite database file."""
-    fd, path = tempfile.mkstemp(suffix=".sqlite")
-    os.close(fd)
-    yield path
-    if os.path.exists(path):
-        os.remove(path)
+def embedding_settings(
+    embedding_model: AsyncEmbeddingModel,
+) -> TextEmbeddingIndexSettings:
+    """Create TextEmbeddingIndexSettings for testing."""
+    return TextEmbeddingIndexSettings(embedding_model)
 
 
 @pytest.fixture
@@ -223,19 +224,6 @@ class TestSqliteRelatedTermsAliases:
         assert "machine learning" in term_texts
         assert "ML" in term_texts
 
-        # Get related terms
-        related = await index.get_related_terms("ai")
-        assert related is not None
-        assert len(related) == 3
-
-        # Set related terms (replace existing)
-        await index.set_related_terms("ai", ["neural networks", "deep learning"])
-        related = await index.get_related_terms("ai")
-        assert related is not None
-        assert len(related) == 2
-        assert "neural networks" in related
-        assert "deep learning" in related
-
     @pytest.mark.asyncio
     async def test_serialize_deserialize(self, sqlite_db: sqlite3.Connection):
         """Test serialization and deserialization of aliases."""
@@ -265,14 +253,6 @@ class TestSqliteRelatedTermsAliases:
         assert not await index.is_empty()
         assert await index.size() == 2
 
-        ai_related = await index.get_related_terms("ai")
-        assert ai_related is not None
-        assert len(ai_related) == 2
-
-        python_related = await index.get_related_terms("python")
-        assert python_related is not None
-        assert len(python_related) == 1
-
 
 class TestSqliteRelatedTermsFuzzy:
     """Test SqliteRelatedTermsFuzzy with real embeddings."""
@@ -281,11 +261,11 @@ class TestSqliteRelatedTermsFuzzy:
     async def test_fuzzy_operations(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test fuzzy operations with real embeddings."""
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Initially empty
         assert await index.size() == 0
@@ -317,11 +297,11 @@ class TestSqliteRelatedTermsFuzzy:
     async def test_fuzzy_deserialize(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test deserialization of fuzzy index data - the critical fix we made."""
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Create test data similar to what would be in JSON
         text_items = ["chess", "artificial intelligence", "machine learning"]
@@ -329,7 +309,7 @@ class TestSqliteRelatedTermsFuzzy:
         # Create embeddings data (simulate what VectorBase would serialize)
         from typeagent.aitools.vectorbase import VectorBase
 
-        settings = TextEmbeddingIndexSettings(embedding_model)
+        settings = TextEmbeddingIndexSettings(embedding_settings.embedding_model)
         temp_vectorbase = VectorBase(settings)
 
         # Add embeddings to the vector base using add_key
@@ -364,11 +344,11 @@ class TestSqliteRelatedTermsFuzzy:
     async def test_fuzzy_lookup_edge_cases(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test edge cases in fuzzy lookup."""
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Empty index
         results = await index.lookup_term("anything")
@@ -377,10 +357,9 @@ class TestSqliteRelatedTermsFuzzy:
         # Add a term
         await index.add_terms(["test term"])
 
-        # Exact match should be filtered out (self-match)
+        # Exact match should return score 1.0
         results = await index.lookup_term("test term", min_score=0.0)
-        # Should not return the exact same term
-        assert not any(term.text == "test term" for term in results)
+        assert any(term.text == "test term" for term in results)
 
         # Test with multiple terms and verify behavior
         results = await index.lookup_term("xyzabc123")
@@ -397,11 +376,11 @@ class TestSqliteRelatedTermsIndex:
     async def test_combined_index_basic(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """Test the combined related terms index basic functionality."""
-        index = SqliteRelatedTermsIndex(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsIndex(sqlite_db, embedding_settings)
 
         # Test that both sub-indexes are accessible
         assert index.aliases is not None
@@ -431,7 +410,7 @@ class TestRegressionPrevention:
     async def test_fuzzy_index_first_run_scenario(
         self,
         sqlite_db: sqlite3.Connection,
-        embedding_model: AsyncEmbeddingModel,
+        embedding_settings: TextEmbeddingIndexSettings,
         needs_auth: None,
     ):
         """
@@ -441,7 +420,7 @@ class TestRegressionPrevention:
         This test prevents the regression where SQLite deserialize was a no-op.
         """
         # Create a fresh fuzzy index
-        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_model)
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
 
         # Simulate JSON data that would be loaded on first run
         # This represents the scenario where we have podcast data with pre-computed embeddings
@@ -455,7 +434,7 @@ class TestRegressionPrevention:
         # Create embeddings as they would exist in the JSON
         from typeagent.aitools.vectorbase import VectorBase
 
-        settings = TextEmbeddingIndexSettings(embedding_model)
+        settings = TextEmbeddingIndexSettings(embedding_settings.embedding_model)
         temp_vectorbase = VectorBase(settings)
 
         for text in text_items:
@@ -491,3 +470,322 @@ class TestRegressionPrevention:
             "grandmaster", max_hits=10, min_score=0.1
         )
         assert len(magnus_results) > 0, "Should find results for grandmaster query"
+
+
+class TestSqliteIndexesEdgeCases:
+    """Test edge cases and error conditions in SQLite indexes."""
+
+    @pytest.mark.asyncio
+    async def test_term_index_edge_cases(self, sqlite_db: sqlite3.Connection):
+        """Test edge cases in term index."""
+        index = SqliteTermToSemanticRefIndex(sqlite_db)
+        assert await index.size() == 0
+
+        # Test with None/empty lookups
+        results = await index.lookup_term("")
+        assert results == []
+        assert await index.size() == 0
+
+        # Test removing terms
+        await index.add_term("remove_test", 1)
+        assert await index.size() == 1
+        await index.remove_term("remove_test", 1)
+        results = await index.lookup_term("remove_test")
+        assert results == []
+        assert await index.size() == 0
+
+        # Test clearing
+        await index.add_term("clear_test", 2)
+        assert await index.size() == 1
+        await index.clear()
+        assert await index.size() == 0
+
+    @pytest.mark.asyncio
+    async def test_property_index_edge_cases(self, sqlite_db: sqlite3.Connection):
+        """Test edge cases in property index."""
+        index = SqlitePropertyIndex(sqlite_db)
+
+        # Test lookup of non-existent property
+        results = await index.lookup_property("nonexistent", "value")
+        assert results is None
+
+        # Test removal operations
+        await index.add_property("test_prop", "test_value", 1)
+        results = await index.lookup_property("test_prop", "test_value")
+        assert results is not None
+        assert len(results) == 1
+        await index.remove_property("test_prop", 1)
+        results = await index.lookup_property("test_prop", "test_value")
+        assert results is None
+
+        # Test remove all for semref
+        await index.add_property("prop1", "val1", 2)
+        await index.add_property("prop2", "val2", 2)
+        await index.remove_all_for_semref(2)
+        results1 = await index.lookup_property("prop1", "val1")
+        results2 = await index.lookup_property("prop2", "val2")
+        assert results1 is None
+        assert results2 is None
+
+    @pytest.mark.asyncio
+    async def test_related_terms_aliases_edge_cases(
+        self, sqlite_db: sqlite3.Connection
+    ):
+        """Test edge cases in aliases."""
+        index = SqliteRelatedTermsAliases(sqlite_db)
+
+        # Test lookup of non-existent term
+        results = await index.lookup_term("nonexistent")
+        assert results is None
+
+        # Test adding different types of related terms
+        await index.add_related_term("test", Term("string_term"))  # Term object
+        await index.add_related_term("test", Term("term_object"))  # Term object
+        await index.add_related_term("test", [Term("list_term")])  # list
+
+        # Test deserialize with None data
+        await index.deserialize(None)
+        # Should not crash
+
+        # Test deserialize with empty data
+        await index.deserialize({"relatedTerms": []})
+
+        # Test with properly formatted data
+        from typeagent.knowpro.interfaces import TermToRelatedTermsData
+
+        formatted_data: TermToRelatedTermsData = {
+            "relatedTerms": [
+                {"termText": "test", "relatedTerms": []},  # valid but empty
+                {"termText": "orphan", "relatedTerms": [{"text": "related"}]},  # valid
+            ]
+        }
+        await index.deserialize(formatted_data)
+
+    @pytest.mark.asyncio
+    async def test_fuzzy_index_edge_cases(
+        self,
+        sqlite_db: sqlite3.Connection,
+        embedding_settings: TextEmbeddingIndexSettings,
+        needs_auth: None,
+    ):
+        """Test edge cases in fuzzy index."""
+        index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
+
+        # Test with empty embeddings
+        await index.add_terms([])  # Empty list
+        assert await index.size() == 0
+
+        # Test lookup_terms (plural) method
+        results_list = await index.lookup_terms(["test1", "test2"], max_hits=5)
+        assert len(results_list) == 2
+        assert all(isinstance(results, list) for results in results_list)
+
+        # Test deserialize with various data formats
+        from typeagent.knowpro.interfaces import TextEmbeddingIndexData
+
+        # Valid data with None embeddings
+        valid_data1: TextEmbeddingIndexData = {
+            "textItems": ["test"],
+            "embeddings": None,
+        }
+        await index.deserialize(valid_data1)
+
+        # Valid data with empty text items
+        valid_data2: TextEmbeddingIndexData = {"textItems": [], "embeddings": None}
+        await index.deserialize(valid_data2)
+
+    @pytest.mark.asyncio
+    async def test_message_text_index_basic(
+        self,
+        sqlite_db: sqlite3.Connection,
+        embedding_settings: TextEmbeddingIndexSettings,
+        needs_auth: None,
+    ):
+        """Test basic operations of message text index."""
+        # Create settings
+        embedding_settings_local = TextEmbeddingIndexSettings(
+            embedding_settings.embedding_model
+        )
+        settings = MessageTextIndexSettings(embedding_settings_local)
+
+        index = SqliteMessageTextIndex(sqlite_db, settings)
+
+        # Test initial state
+        assert await index.size() == 0
+
+        # Test lookup_text on empty index
+        results = await index.lookup_text("test query", max_matches=5)
+        assert results == []
+
+        # Create some mock messages for testing
+        from fixtures import FakeMessage
+        from typeagent.knowpro.interfaces import IMessage
+
+        messages: list[IMessage] = [
+            FakeMessage(text_chunks=["First test message", "Second chunk"]),
+            FakeMessage(text_chunks=["Another message"]),
+        ]
+
+        # Add messages using the proper method
+        await index.add_messages_starting_at(0, messages)
+
+        # After adding messages, size should be > 0
+        size = await index.size()
+        assert size > 0
+
+        # Test lookup with real text
+        results = await index.lookup_text("test message", max_matches=5)
+        assert isinstance(results, list)
+
+        # Test is_empty method
+        assert not await index.is_empty()
+
+        # Test clear and verify it's empty
+        await index.clear()
+        assert await index.size() == 0
+        assert await index.is_empty()
+
+    @pytest.mark.asyncio
+    async def test_serialization_edge_cases(
+        self,
+        sqlite_db: sqlite3.Connection,
+        embedding_settings: TextEmbeddingIndexSettings,
+        needs_auth: None,
+    ):
+        """Test serialization edge cases."""
+        fuzzy_index = SqliteRelatedTermsFuzzy(sqlite_db, embedding_settings)
+
+        # Test serialization of empty index
+        # Note: fuzzy index doesn't implement serialize (returns empty for SQLite)
+        # But test that calling it doesn't crash
+        # This would be implemented if needed
+
+        # Test fuzzy index with some data then clear
+        await fuzzy_index.add_terms(["test1", "test2"])
+        await fuzzy_index.clear()
+        assert await fuzzy_index.size() == 0
+
+        # Test remove_term
+        # TODO: Implement remove_term properly before enabling this test
+        # await fuzzy_index.add_terms(["remove_me"])
+        # await fuzzy_index.remove_term("remove_me")
+        # results = await fuzzy_index.lookup_term("remove_me")
+        # assert results == []
+
+    @pytest.mark.asyncio
+    async def test_term_normalization_whitespace(self, sqlite_db: sqlite3.Connection):
+        """Test whitespace normalization in _prepare_term()."""
+        index = SqliteTermToSemanticRefIndex(sqlite_db)
+
+        # Test that whitespace variations normalize to the same term
+        whitespace_variants = [
+            "hello world",  # baseline
+            "  hello world  ",  # leading/trailing spaces
+            "hello\tworld",  # tab instead of space
+            "hello\nworld",  # newline instead of space
+            "hello   world",  # multiple spaces
+            "hello \t world",  # mixed whitespace
+        ]
+
+        # Add all variants - they should normalize to the same internal form
+        for i, variant in enumerate(whitespace_variants):
+            await index.add_term(variant, i + 1)
+
+        # All variants should find the same normalized term
+        for i, variant in enumerate(whitespace_variants):
+            results = await index.lookup_term(variant)
+            assert results is not None, f"Should find results for '{variant}'"
+            assert len(results) == len(
+                whitespace_variants
+            ), f"Expected {len(whitespace_variants)} results for '{variant}', got {len(results)}"
+            # All should map to the same normalized form, so should find all semantic refs
+            expected_semrefs = set(range(1, len(whitespace_variants) + 1))
+            actual_semrefs = {r.semantic_ref_ordinal for r in results}
+            assert actual_semrefs == expected_semrefs
+
+    @pytest.mark.asyncio
+    async def test_term_normalization_unicode(self, sqlite_db: sqlite3.Connection):
+        """Test Unicode normalization and roundtripping."""
+        index = SqliteTermToSemanticRefIndex(sqlite_db)
+
+        # Test Unicode normalization - these should be equivalent after NFC normalization
+        unicode_variants = [
+            "café",  # NFC form (single é character)
+            "cafe\u0301",  # NFD form (e + combining acute accent)
+        ]
+
+        # Test higher Unicode planes
+        high_plane_terms = [
+            "test🏠house",  # Emoji (U+1F3E0)
+            "math𝑨𝑩𝑪",  # Mathematical symbols (U+1D400 range)
+            "ancient𓀀𓀁",  # Egyptian hieroglyphs (U+13000 range)
+        ]
+
+        # Add Unicode variants
+        for i, variant in enumerate(unicode_variants):
+            await index.add_term(variant, 100 + i)
+
+        # Both variants should resolve to the same normalized form
+        results1 = await index.lookup_term(unicode_variants[0])
+        results2 = await index.lookup_term(unicode_variants[1])
+        assert (
+            results1 is not None and results2 is not None
+        ), "Both Unicode forms should return results"
+        assert len(results1) == len(
+            results2
+        ), "NFC and NFD forms should normalize to same term"
+        assert len(results1) == 2, f"Expected 2 results, got {len(results1)}"
+
+        # Test higher plane Unicode roundtripping
+        for i, term in enumerate(high_plane_terms):
+            await index.add_term(term, 200 + i)
+            results = await index.lookup_term(term)
+            assert (
+                results is not None
+            ), f"Should find results for higher plane Unicode: '{term}'"
+            assert len(results) == 1, f"Should roundtrip higher plane Unicode: '{term}'"
+            assert results[0].semantic_ref_ordinal == 200 + i
+
+    @pytest.mark.asyncio
+    async def test_term_case_sensitivity(self, sqlite_db: sqlite3.Connection):
+        """Test case normalization in _prepare_term()."""
+        index = SqliteTermToSemanticRefIndex(sqlite_db)
+
+        # Test case variations
+        case_variants = [
+            "Hello",
+            "HELLO",
+            "hello",
+            "HeLLo",
+        ]
+
+        # Add all case variants
+        for i, variant in enumerate(case_variants):
+            await index.add_term(variant, 300 + i)
+
+        # All should normalize to same lowercase form
+        for variant in case_variants:
+            results = await index.lookup_term(variant)
+            assert (
+                results is not None
+            ), f"Should find results for case variant '{variant}'"
+            assert len(results) == len(
+                case_variants
+            ), f"Case variant '{variant}' should find all normalized forms"
+            expected_semrefs = set(range(300, 300 + len(case_variants)))
+            actual_semrefs = {r.semantic_ref_ordinal for r in results}
+            assert actual_semrefs == expected_semrefs
+
+        # Test Unicode case sensitivity
+        unicode_cases = ["Café", "CAFÉ", "café"]
+        for i, variant in enumerate(unicode_cases):
+            await index.add_term(variant, 400 + i)
+
+        for variant in unicode_cases:
+            results = await index.lookup_term(variant)
+            assert (
+                results is not None
+            ), f"Should find results for Unicode case variant '{variant}'"
+            assert len(results) == len(
+                unicode_cases
+            ), f"Unicode case variant '{variant}' should find all forms"

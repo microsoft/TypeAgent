@@ -10,7 +10,8 @@ import {
 } from "@typeagent/agent-sdk";
 import { Dispatcher, TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getObjectProperty, setObjectProperty } from "common-utils";
-import { SearchMenu, SearchMenuItem } from "./search";
+import { SearchMenu } from "./search";
+import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 
 function cloneTemplateData(
     templateData: TemplateData | TemplateData[],
@@ -480,7 +481,7 @@ class FieldScalar extends FieldBase {
             return undefined;
         }
         const rect = this.editUI.div.getBoundingClientRect();
-        return { left: rect.left, bottom: rect.top };
+        return { left: rect.left, bottom: window.innerHeight - rect.top };
     }
 
     private createSearchMenu(
@@ -641,7 +642,7 @@ class FieldScalar extends FieldBase {
             return true;
         }
         this.cancelSearchMenu();
-        this.editUI.searchMenu == undefined;
+        this.editUI.searchMenu = undefined;
 
         const fieldType = this.fieldType;
         const newValue = this.getInputValue(fieldType.type, input);

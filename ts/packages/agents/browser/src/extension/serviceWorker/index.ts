@@ -85,8 +85,7 @@ function setupEventListeners(): void {
             // Trigger navigation handler for page knowledge extraction
             if (tab.url && tab.title) {
                 try {
-                    // TODO: re-enable after we resolve potential duplicate extraction operations
-                    // await sendNavigationMessage(tab.url, tab.title, tab.id);
+                    await sendNavigationMessage(tab.url, tab.title, tab.id);
                 } catch (error) {
                     console.error("Error sending navigation message:", error);
                 }
@@ -374,6 +373,9 @@ async function sendActionToTabIndex(action: any): Promise<string | undefined> {
 // Start initialization
 initialize();
 
+// Track recent navigation events for debouncing
+const recentNavigations = new Map<string, number>();
+
 // Re-export functions that need to be accessible from other modules
 async function sendNavigationMessage(
     url: string,
@@ -386,6 +388,27 @@ async function sendNavigationMessage(
     }
 
     try {
+        // Debounce rapid navigation events
+        const navigationKey = `${tabId}-${url}`;
+        if (recentNavigations.has(navigationKey)) {
+            const lastNav = recentNavigations.get(navigationKey);
+            if (lastNav && Date.now() - lastNav < 2000) {
+                // 2 second debounce
+                console.log(`Debouncing navigation to ${url}`);
+                return;
+            }
+        }
+        recentNavigations.set(navigationKey, Date.now());
+
+        // Clean up old entries periodically
+        if (recentNavigations.size > 100) {
+            const cutoff = Date.now() - 60000; // 1 minute
+            for (const [key, time] of recentNavigations.entries()) {
+                if (time < cutoff) {
+                    recentNavigations.delete(key);
+                }
+            }
+        }
         webSocket.send(
             JSON.stringify({
                 method: "handlePageNavigation",

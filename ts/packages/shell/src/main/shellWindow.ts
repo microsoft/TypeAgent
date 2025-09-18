@@ -18,7 +18,7 @@ import {
     ShellSettingManager,
     BrowserTabState,
 } from "./shellSettings.js";
-import { isProd } from "./index.js";
+import { loadLocalWebContents } from "./utils.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import {
     BrowserViewManager,
@@ -29,19 +29,19 @@ import registerDebug from "debug";
 const debugShellWindow = registerDebug("typeagent:shell:window");
 const debugShellWindowError = registerDebug("typeagent:shell:window:error");
 
-const userAgent =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
 function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
     let scheduleHandler: (() => void) | undefined;
+    let timeout: NodeJS.Timeout | undefined;
     mainWindow.on("resize", handler);
     if (isLinux) {
         // Workaround for electron bug where getContentSize isn't updated when "resize" event is fired
         // https://github.com/electron/electron/issues/42586
         scheduleHandler = () => {
             debugShellWindow("Scheduled Maximize/Unmaximize update");
-            setTimeout(() => {
+            timeout = setTimeout(() => {
+                timeout = undefined;
                 debugShellWindow(
                     "Running scheduled Maximize/Unmaximize update",
                 );
@@ -54,6 +54,7 @@ function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
 
     // Clean up function for close
     return () => {
+        clearTimeout(timeout);
         mainWindow.removeListener("resize", handler);
         if (scheduleHandler !== undefined) {
             mainWindow.removeListener("maximize", scheduleHandler);
@@ -61,6 +62,12 @@ function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
         }
     };
 }
+
+type BottomAlignedPosition = { left: number; bottom: number };
+type OverlayData = BottomAlignedPosition & {
+    width: number;
+    height: number;
+};
 
 export class ShellWindow {
     public static getInstance(): ShellWindow | undefined {
@@ -70,6 +77,10 @@ export class ShellWindow {
 
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
+    private readonly overlayWebContentsViews: Map<
+        WebContentsView,
+        OverlayData
+    > = new Map();
 
     private verticalLayout: boolean;
     private contentVisible: boolean = false;
@@ -121,10 +132,9 @@ export class ShellWindow {
         );
 
         setupDevicePermissions(mainWindow);
-        //this.setupWebContents(mainWindow.webContents);
 
         // Initialize browser view manager
-        this.browserViewManager = new BrowserViewManager(mainWindow);
+        this.browserViewManager = new BrowserViewManager(this);
 
         // Set up event callbacks for browser view manager
         this.browserViewManager.setTabUpdateCallback(() => {
@@ -139,8 +149,7 @@ export class ShellWindow {
             // Only restore focus if this is the active tab
             const activeTab = this.browserViewManager.getActiveBrowserView();
             if (activeTab && activeTab.id === tabId) {
-                this.chatView.webContents.focus();
-                this.chatView.webContents.send("focus-chat-input");
+                this.focusChatInput();
             }
         });
 
@@ -172,7 +181,15 @@ export class ShellWindow {
         });
 
         const chatView = createChatView(state);
-        this.setupWebContents(chatView.webContents);
+        this.setupZoomHandlers(chatView.webContents, (zoomFactor) => {
+            this.updateOverlayBounds();
+            this.updateZoomInTitle(zoomFactor);
+        });
+
+        chatView.webContents.on("focus", () => {
+            this.setOverlayVisibility(true);
+        });
+
         mainWindow.contentView.addChildView(chatView);
 
         this.mainWindow = mainWindow;
@@ -190,8 +207,7 @@ export class ShellWindow {
             this.sendTabsUpdate();
 
             // Restore focus to chat after creating new tab
-            this.chatView.webContents.focus();
-            this.chatView.webContents.send("focus-chat-input");
+            this.focusChatInput();
         });
 
         ipcMain.on("browser-close-tab", (_, tabId: string) => {
@@ -205,8 +221,7 @@ export class ShellWindow {
                 }
 
                 // Restore focus to chat after closing tab
-                this.chatView.webContents.focus();
-                this.chatView.webContents.send("focus-chat-input");
+                this.focusChatInput();
             }
         });
 
@@ -234,25 +249,12 @@ export class ShellWindow {
         });
 
         const contentLoadP: Promise<void>[] = [];
-        // HMR for renderer base on electron-vite cli.
-        // Load the remote URL for development or the local html file for production.
-        if (!isProd && process.env["ELECTRON_RENDERER_URL"]) {
-            contentLoadP.push(
-                chatView.webContents.loadURL(
-                    process.env["ELECTRON_RENDERER_URL"],
-                ),
-            );
-        } else {
-            contentLoadP.push(
-                chatView.webContents.loadFile(
-                    path.join(__dirname, "../renderer/chatView.html"),
-                ),
-            );
-        }
         contentLoadP.push(
-            mainWindow.webContents.loadFile(
-                path.join(__dirname, "../renderer/viewHost.html"),
-            ),
+            loadLocalWebContents(chatView.webContents, "chatView.html"),
+        );
+
+        contentLoadP.push(
+            loadLocalWebContents(mainWindow.webContents, "viewHost.html"),
         );
         this.contentLoadP = contentLoadP;
         ShellWindow.instance = this;
@@ -278,6 +280,11 @@ export class ShellWindow {
         this.mainWindow.focus();
     }
 
+    public focusChatInput() {
+        this.chatView.webContents.focus();
+        this.chatView.webContents.send("change-chat-input-focus", true);
+    }
+
     private async ready() {
         // Send settings asap
         this.sendUserSettingChanged();
@@ -290,7 +297,7 @@ export class ShellWindow {
         mainWindow.show();
 
         // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
-        this.setZoomLevel(1, mainWindow.webContents);
+        this.setZoomFactor(1, mainWindow.webContents);
 
         const states = this.settings.window;
         if (states.devTools) {
@@ -338,19 +345,12 @@ export class ShellWindow {
 
         // Register Ctrl+L / Cmd+L and Ctrl+E / Cmd+E to focus chat input
         globalShortcut.register("CommandOrControl+L", () => {
-            this.chatView.webContents.focus();
-            this.chatView.webContents.send("focus-chat-input");
+            this.focusChatInput();
         });
 
         globalShortcut.register("CommandOrControl+E", () => {
-            this.chatView.webContents.focus();
-            this.chatView.webContents.send("focus-chat-input");
+            this.focusChatInput();
         });
-    }
-
-    private setupWebContents(webContents: WebContents) {
-        this.setupZoomHandlers(webContents);
-        webContents.setUserAgent(userAgent);
     }
 
     private installHandler(name: string, handler: (event: any) => void) {
@@ -428,7 +428,7 @@ export class ShellWindow {
             y: addContent ? bounds.y - this.contentHeight : bounds.y,
         };
     }
-    private getWindowState(): ShellWindowState {
+    public getWindowState(): ShellWindowState {
         // Get browser tabs state for saving
         const browserTabs = this.browserViewManager.getAllBrowserTabs();
         const activeBrowserView =
@@ -464,6 +464,19 @@ export class ShellWindow {
         };
     }
 
+    public setWindowState(settings: ShellWindowState) {
+        this.mainWindow.setBounds({
+            x: settings.x,
+            y: settings.y,
+            width: settings.windowWidth,
+            height: settings.windowHeight,
+        });
+
+        this.setZoomFactor(settings.zoomLevel, this.chatView.webContents);
+
+        this.settings.save(this.getWindowState());
+    }
+
     private sendUserSettingChanged() {
         this.chatView.webContents.send("settings-changed", this.settings.user);
     }
@@ -482,6 +495,7 @@ export class ShellWindow {
         const { width, height } = bounds;
 
         let dividerPos = -1;
+        let chatViewBounds: Electron.Rectangle;
         if (verticalLayout) {
             this.windowWidth = width;
             let chatHeight = this.chatHeight;
@@ -515,16 +529,12 @@ export class ShellWindow {
                 this.browserViewManager.setBounds(browserViewBounds);
             }
 
-            const chatViewBounds = {
+            chatViewBounds = {
                 x: 0,
                 y: height - chatHeight,
                 width,
                 height: chatHeight,
             };
-            debugShellWindow(
-                `Chat view bounds: ${JSON.stringify(chatViewBounds)}`,
-            );
-            this.chatView.setBounds(chatViewBounds);
         } else {
             this.windowHeight = height;
             let chatWidth = this.chatWidth;
@@ -556,18 +566,17 @@ export class ShellWindow {
                 this.browserViewManager.setBounds(browserViewBounds);
             }
 
-            const chatViewBounds = {
+            chatViewBounds = {
                 x: 0,
                 y: 0,
                 width: chatWidth,
                 height: height,
             };
-
-            debugShellWindow(
-                `Chat view bounds: ${JSON.stringify(chatViewBounds)}`,
-            );
-            this.chatView.setBounds(chatViewBounds);
         }
+        debugShellWindow(`Chat view bounds: ${JSON.stringify(chatViewBounds)}`);
+        this.chatView.setBounds(chatViewBounds);
+
+        this.updateOverlayBounds();
 
         const dividerLayout = {
             verticalLayout,
@@ -662,7 +671,9 @@ export class ShellWindow {
             // Workaround for electron bug where getContentSize isn't updated when "resize" event is fired
             // https://github.com/electron/electron/issues/42586
             setTimeout(() => {
-                this.updateContentSize();
+                if (!this.closing) {
+                    this.updateContentSize();
+                }
             }, 100);
         } else {
             this.updateContentSize();
@@ -688,6 +699,11 @@ export class ShellWindow {
             waitForPageLoad: options?.waitForPageLoad,
         });
 
+        // Re-add overlay views so they are on top
+        for (const views of this.overlayWebContentsViews.keys()) {
+            this.mainWindow.contentView.addChildView(views);
+        }
+
         // setup zoom handlers for the new browser tab
         this.setupZoomHandlers(
             this.browserViewManager.getBrowserTab(tabId)?.webContentsView
@@ -707,8 +723,7 @@ export class ShellWindow {
             // Small delay to let browser view settle
             setTimeout(() => {
                 if (!this.chatView.webContents.isDestroyed()) {
-                    this.chatView.webContents.focus();
-                    this.chatView.webContents.send("focus-chat-input");
+                    this.focusChatInput();
                 }
             }, 50);
         }
@@ -934,7 +949,10 @@ export class ShellWindow {
     // ================================================================
     // Zoom Handler
     // ================================================================
-    private setupZoomHandlers(webContents: WebContents | undefined) {
+    private setupZoomHandlers(
+        webContents: WebContents | undefined,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
         if (!webContents) return;
 
         webContents.on("before-input-event", (_event, input) => {
@@ -947,11 +965,11 @@ export class ShellWindow {
                     input.key === "+" ||
                     input.key === "="
                 ) {
-                    this.zoomIn(webContents);
+                    this.zoomIn(webContents, onZoomChanged);
                 } else if (input.key === "-" || input.key === "NumpadMinus") {
-                    this.zoomOut(webContents);
+                    this.zoomOut(webContents, onZoomChanged);
                 } else if (input.key === "0") {
-                    this.setZoomLevel(1, webContents);
+                    this.setZoomFactor(1, webContents, onZoomChanged);
                 }
             }
         });
@@ -959,37 +977,53 @@ export class ShellWindow {
         // Register mouse wheel as well.
         webContents.on("zoom-changed", (_event, zoomDirection) => {
             if (zoomDirection === "in") {
-                this.zoomIn(webContents);
+                this.zoomIn(webContents, onZoomChanged);
             } else {
-                this.zoomOut(webContents);
+                this.zoomOut(webContents, onZoomChanged);
             }
         });
     }
 
-    private zoomIn(webContents: WebContents) {
-        this.setZoomLevel(webContents.zoomFactor + 0.1, webContents);
+    private zoomIn(
+        webContents: WebContents,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
+        this.setZoomFactor(
+            webContents.zoomFactor + 0.1,
+            webContents,
+            onZoomChanged,
+        );
     }
 
-    private zoomOut(webContents: WebContents) {
-        this.setZoomLevel(webContents.zoomFactor - 0.1, webContents);
+    private zoomOut(
+        webContents: WebContents,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
+        this.setZoomFactor(
+            webContents.zoomFactor - 0.1,
+            webContents,
+            onZoomChanged,
+        );
     }
 
     /**
-     * Sets the zoom level for the active window/tab.
+     * Sets the zoom factor for the active window/tab.
      * @param zoomFactor - The zoom factor to set for the active window/tab
      */
-    public setZoomLevel(zoomFactor: number, webContents: WebContents) {
+    public setZoomFactor(
+        zoomFactor: number,
+        webContents: WebContents,
+        onZoomChanged?: (zoomFactor: number) => void,
+    ) {
         // limit zoom factor to reasonable numbers
-        if (zoomFactor < 0.1) {
-            zoomFactor = 0.1;
-        } else if (zoomFactor > 10) {
-            zoomFactor = 10;
+        if (zoomFactor < 0.25) {
+            zoomFactor = 0.25;
+        } else if (zoomFactor > 5) {
+            zoomFactor = 5;
         }
 
         webContents.zoomFactor = zoomFactor;
-
-        // only update the zoom in the title for the zoom factor of the main (chat) window
-        this.updateZoomInTitle(this.chatView.webContents.zoomFactor);
+        onZoomChanged?.(zoomFactor);
     }
 
     /**
@@ -1006,6 +1040,80 @@ export class ShellWindow {
         const zoomTitle =
             zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
         this.mainWindow.setTitle(`${summary}${zoomTitle}`);
+
+        // Update the page title to match the window title as well for backwards compat with Playwright tests
+        this.chatView.webContents.executeJavaScript(
+            `document.title = '${summary}${zoomTitle}';`,
+        );
+    }
+
+    // ================================================================
+    // Overlays
+    // ================================================================
+    private updateOverlayBounds() {
+        for (const [view, data] of this.overlayWebContentsViews.entries()) {
+            this.setOverlayBounds(view, data);
+        }
+    }
+    public setOverlayVisibility(visible: boolean) {
+        for (const view of this.overlayWebContentsViews.keys()) {
+            view.setVisible(visible);
+        }
+    }
+
+    public updateOverlay(view: WebContentsView, update?: Partial<OverlayData>) {
+        if (update) {
+            let data = this.overlayWebContentsViews.get(view);
+            if (data === undefined) {
+                this.mainWindow.contentView.addChildView(view);
+                const bounds = view.getBounds();
+                data = {
+                    left: 0,
+                    bottom: 0,
+                    width: bounds.width,
+                    height: bounds.height,
+                };
+
+                this.overlayWebContentsViews.set(view, data);
+            }
+
+            if (update.left) {
+                data.left = update.left;
+            }
+            if (update.bottom) {
+                data.bottom = update.bottom;
+            }
+
+            if (update.width) {
+                data.width = update.width;
+            }
+            if (update.height) {
+                data.height = update.height;
+            }
+
+            this.setOverlayBounds(view, data);
+        } else {
+            this.overlayWebContentsViews.delete(view);
+            this.mainWindow.contentView.removeChildView(view);
+        }
+    }
+
+    private setOverlayBounds(view: WebContentsView, data: OverlayData) {
+        const chatBounds = this.chatView.getBounds();
+        const zoomFactor = this.chatView.webContents.zoomFactor;
+        const left = chatBounds.x + data.left * zoomFactor;
+        const bottom =
+            chatBounds.y + chatBounds.height - data.bottom * zoomFactor;
+        const width = data.width * zoomFactor;
+        const height = data.height * zoomFactor;
+        const newBounds = {
+            x: left,
+            y: bottom - height,
+            width,
+            height,
+        };
+        view.setBounds(newBounds);
+        view.webContents.setZoomFactor(zoomFactor);
     }
 }
 
@@ -1015,7 +1123,7 @@ function createMainWindow(bounds: Electron.Rectangle) {
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
-            preload: path.join(__dirname, "../preload/main.mjs"),
+            preload: path.join(__dirname, "../preload/expose.mjs"),
             sandbox: false,
             zoomFactor: 1,
         },
@@ -1132,4 +1240,34 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
             return false;
         },
     );
+}
+
+export function getShellWindowForIpcEvent(
+    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+): ShellWindow | undefined {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (mainWindow === undefined) {
+        return undefined;
+    }
+    const shellWindow = ShellWindow.getInstance();
+    return shellWindow?.mainWindow === mainWindow ? shellWindow : undefined;
+}
+
+export function getShellWindowForMainWindowIpcEvent(
+    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+): ShellWindow | undefined {
+    const shellWindow = ShellWindow.getInstance();
+    return event.sender === shellWindow?.mainWindow.webContents
+        ? shellWindow
+        : undefined;
+}
+
+// Returns the shell window for IPC events from the current chat view.
+export function getShellWindowForChatViewIpcEvent(
+    event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
+): ShellWindow | undefined {
+    const shellWindow = ShellWindow.getInstance();
+    return event.sender === shellWindow?.chatView.webContents
+        ? shellWindow
+        : undefined;
 }

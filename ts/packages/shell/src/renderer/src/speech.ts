@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
-import { SpeechToken } from "../../preload/electronTypes.js";
+import { SpeechToken } from "./speechToken";
 import { WhisperRecognizer } from "./localWhisperClient";
 import registerDebug from "debug";
 import { getAndroidAPI } from "./main.js";

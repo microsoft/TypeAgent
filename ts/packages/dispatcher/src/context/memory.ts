@@ -27,7 +27,7 @@ import {
     CommandHandler,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { getToggleHandlerTable } from "../command/handlerUtils.js";
+import { getToggleHandlerTable } from "../helpers/command.js";
 import registerDebug from "debug";
 import {
     displayError,

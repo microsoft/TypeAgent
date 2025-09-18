@@ -21,7 +21,8 @@ packages/knowPro/test/data
 packages/knowPro/test/data/**/*.json
 packages/knowPro/test/data
 packages/memory/conversation/test/data
-packages/examples/websiteAliases/cache/*.json
+examples/websiteAliases/data
+
 
 # Test result
 packages/shell/test-results/*
@@ -29,3 +30,6 @@ packages/shell/playwright-report/*
 
 # Eval sources
 packages/agents/spelunker/evals/eval-*/source
+
+# Generated cache files
+examples/websiteAliases/cache

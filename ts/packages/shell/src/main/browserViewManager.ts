@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebContentsView, BrowserWindow } from "electron";
+import { WebContentsView } from "electron";
 import path from "node:path";
 import registerDebug from "debug";
+import { ShellWindow } from "./shellWindow.js";
+import { loadLocalWebContents } from "./utils.js";
+import { BrowserAgentIpc } from "./browserIpc.js";
 
 const debug = registerDebug("typeagent:shell:browserViewManager");
 
@@ -28,14 +31,12 @@ export class BrowserViewManager {
     private browserViews = new Map<string, BrowserViewContext>();
     private activeBrowserViewId: string | null = null;
     private nextTabId = 1;
-    private mainWindow: BrowserWindow;
     private onTabUpdateCallback?: () => void;
     private onNavigationUpdateCallback?: () => void;
     private onPageLoadCompleteCallback?: (tabId: string) => void;
     private onTabClosedCallback?: (tabId: string) => void;
     private viewBounds: Electron.Rectangle | null = null;
-    constructor(mainWindow: BrowserWindow) {
-        this.mainWindow = mainWindow;
+    constructor(private readonly shellWindow: ShellWindow) {
         debug("BrowserViewManager initialized");
     }
 
@@ -99,19 +100,55 @@ export class BrowserViewManager {
         this.browserViews.set(tabId, browserViewContext);
 
         // Add to main window but don't show yet
-        this.mainWindow.contentView.addChildView(webContentsView);
+        this.shellWindow.mainWindow.contentView.addChildView(webContentsView);
+
+        // wire up loaded event handlers for the webContents so we can show errors
+        webContentsView.webContents.on(
+            "did-fail-load",
+            (_, errorCode, errorDesc) => {
+                debug(
+                    `Tab ${tabId} failed to load URL ${options.url}: [${errorCode}] ${errorDesc}`,
+                );
+
+                webContentsView.webContents
+                    .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
+                Error Details: <br />${errorCode} - ${errorDesc}"`);
+            },
+        );
+
+        webContentsView.webContents.on("focus", () => {
+            this.shellWindow.setOverlayVisibility(false);
+        });
 
         // Load the URL or show new tab page
         if (options.url === "about:blank") {
             // Load the new tab HTML file
-            webContentsView.webContents.loadFile(
-                path.join(__dirname, "../renderer/newTab.html"),
-            );
+            loadLocalWebContents(webContentsView.webContents, "newTab.html");
         } else {
             if (options.waitForPageLoad) {
-                await webContentsView.webContents.loadURL(options.url);
+                await webContentsView.webContents
+                    .loadURL(options.url)
+                    .catch((err) => {
+                        debug(
+                            `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
+                            err,
+                        );
+                        webContentsView.webContents.executeJavaScript(
+                            `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
+                        );
+                    });
             } else {
-                webContentsView.webContents.loadURL(options.url);
+                webContentsView.webContents
+                    .loadURL(options.url)
+                    .catch((err) => {
+                        debug(
+                            `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
+                            err,
+                        );
+                        webContentsView.webContents.executeJavaScript(
+                            `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
+                        );
+                    });
             }
         }
 
@@ -156,8 +193,14 @@ export class BrowserViewManager {
         });
 
         // Handle navigation events
-        webContents.on("did-finish-load", () => {
-            this.updateTabUrl(tabId, webContents.getURL());
+        webContents.on("did-finish-load", async () => {
+            const url = webContents.getURL();
+            const title = webContents.getTitle();
+
+            // Send navigation message to browser agent
+            await this.sendNavigationToBrowserAgent(url, title, tabId);
+
+            this.updateTabUrl(tabId, url);
             this.notifyNavigationUpdate();
             this.notifyTabUpdate();
             this.notifyPageLoadComplete(tabId);
@@ -173,7 +216,12 @@ export class BrowserViewManager {
             this.notifyNavigationUpdate();
         });
 
-        webContents.on("did-navigate-in-page", (_, url) => {
+        webContents.on("did-navigate-in-page", async (_, url) => {
+            const title = webContents.getTitle();
+
+            // Send navigation message for in-page navigations too
+            await this.sendNavigationToBrowserAgent(url, title, tabId);
+
             this.updateTabUrl(tabId, url);
             this.notifyTabUpdate();
             this.notifyNavigationUpdate();
@@ -183,11 +231,9 @@ export class BrowserViewManager {
         webContents.setWindowOpenHandler((details) => {
             debug(`New window request from tab ${tabId}: ${details.url}`);
 
-            // Create new tab for the URL
-            this.createBrowserTab({
-                url: details.url,
+            // Create new tab for the URL.  Go thru the shellWindow.
+            this.shellWindow.createBrowserTab(new URL(details.url), {
                 background: false, // New windows should be foreground
-                parentTabId: tabId,
             });
 
             return { action: "deny" }; // Deny the window creation since we handled it
@@ -250,7 +296,7 @@ export class BrowserViewManager {
         debug(`Closing browser tab: ${tabId}`);
 
         // Remove from main window
-        this.mainWindow.contentView.removeChildView(
+        this.shellWindow.mainWindow.contentView.removeChildView(
             browserView.webContentsView,
         );
 
@@ -482,6 +528,43 @@ export class BrowserViewManager {
     private notifyPageLoadComplete(tabId: string): void {
         if (this.onPageLoadCompleteCallback) {
             this.onPageLoadCompleteCallback(tabId);
+        }
+    }
+
+    /**
+     * Send navigation event to browser agent via WebSocket
+     */
+    private async sendNavigationToBrowserAgent(
+        url: string,
+        title: string,
+        tabId: string,
+    ): Promise<void> {
+        try {
+            // Skip about:blank and other non-http URLs
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                return;
+            }
+
+            // Get WebSocket connection to browser agent
+            const browserIpc = BrowserAgentIpc.getinstance();
+            if (!browserIpc.isConnected()) {
+                await browserIpc.ensureWebsocketConnected();
+            }
+
+            const message = {
+                method: "handlePageNavigation",
+                params: {
+                    url,
+                    title,
+                    tabId,
+                    timestamp: Date.now(),
+                },
+            };
+
+            await browserIpc.send(message);
+            debug(`Sent navigation message for ${url}`);
+        } catch (error) {
+            debug(`Failed to send navigation to browser agent:`, error);
         }
     }
 }

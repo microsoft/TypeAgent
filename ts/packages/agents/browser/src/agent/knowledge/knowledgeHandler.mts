@@ -40,6 +40,8 @@ import {
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./browserKnowledgeExtractor.mjs";
 import { DetailedKnowledgeStats } from "../browserKnowledgeSchema.js";
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:browser:knowledge");
 
 /**
  * Knowledge extraction progress update helper function
@@ -62,12 +64,12 @@ export function sendKnowledgeExtractionProgressViaWebSocket(
             };
 
             webSocket.send(JSON.stringify(progressMessage));
-            console.log(
+            debug(
                 `Knowledge Extraction Progress [${extractionId}] sent via WebSocket:`,
                 progress,
             );
         } else {
-            console.log(
+            debug(
                 `Knowledge Extraction Progress [${extractionId}] (WebSocket not available):`,
                 progress,
             );
@@ -208,41 +210,39 @@ function aggregateExtractionResults(results: any[]): {
     let totalReadingTime = 0;
 
     for (const result of results) {
-        if (result.knowledge) {
+        if (result.knowledge || result.partialKnowledge) {
+            const knowledge = result.knowledge || result.partialKnowledge;
             // Collect entities with frame context
-            if (result.knowledge.entities) {
-                allEntities.push(...result.knowledge.entities);
+            if (knowledge.entities) {
+                allEntities.push(...knowledge.entities);
             }
 
             // Collect relationships
-            if (result.knowledge.relationships) {
-                allRelationships.push(...result.knowledge.relationships);
+            if (knowledge.relationships) {
+                allRelationships.push(...knowledge.relationships);
             }
 
             // Collect topics
-            if (result.knowledge.topics) {
-                allTopics.push(...result.knowledge.topics);
+            if (knowledge.topics) {
+                allTopics.push(...knowledge.topics);
             }
 
             // Collect questions
-            if (result.knowledge.suggestedQuestions) {
-                allQuestions.push(...result.knowledge.suggestedQuestions);
+            if (knowledge.suggestedQuestions) {
+                allQuestions.push(...knowledge.suggestedQuestions);
             }
 
             // Collect summaries
-            if (result.knowledge.summary) {
-                summaries.push(result.knowledge.summary);
+            if (knowledge.summary) {
+                summaries.push(knowledge.summary);
             }
 
             // collect content actions
-            if (
-                result.knowledge.actions &&
-                Array.isArray(result.knowledge.actions)
-            ) {
-                allContentActions.push(...result.knowledge.actions);
+            if (knowledge.actions && Array.isArray(knowledge.actions)) {
+                allContentActions.push(...knowledge.actions);
 
                 const actionRelationships =
-                    result.knowledge.actions?.map((action: any) => ({
+                    knowledge.actions?.map((action: any) => ({
                         from: action.subjectEntityName || "unknown",
                         relationship: action.verbs?.join(", ") || "related to",
                         to: action.objectEntityName || "unknown",
@@ -532,7 +532,8 @@ export async function extractKnowledgeFromPageStreaming(
 ): Promise<EnhancedKnowledgeExtractionResult> {
     const { url, mode, extractionId, htmlFragments } = parameters;
     const extractionMode = mode as ExtractionMode;
-    const totalPhases = getPhaseCount(extractionMode);
+
+    let totalItems = 0;
     let processedItems = 0;
     const startTime = Date.now();
 
@@ -545,7 +546,7 @@ export async function extractKnowledgeFromPageStreaming(
         const progress: KnowledgeExtractionProgress = {
             extractionId,
             phase,
-            totalItems: totalPhases,
+            totalItems: totalItems,
             processedItems,
             currentItem: currentItem || undefined,
             errors: [],
@@ -560,9 +561,9 @@ export async function extractKnowledgeFromPageStreaming(
         };
         knowledgeProgressEvents.emitProgress(progressEvent);
 
-        console.log("Knowledge extraction progress:", {
+        debug("Knowledge extraction progress:", {
             extractionId,
-            progress,
+            progress: JSON.stringify(progress),
         });
     };
 
@@ -620,13 +621,38 @@ export async function extractKnowledgeFromPageStreaming(
             extractionMode === "basic" ||
             shouldIncludeMode("basic", extractionMode)
         ) {
-            const basicResults = await extractor.extractBatch(
+            const basicResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
                 "basic",
-                // Progress callback for batch processing
-                (progress) => {
-                    console.log("Basic extraction progress:", progress);
+                async (progress) => {
+                    debug("Basic extraction progress:", progress);
+                    if (
+                        progress.intermediateResults &&
+                        progress.intermediateResults.length > 0
+                    ) {
+                        const partialAggregated = aggregateExtractionResults(
+                            progress.intermediateResults,
+                        );
+                        totalItems = progress.total;
+                        processedItems = progress.processed;
+                        let progressMessage;
+                        if (
+                            progress.currentItemChunk &&
+                            progress.currentItemTotalChunks
+                        ) {
+                            progressMessage = `Processing chunk ${progress.currentItemChunk} of ${progress.currentItemTotalChunks} (${progress.processed} of ${progress.total} total chunks)`;
+                        } else {
+                            progressMessage = `Processing chunks: ${progress.processed} of ${progress.total} completed`;
+                        }
+
+                        await sendProgressUpdate(
+                            "basic",
+                            progressMessage,
+                            partialAggregated,
+                        );
+                    }
                 },
+                3,
             );
             aggregatedResults = aggregateExtractionResults(basicResults);
 
@@ -641,13 +667,29 @@ export async function extractKnowledgeFromPageStreaming(
         if (shouldIncludeMode("summary", extractionMode)) {
             await sendProgressUpdate("summary", "Generating content summary");
 
-            const summaryResults = await extractor.extractBatch(
+            const summaryResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
                 "summary",
-                // Progress callback for batch processing
-                (progress) => {
-                    console.log("Summary extraction progress:", progress);
+                async (progress) => {
+                    debug("Summary extraction progress:", progress);
+                    if (
+                        progress.intermediateResults &&
+                        progress.intermediateResults.length > 0
+                    ) {
+                        const partialData = aggregateExtractionResults(
+                            progress.intermediateResults,
+                        );
+                        totalItems = progress.total;
+                        processedItems = progress.processed;
+
+                        await sendProgressUpdate(
+                            "summary",
+                            `Summarizing: ${progress.processed} of ${progress.total} chunks processed`,
+                            partialData,
+                        );
+                    }
                 },
+                3,
             );
             const summaryData = aggregateExtractionResults(summaryResults);
 
@@ -687,38 +729,30 @@ export async function extractKnowledgeFromPageStreaming(
                 "Discovering entities and topics",
             );
 
-            const contentResults = await extractor.extractBatch(
+            const contentResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
                 "content",
-                // Progress callback for batch processing
-                (progress) => {
-                    console.log("Content extraction progress:", progress);
-                    // Send incremental updates if we have partial results
+                async (progress) => {
+                    debug("Content extraction progress:", progress);
                     if (
-                        progress.processed > 0 &&
-                        progress.processed % 2 === 0
+                        progress.intermediateResults &&
+                        progress.intermediateResults.length > 0
                     ) {
                         const partialData = aggregateExtractionResults(
-                            contentResults.slice(0, progress.processed),
+                            progress.intermediateResults,
                         );
-                        sendProgressUpdate(
+                        totalItems = progress.total;
+                        processedItems = progress.processed;
+                        await sendProgressUpdate(
                             "analyzing",
-                            `Processing item ${progress.processed} of ${progress.total}`,
+                            `Analyzing content: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
                         );
                     }
                 },
+                3,
             );
             const contentData = aggregateExtractionResults(contentResults);
-
-            console.log("Content extraction debug:", {
-                contentResultsCount: contentResults.length,
-                contentDataEntities: contentData.entities?.length || 0,
-                contentDataRelationships:
-                    contentData.relationships?.length || 0,
-                contentDataTopics: contentData.keyTopics?.length || 0,
-                sampleContentResult: contentResults[0], // Sample to inspect structure
-            });
 
             // Replace basic extraction with LLM-based content extraction
             // LLM extraction provides higher-fidelity knowledge than rule-based basic extraction
@@ -767,13 +801,28 @@ export async function extractKnowledgeFromPageStreaming(
                 "Analyzing entity relationships",
             );
 
-            const fullResults = await extractor.extractBatch(
+            const fullResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
                 "full",
-                // Progress callback for batch processing
-                (progress) => {
-                    console.log("Full extraction progress:", progress);
+                async (progress) => {
+                    debug("Full extraction progress:", progress);
+                    if (
+                        progress.intermediateResults &&
+                        progress.intermediateResults.length > 0
+                    ) {
+                        const partialData = aggregateExtractionResults(
+                            progress.intermediateResults,
+                        );
+                        totalItems = progress.total;
+                        processedItems = progress.processed;
+                        await sendProgressUpdate(
+                            "extracting",
+                            `Extracting relationships: ${progress.processed} of ${progress.total} chunks processed`,
+                            partialData,
+                        );
+                    }
                 },
+                3,
             );
             const fullData = aggregateExtractionResults(fullResults);
 
@@ -815,7 +864,7 @@ export async function extractKnowledgeFromPageStreaming(
             aggregatedResults,
         );
 
-        console.log("Knowledge extraction complete:", {
+        debug("Knowledge extraction complete:", {
             extractionId,
             finalData: aggregatedResults,
             totalTime: Date.now() - startTime,
@@ -829,7 +878,7 @@ export async function extractKnowledgeFromPageStreaming(
         const errorProgress: KnowledgeExtractionProgress = {
             extractionId,
             phase: "error",
-            totalItems: totalPhases,
+            totalItems: totalItems,
             processedItems,
             currentItem: undefined,
             errors: [
@@ -851,29 +900,18 @@ export async function extractKnowledgeFromPageStreaming(
     }
 }
 
-function getPhaseCount(mode: ExtractionMode): number {
-    switch (mode) {
-        case "basic":
-            return 2; // content + basic
-        case "summary":
-            return 3; // content + basic + summary
-        case "content":
-            return 4; // content + basic + summary + content
-        case "full":
-            return 5; // content + basic + summary + content + full
-        default:
-            return 4;
-    }
-}
-
 function shouldIncludeMode(
     checkMode: ExtractionMode,
     actualMode: ExtractionMode,
 ): boolean {
+    /*
     const modeOrder = ["basic", "summary", "content", "full"];
     const checkIndex = modeOrder.indexOf(checkMode);
     const actualIndex = modeOrder.indexOf(actualMode);
     return actualIndex >= checkIndex;
+    */
+    // for now, only return the selected mode and "basic"
+    return checkMode === "basic" || checkMode === actualMode;
 }
 
 function extractContentMetrics(extractionInputs: ExtractionInput[]) {
@@ -885,6 +923,41 @@ function extractContentMetrics(extractionInputs: ExtractionInput[]) {
         wordCount: totalWordCount,
         readingTime: Math.ceil(totalWordCount / 200), // 200 words per minute
     };
+}
+
+// Convert aggregated results to actions array, handling both contentActions and relationships
+function getActionsFromAggregatedResults(aggregatedResults: any): any[] {
+    // If we have contentActions, use them directly
+    if (
+        aggregatedResults.contentActions &&
+        Array.isArray(aggregatedResults.contentActions) &&
+        aggregatedResults.contentActions.length > 0
+    ) {
+        return aggregatedResults.contentActions;
+    }
+
+    // If we have relationships but no contentActions, convert relationships to actions
+    if (
+        aggregatedResults.relationships &&
+        Array.isArray(aggregatedResults.relationships) &&
+        aggregatedResults.relationships.length > 0
+    ) {
+        return aggregatedResults.relationships.map((relationship: any) => ({
+            verbs: relationship.relationship
+                ? relationship.relationship
+                      .split(/[,\s]+/)
+                      .filter((v: string) => v.trim().length > 0)
+                : ["related to"],
+            verbTense: "present" as "past" | "present" | "future",
+            subjectEntityName: relationship.from || "none",
+            objectEntityName: relationship.to || "none",
+            indirectObjectEntityName: "none",
+            params: [],
+            confidence: relationship.confidence || 0.8,
+        }));
+    }
+
+    return [];
 }
 
 export async function indexWebPageContent(
@@ -960,8 +1033,8 @@ export async function indexWebPageContent(
                         ? entity.type
                         : [entity.type], // Ensure type is array
                 })),
-                topics: aggregatedResults.keyTopics,
-                actions: aggregatedResults.contentActions || [], // Use actual content actions
+                topics: aggregatedResults.keyTopics || aggregatedResults.topics,
+                actions: getActionsFromAggregatedResults(aggregatedResults),
                 inverseActions: [], // Required property
             };
         }
@@ -1046,7 +1119,7 @@ export async function indexWebPageContent(
                         context.agentContext.index.path,
                         "index",
                     );
-                    console.log(
+                    debug(
                         `Saved updated website collection to ${context.agentContext.index.path}`,
                     );
                 } else {
@@ -1246,7 +1319,7 @@ export async function generateSmartSuggestedQuestions(
     if (websiteCollection && websiteCollection.visitFrequency) {
         try {
             // Domain visit history - simplified approach for now
-            console.log("Checking domain visit data for enhanced questions");
+            debug("Checking domain visit data for enhanced questions");
 
             if (domain) {
                 questions.push(`When did I first visit ${domain}?`);

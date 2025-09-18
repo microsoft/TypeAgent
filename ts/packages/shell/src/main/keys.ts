@@ -18,6 +18,8 @@ export function getKeysPersistencePath(dir: string) {
     return path.join(getShellDataDir(dir), "keys");
 }
 
+type ParsedKeys = dotenv.DotenvParseOutput;
+
 async function createPersistence(dir: string) {
     const cachePath = getKeysPersistencePath(dir);
     return PersistenceCreator.createPersistence({
@@ -33,12 +35,15 @@ async function loadKeysFromPersistence(dir: string) {
     debugShell("Loading keys persistence from directory", dir);
     try {
         const persistence = await createPersistence(dir);
-        return await persistence.load();
+        const keys = await persistence.load();
+        if (keys !== null) {
+            return dotenv.parse(Buffer.from(keys));
+        }
     } catch (e) {
         // Ignore load error and return null as if we don't have the keys.
         debugShellError("Failed to load keys persistence", e);
-        return null;
     }
+    return null;
 }
 
 async function saveKeysToPersistence(dir: string, keys: string) {
@@ -47,29 +52,43 @@ async function saveKeysToPersistence(dir: string, keys: string) {
     await persistence.save(keys);
 }
 
-function populateKeys(keys: string) {
-    const parsed = dotenv.parse(Buffer.from(keys));
+function populateKeys(parsed: ParsedKeys) {
     dotenv.populate(process.env as any, parsed, { override: true });
 }
 
-async function getKeys(
+function parsedKeysEqual(a: ParsedKeys, b: ParsedKeys) {
+    const keysA = Object.keys(a).sort();
+    const keysB = Object.keys(b).sort();
+    if (keysA.length !== keysB.length) {
+        return false;
+    }
+    for (let i = 0; i < keysA.length; i++) {
+        if (keysA[i] !== keysB[i] || a[keysA[i]] !== b[keysB[i]]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+async function getParsedKeys(
     dir: string,
     reset: boolean,
     envFile?: string,
-): Promise<string | null> {
-    const keys = reset ? null : await loadKeysFromPersistence(dir);
+): Promise<ParsedKeys | null> {
+    const parsed = reset ? null : await loadKeysFromPersistence(dir);
     if (envFile) {
         if (!fs.existsSync(envFile)) {
             throw new Error(`Env file ${envFile} not found`);
         }
         debugShell("Loading service keys from file", envFile);
         const content = await fs.promises.readFile(envFile, "utf-8");
-        if (keys === null) {
+        const parsedContent = dotenv.parse(Buffer.from(content));
+        if (parsed === null) {
             await saveKeysToPersistence(dir, content);
-            return content;
+            return parsedContent;
         }
 
-        if (keys !== content) {
+        if (!parsedKeysEqual(parsed, parsedContent)) {
             const result = await dialog.showMessageBox({
                 type: "question",
                 buttons: ["Yes", "No"],
@@ -79,12 +98,12 @@ async function getKeys(
 
             if (result.response === 0) {
                 await saveKeysToPersistence(dir, content);
-                return content;
+                return parsedContent;
             }
         } else {
             debugShell(`Key persistence is up to date with ${envFile}`);
         }
-    } else if (keys === null) {
+    } else if (parsed === null) {
         const result = await dialog.showMessageBox({
             type: "question",
             buttons: ["Import from a .env file", "Cancel"],
@@ -101,11 +120,11 @@ async function getKeys(
             if (result && result.length > 0) {
                 const content = await fs.promises.readFile(result[0], "utf-8");
                 await saveKeysToPersistence(dir, content);
-                return content;
+                return dotenv.parse(Buffer.from(content));
             }
         }
     }
-    return keys;
+    return parsed;
 }
 
 export async function loadKeysFromEnvFile(envFile: string) {
@@ -114,7 +133,8 @@ export async function loadKeysFromEnvFile(envFile: string) {
     }
     debugShell("Loading service keys from file", envFile);
     const keys = await fs.promises.readFile(envFile, "utf-8");
-    populateKeys(keys);
+    const parsed = dotenv.parse(Buffer.from(keys));
+    populateKeys(parsed);
 }
 
 export async function loadKeys(
@@ -122,11 +142,11 @@ export async function loadKeys(
     reset: boolean = false,
     envFile?: string,
 ) {
-    const keys = await getKeys(dir, reset, envFile);
-    if (keys) {
-        populateKeys(keys);
+    const parsed = await getParsedKeys(dir, reset, envFile);
+    if (parsed) {
+        populateKeys(parsed);
     } else {
-        debugShellError("No serivce keys loaded");
+        debugShellError("No service keys loaded");
         await dialog.showMessageBox({
             type: "warning",
             buttons: ["OK"],
