@@ -39,10 +39,11 @@ public class StandardCommands : ICommandModule
 
     private void Ping(ParseResult args)
     {
-        int count = args.Get<int>("count");
+        NamedArgs namedArgs = new(args);
+        int count = namedArgs.Get<int>("count");
         for (int i = 0; i < count; ++i)
         {
-            Console.WriteLine(args.Get<string>("msg"));
+            Console.WriteLine(namedArgs.Get<string>("msg"));
         }
     }
 }

@@ -33,9 +33,4 @@ public static class CommandExtensions
         var parseResult = command.Parse(cmdLine);
         return parseResult.Invoke(null);
     }
-
-    public static T? Get<T>(this ParseResult args, string name)
-    {
-        return args.GetValue<T>(Options.ArgPrefix + name);
-    }
 }
