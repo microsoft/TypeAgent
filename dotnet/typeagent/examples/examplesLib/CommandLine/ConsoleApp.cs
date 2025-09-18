@@ -13,7 +13,7 @@ public abstract class ConsoleApp
         Console.OutputEncoding = Encoding.UTF8;
 
         _allCommands = new RootCommand(title);
-        _allCommands.AddCommands(new StandardCommands(_allCommands));
+        _allCommands.AddModule(new StandardCommands());
 
         _stopStrings = ["quit", "exit"];
     }
@@ -239,14 +239,5 @@ public abstract class ConsoleApp
         {
             Console.WriteLine(item);
         }
-    }
-
-    /// <summary>
-    /// Add a module to this Console
-    /// </summary>
-    /// <param name="obj"></param>
-    public void AddModule(object obj)
-    {
-        Root.AddCommands(obj);
     }
 }

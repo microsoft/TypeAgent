@@ -5,9 +5,4 @@ namespace KnowProConsole;
 
 public class PodcastCommands
 {
-    [Command("ping")]
-    public void Ping(string msg)
-    {
-        Console.WriteLine(msg);
-    }
 }
