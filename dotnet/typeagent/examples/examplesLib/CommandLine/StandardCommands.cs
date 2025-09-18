@@ -16,7 +16,7 @@ public class StandardCommands : ICommandModule
 
     private Command ClearDef()
     {
-        Command cmd = new ("clear", "Clear the screen");
+        Command cmd = new("clear", "Clear the screen");
         cmd.SetAction(this.Clear);
         return cmd;
     }
