@@ -41,6 +41,8 @@ public class Json
         _options.WriteIndented = indented;
     }
 
+    public JsonSerializerOptions Options => _options;
+
     /// <summary>
     /// Turn the given object into a JSON string
     /// </summary>
@@ -79,6 +81,11 @@ public class Json
         return s_default.Deserialize(json, type);
     }
 
+    public static T? ParseFile<T>(string filePath)
+    {
+        return s_default.DeserializeFile<T>(filePath);
+    }
+
     /// <summary>
     /// Parse Json into an object of the given type
     /// </summary>
@@ -88,24 +95,6 @@ public class Json
     public static T? Parse<T>(string json)
     {
         return (T?)Parse(json, typeof(T));
-    }
-
-    /// <summary>
-    /// Parse Json from a stream into an object of the given type
-    /// </summary>
-    /// <typeparam name="T">destination type</typeparam>
-    /// <param name="jsonStream">stream to read from</param>
-    /// <returns></returns>
-    public static T? Parse<T>(Stream jsonStream)
-    {
-        return (T?) s_default.Deserialize(jsonStream, typeof(T));
-    }
-
-    public static T? ParseFile<T>(string filePath)
-    {
-        ArgumentVerify.ThrowIfNullOrEmpty(filePath, nameof(filePath));
-        using Stream stream = System.IO.File.OpenRead(filePath);
-        return Parse<T>(stream);
     }
 
     private string Serialize<T>(T value)
@@ -121,5 +110,13 @@ public class Json
     private object? Deserialize(Stream jsonStream, Type type)
     {
         return JsonSerializer.Deserialize(jsonStream, type, _options);
+    }
+
+    public T? DeserializeFile<T>(string filePath)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(filePath, nameof(filePath));
+        using Stream stream = System.IO.File.OpenRead(filePath);
+        var value = Deserialize(stream, typeof(T));
+        return value is not null ? (T)value : default(T);
     }
 }

@@ -5,7 +5,9 @@ namespace TypeAgent.KnowPro;
 
 public class Facet
 {
+    [JsonPropertyName("name")]
     public string Name { get; set; }
+    [JsonPropertyName("value")]
     public IFacetValue Value { get; set; }
 }
 

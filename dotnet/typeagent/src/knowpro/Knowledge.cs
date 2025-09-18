@@ -68,11 +68,13 @@ public class KnowledgeResponse
 
 public class Topic : Knowledge
 {
+    [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 
 public class Tag : Knowledge
 {
+    [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 

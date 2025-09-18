@@ -8,6 +8,14 @@ namespace TypeAgent.KnowPro;
 
 public class SemanticRef
 {
+    static JsonSerializerOptions s_serializerOptions;
+
+    static SemanticRef()
+    {
+        s_serializerOptions = Json.DefaultOptions();
+        s_serializerOptions.Converters.Add(new FacetValueJsonConverter());
+    }
+
     [JsonPropertyName("semanticRefOrdinal")]
     public int SemanticRefOrdinal { get; set; }
 
@@ -40,7 +48,7 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowledgeTypes.Entity => element.Deserialize<ConcreteEntity>(),
+            KnowledgeTypes.Entity => element.Deserialize<ConcreteEntity>(s_serializerOptions),
             KnowledgeTypes.Action => element.Deserialize<Action>(),
             KnowledgeTypes.Topic => element.Deserialize<Topic>(),
             KnowledgeTypes.Tag => element.Deserialize<Tag>(),
