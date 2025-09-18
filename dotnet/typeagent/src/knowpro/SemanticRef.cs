@@ -11,9 +11,17 @@ public class SemanticRef
     [JsonPropertyName("range")]
     public TextRange Range { get; set; }
 
-   // [JsonPropertyName("knowledgeType")]
-    public KnowledgeType KnowledgeType { get; set; }
+    [JsonPropertyName("knowledgeType")]
+    public string KnowledgeType { get; set; }
 
    // [JsonPropertyName("knowledge")]
-    public IKnowledge Knowledge { get; set; }
+    public Knowledge Knowledge { get; set; }
 }
+
+public static class KnowledgeType
+{
+    public const string Entity = "entity";
+    public const string Action = "action";
+    public const string Topic = "topic";
+}
+

@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface IKnowledge
+public abstract class Knowledge
 {
 }
 
@@ -12,7 +12,8 @@ public interface IKnowledgeSource
     KnowledgeResponse? GetKnowledge();
 }
 
-public class ConcreteEntity : IKnowledge
+
+public class ConcreteEntity : Knowledge
 {
     public ConcreteEntity()
     {
@@ -33,7 +34,7 @@ public class ConcreteEntity : IKnowledge
     public Facet[] Facets { get; set; }
 }
 
-public class Action : IKnowledge
+public class Action : Knowledge
 {
     [JsonPropertyName("verbs")]
     public string[] Verbs { get; set; }
@@ -59,12 +60,12 @@ public class KnowledgeResponse
     public string[] Topics { get; set; }
 }
 
-public class Topic : IKnowledge
+public class Topic : Knowledge
 {
     public string Text { get; set; }
 }
 
-public class Tag : IKnowledge
+public class Tag : Knowledge
 {
     public string Text { get; set; }
 }
