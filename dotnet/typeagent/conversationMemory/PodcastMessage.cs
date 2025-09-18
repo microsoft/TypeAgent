@@ -31,6 +31,6 @@ public class PodcastMessage : Message<PodcastMessageMeta>
                 entities.Add(EntityFactory.Person(listener));
             }
         }
-        return new KnowledgeResponse { Entities = entities };
+        return new KnowledgeResponse { Entities = [.. entities] };
     }
 }

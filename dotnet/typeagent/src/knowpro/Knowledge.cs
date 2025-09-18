@@ -50,13 +50,13 @@ public class Action : IKnowledge
 public class KnowledgeResponse
 {
     [JsonPropertyName("entities")]
-    public IList<ConcreteEntity> Entities { get; set; }
+    public ConcreteEntity[] Entities { get; set; }
     [JsonPropertyName("actions")]
-    public IList<Action> Actions { get; set; }
+    public Action[] Actions { get; set; }
     [JsonPropertyName("inverseActions")]
-    public IList<Action> InverseActions { get; set; }
+    public Action[] InverseActions { get; set; }
     [JsonPropertyName("topics")]
-    public IList<string> Topic { get; set; }
+    public string[] Topics { get; set; }
 }
 
 public class Topic : IKnowledge

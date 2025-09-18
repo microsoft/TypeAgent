@@ -22,7 +22,7 @@ public static class ListExtensions
 
         List<TResult> results = [];
         int count = list.Count;
-        for (int i = 0; i <count; ++i)
+        for (int i = 0; i < count; ++i)
         {
             results.Add(mapFn(list[i]));
         }

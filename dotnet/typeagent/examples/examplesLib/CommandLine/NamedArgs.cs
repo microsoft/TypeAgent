@@ -15,6 +15,11 @@ public class NamedArgs
         _argPrefix = argPrefix ?? Options.ArgPrefix;
     }
 
+    public string? Get(string  name)
+    {
+        return Get<string>(name);
+    }
+
     public T? Get<T>(string name)
     {
         return _args.GetValue<T>(_argPrefix + name);

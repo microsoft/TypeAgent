@@ -16,11 +16,15 @@ public class PodcastCommands : ICommandModule
         {
             Args.Arg<string>("filePath", "Path to existing podcast index")
         };
+        cmd.SetAction(this.PodcastLoadAsync);
         return cmd;
     }
 
-    private void PodcastLoad(ParseResult args)
+    private Task PodcastLoadAsync(ParseResult args, CancellationToken cancellationToken)
     {
-        Console.WriteLine("Podcast load");
+        NamedArgs namedArgs = new(args);
+        string? filePath = namedArgs.Get("filePath");
+        var data = ConversationSerializer.ReadFromFile<PodcastMessage, PodcastMessageMeta>(filePath!);
+        return Task.CompletedTask;
     }
 }
