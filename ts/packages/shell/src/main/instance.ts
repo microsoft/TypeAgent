@@ -269,12 +269,12 @@ export async function initializeInstance(
         startTime,
     );
 
-    const onDomReady = async (event: Electron.IpcMainEvent) => {
+    const onChatViewReady = async (event: Electron.IpcMainEvent) => {
         const eventWindow = getShellWindowForChatViewIpcEvent(event);
         if (eventWindow !== shellWindow) {
             return;
         }
-        ipcMain.removeListener("chat-view-ready", onDomReady);
+        ipcMain.removeListener("chat-view-ready", onChatViewReady);
         debugShellInit("Showing window", performance.now() - startTime);
 
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
@@ -299,11 +299,11 @@ export async function initializeInstance(
             dispatcher.processCommand("@greeting", "agent-0", []);
         }
     };
-    ipcMain.on("chat-view-ready", onDomReady);
+    ipcMain.on("chat-view-ready", onChatViewReady);
 
     shellWindow.mainWindow.on("closed", () => {
         ensureCleanupInstance();
-        ipcMain.removeListener("chat-view-ready", onDomReady);
+        ipcMain.removeListener("chat-view-ready", onChatViewReady);
     });
 
     instance = { shellWindow, dispatcherP };
