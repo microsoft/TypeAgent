@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ipcMain, session } from "electron";
-import { ShellWindow } from "./shellWindow.js";
+import { getShellWindowForIpcEvent, ShellWindow } from "./shellWindow.js";
 import { debugShellError } from "./debug.js";
 import { ExtensionStorageManager } from "./extensionStorage.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
@@ -47,8 +47,8 @@ export function initializeExternalStorageIpcHandlers(instanceDir: string) {
 
 export function initializePDFViewerIpcHandlers() {
     // PDF viewer IPC handlers
-    ipcMain.handle("check-typeagent-connection", async () => {
-        const shellWindow = ShellWindow.getInstance();
+    ipcMain.handle("check-typeagent-connection", async (event) => {
+        const shellWindow = getShellWindowForIpcEvent(event);
         if (shellWindow) {
             const connected = await shellWindow.checkTypeAgentConnection();
             return { connected };
@@ -56,8 +56,8 @@ export function initializePDFViewerIpcHandlers() {
         return { connected: false };
     });
 
-    ipcMain.handle("open-pdf-viewer", async (_, pdfUrl: string) => {
-        const shellWindow = ShellWindow.getInstance();
+    ipcMain.handle("open-pdf-viewer", async (event, pdfUrl: string) => {
+        const shellWindow = getShellWindowForIpcEvent(event);
         if (shellWindow) {
             try {
                 await shellWindow.openPDFViewer(pdfUrl);

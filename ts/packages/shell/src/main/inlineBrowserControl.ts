@@ -17,9 +17,13 @@ import {
     generateEmbedding,
 } from "typeagent";
 
+type InlineBrowserControl = {
+    control: BrowserControl;
+    close: () => void;
+};
 export function createInlineBrowserControl(
     shellWindow: ShellWindow,
-): BrowserControl {
+): InlineBrowserControl {
     // Helper function to get the active browser WebContents for automation
     function getActiveBrowserWebContents() {
         const activeBrowserView = shellWindow.getActiveBrowserView();
@@ -36,14 +40,16 @@ export function createInlineBrowserControl(
     });
 
     // Handle RPC replies from browser views
-    ipcMain.on("inline-browser-rpc-reply", (_, message) => {
+    const onReply = (_, message) => {
+        // REVIEW: should verify the sender is the browser view we did the rpc call to.
         contentScriptRpcChannel.message(message);
-    });
+    };
+    ipcMain.on("inline-browser-rpc-reply", onReply);
 
     const contentScriptControl = createContentScriptRpcClient(
         contentScriptRpcChannel.channel,
     );
-    return {
+    const control: BrowserControl = {
         async openWebPage(url: string, options?: { newTab?: boolean }) {
             const activeTab = shellWindow.getActiveBrowserView();
             if (options?.newTab || !activeTab) {
@@ -400,6 +406,13 @@ export function createInlineBrowserControl(
                     extractionMode: "content",
                 };
             }
+        },
+    };
+    return {
+        control,
+        close: () => {
+            contentScriptRpcChannel.disconnect();
+            ipcMain.removeListener("inline-browser-rpc-reply", onReply);
         },
     };
 }

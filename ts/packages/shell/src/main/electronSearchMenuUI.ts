@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 import { loadLocalWebContents } from "./utils.js";
-import { BrowserWindow, ipcMain, WebContents, WebContentsView } from "electron";
+import { ipcMain, WebContents, WebContentsView } from "electron";
 import {
     getShellWindowForChatViewIpcEvent,
+    getShellWindowForIpcEvent,
     ShellWindow,
 } from "./shellWindow.js";
 import type { SearchMenuUIUpdateData } from "../preload/electronTypes.js";
@@ -93,7 +94,7 @@ export function initializeSearchMenuUI() {
 
             const searchMenuViewP = searchMenuUIs.get(id);
             if (searchMenuViewP === undefined) {
-                debugError(`Invalid id  ${id} for ${name}`);
+                debugError(`Invalid id ${id} for ${name}`);
                 return;
             }
 
@@ -112,25 +113,15 @@ export function initializeSearchMenuUI() {
         shellWindow.updateOverlay(searchMenuView);
     });
 
-    function getShellWindowFromSearchMenuIpcEvent(
-        event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent,
-    ): ShellWindow | undefined {
-        const mainWindow = BrowserWindow.fromWebContents(event.sender);
-        if (mainWindow === undefined) {
-            return undefined;
-        }
-        const shellWindow = ShellWindow.getInstance();
-        return shellWindow?.mainWindow === mainWindow ? shellWindow : undefined;
-    }
-
     ipcMain.on("search-menu-completion", async (event, item) => {
-        const shellWindow = getShellWindowFromSearchMenuIpcEvent(event);
+        const shellWindow = getShellWindowForIpcEvent(event);
         if (shellWindow === undefined) {
             debugError("Invalid sender for search-menu-completion");
             return;
         }
         const id = searchMenuIds.get(event.sender);
         if (id === undefined) {
+            debugError("Invalid sender for search-menu-completion");
             return undefined;
         }
         shellWindow.chatView.webContents.send(
@@ -141,13 +132,14 @@ export function initializeSearchMenuUI() {
     });
 
     ipcMain.on("search-menu-size", async (event, size) => {
-        const shellWindow = getShellWindowFromSearchMenuIpcEvent(event);
+        const shellWindow = getShellWindowForIpcEvent(event);
         if (shellWindow === undefined) {
             debugError("Invalid sender for search-menu-completion");
             return;
         }
         const id = searchMenuIds.get(event.sender);
         if (id === undefined) {
+            debugError("Invalid sender for search-menu-completion");
             return;
         }
         const searchMenuViewP = await searchMenuUIs.get(id);
