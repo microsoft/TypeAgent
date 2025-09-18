@@ -52,6 +52,9 @@ export class EntityGraphVisualizer {
     private zoomEventCount: number = 0;
     private eventSequence: Array<{event: string, time: number, zoom: number, details?: any}> = [];
 
+    // LOD performance optimization
+    private lodThresholds: Map<number, {nodeThreshold: number, edgeThreshold: number}> = new Map();
+
     constructor(container: HTMLElement) {
         this.container = container;
     }
@@ -67,24 +70,23 @@ export class EntityGraphVisualizer {
             );
         }
 
-        // Initialize cytoscape instance with performance optimizations
+        console.log(`[Platform] Detected: ${navigator.platform}, using Cytoscape.js default wheel sensitivity`);
+
+        // Initialize cytoscape instance with defaults for smooth zoom
         this.cy = cytoscape({
             container: this.container,
             elements: [],
             style: this.getOptimizedStyles(),
             layout: { name: "grid" },
-            // Zoom limits to prevent extreme values causing blank graph
-            minZoom: 0.1,                     // Prevent zooming out too far (10% minimum)
-            maxZoom: 10,                      // Prevent excessive zooming in (10x maximum)
-            // Performance optimizations
-            pixelRatio: 1,                    // Lower resolution for better performance
-            motionBlur: false,                // Disable motion blur
-            textureOnViewport: true,          // Cache rendered texture
-            hideEdgesOnViewport: true,        // Hide edges during pan/zoom
-            wheelSensitivity: 0.2,            // Slower zoom for smoother LOD updates
-            // Standard settings
-            zoomingEnabled: true,
-            userZoomingEnabled: true,
+            // Use conservative zoom bounds to prevent oscillation
+            // Previous: 0.15-8.0 (oscillated), 0.01-100 (extreme bouncing), 0.1-10.0 (still bouncing)
+            minZoom: 0.25,                    // Conservative minimum to keep graph visible
+            maxZoom: 4.0,                     // Conservative maximum to prevent fit() overreach
+            // Remove wheelSensitivity to trust Cytoscape defaults and avoid warnings
+            pixelRatio: 1,                     // Lower resolution for better performance on high-density displays
+            // Zoom settings - disable user zooming to implement custom smooth zoom
+            zoomingEnabled: true,           // Allow programmatic zooming
+            userZoomingEnabled: false,      // Disable default wheel/touch zoom (we handle it custom)
             panningEnabled: true,
             userPanningEnabled: true,
             boxSelectionEnabled: false,
@@ -159,6 +161,61 @@ export class EntityGraphVisualizer {
                 }
             }
         };
+    }
+
+    /**
+     * Pre-compute LOD thresholds to avoid calculation during zoom events
+     */
+    private precomputeLODThresholds(): void {
+        if (!this.cy) return;
+
+        const zoomLevels = [0.1, 0.3, 0.6, 1.0, 1.5, 3.0, 6.0, 10.0];
+        this.lodThresholds.clear();
+
+        zoomLevels.forEach(zoom => {
+            const thresholds = this.calculateDynamicThresholds(zoom);
+            this.lodThresholds.set(zoom, thresholds);
+        });
+
+        console.log(`[Performance] Pre-computed LOD thresholds for ${zoomLevels.length} zoom levels`);
+    }
+
+    /**
+     * Fast threshold lookup during zoom events
+     */
+    private getFastLODThresholds(zoom: number): {nodeThreshold: number, edgeThreshold: number} {
+        // Find closest pre-computed zoom level
+        const zoomLevels = Array.from(this.lodThresholds.keys()).sort((a, b) => a - b);
+        const closestZoom = zoomLevels.reduce((prev, curr) =>
+            Math.abs(curr - zoom) < Math.abs(prev - zoom) ? curr : prev
+        );
+
+        const thresholds = this.lodThresholds.get(closestZoom);
+        if (thresholds) {
+            return thresholds;
+        }
+
+        // Fallback to calculation if not found
+        return this.calculateDynamicThresholds(zoom);
+    }
+
+    /**
+     * Normalize wheel delta values for cross-platform consistency
+     */
+    private normalizeWheelDelta(deltaY: number): number {
+        // Handle extreme delta values from different platforms
+        const MAX_DELTA = 10;  // Reasonable maximum delta
+        const MIN_DELTA = -10; // Reasonable minimum delta
+
+        // Linux systems often report ±120, normalize to ±3
+        if (Math.abs(deltaY) > 100) {
+            const normalizedDelta = Math.sign(deltaY) * Math.min(3, Math.abs(deltaY) / 40);
+            console.log(`[Zoom] Normalized extreme delta: ${deltaY} → ${normalizedDelta}`);
+            return normalizedDelta;
+        }
+
+        // Clamp to reasonable range for other platforms
+        return Math.max(MIN_DELTA, Math.min(MAX_DELTA, deltaY));
     }
 
     /**
@@ -763,12 +820,15 @@ export class EntityGraphVisualizer {
         this.cy.add(elements);
         console.timeEnd('[Perf] Add elements to Cytoscape');
 
+        // Pre-compute LOD thresholds for performance
+        this.precomputeLODThresholds();
+
         await this.applyLayoutWithCache('initial');
 
         this.setupZoomInteractions();
 
         console.time('[Perf] Fit to view');
-        this.cy.fit();
+        this.cy.fit({ maxZoom: 2.0 }); // Constrain initial fit to prevent oscillation
         console.timeEnd('[Perf] Fit to view');
 
         // Investigation 1: Measure zoom after fit
@@ -836,8 +896,15 @@ export class EntityGraphVisualizer {
             const layout = this.cy.layout({
                 name: 'preset',
                 positions: (node: any) => positions[node.id()],
-                fit: true,
+                fit: false,        // Prevent layout from fighting viewport control
+                animate: false,    // No animation needed for preset positions
                 padding: 30
+            });
+
+            // Handle layout completion to manually fit view
+            layout.one('layoutstop', () => {
+                console.log(`[Layout] Cached layout applied, fitting view`);
+                this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
             });
 
             layout.run();
@@ -884,7 +951,8 @@ export class EntityGraphVisualizer {
                 idealEdgeLength: 80,
                 nodeOverlap: 20,
                 refresh: 20,
-                fit: true,
+                fit: false,               // Prevent layout from fighting viewport control
+                animate: 'end',           // Animate only at end to prevent viewport conflicts
                 padding: 30,
                 randomize: false,
                 componentSpacing: 100,
@@ -899,6 +967,11 @@ export class EntityGraphVisualizer {
                 stop: () => {
                     // Cache positions after layout completes
                     this.saveLayoutToCache(cacheKey);
+
+                    // Manually fit view after layout completion
+                    console.log(`[Layout] Cose layout completed, fitting view`);
+                    this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
+
                     resolve();
                 }
             });
@@ -922,20 +995,13 @@ export class EntityGraphVisualizer {
     private setupZoomInteractions(): void {
         if (!this.cy) return;
 
-        // Investigation 2: Track zoom event count and sequence
+        // Natural zoom event handling - trust Cytoscape.js defaults
         this.cy.on('zoom', () => {
             const zoom = this.cy.zoom();
             this.zoomEventCount++;
 
-            // With minZoom/maxZoom set, extreme values should not occur
-            // But keep validation as safety check for edge cases
-            if (!isFinite(zoom) || zoom < 0.1 || zoom > 10) {
-                console.error(`[Investigation] ⚠️ Unexpected zoom value: ${zoom} at event #${this.zoomEventCount}`);
-                // This shouldn't happen with minZoom/maxZoom, but log for debugging
-                return; // Skip processing this invalid zoom event
-            }
-
-            console.log(`[Investigation] Zoom event #${this.zoomEventCount}, zoom: ${zoom.toFixed(3)}`);
+            // Simple logging only - no intervention
+            console.log(`[Zoom] Event #${this.zoomEventCount}, zoom: ${zoom.toFixed(3)}`);
 
             this.eventSequence.push({
                 event: 'zoom',
@@ -944,14 +1010,48 @@ export class EntityGraphVisualizer {
                 details: { eventNumber: this.zoomEventCount }
             });
 
+            // Smooth 60fps LOD updates
             clearTimeout(this.zoomTimer);
             this.zoomTimer = setTimeout(() => {
                 console.time('[Perf] Zoom LOD update');
-                console.log(`[Investigation] LOD triggered by zoom event #${this.zoomEventCount}`);
                 this.updateStyleBasedLOD(zoom);
                 console.timeEnd('[Perf] Zoom LOD update');
-            }, 100); // Debounce zoom events
+            }, 16); // ~60fps update rate
         });
+
+        // Custom smooth zoom wheel handler to prevent abrupt zoom changes
+        this.container.addEventListener('wheel', (event) => {
+            event.preventDefault(); // Prevent default Cytoscape zoom handling
+
+            const currentZoom = this.cy.zoom();
+            const deltaY = event.deltaY;
+
+            // Calculate smooth zoom step (10% per wheel event, max)
+            const zoomStep = currentZoom * 0.1; // 10% of current zoom
+            const maxStep = 0.1; // Maximum absolute step
+            const actualStep = Math.min(zoomStep, maxStep);
+
+            // Determine new zoom level
+            let newZoom;
+            if (deltaY > 0) {
+                // Zoom out
+                newZoom = currentZoom - actualStep;
+            } else {
+                // Zoom in
+                newZoom = currentZoom + actualStep;
+            }
+
+            // Clamp to our bounds
+            newZoom = Math.max(0.25, Math.min(4.0, newZoom));
+
+            console.log(`[Smooth Zoom] ${deltaY > 0 ? 'Out' : 'In'}: ${currentZoom.toFixed(3)} → ${newZoom.toFixed(3)} (step: ${actualStep.toFixed(3)})`);
+
+            // Apply smooth zoom
+            this.cy.zoom({
+                level: newZoom,
+                renderedPosition: { x: event.offsetX, y: event.offsetY }
+            });
+        }, { passive: false }); // Must be non-passive to preventDefault
 
         // Investigation 4: Event sequence analysis
         ['pan', 'viewport', 'render'].forEach(eventType => {
@@ -966,6 +1066,22 @@ export class EntityGraphVisualizer {
                 }
             });
         });
+
+        // Custom wheel event handling for delta normalization
+        this.container.addEventListener('wheel', (event: WheelEvent) => {
+            // Check if we should handle this event (only if it targets the cytoscape container)
+            if (!this.cy || event.defaultPrevented) return;
+
+            const originalDelta = event.deltaY;
+            const normalizedDelta = this.normalizeWheelDelta(originalDelta);
+
+            // If delta was normalized significantly, we might want to intervene
+            if (Math.abs(normalizedDelta - originalDelta) > 10) {
+                console.log(`[Zoom] Intercepted extreme wheel delta: ${originalDelta} → ${normalizedDelta}`);
+                // Note: For now we just log. Full intervention would require preventing default
+                // and manually applying zoom, but this might interfere with Cytoscape's handling
+            }
+        }, { passive: true });
     }
 
     /**
@@ -975,10 +1091,19 @@ export class EntityGraphVisualizer {
     private updateStyleBasedLOD(zoom: number): void {
         if (!this.cy) return;
 
-        // Validate zoom value (should be constrained by minZoom/maxZoom)
-        if (!isFinite(zoom) || zoom < 0.1 || zoom > 10) {
-            console.error(`[Investigation] Invalid zoom in updateStyleBasedLOD: ${zoom}`);
+        // Validate and clamp zoom value to reasonable bounds
+        if (!isFinite(zoom)) {
+            console.error(`[Investigation] Non-finite zoom in updateStyleBasedLOD: ${zoom}`);
             return; // Skip update with invalid zoom
+        }
+
+        // Clamp zoom to our configured bounds (0.25 - 4.0)
+        if (zoom < 0.25) {
+            console.warn(`[Investigation] Zoom too low (${zoom}), clamping to 0.25`);
+            zoom = 0.25;
+        } else if (zoom > 4.0) {
+            console.warn(`[Investigation] Zoom too high (${zoom}), clamping to 4.0`);
+            zoom = 4.0;
         }
 
         // Check view mode first
@@ -997,8 +1122,8 @@ export class EntityGraphVisualizer {
         // Global view mode - style-based LOD (no data manipulation)
         console.time('[Perf] Style-based LOD update');
 
-        // Get actual data for dynamic threshold calculation
-        const { nodeThreshold, edgeThreshold } = this.calculateDynamicThresholds(zoom);
+        // Use pre-computed thresholds for performance
+        const { nodeThreshold, edgeThreshold } = this.getFastLODThresholds(zoom);
         const labelZoomThreshold = this.getLabelZoomThreshold(zoom);
 
         // Analyze importance distribution for calibration
@@ -1326,6 +1451,9 @@ export class EntityGraphVisualizer {
         this.cy.batch(() => {
             this.cy.add(elements);
         });
+
+        // Pre-compute LOD thresholds for performance
+        this.precomputeLODThresholds();
 
         // Apply style-based LOD for current zoom
         this.updateStyleBasedLOD(currentZoom);
@@ -1765,7 +1893,8 @@ export class EntityGraphVisualizer {
                 idealEdgeLength: 100,
                 nodeOverlap: 20,
                 refresh: 20,
-                fit: true,
+                fit: false,               // Prevent layout from fighting viewport control
+                animate: 'end',           // Animate only at end to prevent viewport conflicts
                 padding: 30,
                 randomize: false,
                 componentSpacing: 100,
@@ -1795,7 +1924,8 @@ export class EntityGraphVisualizer {
             },
             grid: {
                 name: "grid",
-                fit: true,
+                fit: false,               // Prevent layout from fighting viewport control
+                animate: 'end',           // Animate only at end to prevent viewport conflicts
                 padding: 30,
                 avoidOverlap: true,
                 avoidOverlapPadding: 10,
@@ -1808,13 +1938,19 @@ export class EntityGraphVisualizer {
                     return {};
                 },
                 sort: undefined,
-                animate: false,
             },
         };
 
         const layout = this.cy.layout(
             layoutConfigs[layoutName] || layoutConfigs.force,
         );
+
+        // Handle layout completion to manually fit view
+        layout.one('layoutstop', () => {
+            console.log(`[Layout] ${layoutName} layout completed, fitting view`);
+            this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
+        });
+
         layout.run();
     }
 
@@ -1973,7 +2109,7 @@ export class EntityGraphVisualizer {
     resize(): void {
         if (this.cy) {
             this.cy.resize();
-            this.cy.fit();
+            this.cy.fit({ maxZoom: 2.0 }); // Constrain resize fit to prevent oscillation
         }
     }
 
@@ -2031,7 +2167,7 @@ export class EntityGraphVisualizer {
     fitToView(): void {
         console.log("fitToView() called, cy instance exists:", !!this.cy);
         if (this.cy) {
-            this.cy.fit();
+            this.cy.fit({ maxZoom: 2.0 }); // Constrain user-triggered fit to prevent oscillation
             console.log("Graph fitted to view");
         } else {
             console.warn(
@@ -2060,7 +2196,7 @@ export class EntityGraphVisualizer {
      */
     resetView(): void {
         if (this.cy) {
-            this.cy.fit();
+            this.cy.fit({ maxZoom: 2.0 }); // Constrain reset fit to prevent oscillation
             this.cy.center();
         }
     }
