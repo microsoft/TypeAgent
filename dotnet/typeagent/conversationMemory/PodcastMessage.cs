@@ -6,7 +6,10 @@ namespace TypeAgent.ConversationMemory;
 
 public class PodcastMessageMeta : MessageMetadata
 {
+    [JsonPropertyName("speaker")]
     public string? Speaker { get; set; }
+
+    [JsonPropertyName("listeners")]
     public IList<string> Listeners { get; set; } = [];
 
     public override string? Source => Speaker;
