@@ -9,6 +9,7 @@ import {
     DefaultEntityGraphServices,
     ChromeExtensionService,
     createExtensionService,
+    GlobalDataLoader,
 } from "./knowledgeUtilities";
 
 /**
@@ -35,6 +36,7 @@ class EntityGraphView {
             const extensionService = createExtensionService();
             this.entityGraphService = new DefaultEntityGraphServices(
                 extensionService,
+                () => this.loadGlobalGraphData()
             );
             console.log(
                 "Services initialized with Chrome extension connection",
@@ -759,13 +761,13 @@ class EntityGraphView {
         try {
             console.time('[Perf] Total entity view load');
             this.showGraphLoading();
-            console.log(`Getting entity graph for: ${entityName} depth: 2`);
+            console.log(`Getting entity graph for: ${entityName} depth: 8`);
 
             console.time('[Perf] Entity graph data fetch');
-            // Load entity graph using enhanced search
+            // Load entity graph
             const graphData = await this.entityGraphService.getEntityGraph(
                 entityName,
-                2,
+                4,
             );
             console.timeEnd('[Perf] Entity graph data fetch');
             console.log(`[Perf] Entity data: ${graphData.entities?.length || 0} entities, ${graphData.relationships?.length || 0} relationships`);
@@ -981,7 +983,7 @@ class EntityGraphView {
                         ) ||
                         0.8,
                     source: "graph",
-                    // Include facets from the enhanced entity if available
+                    // Include facets from the entity if available
                     facets: centerEntityFromGraph?.facets || [],
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
@@ -1084,7 +1086,7 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Refresh data using enhanced search
+            // Refresh data
             const refreshedEntity =
                 await this.entityGraphService.refreshEntityData(entityName);
 

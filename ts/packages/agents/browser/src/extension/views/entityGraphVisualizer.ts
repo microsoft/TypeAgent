@@ -35,6 +35,10 @@ export class EntityGraphVisualizer {
     private layoutCache: Map<string, any> = new Map();
     private zoomTimer: any = null;
     private isUpdatingLOD: boolean = false;
+    private isNodeBeingDragged: boolean = false;
+    private layoutUpdateTimer: any = null;
+    private selectedNodes: Set<string> = new Set();
+    private contextMenu: HTMLElement | null = null;
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -421,7 +425,18 @@ export class EntityGraphVisualizer {
     private setupInteractions(): void {
         if (!this.cy) return;
 
-        // Node click
+        this.setupNodeInteractions();
+        this.setupEdgeInteractions();
+        this.setupSelectionInteractions();
+        this.setupContextMenus();
+        this.setupKeyboardShortcuts();
+        this.setupGestureHandling();
+    }
+
+    private setupNodeInteractions(): void {
+        if (!this.cy) return;
+
+        // Single click
         this.cy.on("tap", "node", (evt: any) => {
             const node = evt.target;
             const entityData: EntityData = {
@@ -437,21 +452,152 @@ export class EntityGraphVisualizer {
             this.highlightConnectedElements(node);
         });
 
-        // Background click
-        this.cy.on("tap", (evt: any) => {
-            if (evt.target === this.cy) {
-                this.clearHighlights();
-            }
+        // Double click for detailed view
+        this.cy.on("dblclick", "node", (evt: any) => {
+            const node = evt.target;
+            this.focusOnNode(node);
         });
 
-        // Node hover
+        // Node hover with progressive disclosure
         this.cy.on("mouseover", "node", (evt: any) => {
             const node = evt.target;
-            this.showNodeTooltip(node, evt.renderedPosition);
+            this.showProgressiveNodeInfo(node, evt.renderedPosition);
+            this.highlightNodeNeighborhood(node, 1);
         });
 
         this.cy.on("mouseout", "node", () => {
             this.hideNodeTooltip();
+            this.clearNeighborhoodHighlights();
+        });
+
+        // Node dragging with auto-layout
+        this.cy.on("grab", "node", (evt: any) => {
+            this.isNodeBeingDragged = true;
+        });
+
+        this.cy.on("free", "node", (evt: any) => {
+            this.isNodeBeingDragged = false;
+            this.scheduleLayoutUpdate();
+        });
+    }
+
+    private setupEdgeInteractions(): void {
+        if (!this.cy) return;
+
+        // Edge click
+        this.cy.on("tap", "edge", (evt: any) => {
+            const edge = evt.target;
+            this.highlightEdgePath(edge);
+            this.showEdgeDetails(edge, evt.renderedPosition);
+        });
+
+        // Edge hover
+        this.cy.on("mouseover", "edge", (evt: any) => {
+            const edge = evt.target;
+            this.emphasizeEdge(edge);
+        });
+
+        this.cy.on("mouseout", "edge", () => {
+            this.deemphasizeAllEdges();
+        });
+    }
+
+    private setupSelectionInteractions(): void {
+        if (!this.cy) return;
+
+        // Box selection mode toggle
+        let boxSelectionMode = false;
+
+        // Background interactions
+        this.cy.on("tap", (evt: any) => {
+            if (evt.target === this.cy) {
+                this.clearHighlights();
+                this.clearAllSelections();
+            }
+        });
+
+        // Multi-selection with Ctrl/Cmd
+        this.cy.on("tap", "node", (evt: any) => {
+            if (evt.originalEvent.ctrlKey || evt.originalEvent.metaKey) {
+                const node = evt.target;
+                this.toggleNodeSelection(node);
+                evt.stopPropagation();
+            }
+        });
+
+        // Selection change handling
+        this.cy.on("select unselect", () => {
+            this.updateSelectionToolbar();
+        });
+    }
+
+    private setupContextMenus(): void {
+        if (!this.cy) return;
+
+        // Right-click context menu for nodes
+        this.cy.on("cxttap", "node", (evt: any) => {
+            const node = evt.target;
+            this.showNodeContextMenu(node, evt.renderedPosition);
+            evt.preventDefault();
+        });
+
+        // Right-click context menu for edges
+        this.cy.on("cxttap", "edge", (evt: any) => {
+            const edge = evt.target;
+            this.showEdgeContextMenu(edge, evt.renderedPosition);
+            evt.preventDefault();
+        });
+
+        // Background context menu
+        this.cy.on("cxttap", (evt: any) => {
+            if (evt.target === this.cy) {
+                this.showBackgroundContextMenu(evt.renderedPosition);
+                evt.preventDefault();
+            }
+        });
+    }
+
+    private setupKeyboardShortcuts(): void {
+        if (!this.cy) return;
+
+        document.addEventListener("keydown", (evt: KeyboardEvent) => {
+            if (this.isGraphFocused()) {
+                this.handleKeyboardShortcut(evt);
+            }
+        });
+    }
+
+    private setupGestureHandling(): void {
+        if (!this.cy) return;
+
+        // Pinch-to-zoom for touch devices
+        let initialDistance = 0;
+        let isGesturing = false;
+
+        this.cy.on("touchstart", (evt: any) => {
+            if (evt.originalEvent.touches.length === 2) {
+                isGesturing = true;
+                const touch1 = evt.originalEvent.touches[0];
+                const touch2 = evt.originalEvent.touches[1];
+                initialDistance = this.getTouchDistance(touch1, touch2);
+            }
+        });
+
+        this.cy.on("touchmove", (evt: any) => {
+            if (isGesturing && evt.originalEvent.touches.length === 2) {
+                const touch1 = evt.originalEvent.touches[0];
+                const touch2 = evt.originalEvent.touches[1];
+                const currentDistance = this.getTouchDistance(touch1, touch2);
+                const zoomFactor = currentDistance / initialDistance;
+
+                const currentZoom = this.cy!.zoom();
+                this.cy!.zoom(currentZoom * zoomFactor);
+                initialDistance = currentDistance;
+            }
+        });
+
+        this.cy.on("touchend", () => {
+            isGesturing = false;
         });
     }
 
@@ -518,7 +664,7 @@ export class EntityGraphVisualizer {
 
         await this.applyLayoutWithCache('initial');
 
-        this.setupEnhancedZoomInteractions();
+        this.setupZoomInteractions();
 
         console.time('[Perf] Fit to view');
         this.cy.fit();
@@ -651,7 +797,7 @@ export class EntityGraphVisualizer {
         console.log(`[Perf] Cached layout for ${Object.keys(positions).length} nodes`);
     }
 
-    private setupEnhancedZoomInteractions(): void {
+    private setupZoomInteractions(): void {
         if (!this.cy) return;
 
         this.cy.on('zoom', () => {
@@ -818,40 +964,266 @@ export class EntityGraphVisualizer {
         if (!this.cy) return;
 
         this.cy.batch(() => {
-            this.cy.nodes().forEach((node: any) => {
-                const importance = node.data('importance') || 0;
-                const degree = node.data('degree') || 0;
-                
-                if (zoom < 0.5) {
-                    if (importance < 0.3 && degree < 5) {
-                        node.style('display', 'none');
-                    } else {
-                        node.style('display', 'element');
-                        node.style('label', '');
-                    }
-                } else if (zoom < 1.0) {
-                    node.style('display', 'element');
-                    if (importance > 0.5 || degree > 10) {
-                        node.style('label', node.data('name'));
-                    } else {
-                        node.style('label', '');
-                    }
-                } else {
-                    node.style('display', 'element');
-                    node.style('label', node.data('name'));
-                }
+            this.applySophisticatedLOD(zoom);
+        });
+    }
+
+    /**
+     * Apply sophisticated Level of Detail rendering based on multiple factors
+     */
+    private applySophisticatedLOD(zoom: number): void {
+        const nodes = this.cy.nodes();
+        const edges = this.cy.edges();
+
+        // Calculate global metrics for adaptive thresholds
+        const nodeMetrics = this.calculateNodeMetrics(nodes);
+        const edgeMetrics = this.calculateEdgeMetrics(edges);
+
+        // Apply multi-factor visibility algorithm for nodes
+        nodes.forEach((node: any) => {
+            const visibility = this.calculateNodeVisibility(node, zoom, nodeMetrics);
+            this.applyNodeLOD(node, visibility, zoom);
+        });
+
+        // Apply context-aware edge visibility
+        edges.forEach((edge: any) => {
+            const visibility = this.calculateEdgeVisibility(edge, zoom, edgeMetrics);
+            this.applyEdgeLOD(edge, visibility, zoom);
+        });
+    }
+
+    private calculateNodeMetrics(nodes: any): any {
+        const importanceValues = nodes.map((n: any) => n.data('importance') || 0);
+        const degreeValues = nodes.map((n: any) => n.data('degree') || 0);
+
+        return {
+            importancePercentiles: this.calculatePercentiles(importanceValues),
+            degreePercentiles: this.calculatePercentiles(degreeValues),
+            totalNodes: nodes.length
+        };
+    }
+
+    private calculateEdgeMetrics(edges: any): any {
+        const strengthValues = edges.map((e: any) => e.data('strength') || 0);
+
+        return {
+            strengthPercentiles: this.calculatePercentiles(strengthValues),
+            totalEdges: edges.length
+        };
+    }
+
+    private calculatePercentiles(values: number[]): any {
+        if (values.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
+
+        const sorted = values.sort((a, b) => a - b);
+        const len = sorted.length;
+
+        return {
+            p25: sorted[Math.floor(len * 0.25)],
+            p50: sorted[Math.floor(len * 0.5)],
+            p75: sorted[Math.floor(len * 0.75)],
+            p90: sorted[Math.floor(len * 0.9)]
+        };
+    }
+
+    private calculateNodeVisibility(node: any, zoom: number, metrics: any): any {
+        const importance = node.data('importance') || 0;
+        const degree = node.data('degree') || 0;
+        const type = node.data('type') || 'entity';
+        const communityId = node.data('communityId');
+
+        // Multi-factor scoring system
+        let visibilityScore = 0;
+
+        // Factor 1: Importance (40% weight)
+        if (importance >= metrics.importancePercentiles.p90) visibilityScore += 4;
+        else if (importance >= metrics.importancePercentiles.p75) visibilityScore += 3;
+        else if (importance >= metrics.importancePercentiles.p50) visibilityScore += 2;
+        else if (importance >= metrics.importancePercentiles.p25) visibilityScore += 1;
+
+        // Factor 2: Degree/Connectivity (30% weight)
+        if (degree >= metrics.degreePercentiles.p90) visibilityScore += 3;
+        else if (degree >= metrics.degreePercentiles.p75) visibilityScore += 2;
+        else if (degree >= metrics.degreePercentiles.p50) visibilityScore += 1;
+
+        // Factor 3: Node type priority (20% weight)
+        const typePriority = this.getTypePriority(type);
+        visibilityScore += typePriority;
+
+        // Factor 4: Community hubs (10% weight)
+        if (communityId && this.isCommunityhub(node, communityId)) {
+            visibilityScore += 1;
+        }
+
+        // Adaptive zoom-based thresholds
+        const zoomThresholds = this.getAdaptiveZoomThresholds(zoom, metrics.totalNodes);
+
+        return {
+            score: visibilityScore,
+            shouldShow: visibilityScore >= zoomThresholds.nodeThreshold,
+            shouldLabel: visibilityScore >= zoomThresholds.labelThreshold,
+            labelSize: this.calculateLabelSize(visibilityScore, zoom),
+            opacity: this.calculateOpacity(visibilityScore, zoom)
+        };
+    }
+
+    private calculateEdgeVisibility(edge: any, zoom: number, metrics: any): any {
+        const strength = edge.data('strength') || 0;
+        const type = edge.data('type') || 'related';
+        const sourceNode = edge.source();
+        const targetNode = edge.target();
+
+        // Check if both nodes are visible
+        const sourceVisible = sourceNode.style('display') !== 'none';
+        const targetVisible = targetNode.style('display') !== 'none';
+
+        if (!sourceVisible || !targetVisible) {
+            return { shouldShow: false, opacity: 0 };
+        }
+
+        let visibilityScore = 0;
+
+        // Factor 1: Edge strength
+        if (strength >= metrics.strengthPercentiles.p90) visibilityScore += 3;
+        else if (strength >= metrics.strengthPercentiles.p75) visibilityScore += 2;
+        else if (strength >= metrics.strengthPercentiles.p50) visibilityScore += 1;
+
+        // Factor 2: Edge type importance
+        const typeWeight = this.getEdgeTypeWeight(type);
+        visibilityScore += typeWeight;
+
+        // Factor 3: Connected node importance
+        const nodeImportance = Math.max(
+            sourceNode.data('importance') || 0,
+            targetNode.data('importance') || 0
+        );
+        if (nodeImportance > 0.7) visibilityScore += 1;
+
+        const zoomThresholds = this.getAdaptiveZoomThresholds(zoom, metrics.totalEdges);
+
+        return {
+            score: visibilityScore,
+            shouldShow: visibilityScore >= zoomThresholds.edgeThreshold,
+            opacity: Math.min(1, 0.3 + (visibilityScore * 0.2))
+        };
+    }
+
+    private getTypePriority(type: string): number {
+        const priorities: { [key: string]: number } = {
+            'person': 3,
+            'organization': 3,
+            'product': 2,
+            'concept': 2,
+            'location': 2,
+            'technology': 2,
+            'event': 1,
+            'document': 1,
+            'website': 1,
+            'topic': 1,
+            'related_entity': 0
+        };
+        return priorities[type] || 0;
+    }
+
+    private getEdgeTypeWeight(type: string): number {
+        const weights: { [key: string]: number } = {
+            'contains': 2,
+            'created_by': 2,
+            'located_in': 2,
+            'works_for': 2,
+            'related': 1,
+            'mentioned': 0
+        };
+        return weights[type] || 1;
+    }
+
+    private isCommunityhub(node: any, communityId: string): boolean {
+        if (!this.cy) return false;
+
+        // Simple heuristic: node is a hub if it has connections to many other nodes in the community
+        const communityNodes = this.cy.nodes().filter((n: any) =>
+            n.data('communityId') === communityId
+        );
+        const nodeConnections = node.connectedEdges().length;
+        const avgConnections = communityNodes.map((n: any) =>
+            n.connectedEdges().length
+        ).reduce((a: number, b: number) => a + b, 0) / communityNodes.length;
+
+        return nodeConnections > avgConnections * 1.5;
+    }
+
+    private getAdaptiveZoomThresholds(zoom: number, totalElements: number): any {
+        // Dynamic thresholds based on zoom level and graph density
+        const densityFactor = Math.min(1, totalElements / 1000);
+
+        if (zoom < 0.3) {
+            return {
+                nodeThreshold: 6 + densityFactor * 2,
+                labelThreshold: 8,
+                edgeThreshold: 4 + densityFactor
+            };
+        } else if (zoom < 0.6) {
+            return {
+                nodeThreshold: 4 + densityFactor,
+                labelThreshold: 6,
+                edgeThreshold: 3
+            };
+        } else if (zoom < 1.0) {
+            return {
+                nodeThreshold: 2,
+                labelThreshold: 4,
+                edgeThreshold: 2
+            };
+        } else {
+            return {
+                nodeThreshold: 0,
+                labelThreshold: 2,
+                edgeThreshold: 1
+            };
+        }
+    }
+
+    private calculateLabelSize(score: number, zoom: number): number {
+        const baseSize = 10;
+        const scoreMultiplier = Math.min(1.5, 1 + score * 0.1);
+        const zoomMultiplier = Math.min(1.3, zoom);
+        return Math.round(baseSize * scoreMultiplier * zoomMultiplier);
+    }
+
+    private calculateOpacity(score: number, zoom: number): number {
+        const baseOpacity = 0.6;
+        const scoreBonus = Math.min(0.4, score * 0.1);
+        const zoomBonus = Math.min(0.2, zoom * 0.2);
+        return Math.min(1, baseOpacity + scoreBonus + zoomBonus);
+    }
+
+    private applyNodeLOD(node: any, visibility: any, zoom: number): void {
+        if (visibility.shouldShow) {
+            node.style({
+                'display': 'element',
+                'opacity': visibility.opacity,
+                'font-size': visibility.labelSize + 'px'
             });
 
-            this.cy.edges().forEach((edge: any) => {
-                const strength = edge.data('strength') || 0;
-                
-                if (zoom < 0.7 && strength < 0.3) {
-                    edge.style('display', 'none');
-                } else {
-                    edge.style('display', 'element');
-                }
+            if (visibility.shouldLabel) {
+                node.style('label', node.data('name'));
+            } else {
+                node.style('label', '');
+            }
+        } else {
+            node.style('display', 'none');
+        }
+    }
+
+    private applyEdgeLOD(edge: any, visibility: any, zoom: number): void {
+        if (visibility.shouldShow) {
+            edge.style({
+                'display': 'element',
+                'opacity': visibility.opacity
             });
-        });
+        } else {
+            edge.style('display', 'none');
+        }
     }
 
     /**
@@ -1293,6 +1665,345 @@ export class EntityGraphVisualizer {
         return "";
     }
 
+    // Interactive feature implementations
+    private focusOnNode(node: any): void {
+        if (!this.cy) return;
+
+        this.cy.animate({
+            center: { eles: node },
+            zoom: 2
+        }, {
+            duration: 500
+        });
+
+        this.showLabelsForEntityNeighborhood(node.data('name'), 2);
+    }
+
+    private showProgressiveNodeInfo(node: any, position: any): void {
+        const data = node.data();
+        const tooltip = this.getOrCreateTooltip();
+
+        const connections = node.connectedEdges().length;
+        const importance = data.importance || 0;
+        const communityInfo = data.communityId ? `Community: ${data.communityId}` : '';
+
+        tooltip.innerHTML = `
+            <div class="tooltip-header">${data.name}</div>
+            <div class="tooltip-type">${data.type}</div>
+            <div class="tooltip-connections">Connections: ${connections}</div>
+            <div class="tooltip-importance">Importance: ${Math.round(importance * 100)}%</div>
+            ${communityInfo ? `<div class="tooltip-community">${communityInfo}</div>` : ''}
+        `;
+
+        tooltip.style.left = `${position.x + 10}px`;
+        tooltip.style.top = `${position.y - 10}px`;
+        tooltip.style.display = "block";
+    }
+
+    private highlightNodeNeighborhood(node: any, depth: number): void {
+        if (!this.cy) return;
+
+        const neighborhood = node.neighborhood().union(node);
+        this.cy.elements().removeClass('highlighted neighborhood');
+        neighborhood.addClass('neighborhood');
+        node.addClass('highlighted');
+    }
+
+    private clearNeighborhoodHighlights(): void {
+        if (!this.cy) return;
+        this.cy.elements().removeClass('neighborhood');
+    }
+
+    private scheduleLayoutUpdate(): void {
+        if (this.layoutUpdateTimer) {
+            clearTimeout(this.layoutUpdateTimer);
+        }
+
+        this.layoutUpdateTimer = setTimeout(() => {
+            if (!this.isNodeBeingDragged) {
+                this.applyLayout(this.currentLayout);
+            }
+        }, 1000);
+    }
+
+    private highlightEdgePath(edge: any): void {
+        if (!this.cy) return;
+
+        const sourceNode = edge.source();
+        const targetNode = edge.target();
+
+        this.cy.elements().removeClass('highlighted path-highlighted');
+        edge.addClass('path-highlighted');
+        sourceNode.addClass('highlighted');
+        targetNode.addClass('highlighted');
+    }
+
+    private showEdgeDetails(edge: any, position: any): void {
+        const data = edge.data();
+        const tooltip = this.getOrCreateTooltip();
+
+        const strength = data.strength || 0;
+        const type = data.type || 'related';
+
+        tooltip.innerHTML = `
+            <div class="tooltip-header">${data.source} → ${data.target}</div>
+            <div class="tooltip-type">Type: ${type}</div>
+            <div class="tooltip-strength">Strength: ${Math.round(strength * 100)}%</div>
+        `;
+
+        tooltip.style.left = `${position.x + 10}px`;
+        tooltip.style.top = `${position.y - 10}px`;
+        tooltip.style.display = "block";
+    }
+
+    private emphasizeEdge(edge: any): void {
+        if (!this.cy) return;
+        edge.style({
+            'line-color': '#FF6B35',
+            'width': '4px',
+            'z-index': 999
+        });
+    }
+
+    private deemphasizeAllEdges(): void {
+        if (!this.cy) return;
+        this.cy.edges().style({
+            'line-color': '',
+            'width': '',
+            'z-index': ''
+        });
+    }
+
+    private clearAllSelections(): void {
+        if (!this.cy) return;
+        this.cy.elements().unselect();
+        this.selectedNodes.clear();
+    }
+
+    private toggleNodeSelection(node: any): void {
+        const nodeId = node.id();
+        if (this.selectedNodes.has(nodeId)) {
+            node.unselect();
+            this.selectedNodes.delete(nodeId);
+        } else {
+            node.select();
+            this.selectedNodes.add(nodeId);
+        }
+    }
+
+    private updateSelectionToolbar(): void {
+        const selectedCount = this.selectedNodes.size;
+        // This could emit an event or update a toolbar UI
+        console.log(`Selection changed: ${selectedCount} nodes selected`);
+    }
+
+    private showNodeContextMenu(node: any, position: any): void {
+        this.hideContextMenu();
+
+        const menu = document.createElement('div');
+        menu.className = 'graph-context-menu';
+        menu.style.cssText = `
+            position: fixed;
+            left: ${position.x}px;
+            top: ${position.y}px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            min-width: 150px;
+        `;
+
+        const menuItems = [
+            { label: 'Focus on Node', action: () => this.focusOnNode(node) },
+            { label: 'Hide Node', action: () => node.style('display', 'none') },
+            { label: 'Expand Neighborhood', action: () => this.expandNodeNeighborhood(node) },
+            { label: 'Copy Node Name', action: () => navigator.clipboard.writeText(node.data('name')) }
+        ];
+
+        menuItems.forEach(item => {
+            const menuItem = document.createElement('div');
+            menuItem.textContent = item.label;
+            menuItem.style.cssText = `
+                padding: 8px 12px;
+                cursor: pointer;
+                border-bottom: 1px solid #eee;
+            `;
+            menuItem.addEventListener('click', () => {
+                item.action();
+                this.hideContextMenu();
+            });
+            menuItem.addEventListener('mouseover', () => {
+                menuItem.style.backgroundColor = '#f0f0f0';
+            });
+            menuItem.addEventListener('mouseout', () => {
+                menuItem.style.backgroundColor = '';
+            });
+            menu.appendChild(menuItem);
+        });
+
+        document.body.appendChild(menu);
+        this.contextMenu = menu;
+
+        // Hide menu when clicking elsewhere
+        setTimeout(() => {
+            document.addEventListener('click', this.hideContextMenu.bind(this), { once: true });
+        }, 100);
+    }
+
+    private showEdgeContextMenu(edge: any, position: any): void {
+        this.hideContextMenu();
+
+        const menu = document.createElement('div');
+        menu.className = 'graph-context-menu';
+        menu.style.cssText = `
+            position: fixed;
+            left: ${position.x}px;
+            top: ${position.y}px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            min-width: 150px;
+        `;
+
+        const menuItems = [
+            { label: 'Hide Edge', action: () => edge.style('display', 'none') },
+            { label: 'Trace Path', action: () => this.highlightEdgePath(edge) },
+        ];
+
+        menuItems.forEach(item => {
+            const menuItem = document.createElement('div');
+            menuItem.textContent = item.label;
+            menuItem.style.cssText = `
+                padding: 8px 12px;
+                cursor: pointer;
+                border-bottom: 1px solid #eee;
+            `;
+            menuItem.addEventListener('click', () => {
+                item.action();
+                this.hideContextMenu();
+            });
+            menu.appendChild(menuItem);
+        });
+
+        document.body.appendChild(menu);
+        this.contextMenu = menu;
+
+        setTimeout(() => {
+            document.addEventListener('click', this.hideContextMenu.bind(this), { once: true });
+        }, 100);
+    }
+
+    private showBackgroundContextMenu(position: any): void {
+        this.hideContextMenu();
+
+        const menu = document.createElement('div');
+        menu.className = 'graph-context-menu';
+        menu.style.cssText = `
+            position: fixed;
+            left: ${position.x}px;
+            top: ${position.y}px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            min-width: 150px;
+        `;
+
+        const menuItems = [
+            { label: 'Fit to View', action: () => this.fitToView() },
+            { label: 'Reset Layout', action: () => this.applyLayout(this.currentLayout) },
+            { label: 'Show All Nodes', action: () => this.showAllNodes() },
+            { label: 'Export View', action: () => this.takeScreenshot() }
+        ];
+
+        menuItems.forEach(item => {
+            const menuItem = document.createElement('div');
+            menuItem.textContent = item.label;
+            menuItem.style.cssText = `
+                padding: 8px 12px;
+                cursor: pointer;
+                border-bottom: 1px solid #eee;
+            `;
+            menuItem.addEventListener('click', () => {
+                item.action();
+                this.hideContextMenu();
+            });
+            menu.appendChild(menuItem);
+        });
+
+        document.body.appendChild(menu);
+        this.contextMenu = menu;
+
+        setTimeout(() => {
+            document.addEventListener('click', this.hideContextMenu.bind(this), { once: true });
+        }, 100);
+    }
+
+    private hideContextMenu(): void {
+        if (this.contextMenu) {
+            this.contextMenu.remove();
+            this.contextMenu = null;
+        }
+    }
+
+    private isGraphFocused(): boolean {
+        return document.activeElement === this.container ||
+               this.container.contains(document.activeElement);
+    }
+
+    private handleKeyboardShortcut(evt: KeyboardEvent): void {
+        switch (evt.key) {
+            case 'f':
+                this.fitToView();
+                evt.preventDefault();
+                break;
+            case 'r':
+                this.resetView();
+                evt.preventDefault();
+                break;
+            case 'Escape':
+                this.clearHighlights();
+                this.clearAllSelections();
+                evt.preventDefault();
+                break;
+            case 'a':
+                if (evt.ctrlKey || evt.metaKey) {
+                    this.selectAllNodes();
+                    evt.preventDefault();
+                }
+                break;
+        }
+    }
+
+    private getTouchDistance(touch1: Touch, touch2: Touch): number {
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private expandNodeNeighborhood(node: any): void {
+        // This would integrate with the data loading system to fetch more connected entities
+        console.log(`Expanding neighborhood for node: ${node.data('name')}`);
+    }
+
+    private showAllNodes(): void {
+        if (!this.cy) return;
+        this.cy.nodes().style('display', 'element');
+    }
+
+    private selectAllNodes(): void {
+        if (!this.cy) return;
+        this.cy.nodes().select();
+        this.selectedNodes.clear();
+        this.cy.nodes().forEach((node: any) => {
+            this.selectedNodes.add(node.id());
+        });
+    }
+
     /**
      * Center on specific entity and show labels for neighborhood
      */
@@ -1327,7 +2038,7 @@ export class EntityGraphVisualizer {
         // First clear all labels to ensure clean state
         this.cy.nodes().style('text-opacity', 0);
 
-        // Show label for center node with enhanced styling
+        // Show label for center node with special styling
         centerNode.style({
             'text-opacity': 1,
             'font-weight': 'bold',

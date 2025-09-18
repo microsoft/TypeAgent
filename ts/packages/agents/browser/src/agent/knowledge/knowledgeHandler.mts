@@ -3291,8 +3291,6 @@ export async function rebuildKnowledgeGraph(
         }
 
         // Clear existing graph data and rebuild
-        // Note: This assumes we have a method to clear graph data
-        // If not available, we might need to implement it
         try {
             // Clear existing graph tables if they exist
             if (websiteCollection.relationships) {
