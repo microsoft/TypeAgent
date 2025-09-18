@@ -4,17 +4,17 @@
 namespace TypeAgent.KnowPro;
 
 
-public interface IMessage<T>
+public interface IMessage<T> : IKnowledgeSource
     where T : IMessageMetadata
 {
-    string[] TextChunks { get; set; }
-    string[]? Tags { get; set; }
+    IList<string> TextChunks { get; set; }
+    IList<string>? Tags { get; set; }
     string? Timestamp { get; set; }
     T? Metadata { get; set; }
 }
 
 public interface IMessageMetadata
 {
-    string[]? Source { get; set; }
-    string[]? Dest { get; set; }
+    string Source { get; }
+    IList<string>? Dest { get; }
 }
