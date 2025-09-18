@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro.Storage.FileStore;
 
-public class ConversationSerializer
+public class ConversationJsonSerializer
 {
     public static ConversationJsonData<TMessage, TMeta>? ReadFromFile<TMessage, TMeta>(string filePath)
         where TMessage : IMessage<TMeta>
