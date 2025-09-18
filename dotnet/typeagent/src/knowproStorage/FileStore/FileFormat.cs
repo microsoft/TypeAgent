@@ -23,7 +23,7 @@ public class ConversationData<TMessage, TMeta>
     public SemanticRef[] SemanticRefs { get; set; }
 }
 
-public class ConversationJsonData<TMessage, TMeta>
+public class ConversationJsonData<TMessage, TMeta> : ConversationData<TMessage, TMeta>
     where TMessage : IMessage<TMeta>
     where TMeta: IMessageMetadata
 {
