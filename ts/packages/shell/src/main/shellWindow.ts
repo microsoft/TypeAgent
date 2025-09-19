@@ -31,6 +31,7 @@ const debugShellWindowError = registerDebug("typeagent:shell:window:error");
 
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
+const TITLE_BAR_HEIGHT = isMac ? 28 : 32; // Custom title bar height
 function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
     let scheduleHandler: (() => void) | undefined;
     let timeout: NodeJS.Timeout | undefined;
@@ -493,6 +494,7 @@ export class ShellWindow {
         const dividerSize = 4; // 4px divider
         const verticalLayout = this.verticalLayout;
         const { width, height } = bounds;
+        const availableHeight = height - TITLE_BAR_HEIGHT; // Account for title bar
 
         let dividerPos = -1;
         let chatViewBounds: Electron.Rectangle;
@@ -502,25 +504,25 @@ export class ShellWindow {
 
             // Keep existing chat height unless the divider position changed.
             if (newDividerPos !== undefined) {
-                chatHeight = height - newDividerPos - dividerSize;
+                chatHeight = availableHeight - newDividerPos - dividerSize;
             }
             // Clamp for window resize.
             if (chatHeight < 0) {
                 chatHeight = 0;
-            } else if (chatHeight > height - dividerSize) {
-                chatHeight = height - dividerSize;
+            } else if (chatHeight > availableHeight - dividerSize) {
+                chatHeight = availableHeight - dividerSize;
             }
 
             this.chatHeight = chatHeight;
 
             if (this.contentVisible) {
-                const contentHeight = height - chatHeight - dividerSize;
+                const contentHeight = availableHeight - chatHeight - dividerSize;
                 this.contentHeight = contentHeight;
                 dividerPos = contentHeight;
 
                 const browserViewBounds = {
                     x: 0,
-                    y: 0,
+                    y: TITLE_BAR_HEIGHT,
                     width: width,
                     height: contentHeight,
                 };
@@ -531,7 +533,7 @@ export class ShellWindow {
 
             chatViewBounds = {
                 x: 0,
-                y: height - chatHeight,
+                y: TITLE_BAR_HEIGHT + availableHeight - chatHeight,
                 width,
                 height: chatHeight,
             };
@@ -557,9 +559,9 @@ export class ShellWindow {
 
                 const browserViewBounds = {
                     x: dividerPos + dividerSize,
-                    y: 0,
+                    y: TITLE_BAR_HEIGHT,
                     width: contentWidth,
-                    height,
+                    height: availableHeight,
                 };
 
                 // Update browser view manager for multi-tab layout
@@ -568,9 +570,9 @@ export class ShellWindow {
 
             chatViewBounds = {
                 x: 0,
-                y: 0,
+                y: TITLE_BAR_HEIGHT,
                 width: chatWidth,
-                height: height,
+                height: availableHeight,
             };
         }
         debugShellWindow(`Chat view bounds: ${JSON.stringify(chatViewBounds)}`);
@@ -1118,9 +1120,20 @@ export class ShellWindow {
 }
 
 function createMainWindow(bounds: Electron.Rectangle) {
+    const isMac = process.platform === "darwin";
+    const isWindows = process.platform === "win32";
+    
     const mainWindow = new BrowserWindow({
         ...bounds,
         show: false,
+        frame: false, // Remove default frame
+        titleBarStyle: isMac ? 'hiddenInset' : 'hidden', // Hide title bar
+        titleBarOverlay: isWindows ? {
+            color: '#e5e5e5',     // Matches --title-bar-bg
+            symbolColor: '#333333', // Matches --text-color
+            height: 32
+        } : undefined,
+        trafficLightPosition: isMac ? { x: 12, y: 10 } : undefined,
         autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, "../preload/expose.mjs"),
