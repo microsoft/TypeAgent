@@ -241,10 +241,11 @@ async function initialize() {
         const shellWindow = getShellWindowForMainWindowIpcEvent(event);
         if (shellWindow) {
             // Toggle the verticalLayout setting
-            const currentLayout = shellWindow.getUserSettings().ui.verticalLayout;
+            const currentLayout =
+                shellWindow.getUserSettings().ui.verticalLayout;
             const newLayout = !currentLayout;
             shellWindow.setUserSettingValue("ui.verticalLayout", newLayout);
-            
+
             // Return the new layout state
             return { verticalLayout: newLayout };
         }

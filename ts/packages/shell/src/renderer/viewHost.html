@@ -39,7 +39,8 @@
         margin: 0;
         padding-top: calc(var(--title-bar-height) + 12px);
         overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
 
       /* Title Bar */
@@ -55,7 +56,9 @@
         align-items: center;
         z-index: 10000;
         -webkit-app-region: no-drag;
-        transition: left 0.2s ease, right 0.2s ease;
+        transition:
+          left 0.2s ease,
+          right 0.2s ease;
       }
 
       /* Layout-specific positioning */
@@ -323,8 +326,6 @@
         min-width: 50px;
       }
 
-
-
       .tab-bar {
         display: flex;
         min-width: 0;
@@ -332,7 +333,6 @@
         z-index: 1;
         position: relative;
       }
-
 
       /* Window Controls */
       .window-controls {
@@ -386,7 +386,9 @@
         position: fixed;
         top: 0;
         left: 36px; /* Start after the layout toggle button */
-        width: calc(var(--sidebar-width, 400px) - 36px); /* Adjust width to account for offset */
+        width: calc(
+          var(--sidebar-width, 400px) - 36px
+        ); /* Adjust width to account for offset */
         height: var(--title-bar-height);
         background: var(--title-bar-bg);
         border-bottom: 1px solid var(--border-color);
@@ -396,14 +398,16 @@
         justify-content: center;
         z-index: 9999;
         -webkit-app-region: drag;
-        transition: width 0.2s ease, left 0.2s ease;
+        transition:
+          width 0.2s ease,
+          left 0.2s ease;
         box-sizing: border-box;
         pointer-events: auto;
       }
-      
+
       /* Add a background strip for the toggle button area */
       body.horizontal-layout.has-sidebar .sidebar-title-bar::before {
-        content: '';
+        content: "";
         position: absolute;
         top: 0;
         left: -36px;
@@ -459,28 +463,64 @@
 
   <body>
     <!-- Layout Toggle Button (always at the absolute left) -->
-    <button class="layout-toggle-absolute" id="layout-toggle-btn" title="Toggle Layout">
+    <button
+      class="layout-toggle-absolute"
+      id="layout-toggle-btn"
+      title="Toggle Layout"
+    >
       <svg width="14" height="14" viewBox="0 0 16 16" id="layout-icon">
         <!-- Side panel icon (default) -->
         <g id="side-panel-icon">
-          <rect x="1" y="2" width="6" height="12" fill="currentColor" stroke="currentColor" stroke-width="0.5"/>
-          <rect x="9" y="2" width="6" height="12" fill="none" stroke="currentColor" stroke-width="0.5"/>
+          <rect
+            x="1"
+            y="2"
+            width="6"
+            height="12"
+            fill="currentColor"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
+          <rect
+            x="9"
+            y="2"
+            width="6"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
         </g>
         <!-- Bottom panel icon (hidden by default) -->
-        <g id="bottom-panel-icon" style="display: none;">
-          <rect x="1" y="2" width="14" height="5" fill="currentColor" stroke="currentColor" stroke-width="0.5"/>
-          <rect x="1" y="9" width="14" height="5" fill="none" stroke="currentColor" stroke-width="0.5"/>
+        <g id="bottom-panel-icon" style="display: none">
+          <rect
+            x="1"
+            y="2"
+            width="14"
+            height="5"
+            fill="currentColor"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
+          <rect
+            x="1"
+            y="9"
+            width="14"
+            height="5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
         </g>
       </svg>
     </button>
-    
+
     <!-- Sidebar Title Bar (visible in horizontal layout with sidebar) -->
     <div class="sidebar-title-bar" id="sidebar-title-bar">
       <div class="sidebar-title">
         <span>TypeAgent</span>
       </div>
     </div>
-    
+
     <!-- Title Bar -->
     <div class="title-bar" id="title-bar">
       <!-- Left Side Controls -->
@@ -490,7 +530,12 @@
           <button class="title-bar-button" id="back-btn" title="Back" disabled>
             <i class="fas fa-arrow-left"></i>
           </button>
-          <button class="title-bar-button" id="forward-btn" title="Forward" disabled>
+          <button
+            class="title-bar-button"
+            id="forward-btn"
+            title="Forward"
+            disabled
+          >
             <i class="fas fa-arrow-right"></i>
           </button>
           <button class="title-bar-button" id="reload-btn" title="Reload">
@@ -501,12 +546,11 @@
 
       <!-- Center Area -->
       <div class="title-bar-center">
-        
         <!-- Chat-Only Mode: App Title -->
         <div class="app-title" id="app-title">
           <span>TypeAgent</span>
         </div>
-        
+
         <!-- Browser Mode: Tab Bar -->
         <div class="tab-container" id="tab-container">
           <div class="tab-bar" id="tab-bar">
@@ -517,7 +561,6 @@
           </button>
           <div class="tab-drag-region" id="tab-drag-region"></div>
         </div>
-        
       </div>
 
       <!-- Right Side: Draggable Area + Window Controls -->
@@ -537,8 +580,8 @@
 
       // UI Mode enum
       const UIMode = {
-        BROWSER: 'browser',
-        CHAT_ONLY: 'chat-only'
+        BROWSER: "browser",
+        CHAT_ONLY: "chat-only",
       };
 
       // DOM elements
@@ -569,14 +612,16 @@
       // Platform detection and window controls setup
       function setupPlatformSpecific() {
         const platform = navigator.platform.toLowerCase();
-        const isMac = platform.includes('mac');
-        const isWindows = platform.includes('win');
-        
+        const isMac = platform.includes("mac");
+        const isWindows = platform.includes("win");
+
         // Add platform class
         document.body.classList.add(
-          isMac ? 'platform-macos' : 
-          isWindows ? 'platform-windows' : 
-          'platform-linux'
+          isMac
+            ? "platform-macos"
+            : isWindows
+              ? "platform-windows"
+              : "platform-linux",
         );
 
         // Setup window controls based on platform
@@ -598,17 +643,23 @@
           `;
 
           // Add event listeners for window controls
-          document.getElementById('minimize-btn')?.addEventListener('click', () => {
-            ipcRenderer.send('window-minimize');
-          });
+          document
+            .getElementById("minimize-btn")
+            ?.addEventListener("click", () => {
+              ipcRenderer.send("window-minimize");
+            });
 
-          document.getElementById('maximize-btn')?.addEventListener('click', () => {
-            ipcRenderer.send('window-maximize');
-          });
+          document
+            .getElementById("maximize-btn")
+            ?.addEventListener("click", () => {
+              ipcRenderer.send("window-maximize");
+            });
 
-          document.getElementById('close-btn')?.addEventListener('click', () => {
-            ipcRenderer.send('window-close');
-          });
+          document
+            .getElementById("close-btn")
+            ?.addEventListener("click", () => {
+              ipcRenderer.send("window-close");
+            });
         }
       }
 
@@ -620,24 +671,24 @@
         }
 
         updateVisibility() {
-          const titleBarCenter = document.querySelector('.title-bar-center');
-          
+          const titleBarCenter = document.querySelector(".title-bar-center");
+
           if (currentMode === UIMode.BROWSER) {
-            browserNav.style.display = 'flex';
-            tabContainer.style.display = 'flex';
-            appTitle.style.display = 'none';
-            
+            browserNav.style.display = "flex";
+            tabContainer.style.display = "flex";
+            appTitle.style.display = "none";
+
             // Make center area non-draggable in browser mode
-            titleBarCenter.classList.remove('chat-only-mode');
-            titleBarCenter.classList.add('browser-mode');
+            titleBarCenter.classList.remove("chat-only-mode");
+            titleBarCenter.classList.add("browser-mode");
           } else {
-            browserNav.style.display = 'none';
-            tabContainer.style.display = 'none';
-            appTitle.style.display = 'flex';
-            
+            browserNav.style.display = "none";
+            tabContainer.style.display = "none";
+            appTitle.style.display = "flex";
+
             // Make center area draggable in chat-only mode
-            titleBarCenter.classList.remove('browser-mode');
-            titleBarCenter.classList.add('chat-only-mode');
+            titleBarCenter.classList.remove("browser-mode");
+            titleBarCenter.classList.add("chat-only-mode");
           }
         }
       }
@@ -648,12 +699,15 @@
       class ResponsiveTabManager {
         calculateTabWidths() {
           if (tabs.length === 0) return;
-          
+
           const availableWidth = this.getAvailableWidth();
-          const idealWidth = Math.min(200, Math.max(80, availableWidth / tabs.length));
-          
-          const tabElements = tabBar.querySelectorAll('.tab');
-          tabElements.forEach(tab => {
+          const idealWidth = Math.min(
+            200,
+            Math.max(80, availableWidth / tabs.length),
+          );
+
+          const tabElements = tabBar.querySelectorAll(".tab");
+          tabElements.forEach((tab) => {
             tab.style.width = `${idealWidth}px`;
           });
         }
@@ -663,9 +717,10 @@
           const newTabButtonWidth = newTabBtn?.offsetWidth || 24;
           const dragRegionMinWidth = 50; // Minimum width for drag region
           const gap = 4; // Gap between elements
-          
+
           // Reserve space for new tab button, drag region, and gaps
-          const reservedSpace = newTabButtonWidth + dragRegionMinWidth + (gap * 2);
+          const reservedSpace =
+            newTabButtonWidth + dragRegionMinWidth + gap * 2;
           return Math.max(0, containerWidth - reservedSpace);
         }
       }
@@ -691,16 +746,19 @@
           const newX = e.clientX;
           // Update divider position immediately
           dividerVertical.style.left = `${newX}px`;
-          
+
           // Update title bar position immediately to remove lag
           titleBar.style.left = `${newX}px`;
-          
+
           // Update sidebar width CSS variable and sidebar title bar immediately
-          document.documentElement.style.setProperty('--sidebar-width', `${newX}px`);
+          document.documentElement.style.setProperty(
+            "--sidebar-width",
+            `${newX}px`,
+          );
           if (sidebarTitleBar) {
             sidebarTitleBar.style.width = `calc(${newX}px - 36px)`;
           }
-          
+
           // Send IPC message for view content updates (but UI is already updated)
           ipcRenderer.send("views-resized-by-user", newX);
         }
@@ -745,7 +803,8 @@
         tabElement.className = `tab ${tab.id === activeTabId ? "active" : ""}`;
         tabElement.dataset.tabId = tab.id;
 
-        const faviconSrc = tab.favicon || 
+        const faviconSrc =
+          tab.favicon ||
           `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}`;
 
         tabElement.innerHTML = `
@@ -755,7 +814,7 @@
         `;
 
         const closeButton = tabElement.querySelector(".tab-close");
-        
+
         tabElement.addEventListener("click", (e) => {
           if (e.target !== closeButton && !closeButton.contains(e.target)) {
             switchTab(tab.id);
@@ -782,7 +841,7 @@
         tabs.forEach((tab) => {
           tabBar.appendChild(createTabElement(tab));
         });
-        
+
         // Update responsive tab widths
         setTimeout(() => responsiveTabManager.calculateTabWidths(), 0);
       }
@@ -795,7 +854,7 @@
 
       function closeTab(tabId) {
         ipcRenderer.send("browser-close-tab", tabId);
-        
+
         // Check if this will be the last tab
         if (tabs.length === 1) {
           // Auto-toggle to sidebar mode (horizontal layout)
@@ -810,13 +869,13 @@
 
       function updateLayoutIcon() {
         if (verticalLayout) {
-          sidePanelIcon.style.display = 'block';
-          bottomPanelIcon.style.display = 'none';
-          layoutToggleBtn.title = 'Switch to side layout';
+          sidePanelIcon.style.display = "block";
+          bottomPanelIcon.style.display = "none";
+          layoutToggleBtn.title = "Switch to side layout";
         } else {
-          sidePanelIcon.style.display = 'none';
-          bottomPanelIcon.style.display = 'block';
-          layoutToggleBtn.title = 'Switch to bottom layout';
+          sidePanelIcon.style.display = "none";
+          bottomPanelIcon.style.display = "block";
+          layoutToggleBtn.title = "Switch to bottom layout";
         }
       }
 
@@ -824,19 +883,23 @@
       ipcRenderer.on("set-layout", (_, layout) => {
         verticalLayout = layout.verticalLayout;
         const titleBarHeight = titleBar.offsetHeight;
-        
+
         // Update body classes for layout-specific styling
-        document.body.classList.remove('vertical-layout', 'horizontal-layout', 'has-sidebar');
-        
+        document.body.classList.remove(
+          "vertical-layout",
+          "horizontal-layout",
+          "has-sidebar",
+        );
+
         if (verticalLayout) {
-          document.body.classList.add('vertical-layout');
+          document.body.classList.add("vertical-layout");
           dividerVertical.style.visibility = "hidden";
-          
+
           // Reset title bar to full width in vertical layout
           if (!isDragging) {
             titleBar.style.left = "0px";
           }
-          
+
           const newY = layout.pos;
           if (newY < 0) {
             dividerHorizontal.style.visibility = "hidden";
@@ -848,7 +911,7 @@
             dividerHorizontal.style.visibility = "visible";
           }
         } else {
-          document.body.classList.add('horizontal-layout');
+          document.body.classList.add("horizontal-layout");
           dividerHorizontal.style.visibility = "hidden";
           const newX = layout.pos;
           if (newX < 0) {
@@ -859,20 +922,23 @@
             }
           } else {
             // In horizontal layout with sidebar visible
-            document.body.classList.add('has-sidebar');
-            
+            document.body.classList.add("has-sidebar");
+
             // Only update positions if not currently dragging to avoid conflicts
             if (!isDragging) {
-              document.documentElement.style.setProperty('--sidebar-width', `${newX}px`);
+              document.documentElement.style.setProperty(
+                "--sidebar-width",
+                `${newX}px`,
+              );
               titleBar.style.left = `${newX}px`;
               dividerVertical.style.left = `${newX}px`;
-              
+
               // Update sidebar title bar width
               if (sidebarTitleBar) {
                 sidebarTitleBar.style.width = `calc(${newX}px - 36px)`;
               }
             }
-            
+
             dividerVertical.style.visibility = "visible";
           }
         }
@@ -882,10 +948,12 @@
       ipcRenderer.on("browser-tabs-updated", (_, tabsData) => {
         tabs = tabsData.tabs;
         activeTabId = tabsData.activeTabId;
-        
+
         // Update UI mode based on tabs
-        titleBarManager.setMode(tabs.length > 0 ? UIMode.BROWSER : UIMode.CHAT_ONLY);
-        
+        titleBarManager.setMode(
+          tabs.length > 0 ? UIMode.BROWSER : UIMode.CHAT_ONLY,
+        );
+
         updateTabBar();
 
         if (tabsData.navigationState) {
@@ -902,14 +970,14 @@
       });
 
       // Window resize handler for responsive tabs
-      window.addEventListener('resize', () => {
+      window.addEventListener("resize", () => {
         if (currentMode === UIMode.BROWSER) {
           responsiveTabManager.calculateTabWidths();
         }
       });
 
       // Initialize on page load
-      document.addEventListener('DOMContentLoaded', () => {
+      document.addEventListener("DOMContentLoaded", () => {
         setupPlatformSpecific();
         updateLayoutIcon();
         titleBarManager.setMode(UIMode.CHAT_ONLY);
