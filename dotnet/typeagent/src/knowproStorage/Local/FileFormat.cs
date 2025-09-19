@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace TypeAgent.KnowPro.Storage.FileStore;
+namespace TypeAgent.KnowPro.Storage.Local;
 
 public class FileHeader
 {
