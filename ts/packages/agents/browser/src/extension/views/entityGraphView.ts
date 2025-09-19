@@ -798,7 +798,7 @@ class EntityGraphView {
             let graphData;
             try {
                 console.log(`[HybridGraph Migration] Using Graph data provider for entity "${entityName}" neighborhood`);
-                const neighborhoodResult = await this.graphDataProvider.getEntityNeighborhood(entityName, 3, 100);
+                const neighborhoodResult = await this.graphDataProvider.getEntityNeighborhood(entityName, 2, 100);
 
                 // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
                 console.time('[Perf] Entity View - Search enrichment data');
@@ -1178,7 +1178,7 @@ class EntityGraphView {
             this.showGraphLoading();
 
             // Refresh data by re-fetching entity neighborhood
-            const refreshedEntity = await this.graphDataProvider.getEntityNeighborhood(entityName, 4, 100);
+            const refreshedEntity = await this.graphDataProvider.getEntityNeighborhood(entityName, 2, 100);
 
             if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
                 await this.loadRealEntityData(entityName);

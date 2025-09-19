@@ -1025,19 +1025,18 @@ export class EntityGraphVisualizer {
             return;
         }
 
-        // Use a layout that centers the focus entity on visible elements only
+        // Use cose layout for detail view to match expected layout behavior
+        const coseConfig = this.getOptimalLayoutConfig();
         const layout = visibleElements.layout({
-            name: 'concentric',
-            concentric: (node: any) => {
-                return node.data('name') === centerEntity ? 100 :
-                       node.data('type') === 'topic' ? 50 :
-                       node.data('confidence') * 10;
-            },
-            levelWidth: () => 1,
+            ...coseConfig,
             animate: true,
             animationDuration: 500,
             fit: false, // Disable auto-fit, we'll do it manually after layout completes
-            spacingFactor: 1.2
+            // Override some settings for detail view
+            nodeRepulsion: 200000, // Reduced from 400000 for tighter layout in detail view
+            gravity: 120,          // Increased from 80 for better centering in detail view
+            initialTemp: 100,      // Reduced from 200 for faster convergence
+            numIter: 500          // Reduced from 1000 for faster layout completion
         });
 
         // Handle layout completion like applyLayout does - fit view after layout completes
