@@ -12,15 +12,8 @@ public class SqliteDatabase : IDisposable
         ArgumentVerify.ThrowIfNullOrEmpty(filePath, nameof(filePath));
         _connection = new SqliteConnection(ConnectionString(filePath));
         _connection.Open();
-        EnableWriteAheadLog();
     }
 
-    public void EnsureTable(string tableName, string tableSchema)
-    {
-        using SqliteCommand cmd = _connection.CreateCommand();
-        cmd.CommandText = $@"CREATE TABLE IF NOT EXISTS {tableName}({tableSchema})";
-        cmd.ExecuteNonQuery();
-    }
 
     public SqliteCommand CreateCommand(string sql)
     {
@@ -29,10 +22,12 @@ public class SqliteDatabase : IDisposable
         return cmd;
     }
 
-    public void EnableWriteAheadLog()
+    public void Execute(string commandText)
     {
+        ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
+
         using var command = _connection.CreateCommand();
-        command.CommandText = "PRAGMA journal_mode=WAL;";
+        command.CommandText = commandText;
         command.ExecuteNonQuery();
     }
 

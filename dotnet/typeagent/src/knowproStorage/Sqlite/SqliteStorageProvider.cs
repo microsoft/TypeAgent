@@ -4,9 +4,17 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>
+public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisposable
     where TMessage : IMessage
 {
+    SqliteDatabase _db;
+
+    public SqliteStorageProvider(string dbPath)
+    {
+        _db = new SqliteDatabase(dbPath);
+        ConfigureDatabase();
+    }
+
     public Task<IMessageCollection<TMessage>> GetMessageCollectionAsync()
     {
         throw new NotImplementedException();
@@ -15,5 +23,76 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>
     public Task<ISemanticRefCollection> GetSemanticRefCollection()
     {
         throw new NotImplementedException();
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool fromDispose)
+    {
+        if (fromDispose)
+        {
+            _db?.Dispose();
+            _db = null;
+        }
+    }
+
+    void ConfigureDatabase()
+    {
+        // Configure SQLite for optimal performance
+        this._db.Execute("PRAGMA foreign_keys = OFF");
+        // Improve write performance for bulk operations
+        this._db.Execute("PRAGMA synchronous = NORMAL"); // Faster than FULL, still safe
+        this._db.Execute("PRAGMA journal_mode = WAL");  // Write-Ahead Logging for better concurrency
+    }
+
+    void InitSchema()
+    {
+        _db.Execute(Schema.ConversationMetadataSchema);
+        _db.Execute(Schema.MessagesSchema);
+        _db.Execute(Schema.SemanticRefsSchema);
+    }
+
+    public static class Schema
+    {
+        public const string ConversationMetadataSchema = @"
+CREATE TABLE IF NOT EXISTS ConversationMetadata (
+    name_tag TEXT NOT NULL,           -- User-defined name for this conversation
+    schema_version TEXT NOT NULL,     -- Version of the metadata schema
+    created_at TEXT NOT NULL,         -- UTC timestamp when conversation was created
+    updated_at TEXT NOT NULL,         -- UTC timestamp when metadata was last updated
+    tags JSON NOT NULL,               -- JSON array of string tags
+    extra JSON NOT NULL               -- JSON object for additional metadata
+);
+";
+
+        public const string MessagesSchema = @"
+CREATE TABLE IF NOT EXISTS Messages(
+    msg_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- Messages can store chunks directly in JSON or reference external storage via URI
+    chunks JSON NULL,             -- JSON array of text chunks, or NULL if using chunk_uri
+    chunk_uri TEXT NULL,          -- URI for external chunk storage, or NULL if using chunks
+    start_timestamp TEXT NULL,    -- ISO format with Z timezone
+    tags JSON NULL,               -- JSON array of tags
+    metadata JSON NULL,           -- Message metadata(source, dest, etc.)
+    extra JSON NULL,              -- Extra message fields that were serialized
+
+    CONSTRAINT chunks_xor_chunkuri CHECK(
+        (chunks IS NOT NULL AND chunk_uri IS NULL) OR
+        (chunks IS NULL AND chunk_uri IS NOT NULL)
+    )
+);
+";
+        public const string SemanticRefsSchema = @"
+CREATE TABLE IF NOT EXISTS SemanticRefs (
+    semref_id INTEGER PRIMARY KEY,
+    range_json JSON NOT NULL,          -- JSON of the TextRange object
+    knowledge_type TEXT NOT NULL,      -- Required to distinguish JSON types (entity, topic, etc.)
+    knowledge_json JSON NOT NULL       -- JSON of the Knowledge object
+);
+";
     }
 }
