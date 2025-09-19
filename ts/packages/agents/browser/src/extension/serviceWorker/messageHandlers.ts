@@ -1042,6 +1042,32 @@ export async function handleMessage(
             }
         }
 
+        case "getEntityNeighborhood": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getEntityNeighborhood",
+                    parameters: {
+                        entityId: message.entityId,
+                        depth: message.depth,
+                        maxNodes: message.maxNodes,
+                    },
+                });
+
+                 return {
+                    centerEntity: result.centerEntity,
+                    neighbors: result.neighbors,
+                    relationships: result.relationships,
+                    searchData: result.searchData,
+                    metadata: result.metadata,
+                    error: result.error,
+                };
+
+            } catch (error) {
+                console.error("Error getting entity neighborhood:", error);
+                return [];
+            }
+        }
+
 
         default:
             return null;

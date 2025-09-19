@@ -4,7 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { WebSocket } from "ws";
 import { BrowserActionContext } from "../browserActions.mjs";
-import { searchWebMemories } from "../searchWebMemories.mjs";
+import { searchByEntities, searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
 import {
     knowledgeProgressEvents,
@@ -3405,7 +3405,7 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         return;
     }
 
-    console.log("[Knowledge Graph] Building in-memory cache for graph data");
+    debug("[Knowledge Graph] Building in-memory cache for graph data");
 
     try {
         // Fetch raw data
@@ -3428,7 +3428,7 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
 
         setGraphCache(websiteCollection, newCache);
 
-        console.log(`[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`);
+        debug(`[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`);
 
     } catch (error) {
         console.error("[Knowledge Graph] Failed to build cache:", error);
@@ -3464,7 +3464,7 @@ export async function getAllEntitiesWithMetrics(
         // Get cached data
         const cache = getGraphCache(websiteCollection);
         if (cache && cache.isValid && cache.entityMetrics.length > 0) {
-            console.log(`[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`);
+            debug(`[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`);
             return {
                 entities: cache.entityMetrics,
             };
@@ -3531,7 +3531,7 @@ export async function getEntityNeighborhood(
             };
         }
 
-        console.log(`[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`);
+        debug(`[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`);
 
         // Perform BFS to find neighborhood
         const neighborhoodResult = performBFS(entityId, cache.entityMetrics, cache.relationships, depth, maxNodes);
@@ -3547,11 +3547,11 @@ export async function getEntityNeighborhood(
         // Get search enrichment for topics and related entities
         let searchData: any = null;
         try {
-            console.log(`[Knowledge Graph] Fetching search enrichment for entity "${entityId}"`);
-            const searchResults = await searchWebMemories(
-                { query: entityId, limit: 20, includeRelatedEntities: true },
+const searchResults = await searchByEntities(
+                { entities: [entityId], maxResults: 20 },
                 context
             );
+
 
             if (searchResults) {
                 searchData = {
@@ -3560,7 +3560,7 @@ export async function getEntityNeighborhood(
                     topTopics: searchResults.topTopics?.slice(0, 10) || []
                 };
 
-                console.log(`[Knowledge Graph] Search enrichment found: ${searchData.websites.length} websites, ${searchData.relatedEntities.length} related entities, ${searchData.topTopics.length} topics`);
+                debug(`[Knowledge Graph] Search enrichment found: ${searchData.websites.length} websites, ${searchData.relatedEntities.length} related entities, ${searchData.topTopics.length} topics`);
             }
         } catch (searchError) {
             console.warn(`[Knowledge Graph] Search enrichment failed:`, searchError);
@@ -3685,10 +3685,23 @@ function performBFS(
                     // Add relationship
                     const relKey = `${current.entityName}-${neighborKey}`;
                     const relationship = relationshipMap.get(relKey);
-                    if (relationship && !result.relationships.find(r => r.id === relationship.id)) {
+                    if (relationship && !result.relationships.find(r => r.rowId === relationship.rowId)) {
                         result.relationships.push(relationship);
                     }
                 }
+            }
+        }
+    }
+
+    // add relationships between neighbors
+    for (let i = 0; i < result.neighbors.length; i++) {
+        for (let j = i + 1; j < result.neighbors.length; j++) {
+            const neighborA = result.neighbors[i];
+            const neighborB = result.neighbors[j];
+            const relKey = `${neighborA.name?.toLowerCase() || neighborA.id?.toLowerCase()}-${neighborB.name?.toLowerCase() || neighborB.id?.toLowerCase()}`;
+            const relationship = relationshipMap.get(relKey);
+            if (relationship && !result.relationships.find(r => r.rowId === relationship.rowId)) {
+                result.relationships.push(relationship);
             }
         }
     }
