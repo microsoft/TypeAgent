@@ -5,10 +5,13 @@ namespace KnowProConsole;
 
 public class KnowProConsole : ConsoleApp
 {
+    KnowProContext _context;
+
     public KnowProConsole()
         : base("KnowPro Console")
     {
-        AddModule(new PodcastCommands());
+        _context = new KnowProContext();
+        AddModule(new PodcastCommands(_context));
         SortCommands();
     }
 

@@ -5,7 +5,13 @@ namespace KnowProConsole;
 
 public class PodcastCommands : ICommandModule
 {
-    
+    KnowProContext _kpContext;
+
+    public PodcastCommands(KnowProContext context)
+    {
+        _kpContext = context;
+    }
+
     public IList<Command> GetCommands()
     {
         return [
@@ -23,6 +29,7 @@ public class PodcastCommands : ICommandModule
         cmd.SetAction(this.PodcastLoadAsync);
         return cmd;
     }
+
     private Task PodcastLoadAsync(ParseResult args, CancellationToken cancellationToken)
     {
         NamedArgs namedArgs = new(args);
@@ -37,7 +44,7 @@ public class PodcastCommands : ICommandModule
         {
             Args.Arg<string>("filePath", "Path to existing podcast index"),
         };
-        cmd.SetAction(this.PodcastLoadAsync);
+        cmd.SetAction(this.PodcastImportIndex);
         return cmd;
     }
 
@@ -47,6 +54,7 @@ public class PodcastCommands : ICommandModule
         string? filePath = namedArgs.Get("filePath");
         var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
 
+        SqliteStorageProvider<PodcastMessage> provider = new SqliteStorageProvider<PodcastMessage>(_kpContext.DotnetPath, "podcast", true);
         return Task.CompletedTask;
     }
 

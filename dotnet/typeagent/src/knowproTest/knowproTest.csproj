@@ -8,4 +8,10 @@
     <RootNamespace>TypeAgent.KnowProTest</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\knowproStorage\knowproStorage.csproj" />
+    <ProjectReference Include="..\knowpro\knowpro.csproj" />
+  </ItemGroup>
+
 </Project>

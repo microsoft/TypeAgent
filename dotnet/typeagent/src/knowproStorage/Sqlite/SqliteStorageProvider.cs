@@ -9,6 +9,12 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisp
 {
     SqliteDatabase _db;
 
+    public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
+        : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
+    {
+
+    }
+
     public SqliteStorageProvider(string dbPath, bool createNew = false)
     {
         _db = new SqliteDatabase(dbPath, createNew);
