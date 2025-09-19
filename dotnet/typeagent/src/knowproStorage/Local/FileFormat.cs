@@ -9,9 +9,8 @@ public class FileHeader
     public string Version { get; set; }
 }
 
-public class ConversationData<TMessage, TMeta>
-    where TMessage : IMessage<TMeta>
-    where TMeta : IMessageMetadata
+public class ConversationData<TMessage>
+    where TMessage : IMessage
 {
     [JsonPropertyName("nameTag")]
     public string NameTag { get; set; }
@@ -23,9 +22,8 @@ public class ConversationData<TMessage, TMeta>
     public SemanticRef[] SemanticRefs { get; set; }
 }
 
-public class ConversationJsonData<TMessage, TMeta> : ConversationData<TMessage, TMeta>
-    where TMessage : IMessage<TMeta>
-    where TMeta: IMessageMetadata
+public class ConversationJsonData<TMessage> : ConversationData<TMessage>
+    where TMessage : IMessage
 {
     [JsonPropertyName("fileHeader")]
     public FileHeader? FileHeader { get; set; }

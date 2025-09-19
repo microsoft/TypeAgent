@@ -5,10 +5,9 @@ namespace TypeAgent.KnowPro.Storage.Local;
 
 public class ConversationJsonSerializer
 {
-    public static ConversationJsonData<TMessage, TMeta>? ReadFromFile<TMessage, TMeta>(string filePath)
-        where TMessage : IMessage<TMeta>
-        where TMeta : IMessageMetadata
+    public static ConversationJsonData<TMessage>? ReadFromFile<TMessage>(string filePath)
+        where TMessage : IMessage
     {
-        return Json.ParseFile<ConversationJsonData<TMessage, TMeta>>(filePath);
+        return Json.ParseFile<ConversationJsonData<TMessage>>(filePath);
     }
 }

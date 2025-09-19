@@ -4,8 +4,7 @@
 
 namespace TypeAgent.ConversationMemory;
 
-public class Message<TMeta> : IMessage<TMeta>
-    where TMeta : IMessageMetadata
+public class Message<TMeta> : IMessage where TMeta : IMessageMetadata
 {
     [JsonPropertyName("textChunks")]
     public IList<string> TextChunks { get; set; } = [];
@@ -16,8 +15,16 @@ public class Message<TMeta> : IMessage<TMeta>
     [JsonPropertyName("timestamp")]
     public string? Timestamp { get; set; }
 
+    // Strongly-typed property
     [JsonPropertyName("metadata")]
     public TMeta? Metadata { get; set; }
+
+    // Explicit interface implementation for non-generic access
+    IMessageMetadata? IMessage.Metadata
+    {
+        get => Metadata;
+        set => Metadata = (TMeta?)value;
+    }
 
     public virtual KnowledgeResponse? GetKnowledge() => null;
 }

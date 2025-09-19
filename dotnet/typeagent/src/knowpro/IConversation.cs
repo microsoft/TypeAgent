@@ -3,13 +3,12 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface IConversation<TMessage, TMeta>
-    where TMessage : IMessage<TMeta>
-    where TMeta: IMessageMetadata
+public interface IConversation<TMessage>
+    where TMessage : IMessage
 {
     string Name { get; }
     IReadOnlyList<string> Tags { get; }
-    IMessageCollection<TMessage, TMeta> Messages { get; }
+    IMessageCollection<TMessage> Messages { get; }
     ISemanticRefCollection SemanticRefs { get; }
     ITermToSemanticRefIndex SemanticRefIndex { get; }
     IConversationSecondaryIndexes SecondaryIndexes { get; }

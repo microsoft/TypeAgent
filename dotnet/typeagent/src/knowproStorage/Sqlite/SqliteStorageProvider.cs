@@ -4,11 +4,10 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage, TMeta>
-    where TMessage : IMessage<TMeta>
-    where TMeta : IMessageMetadata
+public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>
+    where TMessage : IMessage
 {
-    public Task<IMessageCollection<TMessage, TMeta>> GetMessageCollectionAsync()
+    public Task<IMessageCollection<TMessage>> GetMessageCollectionAsync()
     {
         throw new NotImplementedException();
     }

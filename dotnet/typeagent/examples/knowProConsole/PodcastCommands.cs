@@ -24,7 +24,7 @@ public class PodcastCommands : ICommandModule
     {
         NamedArgs namedArgs = new(args);
         string? filePath = namedArgs.Get("filePath");
-        var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage, PodcastMessageMeta>(filePath!);
+        var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
         return Task.CompletedTask;
     }
 }
