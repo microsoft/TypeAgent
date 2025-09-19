@@ -1,5 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace TypeAgent.KnowPro;
+namespace TypeAgent.ConversationMemory;
 
+public class Memory
+{
+}

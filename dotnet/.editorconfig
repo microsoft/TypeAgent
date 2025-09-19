@@ -232,6 +232,7 @@ dotnet_diagnostic.IDE0002.severity = none # Simplify member access
 dotnet_diagnostic.IDE0004.severity = none # Remove unnecessary cast
 dotnet_diagnostic.IDE0005.severity = none # Remove unnecessary cast
 dotnet_diagnostic.IDE0009.severity = none # Add this or Me qualification
+dotnet_diagnostic.IDE0010.severity = none # Populate switch
 dotnet_diagnostic.IDE0017.severity = none # Object initializers
 dotnet_diagnostic.IDE0022.severity = none # Use block body for method
 dotnet_diagnostic.IDE0032.severity = none # Use auto property

@@ -8,6 +8,13 @@ global using System.Text;
 global using System.ComponentModel;
 global using System.CommandLine;
 global using System.Threading.Tasks;
+
+
 global using TypeAgent.Common;
+
 global using TypeAgent.ExamplesLib;
 global using TypeAgent.ExamplesLib.CommandLine;
+
+global using TypeAgent.KnowPro;
+global using TypeAgent.KnowPro.Storage.FileStore;
+global using TypeAgent.ConversationMemory;

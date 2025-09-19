@@ -13,8 +13,7 @@ public abstract class ConsoleApp
         Console.OutputEncoding = Encoding.UTF8;
 
         _allCommands = new RootCommand(title);
-        _allCommands.AddCommands(new StandardCommands(_allCommands));
-
+        AddModule(new StandardCommands());
         _stopStrings = ["quit", "exit"];
     }
 
@@ -193,11 +192,7 @@ public abstract class ConsoleApp
 
     public async Task<string?> ReadLineAsync(CancellationToken cancelToken = default)
     {
-#if NET7_0_OR_GREATER
         string? line = await Console.In.ReadLineAsync(cancelToken).ConfigureAwait(false);
-#else
-        string? line = await Console.In.ReadLineAsync().ConfigureAwait(false);
-#endif
         return line is not null ? line.Trim() : line;
     }
 
@@ -241,12 +236,19 @@ public abstract class ConsoleApp
         }
     }
 
-    /// <summary>
-    /// Add a module to this Console
-    /// </summary>
-    /// <param name="obj"></param>
-    public void AddModule(object obj)
+    public void AddModule(ICommandModule module)
     {
-        Root.AddCommands(obj);
+        _allCommands.AddModule(module);
+    }
+
+    public void SortCommands()
+    {
+        var commands = _allCommands.Subcommands.ToList();
+        _allCommands.Subcommands.Clear();
+        commands.Sort((x, y) => x.Name.CompareTo(y.Name));
+        foreach (var cmd in commands)
+        {
+            _allCommands.Add(cmd);
+        }
     }
 }

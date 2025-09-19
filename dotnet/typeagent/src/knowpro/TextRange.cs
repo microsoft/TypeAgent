@@ -5,6 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public class TextRange
 {
+    [JsonConstructor]
     public TextRange(TextLocation start)
     {
         Start = start;
@@ -22,11 +23,13 @@ public class TextRange
     /// <summary>
     /// The start of the range.
     /// </summary>
+    [JsonPropertyName("start")]
     public TextLocation Start { get; private set; }
     /// <summary>
     /// The end of the range (exclusive). If None, the range is a single point.
     /// The end of the range must be at least Start.MessageOrdinal, Start.ChunkOrdinal + 1
     /// </summary>
+    [JsonPropertyName("end")]
     public TextLocation? End { get; private set; }
 
     public override string ToString()
