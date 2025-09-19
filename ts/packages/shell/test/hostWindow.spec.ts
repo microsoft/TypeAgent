@@ -20,8 +20,6 @@ test.describe("Shell interface tests", () => {
     test("remember window position", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
 
-        let agentMessageCount = 0;
-
         const firstWindow = await startShell(true); // have to wait, commands don't run till this is done
 
         // verify shell title
@@ -66,12 +64,8 @@ test.describe("Shell interface tests", () => {
             newWidth,
             `Window width mismatch! Expected ${width} got ${newWidth}`,
         ).toBe(newWidth);
-        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(
-            x + 8,
-        );
-        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(
-            y + 31,
-        );
+        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
+        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
 
         // close the application
         await exitApplication(newWindow);

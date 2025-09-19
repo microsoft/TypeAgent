@@ -182,7 +182,7 @@ export class ShellWindow {
         this.chatView = chatView;
 
         this.installHandler("chat-view-ready", () => {
-            this.ready();
+            this.ready({ x: state.x, y: state.y });
         });
 
         // Browser tab management IPC handlers
@@ -234,7 +234,10 @@ export class ShellWindow {
             this.browserReload();
         });
 
-        this.updateWindowBounds({ x: state.x, y: state.y });
+        if (!isLinux) {
+            // REVIEW: on linux, setting windows bound before showing has not affect?
+            this.updateWindowBounds({ x: state.x, y: state.y });
+        }
 
         const contentLoadP: Promise<void>[] = [];
         contentLoadP.push(
@@ -272,16 +275,24 @@ export class ShellWindow {
         this.chatView.webContents.send("change-chat-input-focus", true);
     }
 
-    private async ready() {
+    private async ready(position: { x: number; y: number }) {
         // Send settings asap
         this.sendUserSettingChanged();
 
         // Make sure content is loaded so we can adjust the size including the divider.
         await this.waitForContentLoaded();
-        this.updateContentSize();
+        if (!isLinux) {
+            // REVIEW: on linux, setting windows bound before showing has not affect?
+            this.updateContentSize();
+        }
 
         const mainWindow = this.mainWindow;
         mainWindow.show();
+
+        if (isLinux) {
+            // REVIEW: on linux, setting windows bound before showing has not affect?
+            this.updateWindowBounds(position);
+        }
 
         // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
         this.setZoomFactor(1, mainWindow.webContents);
@@ -1131,7 +1142,7 @@ export class ShellWindow {
     }
 }
 
-function createMainWindow() {
+function createMainWindow(): BrowserWindow {
     const mainWindow = new BrowserWindow({
         show: false,
         autoHideMenuBar: true,
