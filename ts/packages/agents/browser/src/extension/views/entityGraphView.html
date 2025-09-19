@@ -30,6 +30,15 @@
             <i class="bi bi-chevron-right breadcrumb-separator"></i>
             <span class="breadcrumb-current">Entity Graph</span>
             <span id="entityNameBreadcrumb" class="breadcrumb-entity"></span>
+            <button
+              id="backToGlobalBtn"
+              class="back-to-global-btn"
+              style="display: none"
+              title="Back to Global View"
+            >
+              <i class="bi bi-arrow-left"></i>
+              Global
+            </button>
           </div>
 
           <div class="entity-search">
@@ -59,13 +68,9 @@
         <!-- Entity Sidebar -->
         <aside class="entity-sidebar" id="entitySidebar">
           <div class="entity-header">
-            <div class="entity-icon" id="entityIcon">
-              <i class="bi bi-tags"></i>
-            </div>
             <div class="entity-info">
               <h1 class="entity-name" id="entityName">Select an Entity</h1>
               <div class="entity-type-badge" id="entityType"></div>
-              <div class="entity-confidence" id="entityConfidence"></div>
             </div>
           </div>
 
@@ -78,10 +83,6 @@
               <div class="metric-item">
                 <span class="metric-label">Relationships</span>
                 <span class="metric-value" id="entityRelationships">-</span>
-              </div>
-              <div class="metric-item">
-                <span class="metric-label">Centrality</span>
-                <span class="metric-value" id="entityCentrality">-</span>
               </div>
             </div>
 

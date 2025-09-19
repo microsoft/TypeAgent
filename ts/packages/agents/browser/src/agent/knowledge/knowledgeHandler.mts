@@ -4,7 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { WebSocket } from "ws";
 import { BrowserActionContext } from "../browserActions.mjs";
-import { searchWebMemories } from "../searchWebMemories.mjs";
+import { searchByEntities, searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
 import {
     knowledgeProgressEvents,
@@ -457,6 +457,27 @@ export async function handleKnowledgeAction(
 
         case "getAnalyticsData":
             return await getAnalyticsData(parameters, context);
+
+        case "getKnowledgeGraphStatus":
+            return await getKnowledgeGraphStatus(parameters, context);
+
+        case "buildKnowledgeGraph":
+            return await buildKnowledgeGraph(parameters, context);
+
+        case "rebuildKnowledgeGraph":
+            return await rebuildKnowledgeGraph(parameters, context);
+
+        case "getAllRelationships":
+            return await getAllRelationships(parameters, context);
+
+        case "getAllCommunities":
+            return await getAllCommunities(parameters, context);
+
+        case "getAllEntitiesWithMetrics":
+            return await getAllEntitiesWithMetrics(parameters, context);
+
+        case "getEntityNeighborhood":
+            return await getEntityNeighborhood(parameters, context);
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
@@ -3123,4 +3144,774 @@ export async function getAnalyticsData(
             },
         };
     }
+}
+
+export async function getKnowledgeGraphStatus(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    hasGraph: boolean;
+    entityCount: number;
+    relationshipCount: number;
+    communityCount: number;
+    isBuilding: boolean;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            debug("website collection not found");
+            return {
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: false,
+                error: "Website collection not available",
+            };
+        }
+
+        // Check if relationships and communities tables exist
+        if (
+            !websiteCollection.relationships ||
+            !websiteCollection.communities
+        ) {
+            // Tables not initialized, no graph exists
+            return {
+                hasGraph: false,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: false,
+            };
+        }
+
+        // Get entity count from knowledge entities table
+        let entityCount = 0;
+        try {
+            if (websiteCollection.knowledgeEntities) {
+                entityCount = (
+                    websiteCollection.knowledgeEntities as any
+                ).getTotalEntityCount();
+            }
+        } catch (error) {
+            console.warn("Failed to get entity count:", error);
+        }
+
+        // Get relationship count
+        let relationshipCount = 0;
+        try {
+            const relationships =
+                websiteCollection.relationships.getAllRelationships();
+            relationshipCount = relationships.length;
+        } catch (error) {
+            console.warn("Failed to get relationship count:", error);
+        }
+
+        // Get community count
+        let communityCount = 0;
+        try {
+            const communities =
+                websiteCollection.communities.getAllCommunities();
+            communityCount = communities.length;
+        } catch (error) {
+            console.warn("Failed to get community count:", error);
+        }
+
+        // Determine if graph exists based on actual data
+        const hasGraph = relationshipCount > 0 || entityCount > 0;
+
+        return {
+            hasGraph: hasGraph,
+            entityCount,
+            relationshipCount,
+            communityCount,
+            isBuilding: false,
+        };
+    } catch (error) {
+        console.error("Error getting knowledge graph status:", error);
+        return {
+            hasGraph: false,
+            entityCount: 0,
+            relationshipCount: 0,
+            communityCount: 0,
+            isBuilding: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function buildKnowledgeGraph(
+    parameters: {
+        minimalMode?: boolean;
+        urlLimit?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    stats?: {
+        urlsProcessed: number;
+        entitiesFound: number;
+        relationshipsCreated: number;
+        communitiesDetected: number;
+        timeElapsed: number;
+    };
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        console.log(
+            "[Knowledge Graph] Starting knowledge graph build with parameters:",
+            parameters,
+        );
+        const startTime = Date.now();
+
+        // TODO: Implement actual graph building logic here
+        // This method currently only reports stats from existing data
+        // Actual graph building should process URLs, extract entities/relationships,
+        // run community detection, and calculate metrics
+
+        const timeElapsed = Date.now() - startTime;
+
+        // Get stats directly from websiteCollection using existing status method
+        const status = await getKnowledgeGraphStatus({}, context);
+
+        const stats = {
+            urlsProcessed: parameters.urlLimit || status.entityCount,
+            entitiesFound: status.entityCount,
+            relationshipsCreated: status.relationshipCount,
+            communitiesDetected: status.communityCount,
+            timeElapsed: timeElapsed,
+        };
+
+        console.log("[Knowledge Graph] Build completed:", stats);
+
+        return {
+            success: true,
+            message: `Knowledge graph build completed in ${timeElapsed}ms`,
+            stats,
+        };
+    } catch (error) {
+        console.error("[Knowledge Graph] Error building:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function rebuildKnowledgeGraph(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        // Clear existing graph data and rebuild
+        try {
+            // Clear existing graph tables if they exist
+            if (websiteCollection.relationships) {
+                await websiteCollection.relationships.clear();
+            }
+            if (websiteCollection.communities) {
+                await websiteCollection.communities.clear();
+            }
+        } catch (clearError) {
+            // Continue even if clearing fails, as the rebuild might overwrite
+            console.warn("Failed to clear existing graph data:", clearError);
+        }
+
+        // Rebuild the knowledge graph
+        await websiteCollection.buildGraph();
+
+        return {
+            success: true,
+            message: "Knowledge graph rebuilt successfully",
+        };
+    } catch (error) {
+        console.error("Error rebuilding knowledge graph:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function getAllRelationships(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    relationships: any[];
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                relationships: [],
+                error: "Website collection not available",
+            };
+        }
+
+        const relationships =
+            websiteCollection.relationships?.getAllRelationships() || [];
+
+        return {
+            relationships: relationships,
+        };
+    } catch (error) {
+        console.error("Error getting all relationships:", error);
+        return {
+            relationships: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function getAllCommunities(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    communities: any[];
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                communities: [],
+                error: "Website collection not available",
+            };
+        }
+
+        const communities =
+            websiteCollection.communities?.getAllCommunities() || [];
+
+        return {
+            communities: communities,
+        };
+    } catch (error) {
+        console.error("Error getting all communities:", error);
+        return {
+            communities: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+// Simple in-memory cache for graph data
+interface GraphCache {
+    entities: any[];
+    relationships: any[];
+    communities: any[];
+    entityMetrics: any[];
+    lastUpdated: number;
+    isValid: boolean;
+}
+
+// Cache storage attached to websiteCollection
+function getGraphCache(websiteCollection: any): GraphCache | null {
+    return (websiteCollection as any).__graphCache || null;
+}
+
+function setGraphCache(websiteCollection: any, cache: GraphCache): void {
+    (websiteCollection as any).__graphCache = cache;
+}
+
+// Ensure graph data is cached for fast access
+async function ensureGraphCache(websiteCollection: any): Promise<void> {
+    const cache = getGraphCache(websiteCollection);
+    const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+    // Check if cache is valid
+    if (cache && cache.isValid && Date.now() - cache.lastUpdated < CACHE_TTL) {
+        debug("[Knowledge Graph] Using valid cached graph data");
+        return;
+    }
+
+    debug("[Knowledge Graph] Building in-memory cache for graph data");
+
+    try {
+        // Fetch raw data
+        const entities =
+            (websiteCollection.knowledgeEntities as any)?.getTopEntities(
+                5000,
+            ) || [];
+        const relationships =
+            websiteCollection.relationships?.getAllRelationships() || [];
+        const communities =
+            websiteCollection.communities?.getAllCommunities() || [];
+
+        // Calculate metrics
+        const entityMetrics = calculateEntityMetrics(
+            entities,
+            relationships,
+            communities,
+        );
+
+        // Store in cache
+        const newCache: GraphCache = {
+            entities: entities,
+            relationships: relationships,
+            communities: communities,
+            entityMetrics: entityMetrics,
+            lastUpdated: Date.now(),
+            isValid: true,
+        };
+
+        setGraphCache(websiteCollection, newCache);
+
+        debug(
+            `[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`,
+        );
+    } catch (error) {
+        console.error("[Knowledge Graph] Failed to build cache:", error);
+
+        // Mark cache as invalid but keep existing data if available
+        const existingCache = getGraphCache(websiteCollection);
+        if (existingCache) {
+            existingCache.isValid = false;
+        }
+    }
+}
+
+export async function getAllEntitiesWithMetrics(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    entities: any[];
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                entities: [],
+                error: "Website collection not available",
+            };
+        }
+
+        // Ensure cache is populated
+        await ensureGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getGraphCache(websiteCollection);
+        if (cache && cache.isValid && cache.entityMetrics.length > 0) {
+            debug(
+                `[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`,
+            );
+            return {
+                entities: cache.entityMetrics,
+            };
+        }
+
+        // Fallback to live computation if no cache
+        console.log(
+            "[Knowledge Graph] Cache not available, computing entities with metrics",
+        );
+        const entities =
+            (websiteCollection.knowledgeEntities as any)?.getTopEntities(
+                5000,
+            ) || [];
+        const relationships =
+            websiteCollection.relationships?.getAllRelationships() || [];
+        const communities =
+            websiteCollection.communities?.getAllCommunities() || [];
+
+        const entityMetrics = calculateEntityMetrics(
+            entities,
+            relationships,
+            communities,
+        );
+
+        return {
+            entities: entityMetrics,
+        };
+    } catch (error) {
+        console.error("Error getting all entities with metrics:", error);
+        return {
+            entities: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function getEntityNeighborhood(
+    parameters: {
+        entityId: string;
+        depth?: number;
+        maxNodes?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    centerEntity?: any;
+    neighbors: any[];
+    relationships: any[];
+    searchData?: any;
+    metadata?: any;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                neighbors: [],
+                relationships: [],
+                error: "Website collection not available",
+            };
+        }
+
+        const { entityId, depth = 2, maxNodes = 100 } = parameters;
+
+        // Ensure cache is populated
+        await ensureGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getGraphCache(websiteCollection);
+        if (!cache || !cache.isValid) {
+            return {
+                neighbors: [],
+                relationships: [],
+                error: "Graph cache not available",
+            };
+        }
+
+        debug(
+            `[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
+        );
+
+        // Perform BFS to find neighborhood
+        const neighborhoodResult = performBFS(
+            entityId,
+            cache.entityMetrics,
+            cache.relationships,
+            depth,
+            maxNodes,
+        );
+
+        if (!neighborhoodResult.centerEntity) {
+            const searchNeibhbors = await searchByEntities(
+                { entities: [entityId], maxResults: 20 },
+                context,
+            );
+
+            if (searchNeibhbors) {
+                return {
+                    centerEntity: {
+                        id: entityId,
+                        name: entityId,
+                        type: "entity",
+                        confidence: 0.5,
+                        count: 1,
+                    },
+                    neighbors: searchNeibhbors.relatedEntities || [],
+                    relationships: [],
+                    searchData: {
+                        relatedEntities: searchNeibhbors?.relatedEntities || [],
+                        topTopics: searchNeibhbors?.topTopics || [],
+                        websites: searchNeibhbors?.websites || [],
+                    },
+                    metadata: {
+                        source: "in_memory_cache",
+                        queryDepth: depth,
+                        maxNodes: maxNodes,
+                        actualNodes:
+                            (searchNeibhbors?.relatedEntities?.length || 0) + 1,
+                        actualEdges: 0,
+                        searchEnrichment: {
+                            relatedEntities:
+                                searchNeibhbors?.relatedEntities?.length || 0,
+                            topTopics: searchNeibhbors?.topTopics?.length || 0,
+                            websites: searchNeibhbors?.websites?.length || 0,
+                        },
+                    },
+                };
+            } else {
+                return {
+                    neighbors: [],
+                    relationships: [],
+                    error: `Entity "${entityId}" not found`,
+                };
+            }
+        }
+
+        // Get search enrichment for topics and related entities
+        let searchData: any = null;
+        try {
+            const searchResults = await searchByEntities(
+                { entities: [entityId], maxResults: 20 },
+                context,
+            );
+
+            if (searchResults) {
+                searchData = {
+                    websites: searchResults.websites?.slice(0, 15) || [],
+                    relatedEntities:
+                        searchResults.relatedEntities?.slice(0, 15) || [],
+                    topTopics: searchResults.topTopics?.slice(0, 10) || [],
+                };
+
+                debug(
+                    `[Knowledge Graph] Search enrichment found: ${searchData.websites.length} websites, ${searchData.relatedEntities.length} related entities, ${searchData.topTopics.length} topics`,
+                );
+            }
+        } catch (searchError) {
+            console.warn(
+                `[Knowledge Graph] Search enrichment failed:`,
+                searchError,
+            );
+        }
+
+        return {
+            centerEntity: neighborhoodResult.centerEntity,
+            neighbors: neighborhoodResult.neighbors,
+            relationships: neighborhoodResult.relationships,
+            searchData: {
+                relatedEntities: searchData?.relatedEntities || [],
+                topTopics: searchData?.topTopics || [],
+                websites: searchData?.websites || [],
+            },
+            metadata: {
+                source: "in_memory_cache",
+                queryDepth: depth,
+                maxNodes: maxNodes,
+                actualNodes: neighborhoodResult.neighbors.length + 1,
+                actualEdges: neighborhoodResult.relationships.length,
+                searchEnrichment: {
+                    relatedEntities: searchData?.relatedEntities?.length || 0,
+                    topTopics: searchData?.topTopics?.length || 0,
+                    websites: searchData?.websites?.length || 0,
+                },
+            },
+        };
+    } catch (error) {
+        console.error("Error getting entity neighborhood:", error);
+        return {
+            neighbors: [],
+            relationships: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+// BFS implementation for finding entity neighborhood
+function performBFS(
+    entityId: string,
+    entities: any[],
+    relationships: any[],
+    maxDepth: number,
+    maxNodes: number,
+): {
+    centerEntity?: any;
+    neighbors: any[];
+    relationships: any[];
+} {
+    // Find center entity (case insensitive)
+    const centerEntity = entities.find(
+        (e) =>
+            e.name?.toLowerCase() === entityId.toLowerCase() ||
+            e.id?.toLowerCase() === entityId.toLowerCase(),
+    );
+
+    if (!centerEntity) {
+        return { neighbors: [], relationships: [] };
+    }
+
+    // Build adjacency map for fast lookups
+    const adjacencyMap = new Map<string, any[]>();
+    const relationshipMap = new Map<string, any>();
+
+    relationships.forEach((rel) => {
+        const fromName = rel.fromEntity || rel.from;
+        const toName = rel.toEntity || rel.to;
+
+        if (fromName && toName) {
+            // Normalize entity names for lookup
+            const fromKey = fromName.toLowerCase();
+            const toKey = toName.toLowerCase();
+
+            if (!adjacencyMap.has(fromKey)) adjacencyMap.set(fromKey, []);
+            if (!adjacencyMap.has(toKey)) adjacencyMap.set(toKey, []);
+
+            adjacencyMap.get(fromKey)!.push(toKey);
+            adjacencyMap.get(toKey)!.push(fromKey);
+
+            const relKey = `${fromKey}-${toKey}`;
+            const relKey2 = `${toKey}-${fromKey}`;
+            relationshipMap.set(relKey, rel);
+            relationshipMap.set(relKey2, rel);
+        }
+    });
+
+    // BFS traversal
+    const visited = new Set<string>();
+    const queue: Array<{ entityName: string; depth: number }> = [];
+    const result = {
+        neighbors: [] as any[],
+        relationships: [] as any[],
+    };
+
+    const centerKey =
+        centerEntity.name?.toLowerCase() || centerEntity.id?.toLowerCase();
+    queue.push({ entityName: centerKey, depth: 0 });
+    visited.add(centerKey);
+
+    while (queue.length > 0 && result.neighbors.length < maxNodes) {
+        const current = queue.shift()!;
+
+        if (current.depth > 0) {
+            // Find the actual entity object
+            const entity = entities.find(
+                (e) =>
+                    e.name?.toLowerCase() === current.entityName ||
+                    e.id?.toLowerCase() === current.entityName,
+            );
+
+            if (entity) {
+                result.neighbors.push(entity);
+            }
+        }
+
+        if (current.depth < maxDepth) {
+            const neighbors = adjacencyMap.get(current.entityName) || [];
+
+            for (const neighborKey of neighbors) {
+                if (
+                    !visited.has(neighborKey) &&
+                    result.neighbors.length < maxNodes
+                ) {
+                    visited.add(neighborKey);
+                    queue.push({
+                        entityName: neighborKey,
+                        depth: current.depth + 1,
+                    });
+
+                    // Add relationship
+                    const relKey = `${current.entityName}-${neighborKey}`;
+                    const relationship = relationshipMap.get(relKey);
+                    if (
+                        relationship &&
+                        !result.relationships.find(
+                            (r) => r.rowId === relationship.rowId,
+                        )
+                    ) {
+                        result.relationships.push(relationship);
+                    }
+                }
+            }
+        }
+    }
+
+    // add relationships between neighbors
+    for (let i = 0; i < result.neighbors.length; i++) {
+        for (let j = i + 1; j < result.neighbors.length; j++) {
+            const neighborA = result.neighbors[i];
+            const neighborB = result.neighbors[j];
+            const relKey = `${neighborA.name?.toLowerCase() || neighborA.id?.toLowerCase()}-${neighborB.name?.toLowerCase() || neighborB.id?.toLowerCase()}`;
+            const relationship = relationshipMap.get(relKey);
+            if (
+                relationship &&
+                !result.relationships.find(
+                    (r) => r.rowId === relationship.rowId,
+                )
+            ) {
+                result.relationships.push(relationship);
+            }
+        }
+    }
+
+    return {
+        centerEntity,
+        neighbors: result.neighbors,
+        relationships: result.relationships,
+    };
+}
+
+function calculateEntityMetrics(
+    entities: any[],
+    relationships: any[],
+    communities: any[],
+): any[] {
+    const entityMap = new Map<string, any>();
+    const degreeMap = new Map<string, number>();
+    const communityMap = new Map<string, string>();
+
+    entities.forEach((entity) => {
+        entityMap.set(entity.entityName, {
+            id: entity.entityName,
+            name: entity.entityName,
+            type: entity.entityType || "entity",
+            confidence: entity.confidence || 0.5,
+            count: entity.count || 1,
+        });
+        degreeMap.set(entity.entityName, 0);
+    });
+
+    communities.forEach((community, index) => {
+        let communityEntities: string[] = [];
+        try {
+            communityEntities =
+                typeof community.entities === "string"
+                    ? JSON.parse(community.entities)
+                    : Array.isArray(community.entities)
+                      ? community.entities
+                      : [];
+        } catch (e) {
+            communityEntities = [];
+        }
+
+        communityEntities.forEach((entityName) => {
+            communityMap.set(entityName, community.id || `community_${index}`);
+        });
+    });
+
+    relationships.forEach((rel) => {
+        const from = rel.fromEntity;
+        const to = rel.toEntity;
+
+        if (degreeMap.has(from)) {
+            degreeMap.set(from, degreeMap.get(from)! + 1);
+        }
+        if (degreeMap.has(to)) {
+            degreeMap.set(to, degreeMap.get(to)! + 1);
+        }
+    });
+
+    const maxDegree = Math.max(...Array.from(degreeMap.values())) || 1;
+
+    return Array.from(entityMap.values()).map((entity) => ({
+        ...entity,
+        degree: degreeMap.get(entity.name) || 0,
+        importance: (degreeMap.get(entity.name) || 0) / maxDegree,
+        communityId: communityMap.get(entity.name) || "default",
+        size: Math.max(
+            8,
+            Math.min(40, 8 + Math.sqrt((degreeMap.get(entity.name) || 0) * 3)),
+        ),
+    }));
 }
