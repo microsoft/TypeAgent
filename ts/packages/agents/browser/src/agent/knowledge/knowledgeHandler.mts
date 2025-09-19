@@ -3585,9 +3585,7 @@ export async function getEntityNeighborhood(
                 context,
             );
 
-            if (
-                searchNeibhbors 
-            ) {
+            if (searchNeibhbors) {
                 return {
                     centerEntity: {
                         id: entityId,

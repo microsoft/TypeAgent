@@ -318,14 +318,21 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
             ["updated", { type: "string" }],
         ]);
     }
-    
-    public getNeighbors(entityName: string, minConfidence = 0.3): Relationship[] {
+
+    public getNeighbors(
+        entityName: string,
+        minConfidence = 0.3,
+    ): Relationship[] {
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
             WHERE (fromEntity = ? OR toEntity = ?) AND confidence >= ?
             ORDER BY confidence DESC
         `);
-        return stmt.all(entityName, entityName, minConfidence) as Relationship[];
+        return stmt.all(
+            entityName,
+            entityName,
+            minConfidence,
+        ) as Relationship[];
     }
 
     public getRelationshipsForEntities(entities: string[]): Relationship[] {
@@ -373,14 +380,16 @@ export class CommunityTable extends ms.sqlite.SqliteDataFrame {
             ["updated", { type: "string" }],
         ]);
     }
-    
+
     public getForEntities(entityNames: string[]): Community[] {
         if (entityNames.length === 0) return [];
-        
+
         // Find communities containing any of the given entities
-        const conditions = entityNames.map(() => "entities LIKE ?").join(" OR ");
-        const params = entityNames.map(name => `%"${name}"%`);
-        
+        const conditions = entityNames
+            .map(() => "entities LIKE ?")
+            .join(" OR ");
+        const params = entityNames.map((name) => `%"${name}"%`);
+
         const stmt = this.db.prepare(`
             SELECT * FROM communities 
             WHERE ${conditions}
@@ -402,4 +411,3 @@ export class CommunityTable extends ms.sqlite.SqliteDataFrame {
         stmt.run();
     }
 }
-

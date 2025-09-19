@@ -12,9 +12,7 @@ import {
     SearchResult,
 } from "./extensionServiceBase";
 import type { ProgressCallback } from "../interfaces/websiteImport.types";
-import type {
-    KnowledgeProgressCallback,
-} from "../interfaces/knowledgeExtraction.types";
+import type { KnowledgeProgressCallback } from "../interfaces/knowledgeExtraction.types";
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -1211,7 +1209,6 @@ export interface DiscoveryServices {
     loadDiscoverData(): Promise<any>;
 }
 
-
 // Default implementations using the existing ChromeExtensionService
 export class DefaultAnalyticsServices implements AnalyticsServices {
     constructor(private chromeService: ExtensionServiceBase) {}
@@ -1364,4 +1361,3 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
         }
     }
 }
-

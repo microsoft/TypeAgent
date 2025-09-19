@@ -395,10 +395,13 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async buildKnowledgeGraph(options?: { minimalMode?: boolean; urlLimit?: number }): Promise<any> {
+    async buildKnowledgeGraph(options?: {
+        minimalMode?: boolean;
+        urlLimit?: number;
+    }): Promise<any> {
         return this.sendMessage({
             type: "buildKnowledgeGraph",
-            parameters: options || {}
+            parameters: options || {},
         });
     }
 
@@ -432,7 +435,7 @@ export abstract class ExtensionServiceBase {
     async getEntityNeighborhood(
         entityId: string,
         depth: number,
-        maxNodes: number
+        maxNodes: number,
     ): Promise<any> {
         return this.sendMessage({
             type: "getEntityNeighborhood",

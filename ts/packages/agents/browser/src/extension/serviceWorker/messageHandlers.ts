@@ -1037,7 +1037,10 @@ export async function handleMessage(
 
                 return result;
             } catch (error) {
-                console.error("Error getting all entities with metrics:", error);
+                console.error(
+                    "Error getting all entities with metrics:",
+                    error,
+                );
                 return [];
             }
         }
@@ -1053,14 +1056,12 @@ export async function handleMessage(
                     },
                 });
 
-                 return result;
-
+                return result;
             } catch (error) {
                 console.error("Error getting entity neighborhood:", error);
                 return [];
             }
         }
-
 
         default:
             return null;

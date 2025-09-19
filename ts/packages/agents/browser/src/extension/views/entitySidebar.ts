@@ -418,7 +418,6 @@ export class EntitySidebar {
                 topicsList.innerHTML =
                     '<span class="empty-message">No topics</span>';
         }
-
     }
 
     private getEntityIcon(type: string): string {

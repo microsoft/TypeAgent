@@ -271,7 +271,8 @@ export async function sendActionToAgent(
     return new Promise<any | undefined>((resolve, reject) => {
         if (webSocket) {
             try {
-                const callId = new Date().getTime().toString()+"_"+ action.actionName;
+                const callId =
+                    new Date().getTime().toString() + "_" + action.actionName;
 
                 webSocket.send(
                     JSON.stringify({

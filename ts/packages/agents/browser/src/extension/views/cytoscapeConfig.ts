@@ -4,10 +4,10 @@
 import cytoscape from "cytoscape";
 
 export interface GraphSizeConfig {
-    small: number;      // < 1000 nodes
-    medium: number;     // 1000-5000 nodes  
-    large: number;      // 5000-20000 nodes
-    xlarge: number;     // > 20000 nodes
+    small: number; // < 1000 nodes
+    medium: number; // 1000-5000 nodes
+    large: number; // 5000-20000 nodes
+    xlarge: number; // > 20000 nodes
 }
 
 export interface CytoscapeConfigOptions {
@@ -15,7 +15,7 @@ export interface CytoscapeConfigOptions {
     enableAnimations?: boolean;
     enableNodeLabels?: boolean;
     enableEdgeLabels?: boolean;
-    layoutQuality?: 'draft' | 'default' | 'proof';
+    layoutQuality?: "draft" | "default" | "proof";
 }
 
 /**
@@ -26,32 +26,38 @@ export class CytoscapeConfigManager {
         small: 1000,
         medium: 5000,
         large: 20000,
-        xlarge: Infinity
+        xlarge: Infinity,
     };
 
     /**
      * Get optimized configuration based on graph size and options
      */
-    static getOptimizedConfig(options: CytoscapeConfigOptions): cytoscape.CytoscapeOptions {
+    static getOptimizedConfig(
+        options: CytoscapeConfigOptions,
+    ): cytoscape.CytoscapeOptions {
         const graphSize = this.getGraphSize(options.nodeCount);
         const baseConfig = this.getBaseConfig(graphSize);
-        
+
         // Apply option overrides
         if (options.enableAnimations === false) {
             this.disableAnimations(baseConfig);
         }
-        
+
         if (options.enableNodeLabels === false) {
             this.disableNodeLabels(baseConfig);
         }
-        
+
         if (options.enableEdgeLabels === false) {
             this.disableEdgeLabels(baseConfig);
         }
-        
+
         // Set layout quality
-        this.setLayoutQuality(baseConfig, options.layoutQuality || 'default', graphSize);
-        
+        this.setLayoutQuality(
+            baseConfig,
+            options.layoutQuality || "default",
+            graphSize,
+        );
+
         return baseConfig;
     }
 
@@ -60,42 +66,44 @@ export class CytoscapeConfigManager {
      */
     private static getGraphSize(nodeCount: number): keyof GraphSizeConfig {
         if (nodeCount < this.SIZE_THRESHOLDS.small) {
-            return 'small';
+            return "small";
         } else if (nodeCount < this.SIZE_THRESHOLDS.medium) {
-            return 'medium';
+            return "medium";
         } else if (nodeCount < this.SIZE_THRESHOLDS.large) {
-            return 'large';
+            return "large";
         } else {
-            return 'xlarge';
+            return "xlarge";
         }
     }
 
     /**
      * Get base configuration for graph size
      */
-    private static getBaseConfig(graphSize: keyof GraphSizeConfig): cytoscape.CytoscapeOptions {
+    private static getBaseConfig(
+        graphSize: keyof GraphSizeConfig,
+    ): cytoscape.CytoscapeOptions {
         const common = this.getCommonConfig();
-        
+
         switch (graphSize) {
-            case 'small':
+            case "small":
                 return {
                     ...common,
-                    ...this.getSmallGraphConfig()
+                    ...this.getSmallGraphConfig(),
                 };
-            case 'medium':
+            case "medium":
                 return {
                     ...common,
-                    ...this.getMediumGraphConfig()
+                    ...this.getMediumGraphConfig(),
                 };
-            case 'large':
+            case "large":
                 return {
                     ...common,
-                    ...this.getLargeGraphConfig()
+                    ...this.getLargeGraphConfig(),
                 };
-            case 'xlarge':
+            case "xlarge":
                 return {
                     ...common,
-                    ...this.getXLargeGraphConfig()
+                    ...this.getXLargeGraphConfig(),
                 };
             default:
                 return common;
@@ -114,116 +122,116 @@ export class CytoscapeConfigManager {
             userZoomingEnabled: true,
             panningEnabled: true,
             userPanningEnabled: true,
-            selectionType: 'single',
+            selectionType: "single",
             touchTapThreshold: 8,
             desktopTapThreshold: 4,
             autolock: false,
             autoungrabify: false,
             autounselectify: false,
-            
+
             style: [
                 // Node styles
                 {
-                    selector: 'node',
+                    selector: "node",
                     style: {
-                        'width': 'data(size)',
-                        'height': 'data(size)',
-                        'background-color': 'data(color)',
-                        'border-width': 2,
-                        'border-color': '#666',
-                        'label': 'data(label)',
-                        'font-size': '12px',
-                        'font-weight': 'normal',
-                        'text-valign': 'center',
-                        'text-halign': 'center',
-                        'color': '#333',
-                        'text-outline-width': 1,
-                        'text-outline-color': '#fff',
-                        'text-wrap': 'wrap',
-                        'text-max-width': '80px',
-                        'min-zoomed-font-size': 8,
-                        'z-index': 10
-                    }
+                        width: "data(size)",
+                        height: "data(size)",
+                        "background-color": "data(color)",
+                        "border-width": 2,
+                        "border-color": "#666",
+                        label: "data(label)",
+                        "font-size": "12px",
+                        "font-weight": "normal",
+                        "text-valign": "center",
+                        "text-halign": "center",
+                        color: "#333",
+                        "text-outline-width": 1,
+                        "text-outline-color": "#fff",
+                        "text-wrap": "wrap",
+                        "text-max-width": "80px",
+                        "min-zoomed-font-size": 8,
+                        "z-index": 10,
+                    },
                 },
-                
+
                 // Hub node styles (high degree)
                 {
-                    selector: 'node[size > 30]',
+                    selector: "node[size > 30]",
                     style: {
-                        'border-width': 3,
-                        'border-color': '#e74c3c',
-                        'font-weight': 'bold',
-                        'z-index': 20
-                    }
+                        "border-width": 3,
+                        "border-color": "#e74c3c",
+                        "font-weight": "bold",
+                        "z-index": 20,
+                    },
                 },
-                
+
                 // Community node styles
                 {
-                    selector: 'node.community',
+                    selector: "node.community",
                     style: {
-                        'shape': 'round-rectangle',
-                        'background-color': '#3498db',
-                        'border-color': '#2980b9',
-                        'opacity': 0.8
-                    }
+                        shape: "round-rectangle",
+                        "background-color": "#3498db",
+                        "border-color": "#2980b9",
+                        opacity: 0.8,
+                    },
                 },
-                
+
                 // Edge styles
                 {
-                    selector: 'edge',
+                    selector: "edge",
                     style: {
-                        'width': 'mapData(weight, 0, 1, 1, 4)',
-                        'line-color': 'data(color)',
-                        'target-arrow-color': 'data(color)',
-                        'target-arrow-shape': 'triangle-backcurve',
-                        'arrow-scale': 1.2,
-                        'curve-style': 'haystack',
-                        'haystack-radius': 0.3,
-                        'opacity': 0.6,
-                        'z-index': 1
-                    }
+                        width: "mapData(weight, 0, 1, 1, 4)",
+                        "line-color": "data(color)",
+                        "target-arrow-color": "data(color)",
+                        "target-arrow-shape": "triangle-backcurve",
+                        "arrow-scale": 1.2,
+                        "curve-style": "haystack",
+                        "haystack-radius": 0.3,
+                        opacity: 0.6,
+                        "z-index": 1,
+                    },
                 },
-                
+
                 // High confidence edges
                 {
-                    selector: 'edge[confidence > 0.8]',
+                    selector: "edge[confidence > 0.8]",
                     style: {
-                        'width': 3,
-                        'opacity': 0.9
-                    }
+                        width: 3,
+                        opacity: 0.9,
+                    },
                 },
-                
+
                 // Selected element styles
                 {
-                    selector: ':selected',
+                    selector: ":selected",
                     style: {
-                        'border-width': 4,
-                        'border-color': '#f39c12',
-                        'z-index': 30
-                    }
+                        "border-width": 4,
+                        "border-color": "#f39c12",
+                        "z-index": 30,
+                    },
                 },
-                
+
                 // Highlighted elements
                 {
-                    selector: '.highlighted',
+                    selector: ".highlighted",
                     style: {
-                        'background-color': '#e74c3c',
-                        'line-color': '#e74c3c',
-                        'target-arrow-color': '#e74c3c',
-                        'opacity': 1,
-                        'z-index': 25
-                    }
+                        "background-color": "#e74c3c",
+                        "line-color": "#e74c3c",
+                        "target-arrow-color": "#e74c3c",
+                        opacity: 1,
+                        "z-index": 25,
+                    },
                 },
-                
+
                 // Faded elements
                 {
-                    selector: '.faded',
+                    selector: ".faded",
                     style: {
-                        'opacity': 0.3,
-                        'z-index': 1
-                    }
-                }
-            ]
+                        opacity: 0.3,
+                        "z-index": 1,
+                    },
+                },
+            ],
         };
     }
 
@@ -238,11 +246,11 @@ export class CytoscapeConfigManager {
             textureOnViewport: false,
             hideEdgesOnViewport: false,
             hideLabelsOnViewport: false,
-            
+
             layout: {
-                name: 'cose-bilkent',
+                name: "cose-bilkent",
                 animationDuration: 1000,
-                animationEasing: 'ease-out',
+                animationEasing: "ease-out",
                 fit: true,
                 padding: 50,
                 idealEdgeLength: 80,
@@ -253,8 +261,8 @@ export class CytoscapeConfigManager {
                 numIterations: 2500,
                 tile: true,
                 tilingPaddingVertical: 20,
-                tilingPaddingHorizontal: 20
-            } as any
+                tilingPaddingHorizontal: 20,
+            } as any,
         };
     }
 
@@ -268,9 +276,9 @@ export class CytoscapeConfigManager {
             textureOnViewport: true,
             hideEdgesOnViewport: false,
             hideLabelsOnViewport: false,
-            
+
             layout: {
-                name: 'cose-bilkent',
+                name: "cose-bilkent",
                 fit: true,
                 padding: 30,
                 idealEdgeLength: 60,
@@ -281,8 +289,8 @@ export class CytoscapeConfigManager {
                 numIterations: 1000,
                 tile: true,
                 tilingPaddingVertical: 15,
-                tilingPaddingHorizontal: 15
-            } as any
+                tilingPaddingHorizontal: 15,
+            } as any,
         };
     }
 
@@ -296,9 +304,9 @@ export class CytoscapeConfigManager {
             textureOnViewport: true,
             hideEdgesOnViewport: true, // Hide edges during viewport changes
             hideLabelsOnViewport: true, // Hide labels during viewport changes
-            
+
             layout: {
-                name: 'cose-bilkent',
+                name: "cose-bilkent",
                 fit: true,
                 padding: 20,
                 idealEdgeLength: 50,
@@ -309,8 +317,8 @@ export class CytoscapeConfigManager {
                 numIterations: 500,
                 tile: true,
                 tilingPaddingVertical: 10,
-                tilingPaddingHorizontal: 10
-            } as any
+                tilingPaddingHorizontal: 10,
+            } as any,
         };
     }
 
@@ -324,12 +332,12 @@ export class CytoscapeConfigManager {
             textureOnViewport: true,
             hideEdgesOnViewport: true,
             hideLabelsOnViewport: true,
-            
+
             layout: {
-                name: 'preset', // Use preset positions for very large graphs
+                name: "preset", // Use preset positions for very large graphs
                 fit: true,
-                padding: 10
-            }
+                padding: 10,
+            },
         };
     }
 
@@ -345,10 +353,12 @@ export class CytoscapeConfigManager {
      */
     private static disableNodeLabels(config: cytoscape.CytoscapeOptions): void {
         if (config.style) {
-            const nodeStyle = (config.style as any[]).find(s => s.selector === 'node');
+            const nodeStyle = (config.style as any[]).find(
+                (s) => s.selector === "node",
+            );
             if (nodeStyle) {
-                nodeStyle.style.label = '';
-                nodeStyle.style['text-opacity'] = 0;
+                nodeStyle.style.label = "";
+                nodeStyle.style["text-opacity"] = 0;
             }
         }
     }
@@ -358,10 +368,12 @@ export class CytoscapeConfigManager {
      */
     private static disableEdgeLabels(config: cytoscape.CytoscapeOptions): void {
         if (config.style) {
-            const edgeStyle = (config.style as any[]).find(s => s.selector === 'edge');
+            const edgeStyle = (config.style as any[]).find(
+                (s) => s.selector === "edge",
+            );
             if (edgeStyle) {
-                edgeStyle.style.label = '';
-                edgeStyle.style['text-opacity'] = 0;
+                edgeStyle.style.label = "";
+                edgeStyle.style["text-opacity"] = 0;
             }
         }
     }
@@ -371,21 +383,27 @@ export class CytoscapeConfigManager {
      */
     private static setLayoutQuality(
         config: cytoscape.CytoscapeOptions,
-        quality: 'draft' | 'default' | 'proof',
-        graphSize: keyof GraphSizeConfig
+        quality: "draft" | "default" | "proof",
+        graphSize: keyof GraphSizeConfig,
     ): void {
         if (!config.layout) return;
 
         const layout = config.layout as any;
-        
+
         switch (quality) {
-            case 'draft':
-                layout.numIterations = Math.min(layout.numIterations || 100, 100);
+            case "draft":
+                layout.numIterations = Math.min(
+                    layout.numIterations || 100,
+                    100,
+                );
                 // Draft quality settings applied via iterations
                 break;
-            case 'proof':
-                if (graphSize === 'small' || graphSize === 'medium') {
-                    layout.numIterations = Math.max(layout.numIterations || 1000, 2000);
+            case "proof":
+                if (graphSize === "small" || graphSize === "medium") {
+                    layout.numIterations = Math.max(
+                        layout.numIterations || 1000,
+                        2000,
+                    );
                     // Proof quality settings applied via iterations
                 }
                 break;
@@ -398,13 +416,15 @@ export class CytoscapeConfigManager {
     /**
      * Get configuration for specific use cases
      */
-    static getEntitySpecificConfig(nodeCount: number): cytoscape.CytoscapeOptions {
+    static getEntitySpecificConfig(
+        nodeCount: number,
+    ): cytoscape.CytoscapeOptions {
         return this.getOptimizedConfig({
             nodeCount,
             enableAnimations: nodeCount < 1000,
             enableNodeLabels: true,
             enableEdgeLabels: nodeCount < 500,
-            layoutQuality: nodeCount < 1000 ? 'proof' : 'default'
+            layoutQuality: nodeCount < 1000 ? "proof" : "default",
         });
     }
 
@@ -414,24 +434,26 @@ export class CytoscapeConfigManager {
             enableAnimations: false,
             enableNodeLabels: nodeCount < 200,
             enableEdgeLabels: false,
-            layoutQuality: 'draft'
+            layoutQuality: "draft",
         });
     }
 
-    static getCommunityViewConfig(nodeCount: number): cytoscape.CytoscapeOptions {
+    static getCommunityViewConfig(
+        nodeCount: number,
+    ): cytoscape.CytoscapeOptions {
         const config = this.getOptimizedConfig({
             nodeCount,
             enableAnimations: nodeCount < 500,
             enableNodeLabels: true,
             enableEdgeLabels: nodeCount < 200,
-            layoutQuality: 'default'
+            layoutQuality: "default",
         });
 
         // Adjust for community visualization
         if (config.layout) {
             const layout = config.layout as any;
             layout.idealEdgeLength = 100; // Larger spacing for communities
-            layout.nodeRepulsion = 6000;  // More separation
+            layout.nodeRepulsion = 6000; // More separation
         }
 
         return config;
@@ -440,18 +462,24 @@ export class CytoscapeConfigManager {
     /**
      * Performance monitoring configuration
      */
-    static enablePerformanceMonitoring(config: cytoscape.CytoscapeOptions): void {
+    static enablePerformanceMonitoring(
+        config: cytoscape.CytoscapeOptions,
+    ): void {
         // Add performance event handlers
-        (config as any).ready = function(event: any) {
-            console.log('Cytoscape ready:', event.cy.elements().length, 'elements');
+        (config as any).ready = function (event: any) {
+            console.log(
+                "Cytoscape ready:",
+                event.cy.elements().length,
+                "elements",
+            );
         };
 
-        (config as any).layoutstart = function(event: any) {
-            console.time('layout-duration');
+        (config as any).layoutstart = function (event: any) {
+            console.time("layout-duration");
         };
 
-        (config as any).layoutstop = function(event: any) {
-            console.timeEnd('layout-duration');
+        (config as any).layoutstop = function (event: any) {
+            console.timeEnd("layout-duration");
         };
     }
 }

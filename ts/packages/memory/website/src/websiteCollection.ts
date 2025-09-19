@@ -118,20 +118,22 @@ export class WebsiteCollection
         if (!this.dbPath) {
             this.dbPath = ":memory:";
         }
-        
+
         // Only overwrite if it's a memory database or if the file doesn't exist
         let shouldOverwrite = this.dbPath === ":memory:";
-        
+
         if (this.dbPath !== ":memory:" && this.dbPath) {
             try {
                 const fileExists = fs.existsSync(this.dbPath);
                 shouldOverwrite = !fileExists;
             } catch (error) {
-                console.warn(`[Knowledge Graph] Could not check database file existence: ${error}`);
+                console.warn(
+                    `[Knowledge Graph] Could not check database file existence: ${error}`,
+                );
                 shouldOverwrite = false; // Conservative approach - don't overwrite
             }
         }
-        
+
         this.db = ms.sqlite.createDatabase(this.dbPath, shouldOverwrite);
         this.visitFrequency = new VisitFrequencyTable(this.db);
         this.websiteCategories = new WebsiteCategoryTable(this.db);
@@ -978,12 +980,16 @@ export class WebsiteCollection
         // if we have an in-memory database we need to write it out to disk
         if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
             const dbFile = `${path.join(dirPath, baseFileName)}_dataFrames.sqlite`;
-            console.log(`[Knowledge Graph] Saving SQLite database to: ${dbFile}`);
+            console.log(
+                `[Knowledge Graph] Saving SQLite database to: ${dbFile}`,
+            );
 
             // Only delete if it's a memory database being saved for the first time
             // If we already have a persistent database, don't delete it
             if (fs.existsSync(dbFile) && this.dbPath === ":memory:") {
-                console.log(`[Knowledge Graph] Backing up existing database file`);
+                console.log(
+                    `[Knowledge Graph] Backing up existing database file`,
+                );
                 const backupFile = `${dbFile}.backup.${Date.now()}`;
                 fs.copyFileSync(dbFile, backupFile);
                 fs.unlinkSync(dbFile);
@@ -993,7 +999,9 @@ export class WebsiteCollection
             console.log(`[Knowledge Graph] Database saved successfully`);
         } else {
             // If we already have a persistent database, just ensure it's saved
-            console.log(`[Knowledge Graph] Using existing persistent database: ${this.dbPath}`);
+            console.log(
+                `[Knowledge Graph] Using existing persistent database: ${this.dbPath}`,
+            );
         }
     }
 
@@ -1004,28 +1012,34 @@ export class WebsiteCollection
         // Check if there's a SQLite database file
         const dbFile = path.join(dirPath, `${baseFileName}_dataFrames.sqlite`);
         let dbPath = "";
-        
+
         // Check if the database file exists
         try {
             const fs = await import("fs");
             if (fs.existsSync(dbFile)) {
                 dbPath = dbFile;
-                console.log(`[Knowledge Graph] Loading existing SQLite database from: ${dbFile}`);
+                console.log(
+                    `[Knowledge Graph] Loading existing SQLite database from: ${dbFile}`,
+                );
             } else {
-                console.log(`[Knowledge Graph] No existing database found at: ${dbFile}`);
+                console.log(
+                    `[Knowledge Graph] No existing database found at: ${dbFile}`,
+                );
             }
         } catch (error) {
-            console.warn(`[Knowledge Graph] Could not check for database file: ${error}`);
+            console.warn(
+                `[Knowledge Graph] Could not check for database file: ${error}`,
+            );
         }
-        
+
         const websiteCollection = new WebsiteCollection(
             undefined,
             undefined,
             undefined,
             undefined,
-            dbPath
+            dbPath,
         );
-        
+
         try {
             const data = await readConversationDataFromFile(
                 dirPath,
@@ -1530,7 +1544,9 @@ export class WebsiteCollection
      */
     public async hasGraph(): Promise<boolean> {
         try {
-            const stmt = this.db!.prepare("SELECT COUNT(*) as count FROM relationships LIMIT 1");
+            const stmt = this.db!.prepare(
+                "SELECT COUNT(*) as count FROM relationships LIMIT 1",
+            );
             const result = stmt.get() as { count: number };
             return result.count > 0;
         } catch {
@@ -1544,45 +1560,56 @@ export class WebsiteCollection
     public async buildGraph(options?: { urlLimit?: number }): Promise<void> {
         const urlLimit = options?.urlLimit;
         const isMinimalMode = urlLimit !== undefined;
-        
-        console.log(`[Knowledge Graph] Starting graph build${isMinimalMode ? ` (minimal mode: ${urlLimit} URLs)` : ' (full mode)'}`);
+
+        console.log(
+            `[Knowledge Graph] Starting graph build${isMinimalMode ? ` (minimal mode: ${urlLimit} URLs)` : " (full mode)"}`,
+        );
         const startTime = Date.now();
-        
+
         // Extract entities from websites (limited in minimal mode)
         const entities = await this.extractEntities(urlLimit);
-        console.log(`[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - startTime}ms`);
-        
+        console.log(
+            `[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - startTime}ms`,
+        );
+
         // Store entities in knowledge entities table
         await this.storeEntitiesInDatabase(entities, urlLimit);
         console.log(`[Knowledge Graph] Stored entities in database`);
-        
+
         // Build relationships between entities
         const relationshipStartTime = Date.now();
         await this.buildRelationships(entities, urlLimit);
-        console.log(`[Knowledge Graph] Built relationships in ${Date.now() - relationshipStartTime}ms`);
-        
+        console.log(
+            `[Knowledge Graph] Built relationships in ${Date.now() - relationshipStartTime}ms`,
+        );
+
         // Detect communities
         const communityStartTime = Date.now();
         await this.detectCommunities(entities);
-        console.log(`[Knowledge Graph] Detected communities in ${Date.now() - communityStartTime}ms`);
-        
-        
+        console.log(
+            `[Knowledge Graph] Detected communities in ${Date.now() - communityStartTime}ms`,
+        );
+
         const totalTime = Date.now() - startTime;
-        console.log(`[Knowledge Graph] Graph build completed in ${totalTime}ms with ${entities.length} entities`);
+        console.log(
+            `[Knowledge Graph] Graph build completed in ${totalTime}ms with ${entities.length} entities`,
+        );
     }
 
     /**
      * Update graph when new websites are added
      */
     public async updateGraph(newWebsites: Website[]): Promise<void> {
-        console.log(`Updating knowledge graph with ${newWebsites.length} new websites`);
-        
+        console.log(
+            `Updating knowledge graph with ${newWebsites.length} new websites`,
+        );
+
         for (const website of newWebsites) {
             if (website.knowledge?.entities) {
                 await this.processWebsite(website);
             }
         }
-        
+
         const entityCount = await this.getEntityCount();
         if (this.shouldRecomputeCommunities(entityCount)) {
             await this.recomputeCommunities();
@@ -1594,27 +1621,36 @@ export class WebsiteCollection
      */
     private async extractEntities(urlLimit?: number): Promise<string[]> {
         const entities = new Set<string>();
-        
+
         // Get websites to process (limited in minimal mode)
         const websites = this.getWebsites();
-        const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
-        
-        console.log(`[Knowledge Graph] Extracting entities from ${websitesToProcess.length} of ${websites.length} websites`);
-        
+        const websitesToProcess = urlLimit
+            ? websites.slice(0, urlLimit)
+            : websites;
+
+        console.log(
+            `[Knowledge Graph] Extracting entities from ${websitesToProcess.length} of ${websites.length} websites`,
+        );
+
         let processedCount = 0;
         for (const website of websitesToProcess) {
             processedCount++;
-            if (processedCount % 20 === 0 || processedCount === websitesToProcess.length) {
-                console.log(`[Knowledge Graph] Entity extraction progress: ${processedCount}/${websitesToProcess.length} websites`);
+            if (
+                processedCount % 20 === 0 ||
+                processedCount === websitesToProcess.length
+            ) {
+                console.log(
+                    `[Knowledge Graph] Entity extraction progress: ${processedCount}/${websitesToProcess.length} websites`,
+                );
             }
-            
+
             if (website.knowledge?.entities) {
                 for (const entity of website.knowledge.entities) {
                     entities.add(entity.name);
                 }
             }
         }
-        
+
         console.log(`[Knowledge Graph] Found ${entities.size} unique entities`);
         return Array.from(entities);
     }
@@ -1622,61 +1658,74 @@ export class WebsiteCollection
     /**
      * Store entities and topics in database tables
      */
-    private async storeEntitiesInDatabase(entities: string[], urlLimit?: number): Promise<void> {
-        console.log(`[Knowledge Graph] Storing entities and topics in database...`);
-        
+    private async storeEntitiesInDatabase(
+        entities: string[],
+        urlLimit?: number,
+    ): Promise<void> {
+        console.log(
+            `[Knowledge Graph] Storing entities and topics in database...`,
+        );
+
         // Get websites to process (same limitation as entity extraction)
         const websites = this.getWebsites();
-        const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
-        
+        const websitesToProcess = urlLimit
+            ? websites.slice(0, urlLimit)
+            : websites;
+
         const extractionDate = new Date().toISOString();
         let entityCount = 0;
         let topicCount = 0;
-        
+
         for (const website of websitesToProcess) {
             if (!website.knowledge) continue;
-            
+
             // Store entities
             if (website.knowledge.entities) {
                 for (const entity of website.knowledge.entities) {
                     const sourceRef = {
                         range: {
                             start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                            end: { messageOrdinal: 0, chunkOrdinal: 0 }
-                        }
+                            end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                        },
                     };
-                    
+
                     const entityRow = {
                         sourceRef,
                         record: {
                             url: website.metadata.url,
                             domain: website.metadata.domain,
                             entityName: entity.name,
-                            entityType: Array.isArray(entity.type) ? entity.type.join(',') : (entity.type || "unknown"),
+                            entityType: Array.isArray(entity.type)
+                                ? entity.type.join(",")
+                                : entity.type || "unknown",
                             confidence: 0.8, // Use default confidence since entity.confidence doesn't exist
                             extractionDate,
-                        }
+                        },
                     };
-                    
+
                     await this.knowledgeEntities.addRows(entityRow);
                     entityCount++;
                 }
             }
-            
+
             // Store topics
             if (website.knowledge.topics) {
                 for (const topic of website.knowledge.topics) {
-                    const topicName = typeof topic === 'string' ? topic : (topic as any).name;
-                    const relevance = typeof topic === 'string' ? 0.8 : (topic as any).relevance || 0.8;
-                    
+                    const topicName =
+                        typeof topic === "string" ? topic : (topic as any).name;
+                    const relevance =
+                        typeof topic === "string"
+                            ? 0.8
+                            : (topic as any).relevance || 0.8;
+
                     if (topicName) {
                         const sourceRef = {
                             range: {
                                 start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                                end: { messageOrdinal: 0, chunkOrdinal: 0 }
-                            }
+                                end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                            },
                         };
-                        
+
                         const topicRow = {
                             sourceRef,
                             record: {
@@ -1685,51 +1734,67 @@ export class WebsiteCollection
                                 topic: topicName,
                                 relevance,
                                 extractionDate,
-                            }
+                            },
                         };
-                        
+
                         await this.knowledgeTopics.addRows(topicRow);
                         topicCount++;
                     }
                 }
             }
         }
-        
-        console.log(`[Knowledge Graph] Stored ${entityCount} entity records and ${topicCount} topic records`);
+
+        console.log(
+            `[Knowledge Graph] Stored ${entityCount} entity records and ${topicCount} topic records`,
+        );
     }
 
     /**
      * Build entity relationships based on co-occurrence
      */
-    private async buildRelationships(entities: string[], urlLimit?: number): Promise<void> {
+    private async buildRelationships(
+        entities: string[],
+        urlLimit?: number,
+    ): Promise<void> {
         const relationships = new Map<string, Relationship>();
-        
+
         // Get websites to process (limited in minimal mode)
         const websites = this.getWebsites();
-        const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
-        
-        console.log(`[Knowledge Graph] Building relationships from ${websitesToProcess.length} websites`);
-        
+        const websitesToProcess = urlLimit
+            ? websites.slice(0, urlLimit)
+            : websites;
+
+        console.log(
+            `[Knowledge Graph] Building relationships from ${websitesToProcess.length} websites`,
+        );
+
         let processedCount = 0;
         let relationshipCount = 0;
-        
+
         // Find entity co-occurrences in websites
         for (const website of websitesToProcess) {
             processedCount++;
-            if (processedCount % 20 === 0 || processedCount === websitesToProcess.length) {
-                console.log(`[Knowledge Graph] Relationship building progress: ${processedCount}/${websitesToProcess.length} websites, ${relationshipCount} relationships found`);
+            if (
+                processedCount % 20 === 0 ||
+                processedCount === websitesToProcess.length
+            ) {
+                console.log(
+                    `[Knowledge Graph] Relationship building progress: ${processedCount}/${websitesToProcess.length} websites, ${relationshipCount} relationships found`,
+                );
             }
             if (!website.knowledge?.entities) continue;
-            
-            const websiteEntities = website.knowledge.entities.map(e => e.name);
-            
+
+            const websiteEntities = website.knowledge.entities.map(
+                (e) => e.name,
+            );
+
             // Build pairs of co-occurring entities
             for (let i = 0; i < websiteEntities.length; i++) {
                 for (let j = i + 1; j < websiteEntities.length; j++) {
                     const entityA = websiteEntities[i];
                     const entityB = websiteEntities[j];
                     const key = `${entityA}|${entityB}`;
-                    
+
                     if (!relationships.has(key)) {
                         relationships.set(key, {
                             fromEntity: entityA,
@@ -1742,7 +1807,7 @@ export class WebsiteCollection
                         });
                         relationshipCount++;
                     }
-                    
+
                     const rel = relationships.get(key)!;
                     rel.count++;
                     const urls = JSON.parse(rel.sources);
@@ -1751,55 +1816,65 @@ export class WebsiteCollection
                 }
             }
         }
-        
-        console.log(`[Knowledge Graph] Found ${relationships.size} unique relationships from ${processedCount} websites`);
-        
+
+        console.log(
+            `[Knowledge Graph] Found ${relationships.size} unique relationships from ${processedCount} websites`,
+        );
+
         // Calculate confidence scores and store relationships
         console.log(`[Knowledge Graph] Storing relationships in database...`);
         let storedCount = 0;
         for (const [, rel] of relationships) {
             rel.confidence = Math.min(rel.count / 10, 1.0); // Normalize to 0-1
             storedCount++;
-            
+
             const sourceRef: dataFrame.RowSourceRef = {
                 range: {
                     start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    end: { messageOrdinal: 0, chunkOrdinal: 0 }
-                }
+                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                },
             };
             const relationshipRow: dataFrame.DataFrameRow = {
                 sourceRef,
-                record: rel as any
+                record: rel as any,
             };
             await this.relationships.addRows(relationshipRow);
-            
+
             if (storedCount % 100 === 0 || storedCount === relationships.size) {
-                console.log(`[Knowledge Graph] Stored ${storedCount}/${relationships.size} relationships`);
+                console.log(
+                    `[Knowledge Graph] Stored ${storedCount}/${relationships.size} relationships`,
+                );
             }
         }
-        console.log(`[Knowledge Graph] Finished storing ${storedCount} relationships`);
+        console.log(
+            `[Knowledge Graph] Finished storing ${storedCount} relationships`,
+        );
     }
 
     /**
      * Detect and store communities using simple clustering
      */
     private async detectCommunities(entities: string[]): Promise<void> {
-        console.log(`[Knowledge Graph] Starting community detection for ${entities.length} entities`);
-        
+        console.log(
+            `[Knowledge Graph] Starting community detection for ${entities.length} entities`,
+        );
+
         // Simple community detection based on relationship density
         // For now, group entities that appear together frequently
         const communities = await this.runCommunityDetection(entities);
-        
-        console.log(`[Knowledge Graph] Detected ${communities.length} communities`);
-        
+
+        console.log(
+            `[Knowledge Graph] Detected ${communities.length} communities`,
+        );
+
         let storedCount = 0;
         for (const community of communities) {
             storedCount++;
             const sourceRef: dataFrame.RowSourceRef = {
                 range: {
                     start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    end: { messageOrdinal: 0, chunkOrdinal: 0 }
-                }
+                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                },
             };
             const communityRow: dataFrame.DataFrameRow = {
                 sourceRef,
@@ -1810,28 +1885,36 @@ export class WebsiteCollection
                     size: community.entities.length,
                     density: community.density,
                     updated: new Date().toISOString(),
-                } as any
+                } as any,
             };
             await this.communities.addRows(communityRow);
-            
+
             if (storedCount % 10 === 0 || storedCount === communities.length) {
-                console.log(`[Knowledge Graph] Stored ${storedCount}/${communities.length} communities`);
+                console.log(
+                    `[Knowledge Graph] Stored ${storedCount}/${communities.length} communities`,
+                );
             }
         }
-        console.log(`[Knowledge Graph] Finished storing ${storedCount} communities`);
+        console.log(
+            `[Knowledge Graph] Finished storing ${storedCount} communities`,
+        );
     }
 
     /**
      * Simple community detection algorithm
      */
-    private async runCommunityDetection(entities: string[]): Promise<Array<{
-        id: string;
-        entities: string[];
-        topics: string[];
-        density: number;
-    }>> {
-        console.log(`[Knowledge Graph] Running community detection algorithm...`);
-        
+    private async runCommunityDetection(entities: string[]): Promise<
+        Array<{
+            id: string;
+            entities: string[];
+            topics: string[];
+            density: number;
+        }>
+    > {
+        console.log(
+            `[Knowledge Graph] Running community detection algorithm...`,
+        );
+
         // For now, implement a simple clustering based on co-occurrence strength
         const communities: Array<{
             id: string;
@@ -1842,8 +1925,10 @@ export class WebsiteCollection
 
         // Group entities that have strong relationships (confidence > 0.5)
         const strongRelationships = await this.getStrongRelationships();
-        console.log(`[Knowledge Graph] Found ${strongRelationships.length} strong relationships for clustering`);
-        
+        console.log(
+            `[Knowledge Graph] Found ${strongRelationships.length} strong relationships for clustering`,
+        );
+
         const processed = new Set<string>();
         let communityId = 0;
 
@@ -1858,7 +1943,10 @@ export class WebsiteCollection
             };
 
             // Find strongly connected entities
-            const connected = this.findConnectedEntities(entity, strongRelationships);
+            const connected = this.findConnectedEntities(
+                entity,
+                strongRelationships,
+            );
             for (const connectedEntity of connected) {
                 if (!processed.has(connectedEntity)) {
                     community.entities.push(connectedEntity);
@@ -1867,9 +1955,13 @@ export class WebsiteCollection
             }
 
             processed.add(entity);
-            community.density = this.calculateCommunityDensity(community.entities, strongRelationships);
-            
-            if (community.entities.length > 1) { // Only add communities with multiple entities
+            community.density = this.calculateCommunityDensity(
+                community.entities,
+                strongRelationships,
+            );
+
+            if (community.entities.length > 1) {
+                // Only add communities with multiple entities
                 communities.push(community);
             }
         }
@@ -1892,9 +1984,12 @@ export class WebsiteCollection
     /**
      * Find entities connected to a given entity
      */
-    private findConnectedEntities(entity: string, relationships: Relationship[]): string[] {
+    private findConnectedEntities(
+        entity: string,
+        relationships: Relationship[],
+    ): string[] {
         const connected = new Set<string>();
-        
+
         for (const rel of relationships) {
             if (rel.fromEntity === entity) {
                 connected.add(rel.toEntity);
@@ -1902,25 +1997,31 @@ export class WebsiteCollection
                 connected.add(rel.fromEntity);
             }
         }
-        
+
         return Array.from(connected);
     }
 
     /**
      * Calculate community density
      */
-    private calculateCommunityDensity(entities: string[], relationships: Relationship[]): number {
+    private calculateCommunityDensity(
+        entities: string[],
+        relationships: Relationship[],
+    ): number {
         if (entities.length < 2) return 0;
-        
+
         const maxPossibleEdges = (entities.length * (entities.length - 1)) / 2;
         let actualEdges = 0;
-        
+
         for (const rel of relationships) {
-            if (entities.includes(rel.fromEntity) && entities.includes(rel.toEntity)) {
+            if (
+                entities.includes(rel.fromEntity) &&
+                entities.includes(rel.toEntity)
+            ) {
                 actualEdges++;
             }
         }
-        
+
         return actualEdges / maxPossibleEdges;
     }
 
@@ -1929,12 +2030,15 @@ export class WebsiteCollection
      */
     private async getTopicsForEntity(entity: string): Promise<string[]> {
         const topics = new Set<string>();
-        
+
         for (const website of this.getWebsites()) {
-            if (website.knowledge?.entities?.some(e => e.name === entity)) {
+            if (website.knowledge?.entities?.some((e) => e.name === entity)) {
                 if (website.knowledge.topics) {
                     for (const topic of website.knowledge.topics) {
-                        const topicName = typeof topic === 'string' ? topic : (topic as any).name;
+                        const topicName =
+                            typeof topic === "string"
+                                ? topic
+                                : (topic as any).name;
                         if (topicName) {
                             topics.add(topicName);
                         }
@@ -1942,7 +2046,7 @@ export class WebsiteCollection
                 }
             }
         }
-        
+
         return Array.from(topics);
     }
 
@@ -1951,13 +2055,17 @@ export class WebsiteCollection
      */
     private async processWebsite(website: Website): Promise<void> {
         if (!website.knowledge?.entities) return;
-        
-        const entities = website.knowledge.entities.map(e => e.name);
-        
+
+        const entities = website.knowledge.entities.map((e) => e.name);
+
         // Add new relationships for this website
         for (let i = 0; i < entities.length; i++) {
             for (let j = i + 1; j < entities.length; j++) {
-                await this.addOrUpdateRelationship(entities[i], entities[j], website.metadata.url);
+                await this.addOrUpdateRelationship(
+                    entities[i],
+                    entities[j],
+                    website.metadata.url,
+                );
             }
         }
     }
@@ -1965,12 +2073,19 @@ export class WebsiteCollection
     /**
      * Add or update a relationship between two entities
      */
-    private async addOrUpdateRelationship(entityA: string, entityB: string, sourceUrl: string): Promise<void> {
+    private async addOrUpdateRelationship(
+        entityA: string,
+        entityB: string,
+        sourceUrl: string,
+    ): Promise<void> {
         // Check if relationship already exists
-        const existing = await this.relationships.getNeighbors(entityA).find(
-            rel => (rel.fromEntity === entityA && rel.toEntity === entityB) || 
-                   (rel.fromEntity === entityB && rel.toEntity === entityA)
-        );
+        const existing = await this.relationships
+            .getNeighbors(entityA)
+            .find(
+                (rel) =>
+                    (rel.fromEntity === entityA && rel.toEntity === entityB) ||
+                    (rel.fromEntity === entityB && rel.toEntity === entityA),
+            );
 
         if (existing) {
             // Update existing relationship
@@ -1982,15 +2097,23 @@ export class WebsiteCollection
             }
             existing.confidence = Math.min(existing.count / 10, 1.0);
             existing.updated = new Date().toISOString();
-            
+
             // Update in database
             const stmt = this.db!.prepare(`
                 UPDATE relationships 
                 SET count = ?, sources = ?, confidence = ?, updated = ?
                 WHERE (fromEntity = ? AND toEntity = ?) OR (fromEntity = ? AND toEntity = ?)
             `);
-            stmt.run(existing.count, existing.sources, existing.confidence, existing.updated,
-                    entityA, entityB, entityB, entityA);
+            stmt.run(
+                existing.count,
+                existing.sources,
+                existing.confidence,
+                existing.updated,
+                entityA,
+                entityB,
+                entityB,
+                entityA,
+            );
         } else {
             // Create new relationship
             const newRel: Relationship = {
@@ -2002,16 +2125,16 @@ export class WebsiteCollection
                 count: 1,
                 updated: new Date().toISOString(),
             };
-            
+
             const sourceRef: dataFrame.RowSourceRef = {
                 range: {
                     start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    end: { messageOrdinal: 0, chunkOrdinal: 0 }
-                }
+                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                },
             };
             const newRelRow: dataFrame.DataFrameRow = {
                 sourceRef,
-                record: newRel as any
+                record: newRel as any,
             };
             await this.relationships.addRows(newRelRow);
         }
@@ -2041,7 +2164,7 @@ export class WebsiteCollection
         // Clear existing communities
         const clearStmt = this.db!.prepare("DELETE FROM communities");
         clearStmt.run();
-        
+
         // Rebuild communities
         const entities = await this.extractEntities(undefined);
         await this.detectCommunities(entities);

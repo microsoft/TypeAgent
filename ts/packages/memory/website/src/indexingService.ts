@@ -202,10 +202,21 @@ if (
                         "No existing collection found or empty, creating new one",
                     );
                     // Create with correct database path to preserve any existing data
-                    const dbFile = path.join(index.path, "index_dataFrames.sqlite");
+                    const dbFile = path.join(
+                        index.path,
+                        "index_dataFrames.sqlite",
+                    );
                     const dbPath = fs.existsSync(dbFile) ? dbFile : "";
-                    debug(`Checking for existing database at: ${dbFile}, exists: ${fs.existsSync(dbFile)}`);
-                    websites = new WebsiteCollection(undefined, undefined, undefined, undefined, dbPath);
+                    debug(
+                        `Checking for existing database at: ${dbFile}, exists: ${fs.existsSync(dbFile)}`,
+                    );
+                    websites = new WebsiteCollection(
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        dbPath,
+                    );
                 } else {
                     debug(
                         `Loaded existing collection with ${websites.messages.length} websites`,
@@ -218,8 +229,16 @@ if (
                 // Create with correct database path to preserve any existing data
                 const dbFile = path.join(index.path, "index_dataFrames.sqlite");
                 const dbPath = fs.existsSync(dbFile) ? dbFile : "";
-                debug(`Checking for existing database at: ${dbFile}, exists: ${fs.existsSync(dbFile)}`);
-                websites = new WebsiteCollection(undefined, undefined, undefined, undefined, dbPath);
+                debug(
+                    `Checking for existing database at: ${dbFile}, exists: ${fs.existsSync(dbFile)}`,
+                );
+                websites = new WebsiteCollection(
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    dbPath,
+                );
             }
 
             const browserType = index.browserType || "chrome";
@@ -290,12 +309,14 @@ if (
         // Update knowledge graph
         try {
             const hasGraph = await websiteCollection.hasGraph();
-            
+
             if (!hasGraph) {
                 debug("Building initial knowledge graph...");
                 await websiteCollection.buildGraph();
             } else {
-                debug(`Updating knowledge graph with ${newWebsites.length} new websites...`);
+                debug(
+                    `Updating knowledge graph with ${newWebsites.length} new websites...`,
+                );
                 await websiteCollection.updateGraph(newWebsites);
             }
         } catch (error) {

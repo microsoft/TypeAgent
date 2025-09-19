@@ -4493,7 +4493,11 @@ body {
 }
 
 .progress-bar {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--primary-color) 0%,
+    var(--secondary-color) 100%
+  );
   border-radius: 0.5rem;
   transition: width 0.3s ease;
 }

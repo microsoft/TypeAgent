@@ -23,7 +23,12 @@ interface GraphData {
     relationships: RelationshipData[];
 }
 
-type ViewMode = 'entity-detail' | 'entity-extended' | 'entity-community' | 'global' | 'transitioning';
+type ViewMode =
+    | "entity-detail"
+    | "entity-extended"
+    | "entity-community"
+    | "global"
+    | "transitioning";
 
 /**
  * Entity Graph Visualizer using Cytoscape.js
@@ -35,7 +40,7 @@ export class EntityGraphVisualizer {
     private entityClickCallback: ((entity: EntityData) => void) | null = null;
 
     // View mode and data management
-    private viewMode: ViewMode = 'global';
+    private viewMode: ViewMode = "global";
     private currentEntity: string | null = null;
     private entityGraphData: GraphData | null = null;
     private globalGraphData: any = null;
@@ -50,10 +55,18 @@ export class EntityGraphVisualizer {
 
     // Investigation tracking
     private zoomEventCount: number = 0;
-    private eventSequence: Array<{event: string, time: number, zoom: number, details?: any}> = [];
+    private eventSequence: Array<{
+        event: string;
+        time: number;
+        zoom: number;
+        details?: any;
+    }> = [];
 
     // LOD performance optimization
-    private lodThresholds: Map<number, {nodeThreshold: number, edgeThreshold: number}> = new Map();
+    private lodThresholds: Map<
+        number,
+        { nodeThreshold: number; edgeThreshold: number }
+    > = new Map();
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -64,8 +77,10 @@ export class EntityGraphVisualizer {
      */
     private detectWebGLSupport(): boolean {
         try {
-            const canvas = document.createElement('canvas');
-            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            const canvas = document.createElement("canvas");
+            const gl =
+                canvas.getContext("webgl") ||
+                canvas.getContext("experimental-webgl");
             return !!gl;
         } catch (e) {
             return false;
@@ -81,12 +96,12 @@ export class EntityGraphVisualizer {
 
             // Configure WebGL settings based on graph size
             let webglConfig = {
-                name: 'canvas',
+                name: "canvas",
                 webgl: true,
                 webglTexSize: 2048,
                 webglTexRows: 16,
                 webglBatchSize: 1024,
-                webglTexPerBatch: 8
+                webglTexPerBatch: 8,
             };
 
             // Scale configuration for larger graphs
@@ -100,11 +115,15 @@ export class EntityGraphVisualizer {
                 webglConfig.webglTexPerBatch = 16;
             }
 
-            console.log(`[WebGL] Enabled with texture size: ${webglConfig.webglTexSize}, batch size: ${webglConfig.webglBatchSize}`);
+            console.log(
+                `[WebGL] Enabled with texture size: ${webglConfig.webglTexSize}, batch size: ${webglConfig.webglBatchSize}`,
+            );
             return webglConfig;
         } else {
-            console.log(`[WebGL] Not supported, falling back to Canvas renderer`);
-            return { name: 'canvas' };
+            console.log(
+                `[WebGL] Not supported, falling back to Canvas renderer`,
+            );
+            return { name: "canvas" };
         }
     }
 
@@ -121,7 +140,7 @@ export class EntityGraphVisualizer {
             nodeOverlap: 20,
             refresh: 20,
             fit: false,
-            animate: 'end',
+            animate: "end",
             padding: 30,
             randomize: false,
             componentSpacing: 100,
@@ -150,8 +169,9 @@ export class EntityGraphVisualizer {
             );
         }
 
-
-        console.log(`[Platform] Detected: ${navigator.platform}, using Cytoscape.js default wheel sensitivity`);
+        console.log(
+            `[Platform] Detected: ${navigator.platform}, using Cytoscape.js default wheel sensitivity`,
+        );
 
         // Get optimal renderer configuration (WebGL when available)
         const rendererConfig = this.getOptimalRendererConfig();
@@ -165,13 +185,13 @@ export class EntityGraphVisualizer {
             renderer: rendererConfig,
             // Use conservative zoom bounds to prevent oscillation
             // Previous: 0.15-8.0 (oscillated), 0.01-100 (extreme bouncing), 0.1-10.0 (still bouncing)
-            minZoom: 0.25,                    // Conservative minimum to keep graph visible
-            maxZoom: 4.0,                     // Conservative maximum to prevent fit() overreach
+            minZoom: 0.25, // Conservative minimum to keep graph visible
+            maxZoom: 4.0, // Conservative maximum to prevent fit() overreach
             // Remove wheelSensitivity to trust Cytoscape defaults and avoid warnings
-            pixelRatio: 1,                     // Lower resolution for better performance on high-density displays
+            pixelRatio: 1, // Lower resolution for better performance on high-density displays
             // Zoom settings - disable user zooming to implement custom smooth zoom
-            zoomingEnabled: true,           // Allow programmatic zooming
-            userZoomingEnabled: false,      // Disable default wheel/touch zoom (we handle it custom)
+            zoomingEnabled: true, // Allow programmatic zooming
+            userZoomingEnabled: false, // Disable default wheel/touch zoom (we handle it custom)
             panningEnabled: true,
             userPanningEnabled: true,
             boxSelectionEnabled: false,
@@ -221,12 +241,17 @@ export class EntityGraphVisualizer {
      */
     public getInvestigationData(): {
         zoomEventCount: number;
-        eventSequence: Array<{event: string, time: number, zoom: number, details?: any}>;
+        eventSequence: Array<{
+            event: string;
+            time: number;
+            zoom: number;
+            details?: any;
+        }>;
         summary: any;
     } {
         const now = Date.now();
         const events = this.eventSequence;
-        const zoomEvents = events.filter(e => e.event === 'zoom');
+        const zoomEvents = events.filter((e) => e.event === "zoom");
 
         return {
             zoomEventCount: this.zoomEventCount,
@@ -235,16 +260,25 @@ export class EntityGraphVisualizer {
                 totalEvents: events.length,
                 zoomEvents: zoomEvents.length,
                 firstEventTime: events.length > 0 ? events[0].time : null,
-                lastEventTime: events.length > 0 ? events[events.length - 1].time : null,
-                timeSpanMs: events.length > 1 ? events[events.length - 1].time - events[0].time : 0,
-                eventsInFirstSecond: events.filter(e => e.time <= (events[0]?.time || 0) + 1000).length,
-                eventTypes: [...new Set(events.map(e => e.event))],
+                lastEventTime:
+                    events.length > 0 ? events[events.length - 1].time : null,
+                timeSpanMs:
+                    events.length > 1
+                        ? events[events.length - 1].time - events[0].time
+                        : 0,
+                eventsInFirstSecond: events.filter(
+                    (e) => e.time <= (events[0]?.time || 0) + 1000,
+                ).length,
+                eventTypes: [...new Set(events.map((e) => e.event))],
                 zoomRange: {
-                    min: Math.min(...events.map(e => e.zoom)),
-                    max: Math.max(...events.map(e => e.zoom)),
-                    final: events.length > 0 ? events[events.length - 1].zoom : null
-                }
-            }
+                    min: Math.min(...events.map((e) => e.zoom)),
+                    max: Math.max(...events.map((e) => e.zoom)),
+                    final:
+                        events.length > 0
+                            ? events[events.length - 1].zoom
+                            : null,
+                },
+            },
         };
     }
 
@@ -257,22 +291,29 @@ export class EntityGraphVisualizer {
         const zoomLevels = [0.1, 0.3, 0.6, 1.0, 1.5, 3.0, 6.0, 10.0];
         this.lodThresholds.clear();
 
-        zoomLevels.forEach(zoom => {
+        zoomLevels.forEach((zoom) => {
             const thresholds = this.calculateDynamicThresholds(zoom);
             this.lodThresholds.set(zoom, thresholds);
         });
 
-        console.log(`[Performance] Pre-computed LOD thresholds for ${zoomLevels.length} zoom levels`);
+        console.log(
+            `[Performance] Pre-computed LOD thresholds for ${zoomLevels.length} zoom levels`,
+        );
     }
 
     /**
      * Fast threshold lookup during zoom events
      */
-    private getFastLODThresholds(zoom: number): {nodeThreshold: number, edgeThreshold: number} {
+    private getFastLODThresholds(zoom: number): {
+        nodeThreshold: number;
+        edgeThreshold: number;
+    } {
         // Find closest pre-computed zoom level
-        const zoomLevels = Array.from(this.lodThresholds.keys()).sort((a, b) => a - b);
+        const zoomLevels = Array.from(this.lodThresholds.keys()).sort(
+            (a, b) => a - b,
+        );
         const closestZoom = zoomLevels.reduce((prev, curr) =>
-            Math.abs(curr - zoom) < Math.abs(prev - zoom) ? curr : prev
+            Math.abs(curr - zoom) < Math.abs(prev - zoom) ? curr : prev,
         );
 
         const thresholds = this.lodThresholds.get(closestZoom);
@@ -289,13 +330,16 @@ export class EntityGraphVisualizer {
      */
     private normalizeWheelDelta(deltaY: number): number {
         // Handle extreme delta values from different platforms
-        const MAX_DELTA = 10;  // Reasonable maximum delta
+        const MAX_DELTA = 10; // Reasonable maximum delta
         const MIN_DELTA = -10; // Reasonable minimum delta
 
         // Linux systems often report ±120, normalize to ±3
         if (Math.abs(deltaY) > 100) {
-            const normalizedDelta = Math.sign(deltaY) * Math.min(3, Math.abs(deltaY) / 40);
-            console.log(`[Zoom] Normalized extreme delta: ${deltaY} → ${normalizedDelta}`);
+            const normalizedDelta =
+                Math.sign(deltaY) * Math.min(3, Math.abs(deltaY) / 40);
+            console.log(
+                `[Zoom] Normalized extreme delta: ${deltaY} → ${normalizedDelta}`,
+            );
             return normalizedDelta;
         }
 
@@ -313,32 +357,32 @@ export class EntityGraphVisualizer {
         // Add performance-optimized base node/edge styles
         const performanceStyles = [
             {
-                selector: 'node',
+                selector: "node",
                 style: {
-                    'min-zoomed-font-size': 8,        // Hide labels when too small
-                    'text-opacity': 0,                 // Start with labels hidden
-                    'transition-property': 'none',     // No animations
-                    'transition-duration': 0,
-                }
+                    "min-zoomed-font-size": 8, // Hide labels when too small
+                    "text-opacity": 0, // Start with labels hidden
+                    "transition-property": "none", // No animations
+                    "transition-duration": 0,
+                },
             },
             {
-                selector: 'edge',
+                selector: "edge",
                 style: {
-                    'curve-style': 'haystack',        // Fastest edge rendering
-                    'haystack-radius': 0.5,
-                    'width': 1,
-                    'opacity': 0.6,
-                    'target-arrow-shape': 'none',     // Remove arrows for performance
-                    'transition-property': 'none',
-                    'transition-duration': 0,
-                }
+                    "curve-style": "haystack", // Fastest edge rendering
+                    "haystack-radius": 0.5,
+                    width: 1,
+                    opacity: 0.6,
+                    "target-arrow-shape": "none", // Remove arrows for performance
+                    "transition-property": "none",
+                    "transition-duration": 0,
+                },
             },
             {
-                selector: 'node[?important]',         // Only show labels for important nodes
+                selector: "node[?important]", // Only show labels for important nodes
                 style: {
-                    'text-opacity': 1
-                }
-            }
+                    "text-opacity": 1,
+                },
+            },
         ];
 
         // Merge with base styles, performance styles take precedence
@@ -610,7 +654,7 @@ export class EntityGraphVisualizer {
             },
             // Hub nodes (high importance)
             {
-                selector: 'node[importance > 0.7]',
+                selector: "node[importance > 0.7]",
                 style: {
                     "border-width": 3,
                     "border-color": "#333",
@@ -621,7 +665,7 @@ export class EntityGraphVisualizer {
             },
             // Very important nodes
             {
-                selector: 'node[importance > 0.9]',
+                selector: "node[importance > 0.9]",
                 style: {
                     "border-width": 4,
                     "border-color": "#000",
@@ -669,7 +713,7 @@ export class EntityGraphVisualizer {
             };
 
             // Handle transition from global to detail view
-            if (this.viewMode === 'global') {
+            if (this.viewMode === "global") {
                 this.initiateEntityDetailTransition(node, entityData);
             } else if (this.entityClickCallback) {
                 this.entityClickCallback(entityData);
@@ -819,7 +863,10 @@ export class EntityGraphVisualizer {
                 const currentZoom = this.cy!.zoom();
                 const minZoom = this.cy!.minZoom();
                 const maxZoom = this.cy!.maxZoom();
-                const newZoom = Math.min(Math.max(currentZoom * zoomFactor, minZoom), maxZoom);
+                const newZoom = Math.min(
+                    Math.max(currentZoom * zoomFactor, minZoom),
+                    maxZoom,
+                );
                 this.cy!.zoom(newZoom);
                 initialDistance = currentDistance;
             }
@@ -833,10 +880,13 @@ export class EntityGraphVisualizer {
     /**
      * Load entity graph data
      */
-    async loadEntityGraph(graphData: GraphData, centerEntityName?: string): Promise<void> {
+    async loadEntityGraph(
+        graphData: GraphData,
+        centerEntityName?: string,
+    ): Promise<void> {
         if (!this.cy) return;
 
-        const wasTransitioning = this.viewMode === 'transitioning';
+        const wasTransitioning = this.viewMode === "transitioning";
         const centerEntity = centerEntityName || graphData.centerEntity || null;
 
         // Store entity data
@@ -858,26 +908,35 @@ export class EntityGraphVisualizer {
         }
 
         // Set final view mode
-        this.viewMode = 'entity-detail';
-        console.log(`[Transition] Completed transition to entity detail view for: ${centerEntity}`);
+        this.viewMode = "entity-detail";
+        console.log(
+            `[Transition] Completed transition to entity detail view for: ${centerEntity}`,
+        );
     }
 
     /**
      * Perform smooth transition from global to detail view
      */
-    private async performSmoothDetailTransition(graphData: GraphData, centerEntity: string | null): Promise<void> {
+    private async performSmoothDetailTransition(
+        graphData: GraphData,
+        centerEntity: string | null,
+    ): Promise<void> {
         if (!this.cy || !centerEntity) return;
 
-        console.log(`[Transition] Performing smooth detail transition for: ${centerEntity}`);
+        console.log(
+            `[Transition] Performing smooth detail transition for: ${centerEntity}`,
+        );
 
         // Step 1: Hide non-relevant global nodes/edges
         const relevantEntityIds = new Set([
             centerEntity,
-            ...graphData.entities.map(e => e.name),
-            ...graphData.relationships.flatMap(r => [r.from, r.to])
+            ...graphData.entities.map((e) => e.name),
+            ...graphData.relationships.flatMap((r) => [r.from, r.to]),
         ]);
 
-        console.log(`[Transition] Relevant entities for detail view: ${relevantEntityIds.size} entities`);
+        console.log(
+            `[Transition] Relevant entities for detail view: ${relevantEntityIds.size} entities`,
+        );
 
         this.cy.batch(() => {
             let hiddenNodes = 0;
@@ -885,26 +944,31 @@ export class EntityGraphVisualizer {
 
             // Hide global nodes that aren't in the detail view
             this.cy.nodes().forEach((node: any) => {
-                const nodeId = node.data('name') || node.data('id');
+                const nodeId = node.data("name") || node.data("id");
                 if (!relevantEntityIds.has(nodeId)) {
-                    node.addClass('global-only');
-                    node.style({ 'display': 'none', 'opacity': 0 });
+                    node.addClass("global-only");
+                    node.style({ display: "none", opacity: 0 });
                     hiddenNodes++;
                 }
             });
 
             // Hide global edges that aren't in the detail view
             this.cy.edges().forEach((edge: any) => {
-                const from = edge.data('source');
-                const to = edge.data('target');
-                if (!relevantEntityIds.has(from) || !relevantEntityIds.has(to)) {
-                    edge.addClass('global-only');
-                    edge.style({ 'display': 'none', 'opacity': 0 });
+                const from = edge.data("source");
+                const to = edge.data("target");
+                if (
+                    !relevantEntityIds.has(from) ||
+                    !relevantEntityIds.has(to)
+                ) {
+                    edge.addClass("global-only");
+                    edge.style({ display: "none", opacity: 0 });
                     hiddenEdges++;
                 }
             });
 
-            console.log(`[Transition] Hidden ${hiddenNodes} nodes and ${hiddenEdges} edges from global view`);
+            console.log(
+                `[Transition] Hidden ${hiddenNodes} nodes and ${hiddenEdges} edges from global view`,
+            );
         });
 
         // Step 2: Add new detail-specific nodes and edges
@@ -917,27 +981,32 @@ export class EntityGraphVisualizer {
     /**
      * Perform standard entity graph loading (no transition)
      */
-    private async performStandardEntityLoad(graphData: GraphData, centerEntity: string | null): Promise<void> {
-        console.time('[Perf] Entity clear elements');
+    private async performStandardEntityLoad(
+        graphData: GraphData,
+        centerEntity: string | null,
+    ): Promise<void> {
+        console.time("[Perf] Entity clear elements");
         this.cy.elements().remove();
-        console.timeEnd('[Perf] Entity clear elements');
+        console.timeEnd("[Perf] Entity clear elements");
 
-        console.time('[Perf] Entity convert to elements');
+        console.time("[Perf] Entity convert to elements");
         const elements = this.convertToGraphElements(graphData);
-        console.timeEnd('[Perf] Entity convert to elements');
-        console.log(`[Perf] Entity graph: ${elements.filter(e => e.group === "nodes").length} nodes, ${elements.filter(e => e.group === "edges").length} edges`);
+        console.timeEnd("[Perf] Entity convert to elements");
+        console.log(
+            `[Perf] Entity graph: ${elements.filter((e) => e.group === "nodes").length} nodes, ${elements.filter((e) => e.group === "edges").length} edges`,
+        );
 
-        console.time('[Perf] Entity add elements');
+        console.time("[Perf] Entity add elements");
         this.cy.add(elements);
-        console.timeEnd('[Perf] Entity add elements');
+        console.timeEnd("[Perf] Entity add elements");
 
-        console.time('[Perf] Entity apply layout');
+        console.time("[Perf] Entity apply layout");
         this.applyLayout(this.currentLayout);
-        console.timeEnd('[Perf] Entity apply layout');
+        console.timeEnd("[Perf] Entity apply layout");
 
-        console.time('[Perf] Entity fit to view');
+        console.time("[Perf] Entity fit to view");
         this.cy.fit();
-        console.timeEnd('[Perf] Entity fit to view');
+        console.timeEnd("[Perf] Entity fit to view");
 
         if (centerEntity) {
             this.centerOnEntityWithLabels(centerEntity);
@@ -947,37 +1016,45 @@ export class EntityGraphVisualizer {
     /**
      * Add detail-specific elements during transition
      */
-    private async addDetailElements(graphData: GraphData, centerEntity: string): Promise<void> {
+    private async addDetailElements(
+        graphData: GraphData,
+        centerEntity: string,
+    ): Promise<void> {
         const existingNodeIds = new Set();
         const existingEdgeIds = new Set();
 
         // Track existing elements
         this.cy.nodes().forEach((node: any) => {
-            existingNodeIds.add(node.data('name') || node.data('id'));
+            existingNodeIds.add(node.data("name") || node.data("id"));
         });
         this.cy.edges().forEach((edge: any) => {
-            const id = edge.data('id') || `${edge.data('source')}-${edge.data('target')}`;
+            const id =
+                edge.data("id") ||
+                `${edge.data("source")}-${edge.data("target")}`;
             existingEdgeIds.add(id);
         });
 
         // Convert new data to elements
         const newElements = this.convertToGraphElements(graphData);
-        const newNodes = newElements.filter(e => e.group === "nodes");
-        const newEdges = newElements.filter(e => e.group === "edges");
+        const newNodes = newElements.filter((e) => e.group === "nodes");
+        const newEdges = newElements.filter((e) => e.group === "edges");
 
         // Add only truly new nodes
-        const nodesToAdd = newNodes.filter(node =>
-            !existingNodeIds.has(node.data.name || node.data.id)
+        const nodesToAdd = newNodes.filter(
+            (node) => !existingNodeIds.has(node.data.name || node.data.id),
         );
 
         // Add only truly new edges
-        const edgesToAdd = newEdges.filter(edge => {
-            const id = edge.data.id || `${edge.data.source}-${edge.data.target}`;
+        const edgesToAdd = newEdges.filter((edge) => {
+            const id =
+                edge.data.id || `${edge.data.source}-${edge.data.target}`;
             return !existingEdgeIds.has(id);
         });
 
         if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
-            console.log(`[Transition] Adding ${nodesToAdd.length} new nodes and ${edgesToAdd.length} new edges`);
+            console.log(
+                `[Transition] Adding ${nodesToAdd.length} new nodes and ${edgesToAdd.length} new edges`,
+            );
 
             // Add new elements without style bypasses to avoid warnings
             const elementsToAdd = [...nodesToAdd, ...edgesToAdd];
@@ -987,16 +1064,19 @@ export class EntityGraphVisualizer {
                 this.cy.add(elementsToAdd);
 
                 // Apply initial styling and classes after addition
-                elementsToAdd.forEach(el => {
+                elementsToAdd.forEach((el) => {
                     const element = this.cy.getElementById(el.data.id);
                     if (element.length > 0) {
-                        element.addClass('detail-only');
-                        element.style('opacity', 0);
+                        element.addClass("detail-only");
+                        element.style("opacity", 0);
 
                         // Animate to visible
-                        element.animate({
-                            style: { 'opacity': 1 }
-                        }, 400);
+                        element.animate(
+                            {
+                                style: { opacity: 1 },
+                            },
+                            400,
+                        );
                     }
                 });
             });
@@ -1008,10 +1088,14 @@ export class EntityGraphVisualizer {
      */
     private applyDetailViewLayout(centerEntity: string): void {
         // Only layout visible elements (not those with global-only class)
-        const visibleElements = this.cy.elements().not('.global-only');
-        const centerNode = visibleElements.filter(`node[name = "${centerEntity}"]`);
+        const visibleElements = this.cy.elements().not(".global-only");
+        const centerNode = visibleElements.filter(
+            `node[name = "${centerEntity}"]`,
+        );
 
-        console.log(`[Transition] Applying detail layout for "${centerEntity}", visible elements: ${visibleElements.length}, found center: ${centerNode.length > 0}`);
+        console.log(
+            `[Transition] Applying detail layout for "${centerEntity}", visible elements: ${visibleElements.length}, found center: ${centerNode.length > 0}`,
+        );
 
         if (visibleElements.length === 0) {
             console.warn(`[Transition] No visible elements for layout`);
@@ -1019,7 +1103,9 @@ export class EntityGraphVisualizer {
         }
 
         if (centerNode.length === 0) {
-            console.warn(`[Transition] Center entity "${centerEntity}" not found for layout`);
+            console.warn(
+                `[Transition] Center entity "${centerEntity}" not found for layout`,
+            );
             // Just fit all visible elements if center entity not found
             this.cy.fit(visibleElements);
             return;
@@ -1034,14 +1120,16 @@ export class EntityGraphVisualizer {
             fit: false, // Disable auto-fit, we'll do it manually after layout completes
             // Override some settings for detail view
             nodeRepulsion: 200000, // Reduced from 400000 for tighter layout in detail view
-            gravity: 120,          // Increased from 80 for better centering in detail view
-            initialTemp: 100,      // Reduced from 200 for faster convergence
-            numIter: 500          // Reduced from 1000 for faster layout completion
+            gravity: 120, // Increased from 80 for better centering in detail view
+            initialTemp: 100, // Reduced from 200 for faster convergence
+            numIter: 500, // Reduced from 1000 for faster layout completion
         });
 
         // Handle layout completion like applyLayout does - fit view after layout completes
-        layout.one('layoutstop', () => {
-            console.log(`[Transition] Detail layout completed, fitting view to visible elements`);
+        layout.one("layoutstop", () => {
+            console.log(
+                `[Transition] Detail layout completed, fitting view to visible elements`,
+            );
             this.cy.fit(visibleElements, 50); // Fit to visible elements with padding
         });
 
@@ -1052,48 +1140,49 @@ export class EntityGraphVisualizer {
         if (!this.cy) return;
 
         // Set view mode and store global data
-        this.viewMode = 'global';
+        this.viewMode = "global";
         this.currentEntity = null;
         this.globalGraphData = globalData;
         this.entityGraphData = null;
 
-        console.time('[Perf] Clear existing elements');
+        console.time("[Perf] Clear existing elements");
         this.cy.elements().remove();
-        console.timeEnd('[Perf] Clear existing elements');
+        console.timeEnd("[Perf] Clear existing elements");
 
-
-        console.time('[Perf] Prepare all data for style-based LOD');
+        console.time("[Perf] Prepare all data for style-based LOD");
         // Load ALL data initially - style-based LOD will handle visibility
         const allData = this.prepareAllDataWithImportance(globalData);
-        console.timeEnd('[Perf] Prepare all data for style-based LOD');
-        console.log(`[Perf] Loading ${allData.entities.length} entities, ${allData.relationships.length} relationships for style-based LOD`);
+        console.timeEnd("[Perf] Prepare all data for style-based LOD");
+        console.log(
+            `[Perf] Loading ${allData.entities.length} entities, ${allData.relationships.length} relationships for style-based LOD`,
+        );
 
-        console.time('[Perf] Convert to Cytoscape elements');
+        console.time("[Perf] Convert to Cytoscape elements");
         const elements = this.convertGlobalDataToElements(allData);
-        console.timeEnd('[Perf] Convert to Cytoscape elements');
+        console.timeEnd("[Perf] Convert to Cytoscape elements");
 
-        console.time('[Perf] Add elements to Cytoscape');
+        console.time("[Perf] Add elements to Cytoscape");
         this.cy.add(elements);
-        console.timeEnd('[Perf] Add elements to Cytoscape');
+        console.timeEnd("[Perf] Add elements to Cytoscape");
 
         // Pre-compute LOD thresholds for performance
         this.precomputeLODThresholds();
 
-        await this.applyLayoutWithCache('initial');
+        await this.applyLayoutWithCache("initial");
 
         this.setupZoomInteractions();
 
-        console.time('[Perf] Fit to view');
+        console.time("[Perf] Fit to view");
         this.cy.fit({ maxZoom: 2.0 }); // Constrain initial fit to prevent oscillation
-        console.timeEnd('[Perf] Fit to view');
+        console.timeEnd("[Perf] Fit to view");
 
         // Investigation 1: Measure zoom after fit
         const zoomAfterFit = this.cy.zoom();
 
         // Apply initial style-based LOD immediately after fit
-        console.time('[Perf] Initial style-based LOD');
+        console.time("[Perf] Initial style-based LOD");
         this.updateStyleBasedLOD(zoomAfterFit);
-        console.timeEnd('[Perf] Initial style-based LOD');
+        console.timeEnd("[Perf] Initial style-based LOD");
     }
 
     private async applyLayoutWithCache(cacheKey: string): Promise<void> {
@@ -1104,29 +1193,29 @@ export class EntityGraphVisualizer {
 
         // Check if we have cached positions
         if (this.layoutCache.has(fullCacheKey)) {
-            console.time('[Perf] Apply cached layout');
+            console.time("[Perf] Apply cached layout");
             const positions = this.layoutCache.get(fullCacheKey);
 
             const layout = this.cy.layout({
-                name: 'preset',
+                name: "preset",
                 positions: (node: any) => positions[node.id()],
-                fit: false,        // Prevent layout from fighting viewport control
-                animate: false,    // No animation needed for preset positions
-                padding: 30
+                fit: false, // Prevent layout from fighting viewport control
+                animate: false, // No animation needed for preset positions
+                padding: 30,
             });
 
             // Handle layout completion to manually fit view
-            layout.one('layoutstop', () => {
+            layout.one("layoutstop", () => {
                 console.log(`[Layout] Cached layout applied, fitting view`);
                 this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
             });
 
             layout.run();
-            console.timeEnd('[Perf] Apply cached layout');
+            console.timeEnd("[Perf] Apply cached layout");
         } else {
-            console.time('[Perf] Calculate new layout');
+            console.time("[Perf] Calculate new layout");
             await this.calculateAndCacheLayout(fullCacheKey);
-            console.timeEnd('[Perf] Calculate new layout');
+            console.timeEnd("[Perf] Calculate new layout");
         }
     }
 
@@ -1154,24 +1243,29 @@ export class EntityGraphVisualizer {
 
             // Further reduce if edge density is high
             const edgeDensity = edgeCount / (nodeCount * nodeCount);
-            if (edgeDensity > 0.1) { // Dense graph
+            if (edgeDensity > 0.1) {
+                // Dense graph
                 iterations = Math.max(20, iterations / 2);
             }
 
-            console.log(`[Perf] Using ${iterations} iterations for ${nodeCount} nodes, ${edgeCount} edges (density: ${edgeDensity.toFixed(3)})`);
+            console.log(
+                `[Perf] Using ${iterations} iterations for ${nodeCount} nodes, ${edgeCount} edges (density: ${edgeDensity.toFixed(3)})`,
+            );
 
             const layout = this.cy.layout({
-                name: 'cose',
+                name: "cose",
                 idealEdgeLength: 80,
                 nodeOverlap: 20,
                 refresh: 20,
-                fit: false,               // Prevent layout from fighting viewport control
-                animate: 'end',           // Animate only at end to prevent viewport conflicts
+                fit: false, // Prevent layout from fighting viewport control
+                animate: "end", // Animate only at end to prevent viewport conflicts
                 padding: 30,
                 randomize: false,
                 componentSpacing: 100,
-                nodeRepulsion: (node: any) => 400000 * ((node.data('importance') || 0) + 0.1),
-                edgeElasticity: (edge: any) => 100 * (edge.data('strength') || 0.5),
+                nodeRepulsion: (node: any) =>
+                    400000 * ((node.data("importance") || 0) + 0.1),
+                edgeElasticity: (edge: any) =>
+                    100 * (edge.data("strength") || 0.5),
                 nestingFactor: 5,
                 gravity: 80,
                 numIter: iterations,
@@ -1187,7 +1281,7 @@ export class EntityGraphVisualizer {
                     this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
 
                     resolve();
-                }
+                },
             });
 
             layout.run();
@@ -1203,94 +1297,108 @@ export class EntityGraphVisualizer {
         });
 
         this.layoutCache.set(cacheKey, positions);
-        console.log(`[Perf] Cached layout for ${Object.keys(positions).length} nodes`);
+        console.log(
+            `[Perf] Cached layout for ${Object.keys(positions).length} nodes`,
+        );
     }
 
     private setupZoomInteractions(): void {
         if (!this.cy) return;
 
         // Natural zoom event handling - trust Cytoscape.js defaults
-        this.cy.on('zoom', () => {
+        this.cy.on("zoom", () => {
             const zoom = this.cy.zoom();
             this.zoomEventCount++;
 
             // Simple logging only - no intervention
-            console.log(`[Zoom] Event #${this.zoomEventCount}, zoom: ${zoom.toFixed(3)}`);
+            console.log(
+                `[Zoom] Event #${this.zoomEventCount}, zoom: ${zoom.toFixed(3)}`,
+            );
 
             this.eventSequence.push({
-                event: 'zoom',
+                event: "zoom",
                 time: Date.now(),
                 zoom: zoom,
-                details: { eventNumber: this.zoomEventCount }
+                details: { eventNumber: this.zoomEventCount },
             });
 
             // Smooth 60fps LOD updates
             clearTimeout(this.zoomTimer);
             this.zoomTimer = setTimeout(() => {
-                console.time('[Perf] Zoom LOD update');
+                console.time("[Perf] Zoom LOD update");
                 this.updateStyleBasedLOD(zoom);
-                console.timeEnd('[Perf] Zoom LOD update');
+                console.timeEnd("[Perf] Zoom LOD update");
             }, 16); // ~60fps update rate
         });
 
         // Custom smooth zoom wheel handler to prevent abrupt zoom changes
-        this.container.addEventListener('wheel', (event) => {
-            event.preventDefault(); // Prevent default Cytoscape zoom handling
+        this.container.addEventListener(
+            "wheel",
+            (event) => {
+                event.preventDefault(); // Prevent default Cytoscape zoom handling
 
-            const currentZoom = this.cy.zoom();
-            const deltaY = event.deltaY;
+                const currentZoom = this.cy.zoom();
+                const deltaY = event.deltaY;
 
-            // Calculate smooth zoom step (10% per wheel event, max)
-            const zoomStep = currentZoom * 0.1; // 10% of current zoom
-            const maxStep = 0.1; // Maximum absolute step
-            const actualStep = Math.min(zoomStep, maxStep);
+                // Calculate smooth zoom step (10% per wheel event, max)
+                const zoomStep = currentZoom * 0.1; // 10% of current zoom
+                const maxStep = 0.1; // Maximum absolute step
+                const actualStep = Math.min(zoomStep, maxStep);
 
-            // Determine new zoom level
-            let newZoom;
-            if (deltaY > 0) {
-                // Zoom out
-                newZoom = currentZoom - actualStep;
-            } else {
-                // Zoom in
-                newZoom = currentZoom + actualStep;
-            }
+                // Determine new zoom level
+                let newZoom;
+                if (deltaY > 0) {
+                    // Zoom out
+                    newZoom = currentZoom - actualStep;
+                } else {
+                    // Zoom in
+                    newZoom = currentZoom + actualStep;
+                }
 
-            // Clamp to our bounds
-            newZoom = Math.max(0.25, Math.min(4.0, newZoom));
+                // Clamp to our bounds
+                newZoom = Math.max(0.25, Math.min(4.0, newZoom));
 
-            // Apply smooth zoom
-            this.cy.zoom({
-                level: newZoom,
-                renderedPosition: { x: event.offsetX, y: event.offsetY }
-            });
-        }, { passive: false }); // Must be non-passive to preventDefault
+                // Apply smooth zoom
+                this.cy.zoom({
+                    level: newZoom,
+                    renderedPosition: { x: event.offsetX, y: event.offsetY },
+                });
+            },
+            { passive: false },
+        ); // Must be non-passive to preventDefault
 
         // Investigation 4: Event sequence analysis
-        ['pan', 'viewport', 'render'].forEach(eventType => {
+        ["pan", "viewport", "render"].forEach((eventType) => {
             this.cy.on(eventType, () => {
                 this.eventSequence.push({
                     event: eventType,
                     time: Date.now(),
-                    zoom: this.cy.zoom()
+                    zoom: this.cy.zoom(),
                 });
             });
         });
 
         // Custom wheel event handling for delta normalization
-        this.container.addEventListener('wheel', (event: WheelEvent) => {
-            // Check if we should handle this event (only if it targets the cytoscape container)
-            if (!this.cy || event.defaultPrevented) return;
+        this.container.addEventListener(
+            "wheel",
+            (event: WheelEvent) => {
+                // Check if we should handle this event (only if it targets the cytoscape container)
+                if (!this.cy || event.defaultPrevented) return;
 
-            const originalDelta = event.deltaY;
-            const normalizedDelta = this.normalizeWheelDelta(originalDelta);
+                const originalDelta = event.deltaY;
+                const normalizedDelta = this.normalizeWheelDelta(originalDelta);
 
-            // If delta was normalized significantly, we might want to intervene
-            if (Math.abs(normalizedDelta - originalDelta) > 10) {
-                console.log(`[Zoom] Intercepted extreme wheel delta: ${originalDelta} → ${normalizedDelta}`);
-                // Note: For now we just log. Full intervention would require preventing default
-                // and manually applying zoom, but this might interfere with Cytoscape's handling
-            }
-        }, { passive: true });
+                // If delta was normalized significantly, we might want to intervene
+                if (Math.abs(normalizedDelta - originalDelta) > 10) {
+                    console.log(
+                        `[Zoom] Intercepted extreme wheel delta: ${originalDelta} → ${normalizedDelta}`,
+                    );
+                    // Note: For now we just log. Full intervention would require preventing default
+                    // and manually applying zoom, but this might interfere with Cytoscape's handling
+                }
+            },
+            { passive: true },
+        );
     }
 
     /**
@@ -1302,7 +1410,9 @@ export class EntityGraphVisualizer {
 
         // Validate and clamp zoom value to reasonable bounds
         if (!isFinite(zoom)) {
-            console.error(`[Zoom] Non-finite zoom in updateStyleBasedLOD: ${zoom}`);
+            console.error(
+                `[Zoom] Non-finite zoom in updateStyleBasedLOD: ${zoom}`,
+            );
             return; // Skip update with invalid zoom
         }
 
@@ -1316,9 +1426,11 @@ export class EntityGraphVisualizer {
         }
 
         // Check view mode first
-        if (this.viewMode.startsWith('entity')) {
+        if (this.viewMode.startsWith("entity")) {
             // In entity view mode - only update styles, no data changes
-            console.log(`[Perf] Entity view mode (${this.viewMode}) - style-only LOD update`);
+            console.log(
+                `[Perf] Entity view mode (${this.viewMode}) - style-only LOD update`,
+            );
             this.updateEntityViewStyles(zoom);
 
             // Check if we should transition to global view based on zoom
@@ -1329,19 +1441,26 @@ export class EntityGraphVisualizer {
         }
 
         // Global view mode - style-based LOD (no data manipulation)
-        console.time('[Perf] Style-based LOD update');
+        console.time("[Perf] Style-based LOD update");
 
         // Use pre-computed thresholds for performance
-        const { nodeThreshold, edgeThreshold } = this.getFastLODThresholds(zoom);
+        const { nodeThreshold, edgeThreshold } =
+            this.getFastLODThresholds(zoom);
         const labelZoomThreshold = this.getLabelZoomThreshold(zoom);
 
         // Analyze importance distribution for calibration
-        const importanceValues = this.cy.nodes().map((node: any) => {
-            const importance = node.data('importance') || node.data('computedImportance') || 0;
-            const degreeCount = node.data('degreeCount') || 0;
-            const centralityScore = node.data('centralityScore') || 0;
-            return Math.max(importance, degreeCount / 100, centralityScore);
-        }).sort((a: number, b: number) => b - a);
+        const importanceValues = this.cy
+            .nodes()
+            .map((node: any) => {
+                const importance =
+                    node.data("importance") ||
+                    node.data("computedImportance") ||
+                    0;
+                const degreeCount = node.data("degreeCount") || 0;
+                const centralityScore = node.data("centralityScore") || 0;
+                return Math.max(importance, degreeCount / 100, centralityScore);
+            })
+            .sort((a: number, b: number) => b - a);
 
         const importanceStats = {
             min: Math.min(...importanceValues),
@@ -1350,11 +1469,13 @@ export class EntityGraphVisualizer {
             p10: importanceValues[Math.floor(importanceValues.length * 0.1)],
             p30: importanceValues[Math.floor(importanceValues.length * 0.3)],
             p60: importanceValues[Math.floor(importanceValues.length * 0.6)],
-            p90: importanceValues[Math.floor(importanceValues.length * 0.9)]
+            p90: importanceValues[Math.floor(importanceValues.length * 0.9)],
         };
 
         // Calculate expected visible counts for validation
-        const expectedVisibleNodes = importanceValues.filter((v: number) => v >= nodeThreshold).length;
+        const expectedVisibleNodes = importanceValues.filter(
+            (v: number) => v >= nodeThreshold,
+        ).length;
 
         // Use batch for optimal performance
         this.cy.batch(() => {
@@ -1363,82 +1484,125 @@ export class EntityGraphVisualizer {
 
             // Update node visibility based on importance
             this.cy.nodes().forEach((node: any) => {
-                const importance = node.data('importance') || node.data('computedImportance') || 0;
-                const degreeCount = node.data('degreeCount') || 0;
-                const centralityScore = node.data('centralityScore') || 0;
+                const importance =
+                    node.data("importance") ||
+                    node.data("computedImportance") ||
+                    0;
+                const degreeCount = node.data("degreeCount") || 0;
+                const centralityScore = node.data("centralityScore") || 0;
 
                 // Calculate effective importance from available metrics
-                const effectiveImportance = Math.max(importance, degreeCount / 100, centralityScore);
+                const effectiveImportance = Math.max(
+                    importance,
+                    degreeCount / 100,
+                    centralityScore,
+                );
 
                 if (effectiveImportance >= nodeThreshold) {
-                    node.style('display', 'element');
+                    node.style("display", "element");
 
                     // Show labels based on zoom level and importance
-                    const fontSize = this.calculateNodeFontSize(zoom, effectiveImportance);
+                    const fontSize = this.calculateNodeFontSize(
+                        zoom,
+                        effectiveImportance,
+                    );
                     node.style({
-                        'font-size': fontSize + 'px',
-                        'text-opacity': fontSize > 0 ? 1 : 0
+                        "font-size": fontSize + "px",
+                        "text-opacity": fontSize > 0 ? 1 : 0,
                     });
 
                     visibleNodes++;
                 } else {
-                    node.style('display', 'none');
+                    node.style("display", "none");
                 }
             });
 
             // Update edge visibility based on confidence and connected node visibility
             this.cy.edges().forEach((edge: any) => {
-                const confidence = edge.data('confidence') || edge.data('strength') || edge.data('weight') || 0.5;
+                const confidence =
+                    edge.data("confidence") ||
+                    edge.data("strength") ||
+                    edge.data("weight") ||
+                    0.5;
                 const source = edge.source();
                 const target = edge.target();
 
                 // Only show edge if both nodes are visible and confidence meets threshold
-                const sourceVisible = source.style('display') === 'element';
-                const targetVisible = target.style('display') === 'element';
+                const sourceVisible = source.style("display") === "element";
+                const targetVisible = target.style("display") === "element";
 
-                if (sourceVisible && targetVisible && confidence >= edgeThreshold) {
-                    edge.style('display', 'element');
+                if (
+                    sourceVisible &&
+                    targetVisible &&
+                    confidence >= edgeThreshold
+                ) {
+                    edge.style("display", "element");
                     visibleEdges++;
                 } else {
-                    edge.style('display', 'none');
+                    edge.style("display", "none");
                 }
             });
 
-            console.log(`[Perf] Style LOD: ${visibleNodes} nodes, ${visibleEdges} edges visible`);
+            console.log(
+                `[Perf] Style LOD: ${visibleNodes} nodes, ${visibleEdges} edges visible`,
+            );
         });
 
-        console.timeEnd('[Perf] Style-based LOD update');
+        console.timeEnd("[Perf] Style-based LOD update");
     }
 
     /**
      * Calculate dynamic thresholds based on actual data distribution
      * This adapts to the real importance and confidence scores in the dataset
      */
-    private calculateDynamicThresholds(zoom: number): { nodeThreshold: number; edgeThreshold: number } {
+    private calculateDynamicThresholds(zoom: number): {
+        nodeThreshold: number;
+        edgeThreshold: number;
+    } {
         if (!this.cy) return { nodeThreshold: 0, edgeThreshold: 0 };
 
         // Get target visibility percentages based on zoom level
-        const { nodeVisibilityPercentage, edgeVisibilityPercentage } = this.getVisibilityPercentages(zoom);
+        const { nodeVisibilityPercentage, edgeVisibilityPercentage } =
+            this.getVisibilityPercentages(zoom);
 
         // Calculate node importance threshold from actual data
-        const importanceValues = this.cy.nodes().map((node: any) => {
-            const importance = node.data('importance') || node.data('computedImportance') || 0;
-            const degreeCount = node.data('degreeCount') || 0;
-            const centralityScore = node.data('centralityScore') || 0;
-            return Math.max(importance, degreeCount / 100, centralityScore);
-        }).sort((a: number, b: number) => b - a);
+        const importanceValues = this.cy
+            .nodes()
+            .map((node: any) => {
+                const importance =
+                    node.data("importance") ||
+                    node.data("computedImportance") ||
+                    0;
+                const degreeCount = node.data("degreeCount") || 0;
+                const centralityScore = node.data("centralityScore") || 0;
+                return Math.max(importance, degreeCount / 100, centralityScore);
+            })
+            .sort((a: number, b: number) => b - a);
 
         // Calculate edge confidence threshold from actual data
-        const confidenceValues = this.cy.edges().map((edge: any) => {
-            return edge.data('confidence') || edge.data('strength') || 0.5;
-        }).sort((a: number, b: number) => b - a);
+        const confidenceValues = this.cy
+            .edges()
+            .map((edge: any) => {
+                return edge.data("confidence") || edge.data("strength") || 0.5;
+            })
+            .sort((a: number, b: number) => b - a);
 
         // Get threshold values at target percentiles
-        const nodeThresholdIndex = Math.floor(importanceValues.length * nodeVisibilityPercentage);
-        const edgeThresholdIndex = Math.floor(confidenceValues.length * edgeVisibilityPercentage);
+        const nodeThresholdIndex = Math.floor(
+            importanceValues.length * nodeVisibilityPercentage,
+        );
+        const edgeThresholdIndex = Math.floor(
+            confidenceValues.length * edgeVisibilityPercentage,
+        );
 
-        const nodeThreshold = importanceValues[Math.min(nodeThresholdIndex, importanceValues.length - 1)] || 0;
-        const edgeThreshold = confidenceValues[Math.min(edgeThresholdIndex, confidenceValues.length - 1)] || 0;
+        const nodeThreshold =
+            importanceValues[
+                Math.min(nodeThresholdIndex, importanceValues.length - 1)
+            ] || 0;
+        const edgeThreshold =
+            confidenceValues[
+                Math.min(edgeThresholdIndex, confidenceValues.length - 1)
+            ] || 0;
 
         return { nodeThreshold, edgeThreshold };
     }
@@ -1447,7 +1611,10 @@ export class EntityGraphVisualizer {
      * Get target visibility percentages based on zoom level
      * Progressive disclosure: fewer items visible when zoomed out
      */
-    private getVisibilityPercentages(zoom: number): { nodeVisibilityPercentage: number; edgeVisibilityPercentage: number } {
+    private getVisibilityPercentages(zoom: number): {
+        nodeVisibilityPercentage: number;
+        edgeVisibilityPercentage: number;
+    } {
         let nodeVisibilityPercentage: number;
         let edgeVisibilityPercentage: number;
 
@@ -1501,51 +1668,55 @@ export class EntityGraphVisualizer {
     private updateEntityViewStyles(zoom: number): void {
         if (!this.cy) return;
 
-        console.time('[Perf] Entity view style update');
+        console.time("[Perf] Entity view style update");
 
         // In entity view, show all nodes but adjust labels and edge visibility
         const labelThreshold = 0.7; // Show labels when zoomed in
-        const edgeThreshold = 0.5;   // Show fewer edges when zoomed out
+        const edgeThreshold = 0.5; // Show fewer edges when zoomed out
 
         this.cy.batch(() => {
             // Only update styles for non-hidden nodes (respect global-only class)
             this.cy.nodes().forEach((node: any) => {
                 // Don't show nodes that were hidden during transition
-                if (node.hasClass('global-only')) {
+                if (node.hasClass("global-only")) {
                     return; // Skip hidden nodes
                 }
 
-                node.style('display', 'element');
+                node.style("display", "element");
 
                 if (zoom > labelThreshold) {
                     const fontSize = Math.min(16, zoom * 12);
                     node.style({
-                        'font-size': fontSize + 'px',
-                        'text-opacity': 1
+                        "font-size": fontSize + "px",
+                        "text-opacity": 1,
                     });
                 } else {
-                    node.style('text-opacity', 0);
+                    node.style("text-opacity", 0);
                 }
             });
 
             // Adjust edge visibility based on zoom
             this.cy.edges().forEach((edge: any) => {
                 // Don't show edges that were hidden during transition
-                if (edge.hasClass('global-only')) {
+                if (edge.hasClass("global-only")) {
                     return; // Skip hidden edges
                 }
 
                 if (zoom > edgeThreshold) {
-                    edge.style('display', 'element');
+                    edge.style("display", "element");
                 } else {
                     // In entity view, only hide low-confidence edges when zoomed out
-                    const confidence = edge.data('confidence') || edge.data('strength') || 0.5;
-                    edge.style('display', confidence > 0.7 ? 'element' : 'none');
+                    const confidence =
+                        edge.data("confidence") || edge.data("strength") || 0.5;
+                    edge.style(
+                        "display",
+                        confidence > 0.7 ? "element" : "none",
+                    );
                 }
             });
         });
 
-        console.timeEnd('[Perf] Entity view style update');
+        console.timeEnd("[Perf] Entity view style update");
     }
 
     /**
@@ -1558,7 +1729,7 @@ export class EntityGraphVisualizer {
         // Compute importance scores for all entities
         const entitiesWithImportance = entities.map((entity: any) => ({
             ...entity,
-            computedImportance: this.calculateEntityImportance(entity)
+            computedImportance: this.calculateEntityImportance(entity),
         }));
 
         // Limit to reasonable amount for performance (style-based LOD can handle more than data-based)
@@ -1566,7 +1737,9 @@ export class EntityGraphVisualizer {
         const maxRelationships = 5000; // Increased from 300
 
         const sortedEntities = entitiesWithImportance
-            .sort((a: any, b: any) => b.computedImportance - a.computedImportance)
+            .sort(
+                (a: any, b: any) => b.computedImportance - a.computedImportance,
+            )
             .slice(0, maxEntities);
 
         const entityIds = new Set(sortedEntities.map((e: any) => e.id));
@@ -1579,12 +1752,15 @@ export class EntityGraphVisualizer {
                 const toId = r.to || r.toEntity;
                 return entityIds.has(fromId) && entityIds.has(toId);
             })
-            .sort((a: any, b: any) => (b.confidence || 0.5) - (a.confidence || 0.5))
+            .sort(
+                (a: any, b: any) =>
+                    (b.confidence || 0.5) - (a.confidence || 0.5),
+            )
             .slice(0, maxRelationships);
 
         return {
             entities: sortedEntities,
-            relationships: filteredRelationships
+            relationships: filteredRelationships,
         };
     }
 
@@ -1600,10 +1776,10 @@ export class EntityGraphVisualizer {
         // Combine different importance signals with weights
         return Math.max(
             importance,
-            degree / 100,        // Normalize degree
+            degree / 100, // Normalize degree
             centrality,
             pagerank,
-            0.1                  // Minimum importance
+            0.1, // Minimum importance
         );
     }
 
@@ -1613,12 +1789,12 @@ export class EntityGraphVisualizer {
     private determineViewFromZoom(zoom: number): ViewMode {
         // If we have a current entity, use entity-based view modes
         if (this.currentEntity && this.entityGraphData) {
-            if (zoom > 1.0) return 'entity-detail';      // Close-up view of entity and immediate neighbors
-            if (zoom > 0.5) return 'entity-extended';    // Extended neighborhood
-            if (zoom > 0.3) return 'entity-community';   // Community context
+            if (zoom > 1.0) return "entity-detail"; // Close-up view of entity and immediate neighbors
+            if (zoom > 0.5) return "entity-extended"; // Extended neighborhood
+            if (zoom > 0.3) return "entity-community"; // Community context
         }
         // Otherwise, global view
-        return 'global';
+        return "global";
     }
 
     /**
@@ -1629,23 +1805,35 @@ export class EntityGraphVisualizer {
         // 1. We're in entity view
         // 2. User has zoomed out significantly (< 0.3)
         // 3. We have global data available
-        return this.viewMode.startsWith('entity') &&
-               zoom < 0.3 &&
-               this.globalGraphData !== null;
+        return (
+            this.viewMode.startsWith("entity") &&
+            zoom < 0.3 &&
+            this.globalGraphData !== null
+        );
     }
 
     /**
      * Initiate a smooth transition from entity view to global view
      */
     private async initiateGlobalTransition(currentZoom: number): Promise<void> {
-        if (!this.cy || !this.globalGraphData || this.viewMode === 'transitioning') return;
+        if (
+            !this.cy ||
+            !this.globalGraphData ||
+            this.viewMode === "transitioning"
+        )
+            return;
 
-        console.log('[Transition] Starting transition from entity to global view');
-        this.viewMode = 'transitioning';
+        console.log(
+            "[Transition] Starting transition from entity to global view",
+        );
+        this.viewMode = "transitioning";
 
         // Store current entity position for smooth transition
-        const entityNode = this.currentEntity ? this.cy.$(`#${this.currentEntity}`) : null;
-        const entityPosition = entityNode && entityNode.length > 0 ? entityNode.position() : null;
+        const entityNode = this.currentEntity
+            ? this.cy.$(`#${this.currentEntity}`)
+            : null;
+        const entityPosition =
+            entityNode && entityNode.length > 0 ? entityNode.position() : null;
 
         // Step 1: Show hidden global nodes/edges with animation
         await this.restoreGlobalElements();
@@ -1662,7 +1850,7 @@ export class EntityGraphVisualizer {
      */
     private async restoreGlobalElements(): Promise<void> {
         return new Promise((resolve) => {
-            const globalOnlyElements = this.cy.$('.global-only');
+            const globalOnlyElements = this.cy.$(".global-only");
 
             if (globalOnlyElements.length === 0) {
                 // No global-only elements to restore, need to load full global data
@@ -1671,14 +1859,19 @@ export class EntityGraphVisualizer {
                 return;
             }
 
-            console.log(`[Transition] Restoring ${globalOnlyElements.length} global-only elements`);
+            console.log(
+                `[Transition] Restoring ${globalOnlyElements.length} global-only elements`,
+            );
 
             this.cy.batch(() => {
                 globalOnlyElements.forEach((element: any) => {
-                    element.removeClass('global-only');
-                    element.animate({
-                        style: { 'opacity': 1, 'display': 'element' }
-                    }, 400);
+                    element.removeClass("global-only");
+                    element.animate(
+                        {
+                            style: { opacity: 1, display: "element" },
+                        },
+                        400,
+                    );
                 });
             });
 
@@ -1691,20 +1884,25 @@ export class EntityGraphVisualizer {
      */
     private async hideDetailElements(): Promise<void> {
         return new Promise((resolve) => {
-            const detailOnlyElements = this.cy.$('.detail-only');
+            const detailOnlyElements = this.cy.$(".detail-only");
 
             if (detailOnlyElements.length === 0) {
                 resolve();
                 return;
             }
 
-            console.log(`[Transition] Hiding ${detailOnlyElements.length} detail-only elements`);
+            console.log(
+                `[Transition] Hiding ${detailOnlyElements.length} detail-only elements`,
+            );
 
             this.cy.batch(() => {
                 detailOnlyElements.forEach((element: any) => {
-                    element.animate({
-                        style: { 'opacity': 0, 'display': 'none' }
-                    }, 300);
+                    element.animate(
+                        {
+                            style: { opacity: 0, display: "none" },
+                        },
+                        300,
+                    );
                 });
             });
 
@@ -1720,7 +1918,7 @@ export class EntityGraphVisualizer {
      * Load full global data when transitioning from direct entity view
      */
     private loadFullGlobalData(): void {
-        console.time('[Transition] Load global elements');
+        console.time("[Transition] Load global elements");
 
         // Clear current elements and load global data
         this.cy.elements().remove();
@@ -1736,7 +1934,7 @@ export class EntityGraphVisualizer {
         // Pre-compute LOD thresholds for performance
         this.precomputeLODThresholds();
 
-        console.timeEnd('[Transition] Load global elements');
+        console.timeEnd("[Transition] Load global elements");
     }
 
     /**
@@ -1756,33 +1954,42 @@ export class EntityGraphVisualizer {
                     zoom: currentZoom,
                     duration: 500,
                     complete: () => {
-                        this.viewMode = 'global';
+                        this.viewMode = "global";
                         this.currentEntity = null; // Clear current entity in global view
-                        console.log('[Transition] Completed transition to global view');
-                    }
+                        console.log(
+                            "[Transition] Completed transition to global view",
+                        );
+                    },
                 });
             } else {
                 // Entity not found in global view, just complete the transition
-                this.viewMode = 'global';
+                this.viewMode = "global";
                 this.currentEntity = null;
-                console.log('[Transition] Completed transition to global view (entity not found)');
+                console.log(
+                    "[Transition] Completed transition to global view (entity not found)",
+                );
             }
         } else {
             // No entity to focus on, just complete the transition
-            this.viewMode = 'global';
+            this.viewMode = "global";
             this.currentEntity = null;
-            console.log('[Transition] Completed transition to global view');
+            console.log("[Transition] Completed transition to global view");
         }
     }
 
     /**
      * Initiate a smooth transition from global view to entity detail view
      */
-    private async initiateEntityDetailTransition(node: any, entityData: EntityData): Promise<void> {
-        if (!this.cy || this.viewMode === 'transitioning') return;
+    private async initiateEntityDetailTransition(
+        node: any,
+        entityData: EntityData,
+    ): Promise<void> {
+        if (!this.cy || this.viewMode === "transitioning") return;
 
-        console.log(`[Transition] Starting transition from global to detail view for entity: ${entityData.name}`);
-        this.viewMode = 'transitioning';
+        console.log(
+            `[Transition] Starting transition from global to detail view for entity: ${entityData.name}`,
+        );
+        this.viewMode = "transitioning";
 
         // Store current view state
         const currentZoom = this.cy.zoom();
@@ -1793,16 +2000,25 @@ export class EntityGraphVisualizer {
             const nodePosition = node.position();
             const targetZoom = Math.max(currentZoom * 2, 1.5); // Zoom in at least 2x or to 1.5x minimum
 
-            await this.animateViewport({
-                zoom: targetZoom,
-                pan: {
-                    x: this.container.offsetWidth / 2 - nodePosition.x * targetZoom,
-                    y: this.container.offsetHeight / 2 - nodePosition.y * targetZoom
-                }
-            }, 600); // 600ms smooth transition
+            await this.animateViewport(
+                {
+                    zoom: targetZoom,
+                    pan: {
+                        x:
+                            this.container.offsetWidth / 2 -
+                            nodePosition.x * targetZoom,
+                        y:
+                            this.container.offsetHeight / 2 -
+                            nodePosition.y * targetZoom,
+                    },
+                },
+                600,
+            ); // 600ms smooth transition
 
             // Step 2: Load detailed data for the entity
-            console.log(`[Transition] Loading detailed data for entity: ${entityData.name}`);
+            console.log(
+                `[Transition] Loading detailed data for entity: ${entityData.name}`,
+            );
 
             // Trigger the callback to load detailed entity data
             if (this.entityClickCallback) {
@@ -1810,36 +2026,47 @@ export class EntityGraphVisualizer {
             }
 
             // The EntityGraphView will call loadEntityGraph which will complete the transition
-
         } catch (error) {
-            console.error('[Transition] Failed to transition to entity detail view:', error);
+            console.error(
+                "[Transition] Failed to transition to entity detail view:",
+                error,
+            );
             // Restore original view on error
-            this.viewMode = 'global';
-            this.cy.animate({
-                zoom: currentZoom,
-                pan: currentPan
-            }, 300);
+            this.viewMode = "global";
+            this.cy.animate(
+                {
+                    zoom: currentZoom,
+                    pan: currentPan,
+                },
+                300,
+            );
         }
     }
 
     /**
      * Animate the viewport to a target position and zoom level
      */
-    private animateViewport(target: {zoom: number, pan: {x: number, y: number}}, duration: number = 600): Promise<void> {
+    private animateViewport(
+        target: { zoom: number; pan: { x: number; y: number } },
+        duration: number = 600,
+    ): Promise<void> {
         return new Promise((resolve) => {
             if (!this.cy) {
                 resolve();
                 return;
             }
 
-            this.cy.animate({
-                zoom: target.zoom,
-                pan: target.pan
-            }, {
-                duration: duration,
-                easing: 'ease-out-cubic',
-                complete: () => resolve()
-            });
+            this.cy.animate(
+                {
+                    zoom: target.zoom,
+                    pan: target.pan,
+                },
+                {
+                    duration: duration,
+                    easing: "ease-out-cubic",
+                    complete: () => resolve(),
+                },
+            );
         });
     }
 
@@ -1866,34 +2093,44 @@ export class EntityGraphVisualizer {
 
         // Apply multi-factor visibility algorithm for nodes
         nodes.forEach((node: any) => {
-            const visibility = this.calculateNodeVisibility(node, zoom, nodeMetrics);
+            const visibility = this.calculateNodeVisibility(
+                node,
+                zoom,
+                nodeMetrics,
+            );
             this.applyNodeLOD(node, visibility, zoom);
         });
 
         // Apply context-aware edge visibility
         edges.forEach((edge: any) => {
-            const visibility = this.calculateEdgeVisibility(edge, zoom, edgeMetrics);
+            const visibility = this.calculateEdgeVisibility(
+                edge,
+                zoom,
+                edgeMetrics,
+            );
             this.applyEdgeLOD(edge, visibility, zoom);
         });
     }
 
     private calculateNodeMetrics(nodes: any): any {
-        const importanceValues = nodes.map((n: any) => n.data('importance') || 0);
-        const degreeValues = nodes.map((n: any) => n.data('degree') || 0);
+        const importanceValues = nodes.map(
+            (n: any) => n.data("importance") || 0,
+        );
+        const degreeValues = nodes.map((n: any) => n.data("degree") || 0);
 
         return {
             importancePercentiles: this.calculatePercentiles(importanceValues),
             degreePercentiles: this.calculatePercentiles(degreeValues),
-            totalNodes: nodes.length
+            totalNodes: nodes.length,
         };
     }
 
     private calculateEdgeMetrics(edges: any): any {
-        const strengthValues = edges.map((e: any) => e.data('strength') || 0);
+        const strengthValues = edges.map((e: any) => e.data("strength") || 0);
 
         return {
             strengthPercentiles: this.calculatePercentiles(strengthValues),
-            totalEdges: edges.length
+            totalEdges: edges.length,
         };
     }
 
@@ -1907,24 +2144,32 @@ export class EntityGraphVisualizer {
             p25: sorted[Math.floor(len * 0.25)],
             p50: sorted[Math.floor(len * 0.5)],
             p75: sorted[Math.floor(len * 0.75)],
-            p90: sorted[Math.floor(len * 0.9)]
+            p90: sorted[Math.floor(len * 0.9)],
         };
     }
 
-    private calculateNodeVisibility(node: any, zoom: number, metrics: any): any {
-        const importance = node.data('importance') || 0;
-        const degree = node.data('degree') || 0;
-        const type = node.data('type') || 'entity';
-        const communityId = node.data('communityId');
+    private calculateNodeVisibility(
+        node: any,
+        zoom: number,
+        metrics: any,
+    ): any {
+        const importance = node.data("importance") || 0;
+        const degree = node.data("degree") || 0;
+        const type = node.data("type") || "entity";
+        const communityId = node.data("communityId");
 
         // Multi-factor scoring system
         let visibilityScore = 0;
 
         // Factor 1: Importance (40% weight)
-        if (importance >= metrics.importancePercentiles.p90) visibilityScore += 4;
-        else if (importance >= metrics.importancePercentiles.p75) visibilityScore += 3;
-        else if (importance >= metrics.importancePercentiles.p50) visibilityScore += 2;
-        else if (importance >= metrics.importancePercentiles.p25) visibilityScore += 1;
+        if (importance >= metrics.importancePercentiles.p90)
+            visibilityScore += 4;
+        else if (importance >= metrics.importancePercentiles.p75)
+            visibilityScore += 3;
+        else if (importance >= metrics.importancePercentiles.p50)
+            visibilityScore += 2;
+        else if (importance >= metrics.importancePercentiles.p25)
+            visibilityScore += 1;
 
         // Factor 2: Degree/Connectivity (30% weight)
         if (degree >= metrics.degreePercentiles.p90) visibilityScore += 3;
@@ -1941,26 +2186,33 @@ export class EntityGraphVisualizer {
         }
 
         // Adaptive zoom-based thresholds
-        const zoomThresholds = this.getAdaptiveZoomThresholds(zoom, metrics.totalNodes);
+        const zoomThresholds = this.getAdaptiveZoomThresholds(
+            zoom,
+            metrics.totalNodes,
+        );
 
         return {
             score: visibilityScore,
             shouldShow: visibilityScore >= zoomThresholds.nodeThreshold,
             shouldLabel: visibilityScore >= zoomThresholds.labelThreshold,
             labelSize: this.calculateLabelSize(visibilityScore, zoom),
-            opacity: this.calculateOpacity(visibilityScore, zoom)
+            opacity: this.calculateOpacity(visibilityScore, zoom),
         };
     }
 
-    private calculateEdgeVisibility(edge: any, zoom: number, metrics: any): any {
-        const strength = edge.data('strength') || 0;
-        const type = edge.data('type') || 'related';
+    private calculateEdgeVisibility(
+        edge: any,
+        zoom: number,
+        metrics: any,
+    ): any {
+        const strength = edge.data("strength") || 0;
+        const type = edge.data("type") || "related";
         const sourceNode = edge.source();
         const targetNode = edge.target();
 
         // Check if both nodes are visible
-        const sourceVisible = sourceNode.style('display') !== 'none';
-        const targetVisible = targetNode.style('display') !== 'none';
+        const sourceVisible = sourceNode.style("display") !== "none";
+        const targetVisible = targetNode.style("display") !== "none";
 
         if (!sourceVisible || !targetVisible) {
             return { shouldShow: false, opacity: 0 };
@@ -1970,8 +2222,10 @@ export class EntityGraphVisualizer {
 
         // Factor 1: Edge strength
         if (strength >= metrics.strengthPercentiles.p90) visibilityScore += 3;
-        else if (strength >= metrics.strengthPercentiles.p75) visibilityScore += 2;
-        else if (strength >= metrics.strengthPercentiles.p50) visibilityScore += 1;
+        else if (strength >= metrics.strengthPercentiles.p75)
+            visibilityScore += 2;
+        else if (strength >= metrics.strengthPercentiles.p50)
+            visibilityScore += 1;
 
         // Factor 2: Edge type importance
         const typeWeight = this.getEdgeTypeWeight(type);
@@ -1979,45 +2233,48 @@ export class EntityGraphVisualizer {
 
         // Factor 3: Connected node importance
         const nodeImportance = Math.max(
-            sourceNode.data('importance') || 0,
-            targetNode.data('importance') || 0
+            sourceNode.data("importance") || 0,
+            targetNode.data("importance") || 0,
         );
         if (nodeImportance > 0.7) visibilityScore += 1;
 
-        const zoomThresholds = this.getAdaptiveZoomThresholds(zoom, metrics.totalEdges);
+        const zoomThresholds = this.getAdaptiveZoomThresholds(
+            zoom,
+            metrics.totalEdges,
+        );
 
         return {
             score: visibilityScore,
             shouldShow: visibilityScore >= zoomThresholds.edgeThreshold,
-            opacity: Math.min(1, 0.3 + (visibilityScore * 0.2))
+            opacity: Math.min(1, 0.3 + visibilityScore * 0.2),
         };
     }
 
     private getTypePriority(type: string): number {
         const priorities: { [key: string]: number } = {
-            'person': 3,
-            'organization': 3,
-            'product': 2,
-            'concept': 2,
-            'location': 2,
-            'technology': 2,
-            'event': 1,
-            'document': 1,
-            'website': 1,
-            'topic': 1,
-            'related_entity': 0
+            person: 3,
+            organization: 3,
+            product: 2,
+            concept: 2,
+            location: 2,
+            technology: 2,
+            event: 1,
+            document: 1,
+            website: 1,
+            topic: 1,
+            related_entity: 0,
         };
         return priorities[type] || 0;
     }
 
     private getEdgeTypeWeight(type: string): number {
         const weights: { [key: string]: number } = {
-            'contains': 2,
-            'created_by': 2,
-            'located_in': 2,
-            'works_for': 2,
-            'related': 1,
-            'mentioned': 0
+            contains: 2,
+            created_by: 2,
+            located_in: 2,
+            works_for: 2,
+            related: 1,
+            mentioned: 0,
         };
         return weights[type] || 1;
     }
@@ -2026,18 +2283,23 @@ export class EntityGraphVisualizer {
         if (!this.cy) return false;
 
         // Simple heuristic: node is a hub if it has connections to many other nodes in the community
-        const communityNodes = this.cy.nodes().filter((n: any) =>
-            n.data('communityId') === communityId
-        );
+        const communityNodes = this.cy
+            .nodes()
+            .filter((n: any) => n.data("communityId") === communityId);
         const nodeConnections = node.connectedEdges().length;
-        const avgConnections = communityNodes.map((n: any) =>
-            n.connectedEdges().length
-        ).reduce((a: number, b: number) => a + b, 0) / communityNodes.length;
+        const avgConnections =
+            communityNodes
+                .map((n: any) => n.connectedEdges().length)
+                .reduce((a: number, b: number) => a + b, 0) /
+            communityNodes.length;
 
         return nodeConnections > avgConnections * 1.5;
     }
 
-    private getAdaptiveZoomThresholds(zoom: number, totalElements: number): any {
+    private getAdaptiveZoomThresholds(
+        zoom: number,
+        totalElements: number,
+    ): any {
         // Dynamic thresholds based on zoom level and graph density
         const densityFactor = Math.min(1, totalElements / 1000);
 
@@ -2045,25 +2307,25 @@ export class EntityGraphVisualizer {
             return {
                 nodeThreshold: 6 + densityFactor * 2,
                 labelThreshold: 8,
-                edgeThreshold: 4 + densityFactor
+                edgeThreshold: 4 + densityFactor,
             };
         } else if (zoom < 0.6) {
             return {
                 nodeThreshold: 4 + densityFactor,
                 labelThreshold: 6,
-                edgeThreshold: 3
+                edgeThreshold: 3,
             };
         } else if (zoom < 1.0) {
             return {
                 nodeThreshold: 2,
                 labelThreshold: 4,
-                edgeThreshold: 2
+                edgeThreshold: 2,
             };
         } else {
             return {
                 nodeThreshold: 0,
                 labelThreshold: 2,
-                edgeThreshold: 1
+                edgeThreshold: 1,
             };
         }
     }
@@ -2085,29 +2347,29 @@ export class EntityGraphVisualizer {
     private applyNodeLOD(node: any, visibility: any, zoom: number): void {
         if (visibility.shouldShow) {
             node.style({
-                'display': 'element',
-                'opacity': visibility.opacity,
-                'font-size': visibility.labelSize + 'px'
+                display: "element",
+                opacity: visibility.opacity,
+                "font-size": visibility.labelSize + "px",
             });
 
             if (visibility.shouldLabel) {
-                node.style('label', node.data('name'));
+                node.style("label", node.data("name"));
             } else {
-                node.style('label', '');
+                node.style("label", "");
             }
         } else {
-            node.style('display', 'none');
+            node.style("display", "none");
         }
     }
 
     private applyEdgeLOD(edge: any, visibility: any, zoom: number): void {
         if (visibility.shouldShow) {
             edge.style({
-                'display': 'element',
-                'opacity': visibility.opacity
+                display: "element",
+                opacity: visibility.opacity,
             });
         } else {
-            edge.style('display', 'none');
+            edge.style("display", "none");
         }
     }
 
@@ -2117,7 +2379,7 @@ export class EntityGraphVisualizer {
     private convertToGraphElements(graphData: GraphData): any[] {
         const elements: any[] = [];
 
-        console.time('[Perf] Entity process nodes');
+        console.time("[Perf] Entity process nodes");
         // Add nodes - validate entity data
         graphData.entities.forEach((entity) => {
             if (entity.name && typeof entity.name === "string") {
@@ -2169,10 +2431,12 @@ export class EntityGraphVisualizer {
                 console.warn("Skipping invalid entity (missing name):", entity);
             }
         });
-        console.timeEnd('[Perf] Entity process nodes');
-        console.log(`[Perf] Entity processed ${elements.filter(e => e.group === "nodes").length} nodes`);
+        console.timeEnd("[Perf] Entity process nodes");
+        console.log(
+            `[Perf] Entity processed ${elements.filter((e) => e.group === "nodes").length} nodes`,
+        );
 
-        console.time('[Perf] Entity process relationships');
+        console.time("[Perf] Entity process relationships");
         // Add edges - validate relationship data
         let validRelationships = 0;
         let invalidRelationships = 0;
@@ -2203,8 +2467,10 @@ export class EntityGraphVisualizer {
                 invalidRelationships++;
             }
         });
-        console.timeEnd('[Perf] Entity process relationships');
-        console.log(`[Perf] Entity processed ${validRelationships} valid relationships, ${invalidRelationships} invalid`);
+        console.timeEnd("[Perf] Entity process relationships");
+        console.log(
+            `[Perf] Entity processed ${validRelationships} valid relationships, ${invalidRelationships} invalid`,
+        );
 
         return elements;
     }
@@ -2213,7 +2479,7 @@ export class EntityGraphVisualizer {
         const elements: any[] = [];
         const nodeIds = new Set<string>();
 
-        console.time('[Perf] Process nodes');
+        console.time("[Perf] Process nodes");
         if (globalData.entities && globalData.entities.length > 0) {
             globalData.entities.forEach((entity: any) => {
                 if (!nodeIds.has(entity.id)) {
@@ -2224,21 +2490,24 @@ export class EntityGraphVisualizer {
                             name: entity.name,
                             type: entity.type || "entity",
                             size: entity.size || 12,
-                            importance: entity.importance || entity.computedImportance || 0,
+                            importance:
+                                entity.importance ||
+                                entity.computedImportance ||
+                                0,
                             degree: entity.degree || 0,
                             communityId: entity.communityId,
-                            color: entity.color || '#999999',
-                            borderColor: entity.borderColor || '#333333'
-                        }
+                            color: entity.color || "#999999",
+                            borderColor: entity.borderColor || "#333333",
+                        },
                     });
                     nodeIds.add(entity.id);
                 }
             });
         }
-        console.timeEnd('[Perf] Process nodes');
+        console.timeEnd("[Perf] Process nodes");
         console.log(`[Perf] Created ${nodeIds.size} nodes`);
 
-        console.time('[Perf] Process edges');
+        console.time("[Perf] Process edges");
         if (globalData.relationships && globalData.relationships.length > 0) {
             let validRelationships = 0;
             let invalidRelationships = 0;
@@ -2248,7 +2517,8 @@ export class EntityGraphVisualizer {
                 // Support both transformed (from/to) and original (fromEntity/toEntity) field formats
                 const sourceId = rel.from || rel.fromEntity;
                 const targetId = rel.to || rel.toEntity;
-                const relationType = rel.type || rel.relationshipType || "related";
+                const relationType =
+                    rel.type || rel.relationshipType || "related";
 
                 if (nodeIds.has(sourceId) && nodeIds.has(targetId)) {
                     elements.push({
@@ -2259,8 +2529,8 @@ export class EntityGraphVisualizer {
                             target: targetId,
                             type: relationType,
                             strength: rel.confidence || 0.5,
-                            weight: rel.count || 1
-                        }
+                            weight: rel.count || 1,
+                        },
                     });
                     validRelationships++;
                 } else {
@@ -2268,9 +2538,11 @@ export class EntityGraphVisualizer {
                 }
             });
 
-            console.log(`[Perf] Created ${validRelationships} valid edges, skipped ${invalidRelationships} invalid`);
+            console.log(
+                `[Perf] Created ${validRelationships} valid edges, skipped ${invalidRelationships} invalid`,
+            );
         }
-        console.timeEnd('[Perf] Process edges');
+        console.timeEnd("[Perf] Process edges");
 
         return elements;
     }
@@ -2300,8 +2572,8 @@ export class EntityGraphVisualizer {
             },
             grid: {
                 name: "grid",
-                fit: false,               // Prevent layout from fighting viewport control
-                animate: 'end',           // Animate only at end to prevent viewport conflicts
+                fit: false, // Prevent layout from fighting viewport control
+                animate: "end", // Animate only at end to prevent viewport conflicts
                 padding: 30,
                 avoidOverlap: true,
                 avoidOverlapPadding: 10,
@@ -2322,8 +2594,10 @@ export class EntityGraphVisualizer {
         );
 
         // Handle layout completion to manually fit view
-        layout.one('layoutstop', () => {
-            console.log(`[Layout] ${layoutName} layout completed, fitting view`);
+        layout.one("layoutstop", () => {
+            console.log(
+                `[Layout] ${layoutName} layout completed, fitting view`,
+            );
             this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
         });
 
@@ -2596,14 +2870,17 @@ export class EntityGraphVisualizer {
     private focusOnNode(node: any): void {
         if (!this.cy) return;
 
-        this.cy.animate({
-            center: { eles: node },
-            zoom: 2
-        }, {
-            duration: 500
-        });
+        this.cy.animate(
+            {
+                center: { eles: node },
+                zoom: 2,
+            },
+            {
+                duration: 500,
+            },
+        );
 
-        this.showLabelsForEntityNeighborhood(node.data('name'), 2);
+        this.showLabelsForEntityNeighborhood(node.data("name"), 2);
     }
 
     private showProgressiveNodeInfo(node: any, position: any): void {
@@ -2612,14 +2889,16 @@ export class EntityGraphVisualizer {
 
         const connections = node.connectedEdges().length;
         const importance = data.importance || 0;
-        const communityInfo = data.communityId ? `Community: ${data.communityId}` : '';
+        const communityInfo = data.communityId
+            ? `Community: ${data.communityId}`
+            : "";
 
         tooltip.innerHTML = `
             <div class="tooltip-header">${data.name}</div>
             <div class="tooltip-type">${data.type}</div>
             <div class="tooltip-connections">Connections: ${connections}</div>
             <div class="tooltip-importance">Importance: ${Math.round(importance * 100)}%</div>
-            ${communityInfo ? `<div class="tooltip-community">${communityInfo}</div>` : ''}
+            ${communityInfo ? `<div class="tooltip-community">${communityInfo}</div>` : ""}
         `;
 
         tooltip.style.left = `${position.x + 10}px`;
@@ -2631,14 +2910,14 @@ export class EntityGraphVisualizer {
         if (!this.cy) return;
 
         const neighborhood = node.neighborhood().union(node);
-        this.cy.elements().removeClass('highlighted neighborhood');
-        neighborhood.addClass('neighborhood');
-        node.addClass('highlighted');
+        this.cy.elements().removeClass("highlighted neighborhood");
+        neighborhood.addClass("neighborhood");
+        node.addClass("highlighted");
     }
 
     private clearNeighborhoodHighlights(): void {
         if (!this.cy) return;
-        this.cy.elements().removeClass('neighborhood');
+        this.cy.elements().removeClass("neighborhood");
     }
 
     private scheduleLayoutUpdate(): void {
@@ -2659,10 +2938,10 @@ export class EntityGraphVisualizer {
         const sourceNode = edge.source();
         const targetNode = edge.target();
 
-        this.cy.elements().removeClass('highlighted path-highlighted');
-        edge.addClass('path-highlighted');
-        sourceNode.addClass('highlighted');
-        targetNode.addClass('highlighted');
+        this.cy.elements().removeClass("highlighted path-highlighted");
+        edge.addClass("path-highlighted");
+        sourceNode.addClass("highlighted");
+        targetNode.addClass("highlighted");
     }
 
     private showEdgeDetails(edge: any, position: any): void {
@@ -2670,7 +2949,7 @@ export class EntityGraphVisualizer {
         const tooltip = this.getOrCreateTooltip();
 
         const strength = data.strength || 0;
-        const type = data.type || 'related';
+        const type = data.type || "related";
 
         tooltip.innerHTML = `
             <div class="tooltip-header">${data.source} → ${data.target}</div>
@@ -2686,18 +2965,18 @@ export class EntityGraphVisualizer {
     private emphasizeEdge(edge: any): void {
         if (!this.cy) return;
         edge.style({
-            'line-color': '#FF6B35',
-            'width': '4px',
-            'z-index': 999
+            "line-color": "#FF6B35",
+            width: "4px",
+            "z-index": 999,
         });
     }
 
     private deemphasizeAllEdges(): void {
         if (!this.cy) return;
         this.cy.edges().style({
-            'line-color': '',
-            'width': '',
-            'z-index': ''
+            "line-color": "",
+            width: "",
+            "z-index": "",
         });
     }
 
@@ -2727,8 +3006,8 @@ export class EntityGraphVisualizer {
     private showNodeContextMenu(node: any, position: any): void {
         this.hideContextMenu();
 
-        const menu = document.createElement('div');
-        menu.className = 'graph-context-menu';
+        const menu = document.createElement("div");
+        menu.className = "graph-context-menu";
         menu.style.cssText = `
             position: fixed;
             left: ${position.x}px;
@@ -2742,29 +3021,35 @@ export class EntityGraphVisualizer {
         `;
 
         const menuItems = [
-            { label: 'Focus on Node', action: () => this.focusOnNode(node) },
-            { label: 'Hide Node', action: () => node.style('display', 'none') },
-            { label: 'Expand Neighborhood', action: () => this.expandNodeNeighborhood(node) },
-            { label: 'Copy Node Name', action: () => navigator.clipboard.writeText(node.data('name')) }
+            { label: "Focus on Node", action: () => this.focusOnNode(node) },
+            { label: "Hide Node", action: () => node.style("display", "none") },
+            {
+                label: "Expand Neighborhood",
+                action: () => this.expandNodeNeighborhood(node),
+            },
+            {
+                label: "Copy Node Name",
+                action: () => navigator.clipboard.writeText(node.data("name")),
+            },
         ];
 
-        menuItems.forEach(item => {
-            const menuItem = document.createElement('div');
+        menuItems.forEach((item) => {
+            const menuItem = document.createElement("div");
             menuItem.textContent = item.label;
             menuItem.style.cssText = `
                 padding: 8px 12px;
                 cursor: pointer;
                 border-bottom: 1px solid #eee;
             `;
-            menuItem.addEventListener('click', () => {
+            menuItem.addEventListener("click", () => {
                 item.action();
                 this.hideContextMenu();
             });
-            menuItem.addEventListener('mouseover', () => {
-                menuItem.style.backgroundColor = '#f0f0f0';
+            menuItem.addEventListener("mouseover", () => {
+                menuItem.style.backgroundColor = "#f0f0f0";
             });
-            menuItem.addEventListener('mouseout', () => {
-                menuItem.style.backgroundColor = '';
+            menuItem.addEventListener("mouseout", () => {
+                menuItem.style.backgroundColor = "";
             });
             menu.appendChild(menuItem);
         });
@@ -2774,15 +3059,19 @@ export class EntityGraphVisualizer {
 
         // Hide menu when clicking elsewhere
         setTimeout(() => {
-            document.addEventListener('click', this.hideContextMenu.bind(this), { once: true });
+            document.addEventListener(
+                "click",
+                this.hideContextMenu.bind(this),
+                { once: true },
+            );
         }, 100);
     }
 
     private showEdgeContextMenu(edge: any, position: any): void {
         this.hideContextMenu();
 
-        const menu = document.createElement('div');
-        menu.className = 'graph-context-menu';
+        const menu = document.createElement("div");
+        menu.className = "graph-context-menu";
         menu.style.cssText = `
             position: fixed;
             left: ${position.x}px;
@@ -2796,19 +3085,19 @@ export class EntityGraphVisualizer {
         `;
 
         const menuItems = [
-            { label: 'Hide Edge', action: () => edge.style('display', 'none') },
-            { label: 'Trace Path', action: () => this.highlightEdgePath(edge) },
+            { label: "Hide Edge", action: () => edge.style("display", "none") },
+            { label: "Trace Path", action: () => this.highlightEdgePath(edge) },
         ];
 
-        menuItems.forEach(item => {
-            const menuItem = document.createElement('div');
+        menuItems.forEach((item) => {
+            const menuItem = document.createElement("div");
             menuItem.textContent = item.label;
             menuItem.style.cssText = `
                 padding: 8px 12px;
                 cursor: pointer;
                 border-bottom: 1px solid #eee;
             `;
-            menuItem.addEventListener('click', () => {
+            menuItem.addEventListener("click", () => {
                 item.action();
                 this.hideContextMenu();
             });
@@ -2819,15 +3108,19 @@ export class EntityGraphVisualizer {
         this.contextMenu = menu;
 
         setTimeout(() => {
-            document.addEventListener('click', this.hideContextMenu.bind(this), { once: true });
+            document.addEventListener(
+                "click",
+                this.hideContextMenu.bind(this),
+                { once: true },
+            );
         }, 100);
     }
 
     private showBackgroundContextMenu(position: any): void {
         this.hideContextMenu();
 
-        const menu = document.createElement('div');
-        menu.className = 'graph-context-menu';
+        const menu = document.createElement("div");
+        menu.className = "graph-context-menu";
         menu.style.cssText = `
             position: fixed;
             left: ${position.x}px;
@@ -2841,21 +3134,24 @@ export class EntityGraphVisualizer {
         `;
 
         const menuItems = [
-            { label: 'Fit to View', action: () => this.fitToView() },
-            { label: 'Reset Layout', action: () => this.applyLayout(this.currentLayout) },
-            { label: 'Show All Nodes', action: () => this.showAllNodes() },
-            { label: 'Export View', action: () => this.takeScreenshot() }
+            { label: "Fit to View", action: () => this.fitToView() },
+            {
+                label: "Reset Layout",
+                action: () => this.applyLayout(this.currentLayout),
+            },
+            { label: "Show All Nodes", action: () => this.showAllNodes() },
+            { label: "Export View", action: () => this.takeScreenshot() },
         ];
 
-        menuItems.forEach(item => {
-            const menuItem = document.createElement('div');
+        menuItems.forEach((item) => {
+            const menuItem = document.createElement("div");
             menuItem.textContent = item.label;
             menuItem.style.cssText = `
                 padding: 8px 12px;
                 cursor: pointer;
                 border-bottom: 1px solid #eee;
             `;
-            menuItem.addEventListener('click', () => {
+            menuItem.addEventListener("click", () => {
                 item.action();
                 this.hideContextMenu();
             });
@@ -2866,7 +3162,11 @@ export class EntityGraphVisualizer {
         this.contextMenu = menu;
 
         setTimeout(() => {
-            document.addEventListener('click', this.hideContextMenu.bind(this), { once: true });
+            document.addEventListener(
+                "click",
+                this.hideContextMenu.bind(this),
+                { once: true },
+            );
         }, 100);
     }
 
@@ -2878,26 +3178,28 @@ export class EntityGraphVisualizer {
     }
 
     private isGraphFocused(): boolean {
-        return document.activeElement === this.container ||
-               this.container.contains(document.activeElement);
+        return (
+            document.activeElement === this.container ||
+            this.container.contains(document.activeElement)
+        );
     }
 
     private handleKeyboardShortcut(evt: KeyboardEvent): void {
         switch (evt.key) {
-            case 'f':
+            case "f":
                 this.fitToView();
                 evt.preventDefault();
                 break;
-            case 'r':
+            case "r":
                 this.resetView();
                 evt.preventDefault();
                 break;
-            case 'Escape':
+            case "Escape":
                 this.clearHighlights();
                 this.clearAllSelections();
                 evt.preventDefault();
                 break;
-            case 'a':
+            case "a":
                 if (evt.ctrlKey || evt.metaKey) {
                     this.selectAllNodes();
                     evt.preventDefault();
@@ -2914,12 +3216,12 @@ export class EntityGraphVisualizer {
 
     private expandNodeNeighborhood(node: any): void {
         // This would integrate with the data loading system to fetch more connected entities
-        console.log(`Expanding neighborhood for node: ${node.data('name')}`);
+        console.log(`Expanding neighborhood for node: ${node.data("name")}`);
     }
 
     private showAllNodes(): void {
         if (!this.cy) return;
-        this.cy.nodes().style('display', 'element');
+        this.cy.nodes().style("display", "element");
     }
 
     private selectAllNodes(): void {
@@ -2953,27 +3255,32 @@ export class EntityGraphVisualizer {
     /**
      * Show labels for entity and its neighborhood within specified degrees
      */
-    private showLabelsForEntityNeighborhood(entityName: string, maxDegree: number): void {
+    private showLabelsForEntityNeighborhood(
+        entityName: string,
+        maxDegree: number,
+    ): void {
         if (!this.cy) return;
 
         const centerNode = this.cy.getElementById(entityName);
         if (centerNode.length === 0) {
-            console.warn(`Entity "${entityName}" not found for label enhancement`);
+            console.warn(
+                `Entity "${entityName}" not found for label enhancement`,
+            );
             return;
         }
 
         // First clear all labels to ensure clean state
-        this.cy.nodes().style('text-opacity', 0);
+        this.cy.nodes().style("text-opacity", 0);
 
         // Show label for center node with special styling
         centerNode.style({
-            'text-opacity': 1,
-            'font-weight': 'bold',
-            'font-size': '14px',
-            'color': '#000',
-            'text-background-color': '#ffff99',
-            'text-background-opacity': 0.8,
-            'text-background-padding': '3px'
+            "text-opacity": 1,
+            "font-weight": "bold",
+            "font-size": "14px",
+            color: "#000",
+            "text-background-color": "#ffff99",
+            "text-background-opacity": 0.8,
+            "text-background-padding": "3px",
         });
 
         // Find and label nodes within the specified degree range
@@ -2982,13 +3289,25 @@ export class EntityGraphVisualizer {
 
         for (let degree = 1; degree <= maxDegree; degree++) {
             // Get nodes at current degree
-            const nodesAtDegree = centerNode.neighborhood().nodes().filter((node: any) => {
-                // Simple BFS-style degree calculation
-                const distance = centerNode.edgesWith(node).length > 0 ? 1 :
-                                centerNode.neighborhood().nodes().some((neighbor: any) =>
-                                    neighbor.edgesWith(node).length > 0) ? 2 : 999;
-                return distance === degree;
-            });
+            const nodesAtDegree = centerNode
+                .neighborhood()
+                .nodes()
+                .filter((node: any) => {
+                    // Simple BFS-style degree calculation
+                    const distance =
+                        centerNode.edgesWith(node).length > 0
+                            ? 1
+                            : centerNode
+                                    .neighborhood()
+                                    .nodes()
+                                    .some(
+                                        (neighbor: any) =>
+                                            neighbor.edgesWith(node).length > 0,
+                                    )
+                              ? 2
+                              : 999;
+                    return distance === degree;
+                });
 
             // Style nodes at this degree
             nodesAtDegree.forEach((node: any) => {
@@ -3000,24 +3319,24 @@ export class EntityGraphVisualizer {
                     if (degree === 1) {
                         // First degree neighbors - prominent labels
                         node.style({
-                            'text-opacity': 1,
-                            'font-weight': 'bold',
-                            'font-size': '12px',
-                            'color': '#333',
-                            'text-background-color': '#e6f3ff',
-                            'text-background-opacity': 0.7,
-                            'text-background-padding': '2px'
+                            "text-opacity": 1,
+                            "font-weight": "bold",
+                            "font-size": "12px",
+                            color: "#333",
+                            "text-background-color": "#e6f3ff",
+                            "text-background-opacity": 0.7,
+                            "text-background-padding": "2px",
                         });
                     } else if (degree === 2) {
                         // Second degree neighbors - subtle labels
                         node.style({
-                            'text-opacity': 1,
-                            'font-weight': 'normal',
-                            'font-size': '10px',
-                            'color': '#666',
-                            'text-background-color': '#f0f0f0',
-                            'text-background-opacity': 0.5,
-                            'text-background-padding': '1px'
+                            "text-opacity": 1,
+                            "font-weight": "normal",
+                            "font-size": "10px",
+                            color: "#666",
+                            "text-background-color": "#f0f0f0",
+                            "text-background-opacity": 0.5,
+                            "text-background-padding": "1px",
                         });
                     }
                 }
