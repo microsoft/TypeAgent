@@ -3,8 +3,8 @@ requires = ["setuptools>=67", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "typeagent"
-version = "0.1.0"
+name = "typeagent-py"
+version = "0.1.3"
 description = "TypeAgent implements an agentic memory framework."
 authors = [
   { name = "Guido van Rossum", email = "gvanrossum@microsoft.com" },
@@ -48,6 +48,9 @@ packages = [
     "typeagent.storage",
     "typeagent.storage.memory",
     "typeagent.storage.sqlite",
+    "typechat",
+    "typechat._internal",
+    "typechat._internal.ts_conversion",
 ]
 
 [tool.pytest.ini_options]
