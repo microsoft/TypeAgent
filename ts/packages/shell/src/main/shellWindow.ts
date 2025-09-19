@@ -69,6 +69,7 @@ type OverlayData = BottomAlignedPosition & {
     height: number;
 };
 
+const dividerSize = 4; // 4px divider
 export class ShellWindow {
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
@@ -81,12 +82,12 @@ export class ShellWindow {
     private contentVisible: boolean = false;
     // For use in horizontal layout
     private chatWidth: number;
-    private contentWidth: number; // include dividerSize
+    private contentWidth: number; // does not include dividerSize
     private windowHeight: number;
 
     // For use in vertical layout
     private chatHeight: number;
-    private contentHeight: number; // include dividerSize
+    private contentHeight: number; // does not include dividerSize
     private windowWidth: number;
 
     private readonly contentLoadP: Promise<void>[];
@@ -118,9 +119,7 @@ export class ShellWindow {
         const uiSettings = this.settings.user.ui;
         // Calculate the initial window bound.
         this.verticalLayout = uiSettings.verticalLayout;
-        const mainWindow = createMainWindow(
-            this.getWindowBounds({ x: state.x, y: state.y }, false),
-        );
+        const mainWindow = createMainWindow();
 
         setupDevicePermissions(mainWindow);
 
@@ -149,7 +148,7 @@ export class ShellWindow {
 
             // Update layout if no tabs left
             if (!this.hasBrowserTabs()) {
-                this.setWindowSize(this.getWindowPositionState());
+                this.updateWindowBounds(this.getWindowPositionState());
             }
         });
 
@@ -204,7 +203,7 @@ export class ShellWindow {
 
                 // Update layout if no tabs left
                 if (!this.hasBrowserTabs()) {
-                    this.setWindowSize(this.getWindowPositionState());
+                    this.updateWindowBounds(this.getWindowPositionState());
                 }
 
                 // Restore focus to chat after closing tab
@@ -234,6 +233,8 @@ export class ShellWindow {
         ipcMain.on("browser-reload", () => {
             this.browserReload();
         });
+
+        this.updateWindowBounds({ x: state.x, y: state.y });
 
         const contentLoadP: Promise<void>[] = [];
         contentLoadP.push(
@@ -411,7 +412,7 @@ export class ShellWindow {
             if (name.startsWith("ui")) {
                 const position = this.getWindowPositionState();
                 this.verticalLayout = this.settings.user.ui.verticalLayout;
-                this.setWindowSize(position);
+                this.updateWindowBounds(position);
             }
             this.sendUserSettingChanged();
             this.settings.save(this.getWindowState());
@@ -420,12 +421,15 @@ export class ShellWindow {
     }
 
     private getWindowPositionState(): { x: number; y: number } {
-        const bounds = this.mainWindow.getContentBounds();
+        // get the window position
+        const bounds = this.mainWindow.getNormalBounds();
         const addContent = this.verticalLayout && !this.contentVisible;
 
         return {
             x: bounds.x,
-            y: addContent ? bounds.y - this.contentHeight : bounds.y,
+            y: addContent
+                ? bounds.y - this.contentHeight - dividerSize
+                : bounds.y,
         };
     }
     public getWindowState(): ShellWindowState {
@@ -487,10 +491,9 @@ export class ShellWindow {
     public updateContentSize(newDividerPos?: number) {
         const bounds = this.mainWindow.getContentBounds();
         debugShellWindow(
-            `Updating content size with window bound: ${JSON.stringify(bounds)}`,
+            `Updating content size with window content bound: ${JSON.stringify(bounds)}`,
         );
 
-        const dividerSize = 4; // 4px divider
         const verticalLayout = this.verticalLayout;
         const { width, height } = bounds;
 
@@ -498,26 +501,25 @@ export class ShellWindow {
         let chatViewBounds: Electron.Rectangle;
         if (verticalLayout) {
             this.windowWidth = width;
-            let chatHeight = this.chatHeight;
 
-            // Keep existing chat height unless the divider position changed.
-            if (newDividerPos !== undefined) {
-                chatHeight = height - newDividerPos - dividerSize;
-            }
-
-            const maxChatHeight = this.contentVisible
-                ? width - dividerSize
-                : width;
-            // Clamp for window resize.
-            if (chatHeight < 0) {
-                chatHeight = 0;
-            } else if (chatHeight > maxChatHeight) {
-                chatHeight = maxChatHeight;
-            }
-
-            this.chatHeight = chatHeight;
-
+            let chatHeight = height;
             if (this.contentVisible) {
+                // Keep existing chat height unless the divider position changed.
+                chatHeight =
+                    newDividerPos !== undefined
+                        ? height - newDividerPos - dividerSize
+                        : this.chatHeight;
+
+                // Clamp for window resize.
+                if (chatHeight < 0) {
+                    chatHeight = 0;
+                } else {
+                    const maxHeight = height - dividerSize;
+                    if (chatHeight > maxHeight) {
+                        chatHeight = maxHeight;
+                    }
+                }
+
                 const contentHeight = height - chatHeight - dividerSize;
                 this.contentHeight = contentHeight;
                 dividerPos = contentHeight;
@@ -532,6 +534,7 @@ export class ShellWindow {
                 // Update browser view manager for multi-tab layout
                 this.browserViewManager.setBounds(browserViewBounds);
             }
+            this.chatHeight = chatHeight;
 
             chatViewBounds = {
                 x: 0,
@@ -541,24 +544,21 @@ export class ShellWindow {
             };
         } else {
             this.windowHeight = height;
-            let chatWidth = this.chatWidth;
-            // Keep existing chat width unless the divider position changed.
-            if (newDividerPos !== undefined) {
-                chatWidth = newDividerPos;
-            }
-
-            const maxChatWidth = this.contentVisible
-                ? width - dividerSize
-                : width;
-            // Clamp for window resize.
-            if (chatWidth < 0) {
-                chatWidth = 0;
-            } else if (chatWidth > maxChatWidth) {
-                chatWidth = maxChatWidth;
-            }
-            this.chatWidth = chatWidth;
+            let chatWidth = width;
 
             if (this.contentVisible) {
+                // Keep existing chat width unless the divider position changed.
+                chatWidth = newDividerPos ?? this.chatWidth;
+
+                // Clamp for window resize.
+                if (chatWidth < 0) {
+                    chatWidth = 0;
+                } else {
+                    const maxWidth = width - dividerSize;
+                    if (chatWidth > maxWidth) {
+                        chatWidth = maxWidth;
+                    }
+                }
                 const contentWidth = width - chatWidth - dividerSize;
                 this.contentWidth = contentWidth;
                 dividerPos = chatWidth;
@@ -573,6 +573,8 @@ export class ShellWindow {
                 // Update browser view manager for multi-tab layout
                 this.browserViewManager.setBounds(browserViewBounds);
             }
+
+            this.chatWidth = chatWidth;
 
             chatViewBounds = {
                 x: 0,
@@ -633,7 +635,7 @@ export class ShellWindow {
         }
     }
 
-    private getWindowBounds(
+    private computeWindowBounds(
         position: { x: number; y: number },
         hasBrowserTabs: boolean,
     ) {
@@ -648,9 +650,9 @@ export class ShellWindow {
             const contentVisible =
                 uiSettings.verticalContentAlwaysVisible || hasBrowserTabs;
             if (contentVisible) {
-                bounds.height += this.contentHeight;
+                bounds.height += this.contentHeight + dividerSize;
             } else {
-                bounds.y += this.contentHeight;
+                bounds.y += this.contentHeight + dividerSize;
             }
             this.contentVisible = contentVisible;
         } else {
@@ -662,7 +664,7 @@ export class ShellWindow {
             const contentVisible =
                 uiSettings.horizontalContentAlwaysVisible || hasBrowserTabs;
             if (contentVisible) {
-                bounds.width += this.contentWidth;
+                bounds.width += this.contentWidth + dividerSize;
             }
 
             this.contentVisible = contentVisible;
@@ -670,10 +672,14 @@ export class ShellWindow {
         return bounds;
     }
 
-    private setWindowSize(position: { x: number; y: number }) {
-        const bounds = this.getWindowBounds(position, this.hasBrowserTabs());
+    private updateWindowBounds(position: { x: number; y: number }) {
+        const bounds = this.computeWindowBounds(
+            position,
+            this.hasBrowserTabs(),
+        );
         debugShellWindow("Set window bound: ", bounds, this.contentVisible);
-        this.mainWindow.setBounds(bounds);
+        this.mainWindow.setPosition(bounds.x, bounds.y);
+        this.mainWindow.setContentSize(bounds.width, bounds.height);
 
         if (isLinux) {
             // Workaround for electron bug where getContentSize isn't updated when "resize" event is fired
@@ -720,7 +726,7 @@ export class ShellWindow {
 
         // Update layout when first tab is created
         if (this.browserViewManager.getAllBrowserTabs().length === 1) {
-            this.setWindowSize(this.getWindowPositionState());
+            this.updateWindowBounds(this.getWindowPositionState());
         }
 
         // Send update to renderer
@@ -1125,9 +1131,8 @@ export class ShellWindow {
     }
 }
 
-function createMainWindow(bounds: Electron.Rectangle) {
+function createMainWindow() {
     const mainWindow = new BrowserWindow({
-        ...bounds,
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
@@ -1137,10 +1142,6 @@ function createMainWindow(bounds: Electron.Rectangle) {
         },
     });
 
-    // This (seemingly redundant) call is needed when we use a BrowserView.
-    // Without this call, the mainWindow opens using default width/height, not the
-    // values saved in ShellSettings
-    mainWindow.setBounds(bounds);
     mainWindow.removeMenu();
 
     // make sure links are opened in the the shell
