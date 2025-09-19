@@ -533,7 +533,8 @@ export class ShellWindow {
                     }
                 }
 
-                const contentHeight = availableHeight - chatHeight - dividerSize;
+                const contentHeight =
+                    availableHeight - chatHeight - dividerSize;
                 this.contentHeight = contentHeight;
                 dividerPos = contentHeight;
 
@@ -1147,7 +1148,7 @@ export class ShellWindow {
 function createMainWindow(): BrowserWindow {
     const isMac = process.platform === "darwin";
     const isWindows = process.platform === "win32";
-    
+
     const mainWindow = new BrowserWindow({
         show: false,
         frame: false, // Remove default frame
