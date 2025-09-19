@@ -504,11 +504,15 @@ export class ShellWindow {
             if (newDividerPos !== undefined) {
                 chatHeight = height - newDividerPos - dividerSize;
             }
+
+            const maxChatHeight = this.contentVisible
+                ? width - dividerSize
+                : width;
             // Clamp for window resize.
             if (chatHeight < 0) {
                 chatHeight = 0;
-            } else if (chatHeight > height - dividerSize) {
-                chatHeight = height - dividerSize;
+            } else if (chatHeight > maxChatHeight) {
+                chatHeight = maxChatHeight;
             }
 
             this.chatHeight = chatHeight;
@@ -542,11 +546,15 @@ export class ShellWindow {
             if (newDividerPos !== undefined) {
                 chatWidth = newDividerPos;
             }
+
+            const maxChatWidth = this.contentVisible
+                ? width - dividerSize
+                : width;
             // Clamp for window resize.
             if (chatWidth < 0) {
                 chatWidth = 0;
-            } else if (chatWidth > width - dividerSize) {
-                chatWidth = width - dividerSize;
+            } else if (chatWidth > maxChatWidth) {
+                chatWidth = maxChatWidth;
             }
             this.chatWidth = chatWidth;
 
