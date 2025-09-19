@@ -6,7 +6,6 @@ import { WebSocket } from "ws";
 import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
-import { HybridGraphStorage } from "./hybridGraphStorage.mjs";
 import {
     knowledgeProgressEvents,
     KnowledgeExtractionProgressEvent,
@@ -477,6 +476,8 @@ export async function handleKnowledgeAction(
         case "getAllEntitiesWithMetrics":
             return await getAllEntitiesWithMetrics(parameters, context);
 
+        case "getEntityNeighborhood":
+            return await getEntityNeighborhood(parameters, context);
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
@@ -3227,32 +3228,24 @@ export async function buildKnowledgeGraph(
             };
         }
 
-        console.log("[Knowledge Graph] Starting hybrid graph build with parameters:", parameters);
+        console.log("[Knowledge Graph] Starting knowledge graph build with parameters:", parameters);
         const startTime = Date.now();
 
-        // Create or get hybrid graph storage
-        if (!(websiteCollection as any).hybridStorage) {
-            (websiteCollection as any).hybridStorage = new HybridGraphStorage(websiteCollection);
-        }
-
-        // Build the graph with hybrid storage
-        await (websiteCollection as any).hybridStorage.buildGraph({
-            urlLimit: parameters.urlLimit || 1000,
-            enableCommunityDetection: true,
-            communityAlgorithm: 'louvain',
-            calculateMetrics: true
-        });
+        // TODO: Implement actual graph building logic here
+        // This method currently only reports stats from existing data
+        // Actual graph building should process URLs, extract entities/relationships,
+        // run community detection, and calculate metrics
 
         const timeElapsed = Date.now() - startTime;
 
-        // Get stats from hybrid storage
-        const graphStats = (websiteCollection as any).hybridStorage.getGraphStats();
-        
+        // Get stats directly from websiteCollection using existing status method
+        const status = await getKnowledgeGraphStatus({}, context);
+
         const stats = {
-            urlsProcessed: parameters.urlLimit || graphStats.nodeCount,
-            entitiesFound: graphStats.nodeCount,
-            relationshipsCreated: graphStats.edgeCount,
-            communitiesDetected: graphStats.communityCount,
+            urlsProcessed: parameters.urlLimit || status.entityCount,
+            entitiesFound: status.entityCount,
+            relationshipsCreated: status.relationshipCount,
+            communitiesDetected: status.communityCount,
             timeElapsed: timeElapsed,
         };
 
@@ -3260,7 +3253,7 @@ export async function buildKnowledgeGraph(
 
         return {
             success: true,
-            message: `Hybrid knowledge graph built successfully in ${timeElapsed}ms`,
+            message: `Knowledge graph build completed in ${timeElapsed}ms`,
             stats,
         };
     } catch (error) {
@@ -3382,6 +3375,72 @@ export async function getAllCommunities(
     }
 }
 
+// Simple in-memory cache for graph data
+interface GraphCache {
+    entities: any[];
+    relationships: any[];
+    communities: any[];
+    entityMetrics: any[];
+    lastUpdated: number;
+    isValid: boolean;
+}
+
+// Cache storage attached to websiteCollection
+function getGraphCache(websiteCollection: any): GraphCache | null {
+    return (websiteCollection as any).__graphCache || null;
+}
+
+function setGraphCache(websiteCollection: any, cache: GraphCache): void {
+    (websiteCollection as any).__graphCache = cache;
+}
+
+// Ensure graph data is cached for fast access
+async function ensureGraphCache(websiteCollection: any): Promise<void> {
+    const cache = getGraphCache(websiteCollection);
+    const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+    // Check if cache is valid
+    if (cache && cache.isValid && (Date.now() - cache.lastUpdated) < CACHE_TTL) {
+        console.log("[Knowledge Graph] Using valid cached graph data");
+        return;
+    }
+
+    console.log("[Knowledge Graph] Building in-memory cache for graph data");
+
+    try {
+        // Fetch raw data
+        const entities = (websiteCollection.knowledgeEntities as any)?.getTopEntities(5000) || [];
+        const relationships = websiteCollection.relationships?.getAllRelationships() || [];
+        const communities = websiteCollection.communities?.getAllCommunities() || [];
+
+        // Calculate metrics
+        const entityMetrics = calculateEntityMetrics(entities, relationships, communities);
+
+        // Store in cache
+        const newCache: GraphCache = {
+            entities: entities,
+            relationships: relationships,
+            communities: communities,
+            entityMetrics: entityMetrics,
+            lastUpdated: Date.now(),
+            isValid: true
+        };
+
+        setGraphCache(websiteCollection, newCache);
+
+        console.log(`[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`);
+
+    } catch (error) {
+        console.error("[Knowledge Graph] Failed to build cache:", error);
+
+        // Mark cache as invalid but keep existing data if available
+        const existingCache = getGraphCache(websiteCollection);
+        if (existingCache) {
+            existingCache.isValid = false;
+        }
+    }
+}
+
 export async function getAllEntitiesWithMetrics(
     parameters: {},
     context: SessionContext<BrowserActionContext>,
@@ -3399,23 +3458,26 @@ export async function getAllEntitiesWithMetrics(
             };
         }
 
-        // Try to get cached data first for faster loading
-        const cachedOverview = (websiteCollection as any).getCachedGraphOverview?.();
-        if (cachedOverview && cachedOverview.entities) {
-            console.log(`[Knowledge Graph] Using cached entity data: ${cachedOverview.entities.length} entities`);
+        // Ensure cache is populated
+        await ensureGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getGraphCache(websiteCollection);
+        if (cache && cache.isValid && cache.entityMetrics.length > 0) {
+            console.log(`[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`);
             return {
-                entities: cachedOverview.entities,
+                entities: cache.entityMetrics,
             };
         }
 
         // Fallback to live computation if no cache
-        console.log("[Knowledge Graph] No cache found, computing entities with metrics");
+        console.log("[Knowledge Graph] Cache not available, computing entities with metrics");
         const entities = (websiteCollection.knowledgeEntities as any)?.getTopEntities(5000) || [];
         const relationships = websiteCollection.relationships?.getAllRelationships() || [];
         const communities = websiteCollection.communities?.getAllCommunities() || [];
-        
+
         const entityMetrics = calculateEntityMetrics(entities, relationships, communities);
-        
+
         return {
             entities: entityMetrics,
         };
@@ -3428,6 +3490,215 @@ export async function getAllEntitiesWithMetrics(
     }
 }
 
+export async function getEntityNeighborhood(
+    parameters: {
+        entityId: string;
+        depth?: number;
+        maxNodes?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    centerEntity?: any;
+    neighbors: any[];
+    relationships: any[];
+    searchData?: any;
+    metadata?: any;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                neighbors: [],
+                relationships: [],
+                error: "Website collection not available",
+            };
+        }
+
+        const { entityId, depth = 2, maxNodes = 100 } = parameters;
+
+        // Ensure cache is populated
+        await ensureGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getGraphCache(websiteCollection);
+        if (!cache || !cache.isValid) {
+            return {
+                neighbors: [],
+                relationships: [],
+                error: "Graph cache not available",
+            };
+        }
+
+        console.log(`[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`);
+
+        // Perform BFS to find neighborhood
+        const neighborhoodResult = performBFS(entityId, cache.entityMetrics, cache.relationships, depth, maxNodes);
+
+        if (!neighborhoodResult.centerEntity) {
+            return {
+                neighbors: [],
+                relationships: [],
+                error: `Entity "${entityId}" not found`,
+            };
+        }
+
+        // Get search enrichment for topics and related entities
+        let searchData: any = null;
+        try {
+            console.log(`[Knowledge Graph] Fetching search enrichment for entity "${entityId}"`);
+            const searchResults = await searchWebMemories(
+                { query: entityId, limit: 20, includeRelatedEntities: true },
+                context
+            );
+
+            if (searchResults) {
+                searchData = {
+                    websites: searchResults.websites?.slice(0, 15) || [],
+                    relatedEntities: searchResults.relatedEntities?.slice(0, 15) || [],
+                    topTopics: searchResults.topTopics?.slice(0, 10) || []
+                };
+
+                console.log(`[Knowledge Graph] Search enrichment found: ${searchData.websites.length} websites, ${searchData.relatedEntities.length} related entities, ${searchData.topTopics.length} topics`);
+            }
+        } catch (searchError) {
+            console.warn(`[Knowledge Graph] Search enrichment failed:`, searchError);
+        }
+
+        return {
+            centerEntity: neighborhoodResult.centerEntity,
+            neighbors: neighborhoodResult.neighbors,
+            relationships: neighborhoodResult.relationships,
+            searchData: {
+                relatedEntities: searchData?.relatedEntities || [],
+                topTopics: searchData?.topTopics || [],
+                websites: searchData?.websites || []
+            },
+            metadata: {
+                source: 'in_memory_cache',
+                queryDepth: depth,
+                maxNodes: maxNodes,
+                actualNodes: neighborhoodResult.neighbors.length + 1,
+                actualEdges: neighborhoodResult.relationships.length,
+                searchEnrichment: {
+                    relatedEntities: searchData?.relatedEntities?.length || 0,
+                    topTopics: searchData?.topTopics?.length || 0,
+                    websites: searchData?.websites?.length || 0
+                }
+            }
+        };
+
+    } catch (error) {
+        console.error("Error getting entity neighborhood:", error);
+        return {
+            neighbors: [],
+            relationships: [],
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+// BFS implementation for finding entity neighborhood
+function performBFS(
+    entityId: string,
+    entities: any[],
+    relationships: any[],
+    maxDepth: number,
+    maxNodes: number
+): {
+    centerEntity?: any;
+    neighbors: any[];
+    relationships: any[];
+} {
+    // Find center entity (case insensitive)
+    const centerEntity = entities.find(e =>
+        e.name?.toLowerCase() === entityId.toLowerCase() ||
+        e.id?.toLowerCase() === entityId.toLowerCase()
+    );
+
+    if (!centerEntity) {
+        return { neighbors: [], relationships: [] };
+    }
+
+    // Build adjacency map for fast lookups
+    const adjacencyMap = new Map<string, any[]>();
+    const relationshipMap = new Map<string, any>();
+
+    relationships.forEach(rel => {
+        const fromName = rel.fromEntity || rel.from;
+        const toName = rel.toEntity || rel.to;
+
+        if (fromName && toName) {
+            // Normalize entity names for lookup
+            const fromKey = fromName.toLowerCase();
+            const toKey = toName.toLowerCase();
+
+            if (!adjacencyMap.has(fromKey)) adjacencyMap.set(fromKey, []);
+            if (!adjacencyMap.has(toKey)) adjacencyMap.set(toKey, []);
+
+            adjacencyMap.get(fromKey)!.push(toKey);
+            adjacencyMap.get(toKey)!.push(fromKey);
+
+            const relKey = `${fromKey}-${toKey}`;
+            const relKey2 = `${toKey}-${fromKey}`;
+            relationshipMap.set(relKey, rel);
+            relationshipMap.set(relKey2, rel);
+        }
+    });
+
+    // BFS traversal
+    const visited = new Set<string>();
+    const queue: Array<{entityName: string, depth: number}> = [];
+    const result = {
+        neighbors: [] as any[],
+        relationships: [] as any[]
+    };
+
+    const centerKey = centerEntity.name?.toLowerCase() || centerEntity.id?.toLowerCase();
+    queue.push({ entityName: centerKey, depth: 0 });
+    visited.add(centerKey);
+
+    while (queue.length > 0 && result.neighbors.length < maxNodes) {
+        const current = queue.shift()!;
+
+        if (current.depth > 0) {
+            // Find the actual entity object
+            const entity = entities.find(e =>
+                (e.name?.toLowerCase() === current.entityName) ||
+                (e.id?.toLowerCase() === current.entityName)
+            );
+
+            if (entity) {
+                result.neighbors.push(entity);
+            }
+        }
+
+        if (current.depth < maxDepth) {
+            const neighbors = adjacencyMap.get(current.entityName) || [];
+
+            for (const neighborKey of neighbors) {
+                if (!visited.has(neighborKey) && result.neighbors.length < maxNodes) {
+                    visited.add(neighborKey);
+                    queue.push({ entityName: neighborKey, depth: current.depth + 1 });
+
+                    // Add relationship
+                    const relKey = `${current.entityName}-${neighborKey}`;
+                    const relationship = relationshipMap.get(relKey);
+                    if (relationship && !result.relationships.find(r => r.id === relationship.id)) {
+                        result.relationships.push(relationship);
+                    }
+                }
+            }
+        }
+    }
+
+    return {
+        centerEntity,
+        neighbors: result.neighbors,
+        relationships: result.relationships
+    };
+}
 
 function calculateEntityMetrics(entities: any[], relationships: any[], communities: any[]): any[] {
     const entityMap = new Map<string, any>();

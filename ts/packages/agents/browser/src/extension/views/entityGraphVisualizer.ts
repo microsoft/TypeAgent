@@ -918,53 +918,11 @@ export class EntityGraphVisualizer {
 
         // Investigation 1: Measure zoom after fit
         const zoomAfterFit = this.cy.zoom();
-        console.log('[Investigation] Zoom after fit:', {
-            zoom: zoomAfterFit,
-            totalNodesLoaded: this.cy.nodes().length,
-            totalEdgesLoaded: this.cy.edges().length,
-            viewport: { width: this.container.offsetWidth, height: this.container.offsetHeight }
-        });
 
         // Apply initial style-based LOD immediately after fit
         console.time('[Perf] Initial style-based LOD');
         this.updateStyleBasedLOD(zoomAfterFit);
         console.timeEnd('[Perf] Initial style-based LOD');
-
-        // Schedule investigation summary after events settle
-        setTimeout(() => {
-            const investigationData = this.getInvestigationData();
-            console.log('[Investigation] Summary after 2 seconds:', investigationData.summary);
-            console.log('[Investigation] Full event sequence:', investigationData.eventSequence);
-        }, 2000);
-    }
-
-    private filterForInitialRender(globalData: any): any {
-        const MAX_INITIAL_NODES = 200;
-        const MAX_INITIAL_EDGES = 300; // Reduced from 500 to avoid dense graph
-
-        // Sort entities by importance (use degree, size, or centrality as available)
-        const sortedEntities = (globalData.entities || [])
-            .map((entity: any) => ({
-                ...entity,
-                computedImportance: (entity.importance || 0) +
-                                   (entity.degree || 0) / 100 +
-                                   (entity.size || 0) / 100
-            }))
-            .sort((a: any, b: any) => b.computedImportance - a.computedImportance)
-            .slice(0, MAX_INITIAL_NODES);
-
-        const entityIds = new Set(sortedEntities.map((e: any) => e.id));
-
-        // Only include relationships between visible entities
-        const filteredRelationships = (globalData.relationships || [])
-            .filter((r: any) => entityIds.has(r.fromEntity) && entityIds.has(r.toEntity))
-            .slice(0, MAX_INITIAL_EDGES);
-
-        return {
-            ...globalData,
-            entities: sortedEntities,
-            relationships: filteredRelationships
-        };
     }
 
     private async applyLayoutWithCache(cacheKey: string): Promise<void> {
@@ -1129,8 +1087,6 @@ export class EntityGraphVisualizer {
             // Clamp to our bounds
             newZoom = Math.max(0.25, Math.min(4.0, newZoom));
 
-            console.log(`[Smooth Zoom] ${deltaY > 0 ? 'Out' : 'In'}: ${currentZoom.toFixed(3)} → ${newZoom.toFixed(3)} (step: ${actualStep.toFixed(3)})`);
-
             // Apply smooth zoom
             this.cy.zoom({
                 level: newZoom,
@@ -1146,9 +1102,6 @@ export class EntityGraphVisualizer {
                     time: Date.now(),
                     zoom: this.cy.zoom()
                 });
-                if (this.eventSequence.length <= 20) { // Only log first 20 events to avoid spam
-                    console.log(`[Investigation] ${eventType} event, zoom: ${this.cy.zoom().toFixed(3)}`);
-                }
             });
         });
 
@@ -1178,16 +1131,16 @@ export class EntityGraphVisualizer {
 
         // Validate and clamp zoom value to reasonable bounds
         if (!isFinite(zoom)) {
-            console.error(`[Investigation] Non-finite zoom in updateStyleBasedLOD: ${zoom}`);
+            console.error(`[Zoom] Non-finite zoom in updateStyleBasedLOD: ${zoom}`);
             return; // Skip update with invalid zoom
         }
 
         // Clamp zoom to our configured bounds (0.25 - 4.0)
         if (zoom < 0.25) {
-            console.warn(`[Investigation] Zoom too low (${zoom}), clamping to 0.25`);
+            console.warn(`[Zoom] Zoom too low (${zoom}), clamping to 0.25`);
             zoom = 0.25;
         } else if (zoom > 4.0) {
-            console.warn(`[Investigation] Zoom too high (${zoom}), clamping to 4.0`);
+            console.warn(`[Zoom] Zoom too high (${zoom}), clamping to 4.0`);
             zoom = 4.0;
         }
 
@@ -1229,23 +1182,8 @@ export class EntityGraphVisualizer {
             p90: importanceValues[Math.floor(importanceValues.length * 0.9)]
         };
 
-        console.log('[Investigation] Importance Distribution:', importanceStats);
         // Calculate expected visible counts for validation
         const expectedVisibleNodes = importanceValues.filter((v: number) => v >= nodeThreshold).length;
-        const expectedVisibleEdges = Math.floor(expectedVisibleNodes * 0.8); // Rough estimate
-
-        console.log('[Investigation] Dynamic LOD Decision:', {
-            zoom: zoom.toFixed(3),
-            nodeThreshold: nodeThreshold.toFixed(4),
-            edgeThreshold: edgeThreshold.toFixed(4),
-            labelThreshold: labelZoomThreshold,
-            viewMode: this.viewMode,
-            totalNodes: this.cy.nodes().length,
-            totalEdges: this.cy.edges().length,
-            expectedVisibleNodes: expectedVisibleNodes,
-            expectedVisibleEdges: expectedVisibleEdges,
-            targetNodePercentage: ((expectedVisibleNodes / this.cy.nodes().length) * 100).toFixed(1) + '%'
-        });
 
         // Use batch for optimal performance
         this.cy.batch(() => {
@@ -1453,8 +1391,13 @@ export class EntityGraphVisualizer {
         const entityIds = new Set(sortedEntities.map((e: any) => e.id));
 
         // Filter relationships to those connecting loaded entities
+        // Support both transformed (from/to) and original (fromEntity/toEntity) field formats
         const filteredRelationships = relationships
-            .filter((r: any) => entityIds.has(r.fromEntity) && entityIds.has(r.toEntity))
+            .filter((r: any) => {
+                const fromId = r.from || r.fromEntity;
+                const toId = r.to || r.toEntity;
+                return entityIds.has(fromId) && entityIds.has(toId);
+            })
             .sort((a: any, b: any) => (b.confidence || 0.5) - (a.confidence || 0.5))
             .slice(0, maxRelationships);
 
@@ -1849,13 +1792,48 @@ export class EntityGraphVisualizer {
         // Add nodes - validate entity data
         graphData.entities.forEach((entity) => {
             if (entity.name && typeof entity.name === "string") {
+                // Calculate default visual properties to avoid Cytoscape warnings
+                const entityType = entity.type || "unknown";
+                const confidence = entity.confidence || 0.5;
+
+                // Set default colors and sizes based on entity type and confidence
+                let color = "#6C7B7F"; // Default gray
+                let size = Math.max(20, 30 + confidence * 20); // Size 20-50 based on confidence
+                let borderColor = "#4A5568"; // Default border
+
+                // Type-specific styling
+                switch (entityType) {
+                    case "concept":
+                    case "entity":
+                        color = "#4299E1"; // Blue
+                        borderColor = "#2B6CB0";
+                        break;
+                    case "website":
+                        color = "#48BB78"; // Green
+                        borderColor = "#2F855A";
+                        break;
+                    case "topic":
+                        color = "#ED8936"; // Orange
+                        borderColor = "#C05621";
+                        break;
+                    case "unknown":
+                    default:
+                        color = "#A0AEC0"; // Light gray
+                        borderColor = "#718096";
+                        break;
+                }
+
                 elements.push({
                     group: "nodes",
                     data: {
                         id: entity.name,
                         name: entity.name,
-                        type: entity.type || "unknown",
-                        confidence: entity.confidence || 0.5,
+                        type: entityType,
+                        confidence: confidence,
+                        // Add required visual data fields to prevent Cytoscape warnings
+                        color: color,
+                        size: size,
+                        borderColor: borderColor,
                     },
                 });
             } else {
@@ -1938,8 +1916,10 @@ export class EntityGraphVisualizer {
 
             // No artificial limit when data is already filtered
             globalData.relationships.forEach((rel: any) => {
-                const sourceId = rel.fromEntity;
-                const targetId = rel.toEntity;
+                // Support both transformed (from/to) and original (fromEntity/toEntity) field formats
+                const sourceId = rel.from || rel.fromEntity;
+                const targetId = rel.to || rel.toEntity;
+                const relationType = rel.type || rel.relationshipType || "related";
 
                 if (nodeIds.has(sourceId) && nodeIds.has(targetId)) {
                     elements.push({
@@ -1948,7 +1928,7 @@ export class EntityGraphVisualizer {
                             id: `${sourceId}-${targetId}`,
                             source: sourceId,
                             target: targetId,
-                            type: rel.relationshipType || "related",
+                            type: relationType,
                             strength: rel.confidence || 0.5,
                             weight: rel.count || 1
                         }

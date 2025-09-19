@@ -5,12 +5,13 @@
 import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
 import {
-    EntityGraphServices,
-    DefaultEntityGraphServices,
     ChromeExtensionService,
     createExtensionService,
-    GlobalDataLoader,
 } from "./knowledgeUtilities";
+import {
+    GraphDataProvider,
+    GraphDataProviderImpl,
+} from "./graphDataProvider.js";
 
 /**
  * Main class for the Entity Graph View page
@@ -26,7 +27,7 @@ class EntityGraphView {
     private sidebar: EntitySidebar;
     private currentEntity: string | null = null;
     private currentViewMode: ViewMode = { type: 'global' };
-    private entityGraphService: EntityGraphServices;
+    private graphDataProvider: GraphDataProvider;
 
     constructor() {
         try {
@@ -34,10 +35,9 @@ class EntityGraphView {
 
             // Initialize services with appropriate extension service based on environment
             const extensionService = createExtensionService();
-            this.entityGraphService = new DefaultEntityGraphServices(
-                extensionService,
-                () => this.loadGlobalGraphData()
-            );
+
+            // Initialize Graph data provider for direct storage access
+            this.graphDataProvider = new GraphDataProviderImpl(extensionService);
             console.log(
                 "Services initialized with Chrome extension connection",
             );
@@ -542,11 +542,6 @@ class EntityGraphView {
             console.timeEnd('[Perf] Fetch global data');
             console.log(`[Perf] Data stats: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`);
 
-            // Populate the global cache for intelligent graph extraction
-            if (globalData.statistics.totalEntities > 0) {
-                this.entityGraphService.populateGlobalCache(globalData);
-            }
-
             if (globalData.statistics.totalEntities === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
@@ -571,25 +566,60 @@ class EntityGraphView {
     }
 
     private async loadGlobalGraphData(): Promise<any> {
+        console.time('[Perf] HybridGraph global data fetch');
+        console.log('[HybridGraph] Fetching global graph data');
+
+        // Use Graph data provider for direct storage access
+        const globalGraphResult = await this.graphDataProvider.getGlobalGraphData();
+
+        console.timeEnd('[Perf] HybridGraph global data fetch');
+        console.log(`[HybridGraph] Loaded ${globalGraphResult.entities.length} entities, ${globalGraphResult.relationships.length} relationships`);
+
+        // Process communities for color assignment
+        const processedCommunities = globalGraphResult.communities.map((c: any) => ({
+            ...c,
+            entities: typeof c.entities === 'string' ? JSON.parse(c.entities || "[]") : (c.entities || []),
+            topics: typeof c.topics === 'string' ? JSON.parse(c.topics || "[]") : (c.topics || [])
+        }));
+
+        // Assign community colors to entities
+        const entitiesWithColors = this.assignCommunityColors(globalGraphResult.entities, processedCommunities);
+
+        // Return data in format expected by existing UI components
+        return {
+            communities: processedCommunities,
+            entities: entitiesWithColors,
+            relationships: globalGraphResult.relationships,
+            topics: [],
+            statistics: {
+                totalEntities: globalGraphResult.statistics.totalEntities,
+                totalRelationships: globalGraphResult.statistics.totalRelationships,
+                totalCommunities: globalGraphResult.statistics.communities
+            }
+        };
+    }
+
+    // Legacy method - kept for entity-specific views only
+    private async loadGlobalGraphDataLegacy(): Promise<any> {
         const extensionService = createExtensionService();
 
         try {
-            console.time('[Perf] Get status');
+            console.time('[Perf] Legacy - Get status');
             const status = await (extensionService as any).sendMessage({ type: "getKnowledgeGraphStatus" });
-            console.timeEnd('[Perf] Get status');
+            console.timeEnd('[Perf] Legacy - Get status');
 
             const relationships = await (extensionService as any).sendMessage({ type: "getAllRelationships" });
-            console.log(`[Perf] Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`);
+            console.log(`[Perf] Legacy - Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`);
 
-            console.time('[Perf] Get communities');
+            console.time('[Perf] Legacy - Get communities');
             const communities = await (extensionService as any).sendMessage({ type: "getAllCommunities" });
-            console.timeEnd('[Perf] Get communities');
-            console.log(`[Perf] Fetched ${Array.isArray(communities) ? communities.length : 0} communities`);
+            console.timeEnd('[Perf] Legacy - Get communities');
+            console.log(`[Perf] Legacy - Fetched ${Array.isArray(communities) ? communities.length : 0} communities`);
 
-            console.time('[Perf] Get entities with metrics');
+            console.time('[Perf] Legacy - Get entities with metrics');
             const entitiesWithMetrics = await (extensionService as any).sendMessage({ type: "getAllEntitiesWithMetrics" });
-            console.timeEnd('[Perf] Get entities with metrics');
-            console.log(`[Perf] Fetched ${Array.isArray(entitiesWithMetrics) ? entitiesWithMetrics.length : 0} entities`);
+            console.timeEnd('[Perf] Legacy - Get entities with metrics');
+            console.log(`[Perf] Legacy - Fetched ${Array.isArray(entitiesWithMetrics) ? entitiesWithMetrics.length : 0} entities`);
 
             const processedCommunities = Array.isArray(communities) ? communities.map((c: any) => ({
                 ...c,
@@ -611,7 +641,7 @@ class EntityGraphView {
                 }
             };
         } catch (error) {
-            console.error("Failed to load global graph data:", error);
+            console.error("Failed to load global graph data (legacy fallback):", error);
             return {
                 communities: [],
                 entities: [],
@@ -764,11 +794,73 @@ class EntityGraphView {
             console.log(`Getting entity graph for: ${entityName} depth: 8`);
 
             console.time('[Perf] Entity graph data fetch');
-            // Load entity graph
-            const graphData = await this.entityGraphService.getEntityGraph(
-                entityName,
-                4,
-            );
+            // Load entity graph using HybridGraph data provider
+            let graphData;
+            try {
+                console.log(`[HybridGraph Migration] Using Graph data provider for entity "${entityName}" neighborhood`);
+                const neighborhoodResult = await this.graphDataProvider.getEntityNeighborhood(entityName, 4, 100);
+
+                // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
+                console.time('[Perf] Entity View - Search enrichment data');
+                let searchData: any = null;
+                try {
+                    const extensionService = createExtensionService();
+                    searchData = await (extensionService as any).searchByEntities([entityName], "", 10);
+                    console.timeEnd('[Perf] Entity View - Search enrichment data');
+                    console.log(`[HybridGraph Migration] Fetched search enrichment data: ${searchData?.websites?.length || 0} websites, ${searchData?.topTopics?.length || 0} topics`);
+                } catch (searchError) {
+                    console.timeEnd('[Perf] Entity View - Search enrichment data');
+                    console.warn(`[HybridGraph Migration] Could not fetch search enrichment data:`, searchError);
+                }
+
+                // Transform HybridGraph result to expected format with enrichment
+                console.time('[Perf] Entity View - Combine graph and search data');
+                graphData = {
+                    centerEntity: neighborhoodResult.centerEntity.name,
+                    entities: [neighborhoodResult.centerEntity, ...neighborhoodResult.neighbors],
+                    relationships: neighborhoodResult.relationships,
+                    relatedEntities: neighborhoodResult.neighbors,
+                    topTopics: searchData?.topTopics || [],
+                    summary: searchData?.summary || null,
+                    metadata: {
+                        ...neighborhoodResult.metadata,
+                        ...(searchData?.metadata || {})
+                    },
+                    answerSources: searchData?.answerSources || []
+                };
+
+                // Enrich center entity with search data if available
+                if (searchData?.websites?.length > 0 && graphData.entities.length > 0) {
+                    const firstWebsite = searchData.websites[0];
+                    // Add enrichment data as properties to avoid TypeScript errors
+                    const enrichedEntity: any = {
+                        ...graphData.entities[0],
+                        properties: {
+                            ...(graphData.entities[0].properties || {}),
+                            facets: firstWebsite.facets || [],
+                            aliases: firstWebsite.aliases || [],
+                            description: firstWebsite.description,
+                            url: firstWebsite.url,
+                            domains: firstWebsite.domains || []
+                        }
+                    };
+                    graphData.entities[0] = enrichedEntity;
+                }
+                console.timeEnd('[Perf] Entity View - Combine graph and search data');
+
+                console.log(`[HybridGraph Migration] Entity neighborhood loaded: ${graphData.entities.length} entities, ${graphData.relationships.length} relationships, ${graphData.topTopics?.length || 0} topics`);
+            } catch (error) {
+                console.error(`[HybridGraph Migration] Failed to load entity neighborhood for "${entityName}":`, error);
+                // Return empty graph data on error
+                graphData = {
+                    centerEntity: entityName,
+                    entities: [],
+                    relationships: [],
+                    relatedEntities: [],
+                    topTopics: [],
+                    metadata: { error: error instanceof Error ? error.message : "Unknown error" }
+                };
+            }
             console.timeEnd('[Perf] Entity graph data fetch');
             console.log(`[Perf] Entity data: ${graphData.entities?.length || 0} entities, ${graphData.relationships?.length || 0} relationships`);
 
@@ -779,7 +871,7 @@ class EntityGraphView {
             if (graphData.entities && graphData.entities.length > 0) {
                 console.log("Expanding graph with related entities...");
 
-                console.time('[Perf] Entity data processing');
+                console.time('[Perf] Entity View - Data processing and validation');
                 // Process and validate the relationships data
                 const validRelationships =
                     graphData.relationships?.filter((r: any) => {
@@ -872,9 +964,9 @@ class EntityGraphView {
                 const relationshipSet = new Set();
 
                 for (const r of validRelationships) {
-                    const from = r.from || r.relatedEntity || "Unknown";
+                    const from = r.from || (r as any).relatedEntity || "Unknown";
                     const to = r.to || graphData.centerEntity || "Unknown";
-                    const type = r.relationshipType || r.type || "related";
+                    const type = r.type || (r as any).relationshipType || "related";
 
                     // Check if both entities exist in the graph
                     if (!entityNames.has(from)) {
@@ -952,16 +1044,16 @@ class EntityGraphView {
                 console.log(
                     `Entity types: websites=${graphData.entities.length}, related=${graphData.relatedEntities?.length || 0}, topics=${graphData.topTopics?.length || 0}`,
                 );
-                console.timeEnd('[Perf] Entity data processing');
+                console.timeEnd('[Perf] Entity View - Data processing and validation');
 
-                console.time('[Perf] Entity graph visualization');
+                console.time('[Perf] Entity View - Graph visualization');
                 // Load the graph into the visualizer
                 await this.visualizer.loadEntityGraph({
                     centerEntity: graphData.centerEntity,
                     entities: allEntities,
                     relationships: validatedRelationships,
                 }, graphData.centerEntity);
-                console.timeEnd('[Perf] Entity graph visualization');
+                console.timeEnd('[Perf] Entity View - Graph visualization');
 
                 // Find the center entity from allEntities (should be first)
                 const centerEntityFromGraph =
@@ -983,8 +1075,8 @@ class EntityGraphView {
                         ) ||
                         0.8,
                     source: "graph",
-                    // Include facets from the entity if available
-                    facets: centerEntityFromGraph?.facets || [],
+                    // Include facets from the entity properties if available
+                    facets: centerEntityFromGraph?.properties?.facets || (centerEntityFromGraph as any)?.facets || [],
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
                     metadata: graphData.metadata,
@@ -1036,14 +1128,13 @@ class EntityGraphView {
             console.log(`Searching for real entity: ${query}`);
             this.showMessage(`Searching for "${query}"...`, "info");
 
-            const searchResults = await this.entityGraphService.searchByEntity(
-                query,
-                {
-                    maxResults: 10,
-                    includeRelationships: true,
-                    sortBy: "relevance",
-                },
-            );
+            // Use direct entity neighborhood query for search
+            const neighborhoodResult = await this.graphDataProvider.getEntityNeighborhood(query, 2, 10);
+            const searchResults = {
+                entities: neighborhoodResult.neighbors.length > 0 ?
+                    [{ name: query }, ...neighborhoodResult.neighbors.slice(0, 9)] :
+                    [{ name: query }]
+            };
 
             if (searchResults.entities && searchResults.entities.length > 0) {
                 console.log(
@@ -1086,11 +1177,10 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Refresh data
-            const refreshedEntity =
-                await this.entityGraphService.refreshEntityData(entityName);
+            // Refresh data by re-fetching entity neighborhood
+            const refreshedEntity = await this.graphDataProvider.getEntityNeighborhood(entityName, 4, 100);
 
-            if (refreshedEntity) {
+            if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
                 await this.loadRealEntityData(entityName);
                 this.showMessage(`Refreshed data for ${entityName}`, "success");
             } else {
