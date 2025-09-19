@@ -1186,7 +1186,15 @@ async function processBrowserAgentMessage(
         case "getAnalyticsData":
         case "getDiscoverInsights":
         case "getKnowledgeIndexStats":
-        case "clearKnowledgeIndex": {
+        case "clearKnowledgeIndex":
+        case "getKnowledgeGraphStatus":
+        case "buildKnowledgeGraph":
+        case "rebuildKnowledgeGraph":
+        case "getAllRelationships":
+        case "getAllCommunities":
+        case "getAllEntitiesWithMetrics":
+        case "getEntityNeighborhood":
+        case "getEntityGraphFast": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,
                 data.params,
