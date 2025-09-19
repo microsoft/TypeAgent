@@ -9,10 +9,14 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisp
 {
     SqliteDatabase _db;
 
-    public SqliteStorageProvider(string dbPath)
+    public SqliteStorageProvider(string dbPath, bool createNew = false)
     {
-        _db = new SqliteDatabase(dbPath);
+        _db = new SqliteDatabase(dbPath, createNew);
         ConfigureDatabase();
+        if (createNew)
+        {
+            InitSchema();
+        }
     }
 
     public Task<IMessageCollection<TMessage>> GetMessageCollectionAsync()
@@ -23,6 +27,13 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisp
     public Task<ISemanticRefCollection> GetSemanticRefCollection()
     {
         throw new NotImplementedException();
+    }
+
+    public void InitSchema()
+    {
+        _db.Execute(Schema.ConversationMetadataSchema);
+        _db.Execute(Schema.MessagesSchema);
+        _db.Execute(Schema.SemanticRefsSchema);
     }
 
     public void Dispose()
@@ -47,13 +58,6 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisp
         // Improve write performance for bulk operations
         this._db.Execute("PRAGMA synchronous = NORMAL"); // Faster than FULL, still safe
         this._db.Execute("PRAGMA journal_mode = WAL");  // Write-Ahead Logging for better concurrency
-    }
-
-    void InitSchema()
-    {
-        _db.Execute(Schema.ConversationMetadataSchema);
-        _db.Execute(Schema.MessagesSchema);
-        _db.Execute(Schema.SemanticRefsSchema);
     }
 
     public static class Schema

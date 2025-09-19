@@ -7,9 +7,14 @@ public class SqliteDatabase : IDisposable
 {
     SqliteConnection _connection;
 
-    public SqliteDatabase(string filePath)
+    public SqliteDatabase(string filePath, bool createNew = false)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(filePath, nameof(filePath));
+
+        if (createNew)
+        {
+            DeleteDatabase(filePath);
+        }
         _connection = new SqliteConnection(ConnectionString(filePath));
         _connection.Open();
     }
