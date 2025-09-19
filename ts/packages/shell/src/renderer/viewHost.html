@@ -196,6 +196,20 @@
     <div class="header" id="header">
       <!-- Browser navigation controls -->
       <div class="browser-nav">
+        <button class="nav-button" id="layout-toggle-btn" title="Toggle Layout">
+          <svg width="14" height="14" viewBox="0 0 16 16" id="layout-icon">
+            <!-- Side panel icon (default) -->
+            <g id="side-panel-icon">
+              <rect x="1" y="2" width="6" height="12" fill="currentColor" stroke="currentColor" stroke-width="0.5"/>
+              <rect x="9" y="2" width="6" height="12" fill="none" stroke="currentColor" stroke-width="0.5"/>
+            </g>
+            <!-- Bottom panel icon (hidden by default) -->
+            <g id="bottom-panel-icon" style="display: none;">
+              <rect x="1" y="2" width="14" height="5" fill="currentColor" stroke="currentColor" stroke-width="0.5"/>
+              <rect x="1" y="9" width="14" height="5" fill="none" stroke="currentColor" stroke-width="0.5"/>
+            </g>
+          </svg>
+        </button>
         <button class="nav-button" id="back-btn" title="Back" disabled>
           <i class="fas fa-arrow-left"></i>
         </button>
@@ -232,6 +246,9 @@
       const forwardBtn = document.getElementById("forward-btn");
       const reloadBtn = document.getElementById("reload-btn");
       const addTabBtn = document.getElementById("add-tab-btn");
+      const layoutToggleBtn = document.getElementById("layout-toggle-btn");
+      const sidePanelIcon = document.getElementById("side-panel-icon");
+      const bottomPanelIcon = document.getElementById("bottom-panel-icon");
 
       // State
       let isDragging = false;
@@ -280,6 +297,10 @@
 
       addTabBtn.addEventListener("click", () => {
         ipcRenderer.send("browser-new-tab");
+      });
+
+      layoutToggleBtn.addEventListener("click", () => {
+        ipcRenderer.send("toggle-layout");
       });
 
       // Tab management functions
@@ -342,12 +363,33 @@
 
       function updateHeaderVisibility() {
         const hasBrowserContent = tabs.length > 0;
-        header.classList.toggle("visible", hasBrowserContent);
+        // Always show header for layout toggle button
+        header.classList.add("visible");
+        // Hide browser-specific controls when no tabs
+        backBtn.style.display = hasBrowserContent ? 'flex' : 'none';
+        forwardBtn.style.display = hasBrowserContent ? 'flex' : 'none';
+        reloadBtn.style.display = hasBrowserContent ? 'flex' : 'none';
+        addTabBtn.style.display = hasBrowserContent ? 'flex' : 'none';
+        tabBar.style.display = hasBrowserContent ? 'flex' : 'none';
       }
 
       function updateNavigationState(navigationState) {
         backBtn.disabled = !navigationState.canGoBack;
         forwardBtn.disabled = !navigationState.canGoForward;
+      }
+
+      function updateLayoutIcon() {
+        if (verticalLayout) {
+          // Vertical layout: chat at bottom, show side panel icon
+          sidePanelIcon.style.display = 'block';
+          bottomPanelIcon.style.display = 'none';
+          layoutToggleBtn.title = 'Switch to side layout';
+        } else {
+          // Horizontal layout: chat at side, show bottom panel icon  
+          sidePanelIcon.style.display = 'none';
+          bottomPanelIcon.style.display = 'block';
+          layoutToggleBtn.title = 'Switch to bottom layout';
+        }
       }
 
       // IPC handlers
@@ -358,30 +400,33 @@
           const newY = layout.pos;
           if (newY < 0) {
             dividerHorizontal.style.visibility = "hidden";
-            header.classList.remove("visible");
+            // Keep header visible for layout toggle, but hide browser controls
+            header.classList.add("visible");
+            updateHeaderVisibility();
           } else {
             dividerHorizontal.style.top = `${newY}px`;
             dividerHorizontal.style.visibility = "visible";
             header.style.left = "0px";
-            if (tabs.length > 0) {
-              header.classList.add("visible");
-            }
+            header.classList.add("visible");
+            updateHeaderVisibility();
           }
         } else {
           dividerHorizontal.style.visibility = "hidden";
           const newX = layout.pos;
           if (newX < 0) {
             dividerVertical.style.visibility = "hidden";
-            header.classList.remove("visible");
+            // Keep header visible for layout toggle, but hide browser controls
+            header.classList.add("visible");
+            updateHeaderVisibility();
           } else {
             dividerVertical.style.left = `${newX}px`;
             dividerVertical.style.visibility = "visible";
             header.style.left = `${newX + 5}px`; // Position header just after divider
-            if (tabs.length > 0) {
-              header.classList.add("visible");
-            }
+            header.classList.add("visible");
+            updateHeaderVisibility();
           }
         }
+        updateLayoutIcon();
       });
 
       // Tab management IPC handlers
@@ -403,6 +448,12 @@
 
       ipcRenderer.on("browser-tab-closed", (_, tabId) => {
         document.querySelector(`div.tab[data-tab-id="${tabId}"]`)?.remove();
+      });
+
+      // Initialize layout icon on page load
+      document.addEventListener('DOMContentLoaded', () => {
+        updateLayoutIcon();
+        updateHeaderVisibility();
       });
     </script>
   </body>

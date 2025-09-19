@@ -237,6 +237,15 @@ async function initialize() {
         shellWindow?.updateContentSize(newPos);
     });
 
+    ipcMain.on("toggle-layout", (event) => {
+        const shellWindow = getShellWindowForMainWindowIpcEvent(event);
+        if (shellWindow) {
+            // Toggle the verticalLayout setting
+            const currentLayout = shellWindow.getUserSettings().ui.verticalLayout;
+            shellWindow.setUserSettingValue("ui.verticalLayout", !currentLayout);
+        }
+    });
+
     ipcMain.on("open-image-file", async (event) => {
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
         if (!shellWindow) return;
