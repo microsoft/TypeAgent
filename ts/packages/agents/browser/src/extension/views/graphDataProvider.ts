@@ -96,21 +96,21 @@ class GraphDataProviderImpl implements GraphDataProvider {
         console.log('[GraphDataProvider] Fetching global graph data using existing backend APIs');
 
         try {
-            // Use existing backend APIs (from the working legacy approach)
+            // Use proper service methods instead of direct sendMessage calls
             console.time('[GraphDataProvider] Get status');
-            const status = await this.baseService.sendMessage({ type: "getKnowledgeGraphStatus" });
+            const status = await this.baseService.getKnowledgeGraphStatus();
             console.timeEnd('[GraphDataProvider] Get status');
 
-            const relationships = await this.baseService.sendMessage({ type: "getAllRelationships" });
+            const relationships = await this.baseService.getAllRelationships();
             console.log(`[GraphDataProvider] Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`);
 
             console.time('[GraphDataProvider] Get communities');
-            const communities = await this.baseService.sendMessage({ type: "getAllCommunities" });
+            const communities = await this.baseService.getAllCommunities();
             console.timeEnd('[GraphDataProvider] Get communities');
             console.log(`[GraphDataProvider] Fetched ${Array.isArray(communities) ? communities.length : 0} communities`);
 
             console.time('[GraphDataProvider] Get entities with metrics');
-            const entitiesWithMetrics = await this.baseService.sendMessage({ type: "getAllEntitiesWithMetrics" });
+            const entitiesWithMetrics = await this.baseService.getAllEntitiesWithMetrics();
             console.timeEnd('[GraphDataProvider] Get entities with metrics');
             console.log(`[GraphDataProvider] Fetched ${Array.isArray(entitiesWithMetrics) ? entitiesWithMetrics.length : 0} entities`);
 
@@ -168,14 +168,9 @@ class GraphDataProviderImpl implements GraphDataProvider {
         console.log(`[GraphDataProvider] Fetching neighborhood for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`);
 
         try {
-            // Use the new backend API for efficient neighborhood retrieval
+            // Use the proper service method for efficient neighborhood retrieval
             console.time('[Perf] HybridGraph - Fetch neighborhood data');
-            const neighborhoodData = await this.baseService.sendMessage({
-                type: "getEntityNeighborhood",
-                entityId: entityId,
-                depth: depth,
-                maxNodes: maxNodes
-            });
+            const neighborhoodData = await this.baseService.getEntityNeighborhood(entityId, depth, maxNodes);
             console.timeEnd('[Perf] HybridGraph - Fetch neighborhood data');
 
             if (!neighborhoodData || neighborhoodData.error) {
@@ -256,8 +251,8 @@ class GraphDataProviderImpl implements GraphDataProvider {
         console.log('[GraphDataProvider] Fetching graph statistics using existing backend APIs');
 
         try {
-            // Use existing status API (same as global graph data)
-            const status = await this.baseService.sendMessage({ type: "getKnowledgeGraphStatus" });
+            // Use proper service method for graph status
+            const status = await this.baseService.getKnowledgeGraphStatus();
 
             if (!status) {
                 throw new Error('No statistics received from backend status API');
@@ -286,10 +281,8 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async validateConnection(): Promise<boolean> {
         try {
-            // Use existing status API to validate connection
-            const status = await this.baseService.sendMessage({
-                type: "getKnowledgeGraphStatus"
-            });
+            // Use proper service method to validate connection
+            const status = await this.baseService.getKnowledgeGraphStatus();
             return !!status; // Return true if we get any response
         } catch (error) {
             console.error('[GraphDataProvider] Connection validation failed:', error);

@@ -1007,7 +1007,7 @@ export async function handleMessage(
                     parameters: {},
                 });
 
-                return result.relationships || [];
+                return result;
             } catch (error) {
                 console.error("Error getting all relationships:", error);
                 return [];
@@ -1021,7 +1021,7 @@ export async function handleMessage(
                     parameters: {},
                 });
 
-                return result.communities || [];
+                return result;
             } catch (error) {
                 console.error("Error getting all communities:", error);
                 return [];
@@ -1035,7 +1035,7 @@ export async function handleMessage(
                     parameters: {},
                 });
 
-                return result.entities || [];
+                return result;
             } catch (error) {
                 console.error("Error getting all entities with metrics:", error);
                 return [];
@@ -1053,14 +1053,7 @@ export async function handleMessage(
                     },
                 });
 
-                 return {
-                    centerEntity: result.centerEntity,
-                    neighbors: result.neighbors,
-                    relationships: result.relationships,
-                    searchData: result.searchData,
-                    metadata: result.metadata,
-                    error: result.error,
-                };
+                 return result;
 
             } catch (error) {
                 console.error("Error getting entity neighborhood:", error);

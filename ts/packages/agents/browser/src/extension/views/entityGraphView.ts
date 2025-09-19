@@ -599,63 +599,6 @@ class EntityGraphView {
         };
     }
 
-    // Legacy method - kept for entity-specific views only
-    private async loadGlobalGraphDataLegacy(): Promise<any> {
-        const extensionService = createExtensionService();
-
-        try {
-            console.time('[Perf] Legacy - Get status');
-            const status = await (extensionService as any).sendMessage({ type: "getKnowledgeGraphStatus" });
-            console.timeEnd('[Perf] Legacy - Get status');
-
-            const relationships = await (extensionService as any).sendMessage({ type: "getAllRelationships" });
-            console.log(`[Perf] Legacy - Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`);
-
-            console.time('[Perf] Legacy - Get communities');
-            const communities = await (extensionService as any).sendMessage({ type: "getAllCommunities" });
-            console.timeEnd('[Perf] Legacy - Get communities');
-            console.log(`[Perf] Legacy - Fetched ${Array.isArray(communities) ? communities.length : 0} communities`);
-
-            console.time('[Perf] Legacy - Get entities with metrics');
-            const entitiesWithMetrics = await (extensionService as any).sendMessage({ type: "getAllEntitiesWithMetrics" });
-            console.timeEnd('[Perf] Legacy - Get entities with metrics');
-            console.log(`[Perf] Legacy - Fetched ${Array.isArray(entitiesWithMetrics) ? entitiesWithMetrics.length : 0} entities`);
-
-            const processedCommunities = Array.isArray(communities) ? communities.map((c: any) => ({
-                ...c,
-                entities: typeof c.entities === 'string' ? JSON.parse(c.entities || "[]") : (c.entities || []),
-                topics: typeof c.topics === 'string' ? JSON.parse(c.topics || "[]") : (c.topics || [])
-            })) : [];
-
-            const entitiesWithColors = this.assignCommunityColors(entitiesWithMetrics || [], processedCommunities);
-
-            return {
-                communities: processedCommunities,
-                entities: entitiesWithColors,
-                relationships: Array.isArray(relationships) ? relationships : [],
-                topics: [],
-                statistics: {
-                    totalEntities: status?.entityCount || 0,
-                    totalRelationships: status?.relationshipCount || 0,
-                    totalCommunities: status?.communityCount || 0
-                }
-            };
-        } catch (error) {
-            console.error("Failed to load global graph data (legacy fallback):", error);
-            return {
-                communities: [],
-                entities: [],
-                relationships: [],
-                topics: [],
-                statistics: {
-                    totalEntities: 0,
-                    totalRelationships: 0,
-                    totalCommunities: 0
-                }
-            };
-        }
-    }
-
     private assignCommunityColors(entities: any[], communities: any[]): any[] {
         const communityColors = [
             '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
