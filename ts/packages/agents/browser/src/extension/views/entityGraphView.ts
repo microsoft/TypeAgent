@@ -734,7 +734,7 @@ class EntityGraphView {
         try {
             console.time('[Perf] Total entity view load');
             this.showGraphLoading();
-            console.log(`Getting entity graph for: ${entityName} depth: 8`);
+            console.log(`Getting entity graph for: ${entityName}`);
 
             console.time('[Perf] Entity graph data fetch');
             // Load entity graph using HybridGraph data provider
@@ -746,6 +746,7 @@ class EntityGraphView {
                 // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
                 console.time('[Perf] Entity View - Search enrichment data');
                 let searchData: any = null;
+
                 try {
                     const extensionService = createExtensionService();
                     searchData = await (extensionService as any).searchByEntities([entityName], "", 10);
@@ -912,29 +913,13 @@ class EntityGraphView {
                     const type = r.type || (r as any).relationshipType || "related";
 
                     // Check if both entities exist in the graph
-                    if (!entityNames.has(from)) {
-                        console.warn(
-                            `Dropping relationship - 'from' entity not found in graph:`,
-                            from,
-                        );
-                        continue;
-                    }
-                    if (!entityNames.has(to)) {
-                        console.warn(
-                            `Dropping relationship - 'to' entity not found in graph:`,
-                            to,
-                        );
+                    if (!entityNames.has(from) || !entityNames.has(to)) {
                         continue;
                     }
 
                     // Create unique key for deduplication
                     const relationshipKey = `${from}:${to}:${type}`;
                     if (relationshipSet.has(relationshipKey)) {
-                        console.warn(`Dropping duplicate relationship:`, {
-                            from,
-                            to,
-                            type,
-                        });
                         continue;
                     }
 

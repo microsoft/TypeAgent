@@ -3126,7 +3126,7 @@ export async function getKnowledgeGraphStatus(
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
-            debug("website collection not found")
+            debug("website collection not found");
             return {
                 hasGraph: false,
                 entityCount: 0,
@@ -3138,7 +3138,10 @@ export async function getKnowledgeGraphStatus(
         }
 
         // Check if relationships and communities tables exist
-        if (!websiteCollection.relationships || !websiteCollection.communities) {
+        if (
+            !websiteCollection.relationships ||
+            !websiteCollection.communities
+        ) {
             // Tables not initialized, no graph exists
             return {
                 hasGraph: false,
@@ -3153,16 +3156,19 @@ export async function getKnowledgeGraphStatus(
         let entityCount = 0;
         try {
             if (websiteCollection.knowledgeEntities) {
-                entityCount = (websiteCollection.knowledgeEntities as any).getTotalEntityCount();
+                entityCount = (
+                    websiteCollection.knowledgeEntities as any
+                ).getTotalEntityCount();
             }
         } catch (error) {
             console.warn("Failed to get entity count:", error);
         }
 
-        // Get relationship count  
+        // Get relationship count
         let relationshipCount = 0;
         try {
-            const relationships = websiteCollection.relationships.getAllRelationships();
+            const relationships =
+                websiteCollection.relationships.getAllRelationships();
             relationshipCount = relationships.length;
         } catch (error) {
             console.warn("Failed to get relationship count:", error);
@@ -3171,7 +3177,8 @@ export async function getKnowledgeGraphStatus(
         // Get community count
         let communityCount = 0;
         try {
-            const communities = websiteCollection.communities.getAllCommunities();
+            const communities =
+                websiteCollection.communities.getAllCommunities();
             communityCount = communities.length;
         } catch (error) {
             console.warn("Failed to get community count:", error);
@@ -3228,7 +3235,10 @@ export async function buildKnowledgeGraph(
             };
         }
 
-        console.log("[Knowledge Graph] Starting knowledge graph build with parameters:", parameters);
+        console.log(
+            "[Knowledge Graph] Starting knowledge graph build with parameters:",
+            parameters,
+        );
         const startTime = Date.now();
 
         // TODO: Implement actual graph building logic here
@@ -3330,8 +3340,9 @@ export async function getAllRelationships(
             };
         }
 
-        const relationships = websiteCollection.relationships?.getAllRelationships() || [];
-        
+        const relationships =
+            websiteCollection.relationships?.getAllRelationships() || [];
+
         return {
             relationships: relationships,
         };
@@ -3361,8 +3372,9 @@ export async function getAllCommunities(
             };
         }
 
-        const communities = websiteCollection.communities?.getAllCommunities() || [];
-        
+        const communities =
+            websiteCollection.communities?.getAllCommunities() || [];
+
         return {
             communities: communities,
         };
@@ -3400,8 +3412,8 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
     const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
     // Check if cache is valid
-    if (cache && cache.isValid && (Date.now() - cache.lastUpdated) < CACHE_TTL) {
-        console.log("[Knowledge Graph] Using valid cached graph data");
+    if (cache && cache.isValid && Date.now() - cache.lastUpdated < CACHE_TTL) {
+        debug("[Knowledge Graph] Using valid cached graph data");
         return;
     }
 
@@ -3409,12 +3421,21 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
 
     try {
         // Fetch raw data
-        const entities = (websiteCollection.knowledgeEntities as any)?.getTopEntities(5000) || [];
-        const relationships = websiteCollection.relationships?.getAllRelationships() || [];
-        const communities = websiteCollection.communities?.getAllCommunities() || [];
+        const entities =
+            (websiteCollection.knowledgeEntities as any)?.getTopEntities(
+                5000,
+            ) || [];
+        const relationships =
+            websiteCollection.relationships?.getAllRelationships() || [];
+        const communities =
+            websiteCollection.communities?.getAllCommunities() || [];
 
         // Calculate metrics
-        const entityMetrics = calculateEntityMetrics(entities, relationships, communities);
+        const entityMetrics = calculateEntityMetrics(
+            entities,
+            relationships,
+            communities,
+        );
 
         // Store in cache
         const newCache: GraphCache = {
@@ -3423,13 +3444,14 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
             communities: communities,
             entityMetrics: entityMetrics,
             lastUpdated: Date.now(),
-            isValid: true
+            isValid: true,
         };
 
         setGraphCache(websiteCollection, newCache);
 
-        debug(`[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`);
-
+        debug(
+            `[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`,
+        );
     } catch (error) {
         console.error("[Knowledge Graph] Failed to build cache:", error);
 
@@ -3464,19 +3486,32 @@ export async function getAllEntitiesWithMetrics(
         // Get cached data
         const cache = getGraphCache(websiteCollection);
         if (cache && cache.isValid && cache.entityMetrics.length > 0) {
-            debug(`[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`);
+            debug(
+                `[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`,
+            );
             return {
                 entities: cache.entityMetrics,
             };
         }
 
         // Fallback to live computation if no cache
-        console.log("[Knowledge Graph] Cache not available, computing entities with metrics");
-        const entities = (websiteCollection.knowledgeEntities as any)?.getTopEntities(5000) || [];
-        const relationships = websiteCollection.relationships?.getAllRelationships() || [];
-        const communities = websiteCollection.communities?.getAllCommunities() || [];
+        console.log(
+            "[Knowledge Graph] Cache not available, computing entities with metrics",
+        );
+        const entities =
+            (websiteCollection.knowledgeEntities as any)?.getTopEntities(
+                5000,
+            ) || [];
+        const relationships =
+            websiteCollection.relationships?.getAllRelationships() || [];
+        const communities =
+            websiteCollection.communities?.getAllCommunities() || [];
 
-        const entityMetrics = calculateEntityMetrics(entities, relationships, communities);
+        const entityMetrics = calculateEntityMetrics(
+            entities,
+            relationships,
+            communities,
+        );
 
         return {
             entities: entityMetrics,
@@ -3531,39 +3566,92 @@ export async function getEntityNeighborhood(
             };
         }
 
-        debug(`[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`);
+        debug(
+            `[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
+        );
 
         // Perform BFS to find neighborhood
-        const neighborhoodResult = performBFS(entityId, cache.entityMetrics, cache.relationships, depth, maxNodes);
+        const neighborhoodResult = performBFS(
+            entityId,
+            cache.entityMetrics,
+            cache.relationships,
+            depth,
+            maxNodes,
+        );
 
         if (!neighborhoodResult.centerEntity) {
-            return {
-                neighbors: [],
-                relationships: [],
-                error: `Entity "${entityId}" not found`,
-            };
+            const searchNeibhbors = await searchByEntities(
+                { entities: [entityId], maxResults: 20 },
+                context,
+            );
+
+            if (
+                searchNeibhbors 
+            ) {
+                return {
+                    centerEntity: {
+                        id: entityId,
+                        name: entityId,
+                        type: "entity",
+                        confidence: 0.5,
+                        count: 1,
+                    },
+                    neighbors: searchNeibhbors.relatedEntities || [],
+                    relationships: [],
+                    searchData: {
+                        relatedEntities: searchNeibhbors?.relatedEntities || [],
+                        topTopics: searchNeibhbors?.topTopics || [],
+                        websites: searchNeibhbors?.websites || [],
+                    },
+                    metadata: {
+                        source: "in_memory_cache",
+                        queryDepth: depth,
+                        maxNodes: maxNodes,
+                        actualNodes:
+                            (searchNeibhbors?.relatedEntities?.length || 0) + 1,
+                        actualEdges: 0,
+                        searchEnrichment: {
+                            relatedEntities:
+                                searchNeibhbors?.relatedEntities?.length || 0,
+                            topTopics: searchNeibhbors?.topTopics?.length || 0,
+                            websites: searchNeibhbors?.websites?.length || 0,
+                        },
+                    },
+                };
+            } else {
+                return {
+                    neighbors: [],
+                    relationships: [],
+                    error: `Entity "${entityId}" not found`,
+                };
+            }
         }
 
         // Get search enrichment for topics and related entities
         let searchData: any = null;
         try {
-const searchResults = await searchByEntities(
+            const searchResults = await searchByEntities(
                 { entities: [entityId], maxResults: 20 },
-                context
+                context,
             );
-
 
             if (searchResults) {
                 searchData = {
                     websites: searchResults.websites?.slice(0, 15) || [],
-                    relatedEntities: searchResults.relatedEntities?.slice(0, 15) || [],
-                    topTopics: searchResults.topTopics?.slice(0, 10) || []
+                    relatedEntities:
+                        searchResults.relatedEntities?.slice(0, 15) || [],
+                    topTopics: searchResults.topTopics?.slice(0, 10) || [],
                 };
 
-                debug(`[Knowledge Graph] Search enrichment found: ${searchData.websites.length} websites, ${searchData.relatedEntities.length} related entities, ${searchData.topTopics.length} topics`);
+                debug(
+                    `[Knowledge Graph] Search enrichment found: ${searchData.websites.length} websites, ${searchData.relatedEntities.length} related entities, ${searchData.topTopics.length} topics`,
+                );
             }
         } catch (searchError) {
-            console.warn(`[Knowledge Graph] Search enrichment failed:`, searchError);
+            console.warn(
+                `[Knowledge Graph] Search enrichment failed:`,
+                searchError,
+            );
         }
 
         return {
@@ -3573,10 +3661,10 @@ const searchResults = await searchByEntities(
             searchData: {
                 relatedEntities: searchData?.relatedEntities || [],
                 topTopics: searchData?.topTopics || [],
-                websites: searchData?.websites || []
+                websites: searchData?.websites || [],
             },
             metadata: {
-                source: 'in_memory_cache',
+                source: "in_memory_cache",
                 queryDepth: depth,
                 maxNodes: maxNodes,
                 actualNodes: neighborhoodResult.neighbors.length + 1,
@@ -3584,11 +3672,10 @@ const searchResults = await searchByEntities(
                 searchEnrichment: {
                     relatedEntities: searchData?.relatedEntities?.length || 0,
                     topTopics: searchData?.topTopics?.length || 0,
-                    websites: searchData?.websites?.length || 0
-                }
-            }
+                    websites: searchData?.websites?.length || 0,
+                },
+            },
         };
-
     } catch (error) {
         console.error("Error getting entity neighborhood:", error);
         return {
@@ -3605,16 +3692,17 @@ function performBFS(
     entities: any[],
     relationships: any[],
     maxDepth: number,
-    maxNodes: number
+    maxNodes: number,
 ): {
     centerEntity?: any;
     neighbors: any[];
     relationships: any[];
 } {
     // Find center entity (case insensitive)
-    const centerEntity = entities.find(e =>
-        e.name?.toLowerCase() === entityId.toLowerCase() ||
-        e.id?.toLowerCase() === entityId.toLowerCase()
+    const centerEntity = entities.find(
+        (e) =>
+            e.name?.toLowerCase() === entityId.toLowerCase() ||
+            e.id?.toLowerCase() === entityId.toLowerCase(),
     );
 
     if (!centerEntity) {
@@ -3625,7 +3713,7 @@ function performBFS(
     const adjacencyMap = new Map<string, any[]>();
     const relationshipMap = new Map<string, any>();
 
-    relationships.forEach(rel => {
+    relationships.forEach((rel) => {
         const fromName = rel.fromEntity || rel.from;
         const toName = rel.toEntity || rel.to;
 
@@ -3649,13 +3737,14 @@ function performBFS(
 
     // BFS traversal
     const visited = new Set<string>();
-    const queue: Array<{entityName: string, depth: number}> = [];
+    const queue: Array<{ entityName: string; depth: number }> = [];
     const result = {
         neighbors: [] as any[],
-        relationships: [] as any[]
+        relationships: [] as any[],
     };
 
-    const centerKey = centerEntity.name?.toLowerCase() || centerEntity.id?.toLowerCase();
+    const centerKey =
+        centerEntity.name?.toLowerCase() || centerEntity.id?.toLowerCase();
     queue.push({ entityName: centerKey, depth: 0 });
     visited.add(centerKey);
 
@@ -3664,9 +3753,10 @@ function performBFS(
 
         if (current.depth > 0) {
             // Find the actual entity object
-            const entity = entities.find(e =>
-                (e.name?.toLowerCase() === current.entityName) ||
-                (e.id?.toLowerCase() === current.entityName)
+            const entity = entities.find(
+                (e) =>
+                    e.name?.toLowerCase() === current.entityName ||
+                    e.id?.toLowerCase() === current.entityName,
             );
 
             if (entity) {
@@ -3678,14 +3768,25 @@ function performBFS(
             const neighbors = adjacencyMap.get(current.entityName) || [];
 
             for (const neighborKey of neighbors) {
-                if (!visited.has(neighborKey) && result.neighbors.length < maxNodes) {
+                if (
+                    !visited.has(neighborKey) &&
+                    result.neighbors.length < maxNodes
+                ) {
                     visited.add(neighborKey);
-                    queue.push({ entityName: neighborKey, depth: current.depth + 1 });
+                    queue.push({
+                        entityName: neighborKey,
+                        depth: current.depth + 1,
+                    });
 
                     // Add relationship
                     const relKey = `${current.entityName}-${neighborKey}`;
                     const relationship = relationshipMap.get(relKey);
-                    if (relationship && !result.relationships.find(r => r.rowId === relationship.rowId)) {
+                    if (
+                        relationship &&
+                        !result.relationships.find(
+                            (r) => r.rowId === relationship.rowId,
+                        )
+                    ) {
                         result.relationships.push(relationship);
                     }
                 }
@@ -3700,7 +3801,12 @@ function performBFS(
             const neighborB = result.neighbors[j];
             const relKey = `${neighborA.name?.toLowerCase() || neighborA.id?.toLowerCase()}-${neighborB.name?.toLowerCase() || neighborB.id?.toLowerCase()}`;
             const relationship = relationshipMap.get(relKey);
-            if (relationship && !result.relationships.find(r => r.rowId === relationship.rowId)) {
+            if (
+                relationship &&
+                !result.relationships.find(
+                    (r) => r.rowId === relationship.rowId,
+                )
+            ) {
                 result.relationships.push(relationship);
             }
         }
@@ -3709,45 +3815,52 @@ function performBFS(
     return {
         centerEntity,
         neighbors: result.neighbors,
-        relationships: result.relationships
+        relationships: result.relationships,
     };
 }
 
-function calculateEntityMetrics(entities: any[], relationships: any[], communities: any[]): any[] {
+function calculateEntityMetrics(
+    entities: any[],
+    relationships: any[],
+    communities: any[],
+): any[] {
     const entityMap = new Map<string, any>();
     const degreeMap = new Map<string, number>();
     const communityMap = new Map<string, string>();
-    
-    entities.forEach(entity => {
+
+    entities.forEach((entity) => {
         entityMap.set(entity.entityName, {
             id: entity.entityName,
             name: entity.entityName,
-            type: entity.entityType || 'entity',
+            type: entity.entityType || "entity",
             confidence: entity.confidence || 0.5,
-            count: entity.count || 1
+            count: entity.count || 1,
         });
         degreeMap.set(entity.entityName, 0);
     });
-    
+
     communities.forEach((community, index) => {
         let communityEntities: string[] = [];
         try {
-            communityEntities = typeof community.entities === 'string' 
-                ? JSON.parse(community.entities) 
-                : (Array.isArray(community.entities) ? community.entities : []);
+            communityEntities =
+                typeof community.entities === "string"
+                    ? JSON.parse(community.entities)
+                    : Array.isArray(community.entities)
+                      ? community.entities
+                      : [];
         } catch (e) {
             communityEntities = [];
         }
-        
-        communityEntities.forEach(entityName => {
+
+        communityEntities.forEach((entityName) => {
             communityMap.set(entityName, community.id || `community_${index}`);
         });
     });
-    
-    relationships.forEach(rel => {
+
+    relationships.forEach((rel) => {
         const from = rel.fromEntity;
         const to = rel.toEntity;
-        
+
         if (degreeMap.has(from)) {
             degreeMap.set(from, degreeMap.get(from)! + 1);
         }
@@ -3755,14 +3868,17 @@ function calculateEntityMetrics(entities: any[], relationships: any[], communiti
             degreeMap.set(to, degreeMap.get(to)! + 1);
         }
     });
-    
+
     const maxDegree = Math.max(...Array.from(degreeMap.values())) || 1;
-    
-    return Array.from(entityMap.values()).map(entity => ({
+
+    return Array.from(entityMap.values()).map((entity) => ({
         ...entity,
         degree: degreeMap.get(entity.name) || 0,
         importance: (degreeMap.get(entity.name) || 0) / maxDegree,
-        communityId: communityMap.get(entity.name) || 'default',
-        size: Math.max(8, Math.min(40, 8 + Math.sqrt((degreeMap.get(entity.name) || 0) * 3)))
+        communityId: communityMap.get(entity.name) || "default",
+        size: Math.max(
+            8,
+            Math.min(40, 8 + Math.sqrt((degreeMap.get(entity.name) || 0) * 3)),
+        ),
     }));
 }
