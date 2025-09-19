@@ -60,6 +60,86 @@ export class EntityGraphVisualizer {
     }
 
     /**
+     * Detect WebGL support in the current browser
+     */
+    private detectWebGLSupport(): boolean {
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            return !!gl;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get optimal WebGL renderer configuration based on graph size and device capabilities
+     */
+    private getOptimalRendererConfig(): any {
+        if (this.detectWebGLSupport()) {
+            const nodeCount = this.globalGraphData?.entities?.length || 0;
+
+            // Configure WebGL settings based on graph size
+            let webglConfig = {
+                name: 'canvas',
+                webgl: true,
+                webglTexSize: 2048,
+                webglTexRows: 16,
+                webglBatchSize: 1024,
+                webglTexPerBatch: 8
+            };
+
+            // Scale configuration for larger graphs
+            if (nodeCount > 1000) {
+                webglConfig.webglTexSize = 4096;
+                webglConfig.webglTexRows = 24;
+                webglConfig.webglBatchSize = 2048;
+                webglConfig.webglTexPerBatch = 16;
+            } else if (nodeCount > 500) {
+                webglConfig.webglBatchSize = 2048;
+                webglConfig.webglTexPerBatch = 16;
+            }
+
+            console.log(`[WebGL] Enabled with texture size: ${webglConfig.webglTexSize}, batch size: ${webglConfig.webglBatchSize}`);
+            return webglConfig;
+        } else {
+            console.log(`[WebGL] Not supported, falling back to Canvas renderer`);
+            return { name: 'canvas' };
+        }
+    }
+
+    /**
+     * Get CoSE layout configuration
+     */
+    private getOptimalLayoutConfig(): any {
+        const nodeCount = this.globalGraphData?.entities?.length || 0;
+
+        // Use original CoSE layout configuration
+        const coseConfig = {
+            name: "cose",
+            idealEdgeLength: 100,
+            nodeOverlap: 20,
+            refresh: 20,
+            fit: false,
+            animate: 'end',
+            padding: 30,
+            randomize: false,
+            componentSpacing: 100,
+            nodeRepulsion: 400000,
+            edgeElasticity: 100,
+            nestingFactor: 5,
+            gravity: 80,
+            numIter: 1000,
+            initialTemp: 200,
+            coolingFactor: 0.95,
+            minTemp: 1.0,
+        };
+
+        console.log(`[CoSE] Layout configured for ${nodeCount} nodes`);
+        return coseConfig;
+    }
+
+    /**
      * Initialize the visualizer
      */
     async initialize(): Promise<void> {
@@ -70,14 +150,19 @@ export class EntityGraphVisualizer {
             );
         }
 
+
         console.log(`[Platform] Detected: ${navigator.platform}, using Cytoscape.js default wheel sensitivity`);
 
-        // Initialize cytoscape instance with defaults for smooth zoom
+        // Get optimal renderer configuration (WebGL when available)
+        const rendererConfig = this.getOptimalRendererConfig();
+
+        // Initialize cytoscape instance with optimal configuration
         this.cy = cytoscape({
             container: this.container,
             elements: [],
             style: this.getOptimizedStyles(),
             layout: { name: "grid" },
+            renderer: rendererConfig,
             // Use conservative zoom bounds to prevent oscillation
             // Previous: 0.15-8.0 (oscillated), 0.01-100 (extreme bouncing), 0.1-10.0 (still bouncing)
             minZoom: 0.25,                    // Conservative minimum to keep graph visible
@@ -1888,25 +1973,7 @@ export class EntityGraphVisualizer {
         if (!this.cy) return;
 
         const layoutConfigs: { [key: string]: any } = {
-            force: {
-                name: "cose",
-                idealEdgeLength: 100,
-                nodeOverlap: 20,
-                refresh: 20,
-                fit: false,               // Prevent layout from fighting viewport control
-                animate: 'end',           // Animate only at end to prevent viewport conflicts
-                padding: 30,
-                randomize: false,
-                componentSpacing: 100,
-                nodeRepulsion: 400000,
-                edgeElasticity: 100,
-                nestingFactor: 5,
-                gravity: 80,
-                numIter: 1000,
-                initialTemp: 200,
-                coolingFactor: 0.95,
-                minTemp: 1.0,
-            },
+            force: this.getOptimalLayoutConfig(),
             hierarchical: {
                 name: "breadthfirst",
                 directed: true,
