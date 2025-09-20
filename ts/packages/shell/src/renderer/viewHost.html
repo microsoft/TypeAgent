@@ -133,7 +133,7 @@
         justify-content: center;
         font-size: 11px;
         color: var(--text-color);
-        z-index: 10002;
+        z-index: 10004;
         -webkit-app-region: no-drag;
         pointer-events: auto;
       }
@@ -144,6 +144,18 @@
 
       .layout-toggle-absolute:active {
         background: var(--button-active-bg);
+      }
+
+      /* Ensure toggle button area is not draggable */
+      .layout-toggle-absolute::before {
+        content: "";
+        position: absolute;
+        top: -4px;
+        left: -4px;
+        right: -4px;
+        bottom: -4px;
+        -webkit-app-region: no-drag;
+        pointer-events: none;
       }
 
       .browser-nav {
@@ -310,6 +322,8 @@
         -webkit-user-select: none;
         -webkit-app-region: drag;
         cursor: default;
+        text-align: center;
+        margin-left: 44px; /* Account for toggle button width + safe spacing */
       }
 
       /* Right Side */
@@ -672,11 +686,13 @@
 
         updateVisibility() {
           const titleBarCenter = document.querySelector(".title-bar-center");
+          const titleBarRight = document.querySelector(".title-bar-right");
 
           if (currentMode === UIMode.BROWSER) {
             browserNav.style.display = "flex";
             tabContainer.style.display = "flex";
             appTitle.style.display = "none";
+            titleBarRight.style.display = "flex";
 
             // Make center area non-draggable in browser mode
             titleBarCenter.classList.remove("chat-only-mode");
@@ -685,6 +701,7 @@
             browserNav.style.display = "none";
             tabContainer.style.display = "none";
             appTitle.style.display = "flex";
+            titleBarRight.style.display = "none"; // Hide right side in chat-only mode
 
             // Make center area draggable in chat-only mode
             titleBarCenter.classList.remove("browser-mode");
