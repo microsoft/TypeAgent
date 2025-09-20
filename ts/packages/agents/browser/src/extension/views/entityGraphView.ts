@@ -177,13 +177,13 @@ class EntityGraphView {
         const zoomInBtn = document.getElementById("zoomInBtn");
         const zoomOutBtn = document.getElementById("zoomOutBtn");
         const fitBtn = document.getElementById("fitBtn");
-        const centerBtn = document.getElementById("centerBtn");
+        const reLayoutBtn = document.getElementById("reLayoutBtn");
 
         console.log("Control button elements:", {
             zoomInBtn: !!zoomInBtn,
             zoomOutBtn: !!zoomOutBtn,
             fitBtn: !!fitBtn,
-            centerBtn: !!centerBtn,
+            reLayoutBtn: !!reLayoutBtn,
         });
 
         if (zoomInBtn) {
@@ -207,10 +207,10 @@ class EntityGraphView {
             });
         }
 
-        if (centerBtn) {
-            centerBtn.addEventListener("click", () => {
-                console.log("Center graph button clicked");
-                this.visualizer.centerGraph();
+        if (reLayoutBtn) {
+            reLayoutBtn.addEventListener("click", () => {
+                console.log("Re-run layout button clicked");
+                this.visualizer.reRunLayout();
             });
         }
 
@@ -615,7 +615,7 @@ class EntityGraphView {
         if (sidebar && graphContainer) {
             if (visible) {
                 sidebar.style.display = "block";
-                graphContainer.style.width = "calc(100% - 400px)";
+                graphContainer.style.width = "100%";
             } else {
                 sidebar.style.display = "none";
                 graphContainer.style.width = "100%";

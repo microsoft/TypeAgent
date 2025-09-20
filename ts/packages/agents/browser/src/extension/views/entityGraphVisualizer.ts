@@ -2659,6 +2659,14 @@ export class EntityGraphVisualizer {
     }
 
     /**
+     * Re-run the current layout algorithm
+     */
+    reRunLayout(): void {
+        console.log(`[Layout] Re-running ${this.currentLayout} layout`);
+        this.applyLayout(this.currentLayout);
+    }
+
+    /**
      * Highlight connected elements
      */
     private highlightConnectedElements(node: any): void {
