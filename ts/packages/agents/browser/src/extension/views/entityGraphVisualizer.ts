@@ -1043,8 +1043,9 @@ export class EntityGraphVisualizer {
         // Apply detail layout focusing on center entity
         await this.applyDetailLayoutToInstance(this.detailInstance, centerEntity);
 
-        // Setup zoom interactions for detail instance
+        // Setup all interactions for detail instance (including node clicks)
         this.setupZoomInteractions();
+        this.setupInteractions();
 
         console.log(`[DualInstance] Entity detail view loaded for ${centerEntity}`);
     }
@@ -2899,7 +2900,6 @@ export class EntityGraphVisualizer {
             <div class="tooltip-header">${data.name}</div>
             <div class="tooltip-type">${data.type}</div>
             <div class="tooltip-connections">Connections: ${connections}</div>
-            <div class="tooltip-importance">Importance: ${Math.round(importance * 100)}%</div>
             ${communityInfo ? `<div class="tooltip-community">${communityInfo}</div>` : ""}
         `;
 
@@ -3381,7 +3381,7 @@ export class EntityGraphVisualizer {
             layout.one("layoutstop", () => {
                 console.log(`[DualInstance] Detail layout completed for ${centerEntity}`);
                 // Fit view after layout with maxZoom constraint
-                instance.fit({ maxZoom: 1.0 });
+                instance.fit({ maxZoom: 2.0 });
                 resolve();
             });
 

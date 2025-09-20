@@ -138,7 +138,11 @@ class EntityGraphView {
             ) {
                 console.log(`Loading specific entity: ${this.currentEntity}`);
                 this.updateSidebarVisibility(true);
-                await this.navigateToEntity(this.currentEntity);
+                // Store entity name before clearing current entity to force initial load
+                const entityToLoad = this.currentEntity;
+                this.currentEntity = null; // Clear to ensure navigation doesn't skip
+                // Don't update history during initial load - already handled by setupBrowserNavigation
+                await this.navigateToEntity(entityToLoad, false);
             } else if (this.currentViewMode.type === "global") {
                 console.log("Loading global knowledge graph");
                 this.updateSidebarVisibility(false);
@@ -387,7 +391,7 @@ class EntityGraphView {
             // Check if this is the same entity (prevent unnecessary navigation)
             if (this.currentEntity === entityName && this.currentViewMode.type === 'entity-specific') {
                 console.log('[Navigation] Already viewing this entity - skipping navigation');
-                // return;
+                return;
             }
 
             // Detect transition type for optimization
@@ -972,7 +976,6 @@ class EntityGraphView {
                             aliases: firstWebsite.aliases || [],
                             description: firstWebsite.description,
                             url: firstWebsite.url,
-                            domains: firstWebsite.domains || [],
                         },
                     };
                     graphData.entities[0] = enrichedEntity;
@@ -1228,7 +1231,6 @@ class EntityGraphView {
                         graphData.entities,
                     ),
                     relationships: validRelationships || [],
-                    dominantDomains: this.extractDomains(graphData.entities),
                     firstSeen: this.getEarliestDate(
                         // TODO: limit this to "contains" relationships
                         graphData.entities,
@@ -1398,26 +1400,6 @@ class EntityGraphView {
         }, 0);
     }
 
-    private extractDomains(entities: any[]): string[] {
-        if (!entities || entities.length === 0) return [];
-
-        const domains = new Set<string>();
-        entities.forEach((entity) => {
-            if (entity.url) {
-                try {
-                    const domain = new URL(entity.url).hostname.replace(
-                        "www.",
-                        "",
-                    );
-                    domains.add(domain);
-                } catch (e) {
-                    // Skip invalid URLs
-                }
-            }
-        });
-
-        return Array.from(domains).slice(0, 5);
-    }
 
     private getEarliestDate(entities: any[], relationships: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();

@@ -190,11 +190,7 @@ body {
 .entity-header {
   padding: 20px;
   border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(
-    135deg,
-    var(--primary-color),
-    var(--secondary-color)
-  );
+  background: var(--primary-color);
   color: white;
 }
 
