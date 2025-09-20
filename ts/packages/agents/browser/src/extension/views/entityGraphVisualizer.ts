@@ -45,6 +45,12 @@ export class EntityGraphVisualizer {
     private entityGraphData: GraphData | null = null;
     private globalGraphData: any = null;
 
+
+    // Dual-instance approach: separate persistent instances for global and detail views
+    private globalInstance: any = null;
+    private detailInstance: any = null;
+    private currentActiveView: 'global' | 'detail' = 'global';
+
     private layoutCache: Map<string, any> = new Map();
     private zoomTimer: any = null;
     private isUpdatingLOD: boolean = false;
@@ -176,22 +182,53 @@ export class EntityGraphVisualizer {
         // Get optimal renderer configuration (WebGL when available)
         const rendererConfig = this.getOptimalRendererConfig();
 
-        // Initialize cytoscape instance with optimal configuration
-        this.cy = cytoscape({
-            container: this.container,
+        // Initialize dual instances - global and detail
+        this.initializeDualInstances(rendererConfig);
+
+        // Set the active instance to global initially
+        this.cy = this.globalInstance;
+        this.currentActiveView = 'global';
+
+        this.setupInteractions();
+    }
+
+    /**
+     * Initialize the dual-instance system (global and detail)
+     */
+    private initializeDualInstances(rendererConfig: any): void {
+        console.log('[DualInstance] Initializing global and detail instances');
+
+        // Create global instance container
+        const globalContainer = document.createElement('div');
+        globalContainer.style.width = '100%';
+        globalContainer.style.height = '100%';
+        globalContainer.style.position = 'absolute';
+        globalContainer.style.top = '0';
+        globalContainer.style.left = '0';
+        globalContainer.style.visibility = 'visible';
+        this.container.appendChild(globalContainer);
+
+        // Create detail instance container
+        const detailContainer = document.createElement('div');
+        detailContainer.style.width = '100%';
+        detailContainer.style.height = '100%';
+        detailContainer.style.position = 'absolute';
+        detailContainer.style.top = '0';
+        detailContainer.style.left = '0';
+        detailContainer.style.visibility = 'hidden';
+        this.container.appendChild(detailContainer);
+
+        // Initialize global instance
+        this.globalInstance = cytoscape({
+            container: globalContainer,
             elements: [],
             style: this.getOptimizedStyles(),
             layout: { name: "grid" },
             renderer: rendererConfig,
-            // Use conservative zoom bounds to prevent oscillation
-            // Previous: 0.15-8.0 (oscillated), 0.01-100 (extreme bouncing), 0.1-10.0 (still bouncing)
-            minZoom: 0.25, // Conservative minimum to keep graph visible
-            maxZoom: 4.0, // Conservative maximum to prevent fit() overreach
-            // Remove wheelSensitivity to trust Cytoscape defaults and avoid warnings
-            pixelRatio: 1, // Lower resolution for better performance on high-density displays
-            // Zoom settings - disable user zooming to implement custom smooth zoom
-            zoomingEnabled: true, // Allow programmatic zooming
-            userZoomingEnabled: false, // Disable default wheel/touch zoom (we handle it custom)
+            minZoom: 0.25,
+            maxZoom: 4.0,
+            zoomingEnabled: true,
+            userZoomingEnabled: false,
             panningEnabled: true,
             userPanningEnabled: true,
             boxSelectionEnabled: false,
@@ -199,7 +236,95 @@ export class EntityGraphVisualizer {
             autoungrabify: false,
         });
 
-        this.setupInteractions();
+        // Initialize detail instance
+        this.detailInstance = cytoscape({
+            container: detailContainer,
+            elements: [],
+            style: this.getOptimizedStyles(),
+            layout: { name: "grid" },
+            renderer: rendererConfig,
+            minZoom: 0.25,
+            maxZoom: 4.0,
+            zoomingEnabled: true,
+            userZoomingEnabled: false,
+            panningEnabled: true,
+            userPanningEnabled: true,
+            boxSelectionEnabled: false,
+            selectionType: "single",
+            autoungrabify: false,
+        });
+
+        // Setup interactions for both instances
+        this.setupInteractions();  // Use existing method for global instance (this.cy will be set to global)
+
+        console.log('[DualInstance] Both instances initialized successfully');
+    }
+
+    /**
+     * Switch to global view instance
+     */
+    public switchToGlobalView(): void {
+        console.log('[DualInstance] Switching to global view');
+
+        // Hide detail instance
+        const detailContainer = this.detailInstance.container();
+        if (detailContainer) {
+            detailContainer.style.visibility = 'hidden';
+        }
+
+        // Show global instance
+        const globalContainer = this.globalInstance.container();
+        if (globalContainer) {
+            globalContainer.style.visibility = 'visible';
+        }
+
+        // Update active references
+        this.cy = this.globalInstance;
+        this.currentActiveView = 'global';
+        this.viewMode = 'global';
+    }
+
+    /**
+     * Switch to detail view instance
+     */
+    public switchToDetailView(): void {
+        console.log('[DualInstance] Switching to detail view');
+
+        // Hide global instance
+        const globalContainer = this.globalInstance.container();
+        if (globalContainer) {
+            globalContainer.style.visibility = 'hidden';
+        }
+
+        // Show detail instance
+        const detailContainer = this.detailInstance.container();
+        if (detailContainer) {
+            detailContainer.style.visibility = 'visible';
+        }
+
+        // Update active references
+        this.cy = this.detailInstance;
+        this.currentActiveView = 'detail';
+        this.viewMode = 'entity-detail';
+    }
+
+    /**
+     * Check if dual-instance system is available and can handle fast navigation
+     */
+    public canUseFastNavigation(): boolean {
+        const instancesExist = this.globalInstance !== null && this.detailInstance !== null;
+        const globalHasData = instancesExist && this.globalInstance.elements().length > 0;
+        console.log(`[DualInstance] Instances exist: ${instancesExist}, Global has data: ${globalHasData}`);
+        return instancesExist && globalHasData;
+    }
+
+    /**
+     * Fast switch to global view (dual-instance approach)
+     */
+    public fastSwitchToGlobal(): void {
+        if (this.canUseFastNavigation()) {
+            this.switchToGlobalView();
+        }
     }
 
     /**
@@ -257,7 +382,6 @@ export class EntityGraphVisualizer {
         }>;
         summary: any;
     } {
-        const now = Date.now();
         const events = this.eventSequence;
         const zoomEvents = events.filter((e) => e.event === "zoom");
 
@@ -749,11 +873,11 @@ export class EntityGraphVisualizer {
         });
 
         // Node dragging with auto-layout
-        this.cy.on("grab", "node", (evt: any) => {
+        this.cy.on("grab", "node", () => {
             this.isNodeBeingDragged = true;
         });
 
-        this.cy.on("free", "node", (evt: any) => {
+        this.cy.on("free", "node", () => {
             this.isNodeBeingDragged = false;
             this.scheduleLayoutUpdate();
         });
@@ -784,7 +908,6 @@ export class EntityGraphVisualizer {
         if (!this.cy) return;
 
         // Box selection mode toggle
-        let boxSelectionMode = false;
 
         // Background interactions
         this.cy.on("tap", (evt: any) => {
@@ -892,192 +1015,40 @@ export class EntityGraphVisualizer {
         graphData: GraphData,
         centerEntityName?: string,
     ): Promise<void> {
-        if (!this.cy) return;
-
-        const wasTransitioning = this.viewMode === "transitioning";
         const centerEntity = centerEntityName || graphData.centerEntity || null;
+
+        if (!centerEntity) {
+            console.error('[DualInstance] No center entity specified');
+            return;
+        }
+
+        console.log(`[DualInstance] Loading entity graph for ${centerEntity}`);
 
         // Store entity data
         this.currentEntity = centerEntity;
         this.entityGraphData = graphData;
 
-        // Cancel any pending LOD updates
-        if (this.zoomTimer) {
-            clearTimeout(this.zoomTimer);
-            this.zoomTimer = null;
-        }
+        // Switch to detail view (makes it visible)
+        this.switchToDetailView();
 
-        if (wasTransitioning && this.globalGraphData) {
-            // Smooth transition from global to detail view
-            await this.performSmoothDetailTransition(graphData, centerEntity);
-        } else {
-            // Standard entity graph loading (direct navigation)
-            await this.performStandardEntityLoad(graphData, centerEntity);
-        }
+        // Clear existing elements from detail instance
+        this.detailInstance.elements().remove();
 
-        // Set final view mode
-        this.viewMode = "entity-detail";
-        console.log(
-            `[Transition] Completed transition to entity detail view for: ${centerEntity}`,
-        );
+        // Convert graph data to elements
+        const elements = this.convertToGraphElements(graphData);
+
+        // Add elements to detail instance
+        this.detailInstance.add(elements);
+
+        // Apply detail layout focusing on center entity
+        await this.applyDetailLayoutToInstance(this.detailInstance, centerEntity);
+
+        // Setup zoom interactions for detail instance
+        this.setupZoomInteractions();
+
+        console.log(`[DualInstance] Entity detail view loaded for ${centerEntity}`);
     }
 
-    /**
-     * Perform smooth transition from global to detail view
-     */
-    private async performSmoothDetailTransition(
-        graphData: GraphData,
-        centerEntity: string | null,
-    ): Promise<void> {
-        if (!this.cy || !centerEntity) return;
-
-        console.log(
-            `[Transition] Performing enhanced 6-step smooth detail transition for: ${centerEntity}`,
-        );
-
-        // Check performance thresholds for fallback
-        const nodeCount = this.cy.nodes().length;
-        const shouldUseFallback = this.shouldUseFallbackTransition(nodeCount);
-
-        if (shouldUseFallback) {
-            console.log(`[Transition] Using fallback due to performance constraints (${nodeCount} nodes)`);
-            await this.performStandardEntityLoad(graphData, centerEntity);
-            return;
-        }
-
-        try {
-            // Step 1: Identify Relevant Elements (0ms)
-            const relevantEntityIds = new Set([
-                centerEntity,
-                ...graphData.entities.map((e) => e.name),
-                ...graphData.relationships.flatMap((r) => [r.from, r.to]),
-            ]);
-
-            console.log(
-                `[Transition] Step 1 - Identified ${relevantEntityIds.size} relevant entities for detail view`,
-            );
-
-            // Step 2: Animate Focus (200ms)
-            console.log(`[Transition] Step 2 - Animating focus to target entity`);
-            const targetNode = this.cy.$(`node[name="${centerEntity}"]`);
-            if (targetNode.length > 0) {
-                await this.cy.animate({
-                    fit: { eles: targetNode, padding: 100 },
-                    zoom: 1.5
-                }, {
-                    duration: 200,
-                    easing: 'ease-out'
-                });
-            }
-
-            // Step 3: Fade Out Irrelevant Elements (300ms)
-            console.log(`[Transition] Step 3 - Fading out irrelevant elements`);
-            await new Promise<void>((resolve) => {
-                let animationsCompleted = 0;
-                let totalAnimations = 0;
-
-                this.cy.batch(() => {
-                    this.cy.elements().forEach((element: any) => {
-                        const id = element.data("name") || element.data("id");
-                        if (!relevantEntityIds.has(id)) {
-                            element.addClass("global-only");
-                            totalAnimations++;
-                            element.animate({
-                                style: { opacity: 0 }
-                            }, {
-                                duration: 300,
-                                complete: () => {
-                                    animationsCompleted++;
-                                    if (animationsCompleted === totalAnimations) {
-                                        resolve();
-                                    }
-                                }
-                            });
-                        }
-                    });
-                });
-
-                // Handle case where no animations are needed
-                if (totalAnimations === 0) {
-                    resolve();
-                }
-            });
-
-            // Step 4: Add New Detail Elements (100ms)
-            console.log(`[Transition] Step 4 - Adding new detail elements`);
-            const newElements = await this.createDetailElements(graphData, centerEntity);
-            if (newElements && newElements.length > 0) {
-                this.cy.add(newElements);
-
-                // Fade in new elements
-                await new Promise<void>((resolve) => {
-                    let fadeAnimationsCompleted = 0;
-                    newElements.forEach((elData: any) => {
-                        const element = this.cy.getElementById(elData.data.id);
-                        if (element.length > 0) {
-                            element.style({ opacity: 0 });
-                            element.animate({
-                                style: { opacity: 1 }
-                            }, {
-                                duration: 400,
-                                complete: () => {
-                                    fadeAnimationsCompleted++;
-                                    if (fadeAnimationsCompleted === newElements.length) {
-                                        resolve();
-                                    }
-                                }
-                            });
-                        }
-                    });
-
-                    // Handle case where no new elements
-                    if (newElements.length === 0) {
-                        resolve();
-                    }
-                });
-            }
-
-            // Step 5: Apply Detail Layout (500ms)
-            console.log(`[Transition] Step 5 - Applying detail layout`);
-            const visibleElements = this.cy.elements().not(".global-only");
-            if (visibleElements.length > 0) {
-                const layout = visibleElements.layout({
-                    name: 'cose',
-                    animate: true,
-                    animationDuration: 500,
-                    fit: false,
-                    nodeRepulsion: 200000,  // Tighter for detail view
-                    gravity: 120,           // Better centering
-                    // Keep center entity relatively stable
-                    fixedNodes: targetNode.length > 0 ? [targetNode] : []
-                });
-
-                await new Promise<void>((resolve) => {
-                    layout.one('layoutstop', () => {
-                        resolve();
-                    });
-                });
-            }
-
-            // Step 6: Final Fit and Cleanup (200ms)
-            console.log(`[Transition] Step 6 - Final fit and cleanup`);
-            const finalVisibleElements = this.cy.elements().not(".global-only");
-            await this.cy.animate({
-                fit: { eles: finalVisibleElements, padding: 50 }
-            }, {
-                duration: 200,
-                easing: 'ease-in-out'
-            });
-
-            // Set final view mode
-            this.viewMode = "entity-detail";
-            console.log(`[Transition] Smooth transition completed successfully for ${centerEntity}`);
-
-        } catch (error) {
-            console.error(`[Transition] Smooth transition failed, falling back to standard load:`, error);
-            await this.performStandardEntityLoad(graphData, centerEntity);
-        }
-    }
 
     /**
      * Check if fallback transition should be used based on performance constraints
@@ -1197,106 +1168,58 @@ export class EntityGraphVisualizer {
     }
 
 
-    /**
-     * Apply layout optimized for detail view
-     */
-    private applyDetailViewLayout(centerEntity: string): void {
-        // Only layout visible elements (not those with global-only class)
-        const visibleElements = this.cy.elements().not(".global-only");
-        const centerNode = visibleElements.filter(
-            `node[name = "${centerEntity}"]`,
-        );
-
-        console.log(
-            `[Transition] Applying detail layout for "${centerEntity}", visible elements: ${visibleElements.length}, found center: ${centerNode.length > 0}`,
-        );
-
-        if (visibleElements.length === 0) {
-            console.warn(`[Transition] No visible elements for layout`);
-            return;
-        }
-
-        if (centerNode.length === 0) {
-            console.warn(
-                `[Transition] Center entity "${centerEntity}" not found for layout`,
-            );
-            // Just fit all visible elements if center entity not found
-            this.cy.fit(visibleElements);
-            return;
-        }
-
-        // Use cose layout for detail view to match expected layout behavior
-        const coseConfig = this.getOptimalLayoutConfig();
-        const layout = visibleElements.layout({
-            ...coseConfig,
-            animate: true,
-            animationDuration: 500,
-            fit: false, // Disable auto-fit, we'll do it manually after layout completes
-            // Override some settings for detail view
-            nodeRepulsion: 200000, // Reduced from 400000 for tighter layout in detail view
-            gravity: 120, // Increased from 80 for better centering in detail view
-            initialTemp: 100, // Reduced from 200 for faster convergence
-            numIter: 500, // Reduced from 1000 for faster layout completion
-        });
-
-        // Handle layout completion like applyLayout does - fit view after layout completes
-        layout.one("layoutstop", () => {
-            console.log(
-                `[Transition] Detail layout completed, fitting view to visible elements`,
-            );
-            this.cy.fit(visibleElements, 50); // Fit to visible elements with padding
-        });
-
-        layout.run();
-    }
 
     async loadGlobalGraph(globalData: any): Promise<void> {
         if (!this.cy) return;
 
-        // Set view mode and store global data
-        this.viewMode = "global";
-        this.currentEntity = null;
+        console.log('[DualInstance] Loading global graph');
+
+        // Store global data
         this.globalGraphData = globalData;
         this.entityGraphData = null;
+        this.currentEntity = null;
 
-        console.time("[Perf] Clear existing elements");
-        this.cy.elements().remove();
-        console.timeEnd("[Perf] Clear existing elements");
+        // Switch to global view (makes it visible)
+        this.switchToGlobalView();
 
-        console.time("[Perf] Prepare all data for style-based LOD");
+        // Check if global instance already has data
+        if (this.globalInstance.elements().length > 0) {
+            console.log('[DualInstance] Global instance already loaded, just showing it');
+            return;
+        }
+
+        // Load data into global instance for the first time
+        console.log('[DualInstance] First time loading - building global instance');
+
         // Load ALL data initially - style-based LOD will handle visibility
         const allData = this.prepareAllDataWithImportance(globalData);
-        console.timeEnd("[Perf] Prepare all data for style-based LOD");
         console.log(
-            `[Perf] Loading ${allData.entities.length} entities, ${allData.relationships.length} relationships for style-based LOD`,
+            `[DualInstance] Loading ${allData.entities.length} entities, ${allData.relationships.length} relationships`,
         );
 
-        console.time("[Perf] Convert to Cytoscape elements");
+        // Convert to Cytoscape elements
         const elements = this.convertGlobalDataToElements(allData);
-        console.timeEnd("[Perf] Convert to Cytoscape elements");
 
-        console.time("[Perf] Add elements to Cytoscape");
-        this.cy.add(elements);
-        console.timeEnd("[Perf] Add elements to Cytoscape");
+        // Add elements to global instance
+        this.globalInstance.add(elements);
 
         // Pre-compute LOD thresholds for performance
         this.precomputeLODThresholds();
 
+        // Apply layout with cache
         await this.applyLayoutWithCache("initial");
 
+        // Setup zoom interactions for global instance
         this.setupZoomInteractions();
 
-        console.time("[Perf] Fit to view");
-        this.cy.fit({ maxZoom: 2.0 }); // Constrain initial fit to prevent oscillation
-        console.timeEnd("[Perf] Fit to view");
+        // Fit to view
+        this.globalInstance.fit({ maxZoom: 2.0 });
 
-        // Investigation 1: Measure zoom after fit
-        const zoomAfterFit = this.cy.zoom();
-
-        // Apply initial style-based LOD immediately after fit
-        console.time("[Perf] Initial style-based LOD");
+        // Apply initial LOD
+        const zoomAfterFit = this.globalInstance.zoom();
         this.updateStyleBasedLOD(zoomAfterFit);
-        console.timeEnd("[Perf] Initial style-based LOD");
+
+        console.log('[DualInstance] Global view loaded successfully');
     }
 
     private async applyLayoutWithCache(cacheKey: string): Promise<void> {
@@ -1321,7 +1244,7 @@ export class EntityGraphVisualizer {
             // Handle layout completion to manually fit view
             layout.one("layoutstop", () => {
                 console.log(`[Layout] Cached layout applied, fitting view`);
-                this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
+                this.cy.fit({ maxZoom: 1.0 }); // Constrain fit zoom to normal size
             });
 
             layout.run();
@@ -1560,7 +1483,6 @@ export class EntityGraphVisualizer {
         // Use pre-computed thresholds for performance
         const { nodeThreshold, edgeThreshold } =
             this.getFastLODThresholds(zoom);
-        const labelZoomThreshold = this.getLabelZoomThreshold(zoom);
 
         // Analyze importance distribution for calibration
         const importanceValues = this.cy
@@ -1576,20 +1498,8 @@ export class EntityGraphVisualizer {
             })
             .sort((a: number, b: number) => b - a);
 
-        const importanceStats = {
-            min: Math.min(...importanceValues),
-            max: Math.max(...importanceValues),
-            median: importanceValues[Math.floor(importanceValues.length / 2)],
-            p10: importanceValues[Math.floor(importanceValues.length * 0.1)],
-            p30: importanceValues[Math.floor(importanceValues.length * 0.3)],
-            p60: importanceValues[Math.floor(importanceValues.length * 0.6)],
-            p90: importanceValues[Math.floor(importanceValues.length * 0.9)],
-        };
 
         // Calculate expected visible counts for validation
-        const expectedVisibleNodes = importanceValues.filter(
-            (v: number) => v >= nodeThreshold,
-        ).length;
 
         // Use batch for optimal performance
         this.cy.batch(() => {
@@ -1897,19 +1807,6 @@ export class EntityGraphVisualizer {
         );
     }
 
-    /**
-     * Determine the appropriate view mode based on zoom level and current context
-     */
-    private determineViewFromZoom(zoom: number): ViewMode {
-        // If we have a current entity, use entity-based view modes
-        if (this.currentEntity && this.entityGraphData) {
-            if (zoom > 1.0) return "entity-detail"; // Close-up view of entity and immediate neighbors
-            if (zoom > 0.5) return "entity-extended"; // Extended neighborhood
-            if (zoom > 0.3) return "entity-community"; // Community context
-        }
-        // Otherwise, global view
-        return "global";
-    }
 
     /**
      * Check if we should transition from entity view to global view
@@ -2184,15 +2081,6 @@ export class EntityGraphVisualizer {
         });
     }
 
-    // NOTE: Legacy data-swapping LOD methods removed - replaced with style-based LOD
-
-    private updateLevelOfDetail(zoom: number): void {
-        if (!this.cy) return;
-
-        this.cy.batch(() => {
-            this.applySophisticatedLOD(zoom);
-        });
-    }
 
     /**
      * Apply sophisticated Level of Detail rendering based on multiple factors
@@ -2445,17 +2333,33 @@ export class EntityGraphVisualizer {
     }
 
     private calculateLabelSize(score: number, zoom: number): number {
+        // Safety check for NaN values
+        if (!isFinite(score) || !isFinite(zoom)) {
+            console.warn('[LOD] Non-finite values in calculateLabelSize:', { score, zoom });
+            return 10; // Return safe default
+        }
+
         const baseSize = 10;
         const scoreMultiplier = Math.min(1.5, 1 + score * 0.1);
         const zoomMultiplier = Math.min(1.3, zoom);
-        return Math.round(baseSize * scoreMultiplier * zoomMultiplier);
+        const result = Math.round(baseSize * scoreMultiplier * zoomMultiplier);
+
+        return isFinite(result) ? result : 10;
     }
 
     private calculateOpacity(score: number, zoom: number): number {
+        // Safety check for NaN values
+        if (!isFinite(score) || !isFinite(zoom)) {
+            console.warn('[LOD] Non-finite values in calculateOpacity:', { score, zoom });
+            return 0.8; // Return safe default
+        }
+
         const baseOpacity = 0.6;
         const scoreBonus = Math.min(0.4, score * 0.1);
         const zoomBonus = Math.min(0.2, zoom * 0.2);
-        return Math.min(1, baseOpacity + scoreBonus + zoomBonus);
+        const result = Math.min(1, baseOpacity + scoreBonus + zoomBonus);
+
+        return isFinite(result) ? result : 0.8;
     }
 
     private applyNodeLOD(node: any, visibility: any, zoom: number): void {
@@ -2696,7 +2600,7 @@ export class EntityGraphVisualizer {
                 condense: false,
                 rows: undefined,
                 cols: undefined,
-                position: (node: any) => {
+                position: () => {
                     return {};
                 },
                 sort: undefined,
@@ -2753,22 +2657,6 @@ export class EntityGraphVisualizer {
         this.cy.elements().removeClass("highlighted dimmed");
     }
 
-    /**
-     * Show node tooltip
-     */
-    private showNodeTooltip(node: any, position: any): void {
-        const tooltip = this.getOrCreateTooltip();
-        const data = node.data();
-
-        tooltip.innerHTML = `
-            <div class="tooltip-header">${data.name}</div>
-            <div class="tooltip-type">${data.type}</div>
-        `;
-
-        tooltip.style.left = `${position.x + 10}px`;
-        tooltip.style.top = `${position.y - 10}px`;
-        tooltip.style.display = "block";
-    }
 
     /**
      * Hide node tooltip
@@ -3472,5 +3360,32 @@ export class EntityGraphVisualizer {
         if (tooltip) {
             tooltip.remove();
         }
+    }
+
+    /**
+     * Apply detail layout to a specific instance with focus on center entity
+     */
+    private async applyDetailLayoutToInstance(instance: any, centerEntity: string): Promise<void> {
+        if (!instance) return;
+
+        // Use force-directed layout optimized for detail view
+        const layoutConfig = {
+            ...this.getOptimalLayoutConfig(),
+            fit: false, // Don't auto-fit during layout
+            animate: "end"
+        };
+
+        const layout = instance.layout(layoutConfig);
+
+        return new Promise<void>((resolve) => {
+            layout.one("layoutstop", () => {
+                console.log(`[DualInstance] Detail layout completed for ${centerEntity}`);
+                // Fit view after layout with maxZoom constraint
+                instance.fit({ maxZoom: 1.0 });
+                resolve();
+            });
+
+            layout.run();
+        });
     }
 }

@@ -613,6 +613,22 @@ class EntityGraphView {
             this.showGraphLoading();
             console.log("Loading global knowledge graph");
 
+            // Try dual-instance fast navigation first - skip data fetch if possible
+            console.log(`[Navigation] Current view mode: ${this.currentViewMode.type}, Fast nav available: ${this.visualizer.canUseFastNavigation()}`);
+
+            if (this.visualizer.canUseFastNavigation()) {
+                console.log('[Navigation] Using dual-instance fast switch to global view - no data fetch needed');
+                console.time("[Perf] Visualizer loadGlobalGraph");
+                this.visualizer.fastSwitchToGlobal();
+                console.timeEnd("[Perf] Visualizer loadGlobalGraph");
+                this.hideGraphLoading();
+                console.log('[FastNav] Global view restored from dual-instance cache');
+                console.timeEnd("[Perf] Total global view load");
+                return;
+            }
+
+            // Fallback: fetch data and build graph normally
+            console.log('[Navigation] Dual-instance not available - fetching data and building graph');
             console.time("[Perf] Fetch global data");
             const globalData = await this.loadGlobalGraphData();
             console.timeEnd("[Perf] Fetch global data");
