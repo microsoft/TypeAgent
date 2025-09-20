@@ -23,7 +23,7 @@ interface ViewMode {
 }
 
 interface NavigationState {
-    type: 'global' | 'detail';
+    type: "global" | "detail";
     entityName?: string;
     timestamp: number;
     cacheKey?: string;
@@ -384,23 +384,35 @@ class EntityGraphView {
     /**
      * Navigate to a specific entity
      */
-    async navigateToEntity(entityName: string, updateHistory: boolean = true): Promise<void> {
+    async navigateToEntity(
+        entityName: string,
+        updateHistory: boolean = true,
+    ): Promise<void> {
         try {
             console.log(`[Navigation] Navigating to entity: ${entityName}`);
 
             // Check if this is the same entity (prevent unnecessary navigation)
-            if (this.currentEntity === entityName && this.currentViewMode.type === 'entity-specific') {
-                console.log('[Navigation] Already viewing this entity - skipping navigation');
+            if (
+                this.currentEntity === entityName &&
+                this.currentViewMode.type === "entity-specific"
+            ) {
+                console.log(
+                    "[Navigation] Already viewing this entity - skipping navigation",
+                );
                 return;
             }
 
             // Detect transition type for optimization
             const previousViewMode = this.currentViewMode.type;
-            console.log(`[Navigation] Transition type: ${previousViewMode} -> entity-specific`);
+            console.log(
+                `[Navigation] Transition type: ${previousViewMode} -> entity-specific`,
+            );
 
             // Set transitioning state if coming from global view
             if (this.currentViewMode.type === "global") {
-                console.log('[Navigation] Setting visualizer to transitioning state');
+                console.log(
+                    "[Navigation] Setting visualizer to transitioning state",
+                );
                 this.visualizer.setViewMode("transitioning");
             }
 
@@ -412,7 +424,9 @@ class EntityGraphView {
             };
 
             // Update UI elements
-            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = ` > ${entityName}`;
             }
@@ -427,10 +441,10 @@ class EntityGraphView {
                 this.updateUrlForEntity(entityName);
 
                 const newState: NavigationState = {
-                    type: 'detail',
+                    type: "detail",
                     entityName: entityName,
                     timestamp: Date.now(),
-                    cacheKey: `detail_${entityName}`
+                    cacheKey: `detail_${entityName}`,
                 };
 
                 this.addToNavigationHistory(newState);
@@ -447,14 +461,16 @@ class EntityGraphView {
 
     async navigateToGlobalView(): Promise<void> {
         try {
-            console.log('[Navigation] Navigating to global view');
+            console.log("[Navigation] Navigating to global view");
 
             // Update internal state
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
 
             // Update UI elements
-            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = " > Global View";
             }
@@ -469,8 +485,8 @@ class EntityGraphView {
                 this.updateUrlForGlobal();
 
                 const newState: NavigationState = {
-                    type: 'global',
-                    timestamp: Date.now()
+                    type: "global",
+                    timestamp: Date.now(),
                 };
 
                 this.addToNavigationHistory(newState);
@@ -618,21 +634,29 @@ class EntityGraphView {
             console.log("Loading global knowledge graph");
 
             // Try dual-instance fast navigation first - skip data fetch if possible
-            console.log(`[Navigation] Current view mode: ${this.currentViewMode.type}, Fast nav available: ${this.visualizer.canUseFastNavigation()}`);
+            console.log(
+                `[Navigation] Current view mode: ${this.currentViewMode.type}, Fast nav available: ${this.visualizer.canUseFastNavigation()}`,
+            );
 
             if (this.visualizer.canUseFastNavigation()) {
-                console.log('[Navigation] Using dual-instance fast switch to global view - no data fetch needed');
+                console.log(
+                    "[Navigation] Using dual-instance fast switch to global view - no data fetch needed",
+                );
                 console.time("[Perf] Visualizer loadGlobalGraph");
                 this.visualizer.fastSwitchToGlobal();
                 console.timeEnd("[Perf] Visualizer loadGlobalGraph");
                 this.hideGraphLoading();
-                console.log('[FastNav] Global view restored from dual-instance cache');
+                console.log(
+                    "[FastNav] Global view restored from dual-instance cache",
+                );
                 console.timeEnd("[Perf] Total global view load");
                 return;
             }
 
             // Fallback: fetch data and build graph normally
-            console.log('[Navigation] Dual-instance not available - fetching data and building graph');
+            console.log(
+                "[Navigation] Dual-instance not available - fetching data and building graph",
+            );
             console.time("[Perf] Fetch global data");
             const globalData = await this.loadGlobalGraphData();
             console.timeEnd("[Perf] Fetch global data");
@@ -833,8 +857,8 @@ class EntityGraphView {
     private showNavigationError(message: string): void {
         console.error(`[Navigation] ${message}`);
         // Show temporary error notification without disrupting the current view
-        const notification = document.createElement('div');
-        notification.className = 'navigation-error-notification';
+        const notification = document.createElement("div");
+        notification.className = "navigation-error-notification";
         notification.innerHTML = `
             <div class="notification-content">
                 <span class="error-icon">⚠️</span>
@@ -989,10 +1013,10 @@ class EntityGraphView {
                 );
             } catch (error) {
                 console.error(
-    `[HybridGraph Migration] Failed to load entity neighborhood for "%s":`,
-    entityName,
-    error,
-);
+                    `[HybridGraph Migration] Failed to load entity neighborhood for "%s":`,
+                    entityName,
+                    error,
+                );
                 // Return empty graph data on error
                 graphData = {
                     centerEntity: entityName,
@@ -1400,7 +1424,6 @@ class EntityGraphView {
         }, 0);
     }
 
-
     private getEarliestDate(entities: any[], relationships: any[]): string {
         if (!entities || entities.length === 0) return new Date().toISOString();
 
@@ -1465,13 +1488,13 @@ class EntityGraphView {
      * Setup browser navigation event handlers
      */
     private setupBrowserNavigation(): void {
-        console.log('[Navigation] Setting up browser navigation handlers');
+        console.log("[Navigation] Setting up browser navigation handlers");
 
         // Handle browser back/forward buttons
-        window.addEventListener('popstate', async (event) => {
+        window.addEventListener("popstate", async (event) => {
             if (this.isHandlingPopstate) return;
 
-            console.log('[Navigation] Browser popstate event triggered');
+            console.log("[Navigation] Browser popstate event triggered");
             this.isHandlingPopstate = true;
 
             try {
@@ -1479,7 +1502,7 @@ class EntityGraphView {
                 const targetState = this.parseCurrentUrl();
                 await this.navigateToStateFromUrl(targetState);
             } catch (error) {
-                console.error('[Navigation] Popstate handling failed:', error);
+                console.error("[Navigation] Popstate handling failed:", error);
             } finally {
                 this.isHandlingPopstate = false;
             }
@@ -1488,7 +1511,7 @@ class EntityGraphView {
         // Handle initial page load
         const initialState = this.parseCurrentUrl();
         this.addToNavigationHistory(initialState);
-        console.log('[Navigation] Browser navigation setup complete');
+        console.log("[Navigation] Browser navigation setup complete");
     }
 
     /**
@@ -1502,16 +1525,16 @@ class EntityGraphView {
 
         if (modeParam === "global" || (!entityParam && !topicParam)) {
             return {
-                type: 'global',
-                timestamp: Date.now()
+                type: "global",
+                timestamp: Date.now(),
             };
         } else {
             const entityName = entityParam || topicParam;
             return {
-                type: 'detail',
+                type: "detail",
                 entityName: entityName || undefined,
                 timestamp: Date.now(),
-                cacheKey: entityName ? `detail_${entityName}` : undefined
+                cacheKey: entityName ? `detail_${entityName}` : undefined,
             };
         }
     }
@@ -1519,12 +1542,14 @@ class EntityGraphView {
     /**
      * Navigate to state based on URL
      */
-    private async navigateToStateFromUrl(targetState: NavigationState): Promise<void> {
+    private async navigateToStateFromUrl(
+        targetState: NavigationState,
+    ): Promise<void> {
         console.log(`[Navigation] Navigating to state from URL:`, targetState);
 
-        if (targetState.type === 'global') {
+        if (targetState.type === "global") {
             await this.executeGlobalViewTransition();
-        } else if (targetState.type === 'detail' && targetState.entityName) {
+        } else if (targetState.type === "detail" && targetState.entityName) {
             await this.executeDetailViewTransition(targetState.entityName);
         }
 
@@ -1536,7 +1561,7 @@ class EntityGraphView {
      * Execute global view transition
      */
     private async executeGlobalViewTransition(): Promise<void> {
-        console.log('[Navigation] Executing global view transition');
+        console.log("[Navigation] Executing global view transition");
         this.currentEntity = null;
         this.currentViewMode = { type: "global" };
         this.updateSidebarVisibility(false);
@@ -1546,8 +1571,12 @@ class EntityGraphView {
     /**
      * Execute detail view transition
      */
-    private async executeDetailViewTransition(entityName: string): Promise<void> {
-        console.log(`[Navigation] Executing detail view transition for ${entityName}`);
+    private async executeDetailViewTransition(
+        entityName: string,
+    ): Promise<void> {
+        console.log(
+            `[Navigation] Executing detail view transition for ${entityName}`,
+        );
 
         // Use existing navigateToEntity logic but prevent URL update loop
         const wasHandlingPopstate = this.isHandlingPopstate;
@@ -1564,27 +1593,29 @@ class EntityGraphView {
      * Sync internal state with URL
      */
     private syncInternalStateWithUrl(state: NavigationState): void {
-        if (state.type === 'global') {
+        if (state.type === "global") {
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
         } else if (state.entityName) {
             this.currentEntity = state.entityName;
             this.currentViewMode = {
                 type: "entity-specific",
-                centerEntity: state.entityName
+                centerEntity: state.entityName,
             };
         }
 
         // Update breadcrumb and UI elements
         this.updateBreadcrumbForCurrentState();
-        this.updateSidebarVisibility(state.type === 'detail');
+        this.updateSidebarVisibility(state.type === "detail");
     }
 
     /**
      * Update breadcrumb for current state
      */
     private updateBreadcrumbForCurrentState(): void {
-        const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+        const entityBreadcrumb = document.getElementById(
+            "entityNameBreadcrumb",
+        );
         if (entityBreadcrumb) {
             if (this.currentEntity) {
                 entityBreadcrumb.textContent = ` > ${this.currentEntity}`;
@@ -1595,7 +1626,9 @@ class EntityGraphView {
 
         const backToGlobalBtn = document.getElementById("backToGlobalBtn");
         if (backToGlobalBtn) {
-            backToGlobalBtn.style.display = this.currentEntity ? "flex" : "none";
+            backToGlobalBtn.style.display = this.currentEntity
+                ? "flex"
+                : "none";
         }
     }
 
@@ -1605,7 +1638,10 @@ class EntityGraphView {
     private addToNavigationHistory(state: NavigationState): void {
         // Remove any future history if we're navigating from a middle point
         if (this.currentHistoryIndex < this.navigationHistory.length - 1) {
-            this.navigationHistory = this.navigationHistory.slice(0, this.currentHistoryIndex + 1);
+            this.navigationHistory = this.navigationHistory.slice(
+                0,
+                this.currentHistoryIndex + 1,
+            );
         }
 
         // Add new state
@@ -1618,7 +1654,9 @@ class EntityGraphView {
             this.currentHistoryIndex = this.navigationHistory.length - 1;
         }
 
-        console.log(`[Navigation] Added to history. Index: ${this.currentHistoryIndex}, Total: ${this.navigationHistory.length}`);
+        console.log(
+            `[Navigation] Added to history. Index: ${this.currentHistoryIndex}, Total: ${this.navigationHistory.length}`,
+        );
     }
 
     /**
@@ -1627,12 +1665,16 @@ class EntityGraphView {
     private getNavigationContext(): {
         canGoBack: boolean;
         canGoForward: boolean;
-        previousState?: NavigationState
+        previousState?: NavigationState;
     } {
         return {
             canGoBack: this.currentHistoryIndex > 0,
-            canGoForward: this.currentHistoryIndex < this.navigationHistory.length - 1,
-            previousState: this.currentHistoryIndex > 0 ? this.navigationHistory[this.currentHistoryIndex - 1] : undefined
+            canGoForward:
+                this.currentHistoryIndex < this.navigationHistory.length - 1,
+            previousState:
+                this.currentHistoryIndex > 0
+                    ? this.navigationHistory[this.currentHistoryIndex - 1]
+                    : undefined,
         };
     }
 

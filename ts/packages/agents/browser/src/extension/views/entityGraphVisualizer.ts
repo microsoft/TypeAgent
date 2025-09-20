@@ -45,11 +45,10 @@ export class EntityGraphVisualizer {
     private entityGraphData: GraphData | null = null;
     private globalGraphData: any = null;
 
-
     // Dual-instance approach: separate persistent instances for global and detail views
     private globalInstance: any = null;
     private detailInstance: any = null;
-    private currentActiveView: 'global' | 'detail' = 'global';
+    private currentActiveView: "global" | "detail" = "global";
 
     private layoutCache: Map<string, any> = new Map();
     private zoomTimer: any = null;
@@ -187,7 +186,7 @@ export class EntityGraphVisualizer {
 
         // Set the active instance to global initially
         this.cy = this.globalInstance;
-        this.currentActiveView = 'global';
+        this.currentActiveView = "global";
 
         this.setupInteractions();
     }
@@ -196,26 +195,26 @@ export class EntityGraphVisualizer {
      * Initialize the dual-instance system (global and detail)
      */
     private initializeDualInstances(rendererConfig: any): void {
-        console.log('[DualInstance] Initializing global and detail instances');
+        console.log("[DualInstance] Initializing global and detail instances");
 
         // Create global instance container
-        const globalContainer = document.createElement('div');
-        globalContainer.style.width = '100%';
-        globalContainer.style.height = '100%';
-        globalContainer.style.position = 'absolute';
-        globalContainer.style.top = '0';
-        globalContainer.style.left = '0';
-        globalContainer.style.visibility = 'visible';
+        const globalContainer = document.createElement("div");
+        globalContainer.style.width = "100%";
+        globalContainer.style.height = "100%";
+        globalContainer.style.position = "absolute";
+        globalContainer.style.top = "0";
+        globalContainer.style.left = "0";
+        globalContainer.style.visibility = "visible";
         this.container.appendChild(globalContainer);
 
         // Create detail instance container
-        const detailContainer = document.createElement('div');
-        detailContainer.style.width = '100%';
-        detailContainer.style.height = '100%';
-        detailContainer.style.position = 'absolute';
-        detailContainer.style.top = '0';
-        detailContainer.style.left = '0';
-        detailContainer.style.visibility = 'hidden';
+        const detailContainer = document.createElement("div");
+        detailContainer.style.width = "100%";
+        detailContainer.style.height = "100%";
+        detailContainer.style.position = "absolute";
+        detailContainer.style.top = "0";
+        detailContainer.style.left = "0";
+        detailContainer.style.visibility = "hidden";
         this.container.appendChild(detailContainer);
 
         // Initialize global instance
@@ -255,66 +254,70 @@ export class EntityGraphVisualizer {
         });
 
         // Setup interactions for both instances
-        this.setupInteractions();  // Use existing method for global instance (this.cy will be set to global)
+        this.setupInteractions(); // Use existing method for global instance (this.cy will be set to global)
 
-        console.log('[DualInstance] Both instances initialized successfully');
+        console.log("[DualInstance] Both instances initialized successfully");
     }
 
     /**
      * Switch to global view instance
      */
     public switchToGlobalView(): void {
-        console.log('[DualInstance] Switching to global view');
+        console.log("[DualInstance] Switching to global view");
 
         // Hide detail instance
         const detailContainer = this.detailInstance.container();
         if (detailContainer) {
-            detailContainer.style.visibility = 'hidden';
+            detailContainer.style.visibility = "hidden";
         }
 
         // Show global instance
         const globalContainer = this.globalInstance.container();
         if (globalContainer) {
-            globalContainer.style.visibility = 'visible';
+            globalContainer.style.visibility = "visible";
         }
 
         // Update active references
         this.cy = this.globalInstance;
-        this.currentActiveView = 'global';
-        this.viewMode = 'global';
+        this.currentActiveView = "global";
+        this.viewMode = "global";
     }
 
     /**
      * Switch to detail view instance
      */
     public switchToDetailView(): void {
-        console.log('[DualInstance] Switching to detail view');
+        console.log("[DualInstance] Switching to detail view");
 
         // Hide global instance
         const globalContainer = this.globalInstance.container();
         if (globalContainer) {
-            globalContainer.style.visibility = 'hidden';
+            globalContainer.style.visibility = "hidden";
         }
 
         // Show detail instance
         const detailContainer = this.detailInstance.container();
         if (detailContainer) {
-            detailContainer.style.visibility = 'visible';
+            detailContainer.style.visibility = "visible";
         }
 
         // Update active references
         this.cy = this.detailInstance;
-        this.currentActiveView = 'detail';
-        this.viewMode = 'entity-detail';
+        this.currentActiveView = "detail";
+        this.viewMode = "entity-detail";
     }
 
     /**
      * Check if dual-instance system is available and can handle fast navigation
      */
     public canUseFastNavigation(): boolean {
-        const instancesExist = this.globalInstance !== null && this.detailInstance !== null;
-        const globalHasData = instancesExist && this.globalInstance.elements().length > 0;
-        console.log(`[DualInstance] Instances exist: ${instancesExist}, Global has data: ${globalHasData}`);
+        const instancesExist =
+            this.globalInstance !== null && this.detailInstance !== null;
+        const globalHasData =
+            instancesExist && this.globalInstance.elements().length > 0;
+        console.log(
+            `[DualInstance] Instances exist: ${instancesExist}, Global has data: ${globalHasData}`,
+        );
         return instancesExist && globalHasData;
     }
 
@@ -338,7 +341,9 @@ export class EntityGraphVisualizer {
      * Set view mode for transition management
      */
     public setViewMode(mode: ViewMode): void {
-        console.log(`[Visualizer] View mode changing from ${this.viewMode} to ${mode}`);
+        console.log(
+            `[Visualizer] View mode changing from ${this.viewMode} to ${mode}`,
+        );
         this.viewMode = mode;
     }
 
@@ -1018,7 +1023,7 @@ export class EntityGraphVisualizer {
         const centerEntity = centerEntityName || graphData.centerEntity || null;
 
         if (!centerEntity) {
-            console.error('[DualInstance] No center entity specified');
+            console.error("[DualInstance] No center entity specified");
             return;
         }
 
@@ -1041,15 +1046,19 @@ export class EntityGraphVisualizer {
         this.detailInstance.add(elements);
 
         // Apply detail layout focusing on center entity
-        await this.applyDetailLayoutToInstance(this.detailInstance, centerEntity);
+        await this.applyDetailLayoutToInstance(
+            this.detailInstance,
+            centerEntity,
+        );
 
         // Setup all interactions for detail instance (including node clicks)
         this.setupZoomInteractions();
         this.setupInteractions();
 
-        console.log(`[DualInstance] Entity detail view loaded for ${centerEntity}`);
+        console.log(
+            `[DualInstance] Entity detail view loaded for ${centerEntity}`,
+        );
     }
-
 
     /**
      * Check if fallback transition should be used based on performance constraints
@@ -1071,7 +1080,10 @@ export class EntityGraphVisualizer {
     /**
      * Create detail elements that should be added to the graph
      */
-    private async createDetailElements(graphData: GraphData, centerEntity: string): Promise<any[]> {
+    private async createDetailElements(
+        graphData: GraphData,
+        centerEntity: string,
+    ): Promise<any[]> {
         const newElements: any[] = [];
 
         try {
@@ -1080,12 +1092,12 @@ export class EntityGraphVisualizer {
             const existingEdgeIds = new Set();
 
             this.cy.nodes().forEach((node: any) => {
-                existingNodeIds.add(node.data('id'));
-                existingNodeIds.add(node.data('name'));
+                existingNodeIds.add(node.data("id"));
+                existingNodeIds.add(node.data("name"));
             });
 
             this.cy.edges().forEach((edge: any) => {
-                existingEdgeIds.add(edge.data('id'));
+                existingEdgeIds.add(edge.data("id"));
             });
 
             // Add new entities that don't already exist
@@ -1099,7 +1111,10 @@ export class EntityGraphVisualizer {
                             type: entity.type,
                             confidence: entity.confidence || 0.5,
                         },
-                        classes: entity.type === "document" ? "document" : entity.type
+                        classes:
+                            entity.type === "document"
+                                ? "document"
+                                : entity.type,
                     });
                 }
             });
@@ -1107,10 +1122,13 @@ export class EntityGraphVisualizer {
             // Add new relationships that don't already exist
             graphData.relationships.forEach((rel) => {
                 const edgeId = `${rel.from}-${rel.to}-${rel.type}`;
-                if (!existingEdgeIds.has(edgeId) &&
-                    (existingNodeIds.has(rel.from) || graphData.entities.some(e => e.name === rel.from)) &&
-                    (existingNodeIds.has(rel.to) || graphData.entities.some(e => e.name === rel.to))) {
-
+                if (
+                    !existingEdgeIds.has(edgeId) &&
+                    (existingNodeIds.has(rel.from) ||
+                        graphData.entities.some((e) => e.name === rel.from)) &&
+                    (existingNodeIds.has(rel.to) ||
+                        graphData.entities.some((e) => e.name === rel.to))
+                ) {
                     newElements.push({
                         data: {
                             id: edgeId,
@@ -1119,16 +1137,20 @@ export class EntityGraphVisualizer {
                             type: rel.type,
                             strength: rel.strength || 0.5,
                         },
-                        classes: rel.type
+                        classes: rel.type,
                     });
                 }
             });
 
-            console.log(`[Transition] Created ${newElements.length} new elements for detail view`);
+            console.log(
+                `[Transition] Created ${newElements.length} new elements for detail view`,
+            );
             return newElements;
-
         } catch (error) {
-            console.error('[Transition] Error creating detail elements:', error);
+            console.error(
+                "[Transition] Error creating detail elements:",
+                error,
+            );
             return [];
         }
     }
@@ -1168,12 +1190,10 @@ export class EntityGraphVisualizer {
         }
     }
 
-
-
     async loadGlobalGraph(globalData: any): Promise<void> {
         if (!this.cy) return;
 
-        console.log('[DualInstance] Loading global graph');
+        console.log("[DualInstance] Loading global graph");
 
         // Store global data
         this.globalGraphData = globalData;
@@ -1185,12 +1205,16 @@ export class EntityGraphVisualizer {
 
         // Check if global instance already has data
         if (this.globalInstance.elements().length > 0) {
-            console.log('[DualInstance] Global instance already loaded, just showing it');
+            console.log(
+                "[DualInstance] Global instance already loaded, just showing it",
+            );
             return;
         }
 
         // Load data into global instance for the first time
-        console.log('[DualInstance] First time loading - building global instance');
+        console.log(
+            "[DualInstance] First time loading - building global instance",
+        );
 
         // Load ALL data initially - style-based LOD will handle visibility
         const allData = this.prepareAllDataWithImportance(globalData);
@@ -1220,7 +1244,7 @@ export class EntityGraphVisualizer {
         const zoomAfterFit = this.globalInstance.zoom();
         this.updateStyleBasedLOD(zoomAfterFit);
 
-        console.log('[DualInstance] Global view loaded successfully');
+        console.log("[DualInstance] Global view loaded successfully");
     }
 
     private async applyLayoutWithCache(cacheKey: string): Promise<void> {
@@ -1498,7 +1522,6 @@ export class EntityGraphVisualizer {
                 return Math.max(importance, degreeCount / 100, centralityScore);
             })
             .sort((a: number, b: number) => b - a);
-
 
         // Calculate expected visible counts for validation
 
@@ -1808,7 +1831,6 @@ export class EntityGraphVisualizer {
         );
     }
 
-
     /**
      * Check if we should transition from entity view to global view
      */
@@ -2082,7 +2104,6 @@ export class EntityGraphVisualizer {
         });
     }
 
-
     /**
      * Apply sophisticated Level of Detail rendering based on multiple factors
      */
@@ -2336,7 +2357,10 @@ export class EntityGraphVisualizer {
     private calculateLabelSize(score: number, zoom: number): number {
         // Safety check for NaN values
         if (!isFinite(score) || !isFinite(zoom)) {
-            console.warn('[LOD] Non-finite values in calculateLabelSize:', { score, zoom });
+            console.warn("[LOD] Non-finite values in calculateLabelSize:", {
+                score,
+                zoom,
+            });
             return 10; // Return safe default
         }
 
@@ -2351,7 +2375,10 @@ export class EntityGraphVisualizer {
     private calculateOpacity(score: number, zoom: number): number {
         // Safety check for NaN values
         if (!isFinite(score) || !isFinite(zoom)) {
-            console.warn('[LOD] Non-finite values in calculateOpacity:', { score, zoom });
+            console.warn("[LOD] Non-finite values in calculateOpacity:", {
+                score,
+                zoom,
+            });
             return 0.8; // Return safe default
         }
 
@@ -2657,7 +2684,6 @@ export class EntityGraphVisualizer {
 
         this.cy.elements().removeClass("highlighted dimmed");
     }
-
 
     /**
      * Hide node tooltip
@@ -3365,21 +3391,26 @@ export class EntityGraphVisualizer {
     /**
      * Apply detail layout to a specific instance with focus on center entity
      */
-    private async applyDetailLayoutToInstance(instance: any, centerEntity: string): Promise<void> {
+    private async applyDetailLayoutToInstance(
+        instance: any,
+        centerEntity: string,
+    ): Promise<void> {
         if (!instance) return;
 
         // Use force-directed layout optimized for detail view
         const layoutConfig = {
             ...this.getOptimalLayoutConfig(),
             fit: false, // Don't auto-fit during layout
-            animate: "end"
+            animate: "end",
         };
 
         const layout = instance.layout(layoutConfig);
 
         return new Promise<void>((resolve) => {
             layout.one("layoutstop", () => {
-                console.log(`[DualInstance] Detail layout completed for ${centerEntity}`);
+                console.log(
+                    `[DualInstance] Detail layout completed for ${centerEntity}`,
+                );
                 // Fit view after layout with maxZoom constraint
                 instance.fit({ maxZoom: 2.0 });
                 resolve();

@@ -51,7 +51,6 @@ export class EntitySidebar {
      * Clear stale data from sidebar before loading new entity
      */
     private clearStaleData(): void {
-
         // Clear topics list
         const topicsSection = document.getElementById("entityTopics");
         if (topicsSection) {
@@ -265,7 +264,6 @@ export class EntitySidebar {
         if (text.length <= maxLength) return text;
         return text.substring(0, maxLength - 3) + "...";
     }
-
 
     private renderTopics(): void {
         const topicsSection = document.getElementById("entityTopics");
