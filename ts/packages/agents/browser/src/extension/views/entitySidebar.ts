@@ -51,16 +51,6 @@ export class EntitySidebar {
      * Clear stale data from sidebar before loading new entity
      */
     private clearStaleData(): void {
-        // Clear domains list
-        const domainsSection = document.getElementById("entityDomains");
-        if (domainsSection) {
-            const domainsList = domainsSection.querySelector(".domains-list");
-            if (domainsList) {
-                domainsList.innerHTML =
-                    '<span class="empty-message">Loading...</span>';
-            }
-        }
-
         // Clear topics list
         const topicsSection = document.getElementById("entityTopics");
         if (topicsSection) {
@@ -166,7 +156,6 @@ export class EntitySidebar {
         if (!this.currentEntity) return;
 
         this.renderFacets();
-        this.renderDomains();
         this.renderTopics();
     }
 
@@ -276,48 +265,6 @@ export class EntitySidebar {
         return text.substring(0, maxLength - 3) + "...";
     }
 
-    private renderDomains(): void {
-        const domainsSection = document.getElementById("entityDomains");
-        if (!domainsSection) return;
-
-        const domainsList = domainsSection.querySelector(".domains-list");
-        if (!domainsList) return;
-
-        // Handle case where dominantDomains might not exist in real entity data
-        let domains =
-            this.currentEntity.dominantDomains ||
-            this.currentEntity.domains ||
-            [];
-
-        // If no domains, try to extract from URL if available
-        if (domains.length === 0 && this.currentEntity.url) {
-            try {
-                const domain = new URL(this.currentEntity.url).hostname.replace(
-                    "www.",
-                    "",
-                );
-                domains = [domain];
-            } catch (e) {
-                // Skip invalid URLs
-            }
-        }
-
-        if (domains.length === 0) {
-            domainsList.innerHTML =
-                '<span class="empty-message">No domains</span>';
-            return;
-        }
-
-        const domainsHtml = domains
-            .map(
-                (domain: string) =>
-                    `<span class="domain-tag">${this.escapeHtml(domain)}</span>`,
-            )
-            .join("");
-
-        domainsList.innerHTML = domainsHtml;
-    }
-
     private renderTopics(): void {
         const topicsSection = document.getElementById("entityTopics");
         if (!topicsSection || !this.currentEntity.topicAffinity) return;
@@ -395,7 +342,6 @@ export class EntitySidebar {
 
         // Clear details sections
         const facetsSection = document.getElementById("entityFacets");
-        const domainsSection = document.getElementById("entityDomains");
         const topicsSection = document.getElementById("entityTopics");
 
         if (facetsSection) {
@@ -403,13 +349,6 @@ export class EntitySidebar {
             if (facetsList)
                 facetsList.innerHTML =
                     '<span class="empty-message">No facets</span>';
-        }
-
-        if (domainsSection) {
-            const domainsList = domainsSection.querySelector(".domains-list");
-            if (domainsList)
-                domainsList.innerHTML =
-                    '<span class="empty-message">No domains</span>';
         }
 
         if (topicsSection) {
