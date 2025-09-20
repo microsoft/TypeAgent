@@ -22,12 +22,24 @@ interface ViewMode {
     centerTopic?: string;
 }
 
+interface NavigationState {
+    type: 'global' | 'detail';
+    entityName?: string;
+    timestamp: number;
+    cacheKey?: string;
+}
+
 class EntityGraphView {
     private visualizer: EntityGraphVisualizer;
     private sidebar: EntitySidebar;
     private currentEntity: string | null = null;
     private currentViewMode: ViewMode = { type: "global" };
     private graphDataProvider: GraphDataProvider;
+
+    // Navigation history management
+    private navigationHistory: NavigationState[] = [];
+    private currentHistoryIndex: number = -1;
+    private isHandlingPopstate: boolean = false;
 
     constructor() {
         try {
@@ -113,6 +125,9 @@ class EntityGraphView {
             this.setupControlHandlers();
             this.setupSearchHandlers();
             this.setupInteractiveHandlers();
+
+            // Setup browser navigation AFTER basic initialization
+            this.setupBrowserNavigation();
 
             // Load based on view mode
             console.log(`Current view mode: ${this.currentViewMode.type}`);
@@ -365,17 +380,35 @@ class EntityGraphView {
     /**
      * Navigate to a specific entity
      */
-    async navigateToEntity(entityName: string): Promise<void> {
+    async navigateToEntity(entityName: string, updateHistory: boolean = true): Promise<void> {
         try {
+            console.log(`[Navigation] Navigating to entity: ${entityName}`);
+
+            // Check if this is the same entity (prevent unnecessary navigation)
+            if (this.currentEntity === entityName && this.currentViewMode.type === 'entity-specific') {
+                console.log('[Navigation] Already viewing this entity - skipping navigation');
+                // return;
+            }
+
+            // Detect transition type for optimization
+            const previousViewMode = this.currentViewMode.type;
+            console.log(`[Navigation] Transition type: ${previousViewMode} -> entity-specific`);
+
+            // Set transitioning state if coming from global view
+            if (this.currentViewMode.type === "global") {
+                console.log('[Navigation] Setting visualizer to transitioning state');
+                this.visualizer.setViewMode("transitioning");
+            }
+
+            // Update internal state
             this.currentEntity = entityName;
             this.currentViewMode = {
                 type: "entity-specific",
                 centerEntity: entityName,
             };
 
-            const entityBreadcrumb = document.getElementById(
-                "entityNameBreadcrumb",
-            );
+            // Update UI elements
+            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = ` > ${entityName}`;
             }
@@ -385,26 +418,39 @@ class EntityGraphView {
                 backToGlobalBtn.style.display = "flex";
             }
 
-            const url = new URL(window.location.href);
-            url.searchParams.set("entity", entityName);
-            url.searchParams.delete("mode");
-            window.history.pushState({}, "", url.toString());
+            // Update URL and history - only if not handling popstate and updateHistory is true
+            if (updateHistory && !this.isHandlingPopstate) {
+                this.updateUrlForEntity(entityName);
+
+                const newState: NavigationState = {
+                    type: 'detail',
+                    entityName: entityName,
+                    timestamp: Date.now(),
+                    cacheKey: `detail_${entityName}`
+                };
+
+                this.addToNavigationHistory(newState);
+            }
 
             this.updateSidebarVisibility(true);
             await this.loadRealEntityData(entityName);
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
+            // Show user-friendly error message
+            this.showNavigationError(`Failed to load entity: ${entityName}`);
         }
     }
 
     async navigateToGlobalView(): Promise<void> {
         try {
+            console.log('[Navigation] Navigating to global view');
+
+            // Update internal state
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
 
-            const entityBreadcrumb = document.getElementById(
-                "entityNameBreadcrumb",
-            );
+            // Update UI elements
+            const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
             if (entityBreadcrumb) {
                 entityBreadcrumb.textContent = " > Global View";
             }
@@ -414,16 +460,23 @@ class EntityGraphView {
                 backToGlobalBtn.style.display = "none";
             }
 
-            const url = new URL(window.location.href);
-            url.searchParams.delete("entity");
-            url.searchParams.delete("topic");
-            url.searchParams.set("mode", "global");
-            window.history.pushState({}, "", url.toString());
+            // Update URL and history - only if not handling popstate
+            if (!this.isHandlingPopstate) {
+                this.updateUrlForGlobal();
+
+                const newState: NavigationState = {
+                    type: 'global',
+                    timestamp: Date.now()
+                };
+
+                this.addToNavigationHistory(newState);
+            }
 
             this.updateSidebarVisibility(false);
             await this.loadGlobalView();
         } catch (error) {
             console.error("Failed to navigate to global view:", error);
+            this.showNavigationError("Failed to load global view");
         }
     }
 
@@ -755,6 +808,35 @@ class EntityGraphView {
         if (container) {
             container.innerHTML = `<div class="error-message">${this.escapeHtml(message)}</div>`;
         }
+    }
+
+    private showNavigationError(message: string): void {
+        console.error(`[Navigation] ${message}`);
+        // Show temporary error notification without disrupting the current view
+        const notification = document.createElement('div');
+        notification.className = 'navigation-error-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="error-icon">⚠️</span>
+                <span class="error-text">${this.escapeHtml(message)}</span>
+                <button onclick="this.parentElement.parentElement.remove()" class="close-btn">×</button>
+            </div>
+        `;
+        notification.style.cssText = `
+            position: fixed; top: 20px; right: 20px; z-index: 10000;
+            background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+            border-radius: 4px; padding: 12px; max-width: 300px;
+            font-family: Arial, sans-serif; font-size: 14px;
+            animation: slideIn 0.3s ease-out;
+        `;
+        document.body.appendChild(notification);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 5000);
     }
 
     private showEntityParameterError(): void {
@@ -1375,6 +1457,218 @@ class EntityGraphView {
         return entities.reduce((total, entity) => {
             return total + (entity.visitCount || 0);
         }, 0);
+    }
+
+    // ============================================================================
+    // Browser Navigation Integration (Phase 2)
+    // ============================================================================
+
+    /**
+     * Setup browser navigation event handlers
+     */
+    private setupBrowserNavigation(): void {
+        console.log('[Navigation] Setting up browser navigation handlers');
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', async (event) => {
+            if (this.isHandlingPopstate) return;
+
+            console.log('[Navigation] Browser popstate event triggered');
+            this.isHandlingPopstate = true;
+
+            try {
+                // Parse current URL to determine target state
+                const targetState = this.parseCurrentUrl();
+                await this.navigateToStateFromUrl(targetState);
+            } catch (error) {
+                console.error('[Navigation] Popstate handling failed:', error);
+            } finally {
+                this.isHandlingPopstate = false;
+            }
+        });
+
+        // Handle initial page load
+        const initialState = this.parseCurrentUrl();
+        this.addToNavigationHistory(initialState);
+        console.log('[Navigation] Browser navigation setup complete');
+    }
+
+    /**
+     * Parse current URL to determine navigation state
+     */
+    private parseCurrentUrl(): NavigationState {
+        const urlParams = new URLSearchParams(window.location.search);
+        const entityParam = urlParams.get("entity");
+        const topicParam = urlParams.get("topic");
+        const modeParam = urlParams.get("mode");
+
+        if (modeParam === "global" || (!entityParam && !topicParam)) {
+            return {
+                type: 'global',
+                timestamp: Date.now()
+            };
+        } else {
+            const entityName = entityParam || topicParam;
+            return {
+                type: 'detail',
+                entityName: entityName || undefined,
+                timestamp: Date.now(),
+                cacheKey: entityName ? `detail_${entityName}` : undefined
+            };
+        }
+    }
+
+    /**
+     * Navigate to state based on URL
+     */
+    private async navigateToStateFromUrl(targetState: NavigationState): Promise<void> {
+        console.log(`[Navigation] Navigating to state from URL:`, targetState);
+
+        if (targetState.type === 'global') {
+            await this.executeGlobalViewTransition();
+        } else if (targetState.type === 'detail' && targetState.entityName) {
+            await this.executeDetailViewTransition(targetState.entityName);
+        }
+
+        // Update internal state to match URL
+        this.syncInternalStateWithUrl(targetState);
+    }
+
+    /**
+     * Execute global view transition
+     */
+    private async executeGlobalViewTransition(): Promise<void> {
+        console.log('[Navigation] Executing global view transition');
+        this.currentEntity = null;
+        this.currentViewMode = { type: "global" };
+        this.updateSidebarVisibility(false);
+        await this.loadGlobalView();
+    }
+
+    /**
+     * Execute detail view transition
+     */
+    private async executeDetailViewTransition(entityName: string): Promise<void> {
+        console.log(`[Navigation] Executing detail view transition for ${entityName}`);
+
+        // Use existing navigateToEntity logic but prevent URL update loop
+        const wasHandlingPopstate = this.isHandlingPopstate;
+        this.isHandlingPopstate = true;
+
+        try {
+            await this.navigateToEntity(entityName);
+        } finally {
+            this.isHandlingPopstate = wasHandlingPopstate;
+        }
+    }
+
+    /**
+     * Sync internal state with URL
+     */
+    private syncInternalStateWithUrl(state: NavigationState): void {
+        if (state.type === 'global') {
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+        } else if (state.entityName) {
+            this.currentEntity = state.entityName;
+            this.currentViewMode = {
+                type: "entity-specific",
+                centerEntity: state.entityName
+            };
+        }
+
+        // Update breadcrumb and UI elements
+        this.updateBreadcrumbForCurrentState();
+        this.updateSidebarVisibility(state.type === 'detail');
+    }
+
+    /**
+     * Update breadcrumb for current state
+     */
+    private updateBreadcrumbForCurrentState(): void {
+        const entityBreadcrumb = document.getElementById("entityNameBreadcrumb");
+        if (entityBreadcrumb) {
+            if (this.currentEntity) {
+                entityBreadcrumb.textContent = ` > ${this.currentEntity}`;
+            } else {
+                entityBreadcrumb.textContent = " > Global View";
+            }
+        }
+
+        const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+        if (backToGlobalBtn) {
+            backToGlobalBtn.style.display = this.currentEntity ? "flex" : "none";
+        }
+    }
+
+    /**
+     * Add state to navigation history
+     */
+    private addToNavigationHistory(state: NavigationState): void {
+        // Remove any future history if we're navigating from a middle point
+        if (this.currentHistoryIndex < this.navigationHistory.length - 1) {
+            this.navigationHistory = this.navigationHistory.slice(0, this.currentHistoryIndex + 1);
+        }
+
+        // Add new state
+        this.navigationHistory.push(state);
+        this.currentHistoryIndex = this.navigationHistory.length - 1;
+
+        // Limit history size
+        if (this.navigationHistory.length > 50) {
+            this.navigationHistory = this.navigationHistory.slice(-40);
+            this.currentHistoryIndex = this.navigationHistory.length - 1;
+        }
+
+        console.log(`[Navigation] Added to history. Index: ${this.currentHistoryIndex}, Total: ${this.navigationHistory.length}`);
+    }
+
+    /**
+     * Get navigation context
+     */
+    private getNavigationContext(): {
+        canGoBack: boolean;
+        canGoForward: boolean;
+        previousState?: NavigationState
+    } {
+        return {
+            canGoBack: this.currentHistoryIndex > 0,
+            canGoForward: this.currentHistoryIndex < this.navigationHistory.length - 1,
+            previousState: this.currentHistoryIndex > 0 ? this.navigationHistory[this.currentHistoryIndex - 1] : undefined
+        };
+    }
+
+    /**
+     * Update URL for entity navigation
+     */
+    private updateUrlForEntity(entityName: string): void {
+        const url = new URL(window.location.href);
+        url.searchParams.set("entity", entityName);
+        url.searchParams.delete("mode");
+        url.searchParams.delete("topic");
+
+        // Use replaceState if handling popstate to avoid adding duplicate history entries
+        if (this.isHandlingPopstate) {
+            window.history.replaceState({}, "", url.toString());
+        } else {
+            window.history.pushState({}, "", url.toString());
+        }
+    }
+
+    /**
+     * Update URL for global view
+     */
+    private updateUrlForGlobal(): void {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("entity");
+        url.searchParams.delete("topic");
+        url.searchParams.set("mode", "global");
+
+        if (this.isHandlingPopstate) {
+            window.history.replaceState({}, "", url.toString());
+        } else {
+            window.history.pushState({}, "", url.toString());
+        }
     }
 }
 

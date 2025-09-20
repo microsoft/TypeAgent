@@ -210,6 +210,14 @@ export class EntityGraphVisualizer {
     }
 
     /**
+     * Set view mode for transition management
+     */
+    public setViewMode(mode: ViewMode): void {
+        console.log(`[Visualizer] View mode changing from ${this.viewMode} to ${mode}`);
+        this.viewMode = mode;
+    }
+
+    /**
      * Reset visualizer to clean state
      */
     public resetToCleanState(): void {
@@ -924,58 +932,233 @@ export class EntityGraphVisualizer {
         if (!this.cy || !centerEntity) return;
 
         console.log(
-            `[Transition] Performing smooth detail transition for: ${centerEntity}`,
+            `[Transition] Performing enhanced 6-step smooth detail transition for: ${centerEntity}`,
         );
 
-        // Step 1: Hide non-relevant global nodes/edges
-        const relevantEntityIds = new Set([
-            centerEntity,
-            ...graphData.entities.map((e) => e.name),
-            ...graphData.relationships.flatMap((r) => [r.from, r.to]),
-        ]);
+        // Check performance thresholds for fallback
+        const nodeCount = this.cy.nodes().length;
+        const shouldUseFallback = this.shouldUseFallbackTransition(nodeCount);
 
-        console.log(
-            `[Transition] Relevant entities for detail view: ${relevantEntityIds.size} entities`,
-        );
+        if (shouldUseFallback) {
+            console.log(`[Transition] Using fallback due to performance constraints (${nodeCount} nodes)`);
+            await this.performStandardEntityLoad(graphData, centerEntity);
+            return;
+        }
 
-        this.cy.batch(() => {
-            let hiddenNodes = 0;
-            let hiddenEdges = 0;
-
-            // Hide global nodes that aren't in the detail view
-            this.cy.nodes().forEach((node: any) => {
-                const nodeId = node.data("name") || node.data("id");
-                if (!relevantEntityIds.has(nodeId)) {
-                    node.addClass("global-only");
-                    node.style({ display: "none", opacity: 0 });
-                    hiddenNodes++;
-                }
-            });
-
-            // Hide global edges that aren't in the detail view
-            this.cy.edges().forEach((edge: any) => {
-                const from = edge.data("source");
-                const to = edge.data("target");
-                if (
-                    !relevantEntityIds.has(from) ||
-                    !relevantEntityIds.has(to)
-                ) {
-                    edge.addClass("global-only");
-                    edge.style({ display: "none", opacity: 0 });
-                    hiddenEdges++;
-                }
-            });
+        try {
+            // Step 1: Identify Relevant Elements (0ms)
+            const relevantEntityIds = new Set([
+                centerEntity,
+                ...graphData.entities.map((e) => e.name),
+                ...graphData.relationships.flatMap((r) => [r.from, r.to]),
+            ]);
 
             console.log(
-                `[Transition] Hidden ${hiddenNodes} nodes and ${hiddenEdges} edges from global view`,
+                `[Transition] Step 1 - Identified ${relevantEntityIds.size} relevant entities for detail view`,
             );
-        });
 
-        // Step 2: Add new detail-specific nodes and edges
-        await this.addDetailElements(graphData, centerEntity);
+            // Step 2: Animate Focus (200ms)
+            console.log(`[Transition] Step 2 - Animating focus to target entity`);
+            const targetNode = this.cy.$(`node[name="${centerEntity}"]`);
+            if (targetNode.length > 0) {
+                await this.cy.animate({
+                    fit: { eles: targetNode, padding: 100 },
+                    zoom: 1.5
+                }, {
+                    duration: 200,
+                    easing: 'ease-out'
+                });
+            }
 
-        // Step 3: Apply layout for visible elements only - do this synchronously like performStandardEntityLoad
-        this.applyDetailViewLayout(centerEntity);
+            // Step 3: Fade Out Irrelevant Elements (300ms)
+            console.log(`[Transition] Step 3 - Fading out irrelevant elements`);
+            await new Promise<void>((resolve) => {
+                let animationsCompleted = 0;
+                let totalAnimations = 0;
+
+                this.cy.batch(() => {
+                    this.cy.elements().forEach((element: any) => {
+                        const id = element.data("name") || element.data("id");
+                        if (!relevantEntityIds.has(id)) {
+                            element.addClass("global-only");
+                            totalAnimations++;
+                            element.animate({
+                                style: { opacity: 0 }
+                            }, {
+                                duration: 300,
+                                complete: () => {
+                                    animationsCompleted++;
+                                    if (animationsCompleted === totalAnimations) {
+                                        resolve();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+
+                // Handle case where no animations are needed
+                if (totalAnimations === 0) {
+                    resolve();
+                }
+            });
+
+            // Step 4: Add New Detail Elements (100ms)
+            console.log(`[Transition] Step 4 - Adding new detail elements`);
+            const newElements = await this.createDetailElements(graphData, centerEntity);
+            if (newElements && newElements.length > 0) {
+                this.cy.add(newElements);
+
+                // Fade in new elements
+                await new Promise<void>((resolve) => {
+                    let fadeAnimationsCompleted = 0;
+                    newElements.forEach((elData: any) => {
+                        const element = this.cy.getElementById(elData.data.id);
+                        if (element.length > 0) {
+                            element.style({ opacity: 0 });
+                            element.animate({
+                                style: { opacity: 1 }
+                            }, {
+                                duration: 400,
+                                complete: () => {
+                                    fadeAnimationsCompleted++;
+                                    if (fadeAnimationsCompleted === newElements.length) {
+                                        resolve();
+                                    }
+                                }
+                            });
+                        }
+                    });
+
+                    // Handle case where no new elements
+                    if (newElements.length === 0) {
+                        resolve();
+                    }
+                });
+            }
+
+            // Step 5: Apply Detail Layout (500ms)
+            console.log(`[Transition] Step 5 - Applying detail layout`);
+            const visibleElements = this.cy.elements().not(".global-only");
+            if (visibleElements.length > 0) {
+                const layout = visibleElements.layout({
+                    name: 'cose',
+                    animate: true,
+                    animationDuration: 500,
+                    fit: false,
+                    nodeRepulsion: 200000,  // Tighter for detail view
+                    gravity: 120,           // Better centering
+                    // Keep center entity relatively stable
+                    fixedNodes: targetNode.length > 0 ? [targetNode] : []
+                });
+
+                await new Promise<void>((resolve) => {
+                    layout.one('layoutstop', () => {
+                        resolve();
+                    });
+                });
+            }
+
+            // Step 6: Final Fit and Cleanup (200ms)
+            console.log(`[Transition] Step 6 - Final fit and cleanup`);
+            const finalVisibleElements = this.cy.elements().not(".global-only");
+            await this.cy.animate({
+                fit: { eles: finalVisibleElements, padding: 50 }
+            }, {
+                duration: 200,
+                easing: 'ease-in-out'
+            });
+
+            // Set final view mode
+            this.viewMode = "entity-detail";
+            console.log(`[Transition] Smooth transition completed successfully for ${centerEntity}`);
+
+        } catch (error) {
+            console.error(`[Transition] Smooth transition failed, falling back to standard load:`, error);
+            await this.performStandardEntityLoad(graphData, centerEntity);
+        }
+    }
+
+    /**
+     * Check if fallback transition should be used based on performance constraints
+     */
+    private shouldUseFallbackTransition(nodeCount: number): boolean {
+        // Performance thresholds from design document
+        const deviceMemory = (navigator as any).deviceMemory || 4; // GB
+        const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+
+        if (isMobile || deviceMemory < 4) {
+            return nodeCount > 1000; // Conservative threshold for mobile/low-memory
+        } else if (deviceMemory < 8) {
+            return nodeCount > 2000; // Moderate threshold
+        } else {
+            return nodeCount > 5000; // High threshold for powerful devices
+        }
+    }
+
+    /**
+     * Create detail elements that should be added to the graph
+     */
+    private async createDetailElements(graphData: GraphData, centerEntity: string): Promise<any[]> {
+        const newElements: any[] = [];
+
+        try {
+            // Get existing node and edge IDs to avoid duplicates
+            const existingNodeIds = new Set();
+            const existingEdgeIds = new Set();
+
+            this.cy.nodes().forEach((node: any) => {
+                existingNodeIds.add(node.data('id'));
+                existingNodeIds.add(node.data('name'));
+            });
+
+            this.cy.edges().forEach((edge: any) => {
+                existingEdgeIds.add(edge.data('id'));
+            });
+
+            // Add new entities that don't already exist
+            graphData.entities.forEach((entity) => {
+                const entityId = entity.name;
+                if (!existingNodeIds.has(entityId)) {
+                    newElements.push({
+                        data: {
+                            id: entityId,
+                            name: entity.name,
+                            type: entity.type,
+                            confidence: entity.confidence || 0.5,
+                        },
+                        classes: entity.type === "document" ? "document" : entity.type
+                    });
+                }
+            });
+
+            // Add new relationships that don't already exist
+            graphData.relationships.forEach((rel) => {
+                const edgeId = `${rel.from}-${rel.to}-${rel.type}`;
+                if (!existingEdgeIds.has(edgeId) &&
+                    (existingNodeIds.has(rel.from) || graphData.entities.some(e => e.name === rel.from)) &&
+                    (existingNodeIds.has(rel.to) || graphData.entities.some(e => e.name === rel.to))) {
+
+                    newElements.push({
+                        data: {
+                            id: edgeId,
+                            source: rel.from,
+                            target: rel.to,
+                            type: rel.type,
+                            strength: rel.strength || 0.5,
+                        },
+                        classes: rel.type
+                    });
+                }
+            });
+
+            console.log(`[Transition] Created ${newElements.length} new elements for detail view`);
+            return newElements;
+
+        } catch (error) {
+            console.error('[Transition] Error creating detail elements:', error);
+            return [];
+        }
     }
 
     /**
@@ -1013,75 +1196,6 @@ export class EntityGraphVisualizer {
         }
     }
 
-    /**
-     * Add detail-specific elements during transition
-     */
-    private async addDetailElements(
-        graphData: GraphData,
-        centerEntity: string,
-    ): Promise<void> {
-        const existingNodeIds = new Set();
-        const existingEdgeIds = new Set();
-
-        // Track existing elements
-        this.cy.nodes().forEach((node: any) => {
-            existingNodeIds.add(node.data("name") || node.data("id"));
-        });
-        this.cy.edges().forEach((edge: any) => {
-            const id =
-                edge.data("id") ||
-                `${edge.data("source")}-${edge.data("target")}`;
-            existingEdgeIds.add(id);
-        });
-
-        // Convert new data to elements
-        const newElements = this.convertToGraphElements(graphData);
-        const newNodes = newElements.filter((e) => e.group === "nodes");
-        const newEdges = newElements.filter((e) => e.group === "edges");
-
-        // Add only truly new nodes
-        const nodesToAdd = newNodes.filter(
-            (node) => !existingNodeIds.has(node.data.name || node.data.id),
-        );
-
-        // Add only truly new edges
-        const edgesToAdd = newEdges.filter((edge) => {
-            const id =
-                edge.data.id || `${edge.data.source}-${edge.data.target}`;
-            return !existingEdgeIds.has(id);
-        });
-
-        if (nodesToAdd.length > 0 || edgesToAdd.length > 0) {
-            console.log(
-                `[Transition] Adding ${nodesToAdd.length} new nodes and ${edgesToAdd.length} new edges`,
-            );
-
-            // Add new elements without style bypasses to avoid warnings
-            const elementsToAdd = [...nodesToAdd, ...edgesToAdd];
-
-            this.cy.batch(() => {
-                // Add elements without initial style bypasses
-                this.cy.add(elementsToAdd);
-
-                // Apply initial styling and classes after addition
-                elementsToAdd.forEach((el) => {
-                    const element = this.cy.getElementById(el.data.id);
-                    if (element.length > 0) {
-                        element.addClass("detail-only");
-                        element.style("opacity", 0);
-
-                        // Animate to visible
-                        element.animate(
-                            {
-                                style: { opacity: 1 },
-                            },
-                            400,
-                        );
-                    }
-                });
-            });
-        }
-    }
 
     /**
      * Apply layout optimized for detail view
