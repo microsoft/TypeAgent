@@ -294,7 +294,8 @@ class GraphDataProviderImpl implements GraphDataProvider {
             };
         } catch (error) {
             console.error(
-                `[GraphDataProvider] Failed to fetch neighborhood for entity "${entityId}":`,
+                "[GraphDataProvider] Failed to fetch neighborhood for entity: %s",
+                entityId,
                 error,
             );
             throw new Error(

@@ -888,9 +888,10 @@ class EntityGraphView {
                 );
             } catch (error) {
                 console.error(
-                    `[HybridGraph Migration] Failed to load entity neighborhood for "${entityName}":`,
-                    error,
-                );
+    `[HybridGraph Migration] Failed to load entity neighborhood for "%s":`,
+    entityName,
+    error,
+);
                 // Return empty graph data on error
                 graphData = {
                     centerEntity: entityName,
