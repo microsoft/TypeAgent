@@ -237,6 +237,41 @@ async function initialize() {
         shellWindow?.updateContentSize(newPos);
     });
 
+    ipcMain.handle("toggle-layout", (event) => {
+        const shellWindow = getShellWindowForMainWindowIpcEvent(event);
+        if (shellWindow) {
+            // Toggle the verticalLayout setting
+            const currentLayout =
+                shellWindow.getUserSettings().ui.verticalLayout;
+            const newLayout = !currentLayout;
+            shellWindow.setUserSettingValue("ui.verticalLayout", newLayout);
+
+            // Return the new layout state
+            return { verticalLayout: newLayout };
+        }
+        return null;
+    });
+
+    // Window control handlers
+    ipcMain.on("window-minimize", (event) => {
+        const shellWindow = getShellWindowForMainWindowIpcEvent(event);
+        shellWindow?.mainWindow.minimize();
+    });
+
+    ipcMain.on("window-maximize", (event) => {
+        const shellWindow = getShellWindowForMainWindowIpcEvent(event);
+        if (shellWindow?.mainWindow.isMaximized()) {
+            shellWindow.mainWindow.unmaximize();
+        } else {
+            shellWindow?.mainWindow.maximize();
+        }
+    });
+
+    ipcMain.on("window-close", (event) => {
+        const shellWindow = getShellWindowForMainWindowIpcEvent(event);
+        shellWindow?.mainWindow.close();
+    });
+
     ipcMain.on("open-image-file", async (event) => {
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
         if (!shellWindow) return;
