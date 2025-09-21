@@ -37,6 +37,8 @@ export function getMimeTypeFromFileExtension(fileExtension: string): string {
             return "image/gif";
         case ".ts":
             return "application/x-typescript";
+        case ".ico":
+            return "image/x-icon";
     }
 
     throw "Unsupported file extension.";
