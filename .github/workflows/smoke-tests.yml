@@ -147,7 +147,6 @@ jobs:
         continue-on-error: true
 
       - name: Live Tests
-        if: ${{ runner.os == 'windows' }}
         timeout-minutes: 60
         run: |
           npm run test:live

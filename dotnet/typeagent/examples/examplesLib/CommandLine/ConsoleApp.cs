@@ -13,8 +13,7 @@ public abstract class ConsoleApp
         Console.OutputEncoding = Encoding.UTF8;
 
         _allCommands = new RootCommand(title);
-        _allCommands.AddCommands(new StandardCommands(_allCommands));
-
+        AddModule(new StandardCommands());
         _stopStrings = ["quit", "exit"];
     }
 
@@ -55,7 +54,7 @@ public abstract class ConsoleApp
             Console.Write(ConsolePrompt);
 
             string? input = await ReadLineAsync(cancelToken).ConfigureAwait(false);
-            input = input.Trim();
+            input = input?.Trim();
             if (string.IsNullOrEmpty(input))
             {
                 continue;
@@ -72,7 +71,7 @@ public abstract class ConsoleApp
     public async Task RunBatchAsync(string batchFilePath, CancellationToken cancelToken = default)
     {
         using var reader = new StreamReader(batchFilePath);
-        string line = null;
+        string? line = null;
 
         while (!cancelToken.IsCancellationRequested &&
               (line = reader.ReadLine()) is not null)
@@ -103,9 +102,9 @@ public abstract class ConsoleApp
     /// <param name="input"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public virtual async Task<int> ProcessInputAsync(string input, CancellationToken cancellationToken)
+    public virtual Task<int> ProcessInputAsync(string input, CancellationToken cancellationToken)
     {
-        return 0;
+        return Task.FromResult<int>(0);
     }
 
     /// <summary>
@@ -193,11 +192,7 @@ public abstract class ConsoleApp
 
     public async Task<string?> ReadLineAsync(CancellationToken cancelToken = default)
     {
-#if NET7_0_OR_GREATER
         string? line = await Console.In.ReadLineAsync(cancelToken).ConfigureAwait(false);
-#else
-        string? line = await Console.In.ReadLineAsync().ConfigureAwait(false);
-#endif
         return line is not null ? line.Trim() : line;
     }
 
@@ -241,12 +236,19 @@ public abstract class ConsoleApp
         }
     }
 
-    /// <summary>
-    /// Add a module to this Console
-    /// </summary>
-    /// <param name="obj"></param>
-    public void AddModule(object obj)
+    public void AddModule(ICommandModule module)
     {
-        Root.AddCommands(obj);
+        _allCommands.AddModule(module);
+    }
+
+    public void SortCommands()
+    {
+        var commands = _allCommands.Subcommands.ToList();
+        _allCommands.Subcommands.Clear();
+        commands.Sort((x, y) => x.Name.CompareTo(y.Name));
+        foreach (var cmd in commands)
+        {
+            _allCommands.Add(cmd);
+        }
     }
 }
