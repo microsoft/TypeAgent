@@ -79,6 +79,7 @@ interface GraphDataProvider {
     // Hierarchical partitioned loading methods
     getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
     getImportanceNeighborhood(centerEntity: string, maxNodes?: number): Promise<any>;
+    getViewportBasedNeighborhood(centerEntity: string, viewportNodeNames: string[], maxNodes?: number): Promise<any>;
     getImportanceStatistics(): Promise<any>;
 
     // Validation and health checks
@@ -404,8 +405,8 @@ class GraphDataProviderImpl implements GraphDataProvider {
         try {
             console.log(`[GraphDataProvider] Fetching importance neighborhood for ${centerEntity} with ${maxNodes} nodes`);
 
-            // For small graphs (< 2000 nodes), disable global context to get true neighborhood
-            const includeGlobalContext = maxNodes >= 2000;
+            // Include global context to maintain visual continuity between global and neighborhood views
+            const includeGlobalContext = true;
 
             const result = await this.baseService.sendMessage({
                 type: "getImportanceNeighborhood",
@@ -428,6 +429,45 @@ class GraphDataProviderImpl implements GraphDataProvider {
         } catch (error) {
             console.error("[GraphDataProvider] Error fetching importance neighborhood:", error);
             throw error;
+        }
+    }
+
+    async getViewportBasedNeighborhood(centerEntity: string, viewportNodeNames: string[], maxNodes: number = 5000): Promise<any> {
+        try {
+            console.log(`[GraphDataProvider] Fetching viewport-based neighborhood for ${centerEntity} anchored by ${viewportNodeNames.length} viewport nodes`);
+            console.log(`[GraphDataProvider] Viewport anchor nodes (first 10):`, viewportNodeNames.slice(0, 10));
+
+            // Include global context to maintain visual continuity between global and neighborhood views
+            const includeGlobalContext = true;
+
+            const result = await this.baseService.sendMessage({
+                type: "getViewportBasedNeighborhood",
+                parameters: {
+                    centerEntity,
+                    viewportNodeNames,
+                    maxNodes,
+                    importanceWeighting: true,
+                    includeGlobalContext,
+                    // Run BFS from each viewport node to ensure they are all explored
+                    exploreFromAllViewportNodes: true,
+                    minDepthFromViewport: 1
+                }
+            });
+
+            return {
+                entities: this.transformEntitiesToUIFormat(result.entities || []),
+                relationships: this.transformRelationshipsToUIFormat(result.relationships || []),
+                metadata: {
+                    ...result.metadata,
+                    source: "viewport_based_neighborhood",
+                    viewportAnchorCount: viewportNodeNames.length
+                }
+            };
+        } catch (error) {
+            console.error("[GraphDataProvider] Error fetching viewport-based neighborhood:", error);
+            // Fallback to standard importance neighborhood if viewport-based fails
+            console.log("[GraphDataProvider] Falling back to standard importance neighborhood");
+            return await this.getImportanceNeighborhood(centerEntity, maxNodes);
         }
     }
 
