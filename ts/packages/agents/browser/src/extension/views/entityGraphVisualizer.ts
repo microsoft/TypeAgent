@@ -687,6 +687,10 @@ export class EntityGraphVisualizer {
                     "text-opacity": 0, // Start with labels hidden
                     "transition-property": "none", // No animations
                     "transition-duration": 0,
+                    // Use data-driven sizing based on computed importance
+                    // This allows Cytoscape to scale nodes naturally with zoom
+                    width: "mapData(computedImportance, 0, 1, 20, 40)",
+                    height: "mapData(computedImportance, 0, 1, 20, 40)",
                 },
             },
             {
@@ -1043,6 +1047,11 @@ export class EntityGraphVisualizer {
                 type: node.data("type"),
                 confidence: node.data("confidence"),
             };
+
+            // Hide current view before transitioning to detail view
+            if (this.currentActiveView === "global" || this.currentActiveView === "neighborhood") {
+                this.hideCurrentViewForDetailNavigation();
+            }
 
             // Handle transition from global to detail view
             if (this.viewMode === "global") {
@@ -1402,10 +1411,19 @@ export class EntityGraphVisualizer {
     public async loadGlobalGraph(graphData: any): Promise<void> {
         console.log("[TripleInstance] Loading global graph");
 
+        // Clear anchor nodes to ensure global view uses CSS-based sizing
+        this.currentAnchorNodes.clear();
+
         // Clear and load global instance
         this.globalInstance.elements().remove();
         const elements = this.convertToGraphElements(graphData);
         this.globalInstance.add(elements);
+
+        // Apply direct sizing based on computed importance (since CSS mapData doesn't auto-refresh)
+        this.applyImportanceBasedSizing();
+
+        // Analyze importance distribution and visual sizing
+        this.analyzeGlobalViewImportanceDistribution();
 
         // Set active instance reference BEFORE setting up interactions
         this.cy = this.globalInstance;
@@ -1435,10 +1453,172 @@ export class EntityGraphVisualizer {
         // Apply layout optimized for global size
         await this.applyLayoutToInstance(this.globalInstance, "cose", graphData.entities.length);
 
+        // Fit the graph to the viewport to let Cytoscape handle optimal sizing
+        this.globalInstance.fit({
+            padding: 50,  // Add some padding around edges
+            animate: false  // No animation for initial load
+        });
+
         // Switch to global view
         this.switchToGlobalView();
 
         console.log(`[TripleInstance] Loaded ${graphData.entities.length} entities into global instance`);
+    }
+
+    /**
+     * Analyze importance distribution and visual sizing in global view
+     */
+    private analyzeGlobalViewImportanceDistribution(): void {
+        if (!this.globalInstance) return;
+
+        const nodes = this.globalInstance.nodes();
+        console.log(`[GlobalImportance] Analyzing ${nodes.length} nodes for importance distribution`);
+
+        // Collect importance values and calculate rendered sizes
+        const importanceData: Array<{
+            name: string;
+            importance: number;
+            renderedWidth: number;
+            renderedHeight: number;
+            sizeCategory: string;
+        }> = [];
+
+        nodes.forEach((node: any) => {
+            const importance = node.data('importance') || node.data('computedImportance') || 0;
+            const name = node.data('name') || node.data('id') || 'unknown';
+
+            // Get rendered size (after mapData calculation)
+            const renderedWidth = parseFloat(node.style('width')) || 0;
+            const renderedHeight = parseFloat(node.style('height')) || 0;
+
+            // Categorize by size for analysis
+            let sizeCategory = 'small';
+            if (renderedWidth >= 35) sizeCategory = 'large';
+            else if (renderedWidth >= 25) sizeCategory = 'medium';
+
+            importanceData.push({
+                name,
+                importance,
+                renderedWidth,
+                renderedHeight,
+                sizeCategory
+            });
+        });
+
+        // Sort by importance for analysis
+        importanceData.sort((a, b) => b.importance - a.importance);
+
+        // Calculate distribution statistics
+        const importanceValues = importanceData.map(d => d.importance);
+        const minImportance = Math.min(...importanceValues);
+        const maxImportance = Math.max(...importanceValues);
+        const avgImportance = importanceValues.reduce((sum, val) => sum + val, 0) / importanceValues.length;
+
+        // Calculate percentiles
+        const getPercentile = (arr: number[], percentile: number) => {
+            const index = Math.floor((percentile / 100) * (arr.length - 1));
+            return arr[index] || 0;
+        };
+
+        const sortedImportance = [...importanceValues].sort((a, b) => a - b);
+        const p25 = getPercentile(sortedImportance, 25);
+        const p50 = getPercentile(sortedImportance, 50);
+        const p75 = getPercentile(sortedImportance, 75);
+        const p90 = getPercentile(sortedImportance, 90);
+        const p95 = getPercentile(sortedImportance, 95);
+
+        // Analyze size distribution
+        const sizeCounts = {
+            small: importanceData.filter(d => d.sizeCategory === 'small').length,
+            medium: importanceData.filter(d => d.sizeCategory === 'medium').length,
+            large: importanceData.filter(d => d.sizeCategory === 'large').length
+        };
+
+        const sizeStats = {
+            minSize: Math.min(...importanceData.map(d => d.renderedWidth)),
+            maxSize: Math.max(...importanceData.map(d => d.renderedWidth)),
+            avgSize: importanceData.reduce((sum, d) => sum + d.renderedWidth, 0) / importanceData.length
+        };
+
+        // Define importance thresholds based on mapData(importance, 0, 1, 20, 40)
+        const getExpectedSize = (importance: number) => 20 + (importance * 20);
+        const thresholds = {
+            veryHigh: 0.8,  // Should render ~36px
+            high: 0.6,      // Should render ~32px
+            medium: 0.4,    // Should render ~28px
+            low: 0.2,       // Should render ~24px
+            veryLow: 0.0    // Should render ~20px
+        };
+
+        const thresholdCounts = {
+            veryHigh: importanceValues.filter(v => v >= thresholds.veryHigh).length,
+            high: importanceValues.filter(v => v >= thresholds.high && v < thresholds.veryHigh).length,
+            medium: importanceValues.filter(v => v >= thresholds.medium && v < thresholds.high).length,
+            low: importanceValues.filter(v => v >= thresholds.low && v < thresholds.medium).length,
+            veryLow: importanceValues.filter(v => v < thresholds.low).length
+        };
+
+        // Log comprehensive analysis
+        console.log("[GlobalImportance] ============ IMPORTANCE DISTRIBUTION ANALYSIS ============");
+        console.log("[GlobalImportance] Basic Statistics:", {
+            totalNodes: nodes.length,
+            importanceRange: { min: minImportance.toFixed(4), max: maxImportance.toFixed(4) },
+            average: avgImportance.toFixed(4),
+            percentiles: {
+                p25: p25.toFixed(4),
+                p50: p50.toFixed(4),
+                p75: p75.toFixed(4),
+                p90: p90.toFixed(4),
+                p95: p95.toFixed(4)
+            }
+        });
+
+        console.log("[GlobalImportance] Threshold Distribution:", {
+            veryHigh: `${thresholdCounts.veryHigh} nodes (≥0.8) - ${(thresholdCounts.veryHigh/nodes.length*100).toFixed(1)}%`,
+            high: `${thresholdCounts.high} nodes (0.6-0.8) - ${(thresholdCounts.high/nodes.length*100).toFixed(1)}%`,
+            medium: `${thresholdCounts.medium} nodes (0.4-0.6) - ${(thresholdCounts.medium/nodes.length*100).toFixed(1)}%`,
+            low: `${thresholdCounts.low} nodes (0.2-0.4) - ${(thresholdCounts.low/nodes.length*100).toFixed(1)}%`,
+            veryLow: `${thresholdCounts.veryLow} nodes (<0.2) - ${(thresholdCounts.veryLow/nodes.length*100).toFixed(1)}%`
+        });
+
+        console.log("[GlobalImportance] Visual Size Analysis:", {
+            sizeRange: { min: sizeStats.minSize.toFixed(1), max: sizeStats.maxSize.toFixed(1) },
+            averageSize: sizeStats.avgSize.toFixed(1),
+            sizeDistribution: {
+                small: `${sizeCounts.small} nodes (<25px) - ${(sizeCounts.small/nodes.length*100).toFixed(1)}%`,
+                medium: `${sizeCounts.medium} nodes (25-35px) - ${(sizeCounts.medium/nodes.length*100).toFixed(1)}%`,
+                large: `${sizeCounts.large} nodes (≥35px) - ${(sizeCounts.large/nodes.length*100).toFixed(1)}%`
+            }
+        });
+
+        // Log top 10 most important nodes
+        console.log("[GlobalImportance] Top 10 Most Important Nodes:");
+        importanceData.slice(0, 10).forEach((node, index) => {
+            const expectedSize = getExpectedSize(node.importance);
+            console.log(`  ${index + 1}. ${node.name}: importance=${node.importance.toFixed(4)}, rendered=${node.renderedWidth.toFixed(1)}px (expected=${expectedSize.toFixed(1)}px)`);
+        });
+
+        // Log bottom 10 least important nodes
+        console.log("[GlobalImportance] Bottom 10 Least Important Nodes:");
+        importanceData.slice(-10).forEach((node, index) => {
+            const expectedSize = getExpectedSize(node.importance);
+            console.log(`  ${importanceData.length - 9 + index}. ${node.name}: importance=${node.importance.toFixed(4)}, rendered=${node.renderedWidth.toFixed(1)}px (expected=${expectedSize.toFixed(1)}px)`);
+        });
+
+        // Analyze visual differentiation effectiveness
+        const uniqueSizes = new Set(importanceData.map(d => Math.round(d.renderedWidth)));
+        const sizeSpread = sizeStats.maxSize - sizeStats.minSize;
+        const importanceSpread = maxImportance - minImportance;
+
+        console.log("[GlobalImportance] Visual Differentiation Analysis:", {
+            uniqueSizes: uniqueSizes.size,
+            sizeSpread: sizeSpread.toFixed(1) + 'px',
+            importanceSpread: importanceSpread.toFixed(4),
+            sizesPerImportanceUnit: (sizeSpread / importanceSpread).toFixed(1) + 'px per importance unit',
+            effectivenessRating: sizeSpread > 15 ? 'Good' : sizeSpread > 10 ? 'Moderate' : 'Poor'
+        });
+
+        console.log("[GlobalImportance] ========================================================");
     }
 
     /**
@@ -1460,13 +1640,14 @@ export class EntityGraphVisualizer {
 
         // Only set initial zoom when transitioning from global view, not when reloading
         if (!preserveZoom) {
-            // Set initial zoom level for neighborhood view - zoomed out with labels visible
-            // For 50-100 node neighborhoods, zoom 0.8 provides good overview with visible labels
-            const neighborhoodZoom = 0.8;
-            this.neighborhoodInstance.zoom(neighborhoodZoom);
-            this.neighborhoodInstance.center(); // Center the view
+            // Fit the neighborhood to the viewport, letting Cytoscape determine optimal zoom
+            this.neighborhoodInstance.fit({
+                padding: 30,
+                animate: false
+            });
 
-            console.log(`[TripleInstance] Set neighborhood initial zoom to ${neighborhoodZoom} for ${neighborhoodData.entities.length} nodes`);
+            const actualZoom = this.neighborhoodInstance.zoom();
+            console.log(`[TripleInstance] Fitted neighborhood to viewport, zoom: ${actualZoom.toFixed(3)} for ${neighborhoodData.entities.length} nodes`);
         } else {
             console.log(`[TripleInstance] Preserving current zoom level for neighborhood reload`);
         }
@@ -1493,6 +1674,12 @@ export class EntityGraphVisualizer {
 
         // Apply layout optimized for detail size (force-directed for entity focus)
         await this.applyLayoutToInstance(this.detailInstance, "force", entityData.entities.length);
+
+        // Fit the detail view to the viewport
+        this.detailInstance.fit({
+            padding: 40,
+            animate: false
+        });
 
         // Switch to detail view
         this.switchToDetailView();
@@ -1566,6 +1753,12 @@ export class EntityGraphVisualizer {
             firstRelationship: graphData.relationships[0]
         });
 
+        // Debug: Check the first few entities' importance values
+        console.log(`[DEBUG] First 5 entities with importance values:`);
+        graphData.entities.slice(0, 5).forEach((entity: any, index: number) => {
+            console.log(`  ${index + 1}. ${entity.name}: importance=${entity.importance}, degree=${entity.degree}, type=${entity.type}`);
+        });
+
         const nodes = graphData.entities.map((entity: any) => {
             // Set appropriate importance values based on current context
             const baseImportance = entity.importance || 0;
@@ -1583,7 +1776,7 @@ export class EntityGraphVisualizer {
                     // Ensure LOD-compatible properties are set
                     degreeCount: entity.degree || entity.degreeCount || Math.max(1, effectiveImportance * 10),
                     centralityScore: entity.centrality || entity.centralityScore || effectiveImportance,
-                    computedImportance: effectiveImportance,
+                    computedImportance: this.calculateEntityImportance(entity),
                     ...entity.properties
                 }
             };
@@ -2149,7 +2342,7 @@ export class EntityGraphVisualizer {
                 y: event.clientY - containerRect.top
             };
             this.isCursorOverMap = true;
-            console.log(`[CursorTracking] Cursor at container-relative position: (${this.lastCursorPosition.x.toFixed(1)}, ${this.lastCursorPosition.y.toFixed(1)})`);
+            // console.log(`[CursorTracking] Cursor at container-relative position: (${this.lastCursorPosition.x.toFixed(1)}, ${this.lastCursorPosition.y.toFixed(1)})`);
         });
 
         this.container.addEventListener("mouseleave", () => {
@@ -2686,6 +2879,27 @@ export class EntityGraphVisualizer {
     }
 
     /**
+     * Apply visual sizing based on computed importance values
+     * This replaces CSS mapData which doesn't auto-refresh when data changes
+     */
+    private applyImportanceBasedSizing(): void {
+        if (!this.globalInstance) return;
+
+        this.globalInstance.nodes().forEach((node: any) => {
+            const computedImportance = node.data('computedImportance') || 0;
+            // Map importance (0-1) to size (20-40px) - same as CSS mapData(computedImportance, 0, 1, 20, 40)
+            const size = 20 + (computedImportance * 20);
+
+            node.style({
+                'width': size,
+                'height': size
+            });
+        });
+
+        console.log('[ImportanceSizing] Applied direct sizing based on computedImportance values');
+    }
+
+    /**
      * Calculate entity importance from available metrics
      */
     private calculateEntityImportance(entity: any): number {
@@ -2887,7 +3101,7 @@ export class EntityGraphVisualizer {
     }
 
     /**
-     * Initiate a smooth transition from global view to entity detail view
+     * Initiate a direct transition from global view to entity detail view
      */
     private async initiateEntityDetailTransition(
         node: any,
@@ -2896,35 +3110,12 @@ export class EntityGraphVisualizer {
         if (!this.cy || this.viewMode === "transitioning") return;
 
         console.log(
-            `[Transition] Starting transition from global to detail view for entity: ${entityData.name}`,
+            `[Transition] Starting direct transition to detail view for entity: ${entityData.name}`,
         );
         this.viewMode = "transitioning";
 
-        // Store current view state
-        const currentZoom = this.cy.zoom();
-        const currentPan = this.cy.pan();
-
         try {
-            // Step 1: Smooth zoom to the selected node
-            const nodePosition = node.position();
-            const targetZoom = Math.max(currentZoom * 2, 1.5); // Zoom in at least 2x or to 1.5x minimum
-
-            await this.animateViewport(
-                {
-                    zoom: targetZoom,
-                    pan: {
-                        x:
-                            this.container.offsetWidth / 2 -
-                            nodePosition.x * targetZoom,
-                        y:
-                            this.container.offsetHeight / 2 -
-                            nodePosition.y * targetZoom,
-                    },
-                },
-                600,
-            ); // 600ms smooth transition
-
-            // Step 2: Load detailed data for the entity
+            // Direct transition to detail view without zoom animation
             console.log(
                 `[Transition] Loading detailed data for entity: ${entityData.name}`,
             );
@@ -2942,13 +3133,6 @@ export class EntityGraphVisualizer {
             );
             // Restore original view on error
             this.viewMode = "global";
-            this.cy.animate(
-                {
-                    zoom: currentZoom,
-                    pan: currentPan,
-                },
-                300,
-            );
         }
     }
 
@@ -3773,6 +3957,16 @@ export class EntityGraphVisualizer {
     // Store current anchor nodes for LoD calculations
     private currentAnchorNodes: Set<string> = new Set();
 
+    // Navigation state tracking for hide/show approach with viewport preservation
+    private hiddenViewStack: Array<{
+        view: "global" | "neighborhood";
+        viewport: {
+            zoom: number;
+            pan: { x: number; y: number };
+        };
+        timestamp: number;
+    }> = [];
+
     /**
      * Apply Level of Detail based on anchor proximity and zoom level
      */
@@ -3887,6 +4081,119 @@ export class EntityGraphVisualizer {
         });
 
         console.log(`[AnchorLoD] LoD applied: ${visibleNodeCount}/${nodes.length} nodes, ${visibleEdgeCount}/${edges.length} edges visible`);
+    }
+
+    /**
+     * Hide current view for detail navigation
+     */
+    private hideCurrentViewForDetailNavigation(): void {
+        if (this.currentActiveView === "global" || this.currentActiveView === "neighborhood") {
+            // Capture current viewport state before hiding
+            const currentInstance = this.currentActiveView === "global" ? this.globalInstance : this.neighborhoodInstance;
+            const viewport = {
+                zoom: currentInstance.zoom(),
+                pan: currentInstance.pan()
+            };
+
+            console.log(`[Navigation] Hiding ${this.currentActiveView} view for detail navigation - viewport: zoom=${viewport.zoom.toFixed(3)}, pan=(${viewport.pan.x.toFixed(1)}, ${viewport.pan.y.toFixed(1)})`);
+
+            this.hiddenViewStack.push({
+                view: this.currentActiveView,
+                viewport: viewport,
+                timestamp: Date.now()
+            });
+
+            // Limit stack size to prevent memory issues
+            if (this.hiddenViewStack.length > 5) {
+                this.hiddenViewStack.shift();
+            }
+        }
+    }
+
+    /**
+     * Restore previously hidden view
+     */
+    public restoreHiddenView(): boolean {
+        if (this.hiddenViewStack.length === 0) {
+            console.log("[Navigation] No hidden view to restore");
+            return false;
+        }
+
+        const hiddenView = this.hiddenViewStack.pop()!;
+        console.log(`[Navigation] Restoring hidden ${hiddenView.view} view with viewport: zoom=${hiddenView.viewport.zoom.toFixed(3)}, pan=(${hiddenView.viewport.pan.x.toFixed(1)}, ${hiddenView.viewport.pan.y.toFixed(1)})`);
+
+        try {
+            // Switch back to the hidden view
+            if (hiddenView.view === "global") {
+                this.switchToGlobalView();
+
+                // Delay viewport restoration to ensure all LoD updates are complete
+                setTimeout(() => {
+                    // Force resize to recalculate container dimensions, then restore viewport
+                    this.globalInstance.resize();
+
+                    // Log current zoom before restoration
+                    const currentZoom = this.globalInstance.zoom();
+                    console.log(`[Navigation] Global view zoom before restoration: ${currentZoom.toFixed(3)}`);
+
+                    this.globalInstance.zoom(hiddenView.viewport.zoom);
+                    this.globalInstance.pan(hiddenView.viewport.pan);
+
+                    // Verify zoom was actually set
+                    const restoredZoom = this.globalInstance.zoom();
+                    console.log(`[Navigation] Global view zoom after restoration: ${restoredZoom.toFixed(3)} (expected: ${hiddenView.viewport.zoom.toFixed(3)})`);
+                }, 50);
+
+            } else if (hiddenView.view === "neighborhood") {
+                this.switchToNeighborhoodView();
+
+                // Delay viewport restoration to ensure LoD updates are complete
+                setTimeout(() => {
+                    // Force resize to recalculate container dimensions, then restore viewport
+                    this.neighborhoodInstance.resize();
+
+                    // Log current zoom before restoration
+                    const currentZoom = this.neighborhoodInstance.zoom();
+                    console.log(`[Navigation] Neighborhood view zoom before restoration: ${currentZoom.toFixed(3)}`);
+
+                    this.neighborhoodInstance.zoom(hiddenView.viewport.zoom);
+                    this.neighborhoodInstance.pan(hiddenView.viewport.pan);
+
+                    // Verify zoom was actually set
+                    const restoredZoom = this.neighborhoodInstance.zoom();
+                    console.log(`[Navigation] Neighborhood view zoom after restoration: ${restoredZoom.toFixed(3)} (expected: ${hiddenView.viewport.zoom.toFixed(3)})`);
+                }, 50);
+            }
+
+            console.log(`[Navigation] Successfully restored ${hiddenView.view} view`);
+            return true;
+        } catch (error) {
+            console.error("[Navigation] Failed to restore hidden view:", error);
+            return false;
+        }
+    }
+
+    /**
+     * Check if there's a hidden view available for restoration
+     */
+    public hasHiddenView(): boolean {
+        return this.hiddenViewStack.length > 0;
+    }
+
+    /**
+     * Get the type of the most recent hidden view
+     */
+    public getHiddenViewType(): "global" | "neighborhood" | null {
+        if (this.hiddenViewStack.length === 0) return null;
+        return this.hiddenViewStack[this.hiddenViewStack.length - 1].view;
+    }
+
+    /**
+     * Clear hidden view stack (useful for resetting navigation state)
+     */
+    public clearHiddenViews(): void {
+        this.hiddenViewStack = [];
+        console.log("[Navigation] Hidden view stack cleared");
     }
 
     /**

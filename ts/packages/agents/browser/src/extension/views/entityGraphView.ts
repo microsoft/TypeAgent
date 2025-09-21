@@ -265,12 +265,22 @@ class EntityGraphView {
             refreshButton.addEventListener("click", () => this.refreshGraph());
         }
 
-        // Back to global button
+        // Back to previous view button (was "back to global" but now smarter)
         const backToGlobalBtn = document.getElementById("backToGlobalBtn");
         if (backToGlobalBtn) {
-            backToGlobalBtn.addEventListener("click", () => {
-                console.log("Back to global button clicked");
-                this.navigateToGlobalView();
+            backToGlobalBtn.addEventListener("click", async () => {
+                console.log("Back button clicked");
+
+                // Try to restore hidden view first (much simpler approach)
+                const restored = this.visualizer.restoreHiddenView();
+                if (!restored) {
+                    // Fallback to global view if no hidden view available
+                    console.log("No hidden view available, falling back to global view");
+                    this.navigateToGlobalView();
+                }
+
+                // Update button text after navigation
+                this.updateBackButtonText();
             });
         }
 
@@ -466,6 +476,9 @@ class EntityGraphView {
             if (backToGlobalBtn) {
                 backToGlobalBtn.style.display = "flex";
             }
+
+            // Update back button text to reflect what view we'll return to
+            this.updateBackButtonText();
 
             // Update URL and history - only if not handling popstate and updateHistory is true
             if (updateHistory && !this.isHandlingPopstate) {
@@ -1014,7 +1027,7 @@ class EntityGraphView {
                     await this.graphDataProvider.getEntityNeighborhood(
                         entityName,
                         2,
-                        100,
+                        50,
                     );
 
                 // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
@@ -1437,7 +1450,7 @@ class EntityGraphView {
                 await this.graphDataProvider.getEntityNeighborhood(
                     entityName,
                     2,
-                    100,
+                    50,
                 );
 
             if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
@@ -1645,12 +1658,24 @@ class EntityGraphView {
             if (layerText) layerText.textContent = "Importance";
             if (layerIndicator) layerIndicator.style.backgroundColor = "#28a745";
 
-            // Get importance layer data (top 100 most important nodes - TESTING)
-            const importanceData = await this.graphDataProvider.getGlobalImportanceLayer(100);
+            // Get importance layer data (top 500 most important nodes - TESTING)
+            const importanceData = await this.graphDataProvider.getGlobalImportanceLayer(500);
 
             console.log(
                 `[HierarchicalLoading] Loaded importance layer: ${importanceData.entities.length} entities, ${importanceData.relationships.length} relationships`
             );
+
+            // Debug: Check the raw data structure
+            console.log(`[DEBUG-Frontend] Raw importance data sample:`, {
+                firstEntity: importanceData.entities[0],
+                firstRelationship: importanceData.relationships[0],
+                entitySample: importanceData.entities.slice(0, 3).map((e: any) => ({
+                    name: e.name,
+                    importance: e.importance,
+                    degree: e.degree,
+                    type: e.type
+                }))
+            });
 
             if (importanceData.entities.length === 0) {
                 this.hideGraphLoading();
@@ -1820,10 +1845,24 @@ class EntityGraphView {
      */
     private async executeGlobalViewTransition(): Promise<void> {
         console.log("[Navigation] Executing global view transition");
-        this.currentEntity = null;
-        this.currentViewMode = { type: "global" };
-        this.updateSidebarVisibility(false);
-        await this.loadGlobalView();
+
+        // Try to use hide/show logic first (same as back button)
+        const restored = this.visualizer.restoreHiddenView();
+        if (restored) {
+            console.log("[Navigation] Browser back: Successfully restored hidden view");
+            // Update internal state to match the restored view
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+            this.updateSidebarVisibility(false);
+            this.updateBackButtonText();
+        } else {
+            console.log("[Navigation] Browser back: No hidden view available, falling back to loadGlobalView");
+            // Fallback to original logic if no hidden view available
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+            this.updateSidebarVisibility(false);
+            await this.loadGlobalView();
+        }
     }
 
     /**
@@ -1887,6 +1926,33 @@ class EntityGraphView {
             backToGlobalBtn.style.display = this.currentEntity
                 ? "flex"
                 : "none";
+        }
+    }
+
+    /**
+     * Update back button text based on hidden view stack
+     */
+    private updateBackButtonText(): void {
+        const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+        if (!backToGlobalBtn) return;
+
+        // Check if visualizer has a hidden view available
+        if (this.visualizer && this.visualizer.hasHiddenView()) {
+            const hiddenViewType = this.visualizer.getHiddenViewType();
+            if (hiddenViewType === "global") {
+                backToGlobalBtn.innerHTML = '<i class="bi bi-arrow-left"></i> Global';
+                backToGlobalBtn.title = "Back to Global View";
+            } else if (hiddenViewType === "neighborhood") {
+                backToGlobalBtn.innerHTML = '<i class="bi bi-arrow-left"></i> Neighborhood';
+                backToGlobalBtn.title = "Back to Neighborhood View";
+            } else {
+                backToGlobalBtn.innerHTML = '<i class="bi bi-arrow-left"></i> Back';
+                backToGlobalBtn.title = "Back to Previous View";
+            }
+        } else {
+            // No hidden view, will go to global view
+            backToGlobalBtn.innerHTML = '<i class="bi bi-arrow-left"></i> Global';
+            backToGlobalBtn.title = "Back to Global View";
         }
     }
 

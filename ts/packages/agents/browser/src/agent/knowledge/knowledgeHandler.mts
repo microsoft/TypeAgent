@@ -3871,14 +3871,15 @@ function calculateEntityMetrics(
     const communityMap = new Map<string, string>();
 
     entities.forEach((entity) => {
-        entityMap.set(entity.entityName || entity.name, {
-            id: entity.entityName  || entity.name,
-            name: entity.entityName || entity.name,
+        const entityName = entity.entityName || entity.name;
+        entityMap.set(entityName, {
+            id: entityName,
+            name: entityName,
             type: entity.entityType || entity.type || "entity",
             confidence: entity.confidence || 0.5,
             count: entity.count || 1,
         });
-        degreeMap.set(entity.entityName, 0);
+        degreeMap.set(entityName, 0);
     });
 
     communities.forEach((community, index) => {
@@ -3905,24 +3906,50 @@ function calculateEntityMetrics(
 
         if (degreeMap.has(from)) {
             degreeMap.set(from, degreeMap.get(from)! + 1);
+        } else {
+            console.log(`[DEBUG-Backend] Warning: fromEntity '${from}' not found in degreeMap`);
         }
         if (degreeMap.has(to)) {
             degreeMap.set(to, degreeMap.get(to)! + 1);
+        } else {
+            console.log(`[DEBUG-Backend] Warning: toEntity '${to}' not found in degreeMap`);
         }
     });
 
+    // Debug: Show degree map statistics
+    const degreeValues = Array.from(degreeMap.values());
+    const nonZeroDegrees = degreeValues.filter(d => d > 0);
+    console.log(`[DEBUG-Backend] Degree map stats: total entities=${degreeValues.length}, nonZero=${nonZeroDegrees.length}, max=${Math.max(...degreeValues)}`);
+    if (nonZeroDegrees.length > 0 && nonZeroDegrees.length <= 10) {
+        console.log(`[DEBUG-Backend] Non-zero degrees:`, Array.from(degreeMap.entries()).filter(([k, v]) => v > 0));
+    }
+
     const maxDegree = Math.max(...Array.from(degreeMap.values())) || 1;
 
-    return Array.from(entityMap.values()).map((entity) => ({
-        ...entity,
-        degree: degreeMap.get(entity.name) || 0,
-        importance: (degreeMap.get(entity.name) || 0) / maxDegree,
-        communityId: communityMap.get(entity.name) || "default",
-        size: Math.max(
-            8,
-            Math.min(40, 8 + Math.sqrt((degreeMap.get(entity.name) || 0) * 3)),
-        ),
-    }));
+    console.log(`[DEBUG-Backend] calculateEntityMetrics: entityCount=${entities.length}, relationshipCount=${relationships.length}, maxDegree=${maxDegree}`);
+
+    const results = Array.from(entityMap.values()).map((entity) => {
+        const degree = degreeMap.get(entity.name) || 0;
+        const importance = degree / maxDegree;
+        return {
+            ...entity,
+            degree: degree,
+            importance: importance,
+            communityId: communityMap.get(entity.name) || "default",
+            size: Math.max(
+                8,
+                Math.min(40, 8 + Math.sqrt(degree * 3)),
+            ),
+        };
+    });
+
+    // Debug: Show first few results
+    console.log(`[DEBUG-Backend] First 5 calculated entities:`);
+    results.slice(0, 5).forEach((entity, index) => {
+        console.log(`  ${index + 1}. ${entity.name}: degree=${entity.degree}, importance=${entity.importance.toFixed(4)}`);
+    });
+
+    return results;
 }
 
 // ============================================================================
