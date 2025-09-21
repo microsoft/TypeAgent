@@ -76,6 +76,11 @@ interface GraphDataProvider {
     // Statistics and metadata
     getGraphStatistics(): Promise<GraphStatistics>;
 
+    // Hierarchical partitioned loading methods
+    getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
+    getImportanceNeighborhood(centerEntity: string, maxNodes?: number): Promise<any>;
+    getImportanceStatistics(): Promise<any>;
+
     // Validation and health checks
     validateConnection(): Promise<boolean>;
 }
@@ -362,6 +367,82 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 error,
             );
             return false;
+        }
+    }
+
+    // ===================================================================
+    // HIERARCHICAL PARTITIONED LOADING METHODS
+    // ===================================================================
+
+    async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
+        try {
+            console.log(`[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`);
+
+            const result = await this.baseService.sendMessage({
+                type: "getGlobalImportanceLayer",
+                parameters: {
+                    maxNodes,
+                    includeConnectivity: true
+                }
+            });
+
+            return {
+                entities: this.transformEntitiesToUIFormat(result.entities || []),
+                relationships: this.transformRelationshipsToUIFormat(result.relationships || []),
+                metadata: {
+                    ...result.metadata,
+                    source: "global_importance_layer"
+                }
+            };
+        } catch (error) {
+            console.error("[GraphDataProvider] Error fetching global importance layer:", error);
+            throw error;
+        }
+    }
+
+    async getImportanceNeighborhood(centerEntity: string, maxNodes: number = 5000): Promise<any> {
+        try {
+            console.log(`[GraphDataProvider] Fetching importance neighborhood for ${centerEntity} with ${maxNodes} nodes`);
+
+            // For small graphs (< 2000 nodes), disable global context to get true neighborhood
+            const includeGlobalContext = maxNodes >= 2000;
+
+            const result = await this.baseService.sendMessage({
+                type: "getImportanceNeighborhood",
+                parameters: {
+                    centerEntity,
+                    maxNodes,
+                    importanceWeighting: true,
+                    includeGlobalContext
+                }
+            });
+
+            return {
+                entities: this.transformEntitiesToUIFormat(result.entities || []),
+                relationships: this.transformRelationshipsToUIFormat(result.relationships || []),
+                metadata: {
+                    ...result.metadata,
+                    source: "importance_neighborhood"
+                }
+            };
+        } catch (error) {
+            console.error("[GraphDataProvider] Error fetching importance neighborhood:", error);
+            throw error;
+        }
+    }
+
+    async getImportanceStatistics(): Promise<any> {
+        try {
+            console.log("[GraphDataProvider] Fetching importance statistics");
+
+            const result = await this.baseService.sendMessage({
+                type: "getImportanceStatistics"
+            });
+
+            return result;
+        } catch (error) {
+            console.error("[GraphDataProvider] Error fetching importance statistics:", error);
+            throw error;
         }
     }
 

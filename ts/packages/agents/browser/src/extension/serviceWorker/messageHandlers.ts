@@ -1063,6 +1063,45 @@ export async function handleMessage(
             }
         }
 
+        case "getGlobalImportanceLayer": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getGlobalImportanceLayer",
+                    parameters: message.parameters || {}
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting global importance layer:", error);
+                return { entities: [], relationships: [], metadata: { error: error instanceof Error ? error.message : "Unknown error" } };
+            }
+        }
+
+        case "getImportanceNeighborhood": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getImportanceNeighborhood",
+                    parameters: message.parameters || {}
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting importance neighborhood:", error);
+                return { entities: [], relationships: [], metadata: { error: error instanceof Error ? error.message : "Unknown error" } };
+            }
+        }
+
+        case "getImportanceStatistics": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getImportanceStatistics",
+                    parameters: {}
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting importance statistics:", error);
+                return { distribution: [], recommendedLevel: 1, levelPreview: [] };
+            }
+        }
+
         default:
             return null;
     }

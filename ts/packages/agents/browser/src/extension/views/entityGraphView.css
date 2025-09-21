@@ -403,6 +403,25 @@ body {
   cursor: not-allowed;
 }
 
+/* Layer Indicator */
+.layer-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #6c757d;
+  margin-top: 4px;
+}
+
+.layer-text {
+  color: white;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* Graph Info Panel */
 .graph-info-panel {
   position: absolute;

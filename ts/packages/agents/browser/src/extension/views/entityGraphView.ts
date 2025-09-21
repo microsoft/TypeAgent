@@ -76,6 +76,15 @@ class EntityGraphView {
 
             console.log("Creating visualizer...");
             this.visualizer = new EntityGraphVisualizer(graphContainer);
+
+            // Set up hierarchical loading
+            this.visualizer.setGraphDataProvider(this.graphDataProvider);
+
+            // Set up UI callbacks
+            this.visualizer.setInstanceChangeCallback(() => {
+                this.updateLayerIndicator();
+            });
+
             console.log("Creating sidebar...");
             this.sidebar = new EntitySidebar(sidebarContainer);
 
@@ -144,9 +153,13 @@ class EntityGraphView {
                 // Don't update history during initial load - already handled by setupBrowserNavigation
                 await this.navigateToEntity(entityToLoad, false);
             } else if (this.currentViewMode.type === "global") {
-                console.log("Loading global knowledge graph");
+                console.log("Loading global knowledge graph with importance layer");
                 this.updateSidebarVisibility(false);
-                await this.loadGlobalView();
+                await this.loadGlobalViewWithImportanceLayer();
+                this.updateLayerIndicator(); // Update layer indicator after loading
+                // Show neighborhood button for testing
+                const toggleBtn = document.getElementById("toggleNeighborhoodBtn");
+                if (toggleBtn) toggleBtn.style.display = "block";
             } else {
                 console.log("Invalid state - showing error");
                 this.showEntityParameterError();
@@ -258,6 +271,24 @@ class EntityGraphView {
             backToGlobalBtn.addEventListener("click", () => {
                 console.log("Back to global button clicked");
                 this.navigateToGlobalView();
+            });
+        }
+
+        // Importance layer toggle
+        const useImportanceLayerBtn = document.getElementById("useImportanceLayerBtn");
+        if (useImportanceLayerBtn) {
+            useImportanceLayerBtn.addEventListener("click", () => {
+                console.log("Use importance layer button clicked");
+                this.toggleImportanceLayer();
+            });
+        }
+
+        // Testing: Neighborhood toggle button
+        const toggleNeighborhoodBtn = document.getElementById("toggleNeighborhoodBtn");
+        if (toggleNeighborhoodBtn) {
+            toggleNeighborhoodBtn.addEventListener("click", () => {
+                console.log("Toggle neighborhood button clicked");
+                this.manuallyTriggerNeighborhood();
             });
         }
     }
@@ -493,7 +524,7 @@ class EntityGraphView {
             }
 
             this.updateSidebarVisibility(false);
-            await this.loadGlobalView();
+            await this.loadGlobalViewWithImportanceLayer();
         } catch (error) {
             console.error("Failed to navigate to global view:", error);
             this.showNavigationError("Failed to load global view");
@@ -736,6 +767,53 @@ class EntityGraphView {
                 totalCommunities: globalGraphResult.statistics.communities,
             },
         };
+    }
+
+    /**
+     * Enhance entities with LoD properties for importance-based visualization
+     */
+    private enhanceEntitiesForLoD(entities: any[]): any[] {
+        console.log(`[LoD] Enhancing ${entities.length} entities for importance-based LoD`);
+
+        // Calculate importance statistics for proper scaling
+        const importanceValues = entities.map(e => e.importance || 0).filter(i => i > 0);
+        const minImportance = Math.min(...importanceValues);
+        const maxImportance = Math.max(...importanceValues);
+        const importanceRange = maxImportance - minImportance;
+
+        console.log(`[LoD] Importance range: ${minImportance.toFixed(3)} - ${maxImportance.toFixed(3)}`);
+
+        return entities.map((entity: any) => {
+            const importance = entity.importance || 0;
+            const normalizedImportance = importanceRange > 0 ? (importance - minImportance) / importanceRange : 0.5;
+
+            // Calculate size based on importance (10-50px range)
+            const baseSize = 10;
+            const maxSize = 50;
+            const size = baseSize + (normalizedImportance * (maxSize - baseSize));
+
+            // Calculate color based on importance (blue gradient)
+            const colorIntensity = Math.max(0.3, normalizedImportance); // Minimum 30% intensity
+            const blue = Math.floor(255 * colorIntensity);
+            const color = `rgb(${Math.floor(blue * 0.3)}, ${Math.floor(blue * 0.6)}, ${blue})`;
+            const borderColor = `rgb(${Math.floor(blue * 0.2)}, ${Math.floor(blue * 0.4)}, ${Math.floor(blue * 0.8)})`;
+
+            // Enhanced entity with LoD properties
+            return {
+                ...entity,
+                size: Math.round(size),
+                color: color,
+                borderColor: borderColor,
+                // LoD properties for visibility thresholds
+                computedImportance: importance,
+                visualPriority: normalizedImportance,
+                degreeCount: entity.degree || entity.degreeCount || Math.max(1, importance * 10),
+                centralityScore: entity.centrality || entity.centralityScore || importance,
+                // Labels based on importance
+                showLabel: normalizedImportance > 0.3, // Only show labels for top 70% important nodes
+                labelSize: Math.max(8, 8 + normalizedImportance * 8) // 8-16px label size
+            };
+        });
     }
 
     private assignCommunityColors(entities: any[], communities: any[]): any[] {
@@ -1478,6 +1556,186 @@ class EntityGraphView {
         return entities.reduce((total, entity) => {
             return total + (entity.visitCount || 0);
         }, 0);
+    }
+
+    // ===================================================================
+    // HIERARCHICAL LOADING METHODS
+    // ===================================================================
+
+    private useImportanceLayer: boolean = false;
+
+    /**
+     * Update layer indicator to show current instance state
+     */
+    private updateLayerIndicator(): void {
+        const layerIndicator = document.getElementById("layerIndicator");
+        const layerText = layerIndicator?.querySelector(".layer-text");
+
+        if (!layerText || !layerIndicator) return;
+
+        if (this.visualizer) {
+            const currentView = this.visualizer.getCurrentActiveView();
+            const toggleNeighborhoodBtn = document.getElementById("toggleNeighborhoodBtn");
+
+            switch (currentView) {
+                case "global":
+                    layerText.textContent = "Global";
+                    layerIndicator.style.backgroundColor = "#28a745"; // Green
+                    // Show neighborhood toggle button only in global view
+                    if (toggleNeighborhoodBtn) toggleNeighborhoodBtn.style.display = "block";
+                    break;
+                case "neighborhood":
+                    layerText.textContent = "Neighborhood";
+                    layerIndicator.style.backgroundColor = "#0d6efd"; // Blue
+                    // Hide neighborhood toggle button in neighborhood view
+                    if (toggleNeighborhoodBtn) toggleNeighborhoodBtn.style.display = "none";
+                    break;
+                case "detail":
+                    layerText.textContent = "Detail";
+                    layerIndicator.style.backgroundColor = "#dc3545"; // Red
+                    // Hide neighborhood toggle button in detail view
+                    if (toggleNeighborhoodBtn) toggleNeighborhoodBtn.style.display = "none";
+                    break;
+                default:
+                    layerText.textContent = "Unknown";
+                    layerIndicator.style.backgroundColor = "#6c757d"; // Gray
+                    if (toggleNeighborhoodBtn) toggleNeighborhoodBtn.style.display = "none";
+            }
+        }
+    }
+
+    private async toggleImportanceLayer(): Promise<void> {
+        try {
+            this.useImportanceLayer = !this.useImportanceLayer;
+
+            const layerIndicator = document.getElementById("layerIndicator");
+            const layerText = layerIndicator?.querySelector(".layer-text");
+
+            if (this.useImportanceLayer) {
+                console.log("[HierarchicalLoading] Switching to importance layer");
+                if (layerText) layerText.textContent = "Importance";
+                if (layerIndicator) layerIndicator.style.backgroundColor = "#0d6efd";
+
+                // Load using importance layer
+                await this.loadGlobalViewWithImportanceLayer();
+            } else {
+                console.log("[HierarchicalLoading] Switching to standard view");
+                if (layerText) layerText.textContent = "Standard";
+                if (layerIndicator) layerIndicator.style.backgroundColor = "#6c757d";
+
+                // Load using standard method
+                await this.loadGlobalView();
+            }
+
+        } catch (error) {
+            console.error("[HierarchicalLoading] Error toggling importance layer:", error);
+            this.showMessage("Failed to switch layers", "error");
+        }
+    }
+
+    private async loadGlobalViewWithImportanceLayer(): Promise<void> {
+        try {
+            console.time("[Perf] Importance layer load");
+            this.showGraphLoading();
+            console.log("[HierarchicalLoading] Loading global importance layer");
+
+            // Update UI indicator to show importance mode
+            const layerIndicator = document.getElementById("layerIndicator");
+            const layerText = layerIndicator?.querySelector(".layer-text");
+            if (layerText) layerText.textContent = "Importance";
+            if (layerIndicator) layerIndicator.style.backgroundColor = "#28a745";
+
+            // Get importance layer data (top 100 most important nodes - TESTING)
+            const importanceData = await this.graphDataProvider.getGlobalImportanceLayer(100);
+
+            console.log(
+                `[HierarchicalLoading] Loaded importance layer: ${importanceData.entities.length} entities, ${importanceData.relationships.length} relationships`
+            );
+
+            if (importanceData.entities.length === 0) {
+                this.hideGraphLoading();
+                this.showGraphEmpty();
+                console.timeEnd("[Perf] Importance layer load");
+                return;
+            }
+
+            // Transform data to expected format for visualizer with proper LoD properties
+            const transformedData = {
+                entities: this.enhanceEntitiesForLoD(importanceData.entities),
+                relationships: importanceData.relationships,
+                communities: [],
+                topics: [],
+                statistics: {
+                    totalEntities: importanceData.entities.length,
+                    totalRelationships: importanceData.relationships.length,
+                    totalCommunities: 0,
+                }
+            };
+
+            await this.visualizer.loadGlobalGraph(transformedData);
+            this.hideGraphLoading();
+
+            console.log(
+                `[HierarchicalLoading] Loaded importance layer: ${importanceData.entities.length} entities, ${importanceData.relationships.length} relationships`
+            );
+            console.timeEnd("[Perf] Importance layer load");
+
+            // Show success message
+            this.showMessage(
+                `Loaded importance layer with ${importanceData.entities.length} most important entities`,
+                "success"
+            );
+
+        } catch (error) {
+            console.error("[HierarchicalLoading] Failed to load importance layer:", error);
+            this.hideGraphLoading();
+            this.showGraphError("Failed to load importance layer");
+            console.timeEnd("[Perf] Importance layer load");
+        }
+    }
+
+    /**
+     * Manually trigger neighborhood view for testing (finds central node in current view)
+     */
+    private async manuallyTriggerNeighborhood(): Promise<void> {
+        if (!this.visualizer) {
+            console.warn("[Testing] No visualizer available for neighborhood trigger");
+            return;
+        }
+
+        const currentView = this.visualizer.getCurrentActiveView();
+        if (currentView !== "global") {
+            console.warn("[Testing] Neighborhood trigger only available in global view");
+            return;
+        }
+
+        try {
+            console.log("[Testing] Manually triggering neighborhood view...");
+            console.log("[Testing] Current visualizer state:", {
+                hasVisualizer: !!this.visualizer,
+                currentView: this.visualizer?.getCurrentActiveView()
+            });
+
+            // Find the most central/important node in current viewport
+            const centralNode = this.visualizer.findCentralNodeInViewport();
+
+            if (!centralNode) {
+                console.warn("[Testing] No suitable central node found for neighborhood");
+                return;
+            }
+
+            const entityName = centralNode.data('name') || centralNode.data('id');
+            console.log(`[Testing] Triggering neighborhood for entity: ${entityName}`);
+
+            // Trigger neighborhood transition via the visualizer
+            await this.visualizer.loadNeighborhoodAroundNode(entityName);
+
+            // Update UI after transition
+            this.updateLayerIndicator();
+
+        } catch (error) {
+            console.error("[Testing] Failed to trigger neighborhood:", error);
+        }
     }
 
     // ============================================================================
