@@ -1187,6 +1187,7 @@ function createMainWindow(): BrowserWindow {
     const mainWindow = new BrowserWindow({
         show: false,
         frame: false, // Remove default frame
+        //transparent: true,
         titleBarStyle: isMac ? "hiddenInset" : "hidden", // Hide title bar
         titleBarOverlay: isWindows
             ? {

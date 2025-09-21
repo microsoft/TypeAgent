@@ -177,6 +177,7 @@ export class SettingsView {
 
             chatView.enablePartialInput(this.shellSettings.partialCompletion);
             chatView.setMetricsVisible(this.shellSettings.ui.dev);
+            chatView.setInputMode(this.shellSettings.ui.verticalLayout);
         };
 
         const updateTheme = () => {
