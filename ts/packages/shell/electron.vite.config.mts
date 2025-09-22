@@ -35,7 +35,10 @@ export default defineConfig({
                         "src/renderer/searchMenuView.html",
                     ),
                     newTab: resolve(__dirname, "src/renderer/newTab.html"),
-                    readOnlyChatView: resolve(__dirname, "src/renderer/readonlyChatView.html"),                    
+                    readOnlyChatView: resolve(
+                        __dirname,
+                        "src/renderer/readonlyChatView.html",
+                    ),
                 },
             },
         },

@@ -25,7 +25,9 @@ export async function createWebSocket(autoReconnect: boolean = true) {
             console.log(msgObj);
             switch (msgObj.message) {
                 case "updated-content":
-                    const wrapper: HTMLDivElement = document.getElementById('wrapper') as HTMLDivElement;
+                    const wrapper: HTMLDivElement = document.getElementById(
+                        "wrapper",
+                    ) as HTMLDivElement;
 
                     wrapper.innerHTML += "updated";
                     break;

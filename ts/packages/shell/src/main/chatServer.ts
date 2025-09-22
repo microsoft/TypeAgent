@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
-import {
-    createServer,
-    Server,
-    IncomingMessage
-} from "node:http";
+import { createServer, Server, IncomingMessage } from "node:http";
 
 import registerDebug from "debug";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
@@ -15,18 +11,19 @@ import path from "node:path";
 const debug = registerDebug("typeagent:shell:chatServer");
 
 export class ChatServer {
-
     private server: Server<any, any>;
     private socketServer: WebSocketServer;
     private port: number;
 
-    onConnection(callback: (ws: WebSocket, req: IncomingMessage) => void) {        
+    onConnection(callback: (ws: WebSocket, req: IncomingMessage) => void) {
+        this.socketServer.on(
+            "connection",
+            (ws: WebSocket, req: IncomingMessage) => {
+                console.log(`New client ${ws} ${req}`);
 
-        this.socketServer.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-            console.log(`New client ${ws} ${req}`);
-
-            callback(ws, req);
-        });
+                callback(ws, req);
+            },
+        );
     }
 
     constructor(port: number) {
@@ -58,7 +55,7 @@ export class ChatServer {
         //             client.send();
         //         }
         //     });
-        // });        
+        // });
     }
 
     async start() {
@@ -114,7 +111,7 @@ export class ChatServer {
             response.end("File Not Found!\n");
 
             console.log(`Unable to serve '${request.url}', 404. ${error}`);
-        }                
+        }
     }
 
     broadcast(message: string) {

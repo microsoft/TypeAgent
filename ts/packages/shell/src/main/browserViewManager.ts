@@ -113,8 +113,9 @@ export class BrowserViewManager {
                 // only show the error if it's for the page the user was asking
                 // it's possible some other resource failed to load (image, script, etc.)
                 if (validatedURL === options.url) {
-                    webContentsView.webContents
-                        .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />Error Details: <br />${errorCode} - ${errorDesc}"`);
+                    webContentsView.webContents.executeJavaScript(
+                        `document.body.innerHTML = "There was an error loading '${options.url}'.<br />Error Details: <br />${errorCode} - ${errorDesc}"`,
+                    );
                 }
             },
         );

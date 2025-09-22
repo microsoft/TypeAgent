@@ -371,14 +371,17 @@ export class ShellWindow {
             this.chatViewServer.onConnection(async (ws: WebSocket) => {
                 // when a new connection is established send the chat log to the client
                 try {
-                    const html: string = await this.chatView.webContents.executeJavaScript(`document.getElementById('wrapper').innerHTML`);
+                    const html: string =
+                        await this.chatView.webContents.executeJavaScript(
+                            `document.getElementById('wrapper').innerHTML`,
+                        );
                     ws.send(html);
                 } catch (error) {
                     console.error("Error sending chat log:", error);
                     ws.send(JSON.stringify(error));
                 }
             });
-            this.chatViewServer.start();        
+            this.chatViewServer.start();
         }
     }
 

@@ -36,7 +36,7 @@ export type ShellContext = {
 const config: AppAgentManifest = {
     emojiChar: "🐚",
     description: "Shell",
-    localView: true
+    localView: true,
 };
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
@@ -334,7 +334,9 @@ const handlers: CommandHandlerTable = {
 
 export function createShellAgentProvider(shellWindow: ShellWindow) {
     const agent: AppAgent = {
-        async initializeAgentContext(settings: AppAgentInitSettings): Promise<ShellContext> {
+        async initializeAgentContext(
+            settings: AppAgentInitSettings,
+        ): Promise<ShellContext> {
             shellWindow.startChatServer(settings.localHostPort ?? -1);
             return {
                 shellWindow,
