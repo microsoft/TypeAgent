@@ -445,6 +445,71 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async getGlobalImportanceLayer(maxNodes: number = 5000, includeConnectivity: boolean = true): Promise<any> {
+        return this.sendMessage({
+            type: "getGlobalImportanceLayer",
+            parameters: {
+                maxNodes,
+                includeConnectivity
+            }
+        });
+    }
+
+    async getImportanceNeighborhood(
+        centerEntity: string,
+        maxNodes: number = 5000,
+        importanceWeighting: boolean = true,
+        includeGlobalContext: boolean = true
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getImportanceNeighborhood",
+            parameters: {
+                centerEntity,
+                maxNodes,
+                importanceWeighting,
+                includeGlobalContext
+            }
+        });
+    }
+
+    async getViewportBasedNeighborhood(
+        centerEntity: string,
+        viewportNodeNames: string[],
+        maxNodes: number = 5000,
+        options: {
+            importanceWeighting?: boolean;
+            includeGlobalContext?: boolean;
+            exploreFromAllViewportNodes?: boolean;
+            minDepthFromViewport?: number;
+        } = {}
+    ): Promise<any> {
+        const {
+            importanceWeighting = true,
+            includeGlobalContext = true,
+            exploreFromAllViewportNodes = true,
+            minDepthFromViewport = 1
+        } = options;
+
+        return this.sendMessage({
+            type: "getViewportBasedNeighborhood",
+            parameters: {
+                centerEntity,
+                viewportNodeNames,
+                maxNodes,
+                importanceWeighting,
+                includeGlobalContext,
+                exploreFromAllViewportNodes,
+                minDepthFromViewport
+            }
+        });
+    }
+
+    async getImportanceStatistics(): Promise<any> {
+        return this.sendMessage({
+            type: "getImportanceStatistics"
+        });
+    }
+
     async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
         await this.sendMessage({
             type: "notifyAutoIndexSettingChanged",

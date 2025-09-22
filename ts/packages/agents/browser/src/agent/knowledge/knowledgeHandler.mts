@@ -3279,7 +3279,7 @@ export async function buildKnowledgeGraph(
             };
         }
 
-        console.log(
+        debug(
             "[Knowledge Graph] Starting knowledge graph build with parameters:",
             parameters,
         );
@@ -3303,7 +3303,7 @@ export async function buildKnowledgeGraph(
             timeElapsed: timeElapsed,
         };
 
-        console.log("[Knowledge Graph] Build completed:", stats);
+        debug("[Knowledge Graph] Build completed:", stats);
 
         return {
             success: true,
@@ -3539,7 +3539,7 @@ export async function getAllEntitiesWithMetrics(
         }
 
         // Fallback to live computation if no cache
-        console.log(
+        debug(
             "[Knowledge Graph] Cache not available, computing entities with metrics",
         );
         const entities =
@@ -3907,26 +3907,26 @@ function calculateEntityMetrics(
         if (degreeMap.has(from)) {
             degreeMap.set(from, degreeMap.get(from)! + 1);
         } else {
-            console.log(`[DEBUG-Backend] Warning: fromEntity '${from}' not found in degreeMap`);
+            debug(`[DEBUG-Backend] Warning: fromEntity '${from}' not found in degreeMap`);
         }
         if (degreeMap.has(to)) {
             degreeMap.set(to, degreeMap.get(to)! + 1);
         } else {
-            console.log(`[DEBUG-Backend] Warning: toEntity '${to}' not found in degreeMap`);
+            debug(`[DEBUG-Backend] Warning: toEntity '${to}' not found in degreeMap`);
         }
     });
 
     // Debug: Show degree map statistics
     const degreeValues = Array.from(degreeMap.values());
     const nonZeroDegrees = degreeValues.filter(d => d > 0);
-    console.log(`[DEBUG-Backend] Degree map stats: total entities=${degreeValues.length}, nonZero=${nonZeroDegrees.length}, max=${Math.max(...degreeValues)}`);
+    debug(`[DEBUG-Backend] Degree map stats: total entities=${degreeValues.length}, nonZero=${nonZeroDegrees.length}, max=${Math.max(...degreeValues)}`);
     if (nonZeroDegrees.length > 0 && nonZeroDegrees.length <= 10) {
-        console.log(`[DEBUG-Backend] Non-zero degrees:`, Array.from(degreeMap.entries()).filter(([k, v]) => v > 0));
+        debug(`[DEBUG-Backend] Non-zero degrees:`, Array.from(degreeMap.entries()).filter(([k, v]) => v > 0));
     }
 
     const maxDegree = Math.max(...Array.from(degreeMap.values())) || 1;
 
-    console.log(`[DEBUG-Backend] calculateEntityMetrics: entityCount=${entities.length}, relationshipCount=${relationships.length}, maxDegree=${maxDegree}`);
+    debug(`[DEBUG-Backend] calculateEntityMetrics: entityCount=${entities.length}, relationshipCount=${relationships.length}, maxDegree=${maxDegree}`);
 
     const results = Array.from(entityMap.values()).map((entity) => {
         const degree = degreeMap.get(entity.name) || 0;
@@ -3941,12 +3941,6 @@ function calculateEntityMetrics(
                 Math.min(40, 8 + Math.sqrt(degree * 3)),
             ),
         };
-    });
-
-    // Debug: Show first few results
-    console.log(`[DEBUG-Backend] First 5 calculated entities:`);
-    results.slice(0, 5).forEach((entity, index) => {
-        console.log(`  ${index + 1}. ${entity.name}: degree=${entity.degree}, importance=${entity.importance.toFixed(4)}`);
     });
 
     return results;

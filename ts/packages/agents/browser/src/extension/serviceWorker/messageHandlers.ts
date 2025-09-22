@@ -1067,12 +1067,24 @@ export async function handleMessage(
             try {
                 const result = await sendActionToAgent({
                     actionName: "getGlobalImportanceLayer",
-                    parameters: message.parameters || {}
+                    parameters: {
+                        maxNodes:message.maxNodes,
+            includeConnectivity:message.includeConnectivity,
+                    },
                 });
                 return result;
             } catch (error) {
                 console.error("Error getting global importance layer:", error);
-                return { entities: [], relationships: [], metadata: { error: error instanceof Error ? error.message : "Unknown error" } };
+                return {
+                    entities: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
             }
         }
 
@@ -1080,12 +1092,27 @@ export async function handleMessage(
             try {
                 const result = await sendActionToAgent({
                     actionName: "getImportanceNeighborhood",
-                    parameters: message.parameters || {}
+                    parameters: {
+centerEntity: message.centerEntity,
+            maxNodes: message.maxNodes,
+            importanceWeighting: message.importanceWeighting,
+            includeGlobalContext: message.includeGlobalContext,
+
+                    },
                 });
                 return result;
             } catch (error) {
                 console.error("Error getting importance neighborhood:", error);
-                return { entities: [], relationships: [], metadata: { error: error instanceof Error ? error.message : "Unknown error" } };
+                return {
+                    entities: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
             }
         }
 
@@ -1093,12 +1120,50 @@ export async function handleMessage(
             try {
                 const result = await sendActionToAgent({
                     actionName: "getImportanceStatistics",
-                    parameters: {}
+                    parameters: {},
                 });
                 return result;
             } catch (error) {
                 console.error("Error getting importance statistics:", error);
-                return { distribution: [], recommendedLevel: 1, levelPreview: [] };
+                return {
+                    distribution: [],
+                    recommendedLevel: 1,
+                    levelPreview: [],
+                };
+            }
+        }
+
+        case "getViewportBasedNeighborhood": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getViewportBasedNeighborhood",
+                    parameters: {
+                        centerEntity: message.centerEntity,
+                        viewportNodeNames: message.viewportNodeNames,
+                        maxNodes: message.maxNodes,
+                        importanceWeighting: message.importanceWeighting,
+                        includeGlobalContext: message.includeGlobalContext,
+                        exploreFromAllViewportNodes:
+                            message.exploreFromAllViewportNodes,
+                        minDepthFromViewport: message.minDepthFromViewport,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error(
+                    "Error getting viewport-based neighborhood:",
+                    error,
+                );
+                return {
+                    entities: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
             }
         }
 

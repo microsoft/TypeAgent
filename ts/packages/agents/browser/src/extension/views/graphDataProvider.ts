@@ -379,13 +379,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
         try {
             console.log(`[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`);
 
-            const result = await this.baseService.sendMessage({
-                type: "getGlobalImportanceLayer",
-                parameters: {
-                    maxNodes,
-                    includeConnectivity: true
-                }
-            });
+            const result = await this.baseService.getGlobalImportanceLayer(maxNodes, true);
 
             return {
                 entities: this.transformEntitiesToUIFormat(result.entities || []),
@@ -405,20 +399,8 @@ class GraphDataProviderImpl implements GraphDataProvider {
         try {
             console.log(`[GraphDataProvider] Fetching importance neighborhood for ${centerEntity} with ${maxNodes} nodes`);
 
-            // Include global context to maintain visual continuity between global and neighborhood views
-            const includeGlobalContext = true;
+            const result = await this.baseService.getImportanceNeighborhood(centerEntity, maxNodes, true, true);
 
-            const result = await this.baseService.sendMessage({
-                type: "getImportanceNeighborhood",
-                parameters: {
-                    centerEntity,
-                    maxNodes,
-                    importanceWeighting: true,
-                    includeGlobalContext
-                }
-            });
-
-            // Check if result is null or invalid
             if (!result) {
                 console.warn("[GraphDataProvider] Received null result from getImportanceNeighborhood service");
                 throw new Error("Service returned null result");
@@ -444,29 +426,23 @@ class GraphDataProviderImpl implements GraphDataProvider {
             console.log(`[GraphDataProvider] Viewport anchor nodes (first 10): ${JSON.stringify(viewportNodeNames.slice(0, 10))}`);
             console.log(`[GraphDataProvider] All viewport anchor nodes: ${JSON.stringify(viewportNodeNames)}`);
 
-            // Include global context to maintain visual continuity between global and neighborhood views
-            const includeGlobalContext = true;
-
-            const result = await this.baseService.sendMessage({
-                type: "getViewportBasedNeighborhood",
-                parameters: {
-                    centerEntity,
-                    viewportNodeNames,
-                    maxNodes,
+            const result = await this.baseService.getViewportBasedNeighborhood(
+                centerEntity,
+                viewportNodeNames,
+                maxNodes,
+                {
                     importanceWeighting: true,
-                    includeGlobalContext,
-                    // Run BFS from each viewport node to ensure they are all explored
+                    includeGlobalContext: true,
                     exploreFromAllViewportNodes: true,
                     minDepthFromViewport: 1
                 }
-            });
+            );
 
             console.log(`[GraphDataProvider] Raw service result:`, result);
             console.log(`[GraphDataProvider] Result type:`, typeof result);
             console.log(`[GraphDataProvider] Result entities length:`, result?.entities?.length || 'N/A');
             console.log(`[GraphDataProvider] Result relationships length:`, result?.relationships?.length || 'N/A');
 
-            // Check if result is null or invalid
             if (!result) {
                 console.warn("[GraphDataProvider] Received null result from getViewportBasedNeighborhood service");
                 throw new Error("Service returned null result");
@@ -483,7 +459,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
             };
         } catch (error) {
             console.error("[GraphDataProvider] Error fetching viewport-based neighborhood:", error);
-            // Fallback to standard importance neighborhood if viewport-based fails
             console.log("[GraphDataProvider] Falling back to standard importance neighborhood");
             return await this.getImportanceNeighborhood(centerEntity, maxNodes);
         }
@@ -493,9 +468,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
         try {
             console.log("[GraphDataProvider] Fetching importance statistics");
 
-            const result = await this.baseService.sendMessage({
-                type: "getImportanceStatistics"
-            });
+            const result = await this.baseService.getImportanceStatistics();
 
             return result;
         } catch (error) {
