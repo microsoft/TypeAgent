@@ -14,6 +14,7 @@ import {
     PlayRandomAction,
     PlayTrackAction,
     SearchTracksAction,
+    SearchForPlaylistsAction,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -41,6 +42,7 @@ import {
     shuffle,
     getQueue,
     getAlbum,
+    followPlaylist,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -53,6 +55,7 @@ import {
     UserData,
     addFullTracks,
     getPlaylistsFromUserData,
+    updatePlaylists,
 } from "./userData.js";
 
 import {
@@ -96,6 +99,7 @@ import {
     setMaxVolumeAction,
     setVolumeAction,
 } from "./volume.js";
+import e from "express";
 
 function createWarningActionResult(message: string) {
     debugSpotifyError(message);
@@ -210,6 +214,31 @@ export async function loadHistoryFile(
     } catch (e: any) {
         throw new Error(`Error reading history file: ${e.message}`);
     }
+}
+
+async function htmlPlaylistNames(
+    playlists: SpotifyApi.PlaylistObjectSimplified[],
+    headText = "Playlists",
+) {
+    const displayContent: DisplayContent = {
+        type: "html",
+        content: "",
+    };
+
+    const actionResult: ActionResult = {
+        displayContent,
+        historyText: "",
+        entities: [],
+    };
+    let content = `<div class='playlist-list'><div>${headText}...</div><ol>\n`;
+    for (const playlist of playlists) {
+        if (playlist) {
+            content += `  <li><span class='playlist-name'>${playlist.name}</span></li>\n`;
+        }
+    }
+    content += "</ol></div>";
+    displayContent.content = content;
+    return actionResult;
 }
 
 async function htmlTrackNames(
@@ -404,6 +433,22 @@ export async function searchTracks(
     const data = await search(query, context.service);
     if (data && data.tracks && data.tracks.items.length > 0) {
         return new TrackCollection(data.tracks.items);
+    }
+}
+
+export async function searchForPlaylists(
+    queryString: string,
+    context: IClientContext,
+) {
+    const query: SpotifyApi.SearchForItemParameterObject = {
+        q: queryString,
+        type: "playlist",
+        limit: 50,
+        offset: 0,
+    };
+    const data = await search(query, context.service);
+    if (data && data.playlists && data.playlists.items.length > 0) {
+        return data.playlists.items;
     }
 }
 
@@ -839,6 +884,18 @@ export async function handleCall(
             }
             return createNotFoundActionResult("tracks", queryString);
         }
+        case "searchForPlaylists": {
+            const searchPlaylistsAction = action as SearchForPlaylistsAction;
+            const queryString = searchPlaylistsAction.parameters.query;
+            const playlists = await searchForPlaylists(
+                queryString,
+                clientContext,
+            );
+            if (playlists) {
+                return htmlPlaylistNames(playlists, "PlaylistSearch Results");
+            }
+            return createNotFoundActionResult("playlists", queryString);
+        }
         case "listPlaylists": {
             if (clientContext.userData !== undefined) {
                 const playlists = await getPlaylistsFromUserData(
@@ -868,11 +925,38 @@ export async function handleCall(
                 clientContext.service,
                 clientContext.userData!.data,
             );
-            const playlist = playlists?.find((pl) => {
+            let playlist = playlists?.find((pl) => {
                 return pl.name
                     .toLowerCase()
                     .includes(playlistName.toLowerCase());
             });
+            if (!playlist) {
+                //look for playlist through search
+                const searchPlaylists = await searchForPlaylists(
+                    playlistName,
+                    clientContext,
+                );
+                if (searchPlaylists && searchPlaylists.length > 0) {
+                    for (const pl of searchPlaylists) {
+                        if (
+                            pl.name
+                                .toLowerCase()
+                                .includes(playlistName.toLowerCase())
+                        ) {
+                            playlist = pl;
+                            await followPlaylist(
+                                clientContext.service,
+                                playlist.id,
+                            );
+                            await updatePlaylists(
+                                clientContext.service,
+                                clientContext.userData!.data,
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
             if (playlist) {
                 const playlistResponse = await getPlaylistTracks(
                     clientContext.service,

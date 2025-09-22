@@ -13,7 +13,7 @@
     />
     <style>
       :root {
-        --title-bar-height: 32px;
+        --title-bar-height: 40px;
         --title-bar-bg: #e5e5e5;
         --border-color: #d0d0d0;
         --button-hover-bg: rgba(0, 0, 0, 0.05);
@@ -28,16 +28,16 @@
 
       /* Platform-specific adjustments */
       .platform-macos {
-        --title-bar-height: 28px;
+        --title-bar-height: 36px;
       }
 
       .platform-linux {
-        --title-bar-height: 32px;
+        --title-bar-height: 40px;
       }
 
       body {
         margin: 0;
-        padding-top: calc(var(--title-bar-height) + 12px);
+        padding-top: 0;
         overflow: hidden;
         font-family:
           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -53,7 +53,7 @@
         background: var(--title-bar-bg);
         border-bottom: 1px solid var(--border-color);
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         z-index: 10000;
         -webkit-app-region: no-drag;
         transition:
@@ -87,6 +87,7 @@
         display: flex;
         align-items: center;
         flex-shrink: 0;
+        padding-bottom: 4px;
       }
 
       .title-bar-button {
@@ -124,7 +125,7 @@
       /* Absolute positioned layout toggle button */
       .layout-toggle-absolute {
         position: fixed;
-        top: 2px;
+        top: 8px;
         left: 4px;
         width: 28px;
         height: 28px;
@@ -198,7 +199,7 @@
       .tab-container {
         flex: 1;
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         min-width: 0;
         gap: 4px;
       }
@@ -223,11 +224,11 @@
         min-width: 80px;
         max-width: 200px;
         flex: 1;
-        height: var(--title-bar-height);
-        background: var(--tab-inactive-bg);
+        height: 32px;
+        background: var(--title-bar-bg);
         border: 1px solid var(--tab-border);
-        border-bottom: 1px solid var(--tab-border);
-        border-radius: 4px 4px 0 0;
+        border-bottom: 1px solid transparent;
+        border-radius: 8px 8px 0 0;
         display: flex;
         align-items: center;
         padding: 0 8px;
@@ -237,9 +238,13 @@
         user-select: none;
         -webkit-user-select: none;
         position: relative;
-        margin-top: 0;
+        margin-top: 8px;
         z-index: 2;
         -webkit-app-region: no-drag;
+      }
+
+      .tab:hover:not(.active) {
+        background: var(--button-hover-bg);
       }
 
       .tab.active {
@@ -248,6 +253,7 @@
         border-bottom: none;
         z-index: 3;
         position: relative;
+        top: 1px;
       }
 
       .tab-favicon {
@@ -307,6 +313,7 @@
         z-index: 1;
         position: relative;
         -webkit-app-region: no-drag;
+        margin-bottom: 4px;
       }
 
       .new-tab-button:hover {
@@ -328,18 +335,19 @@
         cursor: default;
         text-align: center;
         margin-left: 44px; /* Account for toggle button width + safe spacing */
+        margin-bottom: 4px;
       }
 
       /* Right Side */
       .title-bar-right {
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         flex-shrink: 0;
       }
 
       .drag-region {
         flex: 1;
-        height: var(--title-bar-height);
+        height: 100%;
         -webkit-app-region: drag;
         min-width: 50px;
       }
@@ -412,7 +420,7 @@
         border-bottom: 1px solid var(--border-color);
         border-right: 1px solid var(--border-color);
         display: none;
-        align-items: center;
+        align-items: flex-end;
         justify-content: center;
         z-index: 9999;
         -webkit-app-region: drag;
@@ -447,6 +455,7 @@
         user-select: none;
         -webkit-user-select: none;
         cursor: default;
+        margin-bottom: 4px;
       }
 
       /* Show sidebar title only in horizontal layout with sidebar */
@@ -921,6 +930,8 @@
             titleBar.style.left = "0px";
           }
 
+          browserNav.style.paddingLeft = "28px";
+
           const newY = layout.pos;
           if (newY < 0) {
             dividerHorizontal.style.visibility = "hidden";
@@ -944,6 +955,8 @@
           } else {
             // In horizontal layout with sidebar visible
             document.body.classList.add("has-sidebar");
+
+            browserNav.style.paddingLeft = "0px";
 
             // Only update positions if not currently dragging to avoid conflicts
             if (!isDragging) {

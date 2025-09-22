@@ -22,6 +22,7 @@ export type PlayerActions =
     | SetMaxVolumeAction
     | ChangeVolumeAction
     | SearchTracksAction
+    | SearchForPlaylistsAction
     | ListPlaylistsAction
     | GetPlaylistAction
     | GetAlbumAction
@@ -185,6 +186,16 @@ export interface SearchTracksAction {
     };
 }
 
+// this action is used when the user asks to search for public playlists that match a query string like 'search playlist bach hilary hahn'; it is not used to get a specific playlist by name (use GetPlaylistAction for that); it is not used to search for tracks (use SearchTracksAction for that)
+// result of this action is a list of playlists that match the query
+export interface SearchForPlaylistsAction {
+    actionName: "searchForPlaylists";
+    parameters: {
+        // the part of the request specifying the the search keywords
+        // examples: 'bach hilary hahn', 'rock classics', 'workout', 'jazz for dinner'
+        query: string;
+    };
+}
 // list all playlists
 export interface ListPlaylistsAction {
     actionName: "listPlaylists";
