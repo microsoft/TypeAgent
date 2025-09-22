@@ -200,15 +200,22 @@ export async function defineTranslateTest(
     });
 }
 
+function checkResultError(result: CommandResult | undefined, message: string) {
+    if (result === undefined) {
+        throw new Error(`${message}: no result returned`);
+    }
+    if (result.lastError !== undefined) {
+        throw new Error(`${message}: ${result.lastError}`);
+    }
+}
+
 async function setupOneStep(
     steps: TranslateTestStep[],
     curr: TranslateTestStep,
     dispatcher: Dispatcher,
 ) {
     const result = await dispatcher.processCommand("@history clear");
-    if (result?.hasError === true) {
-        throw new Error(`Failed to clear history: ${result.exception}`);
-    }
+    checkResultError(result, "Failed to clear history");
     for (const step of steps) {
         if (step === curr) {
             return;
@@ -219,11 +226,7 @@ async function setupOneStep(
             const insertResult = await dispatcher.processCommand(
                 `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
             );
-            if (insertResult?.hasError === true) {
-                throw new Error(
-                    `Failed to insert history: ${insertResult.exception}`,
-                );
-            }
+            checkResultError(insertResult, "Failed to insert history");
         }
     }
 
@@ -240,9 +243,7 @@ function validateCommandResult(
     result?: CommandResult,
 ) {
     const { request, expected } = step;
-    if (result?.hasError) {
-        throw new Error(`Request '${request}' failed: ${result.exception}`);
-    }
+    checkResultError(result, `Failed to process request '${request}'`);
 
     if (expected !== undefined) {
         const actionMatches = normalizeActionMatches(expected);

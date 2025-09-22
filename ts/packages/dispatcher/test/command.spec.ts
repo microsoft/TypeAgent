@@ -180,17 +180,15 @@ describe("Command", () => {
                 "@test test param param",
             );
             expect(result).toBeDefined();
-            expect(result!.hasError).toBe(true);
-            expect(result!.exception).toContain(
+            expect(result!.lastError).toContain(
                 "Command '@test test' does not accept parameters.",
             );
         });
         it("resolves a default command with extra param error", async () => {
             const result = await dispatcher.processCommand("@test param param");
             expect(result).toBeDefined();
-            expect(result!.hasError).toBe(true);
-            expect(result!.exception).toContain(
-                "'param param' is not a subcommand for '@test",
+            expect(result!.lastError).toContain(
+                "'param param' is not a subcommand for '@test'",
             );
         });
         it("resolves nested command with extra param error", async () => {
@@ -198,8 +196,7 @@ describe("Command", () => {
                 "@test nested nested param param",
             );
             expect(result).toBeDefined();
-            expect(result!.hasError).toBe(true);
-            expect(result!.exception).toContain(
+            expect(result!.lastError).toContain(
                 "Command '@test nested nested' does not accept parameters.",
             );
         });
@@ -208,8 +205,7 @@ describe("Command", () => {
                 "@test nested param param",
             );
             expect(result).toBeDefined();
-            expect(result!.hasError).toBe(true);
-            expect(result!.exception).toContain(
+            expect(result!.lastError).toContain(
                 "'param param' is not a subcommand for '@test nested'.",
             );
         });
@@ -218,24 +214,21 @@ describe("Command", () => {
                 "@agent nested param param",
             );
             expect(result).toBeDefined();
-            expect(result!.hasError).toBe(true);
-            expect(result!.exception).toContain(
+            expect(result!.lastError).toContain(
                 "Command or agent name required.",
             );
         });
         it("missing subcommand error", async () => {
             const result = await dispatcher.processCommand("@test nested");
             expect(result).toBeDefined();
-            expect(result!.hasError).toBe(true);
-            expect(result!.exception).toContain(
+            expect(result!.lastError).toContain(
                 "'@test nested' requires a subcommand.",
             );
         });
         it("missing agent error", async () => {
             const result = await dispatcher.processCommand("@");
             expect(result).toBeDefined();
-            expect(result!.hasError).toBe(true);
-            expect(result!.exception).toContain(
+            expect(result!.lastError).toContain(
                 "Command or agent name required.",
             );
         });
