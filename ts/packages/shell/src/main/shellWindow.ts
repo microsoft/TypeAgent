@@ -31,7 +31,7 @@ const debugShellWindowError = registerDebug("typeagent:shell:window:error");
 
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
-const TITLE_BAR_HEIGHT = isMac ? 28 : 32; // Custom title bar height
+const TITLE_BAR_HEIGHT = isMac ? 36 : 40; // Custom title bar height
 function setupResizeHandler(mainWindow: BrowserWindow, handler: () => void) {
     let scheduleHandler: (() => void) | undefined;
     let timeout: NodeJS.Timeout | undefined;
@@ -1157,7 +1157,7 @@ function createMainWindow(): BrowserWindow {
             ? {
                   color: "#e5e5e5", // Matches --title-bar-bg
                   symbolColor: "#333333", // Matches --text-color
-                  height: 32,
+                  height: 40,
               }
             : undefined,
         trafficLightPosition: isMac ? { x: 12, y: 10 } : undefined,
