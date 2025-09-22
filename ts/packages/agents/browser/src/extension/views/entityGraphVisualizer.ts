@@ -5186,7 +5186,7 @@ export class EntityGraphVisualizer {
                     Loading detailed view around <strong>${centerEntity}</strong>
                 </div>
                 <div class="loading-subtext">
-                    Fetching ~5000 related entities...
+                    Fetching ~500 related entities...
                 </div>
             </div>
         `;

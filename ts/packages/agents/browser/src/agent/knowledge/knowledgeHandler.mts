@@ -4031,7 +4031,7 @@ export async function getGlobalImportanceLayer(
         const entitiesWithMetrics = calculateEntityMetrics(allEntities, allRelationships, communities);
 
         // Sort by importance and select top nodes
-        const maxNodes = parameters.maxNodes || 5000;
+        const maxNodes = parameters.maxNodes || 500;
         const sortedEntities = entitiesWithMetrics
             .sort((a, b) => (b.importance || 0) - (a.importance || 0));
 

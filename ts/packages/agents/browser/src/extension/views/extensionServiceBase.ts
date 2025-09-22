@@ -448,10 +448,8 @@ export abstract class ExtensionServiceBase {
     async getGlobalImportanceLayer(maxNodes: number = 5000, includeConnectivity: boolean = true): Promise<any> {
         return this.sendMessage({
             type: "getGlobalImportanceLayer",
-            parameters: {
-                maxNodes,
-                includeConnectivity
-            }
+            maxNodes,
+            includeConnectivity
         });
     }
 
@@ -463,12 +461,10 @@ export abstract class ExtensionServiceBase {
     ): Promise<any> {
         return this.sendMessage({
             type: "getImportanceNeighborhood",
-            parameters: {
-                centerEntity,
-                maxNodes,
-                importanceWeighting,
-                includeGlobalContext
-            }
+            centerEntity,
+            maxNodes,
+            importanceWeighting,
+            includeGlobalContext
         });
     }
 
@@ -492,15 +488,14 @@ export abstract class ExtensionServiceBase {
 
         return this.sendMessage({
             type: "getViewportBasedNeighborhood",
-            parameters: {
-                centerEntity,
-                viewportNodeNames,
-                maxNodes,
-                importanceWeighting,
-                includeGlobalContext,
-                exploreFromAllViewportNodes,
-                minDepthFromViewport
-            }
+            centerEntity,
+            viewportNodeNames,
+            maxNodes,
+            importanceWeighting,
+            includeGlobalContext,
+            exploreFromAllViewportNodes,
+            minDepthFromViewport
+
         });
     }
 
