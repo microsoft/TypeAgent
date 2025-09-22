@@ -1,14 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace TypeAgent.KnowPro.Storage;
 
+public interface IStorageSerializer
+{
+
+}
 internal static class StorageSerializer
 {
     internal static string? Serialize<T>(T? value)

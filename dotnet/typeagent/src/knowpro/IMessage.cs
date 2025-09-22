@@ -14,7 +14,10 @@ public interface IMessage : IKnowledgeSource
 
 public interface IMessageMetadata
 {
+    [JsonIgnore]
     string Source { get; }
+
+    [JsonIgnore]
     IList<string>? Dest { get; }
 }
 

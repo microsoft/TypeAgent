@@ -110,7 +110,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         messageRow.ChunkUri = null;
         messageRow.StartTimestamp = message.Timestamp;
         messageRow.TagsJson = StorageSerializer.SerializeList<string>(message.Tags);
-        messageRow.MetadataJson = StorageSerializer.Serialize(message.Metadata);
+        messageRow.MetadataJson = StorageSerializer.Serialize((TMeta)message.Metadata);
         // Also capture any extra data on the message
         messageRow.ExtraJson = (message is IMessageEx messageEx) ?
                                messageEx.SerializeExtraDataToJson() :
