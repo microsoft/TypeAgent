@@ -3,10 +3,6 @@
 
 namespace TypeAgent.KnowPro.Storage;
 
-public interface IStorageSerializer
-{
-
-}
 internal static class StorageSerializer
 {
     internal static string? Serialize<T>(T? value)
