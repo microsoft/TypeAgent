@@ -127,7 +127,6 @@ jobs:
         run: |
           npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
-        continue-on-error: true
 
       - name: Shell Tests - smoke (windows)
         if: ${{ runner.os == 'windows' }}
@@ -135,7 +134,6 @@ jobs:
         run: |
           npm run shell:smoke
         working-directory: ts/packages/shell
-        continue-on-error: true
 
       - name: Shell Tests - smoke (linux)
         if: ${{ runner.os == 'Linux' }}
@@ -144,7 +142,6 @@ jobs:
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
           npm run shell:smoke
         working-directory: ts/packages/shell
-        continue-on-error: true
 
       - name: Live Tests
         timeout-minutes: 60
