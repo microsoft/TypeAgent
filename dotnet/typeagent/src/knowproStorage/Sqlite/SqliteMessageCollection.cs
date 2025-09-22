@@ -36,15 +36,18 @@ public class SqliteMessageCollection<TMessage> : IMessageCollection<TMessage>
         MessageRow messageRow = ToMessageRow(message);
 
         using var cmd = _db.CreateCommand(
-            @"INSERT INTO Messages (chunks, chunk_uri, start_timestamp, tags, metadata, extra)
-          VALUES (@chunks, @chunk_uri, @start_timestamp, @tags, @metadata, @extra);"
+            @"INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
+          VALUES (@msg_id, @chunks, @chunk_uri, @start_timestamp, @tags, @metadata, @extra);"
         );
+
+        cmd.Parameters.AddWithValue("@msg_id", GetNextMessageId());
         cmd.Parameters.AddWithValue("@chunks", messageRow.TextChunks);
-        cmd.Parameters.AddWithValue("@tags", messageRow.Tags);
+        cmd.Parameters.AddWithValue("@chunk_uri", DBNull.Value);
         cmd.Parameters.AddWithValue(
             "@start_timestamp",
             messageRow.StartTimestamp is not null ? messageRow.StartTimestamp : DBNull.Value
         );
+        cmd.Parameters.AddWithValue("@tags", messageRow.Tags);
         cmd.Parameters.AddWithValue(
             "@metadata",
             messageRow.Metadata is not null ? messageRow.Metadata : DBNull.Value
@@ -53,7 +56,12 @@ public class SqliteMessageCollection<TMessage> : IMessageCollection<TMessage>
             "@extra",
             messageRow.Extra is not null ? messageRow.Extra : DBNull.Value
         );
-        return Task.FromResult(cmd.ExecuteNonQuery());
+        int rowCount = cmd.ExecuteNonQuery();
+        if (rowCount > 0)
+        {
+            _count += rowCount;
+        }
+        return Task.FromResult(rowCount);
     }
 
     public Task AppendAsync(IEnumerable<TMessage> items)
@@ -79,6 +87,11 @@ public class SqliteMessageCollection<TMessage> : IMessageCollection<TMessage>
     public Task<IList<TMessage>> GetSliceAsync(int start, int end)
     {
         throw new NotImplementedException();
+    }
+
+    int GetNextMessageId()
+    {
+        return GetCount();
     }
 
     int GetCount()

@@ -60,9 +60,14 @@ public class PodcastCommands : ICommandModule
         }
         Console.WriteLine($"{data.Messages.Length} messages in source file");
 
-        SqliteStorageProvider<PodcastMessage> provider = new SqliteStorageProvider<PodcastMessage>(_kpContext.DotnetPath, "podcast", true);
-
+        using SqliteStorageProvider<PodcastMessage> provider = new SqliteStorageProvider<PodcastMessage>(_kpContext.DotnetPath, "podcast", true);
         int count = await provider.Messages.GetCountAsync().ConfigureAwait(false);
         Console.WriteLine(count);
+        foreach (var message in data.Messages)
+        {
+            await provider.Messages.AppendAsync(message).ConfigureAwait(false);
+            count = await provider.Messages.GetCountAsync().ConfigureAwait(false);
+            Console.WriteLine(count);
+        }
     }
 }

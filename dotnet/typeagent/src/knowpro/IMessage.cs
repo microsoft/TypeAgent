@@ -30,7 +30,7 @@ public class Message : IMessage
 
 public interface IMessageEx : IMessage
 {
-    string SerializeExtraDataToJson();
+    string? SerializeExtraDataToJson();
     void DeserializeExtraDataFromJson(string json);
 }
 

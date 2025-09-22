@@ -33,8 +33,5 @@ public class Message<TMeta> : IMessageEx where TMeta : IMessageMetadata
     public virtual KnowledgeResponse? GetKnowledge() => null;
 
     public virtual void DeserializeExtraDataFromJson(string json) { }
-    public string SerializeExtraDataToJson()
-    {
-        throw new NotImplementedException();
-    }
+    public string? SerializeExtraDataToJson() { return null; }
 }
