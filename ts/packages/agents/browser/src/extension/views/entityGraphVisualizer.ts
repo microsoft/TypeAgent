@@ -98,6 +98,19 @@ export class EntityGraphVisualizer {
         neighborhoodSwitch: 1.2      // TESTING: Lower pan threshold for smaller graphs
     };
 
+    // Dynamic spacing adjustment system
+    private baseSpacingParameters = {
+        idealEdgeLength: 100,
+        nodeOverlap: 20,
+        componentSpacing: 100
+    };
+    private spacingScaleThreshold = 1.5;  // Start scaling spacing above this zoom level
+    private lastSpacingUpdate = 0;  // Timestamp to throttle updates
+    private spacingUpdateInterval = 100;  // Minimum ms between spacing updates
+    private spacingAdjustmentEnabled = true;  // Feature flag for dynamic spacing
+    private originalNodePositions = new Map<string, { x: number; y: number }>();  // Store layout positions
+    private lastSpacingZoom = 1.0;  // Track last zoom level for which spacing was applied
+
     constructor(container: HTMLElement) {
         this.container = container;
     }
@@ -372,6 +385,12 @@ export class EntityGraphVisualizer {
         // Clear neighborhood state when transitioning to global
         this.clearNeighborhoodState();
 
+        // Clear previous dynamic spacing positions when switching to global
+        if (this.originalNodePositions.size > 0) {
+            console.log(`[DynamicSpacing] Clearing ${this.originalNodePositions.size} previous positions for global view`);
+            this.originalNodePositions.clear();
+        }
+
         // Notify UI of instance change
         if (this.onInstanceChangeCallback) {
             this.onInstanceChangeCallback();
@@ -403,6 +422,12 @@ export class EntityGraphVisualizer {
             this.anchorNodeData.clear();
         }
 
+        // Clear dynamic spacing original positions
+        if (this.originalNodePositions.size > 0) {
+            console.log(`[StateClearing] Clearing ${this.originalNodePositions.size} original node positions`);
+            this.originalNodePositions.clear();
+        }
+
         // Optionally clear neighborhood cache to force fresh data fetching
         if (clearCache && this.neighborhoodCache.size > 0) {
             console.log(`[StateClearing] Clearing ${this.neighborhoodCache.size} neighborhood cache entries`);
@@ -418,6 +443,269 @@ export class EntityGraphVisualizer {
     public forceResetNeighborhoodState(): void {
         console.log("[StateClearing] Force clearing all neighborhood state including cache");
         this.clearNeighborhoodState(true);
+    }
+
+    /**
+     * Configure dynamic spacing behavior
+     */
+    public configureDynamicSpacing(options: {
+        enabled?: boolean;
+        scaleThreshold?: number;
+        updateInterval?: number;
+        maxScaling?: number;
+    }): void {
+        if (options.enabled !== undefined) {
+            this.spacingAdjustmentEnabled = options.enabled;
+            console.log(`[DynamicSpacing] Dynamic spacing ${options.enabled ? 'enabled' : 'disabled'}`);
+        }
+
+        if (options.scaleThreshold !== undefined) {
+            this.spacingScaleThreshold = options.scaleThreshold;
+            console.log(`[DynamicSpacing] Scale threshold set to ${options.scaleThreshold}`);
+        }
+
+        if (options.updateInterval !== undefined) {
+            this.spacingUpdateInterval = options.updateInterval;
+            console.log(`[DynamicSpacing] Update interval set to ${options.updateInterval}ms`);
+        }
+    }
+
+    /**
+     * Get current dynamic spacing configuration
+     */
+    public getDynamicSpacingConfig(): {
+        enabled: boolean;
+        scaleThreshold: number;
+        updateInterval: number;
+        storedPositions: number;
+    } {
+        return {
+            enabled: this.spacingAdjustmentEnabled,
+            scaleThreshold: this.spacingScaleThreshold,
+            updateInterval: this.spacingUpdateInterval,
+            storedPositions: this.originalNodePositions.size
+        };
+    }
+
+    /**
+     * Test dynamic spacing by simulating different zoom levels (for debugging)
+     */
+    public testDynamicSpacing(): void {
+        if (this.currentActiveView !== "global" && this.currentActiveView !== "detail") {
+            console.log("[DynamicSpacing] Test can only be run in global or detail view");
+            return;
+        }
+
+        console.log("[DynamicSpacing] Starting spacing test sequence...");
+
+        const testZoomLevels = [1.0, 1.5, 2.0, 2.5, 3.0, 2.0, 1.5, 1.0];
+        let currentTest = 0;
+
+        const runTest = () => {
+            if (currentTest >= testZoomLevels.length) {
+                console.log("[DynamicSpacing] Test sequence complete");
+                return;
+            }
+
+            const zoom = testZoomLevels[currentTest];
+            console.log(`[DynamicSpacing] Test ${currentTest + 1}: Setting zoom to ${zoom}`);
+
+            // Set zoom and trigger spacing update
+            if (this.cy) {
+                this.cy.zoom(zoom);
+                this.updateDynamicSpacing(zoom);
+            }
+
+            currentTest++;
+            setTimeout(runTest, 2000); // 2 second delay between tests
+        };
+
+        setTimeout(runTest, 1000); // Start after 1 second
+    }
+
+    /**
+     * Dynamic spacing adjustment system to maintain consistent visual density during zoom
+     */
+    private updateDynamicSpacing(zoom: number): void {
+        if (!this.spacingAdjustmentEnabled || !this.cy) {
+            return;
+        }
+
+        // Apply to both global and detail views (neighborhood view works well already)
+        if (this.currentActiveView !== "global" && this.currentActiveView !== "detail") {
+            return;
+        }
+
+        // Throttle updates to avoid performance issues
+        const now = Date.now();
+        if (now - this.lastSpacingUpdate < this.spacingUpdateInterval) {
+            return;
+        }
+        this.lastSpacingUpdate = now;
+
+        // Store original positions when layout first completes
+        if (this.originalNodePositions.size === 0) {
+            this.storeOriginalNodePositions();
+        }
+
+        // Calculate spacing adjustment factor
+        const spacingFactor = this.calculateSpacingFactor(zoom);
+
+        // Only apply adjustments if there's a significant change
+        const zoomDelta = Math.abs(zoom - this.lastSpacingZoom);
+        if (zoomDelta < 0.1) {
+            return;
+        }
+
+        console.log(`[DynamicSpacing] Updating ${this.currentActiveView} view spacing for zoom ${zoom.toFixed(2)}, factor: ${spacingFactor.toFixed(2)}`);
+
+        // Apply gradual position adjustments to maintain visual density
+        this.adjustNodeSpacingForZoom(spacingFactor, zoom);
+        this.lastSpacingZoom = zoom;
+    }
+
+    /**
+     * Store original node positions after layout completes
+     */
+    private storeOriginalNodePositions(): void {
+        if (!this.cy) return;
+
+        this.originalNodePositions.clear();
+        this.cy.nodes().forEach((node: any) => {
+            const pos = node.position();
+            this.originalNodePositions.set(node.id(), { x: pos.x, y: pos.y });
+        });
+
+        console.log(`[DynamicSpacing] Stored ${this.originalNodePositions.size} original node positions`);
+    }
+
+    /**
+     * Calculate the appropriate spacing factor based on zoom level
+     */
+    private calculateSpacingFactor(zoom: number): number {
+        if (zoom <= this.spacingScaleThreshold) {
+            return 1.0;  // No scaling needed
+        }
+
+        // Progressive scaling with diminishing returns to avoid excessive spreading
+        const zoomRatio = zoom / this.spacingScaleThreshold;
+        const maxScaling = 2.0;  // Maximum 2x spacing increase
+
+        // Use square root for more gradual scaling
+        return Math.min(maxScaling, 1.0 + Math.sqrt(zoomRatio - 1.0) * 0.8);
+    }
+
+    /**
+     * Adjust node positions to maintain consistent visual spacing at different zoom levels
+     */
+    private adjustNodeSpacingForZoom(spacingFactor: number, currentZoom: number): void {
+        if (!this.cy || this.originalNodePositions.size === 0) {
+            return;
+        }
+
+        // Apply to both global and detail views
+        if (this.currentActiveView !== "global" && this.currentActiveView !== "detail") {
+            return;
+        }
+
+        const nodes = this.cy.nodes();
+        if (nodes.length === 0) {
+            return;
+        }
+
+        // Calculate the center of the original layout for consistent scaling
+        const originalCenter = this.calculateOriginalLayoutCenter();
+
+        // Track how many nodes we're adjusting for performance monitoring
+        let adjustedCount = 0;
+
+        // Apply spacing adjustment to each node relative to original layout center
+        nodes.forEach((node: any) => {
+            const nodeId = node.id();
+            const originalPos = this.originalNodePositions.get(nodeId);
+
+            if (!originalPos) {
+                return;  // Skip nodes without stored positions
+            }
+
+            // Calculate vector from original center to original node position
+            const deltaX = originalPos.x - originalCenter.x;
+            const deltaY = originalPos.y - originalCenter.y;
+
+            // Scale the distance from center based on spacing factor
+            const newX = originalCenter.x + (deltaX * spacingFactor);
+            const newY = originalCenter.y + (deltaY * spacingFactor);
+
+            // Apply the new position smoothly
+            node.position({ x: newX, y: newY });
+            adjustedCount++;
+        });
+
+        console.log(`[DynamicSpacing] Adjusted ${adjustedCount} ${this.currentActiveView} view node positions with spacing factor ${spacingFactor.toFixed(2)} at zoom ${currentZoom.toFixed(2)}`);
+    }
+
+    /**
+     * Calculate the center point of the original layout
+     */
+    private calculateOriginalLayoutCenter(): { x: number; y: number } {
+        if (this.originalNodePositions.size === 0) {
+            return { x: 0, y: 0 };
+        }
+
+        let totalX = 0;
+        let totalY = 0;
+        let count = 0;
+
+        this.originalNodePositions.forEach((pos) => {
+            totalX += pos.x;
+            totalY += pos.y;
+            count++;
+        });
+
+        return {
+            x: totalX / count,
+            y: totalY / count
+        };
+    }
+
+    /**
+     * Get the center of the current viewport for spacing calculations
+     */
+    private getViewportCenter(): { x: number; y: number } {
+        if (!this.cy) {
+            return { x: 0, y: 0 };
+        }
+
+        const extent = this.cy.extent();
+        return {
+            x: (extent.x1 + extent.x2) / 2,
+            y: (extent.y1 + extent.y2) / 2
+        };
+    }
+
+    /**
+     * Calculate the center point of all nodes for spacing calculations
+     */
+    private calculateGraphCenter(nodes: any): { x: number; y: number } {
+        if (nodes.length === 0) {
+            return { x: 0, y: 0 };
+        }
+
+        let totalX = 0;
+        let totalY = 0;
+        let nodeCount = 0;
+
+        nodes.forEach((node: any) => {
+            const pos = node.position();
+            totalX += pos.x;
+            totalY += pos.y;
+            nodeCount++;
+        });
+
+        return {
+            x: totalX / nodeCount,
+            y: totalY / nodeCount
+        };
     }
 
     /**
@@ -451,6 +739,12 @@ export class EntityGraphVisualizer {
      */
     public switchToDetailView(): void {
         console.log("[TripleInstance] Switching to detail view");
+
+        // Clear previous layout positions when switching to detail view
+        if (this.originalNodePositions.size > 0) {
+            console.log(`[DynamicSpacing] Clearing ${this.originalNodePositions.size} previous positions for detail view`);
+            this.originalNodePositions.clear();
+        }
 
         // Hide other instances and show detail
         this.setInstanceVisibility("detail");
@@ -1839,6 +2133,12 @@ export class EntityGraphVisualizer {
         return new Promise((resolve) => {
             layout.on('layoutstop', () => {
                 console.log(`[TripleInstance] Layout ${layoutName} completed for ${nodeCount} nodes`);
+
+                // Store original positions for dynamic spacing (global and detail views)
+                if (instance === this.globalInstance || instance === this.detailInstance) {
+                    this.storeOriginalNodePositions();
+                }
+
                 resolve();
             });
             layout.run();
@@ -2308,6 +2608,9 @@ export class EntityGraphVisualizer {
                 } else {
                     // Use standard style-based LoD for global and detail views
                     this.updateStyleBasedLOD(zoom);
+
+                    // Apply dynamic spacing adjustments for global and detail views
+                    this.updateDynamicSpacing(zoom);
                 }
 
                 console.timeEnd("[Perf] Zoom LOD update");
@@ -5691,6 +5994,12 @@ export class EntityGraphVisualizer {
                 console.log(
                     `[TripleInstance] Detail layout completed for ${centerEntity}`,
                 );
+
+                // Store original positions for dynamic spacing (detail view)
+                if (instance === this.detailInstance) {
+                    this.storeOriginalNodePositions();
+                }
+
                 // Fit view after layout with maxZoom constraint
                 instance.fit({ maxZoom: 2.0 });
                 resolve();
