@@ -42,6 +42,7 @@ import {
     shuffle,
     getQueue,
     getAlbum,
+    followPlaylist,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -54,6 +55,7 @@ import {
     UserData,
     addFullTracks,
     getPlaylistsFromUserData,
+    updatePlaylists,
 } from "./userData.js";
 
 import {
@@ -230,7 +232,9 @@ async function htmlPlaylistNames(
     };
     let content = `<div class='playlist-list'><div>${headText}...</div><ol>\n`;
     for (const playlist of playlists) {
-        content += `  <li><span class='playlist-name'>${playlist.name}</span></li>\n`;
+        if (playlist) {
+            content += `  <li><span class='playlist-name'>${playlist.name}</span></li>\n`;
+        }
     }
     content += "</ol></div>";
     displayContent.content = content;
@@ -921,11 +925,38 @@ export async function handleCall(
                 clientContext.service,
                 clientContext.userData!.data,
             );
-            const playlist = playlists?.find((pl) => {
+            let playlist = playlists?.find((pl) => {
                 return pl.name
                     .toLowerCase()
                     .includes(playlistName.toLowerCase());
             });
+            if (!playlist) {
+                //look for playlist through search
+                const searchPlaylists = await searchForPlaylists(
+                    playlistName,
+                    clientContext,
+                );
+                if (searchPlaylists && searchPlaylists.length > 0) {
+                    for (const pl of searchPlaylists) {
+                        if (
+                            pl.name
+                                .toLowerCase()
+                                .includes(playlistName.toLowerCase())
+                        ) {
+                            playlist = pl;
+                            await followPlaylist(
+                                clientContext.service,
+                                playlist.id,
+                            );
+                            await updatePlaylists(
+                                clientContext.service,
+                                clientContext.userData!.data,
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
             if (playlist) {
                 const playlistResponse = await getPlaylistTracks(
                     clientContext.service,
