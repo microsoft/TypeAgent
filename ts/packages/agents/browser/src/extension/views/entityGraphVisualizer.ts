@@ -6487,10 +6487,67 @@ export class EntityGraphVisualizer {
 
         console.log(`[SimplifiedTest] ✅ Direct positioning complete: ${anchorCount} anchors at global coords, ${nonAnchorCount} non-anchors at center, ${missingCount} missing`);
 
-        // Apply size overrides after a short delay to defeat CSS mapData
+        // Apply COSE layout to non-anchor nodes while preserving anchor positions
+        console.log(`[COSE Layout] 🔒 Locking ${anchorCount} anchor nodes to preserve positions`);
+
+        // Lock all anchor nodes to prevent layout from moving them
+        const anchorNodes = this.neighborhoodInstance.nodes().filter((node: any) => {
+            const nodeData = node.data();
+            return nodeData.isAnchor === true;
+        });
+
+        anchorNodes.forEach((node: any) => node.lock());
+
+        // Apply COSE layout only to unlocked (non-anchor) nodes
+        console.log(`[COSE Layout] 🎯 Running COSE layout on ${nonAnchorCount} non-anchor nodes`);
+        const layout = this.neighborhoodInstance.layout({
+            name: 'cose',
+            animate: false,
+            fit: true, // Fit to viewport to keep nodes visible
+            padding: 50, // Add padding to ensure nodes don't touch edges
+            boundingBox: { // Constrain layout to visible area
+                x1: 0,
+                y1: 0,
+                x2: this.neighborhoodInstance.width(),
+                y2: this.neighborhoodInstance.height()
+            },
+            nodeOverlap: 20,
+            idealEdgeLength: 80, // Slightly smaller for better fit
+            edgeElasticity: 100,
+            nestingFactor: 5,
+            gravity: 80,
+            numIter: 1000,
+            initialTemp: 200,
+            coolingFactor: 0.95,
+            minTemp: 1.0
+        });
+
+        layout.run();
+
+        // Unlock anchor nodes after layout completes
+        setTimeout(() => {
+            anchorNodes.forEach((node: any) => node.unlock());
+            console.log(`[COSE Layout] 🔓 Unlocked ${anchorCount} anchor nodes after layout completion`);
+
+            // Log final positions for verification
+            let layoutedNonAnchors = 0;
+            this.neighborhoodInstance.nodes().forEach((node: any) => {
+                const nodeData = node.data();
+                if (!nodeData.isAnchor) {
+                    const pos = node.position();
+                    if (layoutedNonAnchors < 3) { // Log first 3 for verification
+                        console.log(`[COSE Layout] 📍 Non-anchor ${nodeData.name || nodeData.id} positioned at (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
+                    }
+                    layoutedNonAnchors++;
+                }
+            });
+            console.log(`[COSE Layout] ✅ COSE layout complete: ${layoutedNonAnchors} non-anchor nodes positioned`);
+        }, 50);
+
+        // Apply size overrides after layout and positioning
         setTimeout(() => {
             this.forceApplyNeighborhoodSizes();
-        }, 100);
+        }, 200);
 
         // Comprehensive importance analysis after positioning
         console.log(`[ImportanceAnalysis] --- COMPREHENSIVE COMPARISON ---`);
