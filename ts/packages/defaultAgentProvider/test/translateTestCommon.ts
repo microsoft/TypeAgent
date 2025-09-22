@@ -201,10 +201,7 @@ export async function defineTranslateTest(
 }
 
 function checkResultError(result: CommandResult | undefined, message: string) {
-    if (result === undefined) {
-        throw new Error(`${message}: no result returned`);
-    }
-    if (result.lastError !== undefined) {
+    if (result?.lastError !== undefined) {
         throw new Error(`${message}: ${result.lastError}`);
     }
 }
