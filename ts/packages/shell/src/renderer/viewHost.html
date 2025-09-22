@@ -24,6 +24,8 @@
         --close-button-hover: #e81123;
         --text-color: #333333;
         --toolbar-bg: #e5e5e5;
+        --layout-button-width: 28px;
+        --layout-button-height: 28px;
       }
 
       /* Platform-specific adjustments */
@@ -127,8 +129,8 @@
         position: fixed;
         top: 8px;
         left: 4px;
-        width: 28px;
-        height: 28px;
+        width: var(--layout-button-width);
+        height: var(--layout-button-height);
         border: none;
         background: transparent;
         border-radius: 4px;
@@ -163,6 +165,11 @@
         pointer-events: none;
       }
 
+      .platform-macos .layout-toggle-absolute {
+        left: 78px;
+        top: 4px;
+      }
+
       .browser-nav {
         display: flex;
         align-items: center;
@@ -182,7 +189,7 @@
         display: flex;
         align-items: center;
         min-width: 0;
-        padding: 0 8px;
+        padding: 0px;
         position: relative;
         height: 100%;
       }
@@ -211,6 +218,7 @@
         min-width: 0;
         overflow: hidden;
         gap: 1px;
+        padding: 0 8px;
       }
 
       .tab-drag-region {
@@ -396,8 +404,12 @@
       }
 
       .platform-macos .traffic-light-spacer {
-        width: 78px;
+        width: calc(var(--layout-button-width) + 78px);
         height: var(--title-bar-height);
+      }
+
+      .platform-macos.has-sidebar .window-controls {
+        display: none;
       }
 
       /* Responsive behavior */
@@ -591,13 +603,9 @@
         </div>
       </div>
 
-      <!-- Right Side: Draggable Area + Window Controls -->
-      <div class="title-bar-right">
-        <div class="drag-region"></div>
-        <!-- Window controls will be inserted based on platform -->
-        <div class="window-controls" id="window-controls">
-          <!-- Platform-specific buttons will be inserted here -->
-        </div>
+      <!-- Right Side: Window Controls -->
+      <div class="title-bar-right window-controls" id="window-controls">
+        <!-- Platform-specific buttons will be inserted here -->
       </div>
     </div>
 
@@ -703,10 +711,10 @@
           const titleBarRight = document.querySelector(".title-bar-right");
 
           if (currentMode === UIMode.BROWSER) {
-            browserNav.style.display = "flex";
-            tabContainer.style.display = "flex";
-            appTitle.style.display = "none";
-            titleBarRight.style.display = "flex";
+            browserNav.style.display = null;
+            tabContainer.style.display = null;
+            appTitle.style.display = null;
+            titleBarRight.style.display = null;
 
             // Make center area non-draggable in browser mode
             titleBarCenter.classList.remove("chat-only-mode");
