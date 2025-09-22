@@ -86,7 +86,7 @@ export class ShellWindow {
     // For use in horizontal layout
     private chatWidth: number;
     private contentWidth: number; // does not include dividerSize
-    private windowHeight: number;
+    private windowHeight: number; // includes TITLE_BAR_HEIGHT
 
     // For use in vertical layout
     private chatHeight: number;
@@ -697,7 +697,7 @@ export class ShellWindow {
             bounds = {
                 ...position,
                 width: this.windowWidth,
-                height: this.chatHeight,
+                height: this.chatHeight + TITLE_BAR_HEIGHT,
             };
             const contentVisible =
                 uiSettings.verticalContentAlwaysVisible || hasBrowserTabs;
