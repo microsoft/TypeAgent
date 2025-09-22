@@ -191,12 +191,14 @@ class EntityGraphView {
         const zoomOutBtn = document.getElementById("zoomOutBtn");
         const fitBtn = document.getElementById("fitBtn");
         const reLayoutBtn = document.getElementById("reLayoutBtn");
+        const debugViewportBtn = document.getElementById("debugViewportBtn");
 
         console.log("Control button elements:", {
             zoomInBtn: !!zoomInBtn,
             zoomOutBtn: !!zoomOutBtn,
             fitBtn: !!fitBtn,
             reLayoutBtn: !!reLayoutBtn,
+            debugViewportBtn: !!debugViewportBtn,
         });
 
         if (zoomInBtn) {
@@ -224,6 +226,13 @@ class EntityGraphView {
             reLayoutBtn.addEventListener("click", () => {
                 console.log("Re-run layout button clicked");
                 this.visualizer.reRunLayout();
+            });
+        }
+
+        if (debugViewportBtn) {
+            debugViewportBtn.addEventListener("click", () => {
+                console.log("Debug viewport button clicked");
+                this.visualizer.debugLogViewportNodes();
             });
         }
 

@@ -418,6 +418,12 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 }
             });
 
+            // Check if result is null or invalid
+            if (!result) {
+                console.warn("[GraphDataProvider] Received null result from getImportanceNeighborhood service");
+                throw new Error("Service returned null result");
+            }
+
             return {
                 entities: this.transformEntitiesToUIFormat(result.entities || []),
                 relationships: this.transformRelationshipsToUIFormat(result.relationships || []),
@@ -435,7 +441,8 @@ class GraphDataProviderImpl implements GraphDataProvider {
     async getViewportBasedNeighborhood(centerEntity: string, viewportNodeNames: string[], maxNodes: number = 5000): Promise<any> {
         try {
             console.log(`[GraphDataProvider] Fetching viewport-based neighborhood for ${centerEntity} anchored by ${viewportNodeNames.length} viewport nodes`);
-            console.log(`[GraphDataProvider] Viewport anchor nodes (first 10):`, viewportNodeNames.slice(0, 10));
+            console.log(`[GraphDataProvider] Viewport anchor nodes (first 10): ${JSON.stringify(viewportNodeNames.slice(0, 10))}`);
+            console.log(`[GraphDataProvider] All viewport anchor nodes: ${JSON.stringify(viewportNodeNames)}`);
 
             // Include global context to maintain visual continuity between global and neighborhood views
             const includeGlobalContext = true;
@@ -453,6 +460,17 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     minDepthFromViewport: 1
                 }
             });
+
+            console.log(`[GraphDataProvider] Raw service result:`, result);
+            console.log(`[GraphDataProvider] Result type:`, typeof result);
+            console.log(`[GraphDataProvider] Result entities length:`, result?.entities?.length || 'N/A');
+            console.log(`[GraphDataProvider] Result relationships length:`, result?.relationships?.length || 'N/A');
+
+            // Check if result is null or invalid
+            if (!result) {
+                console.warn("[GraphDataProvider] Received null result from getViewportBasedNeighborhood service");
+                throw new Error("Service returned null result");
+            }
 
             return {
                 entities: this.transformEntitiesToUIFormat(result.entities || []),
