@@ -4,11 +4,12 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisposable
-    where TMessage : IMessage, new()
+public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>, IDisposable
+    where TMessage : class, IMessage, new()
+    where TMeta : IMessageMetadata, new()
 {
     SqliteDatabase _db;
-    SqliteMessageCollection<TMessage> _messages;
+    SqliteMessageCollection<TMessage, TMeta> _messages;
 
     public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
         : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
@@ -24,7 +25,7 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisp
         {
             InitSchema();
         }
-        _messages = new SqliteMessageCollection<TMessage>(this._db);
+        _messages = new SqliteMessageCollection<TMessage, TMeta>(this._db);
     }
 
     public IMessageCollection<TMessage> Messages => _messages;
@@ -80,7 +81,7 @@ CREATE TABLE IF NOT EXISTS ConversationMetadata (
     public const string MessagesTable = "Messages";
     public const string MessagesSchema = @"
 CREATE TABLE IF NOT EXISTS Messages(
-    msg_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    msg_id INTEGER PRIMARY KEY,
     -- Messages can store chunks directly in JSON or reference external storage via URI
     chunks JSON NULL,             -- JSON array of text chunks, or NULL if using chunk_uri
     chunk_uri TEXT NULL,          -- URI for external chunk storage, or NULL if using chunks
