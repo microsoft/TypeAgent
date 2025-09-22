@@ -369,10 +369,55 @@ export class EntityGraphVisualizer {
             this.logGlobalNodePositions("AFTER_TRANSITION", []);
         }, 100); // Delay to ensure view is fully switched
 
+        // Clear neighborhood state when transitioning to global
+        this.clearNeighborhoodState();
+
         // Notify UI of instance change
         if (this.onInstanceChangeCallback) {
             this.onInstanceChangeCallback();
         }
+    }
+
+    /**
+     * Clear neighborhood state to prevent cached data from affecting new neighborhood loads
+     * @param clearCache - If true, also clears the neighborhood data cache to force fresh data fetching
+     */
+    private clearNeighborhoodState(clearCache: boolean = false): void {
+        console.log("[StateClearing] Clearing neighborhood state for fresh transitions");
+
+        // Clear anchor nodes tracking
+        if (this.currentAnchorNodes) {
+            console.log(`[StateClearing] Clearing ${this.currentAnchorNodes.size} anchor nodes`);
+            this.currentAnchorNodes.clear();
+        }
+
+        // Clear neighborhood instance data to prevent cached views
+        if (this.neighborhoodInstance && this.neighborhoodInstance.elements().length > 0) {
+            console.log(`[StateClearing] Removing ${this.neighborhoodInstance.elements().length} neighborhood elements`);
+            this.neighborhoodInstance.elements().remove();
+        }
+
+        // Clear anchor position tracking data
+        if (this.anchorNodeData && this.anchorNodeData.size > 0) {
+            console.log(`[StateClearing] Clearing ${this.anchorNodeData.size} anchor position tracking entries`);
+            this.anchorNodeData.clear();
+        }
+
+        // Optionally clear neighborhood cache to force fresh data fetching
+        if (clearCache && this.neighborhoodCache.size > 0) {
+            console.log(`[StateClearing] Clearing ${this.neighborhoodCache.size} neighborhood cache entries`);
+            this.neighborhoodCache.clear();
+        }
+
+        console.log("[StateClearing] Neighborhood state cleared successfully");
+    }
+
+    /**
+     * Force clear all neighborhood state including cache (for debugging or fixing cached state issues)
+     */
+    public forceResetNeighborhoodState(): void {
+        console.log("[StateClearing] Force clearing all neighborhood state including cache");
+        this.clearNeighborhoodState(true);
     }
 
     /**
@@ -1417,8 +1462,8 @@ export class EntityGraphVisualizer {
     public async loadGlobalGraph(graphData: any): Promise<void> {
         console.log("[TripleInstance] Loading global graph");
 
-        // Clear anchor nodes to ensure global view uses CSS-based sizing
-        this.currentAnchorNodes.clear();
+        // Clear all neighborhood state when loading global data
+        this.clearNeighborhoodState();
 
         // Clear and load global instance
         this.globalInstance.elements().remove();
