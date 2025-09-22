@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\conversationMemory\conversationMemory.csproj" />
     <ProjectReference Include="..\knowproStorage\knowproStorage.csproj" />
     <ProjectReference Include="..\knowpro\knowpro.csproj" />
   </ItemGroup>

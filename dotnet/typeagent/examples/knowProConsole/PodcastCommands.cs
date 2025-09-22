@@ -44,11 +44,11 @@ public class PodcastCommands : ICommandModule
         {
             Args.Arg<string>("filePath", "Path to existing podcast index"),
         };
-        cmd.SetAction(this.PodcastImportIndex);
+        cmd.SetAction(this.PodcastImportIndexAsync);
         return cmd;
     }
 
-    private async Task PodcastImportIndex(ParseResult args, CancellationToken cancellationToken)
+    private async Task PodcastImportIndexAsync(ParseResult args, CancellationToken cancellationToken)
     {
         NamedArgs namedArgs = new(args);
         string? filePath = namedArgs.Get("filePath");
