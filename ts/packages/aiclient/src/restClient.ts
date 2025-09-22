@@ -3,6 +3,7 @@
 
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
+import { debug } from "console";
 
 const debugUrl = registerDebug("typeagent:rest:url");
 const debugHeader = registerDebug("typeagent:rest:header");
@@ -259,6 +260,10 @@ export async function fetchWithRetry(
             debugHeader(result.headers);
             if (result.status === 200) {
                 return success(result);
+            }
+            if (result.status === 429) {
+                const deets = await result.text();
+                debug(`Received 429: ${deets}`);
             }
             if (
                 !isTransientHttpError(result.status) ||
