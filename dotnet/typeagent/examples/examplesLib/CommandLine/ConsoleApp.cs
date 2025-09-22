@@ -15,6 +15,7 @@ public abstract class ConsoleApp
         _allCommands = new RootCommand(title);
         AddModule(new StandardCommands());
         _stopStrings = ["quit", "exit"];
+
     }
 
     public RootCommand Root => _allCommands;
@@ -196,18 +197,6 @@ public abstract class ConsoleApp
         return line is not null ? line.Trim() : line;
     }
 
-    public async Task WriteLineAsync(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            Console.Out.WriteLine();
-        }
-        else
-        {
-            await Console.Out.WriteLineAsync(value).ConfigureAwait(false);
-        }
-    }
-
     protected virtual void OnException(string input, Exception ex)
     {
         Console.WriteLine("## Could not process request");
@@ -216,7 +205,7 @@ public abstract class ConsoleApp
 
     protected void WriteError(Exception ex)
     {
-        ConsolePrint.WriteError(ex);
+        ConsoleEx.WriteError(ex);
     }
 
     protected virtual void WriteTitle()
@@ -225,14 +214,6 @@ public abstract class ConsoleApp
         {
             Console.WriteLine(_allCommands.Description);
             Console.WriteLine();
-        }
-    }
-
-    public static void WriteLines(IEnumerable<string> items)
-    {
-        foreach (string item in items)
-        {
-            Console.WriteLine(item);
         }
     }
 

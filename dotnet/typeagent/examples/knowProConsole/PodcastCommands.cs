@@ -5,9 +5,9 @@ namespace KnowProConsole;
 
 public class PodcastCommands : ICommandModule
 {
-    KnowProContext _kpContext;
+    KnowProConsoleContext _kpContext;
 
-    public PodcastCommands(KnowProContext context)
+    public PodcastCommands(KnowProConsoleContext context)
     {
         _kpContext = context;
     }
@@ -48,14 +48,21 @@ public class PodcastCommands : ICommandModule
         return cmd;
     }
 
-    private Task PodcastImportIndex(ParseResult args, CancellationToken cancellationToken)
+    private async Task PodcastImportIndex(ParseResult args, CancellationToken cancellationToken)
     {
         NamedArgs namedArgs = new(args);
         string? filePath = namedArgs.Get("filePath");
         var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
+        if (data is null)
+        {
+            ConsoleEx.WriteError("NO data in file");
+            return;
+        }
+        Console.WriteLine($"{data.Messages.Length} messages in source file");
 
         SqliteStorageProvider<PodcastMessage> provider = new SqliteStorageProvider<PodcastMessage>(_kpContext.DotnetPath, "podcast", true);
-        return Task.CompletedTask;
-    }
 
+        int count = await provider.Messages.GetCountAsync().ConfigureAwait(false);
+        Console.WriteLine(count);
+    }
 }

@@ -16,5 +16,5 @@ public interface IAsyncCollection<T> : IReadOnlyAsyncCollection<T>
     bool IsPersistent { get; }
 
     Task AppendAsync(T item);
-    Task AppendAsync(IList<T> items);
+    Task AppendAsync(IEnumerable<T> items);
 }

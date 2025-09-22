@@ -5,9 +5,10 @@
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisposable
-    where TMessage : IMessage
+    where TMessage : IMessage, new()
 {
     SqliteDatabase _db;
+    SqliteMessageCollection<TMessage> _messages;
 
     public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
         : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
@@ -23,23 +24,18 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisp
         {
             InitSchema();
         }
+        _messages = new SqliteMessageCollection<TMessage>(this._db);
     }
 
-    public Task<IMessageCollection<TMessage>> GetMessageCollectionAsync()
-    {
-        throw new NotImplementedException();
-    }
+    public IMessageCollection<TMessage> Messages => _messages;
 
-    public Task<ISemanticRefCollection> GetSemanticRefCollection()
-    {
-        throw new NotImplementedException();
-    }
+    public ISemanticRefCollection SemanticRefs => null;
 
     public void InitSchema()
     {
-        _db.Execute(Schema.ConversationMetadataSchema);
-        _db.Execute(Schema.MessagesSchema);
-        _db.Execute(Schema.SemanticRefsSchema);
+        _db.Execute(SqliteStorageProviderSchema.ConversationMetadataSchema);
+        _db.Execute(SqliteStorageProviderSchema.MessagesSchema);
+        _db.Execute(SqliteStorageProviderSchema.SemanticRefsSchema);
     }
 
     public void Dispose()
@@ -66,9 +62,11 @@ public class SqliteStorageProvider<TMessage> : IStorageProvider<TMessage>, IDisp
         this._db.Execute("PRAGMA journal_mode = WAL");  // Write-Ahead Logging for better concurrency
     }
 
-    public static class Schema
-    {
-        public const string ConversationMetadataSchema = @"
+}
+
+public static class SqliteStorageProviderSchema
+{
+    public const string ConversationMetadataSchema = @"
 CREATE TABLE IF NOT EXISTS ConversationMetadata (
     name_tag TEXT NOT NULL,           -- User-defined name for this conversation
     schema_version TEXT NOT NULL,     -- Version of the metadata schema
@@ -79,7 +77,8 @@ CREATE TABLE IF NOT EXISTS ConversationMetadata (
 );
 ";
 
-        public const string MessagesSchema = @"
+    public const string MessagesTable = "Messages";
+    public const string MessagesSchema = @"
 CREATE TABLE IF NOT EXISTS Messages(
     msg_id INTEGER PRIMARY KEY AUTOINCREMENT,
     -- Messages can store chunks directly in JSON or reference external storage via URI
@@ -96,7 +95,7 @@ CREATE TABLE IF NOT EXISTS Messages(
     )
 );
 ";
-        public const string SemanticRefsSchema = @"
+    public const string SemanticRefsSchema = @"
 CREATE TABLE IF NOT EXISTS SemanticRefs (
     semref_id INTEGER PRIMARY KEY,
     range_json JSON NOT NULL,          -- JSON of the TextRange object
@@ -104,5 +103,4 @@ CREATE TABLE IF NOT EXISTS SemanticRefs (
     knowledge_json JSON NOT NULL       -- JSON of the Knowledge object
 );
 ";
-    }
 }

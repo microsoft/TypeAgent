@@ -3,14 +3,21 @@
 
 namespace KnowProConsole;
 
+public class KnowProConsoleContext : KnowProContext
+{
+    public KnowProConsoleContext()
+    {
+    }
+}
+
 public class KnowProConsole : ConsoleApp
 {
-    KnowProContext _context;
+    KnowProConsoleContext _context;
 
     public KnowProConsole()
         : base("KnowPro Console")
     {
-        _context = new KnowProContext();
+        _context = new KnowProConsoleContext();
         AddModule(new PodcastCommands(_context));
         SortCommands();
     }

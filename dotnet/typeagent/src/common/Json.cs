@@ -9,6 +9,8 @@ namespace TypeAgent.Common;
 /// </summary>
 public class Json
 {
+    public const string EmptyObject = "{}";
+    public const string EmptyArray = "[]";
     /// <summary>
     /// Create default serialization options used by the validator
     /// </summary>

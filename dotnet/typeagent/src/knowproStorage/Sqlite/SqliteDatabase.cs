@@ -36,6 +36,23 @@ public class SqliteDatabase : IDisposable
         command.ExecuteNonQuery();
     }
 
+    public object? FetchOne(string commandText)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = commandText;
+        return command.ExecuteScalar();
+    }
+
+    public int GetCount(string tableName)
+    {
+        string sql = $"SELECT COUNT(*) FROM {tableName}";
+        long count = (long)(FetchOne(sql) ?? 0);
+        return (int)count;
+
+    }
+
     public void Dispose()
     {
         Dispose(true);

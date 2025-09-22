@@ -4,8 +4,12 @@
 
 namespace TypeAgent.ConversationMemory;
 
-public class Message<TMeta> : IMessage where TMeta : IMessageMetadata
+public class Message<TMeta> : IMessageEx where TMeta : IMessageMetadata
 {
+    public Message()
+    {
+    }
+
     [JsonPropertyName("textChunks")]
     public IList<string> TextChunks { get; set; } = [];
 
@@ -27,4 +31,10 @@ public class Message<TMeta> : IMessage where TMeta : IMessageMetadata
     }
 
     public virtual KnowledgeResponse? GetKnowledge() => null;
+
+    public virtual void DeserializeExtraDataFromJson(string json) { }
+    public string SerializeExtraDataToJson()
+    {
+        throw new NotImplementedException();
+    }
 }

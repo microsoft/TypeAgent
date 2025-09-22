@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\common\common.csproj" />
+    <ProjectReference Include="..\..\src\knowpro\knowpro.csproj" />
   </ItemGroup>
 
 </Project>
