@@ -9,6 +9,7 @@ public class KnowProConsole : ConsoleApp
         : base("KnowPro Console")
     {
         AddModule(new PodcastCommands());
+        SortCommands();
     }
 
     public static async Task<int> Main(string[] args)

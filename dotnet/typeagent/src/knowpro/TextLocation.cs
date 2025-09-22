@@ -5,14 +5,19 @@ namespace TypeAgent.KnowPro;
 
 public struct TextLocation
 {
-    public TextLocation(uint messageOrdinal, uint chunkOrdinal)
+    public TextLocation() { }
+
+    public TextLocation(int messageOrdinal, int chunkOrdinal)
     {
         this.MessageOrdinal = messageOrdinal;
         this.ChunkOrdinal = chunkOrdinal;
     }
 
-    public uint MessageOrdinal { get; set; }
-    public uint ChunkOrdinal { get; set; }
+    [JsonPropertyName("messageOrdinal")]
+    public int MessageOrdinal { get; set; }
+
+    [JsonPropertyName("chunkOrdinal")]
+    public int ChunkOrdinal { get; set; }
 
     public readonly bool IsLessThan(TextLocation other)
     {

@@ -4431,3 +4431,73 @@ body {
     min-width: auto;
   }
 }
+
+/* Knowledge Graph Modal Styles */
+.knowledge-graph-status {
+  padding: 1rem 0;
+}
+
+.status-card {
+  background: #f8f9fa;
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+}
+
+.status-header h6 {
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.status-icon {
+  font-size: 0.875rem;
+}
+
+.metric-card {
+  background: white;
+  border-radius: var(--border-radius-sm);
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.metric-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 0.5rem;
+}
+
+.metric-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+#buildProgress .spinner-border {
+  width: 2rem;
+  height: 2rem;
+}
+
+.progress {
+  background-color: #e9ecef;
+  border-radius: 0.5rem;
+}
+
+.progress-bar {
+  background: linear-gradient(
+    135deg,
+    var(--primary-color) 0%,
+    var(--secondary-color) 100%
+  );
+  border-radius: 0.5rem;
+  transition: width 0.3s ease;
+}

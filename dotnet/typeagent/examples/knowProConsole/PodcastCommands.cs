@@ -3,11 +3,28 @@
 
 namespace KnowProConsole;
 
-public class PodcastCommands
+public class PodcastCommands : ICommandModule
 {
-    [Command("ping")]
-    public void Ping(string msg)
+    public IList<Command> GetCommands()
     {
-        Console.WriteLine(msg);
+        return [PodcastLoadDef()];
+    }
+
+    private Command PodcastLoadDef()
+    {
+        Command cmd = new("podcastLoad", "Load existing podcast memory")
+        {
+            Args.Arg<string>("filePath", "Path to existing podcast index")
+        };
+        cmd.SetAction(this.PodcastLoadAsync);
+        return cmd;
+    }
+
+    private Task PodcastLoadAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        NamedArgs namedArgs = new(args);
+        string? filePath = namedArgs.Get("filePath");
+        var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage, PodcastMessageMeta>(filePath!);
+        return Task.CompletedTask;
     }
 }

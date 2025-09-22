@@ -1,24 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import test, {
-    _electron,
-    _electron as electron,
-    expect,
-    Page,
-} from "@playwright/test";
+import test, { expect, Page } from "@playwright/test";
 import {
     exitApplication,
-    getAppPath,
-    getLastAgentMessage,
-    sendUserRequest,
     sendUserRequestAndWaitForCompletion,
     sendUserRequestAndWaitForResponse,
-    sendUserRequestFast,
     startShell,
-    waitForAgentMessage,
 } from "./testHelper";
-import { exit } from "process";
 
 // Annotate entire file as serial.
 test.describe.configure({ mode: "serial" });
@@ -28,10 +17,8 @@ test.describe("Shell interface tests", () => {
      * Test to ensure that the shell recall startup layout (position, size)
      */
     // robgruen - 09.11.2025 - temporarily skipping while we redo UI layout to support different modes
-    test.skip("remember window position", async ({}, testInfo) => {
+    test("remember window position", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
-
-        let agentMessageCount = 0;
 
         const firstWindow = await startShell(true); // have to wait, commands don't run till this is done
 
@@ -77,12 +64,8 @@ test.describe("Shell interface tests", () => {
             newWidth,
             `Window width mismatch! Expected ${width} got ${newWidth}`,
         ).toBe(newWidth);
-        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(
-            x + 8,
-        );
-        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(
-            y + 31,
-        );
+        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
+        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
 
         // close the application
         await exitApplication(newWindow);

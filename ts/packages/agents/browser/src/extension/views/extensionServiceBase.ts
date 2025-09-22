@@ -389,6 +389,62 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async getKnowledgeGraphStatus(): Promise<any> {
+        return this.sendMessage({
+            type: "getKnowledgeGraphStatus",
+        });
+    }
+
+    async buildKnowledgeGraph(options?: {
+        minimalMode?: boolean;
+        urlLimit?: number;
+    }): Promise<any> {
+        return this.sendMessage({
+            type: "buildKnowledgeGraph",
+            parameters: options || {},
+        });
+    }
+
+    async rebuildKnowledgeGraph(): Promise<any> {
+        return this.sendMessage({
+            type: "rebuildKnowledgeGraph",
+        });
+    }
+
+    async getAllRelationships(): Promise<any[]> {
+        const result = await this.sendMessage<{ relationships?: any[] }>({
+            type: "getAllRelationships",
+        });
+        return result?.relationships || [];
+    }
+
+    async getAllCommunities(): Promise<any[]> {
+        const result = await this.sendMessage<{ communities?: any[] }>({
+            type: "getAllCommunities",
+        });
+        return result?.communities || [];
+    }
+
+    async getAllEntitiesWithMetrics(): Promise<any[]> {
+        const result = await this.sendMessage<{ entities?: any[] }>({
+            type: "getAllEntitiesWithMetrics",
+        });
+        return result?.entities || [];
+    }
+
+    async getEntityNeighborhood(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getEntityNeighborhood",
+            entityId: entityId,
+            depth: depth,
+            maxNodes: maxNodes,
+        });
+    }
+
     async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
         await this.sendMessage({
             type: "notifyAutoIndexSettingChanged",

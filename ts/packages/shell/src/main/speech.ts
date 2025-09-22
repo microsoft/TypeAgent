@@ -7,9 +7,9 @@ import { isLocalWhisperEnabled } from "./localWhisperCommandHandler.js";
 
 import registerDebug from "debug";
 import {
+    getShellWindow,
     getShellWindowForChatViewIpcEvent,
-    ShellWindow,
-} from "./shellWindow.js";
+} from "./instance.js";
 const debugShell = registerDebug("typeagent:shell:speech");
 const debugShellError = registerDebug("typeagent:shell:speech:error");
 
@@ -55,7 +55,7 @@ async function getSpeechToken(silent: boolean) {
 }
 
 export async function triggerRecognitionOnce() {
-    const shellWindow = ShellWindow.getInstance();
+    const shellWindow = getShellWindow();
     if (shellWindow === undefined) {
         return;
     }

@@ -19,7 +19,7 @@ export async function createServiceHost() {
             if (message === "Success") {
                 resolve(childProcess);
             } else {
-                resolve(undefined);
+                reject(new Error(message as string));
             }
         });
     });
