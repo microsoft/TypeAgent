@@ -621,10 +621,10 @@ export class ChatView {
 
     public setInputMode(verticalLayout: boolean) {
         if (verticalLayout) {
-            this.topDiv.parentElement?.classList.add("write-only");
+            //this.topDiv.parentElement?.classList.add("write-only");
             this.topDiv.parentElement?.classList.remove("read-only");
         } else {
-            this.topDiv.parentElement?.classList.remove("write-only");
+            //this.topDiv.parentElement?.classList.remove("write-only");
             this.topDiv.parentElement?.classList.remove("read-only");
         }
     }
