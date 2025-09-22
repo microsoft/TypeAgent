@@ -8,7 +8,6 @@ import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
     ensureCommandResult,
-    getCommandResult,
 } from "../context/commandHandlerContext.js";
 
 import {
@@ -299,11 +298,6 @@ export async function processCommandNoLock(
             message: e.message,
             stack: e.stack,
         });
-
-        const commandResult = getCommandResult(context);
-        if (commandResult !== undefined) {
-            commandResult.exception = e.message;
-        }
     }
 }
 
