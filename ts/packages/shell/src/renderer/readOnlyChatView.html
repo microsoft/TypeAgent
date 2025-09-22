@@ -22,6 +22,8 @@
       integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
       crossorigin="anonymous"
     />
+    <!-- Add DOMPurify library for XSS protection -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   </head>
   <body>
     <div id="wrapper" class="wrapper read-only"></div>
@@ -51,11 +53,11 @@
             );
             //const wrapper = document.getElementById('wrapper');
             if (scrollWrappers.length > 0) {
-              scrollWrappers[0].innerHTML = event.data;
+              scrollWrappers[0].innerHTML = DOMPurify.sanitize(event.data);
             } else {
               const wrapper = document.getElementById("wrapper");
               if (wrapper) {
-                wrapper.innerHTML = event.data;
+                wrapper.innerHTML = DOMPurify.sanitize(event.data);
               }
             }
           };
