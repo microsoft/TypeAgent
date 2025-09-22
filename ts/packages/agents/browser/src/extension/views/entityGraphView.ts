@@ -74,6 +74,9 @@ class EntityGraphView {
                 throw new Error("Sidebar container 'entitySidebar' not found");
             }
 
+            // Hide sidebar by default
+            sidebarContainer.style.display = "none";
+
             console.log("Creating visualizer...");
             this.visualizer = new EntityGraphVisualizer(graphContainer);
 
@@ -146,7 +149,8 @@ class EntityGraphView {
                 this.currentEntity
             ) {
                 console.log(`Loading specific entity: ${this.currentEntity}`);
-                this.updateSidebarVisibility(true);
+                // Don't show sidebar until detail view is loaded
+                this.updateSidebarVisibility(false);
                 // Store entity name before clearing current entity to force initial load
                 const entityToLoad = this.currentEntity;
                 this.currentEntity = null; // Clear to ensure navigation doesn't skip
@@ -156,9 +160,6 @@ class EntityGraphView {
                 console.log("Loading global knowledge graph with importance layer");
                 this.updateSidebarVisibility(false);
                 await this.loadGlobalViewWithImportanceLayer();
-                // Show neighborhood button for testing
-                const toggleBtn = document.getElementById("toggleNeighborhoodBtn");
-                if (toggleBtn) toggleBtn.style.display = "block";
             } else {
                 console.log("Invalid state - showing error");
                 this.showEntityParameterError();
@@ -292,15 +293,6 @@ class EntityGraphView {
             });
         }
 
-
-        // Testing: Neighborhood toggle button
-        const toggleNeighborhoodBtn = document.getElementById("toggleNeighborhoodBtn");
-        if (toggleNeighborhoodBtn) {
-            toggleNeighborhoodBtn.addEventListener("click", () => {
-                console.log("Toggle neighborhood button clicked");
-                this.manuallyTriggerNeighborhood();
-            });
-        }
     }
 
     /**
@@ -494,8 +486,10 @@ class EntityGraphView {
                 this.addToNavigationHistory(newState);
             }
 
-            this.updateSidebarVisibility(true);
+            // Don't show sidebar yet - wait for data to load
             await this.loadRealEntityData(entityName);
+            // Show sidebar after detail view is loaded
+            this.updateSidebarVisibility(true);
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
             // Show user-friendly error message
@@ -1362,6 +1356,9 @@ class EntityGraphView {
                 await this.sidebar.loadEntity(centerEntityData);
                 console.timeEnd("[Perf] Entity sidebar load");
 
+                // Show sidebar after successfully loading data
+                this.updateSidebarVisibility(true);
+
                 this.hideGraphLoading();
                 console.log(
                     `Loaded real entity graph for ${entityName}: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
@@ -1777,6 +1774,7 @@ class EntityGraphView {
             // Update internal state to match the restored view
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
+            // Hide sidebar when navigating to global view
             this.updateSidebarVisibility(false);
             this.updateBackButtonText();
         } else {
@@ -1784,6 +1782,7 @@ class EntityGraphView {
             // Fallback to original logic if no hidden view available
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
+            // Hide sidebar when navigating to global view
             this.updateSidebarVisibility(false);
             await this.loadGlobalView();
         }
@@ -1827,7 +1826,10 @@ class EntityGraphView {
 
         // Update breadcrumb and UI elements
         this.updateBreadcrumbForCurrentState();
-        this.updateSidebarVisibility(state.type === "detail");
+        // Don't automatically show sidebar for detail state - let loadRealEntityData handle it
+        if (state.type === "global") {
+            this.updateSidebarVisibility(false);
+        }
     }
 
     /**

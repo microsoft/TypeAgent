@@ -485,6 +485,9 @@ export async function handleKnowledgeAction(
         case "getImportanceNeighborhood":
             return await getImportanceNeighborhood(parameters, context);
 
+        case "getViewportBasedNeighborhood":
+            return await getViewportBasedNeighborhood(parameters, context);
+
         case "getImportanceStatistics":
             return await getImportanceStatistics(parameters, context);
 
@@ -4186,6 +4189,245 @@ export async function getImportanceNeighborhood(
             entities: [],
             relationships: [],
             metadata: { error: error instanceof Error ? error.message : "Unknown error", layer: "importance_neighborhood" }
+        };
+    }
+}
+
+export async function getViewportBasedNeighborhood(
+    parameters: {
+        centerEntity: string;
+        viewportNodeNames: string[];
+        maxNodes?: number;
+        importanceWeighting?: boolean;
+        includeGlobalContext?: boolean;
+        exploreFromAllViewportNodes?: boolean;
+        minDepthFromViewport?: number;
+    },
+    context: SessionContext<BrowserActionContext>
+): Promise<{
+    entities: any[];
+    relationships: any[];
+    metadata: any;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                entities: [],
+                relationships: [],
+                metadata: { error: "Website collection not available", layer: "viewport_neighborhood" }
+            };
+        }
+
+        // Ensure cache is populated
+        await ensureGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getGraphCache(websiteCollection);
+        if (!cache || !cache.isValid) {
+            return {
+                entities: [],
+                relationships: [],
+                metadata: { error: "Graph cache not available", layer: "viewport_neighborhood" }
+            };
+        }
+
+        const allEntities = cache.entityMetrics || [];
+        const allRelationships = cache.relationships || [];
+        const communities = cache.communities || [];
+
+        const entitiesWithMetrics = calculateEntityMetrics(allEntities, allRelationships, communities);
+        const maxNodes = parameters.maxNodes || 500;
+        const minDepthFromViewport = parameters.minDepthFromViewport || 1;
+        const exploreFromAll = parameters.exploreFromAllViewportNodes !== false;
+
+        // Find center entity
+        const centerEntity = entitiesWithMetrics.find(e =>
+            e.name?.toLowerCase() === parameters.centerEntity.toLowerCase() ||
+            e.id?.toLowerCase() === parameters.centerEntity.toLowerCase()
+        );
+
+        if (!centerEntity) {
+            return {
+                entities: [],
+                relationships: [],
+                metadata: { error: "Center entity not found", layer: "viewport_neighborhood" }
+            };
+        }
+
+        // Find viewport entities
+        const viewportEntities: any[] = [];
+        const viewportNodeNamesLower = (parameters.viewportNodeNames || []).map(name => name.toLowerCase());
+
+        for (const nodeName of viewportNodeNamesLower) {
+            const entity = entitiesWithMetrics.find(e =>
+                e.name?.toLowerCase() === nodeName ||
+                e.id?.toLowerCase() === nodeName
+            );
+            if (entity) {
+                viewportEntities.push(entity);
+            }
+        }
+
+        if (viewportEntities.length === 0 && parameters.viewportNodeNames && parameters.viewportNodeNames.length > 0) {
+            console.warn(`No viewport entities found from ${parameters.viewportNodeNames.length} names`);
+        }
+
+        // Build adjacency map with importance weighting
+        const adjacencyMap = buildImportanceWeightedAdjacency(entitiesWithMetrics, allRelationships);
+
+        // Start with center entity and viewport entities as initial set
+        const initialEntities = [centerEntity, ...viewportEntities];
+        const visited = new Set<string>();
+        const result: any[] = [];
+
+        // Add all initial entities to result and visited set
+        initialEntities.forEach(entity => {
+            if (!visited.has(entity.name.toLowerCase())) {
+                visited.add(entity.name.toLowerCase());
+                result.push(entity);
+            }
+        });
+
+        // BFS queue: [entity, depth from nearest viewport node, source]
+        type QueueItem = { entity: any; depth: number; importance: number; source: string };
+        const queue: QueueItem[] = [];
+
+        // Initialize queue with neighbors of all initial entities
+        if (exploreFromAll) {
+            // Explore from all viewport nodes simultaneously
+            initialEntities.forEach(startEntity => {
+                const neighbors = adjacencyMap.get(startEntity.name.toLowerCase()) || [];
+                neighbors.forEach(neighbor => {
+                    if (!visited.has(neighbor.entity.name.toLowerCase())) {
+                        queue.push({
+                            entity: neighbor.entity,
+                            depth: 1,
+                            importance: neighbor.importance,
+                            source: startEntity.name
+                        });
+                    }
+                });
+            });
+        } else {
+            // Only explore from center entity
+            const centerNeighbors = adjacencyMap.get(centerEntity.name.toLowerCase()) || [];
+            centerNeighbors.forEach(neighbor => {
+                if (!visited.has(neighbor.entity.name.toLowerCase())) {
+                    queue.push({
+                        entity: neighbor.entity,
+                        depth: 1,
+                        importance: neighbor.importance,
+                        source: centerEntity.name
+                    });
+                }
+            });
+        }
+
+        // Sort queue by importance if weighting is enabled
+        if (parameters.importanceWeighting !== false) {
+            queue.sort((a, b) => b.importance - a.importance);
+        }
+
+        // Expand neighborhood using BFS
+        let actualMaxDepth = 0;
+        while (queue.length > 0 && result.length < maxNodes) {
+            const current = queue.shift()!;
+
+            // Skip if already visited or depth exceeds minimum
+            if (visited.has(current.entity.name.toLowerCase())) continue;
+            if (current.depth < minDepthFromViewport) {
+                // Still need to explore neighbors even if not adding this node yet
+                const neighbors = adjacencyMap.get(current.entity.name.toLowerCase()) || [];
+                neighbors.forEach(neighbor => {
+                    if (!visited.has(neighbor.entity.name.toLowerCase())) {
+                        queue.push({
+                            entity: neighbor.entity,
+                            depth: current.depth + 1,
+                            importance: neighbor.importance,
+                            source: current.source
+                        });
+                    }
+                });
+
+                // Re-sort if importance weighting is enabled
+                if (parameters.importanceWeighting !== false) {
+                    queue.sort((a, b) => b.importance - a.importance);
+                }
+                continue;
+            }
+
+            // Add to result
+            visited.add(current.entity.name.toLowerCase());
+            result.push(current.entity);
+            actualMaxDepth = Math.max(actualMaxDepth, current.depth);
+
+            // Add neighbors to queue
+            const neighbors = adjacencyMap.get(current.entity.name.toLowerCase()) || [];
+            neighbors.forEach(neighbor => {
+                if (!visited.has(neighbor.entity.name.toLowerCase())) {
+                    queue.push({
+                        entity: neighbor.entity,
+                        depth: current.depth + 1,
+                        importance: neighbor.importance,
+                        source: current.source
+                    });
+                }
+            });
+
+            // Re-sort queue by importance after adding new neighbors
+            if (parameters.importanceWeighting !== false) {
+                queue.sort((a, b) => b.importance - a.importance);
+            }
+        }
+
+        // Optionally include global context nodes
+        if (parameters.includeGlobalContext) {
+            const availableSlots = maxNodes - result.length;
+            if (availableSlots > 0) {
+                const resultNames = new Set(result.map(e => e.name));
+                const globalNodes = entitiesWithMetrics
+                    .filter(e => !resultNames.has(e.name))
+                    .sort((a, b) => (b.importance || 0) - (a.importance || 0))
+                    .slice(0, Math.min(availableSlots, Math.floor(availableSlots * 0.1))); // Add up to 10% global context
+                result.push(...globalNodes);
+            }
+        }
+
+        // Get relationships between all included entities
+        const entityNames = new Set(result.map(e => e.name));
+        const neighborhoodRelationships = allRelationships.filter((rel: any) =>
+            entityNames.has(rel.fromEntity) && entityNames.has(rel.toEntity)
+        );
+
+        return {
+            entities: result,
+            relationships: neighborhoodRelationships,
+            metadata: {
+                centerEntity: centerEntity.name,
+                viewportEntities: viewportEntities.map(e => e.name),
+                viewportNodesFound: viewportEntities.length,
+                viewportNodesRequested: parameters.viewportNodeNames?.length || 0,
+                actualDepth: actualMaxDepth,
+                entityCount: result.length,
+                relationshipCount: neighborhoodRelationships.length,
+                importanceRange: result.length > 0 ? {
+                    min: Math.min(...result.map(e => e.importance || 0)),
+                    max: Math.max(...result.map(e => e.importance || 0))
+                } : { min: 0, max: 0 },
+                exploreFromAllViewportNodes: exploreFromAll,
+                minDepthFromViewport: minDepthFromViewport,
+                layer: "viewport_neighborhood"
+            }
+        };
+
+    } catch (error) {
+        console.error("Error getting viewport-based neighborhood:", error);
+        return {
+            entities: [],
+            relationships: [],
+            metadata: { error: error instanceof Error ? error.message : "Unknown error", layer: "viewport_neighborhood" }
         };
     }
 }

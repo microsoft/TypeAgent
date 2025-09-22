@@ -1147,7 +1147,7 @@ centerEntity: message.centerEntity,
                             message.exploreFromAllViewportNodes,
                         minDepthFromViewport: message.minDepthFromViewport,
                     },
-                });
+                });                                                         
                 return result;
             } catch (error) {
                 console.error(

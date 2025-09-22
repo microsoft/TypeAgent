@@ -108,8 +108,12 @@ export class EntityGraphVisualizer {
     private lastSpacingUpdate = 0;  // Timestamp to throttle updates
     private spacingUpdateInterval = 100;  // Minimum ms between spacing updates
     private spacingAdjustmentEnabled = true;  // Feature flag for dynamic spacing
-    private originalNodePositions = new Map<string, { x: number; y: number }>();  // Store layout positions
-    private lastSpacingZoom = 1.0;  // Track last zoom level for which spacing was applied
+    private originalNodePositions = new Map<string, { x: number; y: number }>();
+    private spacingHistory = new Map<string, { x: number; y: number }>();
+    private appliedSpacingFactor = 1.0;
+    private isSpacingActive = false;
+    private spacingTransitionDirection: 'expanding' | 'contracting' | 'stable' = 'stable';
+    private lastSpacingZoom = 1.0;
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -527,40 +531,42 @@ export class EntityGraphVisualizer {
      * Dynamic spacing adjustment system to maintain consistent visual density during zoom
      */
     private updateDynamicSpacing(zoom: number): void {
-        if (!this.spacingAdjustmentEnabled || !this.cy) {
-            return;
-        }
+        if (!this.spacingAdjustmentEnabled || !this.cy) return;
+        if (this.currentActiveView !== "global" && this.currentActiveView !== "detail") return;
 
-        // Apply to both global and detail views (neighborhood view works well already)
-        if (this.currentActiveView !== "global" && this.currentActiveView !== "detail") {
-            return;
-        }
-
-        // Throttle updates to avoid performance issues
         const now = Date.now();
-        if (now - this.lastSpacingUpdate < this.spacingUpdateInterval) {
-            return;
-        }
+        if (now - this.lastSpacingUpdate < this.spacingUpdateInterval) return;
         this.lastSpacingUpdate = now;
 
-        // Store original positions when layout first completes
         if (this.originalNodePositions.size === 0) {
             this.storeOriginalNodePositions();
+            this.appliedSpacingFactor = 1.0;
         }
 
-        // Calculate spacing adjustment factor
-        const spacingFactor = this.calculateSpacingFactor(zoom);
+        const { factor, direction, shouldApply } = this.calculateBidirectionalSpacingFactor(zoom);
 
-        // Only apply adjustments if there's a significant change
-        const zoomDelta = Math.abs(zoom - this.lastSpacingZoom);
-        if (zoomDelta < 0.1) {
-            return;
+        if (!shouldApply) return;
+
+        console.log(`[DynamicSpacing] ${direction} spacing: ${this.appliedSpacingFactor.toFixed(2)} → ${factor.toFixed(2)} at zoom ${zoom.toFixed(2)}`);
+
+        switch (direction) {
+            case 'expanding':
+                this.applyExpandingSpacing(factor, zoom);
+                break;
+            case 'contracting':
+                if (factor === 1.0) {
+                    this.restoreOriginalLayout();
+                } else {
+                    this.applyContractingSpacing(factor, zoom);
+                }
+                break;
+            case 'stable':
+                break;
         }
 
-        console.log(`[DynamicSpacing] Updating ${this.currentActiveView} view spacing for zoom ${zoom.toFixed(2)}, factor: ${spacingFactor.toFixed(2)}`);
-
-        // Apply gradual position adjustments to maintain visual density
-        this.adjustNodeSpacingForZoom(spacingFactor, zoom);
+        this.appliedSpacingFactor = factor;
+        this.isSpacingActive = factor > 1.0;
+        this.spacingTransitionDirection = direction;
         this.lastSpacingZoom = zoom;
     }
 
@@ -584,65 +590,111 @@ export class EntityGraphVisualizer {
      */
     private calculateSpacingFactor(zoom: number): number {
         if (zoom <= this.spacingScaleThreshold) {
-            return 1.0;  // No scaling needed
+            return 1.0;
         }
 
-        // Progressive scaling with diminishing returns to avoid excessive spreading
         const zoomRatio = zoom / this.spacingScaleThreshold;
-        const maxScaling = 2.0;  // Maximum 2x spacing increase
-
-        // Use square root for more gradual scaling
+        const maxScaling = 2.0;
         return Math.min(maxScaling, 1.0 + Math.sqrt(zoomRatio - 1.0) * 0.8);
     }
 
-    /**
-     * Adjust node positions to maintain consistent visual spacing at different zoom levels
-     */
-    private adjustNodeSpacingForZoom(spacingFactor: number, currentZoom: number): void {
-        if (!this.cy || this.originalNodePositions.size === 0) {
-            return;
+    private calculateBidirectionalSpacingFactor(zoom: number): {
+        factor: number;
+        direction: 'expanding' | 'contracting' | 'stable';
+        shouldApply: boolean;
+    } {
+        const currentFactor = this.calculateSpacingFactor(zoom);
+        const previousFactor = this.appliedSpacingFactor;
+
+        let direction: 'expanding' | 'contracting' | 'stable' = 'stable';
+        let shouldApply = false;
+
+        if (currentFactor > previousFactor + 0.05) {
+            direction = 'expanding';
+            shouldApply = true;
+        } else if (currentFactor < previousFactor - 0.05) {
+            direction = 'contracting';
+            shouldApply = true;
+        } else {
+            direction = 'stable';
+            shouldApply = false;
         }
 
-        // Apply to both global and detail views
-        if (this.currentActiveView !== "global" && this.currentActiveView !== "detail") {
-            return;
-        }
+        return { factor: currentFactor, direction, shouldApply };
+    }
 
-        const nodes = this.cy.nodes();
-        if (nodes.length === 0) {
-            return;
-        }
+    private applyContractingSpacing(newFactor: number, zoom: number): void {
+        if (!this.cy || this.appliedSpacingFactor === 0) return;
 
-        // Calculate the center of the original layout for consistent scaling
-        const originalCenter = this.calculateOriginalLayoutCenter();
-
-        // Track how many nodes we're adjusting for performance monitoring
+        const viewportCenter = this.getViewportCenter();
+        const scalingRatio = newFactor / this.appliedSpacingFactor;
         let adjustedCount = 0;
 
-        // Apply spacing adjustment to each node relative to original layout center
-        nodes.forEach((node: any) => {
+        this.cy.nodes().forEach((node: any) => {
             const nodeId = node.id();
-            const originalPos = this.originalNodePositions.get(nodeId);
+            const currentPos = node.position();
 
-            if (!originalPos) {
-                return;  // Skip nodes without stored positions
-            }
+            const deltaX = currentPos.x - viewportCenter.x;
+            const deltaY = currentPos.y - viewportCenter.y;
 
-            // Calculate vector from original center to original node position
-            const deltaX = originalPos.x - originalCenter.x;
-            const deltaY = originalPos.y - originalCenter.y;
+            const newX = viewportCenter.x + (deltaX * scalingRatio);
+            const newY = viewportCenter.y + (deltaY * scalingRatio);
 
-            // Scale the distance from center based on spacing factor
-            const newX = originalCenter.x + (deltaX * spacingFactor);
-            const newY = originalCenter.y + (deltaY * spacingFactor);
-
-            // Apply the new position smoothly
             node.position({ x: newX, y: newY });
+            this.spacingHistory.set(nodeId, { x: newX, y: newY });
             adjustedCount++;
         });
 
-        console.log(`[DynamicSpacing] Adjusted ${adjustedCount} ${this.currentActiveView} view node positions with spacing factor ${spacingFactor.toFixed(2)} at zoom ${currentZoom.toFixed(2)}`);
+        console.log(`[DynamicSpacing] Contracted ${adjustedCount} ${this.currentActiveView} view node positions with factor ${newFactor.toFixed(2)} at zoom ${zoom.toFixed(2)}`);
     }
+
+    private restoreOriginalLayout(): void {
+        if (!this.cy) return;
+
+        let restoredCount = 0;
+        this.cy.nodes().forEach((node: any) => {
+            const nodeId = node.id();
+            const originalPos = this.originalNodePositions.get(nodeId);
+
+            if (originalPos) {
+                node.position({ x: originalPos.x, y: originalPos.y });
+                this.spacingHistory.delete(nodeId);
+                restoredCount++;
+            }
+        });
+
+        this.appliedSpacingFactor = 1.0;
+        this.isSpacingActive = false;
+
+        console.log(`[DynamicSpacing] Restored ${restoredCount} ${this.currentActiveView} view nodes to original layout`);
+    }
+
+    private applyExpandingSpacing(newFactor: number, zoom: number): void {
+        if (!this.cy) return;
+
+        const viewportCenter = this.getViewportCenter();
+        let adjustedCount = 0;
+
+        this.cy.nodes().forEach((node: any) => {
+            const nodeId = node.id();
+            const originalPos = this.originalNodePositions.get(nodeId);
+
+            if (!originalPos) return;
+
+            const deltaX = originalPos.x - viewportCenter.x;
+            const deltaY = originalPos.y - viewportCenter.y;
+
+            const newX = viewportCenter.x + (deltaX * newFactor);
+            const newY = viewportCenter.y + (deltaY * newFactor);
+
+            node.position({ x: newX, y: newY });
+            this.spacingHistory.set(nodeId, { x: newX, y: newY });
+            adjustedCount++;
+        });
+
+        console.log(`[DynamicSpacing] Expanded ${adjustedCount} ${this.currentActiveView} view node positions with factor ${newFactor.toFixed(2)} at zoom ${zoom.toFixed(2)}`);
+    }
+
 
     /**
      * Calculate the center point of the original layout
@@ -4546,7 +4598,7 @@ export class EntityGraphVisualizer {
 
             // Use high maxNodes for viewport-based neighborhoods to explore more comprehensively
             // Since we have multiple anchor points, we want to ensure thorough exploration
-            const maxNodesForNeighborhood = 500;
+            const maxNodesForNeighborhood = 100;
             console.log(`[TripleInstance] Using maxNodes=${maxNodesForNeighborhood} for comprehensive viewport-based exploration`);
 
             console.log(`[TripleInstance] Loading viewport-based neighborhood for ${centerEntityName} with ${viewportNodeNames.length} anchor nodes`);
@@ -5184,9 +5236,6 @@ export class EntityGraphVisualizer {
                 <div class="spinner"></div>
                 <div class="loading-text">
                     Loading detailed view around <strong>${centerEntity}</strong>
-                </div>
-                <div class="loading-subtext">
-                    Fetching ~500 related entities...
                 </div>
             </div>
         `;
