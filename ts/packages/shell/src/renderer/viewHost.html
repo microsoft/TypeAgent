@@ -12,86 +12,220 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
     <style>
+      :root {
+        --title-bar-height: 40px;
+        --title-bar-bg: #e5e5e5;
+        --border-color: #d0d0d0;
+        --button-hover-bg: rgba(0, 0, 0, 0.05);
+        --button-active-bg: rgba(0, 0, 0, 0.1);
+        --tab-bg: #ffffff;
+        --tab-inactive-bg: #f0f0f0;
+        --tab-border: #d0d0d0;
+        --close-button-hover: #e81123;
+        --text-color: #333333;
+        --toolbar-bg: #e5e5e5;
+      }
+
+      /* Platform-specific adjustments */
+      .platform-macos {
+        --title-bar-height: 36px;
+      }
+
+      .platform-linux {
+        --title-bar-height: 40px;
+      }
+
       body {
         margin: 0;
+        padding-top: 0;
         overflow: hidden;
         font-family:
           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
 
-      .header {
-        position: absolute;
+      /* Title Bar */
+      .title-bar {
+        position: fixed;
         top: 0;
-        /* Start at divider position */
-        left: 400px;
+        left: 0;
         right: 0;
-        height: 40px;
-        background: #f5f5f5;
-        border-bottom: 1px solid #ddd;
+        height: var(--title-bar-height);
+        background: var(--title-bar-bg);
+        border-bottom: 1px solid var(--border-color);
         display: flex;
-        align-items: center;
-        z-index: 1000;
-        /* Hidden by default, shown when browser is open */
-        visibility: hidden;
+        align-items: flex-end;
+        z-index: 10000;
+        -webkit-app-region: no-drag;
+        transition:
+          left 0.2s ease,
+          right 0.2s ease;
       }
 
-      .header.visible {
-        visibility: visible;
+      /* Layout-specific positioning */
+      body.horizontal-layout .title-bar {
+        left: 0;
+        right: 0;
+      }
+
+      body.vertical-layout .title-bar {
+        left: 0 !important; /* Force full width in vertical layout */
+        right: 0;
+      }
+
+      /* When in horizontal layout with chat sidebar, browser controls should be positioned over browser area */
+      body.horizontal-layout.has-sidebar .title-bar {
+        left: var(--sidebar-width, 400px);
+        padding-left: 8px; /* Add some padding since navigation buttons are the first element */
+      }
+
+      /* Left Side Controls */
+      .title-bar-left {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        padding-bottom: 4px;
+      }
+
+      .title-bar-button {
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        color: var(--text-color);
+        margin: 0 1px;
+      }
+
+      .title-bar-button:hover {
+        background: var(--button-hover-bg);
+      }
+
+      .title-bar-button:active {
+        background: var(--button-active-bg);
+      }
+
+      .title-bar-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .title-bar-button:disabled:hover {
+        background: transparent;
+      }
+
+      /* Absolute positioned layout toggle button */
+      .layout-toggle-absolute {
+        position: fixed;
+        top: 8px;
+        left: 4px;
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        color: var(--text-color);
+        z-index: 10004;
+        -webkit-app-region: no-drag;
+        pointer-events: auto;
+      }
+
+      .layout-toggle-absolute:hover {
+        background: var(--button-hover-bg);
+      }
+
+      .layout-toggle-absolute:active {
+        background: var(--button-active-bg);
+      }
+
+      /* Ensure toggle button area is not draggable */
+      .layout-toggle-absolute::before {
+        content: "";
+        position: absolute;
+        top: -4px;
+        left: -4px;
+        right: -4px;
+        bottom: -4px;
+        -webkit-app-region: no-drag;
+        pointer-events: none;
       }
 
       .browser-nav {
         display: flex;
         align-items: center;
-        padding: 0 8px;
-        gap: 4px;
+        gap: 1px;
       }
 
-      .nav-button {
-        width: 24px;
-        height: 24px;
-        border: none;
-        background: transparent;
-        border-radius: 3px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
+      .nav-separator {
+        width: 1px;
+        height: 18px;
+        background: var(--border-color);
+        margin: 0 8px;
       }
 
-      .nav-button i {
-        font-size: 11px;
-      }
-
-      .nav-button:hover {
-        background: #e0e0e0;
-      }
-
-      .nav-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .nav-button:disabled:hover {
-        background: transparent;
-      }
-
-      .tab-bar {
+      /* Center Area */
+      .title-bar-center {
         flex: 1;
         display: flex;
         align-items: center;
+        min-width: 0;
+        padding: 0 8px;
+        position: relative;
+        height: 100%;
+      }
+
+      /* Draggable regions based on mode */
+      .title-bar-center.chat-only-mode {
+        -webkit-app-region: drag;
+      }
+
+      .title-bar-center.browser-mode {
+        -webkit-app-region: no-drag;
+      }
+
+      /* Tab Container */
+      .tab-container {
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        min-width: 0;
+        gap: 4px;
+      }
+
+      .tab-bar {
+        display: flex;
+        flex: 0 1 auto;
+        min-width: 0;
         overflow: hidden;
-        padding: 0 4px;
+        gap: 1px;
+      }
+
+      .tab-drag-region {
+        flex: 1;
+        height: var(--title-bar-height);
+        min-width: 50px;
+        -webkit-app-region: drag;
+        cursor: default;
       }
 
       .tab {
-        min-width: 120px;
+        min-width: 80px;
         max-width: 200px;
+        flex: 1;
         height: 32px;
-        background: #fff;
-        border: 1px solid #ccc;
-        border-radius: 6px 6px 0 0;
-        margin-right: 2px;
+        background: var(--title-bar-bg);
+        border: 1px solid var(--tab-border);
+        border-bottom: 1px solid transparent;
+        border-radius: 8px 8px 0 0;
         display: flex;
         align-items: center;
         padding: 0 8px;
@@ -100,16 +234,23 @@
         overflow: hidden;
         user-select: none;
         -webkit-user-select: none;
+        position: relative;
+        margin-top: 8px;
+        z-index: 2;
+        -webkit-app-region: no-drag;
+      }
+
+      .tab:hover:not(.active) {
+        background: var(--button-hover-bg);
       }
 
       .tab.active {
-        background: #fff;
-        border-bottom-color: #fff;
-        z-index: 1;
-      }
-
-      .tab:not(.active) {
-        background: #f0f0f0;
+        background: white;
+        border-color: var(--tab-border);
+        border-bottom: none;
+        z-index: 3;
+        position: relative;
+        top: 1px;
       }
 
       .tab-favicon {
@@ -124,6 +265,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        font-size: 11px;
       }
 
       .tab-close {
@@ -139,83 +281,320 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+
+      .tab:hover .tab-close {
+        opacity: 1;
       }
 
       .tab-close:hover {
-        background: #e0e0e0;
+        background: var(--close-button-hover);
+        color: white;
       }
 
-      .add-tab-button {
-        width: 28px;
-        height: 28px;
+      .new-tab-button {
+        width: 24px;
+        height: 24px;
         background: transparent;
-        border: 1px solid #ccc;
+        border: none;
         border-radius: 4px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 12px;
-        margin-right: 8px;
+        font-size: 11px;
+        margin-left: 4px;
+        flex-shrink: 0;
+        z-index: 1;
+        position: relative;
+        -webkit-app-region: no-drag;
+        margin-bottom: 4px;
       }
 
-      .add-tab-button:hover {
-        background: #f0f0f0;
+      .new-tab-button:hover {
+        background: var(--button-hover-bg);
       }
 
+      /* App Title (Chat-Only Mode) */
+      .app-title {
+        flex: 1;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-color);
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-app-region: drag;
+        cursor: default;
+        text-align: center;
+        margin-left: 44px; /* Account for toggle button width + safe spacing */
+        margin-bottom: 4px;
+      }
+
+      /* Right Side */
+      .title-bar-right {
+        display: flex;
+        align-items: flex-end;
+        flex-shrink: 0;
+      }
+
+      .drag-region {
+        flex: 1;
+        height: 100%;
+        -webkit-app-region: drag;
+        min-width: 50px;
+      }
+
+      .tab-bar {
+        display: flex;
+        min-width: 0;
+        gap: 1px;
+        z-index: 1;
+        position: relative;
+      }
+
+      /* Window Controls */
+      .window-controls {
+        display: flex;
+        align-items: center;
+      }
+
+      .window-control {
+        width: 46px;
+        height: var(--title-bar-height);
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        color: var(--text-color);
+      }
+
+      .window-control:hover {
+        background: var(--button-hover-bg);
+      }
+
+      .window-control.close:hover {
+        background: var(--close-button-hover);
+        color: white;
+      }
+
+      /* macOS specific */
+      .platform-macos .window-controls {
+        order: -1;
+        margin-right: auto;
+      }
+
+      .platform-macos .traffic-light-spacer {
+        width: 78px;
+        height: var(--title-bar-height);
+      }
+
+      /* Responsive behavior */
+      @media (max-width: 800px) {
+        .tab {
+          min-width: 60px;
+          max-width: 120px;
+        }
+      }
+
+      /* Sidebar Title Bar */
+      .sidebar-title-bar {
+        position: fixed;
+        top: 0;
+        left: 36px; /* Start after the layout toggle button */
+        width: calc(
+          var(--sidebar-width, 400px) - 36px
+        ); /* Adjust width to account for offset */
+        height: var(--title-bar-height);
+        background: var(--title-bar-bg);
+        border-bottom: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        display: none;
+        align-items: flex-end;
+        justify-content: center;
+        z-index: 9999;
+        -webkit-app-region: drag;
+        transition:
+          width 0.2s ease,
+          left 0.2s ease;
+        box-sizing: border-box;
+        pointer-events: auto;
+      }
+
+      /* Add a background strip for the toggle button area */
+      body.horizontal-layout.has-sidebar .sidebar-title-bar::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -36px;
+        width: 36px;
+        height: 100%;
+        background: var(--title-bar-bg);
+        border-bottom: 1px solid var(--border-color);
+        z-index: -1;
+        pointer-events: none;
+      }
+
+      .sidebar-title {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-color);
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: default;
+        margin-bottom: 4px;
+      }
+
+      /* Show sidebar title only in horizontal layout with sidebar */
+      body.horizontal-layout.has-sidebar .sidebar-title-bar {
+        display: flex;
+      }
+
+      /* Dividers */
       .divider-vertical {
         position: absolute;
-        /* Full height always */
-        top: 0;
+        top: var(--title-bar-height);
         bottom: 0;
         left: 400px;
         width: 5px;
         cursor: ew-resize;
-        background-color: #ddd;
-        /* Hidden initially */
+        background-color: var(--border-color);
         visibility: hidden;
       }
 
       .divider-horizontal {
         position: absolute;
-        /* Full width always */
         left: 0;
         right: 0;
-        top: 40px;
+        top: calc(var(--title-bar-height) + 40px);
         height: 5px;
         cursor: ns-resize;
-        background-color: #ddd;
-        /* Hidden initially */
+        background-color: var(--border-color);
         visibility: hidden;
       }
     </style>
   </head>
 
   <body>
-    <!-- Header for browser navigation and tabs -->
-    <div class="header" id="header">
-      <!-- Browser navigation controls -->
-      <div class="browser-nav">
-        <button class="nav-button" id="back-btn" title="Back" disabled>
-          <i class="fas fa-arrow-left"></i>
-        </button>
-        <button class="nav-button" id="forward-btn" title="Forward" disabled>
-          <i class="fas fa-arrow-right"></i>
-        </button>
-        <button class="nav-button" id="reload-btn" title="Reload">
-          <i class="fas fa-sync-alt"></i>
-        </button>
+    <!-- Layout Toggle Button (always at the absolute left) -->
+    <button
+      class="layout-toggle-absolute"
+      id="layout-toggle-btn"
+      title="Toggle Layout"
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" id="layout-icon">
+        <!-- Side panel icon (default) -->
+        <g id="side-panel-icon">
+          <rect
+            x="1"
+            y="2"
+            width="6"
+            height="12"
+            fill="currentColor"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
+          <rect
+            x="9"
+            y="2"
+            width="6"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
+        </g>
+        <!-- Bottom panel icon (hidden by default) -->
+        <g id="bottom-panel-icon" style="display: none">
+          <rect
+            x="1"
+            y="2"
+            width="14"
+            height="5"
+            fill="currentColor"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
+          <rect
+            x="1"
+            y="9"
+            width="14"
+            height="5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="0.5"
+          />
+        </g>
+      </svg>
+    </button>
+
+    <!-- Sidebar Title Bar (visible in horizontal layout with sidebar) -->
+    <div class="sidebar-title-bar" id="sidebar-title-bar">
+      <div class="sidebar-title">
+        <span>TypeAgent</span>
+      </div>
+    </div>
+
+    <!-- Title Bar -->
+    <div class="title-bar" id="title-bar">
+      <!-- Left Side Controls -->
+      <div class="title-bar-left">
+        <!-- Browser Mode Navigation (hidden in chat-only mode) -->
+        <div class="browser-nav" id="browser-nav">
+          <button class="title-bar-button" id="back-btn" title="Back" disabled>
+            <i class="fas fa-arrow-left"></i>
+          </button>
+          <button
+            class="title-bar-button"
+            id="forward-btn"
+            title="Forward"
+            disabled
+          >
+            <i class="fas fa-arrow-right"></i>
+          </button>
+          <button class="title-bar-button" id="reload-btn" title="Reload">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+        </div>
       </div>
 
-      <!-- Tab bar -->
-      <div class="tab-bar" id="tab-bar">
-        <!-- Tabs will be dynamically added here -->
+      <!-- Center Area -->
+      <div class="title-bar-center">
+        <!-- Chat-Only Mode: App Title -->
+        <div class="app-title" id="app-title">
+          <span>TypeAgent</span>
+        </div>
+
+        <!-- Browser Mode: Tab Bar -->
+        <div class="tab-container" id="tab-container">
+          <div class="tab-bar" id="tab-bar">
+            <!-- Tabs inserted dynamically -->
+          </div>
+          <button class="new-tab-button" id="new-tab-btn" title="New Tab">
+            <i class="fas fa-plus"></i>
+          </button>
+          <div class="tab-drag-region" id="tab-drag-region"></div>
+        </div>
       </div>
 
-      <!-- Add tab button -->
-      <button class="add-tab-button" id="add-tab-btn" title="New Tab">
-        <i class="fas fa-plus"></i>
-      </button>
+      <!-- Right Side: Draggable Area + Window Controls -->
+      <div class="title-bar-right">
+        <div class="drag-region"></div>
+        <!-- Window controls will be inserted based on platform -->
+        <div class="window-controls" id="window-controls">
+          <!-- Platform-specific buttons will be inserted here -->
+        </div>
+      </div>
     </div>
 
     <div class="divider-vertical" id="divider-vertical"></div>
@@ -223,21 +602,157 @@
     <script>
       const ipcRenderer = window.electron.ipcRenderer;
 
+      // UI Mode enum
+      const UIMode = {
+        BROWSER: "browser",
+        CHAT_ONLY: "chat-only",
+      };
+
       // DOM elements
-      const header = document.getElementById("header");
+      const titleBar = document.getElementById("title-bar");
+      const sidebarTitleBar = document.getElementById("sidebar-title-bar");
       const dividerVertical = document.getElementById("divider-vertical");
       const dividerHorizontal = document.getElementById("divider-horizontal");
       const tabBar = document.getElementById("tab-bar");
       const backBtn = document.getElementById("back-btn");
       const forwardBtn = document.getElementById("forward-btn");
       const reloadBtn = document.getElementById("reload-btn");
-      const addTabBtn = document.getElementById("add-tab-btn");
+      const newTabBtn = document.getElementById("new-tab-btn");
+      const layoutToggleBtn = document.getElementById("layout-toggle-btn");
+      const sidePanelIcon = document.getElementById("side-panel-icon");
+      const bottomPanelIcon = document.getElementById("bottom-panel-icon");
+      const browserNav = document.getElementById("browser-nav");
+      const tabContainer = document.getElementById("tab-container");
+      const appTitle = document.getElementById("app-title");
+      const windowControls = document.getElementById("window-controls");
 
       // State
       let isDragging = false;
       let tabs = [];
       let activeTabId = null;
       let verticalLayout = false;
+      let currentMode = UIMode.CHAT_ONLY;
+
+      // Platform detection and window controls setup
+      function setupPlatformSpecific() {
+        const platform = navigator.platform.toLowerCase();
+        const isMac = platform.includes("mac");
+        const isWindows = platform.includes("win");
+
+        // Add platform class
+        document.body.classList.add(
+          isMac
+            ? "platform-macos"
+            : isWindows
+              ? "platform-windows"
+              : "platform-linux",
+        );
+
+        // Setup window controls based on platform
+        if (isMac) {
+          // macOS: Use system traffic lights, add spacer
+          windowControls.innerHTML = '<div class="traffic-light-spacer"></div>';
+        } else {
+          // Windows/Linux: Custom window controls
+          windowControls.innerHTML = `
+            <button class="window-control minimize" id="minimize-btn" title="Minimize">
+              <i class="fas fa-window-minimize"></i>
+            </button>
+            <button class="window-control maximize" id="maximize-btn" title="Maximize">
+              <i class="fas fa-window-maximize"></i>
+            </button>
+            <button class="window-control close" id="close-btn" title="Close">
+              <i class="fas fa-times"></i>
+            </button>
+          `;
+
+          // Add event listeners for window controls
+          document
+            .getElementById("minimize-btn")
+            ?.addEventListener("click", () => {
+              ipcRenderer.send("window-minimize");
+            });
+
+          document
+            .getElementById("maximize-btn")
+            ?.addEventListener("click", () => {
+              ipcRenderer.send("window-maximize");
+            });
+
+          document
+            .getElementById("close-btn")
+            ?.addEventListener("click", () => {
+              ipcRenderer.send("window-close");
+            });
+        }
+      }
+
+      // UI Mode Management
+      class TitleBarManager {
+        setMode(mode) {
+          currentMode = mode;
+          this.updateVisibility();
+        }
+
+        updateVisibility() {
+          const titleBarCenter = document.querySelector(".title-bar-center");
+          const titleBarRight = document.querySelector(".title-bar-right");
+
+          if (currentMode === UIMode.BROWSER) {
+            browserNav.style.display = "flex";
+            tabContainer.style.display = "flex";
+            appTitle.style.display = "none";
+            titleBarRight.style.display = "flex";
+
+            // Make center area non-draggable in browser mode
+            titleBarCenter.classList.remove("chat-only-mode");
+            titleBarCenter.classList.add("browser-mode");
+          } else {
+            browserNav.style.display = "none";
+            tabContainer.style.display = "none";
+            appTitle.style.display = "flex";
+            titleBarRight.style.display = "none"; // Hide right side in chat-only mode
+
+            // Make center area draggable in chat-only mode
+            titleBarCenter.classList.remove("browser-mode");
+            titleBarCenter.classList.add("chat-only-mode");
+          }
+        }
+      }
+
+      const titleBarManager = new TitleBarManager();
+
+      // Responsive Tab Management
+      class ResponsiveTabManager {
+        calculateTabWidths() {
+          if (tabs.length === 0) return;
+
+          const availableWidth = this.getAvailableWidth();
+          const idealWidth = Math.min(
+            200,
+            Math.max(80, availableWidth / tabs.length),
+          );
+
+          const tabElements = tabBar.querySelectorAll(".tab");
+          tabElements.forEach((tab) => {
+            tab.style.width = `${idealWidth}px`;
+          });
+        }
+
+        getAvailableWidth() {
+          const containerWidth = tabContainer.offsetWidth;
+          const newTabButtonWidth = newTabBtn?.offsetWidth || 24;
+          const dragRegionMinWidth = 50; // Minimum width for drag region
+          const gap = 4; // Gap between elements
+
+          // Reserve space for new tab button, drag region, and gaps
+          const reservedSpace =
+            newTabButtonWidth + dragRegionMinWidth + gap * 2;
+          return Math.max(0, containerWidth - reservedSpace);
+        }
+      }
+
+      const responsiveTabManager = new ResponsiveTabManager();
 
       // Divider functionality
       dividerVertical.addEventListener("mousedown", () => {
@@ -247,16 +762,31 @@
       dividerHorizontal.addEventListener("mousedown", () => {
         isDragging = true;
       });
+
       window.addEventListener("mousemove", (e) => {
         if (!isDragging) return;
         if (verticalLayout) {
-          const newY = e.clientY;
-          dividerHorizontal.style.top = `${newY}px`;
+          const newY = e.clientY - titleBar.offsetHeight;
+          dividerHorizontal.style.top = `${newY + titleBar.offsetHeight}px`;
           ipcRenderer.send("views-resized-by-user", newY);
         } else {
           const newX = e.clientX;
+          // Update divider position immediately
           dividerVertical.style.left = `${newX}px`;
-          header.style.left = `${newX + 5}px`; // Position header just after divider
+
+          // Update title bar position immediately to remove lag
+          titleBar.style.left = `${newX}px`;
+
+          // Update sidebar width CSS variable and sidebar title bar immediately
+          document.documentElement.style.setProperty(
+            "--sidebar-width",
+            `${newX}px`,
+          );
+          if (sidebarTitleBar) {
+            sidebarTitleBar.style.width = `calc(${newX}px - 36px)`;
+          }
+
+          // Send IPC message for view content updates (but UI is already updated)
           ipcRenderer.send("views-resized-by-user", newX);
         }
       });
@@ -265,7 +795,7 @@
         isDragging = false;
       });
 
-      // Handle browser navigation
+      // Navigation handlers
       backBtn.addEventListener("click", () => {
         ipcRenderer.send("browser-go-back");
       });
@@ -278,8 +808,20 @@
         ipcRenderer.send("browser-reload");
       });
 
-      addTabBtn.addEventListener("click", () => {
+      newTabBtn.addEventListener("click", () => {
         ipcRenderer.send("browser-new-tab");
+      });
+
+      layoutToggleBtn.addEventListener("click", async () => {
+        try {
+          const result = await ipcRenderer.invoke("toggle-layout");
+          if (result && result.verticalLayout && tabs.length === 0) {
+            // If switching to vertical layout with no tabs, create a new tab
+            ipcRenderer.send("browser-new-tab");
+          }
+        } catch (error) {
+          console.error("Failed to toggle layout:", error);
+        }
       });
 
       // Tab management functions
@@ -288,7 +830,6 @@
         tabElement.className = `tab ${tab.id === activeTabId ? "active" : ""}`;
         tabElement.dataset.tabId = tab.id;
 
-        // Create favicon element with fallback
         const faviconSrc =
           tab.favicon ||
           `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}`;
@@ -300,21 +841,20 @@
         `;
 
         const closeButton = tabElement.querySelector(".tab-close");
-        // Tab click handler
+
         tabElement.addEventListener("click", (e) => {
-          if (e.target !== closeButton) {
+          if (e.target !== closeButton && !closeButton.contains(e.target)) {
             switchTab(tab.id);
           }
         });
 
-        // Tab close handler
         tabElement.addEventListener("auxclick", (e) => {
           if (e.button === 1) {
-            // Middle click
             e.stopPropagation();
             closeTab(tab.id);
           }
         });
+
         closeButton.addEventListener("click", (e) => {
           e.stopPropagation();
           closeTab(tab.id);
@@ -328,6 +868,9 @@
         tabs.forEach((tab) => {
           tabBar.appendChild(createTabElement(tab));
         });
+
+        // Update responsive tab widths
+        setTimeout(() => responsiveTabManager.calculateTabWidths(), 0);
       }
 
       function switchTab(tabId) {
@@ -338,11 +881,12 @@
 
       function closeTab(tabId) {
         ipcRenderer.send("browser-close-tab", tabId);
-      }
 
-      function updateHeaderVisibility() {
-        const hasBrowserContent = tabs.length > 0;
-        header.classList.toggle("visible", hasBrowserContent);
+        // Check if this will be the last tab
+        if (tabs.length === 1) {
+          // Auto-toggle to sidebar mode (horizontal layout)
+          ipcRenderer.send("toggle-layout");
+        }
       }
 
       function updateNavigationState(navigationState) {
@@ -350,48 +894,99 @@
         forwardBtn.disabled = !navigationState.canGoForward;
       }
 
+      function updateLayoutIcon() {
+        if (verticalLayout) {
+          sidePanelIcon.style.display = "block";
+          bottomPanelIcon.style.display = "none";
+          layoutToggleBtn.title = "Switch to side layout";
+        } else {
+          sidePanelIcon.style.display = "none";
+          bottomPanelIcon.style.display = "block";
+          layoutToggleBtn.title = "Switch to bottom layout";
+        }
+      }
+
       // IPC handlers
       ipcRenderer.on("set-layout", (_, layout) => {
         verticalLayout = layout.verticalLayout;
+        const titleBarHeight = titleBar.offsetHeight;
+
+        // Update body classes for layout-specific styling
+        document.body.classList.remove(
+          "vertical-layout",
+          "horizontal-layout",
+          "has-sidebar",
+        );
+
         if (verticalLayout) {
+          document.body.classList.add("vertical-layout");
           dividerVertical.style.visibility = "hidden";
+
+          // Reset title bar to full width in vertical layout
+          if (!isDragging) {
+            titleBar.style.left = "0px";
+          }
+
+          browserNav.style.paddingLeft = "28px";
+
           const newY = layout.pos;
           if (newY < 0) {
             dividerHorizontal.style.visibility = "hidden";
-            header.classList.remove("visible");
           } else {
-            dividerHorizontal.style.top = `${newY}px`;
-            dividerHorizontal.style.visibility = "visible";
-            header.style.left = "0px";
-            if (tabs.length > 0) {
-              header.classList.add("visible");
+            // Only update position if not currently dragging to avoid conflicts
+            if (!isDragging) {
+              dividerHorizontal.style.top = `${newY + titleBarHeight}px`;
             }
+            dividerHorizontal.style.visibility = "visible";
           }
         } else {
+          document.body.classList.add("horizontal-layout");
           dividerHorizontal.style.visibility = "hidden";
           const newX = layout.pos;
           if (newX < 0) {
             dividerVertical.style.visibility = "hidden";
-            header.classList.remove("visible");
-          } else {
-            dividerVertical.style.left = `${newX}px`;
-            dividerVertical.style.visibility = "visible";
-            header.style.left = `${newX + 5}px`; // Position header just after divider
-            if (tabs.length > 0) {
-              header.classList.add("visible");
+            // Reset title bar to full width when no sidebar in horizontal layout
+            if (!isDragging) {
+              titleBar.style.left = "0px";
             }
+          } else {
+            // In horizontal layout with sidebar visible
+            document.body.classList.add("has-sidebar");
+
+            browserNav.style.paddingLeft = "0px";
+
+            // Only update positions if not currently dragging to avoid conflicts
+            if (!isDragging) {
+              document.documentElement.style.setProperty(
+                "--sidebar-width",
+                `${newX}px`,
+              );
+              titleBar.style.left = `${newX}px`;
+              dividerVertical.style.left = `${newX}px`;
+
+              // Update sidebar title bar width
+              if (sidebarTitleBar) {
+                sidebarTitleBar.style.width = `calc(${newX}px - 36px)`;
+              }
+            }
+
+            dividerVertical.style.visibility = "visible";
           }
         }
+        updateLayoutIcon();
       });
 
-      // Tab management IPC handlers
       ipcRenderer.on("browser-tabs-updated", (_, tabsData) => {
         tabs = tabsData.tabs;
         activeTabId = tabsData.activeTabId;
-        updateTabBar();
-        updateHeaderVisibility();
 
-        // Update navigation state if we have an active tab
+        // Update UI mode based on tabs
+        titleBarManager.setMode(
+          tabs.length > 0 ? UIMode.BROWSER : UIMode.CHAT_ONLY,
+        );
+
+        updateTabBar();
+
         if (tabsData.navigationState) {
           updateNavigationState(tabsData.navigationState);
         }
@@ -403,6 +998,20 @@
 
       ipcRenderer.on("browser-tab-closed", (_, tabId) => {
         document.querySelector(`div.tab[data-tab-id="${tabId}"]`)?.remove();
+      });
+
+      // Window resize handler for responsive tabs
+      window.addEventListener("resize", () => {
+        if (currentMode === UIMode.BROWSER) {
+          responsiveTabManager.calculateTabWidths();
+        }
+      });
+
+      // Initialize on page load
+      document.addEventListener("DOMContentLoaded", () => {
+        setupPlatformSpecific();
+        updateLayoutIcon();
+        titleBarManager.setMode(UIMode.CHAT_ONLY);
       });
     </script>
   </body>

@@ -405,7 +405,6 @@ export class BrowserViewManager {
         const headerHeight = 40; // Height of the tab/navigation header
         const browserViewBounds = { ...this.viewBounds };
         browserViewBounds.y = headerHeight;
-        browserViewBounds.height -= headerHeight;
 
         activeView.webContentsView.setBounds(browserViewBounds);
         debug(`Updated active browser view bounds:`, browserViewBounds);
