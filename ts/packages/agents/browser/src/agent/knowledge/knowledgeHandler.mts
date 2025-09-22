@@ -482,9 +482,6 @@ export async function handleKnowledgeAction(
         case "getGlobalImportanceLayer":
             return await getGlobalImportanceLayer(parameters, context);
 
-        case "getImportanceNeighborhood":
-            return await getImportanceNeighborhood(parameters, context);
-
         case "getViewportBasedNeighborhood":
             return await getViewportBasedNeighborhood(parameters, context);
 
@@ -3924,7 +3921,7 @@ function calculateEntityMetrics(
     const nonZeroDegrees = degreeValues.filter(d => d > 0);
     debug(`[DEBUG-Backend] Degree map stats: total entities=${degreeValues.length}, nonZero=${nonZeroDegrees.length}, max=${Math.max(...degreeValues)}`);
     if (nonZeroDegrees.length > 0 && nonZeroDegrees.length <= 10) {
-        debug(`[DEBUG-Backend] Non-zero degrees:`, Array.from(degreeMap.entries()).filter(([k, v]) => v > 0));
+        debug(`[DEBUG-Backend] Non-zero degrees:`, Array.from(degreeMap.entries()).filter(([, v]) => v > 0));
     }
 
     const maxDegree = Math.max(...Array.from(degreeMap.values())) || 1;
@@ -4075,120 +4072,6 @@ export async function getGlobalImportanceLayer(
             entities: [],
             relationships: [],
             metadata: { error: error instanceof Error ? error.message : "Unknown error", layer: "global_importance" }
-        };
-    }
-}
-
-export async function getImportanceNeighborhood(
-    parameters: {
-        centerEntity: string;
-        maxNodes?: number;
-        maxDepth?: number;
-        importanceWeighting?: boolean;
-        includeGlobalContext?: boolean;
-    },
-    context: SessionContext<BrowserActionContext>
-): Promise<{
-    entities: any[];
-    relationships: any[];
-    metadata: any;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                entities: [],
-                relationships: [],
-                metadata: { error: "Website collection not available", layer: "importance_neighborhood" }
-            };
-        }
-
-        // Ensure cache is populated
-        await ensureGraphCache(websiteCollection);
-
-        // Get cached data
-        const cache = getGraphCache(websiteCollection);
-        if (!cache || !cache.isValid) {
-            return {
-                entities: [],
-                relationships: [],
-                metadata: { error: "Graph cache not available", layer: "importance_neighborhood" }
-            };
-        }
-
-        const allEntities = cache.entityMetrics || [];
-        const allRelationships = cache.relationships || [];
-        const communities = cache.communities || [];
-
-        const entitiesWithMetrics = calculateEntityMetrics(allEntities, allRelationships, communities);
-        const maxNodes = parameters.maxNodes || 5000;
-        const maxDepth = parameters.maxDepth || 3;
-
-        // Find center entity
-        const centerEntity = entitiesWithMetrics.find(e =>
-            e.name?.toLowerCase() === parameters.centerEntity.toLowerCase() ||
-            e.id?.toLowerCase() === parameters.centerEntity.toLowerCase()
-        );
-
-        if (!centerEntity) {
-            return {
-                entities: [],
-                relationships: [],
-                metadata: { error: "Center entity not found", layer: "importance_neighborhood" }
-            };
-        }
-
-        // Build adjacency map with importance weighting
-        const adjacencyMap = buildImportanceWeightedAdjacency(entitiesWithMetrics, allRelationships);
-
-        // Importance-weighted BFS expansion
-        const neighborhoodResult = expandImportanceNeighborhood(
-            centerEntity,
-            adjacencyMap,
-            entitiesWithMetrics,
-            maxNodes,
-            maxDepth,
-            parameters.importanceWeighting !== false
-        );
-
-        // Optionally include global context nodes
-        if (parameters.includeGlobalContext !== false) {
-            neighborhoodResult.entities = addGlobalContextNodes(
-                neighborhoodResult.entities,
-                entitiesWithMetrics,
-                maxNodes
-            );
-        }
-
-        // Get relationships between all included entities
-        const entityNames = new Set(neighborhoodResult.entities.map(e => e.name));
-        const neighborhoodRelationships = allRelationships.filter((rel: any) =>
-            entityNames.has(rel.fromEntity) && entityNames.has(rel.toEntity)
-        );
-
-        return {
-            entities: neighborhoodResult.entities,
-            relationships: neighborhoodRelationships,
-            metadata: {
-                centerEntity: centerEntity.name,
-                actualDepth: neighborhoodResult.maxDepth,
-                entityCount: neighborhoodResult.entities.length,
-                relationshipCount: neighborhoodRelationships.length,
-                importanceRange: {
-                    min: Math.min(...neighborhoodResult.entities.map(e => e.importance || 0)),
-                    max: Math.max(...neighborhoodResult.entities.map(e => e.importance || 0))
-                },
-                layer: "importance_neighborhood"
-            }
-        };
-
-    } catch (error) {
-        console.error("Error getting importance neighborhood:", error);
-        return {
-            entities: [],
-            relationships: [],
-            metadata: { error: error instanceof Error ? error.message : "Unknown error", layer: "importance_neighborhood" }
         };
     }
 }
@@ -4598,94 +4481,6 @@ function buildImportanceWeightedAdjacency(entities: any[], relationships: any[])
     });
 
     return adjacencyMap;
-}
-
-function expandImportanceNeighborhood(
-    centerEntity: any,
-    adjacencyMap: Map<string, Array<{entity: any, importance: number}>>,
-    allEntities: any[],
-    maxNodes: number,
-    maxDepth: number,
-    useImportanceWeighting: boolean
-): { entities: any[], maxDepth: number } {
-    const visited = new Set<string>();
-    const result: any[] = [centerEntity];
-
-    // Priority queue: [entity, depth, importance]
-    const queue: Array<{entity: any, depth: number, importance: number}> = [];
-
-    // Add center entity to visited
-    visited.add(centerEntity.name.toLowerCase());
-
-    // Initialize with center entity's neighbors
-    const centerNeighbors = adjacencyMap.get(centerEntity.name.toLowerCase()) || [];
-    centerNeighbors.forEach(neighbor => {
-        if (!visited.has(neighbor.entity.name.toLowerCase())) {
-            queue.push({
-                entity: neighbor.entity,
-                depth: 1,
-                importance: neighbor.importance
-            });
-        }
-    });
-
-    // Sort queue by importance (descending)
-    if (useImportanceWeighting) {
-        queue.sort((a, b) => b.importance - a.importance);
-    }
-
-    let actualMaxDepth = 0;
-
-    while (queue.length > 0 && result.length < maxNodes) {
-        const current = queue.shift()!;
-
-        if (current.depth > maxDepth) continue;
-        if (visited.has(current.entity.name.toLowerCase())) continue;
-
-        visited.add(current.entity.name.toLowerCase());
-        result.push(current.entity);
-        actualMaxDepth = Math.max(actualMaxDepth, current.depth);
-
-        // Add neighbors of current entity
-        if (current.depth < maxDepth) {
-            const neighbors = adjacencyMap.get(current.entity.name.toLowerCase()) || [];
-            neighbors.forEach(neighbor => {
-                if (!visited.has(neighbor.entity.name.toLowerCase())) {
-                    queue.push({
-                        entity: neighbor.entity,
-                        depth: current.depth + 1,
-                        importance: neighbor.importance
-                    });
-                }
-            });
-
-            // Re-sort queue by importance after adding new neighbors
-            if (useImportanceWeighting) {
-                queue.sort((a, b) => b.importance - a.importance);
-            }
-        }
-    }
-
-    return { entities: result, maxDepth: actualMaxDepth };
-}
-
-function addGlobalContextNodes(
-    neighborhoodEntities: any[],
-    allEntities: any[],
-    maxNodes: number
-): any[] {
-    const neighborhoodNames = new Set(neighborhoodEntities.map(e => e.name));
-    const availableSlots = maxNodes - neighborhoodEntities.length;
-
-    if (availableSlots <= 0) return neighborhoodEntities;
-
-    // Add some of the most important global nodes not already included
-    const globalNodes = allEntities
-        .filter(e => !neighborhoodNames.has(e.name))
-        .sort((a, b) => (b.importance || 0) - (a.importance || 0))
-        .slice(0, Math.min(availableSlots, Math.floor(availableSlots * 0.2))); // Add up to 20% global context
-
-    return [...neighborhoodEntities, ...globalNodes];
 }
 
 function calculateDistributionPercentiles(importanceScores: number[]): number[] {

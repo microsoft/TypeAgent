@@ -5,7 +5,6 @@
 import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
 import {
-    ChromeExtensionService,
     createExtensionService,
 } from "./knowledgeUtilities";
 import {
@@ -1188,7 +1187,7 @@ class EntityGraphView {
                     })),
                     // Related entities from search results
                     ...(graphData.relatedEntities || []).map(
-                        (entity: any, index: number) => ({
+                        (entity: any) => ({
                             name:
                                 typeof entity === "string"
                                     ? entity
@@ -1202,7 +1201,7 @@ class EntityGraphView {
                     ),
                     // Top topics as entities
                     ...(graphData.topTopics || []).map(
-                        (topic: any, index: number) => ({
+                        (topic: any) => ({
                             name:
                                 typeof topic === "string"
                                     ? topic
@@ -1379,61 +1378,6 @@ class EntityGraphView {
         }
     }
 
-    private async searchRealEntity(query: string): Promise<void> {
-        try {
-            console.log(`Searching for real entity: ${query}`);
-            this.showMessage(`Searching for "${query}"...`, "info");
-
-            // Use direct entity neighborhood query for search
-            const neighborhoodResult =
-                await this.graphDataProvider.getEntityNeighborhood(
-                    query,
-                    2,
-                    10,
-                );
-            const searchResults = {
-                entities:
-                    neighborhoodResult.neighbors.length > 0
-                        ? [
-                              { name: query },
-                              ...neighborhoodResult.neighbors.slice(0, 9),
-                          ]
-                        : [{ name: query }],
-            };
-
-            if (searchResults.entities && searchResults.entities.length > 0) {
-                console.log(
-                    `Found ${searchResults.entities.length} entities for search: ${query}`,
-                );
-
-                // Navigate to the most relevant result
-                const topResult = searchResults.entities[0];
-                await this.navigateToEntity(topResult.name);
-
-                // Show search results summary
-                this.showMessage(
-                    `Found ${searchResults.entities.length} results for "${query}". Showing: ${topResult.name}`,
-                    "success",
-                );
-
-                console.log(
-                    `Real entity search for "${query}" completed successfully`,
-                );
-            } else {
-                console.log(`No results found for search: ${query}`);
-                this.showMessage(
-                    `No entities found for search: "${query}". Try different keywords or import more website data.`,
-                    "warning",
-                );
-            }
-        } catch (error) {
-            console.error("Real entity search failed:", error);
-            this.showMessage(
-                `Search failed for "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
-                "error",
-            );
-        }
-    }
 
     /**
      * Refresh entity data from source
@@ -1642,47 +1586,6 @@ class EntityGraphView {
         }
     }
 
-    /**
-     * Manually trigger neighborhood view for testing (finds central node in current view)
-     */
-    private async manuallyTriggerNeighborhood(): Promise<void> {
-        if (!this.visualizer) {
-            console.warn("[Testing] No visualizer available for neighborhood trigger");
-            return;
-        }
-
-        const currentView = this.visualizer.getCurrentActiveView();
-        if (currentView !== "global") {
-            console.warn("[Testing] Neighborhood trigger only available in global view");
-            return;
-        }
-
-        try {
-            console.log("[Testing] Manually triggering neighborhood view...");
-            console.log("[Testing] Current visualizer state:", {
-                hasVisualizer: !!this.visualizer,
-                currentView: this.visualizer?.getCurrentActiveView()
-            });
-
-            // Find the most central/important node in current viewport
-            const centralNode = this.visualizer.findCentralNodeInViewport();
-
-            if (!centralNode) {
-                console.warn("[Testing] No suitable central node found for neighborhood");
-                return;
-            }
-
-            const entityName = centralNode.data('name') || centralNode.data('id');
-            console.log(`[Testing] Triggering neighborhood for entity: ${entityName}`);
-
-            // Trigger neighborhood transition via the visualizer
-            await this.visualizer.loadNeighborhoodAroundNode(entityName);
-
-
-        } catch (error) {
-            console.error("[Testing] Failed to trigger neighborhood:", error);
-        }
-    }
 
     // ============================================================================
     // Browser Navigation Integration (Phase 2)
@@ -1695,7 +1598,7 @@ class EntityGraphView {
         console.log("[Navigation] Setting up browser navigation handlers");
 
         // Handle browser back/forward buttons
-        window.addEventListener("popstate", async (event) => {
+        window.addEventListener("popstate", async () => {
             if (this.isHandlingPopstate) return;
 
             console.log("[Navigation] Browser popstate event triggered");
@@ -1909,24 +1812,6 @@ class EntityGraphView {
         );
     }
 
-    /**
-     * Get navigation context
-     */
-    private getNavigationContext(): {
-        canGoBack: boolean;
-        canGoForward: boolean;
-        previousState?: NavigationState;
-    } {
-        return {
-            canGoBack: this.currentHistoryIndex > 0,
-            canGoForward:
-                this.currentHistoryIndex < this.navigationHistory.length - 1,
-            previousState:
-                this.currentHistoryIndex > 0
-                    ? this.navigationHistory[this.currentHistoryIndex - 1]
-                    : undefined,
-        };
-    }
 
     /**
      * Update URL for entity navigation

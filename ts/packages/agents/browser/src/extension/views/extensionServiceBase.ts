@@ -453,21 +453,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getImportanceNeighborhood(
-        centerEntity: string,
-        maxNodes: number = 5000,
-        importanceWeighting: boolean = true,
-        includeGlobalContext: boolean = true
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "getImportanceNeighborhood",
-            centerEntity,
-            maxNodes,
-            importanceWeighting,
-            includeGlobalContext
-        });
-    }
-
     async getViewportBasedNeighborhood(
         centerEntity: string,
         viewportNodeNames: string[],

@@ -98,12 +98,6 @@ export class EntityGraphVisualizer {
         neighborhoodSwitch: 1.2      // TESTING: Lower pan threshold for smaller graphs
     };
 
-    // Dynamic spacing adjustment system
-    private baseSpacingParameters = {
-        idealEdgeLength: 100,
-        nodeOverlap: 20,
-        componentSpacing: 100
-    };
     private spacingScaleThreshold = 1.5;  // Start scaling spacing above this zoom level
     private lastSpacingUpdate = 0;  // Timestamp to throttle updates
     private spacingUpdateInterval = 100;  // Minimum ms between spacing updates
@@ -696,29 +690,6 @@ export class EntityGraphVisualizer {
     }
 
 
-    /**
-     * Calculate the center point of the original layout
-     */
-    private calculateOriginalLayoutCenter(): { x: number; y: number } {
-        if (this.originalNodePositions.size === 0) {
-            return { x: 0, y: 0 };
-        }
-
-        let totalX = 0;
-        let totalY = 0;
-        let count = 0;
-
-        this.originalNodePositions.forEach((pos) => {
-            totalX += pos.x;
-            totalY += pos.y;
-            count++;
-        });
-
-        return {
-            x: totalX / count,
-            y: totalY / count
-        };
-    }
 
     /**
      * Get the center of the current viewport for spacing calculations
@@ -735,30 +706,6 @@ export class EntityGraphVisualizer {
         };
     }
 
-    /**
-     * Calculate the center point of all nodes for spacing calculations
-     */
-    private calculateGraphCenter(nodes: any): { x: number; y: number } {
-        if (nodes.length === 0) {
-            return { x: 0, y: 0 };
-        }
-
-        let totalX = 0;
-        let totalY = 0;
-        let nodeCount = 0;
-
-        nodes.forEach((node: any) => {
-            const pos = node.position();
-            totalX += pos.x;
-            totalY += pos.y;
-            nodeCount++;
-        });
-
-        return {
-            x: totalX / nodeCount,
-            y: totalY / nodeCount
-        };
-    }
 
     /**
      * Switch to neighborhood view instance
@@ -1672,135 +1619,8 @@ export class EntityGraphVisualizer {
         );
     }
 
-    /**
-     * Check if fallback transition should be used based on performance constraints
-     */
-    private shouldUseFallbackTransition(nodeCount: number): boolean {
-        // Performance thresholds from design document
-        const deviceMemory = (navigator as any).deviceMemory || 4; // GB
-        const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
-        if (isMobile || deviceMemory < 4) {
-            return nodeCount > 1000; // Conservative threshold for mobile/low-memory
-        } else if (deviceMemory < 8) {
-            return nodeCount > 2000; // Moderate threshold
-        } else {
-            return nodeCount > 5000; // High threshold for powerful devices
-        }
-    }
 
-    /**
-     * Create detail elements that should be added to the graph
-     */
-    private async createDetailElements(
-        graphData: GraphData,
-        centerEntity: string,
-    ): Promise<any[]> {
-        const newElements: any[] = [];
-
-        try {
-            // Get existing node and edge IDs to avoid duplicates
-            const existingNodeIds = new Set();
-            const existingEdgeIds = new Set();
-
-            this.cy.nodes().forEach((node: any) => {
-                existingNodeIds.add(node.data("id"));
-                existingNodeIds.add(node.data("name"));
-            });
-
-            this.cy.edges().forEach((edge: any) => {
-                existingEdgeIds.add(edge.data("id"));
-            });
-
-            // Add new entities that don't already exist
-            graphData.entities.forEach((entity) => {
-                const entityId = entity.name;
-                if (!existingNodeIds.has(entityId)) {
-                    newElements.push({
-                        data: {
-                            id: entityId,
-                            name: entity.name,
-                            type: entity.type,
-                            confidence: entity.confidence || 0.5,
-                        },
-                        classes:
-                            entity.type === "document"
-                                ? "document"
-                                : entity.type,
-                    });
-                }
-            });
-
-            // Add new relationships that don't already exist
-            graphData.relationships.forEach((rel) => {
-                const edgeId = `${rel.from}-${rel.to}-${rel.type}`;
-                if (
-                    !existingEdgeIds.has(edgeId) &&
-                    (existingNodeIds.has(rel.from) ||
-                        graphData.entities.some((e) => e.name === rel.from)) &&
-                    (existingNodeIds.has(rel.to) ||
-                        graphData.entities.some((e) => e.name === rel.to))
-                ) {
-                    newElements.push({
-                        data: {
-                            id: edgeId,
-                            source: rel.from,
-                            target: rel.to,
-                            type: rel.type,
-                            strength: rel.strength || 0.5,
-                        },
-                        classes: rel.type,
-                    });
-                }
-            });
-
-            console.log(
-                `[Transition] Created ${newElements.length} new elements for detail view`,
-            );
-            return newElements;
-        } catch (error) {
-            console.error(
-                "[Transition] Error creating detail elements:",
-                error,
-            );
-            return [];
-        }
-    }
-
-    /**
-     * Perform standard entity graph loading (no transition)
-     */
-    private async performStandardEntityLoad(
-        graphData: GraphData,
-        centerEntity: string | null,
-    ): Promise<void> {
-        console.time("[Perf] Entity clear elements");
-        this.cy.elements().remove();
-        console.timeEnd("[Perf] Entity clear elements");
-
-        console.time("[Perf] Entity convert to elements");
-        const elements = this.convertToGraphElements(graphData);
-        console.timeEnd("[Perf] Entity convert to elements");
-        console.log(
-            `[Perf] Entity graph: ${elements.filter((e) => e.group === "nodes").length} nodes, ${elements.filter((e) => e.group === "edges").length} edges`,
-        );
-
-        console.time("[Perf] Entity add elements");
-        this.cy.add(elements);
-        console.timeEnd("[Perf] Entity add elements");
-
-        console.time("[Perf] Entity apply layout");
-        this.applyLayout(this.currentLayout);
-        console.timeEnd("[Perf] Entity apply layout");
-
-        console.time("[Perf] Entity fit to view");
-        this.cy.fit();
-        console.timeEnd("[Perf] Entity fit to view");
-
-        if (centerEntity) {
-            this.centerOnEntityWithLabels(centerEntity);
-        }
-    }
 
     /**
      * Load global importance layer into global instance (Triple-Instance Architecture)
@@ -2696,7 +2516,6 @@ export class EntityGraphVisualizer {
     private async handleHierarchicalZoomChange(newZoom: number): Promise<void> {
         if (!this.graphDataProvider) return;
 
-        const zoomDelta = newZoom - this.lastZoomLevel;
         this.lastZoomLevel = newZoom;
 
         // Determine transitions based on current view and zoom
@@ -3046,18 +2865,6 @@ export class EntityGraphVisualizer {
         }));
 
         // Analyze importance distribution for calibration
-        const importanceValues = this.cy
-            .nodes()
-            .map((node: any) => {
-                const importance =
-                    node.data("importance") ||
-                    node.data("computedImportance") ||
-                    0;
-                const degreeCount = node.data("degreeCount") || 0;
-                const centralityScore = node.data("centralityScore") || 0;
-                return Math.max(importance, degreeCount / 100, centralityScore);
-            })
-            .sort((a: number, b: number) => b - a);
 
         // Calculate expected visible counts for validation
 
@@ -3246,12 +3053,6 @@ export class EntityGraphVisualizer {
         return { nodeVisibilityPercentage, edgeVisibilityPercentage };
     }
 
-    /**
-     * Calculate zoom threshold for showing labels
-     */
-    private getLabelZoomThreshold(zoom: number): number {
-        return zoom > 0.5 ? zoom : 0; // Only show labels when zoomed in enough
-    }
 
     /**
      * Calculate font size for nodes based on zoom and importance
@@ -3293,7 +3094,6 @@ export class EntityGraphVisualizer {
         // Update node visibility and labels based on zoom and importance
         nodes.forEach((node: any) => {
             const importance = node.data('importance') || node.data('computedImportance') || 0.5;
-            const size = node.data('size') || 30;
 
             // Always show nodes in neighborhood view (they're already filtered)
             node.style('display', 'element');
@@ -3775,55 +3575,7 @@ export class EntityGraphVisualizer {
         return 0.1;
     }
 
-    /**
-     * Check if we should transition from entity view to global view
-     */
-    private shouldTransitionToGlobal(zoom: number): boolean {
-        // In triple-instance architecture, we don't auto-transition based on zoom
-        // Users manually navigate between instances via UI controls
-        // Keep this method for potential future use but disable auto-transitions
-        return false;
 
-        // Original logic (disabled for triple-instance):
-        // return (
-        //     this.viewMode.startsWith("entity") &&
-        //     zoom < 0.3 &&
-        //     this.globalGraphData !== null
-        // );
-    }
-
-    /**
-     * Initiate a smooth transition from entity view to global view
-     */
-    private async initiateGlobalTransition(currentZoom: number): Promise<void> {
-        if (
-            !this.cy ||
-            !this.globalGraphData ||
-            this.viewMode === "transitioning"
-        )
-            return;
-
-        console.log(
-            "[Transition] Starting transition from entity to global view",
-        );
-        this.viewMode = "transitioning";
-
-        // Store current entity position for smooth transition
-        const entityNode = this.currentEntity
-            ? this.cy.$(`#${this.currentEntity}`)
-            : null;
-        const entityPosition =
-            entityNode && entityNode.length > 0 ? entityNode.position() : null;
-
-        // Step 1: Show hidden global nodes/edges with animation
-        await this.restoreGlobalElements();
-
-        // Step 2: Hide detail-only nodes/edges
-        await this.hideDetailElements();
-
-        // Step 3: Apply global layout and focus
-        this.applyGlobalLayout(currentZoom, entityPosition);
-    }
 
     /**
      * Restore global-only elements that were hidden during detail view
@@ -3993,64 +3745,7 @@ export class EntityGraphVisualizer {
         }
     }
 
-    /**
-     * Animate the viewport to a target position and zoom level
-     */
-    private animateViewport(
-        target: { zoom: number; pan: { x: number; y: number } },
-        duration: number = 600,
-    ): Promise<void> {
-        return new Promise((resolve) => {
-            if (!this.cy) {
-                resolve();
-                return;
-            }
 
-            this.cy.animate(
-                {
-                    zoom: target.zoom,
-                    pan: target.pan,
-                },
-                {
-                    duration: duration,
-                    easing: "ease-out-cubic",
-                    complete: () => resolve(),
-                },
-            );
-        });
-    }
-
-    /**
-     * Apply sophisticated Level of Detail rendering based on multiple factors
-     */
-    private applySophisticatedLOD(zoom: number): void {
-        const nodes = this.cy.nodes();
-        const edges = this.cy.edges();
-
-        // Calculate global metrics for adaptive thresholds
-        const nodeMetrics = this.calculateNodeMetrics(nodes);
-        const edgeMetrics = this.calculateEdgeMetrics(edges);
-
-        // Apply multi-factor visibility algorithm for nodes
-        nodes.forEach((node: any) => {
-            const visibility = this.calculateNodeVisibility(
-                node,
-                zoom,
-                nodeMetrics,
-            );
-            this.applyNodeLOD(node, visibility, zoom);
-        });
-
-        // Apply context-aware edge visibility
-        edges.forEach((edge: any) => {
-            const visibility = this.calculateEdgeVisibility(
-                edge,
-                zoom,
-                edgeMetrics,
-            );
-            this.applyEdgeLOD(edge, visibility, zoom);
-        });
-    }
 
     private calculateNodeMetrics(nodes: any): any {
         const importanceValues = nodes.map(
@@ -4489,91 +4184,6 @@ export class EntityGraphVisualizer {
         console.log("[HierarchicalLoading] Graph data provider set");
     }
 
-    // ===================================================================
-    // HIERARCHICAL PARTITIONED LOADING METHODS
-    // ===================================================================
-
-
-    /**
-     * Check if we should switch to a different neighborhood
-     */
-    private async checkNeighborhoodSwitch(): Promise<void> {
-        // Find the most important visible node in current viewport
-        let viewportNodes = this.getNodesInViewport();
-
-        if (viewportNodes.length === 0) {
-            // Fallback: use visible nodes when viewport filtering is too restrictive
-            viewportNodes = this.cy.nodes().filter((node: any) => {
-                return node.style('display') !== 'none' && node.style('opacity') > 0;
-            });
-        }
-
-        const centerNode = this.findMostImportantNode(viewportNodes);
-
-        if (!centerNode) return;
-
-        const centerEntityName = centerNode.data('name') || centerNode.data('id');
-
-        // Check if this is different from current neighborhood center
-        // (Implementation can be enhanced to track current center)
-        if (this.neighborhoodCache.has(centerEntityName)) {
-            console.log(`[HierarchicalLoading] Switching to cached neighborhood: ${centerEntityName}`);
-            const cachedData = this.neighborhoodCache.get(centerEntityName);
-            await this.bindCompleteGraph(cachedData);
-        } else {
-            await this.loadNeighborhoodAroundNode(centerEntityName);
-        }
-    }
-
-    /**
-     * Load neighborhood around a specific node (Triple-Instance Architecture)
-     */
-    public async loadNeighborhoodAroundNode(centerEntityName: string): Promise<void> {
-        // Check cache first
-        if (this.neighborhoodCache.has(centerEntityName)) {
-            console.log(`[TripleInstance] Cache hit for ${centerEntityName}`);
-            const cachedData = this.neighborhoodCache.get(centerEntityName);
-            // Preserve zoom when loading from cache to avoid jarring resets
-            const shouldPreserveZoom = this.currentActiveView === "neighborhood";
-            await this.loadNeighborhoodGraph(cachedData, centerEntityName, shouldPreserveZoom);
-            return;
-        }
-
-        // Loading flag is managed by the calling method to avoid conflicts
-        try {
-            this.showNeighborhoodLoadingIndicator(centerEntityName);
-
-            // Fetch neighborhood data with adjusted max nodes for small graphs
-            // TESTING: Smaller neighborhood for 100-node global graphs
-            const totalNodes = this.globalInstance?.nodes().length || 1000;
-            const maxNodesForNeighborhood = totalNodes < 200 ? 50 : 100;
-
-            const neighborhoodData = await this.graphDataProvider.getImportanceNeighborhood(
-                centerEntityName,
-                maxNodesForNeighborhood  // Adjusted based on graph size
-            );
-
-            console.log("[TripleInstance] About to load neighborhood data:", JSON.stringify({
-                entities: neighborhoodData.entities?.length || 0,
-                relationships: neighborhoodData.relationships?.length || 0,
-                centerEntity: centerEntityName
-            }));
-
-            // Load into neighborhood instance
-            // Don't preserve zoom for fresh neighborhood loads (allow initial zoom setup)
-            await this.loadNeighborhoodGraph(neighborhoodData, centerEntityName, false);
-
-            console.log("[TripleInstance] Neighborhood loaded successfully");
-
-        } catch (error) {
-            console.error("[HierarchicalLoading] Error loading neighborhood:", error);
-            this.showNeighborhoodError(centerEntityName);
-        } finally {
-            this.hideNeighborhoodLoadingIndicator();
-            // Loading flag is cleared by the calling method to avoid conflicts
-        }
-    }
-
     /**
      * Load neighborhood around multiple viewport nodes for better visual continuity
      */
@@ -4637,15 +4247,7 @@ export class EntityGraphVisualizer {
 
         } catch (error) {
             console.error("[TripleInstance] Error loading viewport-based neighborhood:", error);
-            console.log("[TripleInstance] Falling back to standard neighborhood loading");
-
-            // Fallback to standard neighborhood loading
-            try {
-                await this.loadNeighborhoodAroundNode(centerEntityName);
-            } catch (fallbackError) {
-                console.error("[TripleInstance] Fallback neighborhood loading also failed:", fallbackError);
-                this.showNeighborhoodError(centerEntityName);
-            }
+            this.showNeighborhoodError(centerEntityName);
         } finally {
             this.hideNeighborhoodLoadingIndicator();
             // Loading flag is cleared by the calling method to avoid conflicts
@@ -5119,7 +4721,6 @@ export class EntityGraphVisualizer {
         // Try to use Cytoscape's built-in element hit testing first
         try {
             // Method 1: Try to get the element directly at the cursor position
-            const containerRect = this.container.getBoundingClientRect();
             const renderedPosition = {
                 x: cursorPosition.x,
                 y: cursorPosition.y
@@ -5201,28 +4802,7 @@ export class EntityGraphVisualizer {
         return closestNode;
     }
 
-    /**
-     * Get current viewport bounds
-     */
-    private getCurrentViewport(): any {
-        if (!this.cy) return null;
 
-        return {
-            zoom: this.cy.zoom(),
-            pan: this.cy.pan(),
-            extent: this.cy.extent()
-        };
-    }
-
-    /**
-     * Restore viewport position
-     */
-    private restoreViewport(viewport: any): void {
-        if (!this.cy || !viewport) return;
-
-        this.cy.zoom(viewport.zoom);
-        this.cy.pan(viewport.pan);
-    }
 
     /**
      * Show loading indicator for neighborhood loading
@@ -5259,17 +4839,6 @@ export class EntityGraphVisualizer {
         }
     }
 
-    /**
-     * Show layer transition indicator
-     */
-    private showLayerTransitionIndicator(fromLayer: string, toLayer: string): void {
-        const message = toLayer === 'neighborhood'
-            ? `Switching to detailed exploration around selected area`
-            : `Returning to global overview`;
-
-        console.log(`[HierarchicalLoading] ${message}`);
-        // Could add visual indicator here
-    }
 
     /**
      * Show error message for neighborhood loading
@@ -6082,140 +5651,6 @@ export class EntityGraphVisualizer {
         return positions;
     }
 
-    /**
-     * Apply layout with visual continuity - preserve global positions where possible
-     */
-    private async applyLayoutWithVisualContinuity(
-        instance: any,
-        globalPositions: Map<string, { x: number; y: number }>,
-        centerEntity: string,
-        nodeCount: number
-    ): Promise<{ preservationRatio: number }> {
-        console.log(`[VisualContinuity] Applying layout with continuity for ${nodeCount} nodes, center: ${centerEntity}`);
-
-        // TWO-PHASE LAYOUT APPROACH: Lock preserved nodes, layout only new nodes
-
-        // Phase 1: Position and lock preserved nodes
-        const preservedNodes: any[] = [];
-        const newNodes: any[] = [];
-
-        instance.nodes().forEach((node: any) => {
-            const nodeId = node.data('id') || node.data('name');
-            const globalPosition = globalPositions.get(nodeId);
-
-            if (globalPosition) {
-                // Position and lock anchor nodes at their global coordinates
-                node.position(globalPosition);
-                node.lock(); // CRITICAL: Lock position to prevent COSE from moving it
-                preservedNodes.push(node);
-                console.log(`[TwoPhaseLayout] LOCKED anchor node ${nodeId} at (${globalPosition.x.toFixed(1)}, ${globalPosition.y.toFixed(1)})`);
-            } else {
-                // Mark new nodes for layout
-                newNodes.push(node);
-                console.log(`[TwoPhaseLayout] New node ${nodeId} needs positioning`);
-            }
-        });
-
-        const preservationRatio = preservedNodes.length / instance.nodes().length;
-        console.log(`[TwoPhaseLayout] Phase 1 complete: ${preservedNodes.length} locked anchors, ${newNodes.length} new nodes (${(preservationRatio * 100).toFixed(1)}% preserved)`);
-
-        // Phase 2: Layout strategy based on preservation ratio
-        if (preservationRatio > 0.7) {
-            // High preservation: Skip COSE layout entirely, position new nodes manually
-            console.log(`[TwoPhaseLayout] High preservation ratio (${(preservationRatio * 100).toFixed(1)}%), positioning new nodes manually`);
-
-            await this.positionNewNodesAroundAnchors(newNodes, preservedNodes);
-
-            // Unlock anchor nodes after positioning
-            preservedNodes.forEach(node => node.unlock());
-            console.log(`[TwoPhaseLayout] Manual positioning complete, unlocked ${preservedNodes.length} anchor nodes`);
-
-        } else {
-            // Medium/Low preservation: Use constrained COSE layout
-            console.log(`[TwoPhaseLayout] Medium preservation ratio (${(preservationRatio * 100).toFixed(1)}%), using constrained COSE layout`);
-
-            const layoutOptions = {
-                name: 'cose',
-                animate: false,
-                fit: false,                   // Don't fit to viewport (preserve anchor positions)
-                randomize: false,             // Use current positions
-                nodeRepulsion: () => 400000,  // Lower repulsion to avoid moving locked nodes
-                nodeOverlap: 30,              // Moderate overlap prevention
-                idealEdgeLength: () => 100,   // Shorter edges to stay near anchors
-                edgeElasticity: () => 50,     // Lower elasticity to reduce anchor displacement
-                gravity: 20,                  // Very low gravity to minimize anchor pull
-                numIter: 100,                 // Fewer iterations to minimize drift
-                initialTemp: 100,             // Lower temp to reduce large movements
-                coolingFactor: 0.95,
-                minTemp: 1.0
-            };
-
-            console.log(`[TwoPhaseLayout] Constrained COSE config: fit=${layoutOptions.fit}, gravity=${layoutOptions.gravity}, nodeRepulsion=${layoutOptions.nodeRepulsion()}`);
-
-            const layout = instance.layout(layoutOptions);
-            console.log(`[TwoPhaseLayout] Starting constrained COSE layout with ${preservedNodes.length} locked anchors...`);
-
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    console.error(`[TwoPhaseLayout] Layout timeout after 10 seconds`);
-                    reject(new Error('Layout timeout'));
-                }, 10000);
-
-                layout.on('layoutstop', () => {
-                    clearTimeout(timeout);
-                    // Unlock anchor nodes after layout
-                    preservedNodes.forEach(node => node.unlock());
-                    console.log(`[TwoPhaseLayout] Constrained COSE layout completed, unlocked ${preservedNodes.length} anchor nodes`);
-                    resolve(undefined);
-                });
-
-                layout.on('layoutready', () => {
-                    console.log(`[TwoPhaseLayout] Constrained layout ready - nodes positioned`);
-                });
-
-                layout.run();
-            });
-        }
-
-        // Phase 3: Verify anchor preservation
-        let preservedCount = 0;
-        let totalDrift = 0;
-        preservedNodes.forEach(node => {
-            const nodeId = node.data('id') || node.data('name');
-            const originalPos = globalPositions.get(nodeId);
-            const currentPos = node.position();
-
-            if (originalPos) {
-                const drift = Math.sqrt(Math.pow(currentPos.x - originalPos.x, 2) + Math.pow(currentPos.y - originalPos.y, 2));
-                totalDrift += drift;
-                if (drift < 50) preservedCount++; // Stricter threshold
-
-                console.log(`[TwoPhaseLayout] Anchor ${nodeId} drift: ${drift.toFixed(1)}px`);
-            }
-        });
-
-        const avgDrift = preservedNodes.length > 0 ? totalDrift / preservedNodes.length : 0;
-        const preservationSuccess = preservedNodes.length > 0 ? (preservedCount / preservedNodes.length) * 100 : 0;
-
-        console.log(`[TwoPhaseLayout] ✅ SOLUTION VERIFICATION: ${preservedCount}/${preservedNodes.length} anchors preserved (${preservationSuccess.toFixed(1)}%), avg drift: ${avgDrift.toFixed(1)}px`);
-
-        console.log(`[TwoPhaseLayout] ✅ Two-phase layout complete: ${instance.nodes().length} total nodes, ${preservedNodes.length} anchors preserved, ${newNodes.length} new nodes positioned`);
-
-        // Verify center entity position
-        const centerNode = instance.nodes().filter((node: any) => {
-            const nodeId = node.data('id') || node.data('name');
-            return nodeId === centerEntity;
-        });
-
-        if (centerNode.length > 0) {
-            const centerPosition = centerNode.position();
-            const wasPreserved = preservedNodes.includes(centerNode[0]);
-            console.log(`[TwoPhaseLayout] Center entity ${centerEntity} at (${centerPosition.x.toFixed(1)}, ${centerPosition.y.toFixed(1)}) - ${wasPreserved ? 'PRESERVED' : 'REPOSITIONED'}`);
-        }
-
-        // Return preservation ratio for viewport decision
-        return { preservationRatio };
-    }
 
     // Anchor node position tracking for global->neighborhood transitions
     private anchorNodeData: Map<string, { globalPosition: any; globalViewport: any; neighborhoodPosition?: any; neighborhoodViewport?: any }> = new Map();
@@ -6550,38 +5985,6 @@ export class EntityGraphVisualizer {
         console.log(`[ViewportMatching] Anchor center: (${anchorCenterX.toFixed(1)}, ${anchorCenterY.toFixed(1)}), container: ${containerWidth}x${containerHeight}`);
     }
 
-    /**
-     * Filter neighborhood data to only include anchor nodes for simplified testing
-     */
-    private filterToAnchorNodesOnly(neighborhoodData: any): any {
-        if (!this.currentAnchorNodes || this.currentAnchorNodes.size === 0) {
-            return { entities: [], relationships: [], metadata: neighborhoodData.metadata };
-        }
-
-        const anchorNodeNames = Array.from(this.currentAnchorNodes);
-
-        // Filter entities to only include anchor nodes
-        const filteredEntities = neighborhoodData.entities.filter((entity: any) => {
-            const entityName = entity.name || entity.id;
-            return anchorNodeNames.includes(entityName);
-        });
-
-        // Filter relationships to only include those between anchor nodes
-        const filteredRelationships = neighborhoodData.relationships.filter((rel: any) => {
-            return anchorNodeNames.includes(rel.from) && anchorNodeNames.includes(rel.to);
-        });
-
-        return {
-            entities: filteredEntities,
-            relationships: filteredRelationships,
-            metadata: {
-                ...neighborhoodData.metadata,
-                source: "anchor_nodes_only",
-                originalEntityCount: neighborhoodData.entities.length,
-                filteredEntityCount: filteredEntities.length
-            }
-        };
-    }
 
     /**
      * Position all nodes directly: anchors at global coordinates, non-anchors at center position
@@ -6672,7 +6075,6 @@ export class EntityGraphVisualizer {
                     }
 
                     if (size && !isNaN(size) && size > 0) {
-                        const importance = globalNode.data('importance') || 0;
                         globalNodeSizes.set(anchorName, size);
 
                     }
@@ -6684,8 +6086,6 @@ export class EntityGraphVisualizer {
             if (globalSizes.length > 0) {
                 const minGlobalSize = Math.min(...globalSizes);
                 const maxGlobalSize = Math.max(...globalSizes);
-                const globalRange = maxGlobalSize - minGlobalSize;
-                const neighborhoodRange = maxNeighborhoodSize - minNeighborhoodSize;
 
             }
         }
@@ -6819,33 +6219,5 @@ export class EntityGraphVisualizer {
 
     }
 
-     /**
-     * Position anchor nodes directly at their global coordinates without any layout
-     */
-    private positionAnchorNodesDirectly(globalPositions: Map<string, { x: number; y: number }>): void {
-        if (!this.currentAnchorNodes || this.currentAnchorNodes.size === 0) {
-            console.log(`[SimplifiedTest] No anchor nodes to position`);
-            return;
-        }
-
-        let positionedCount = 0;
-        let missingCount = 0;
-
-        this.currentAnchorNodes.forEach(anchorName => {
-            const node = this.neighborhoodInstance.$(`#${anchorName}`);
-            const globalPosition = globalPositions.get(anchorName);
-
-            if (node.length > 0 && globalPosition) {
-                node.position(globalPosition);
-                positionedCount++;
-                console.log(`[SimplifiedTest] Positioned anchor ${anchorName} at (${globalPosition.x.toFixed(1)}, ${globalPosition.y.toFixed(1)})`);
-            } else {
-                missingCount++;
-                console.log(`[SimplifiedTest] ❌ Cannot position ${anchorName}: node=${node.length > 0}, globalPos=${!!globalPosition}`);
-            }
-        });
-
-        console.log(`[SimplifiedTest] ✅ Direct positioning complete: ${positionedCount} anchors positioned, ${missingCount} missing`);
-    }
 
 }

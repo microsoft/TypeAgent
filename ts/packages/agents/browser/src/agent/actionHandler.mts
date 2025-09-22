@@ -1195,10 +1195,8 @@ async function processBrowserAgentMessage(
         case "getAllEntitiesWithMetrics":
         case "getEntityNeighborhood":
         case "getGlobalImportanceLayer":
-        case "getImportanceNeighborhood":
         case "getImportanceStatistics":
-        case "getViewportBasedNeighborhood":
-        case "getEntityGraphFast": {
+        case "getViewportBasedNeighborhood":{
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,
                 data.params,

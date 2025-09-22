@@ -78,7 +78,6 @@ interface GraphDataProvider {
 
     // Hierarchical partitioned loading methods
     getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
-    getImportanceNeighborhood(centerEntity: string, maxNodes?: number): Promise<any>;
     getViewportBasedNeighborhood(centerEntity: string, viewportNodeNames: string[], maxNodes?: number): Promise<any>;
     getImportanceStatistics(): Promise<any>;
 
@@ -395,31 +394,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         }
     }
 
-    async getImportanceNeighborhood(centerEntity: string, maxNodes: number = 5000): Promise<any> {
-        try {
-            console.log(`[GraphDataProvider] Fetching importance neighborhood for ${centerEntity} with ${maxNodes} nodes`);
-
-            const result = await this.baseService.getImportanceNeighborhood(centerEntity, maxNodes, true, true);
-
-            if (!result) {
-                console.warn("[GraphDataProvider] Received null result from getImportanceNeighborhood service");
-                throw new Error("Service returned null result");
-            }
-
-            return {
-                entities: this.transformEntitiesToUIFormat(result.entities || []),
-                relationships: this.transformRelationshipsToUIFormat(result.relationships || []),
-                metadata: {
-                    ...result.metadata,
-                    source: "importance_neighborhood"
-                }
-            };
-        } catch (error) {
-            console.error("[GraphDataProvider] Error fetching importance neighborhood:", error);
-            throw error;
-        }
-    }
-
     async getViewportBasedNeighborhood(centerEntity: string, viewportNodeNames: string[], maxNodes: number = 5000): Promise<any> {
         try {
             console.log(`[GraphDataProvider] Fetching viewport-based neighborhood for ${centerEntity} anchored by ${viewportNodeNames.length} viewport nodes`);
@@ -459,8 +433,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
             };
         } catch (error) {
             console.error("[GraphDataProvider] Error fetching viewport-based neighborhood:", error);
-            console.log("[GraphDataProvider] Falling back to standard importance neighborhood");
-            return await this.getImportanceNeighborhood(centerEntity, maxNodes);
+            throw error;
         }
     }
 

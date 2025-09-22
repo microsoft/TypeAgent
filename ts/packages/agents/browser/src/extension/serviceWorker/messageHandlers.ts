@@ -1088,34 +1088,6 @@ export async function handleMessage(
             }
         }
 
-        case "getImportanceNeighborhood": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "getImportanceNeighborhood",
-                    parameters: {
-centerEntity: message.centerEntity,
-            maxNodes: message.maxNodes,
-            importanceWeighting: message.importanceWeighting,
-            includeGlobalContext: message.includeGlobalContext,
-
-                    },
-                });
-                return result;
-            } catch (error) {
-                console.error("Error getting importance neighborhood:", error);
-                return {
-                    entities: [],
-                    relationships: [],
-                    metadata: {
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : "Unknown error",
-                    },
-                };
-            }
-        }
-
         case "getImportanceStatistics": {
             try {
                 const result = await sendActionToAgent({
