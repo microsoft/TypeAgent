@@ -1663,23 +1663,15 @@ export class EntityGraphVisualizer {
         this.neighborhoodInstance.elements().remove();
 
         // Use full neighborhood data (don't filter out non-anchor nodes)
-        console.log(`[SimplifiedTest] Loading ${neighborhoodData.entities.length} total nodes (including non-anchors)`);
-
         const elements = this.convertToGraphElements(neighborhoodData);
         this.neighborhoodInstance.add(elements);
-        console.log(`[SimplifiedTest] Added ${elements.length} elements to neighborhood instance`);
 
         // SKIP LAYOUT: Position anchor nodes at global coordinates, non-anchors at center
-        console.log(`[SimplifiedTest] Positioning nodes directly without layout...`);
         const layoutResult = { preservationRatio: 1.0 }; // Mock result for viewport calculation
 
         // Get center node position (the entity we're centering the neighborhood on)
         const centerNodePosition = globalNodePositions.get(centerEntity);
-        if (!centerNodePosition) {
-            console.log(`[SimplifiedTest] ❌ Cannot find center node ${centerEntity} position, using default (0,0)`);
-        }
         const centerPos = centerNodePosition || { x: 0, y: 0 };
-        console.log(`[SimplifiedTest] Center node ${centerEntity} position: (${centerPos.x.toFixed(1)}, ${centerPos.y.toFixed(1)})`);
 
         this.positionAllNodesDirectly(globalNodePositions, centerPos);
 
@@ -1704,8 +1696,6 @@ export class EntityGraphVisualizer {
                     anchorPostLayoutPositions[anchorName] = { x: pos.x, y: pos.y };
                 }
             });
-            console.log(`[SimplifiedTest] Anchor positions after direct positioning: ${JSON.stringify(anchorPostLayoutPositions)}`);
-
             // Calculate position preservation effectiveness
             let preservedCount = 0;
             let totalShift = 0;
@@ -1718,8 +1708,6 @@ export class EntityGraphVisualizer {
                     if (shift < 100) preservedCount++;
                 }
             });
-            const avgShift = Object.keys(anchorGlobalPositions).length > 0 ? totalShift / Object.keys(anchorGlobalPositions).length : 0;
-            console.log(`[SimplifiedTest] ✅ Position preservation: ${preservedCount}/${Object.keys(anchorGlobalPositions).length} anchors preserved (<100px shift), avg shift: ${avgShift.toFixed(1)}px`);
         }
 
         // Only set initial zoom when transitioning from global view, not when reloading
@@ -3279,78 +3267,9 @@ export class EntityGraphVisualizer {
         console.log(`[DEBUG-VIEWPORT] Visibility ratio: ${((visibleNodes.length / nodesInViewport.length) * 100).toFixed(1)}%`);
         console.log("[DEBUG-VIEWPORT] ================================================");
 
-        // Add anchor node size comparison
-        this.debugAnchorSizes();
     }
 
-    /**
-     * Debug anchor node sizes in both global and neighborhood views
-     */
-    private debugAnchorSizes(): void {
-        console.log(`[SizeDebug] === ANCHOR NODE SIZE COMPARISON ===`);
 
-        if (!this.currentAnchorNodes || this.currentAnchorNodes.size === 0) {
-            console.log(`[SizeDebug] No anchor nodes available`);
-            return;
-        }
-
-        let comparisonCount = 0;
-        this.currentAnchorNodes.forEach(anchorName => {
-            if (comparisonCount >= 10) return; // Limit to 10 for readability
-
-            // Get neighborhood node info using robust selectors
-            let neighborhoodNode = this.neighborhoodInstance.$(`#${anchorName}`);
-            if (neighborhoodNode.length === 0) {
-                neighborhoodNode = this.neighborhoodInstance.$(`[name="${anchorName}"]`);
-            }
-            if (neighborhoodNode.length === 0) {
-                neighborhoodNode = this.neighborhoodInstance.nodes().filter((n: any) => {
-                    const nodeData = n.data();
-                    return nodeData.id === anchorName || nodeData.name === anchorName;
-                });
-            }
-
-            // Get global node info using robust selectors
-            let globalNode = this.globalInstance.$(`#${anchorName}`);
-            if (globalNode.length === 0) {
-                globalNode = this.globalInstance.$(`[name="${anchorName}"]`);
-            }
-            if (globalNode.length === 0) {
-                globalNode = this.globalInstance.nodes().filter((n: any) => {
-                    const nodeData = n.data();
-                    return nodeData.id === anchorName || nodeData.name === anchorName;
-                });
-            }
-
-            if (neighborhoodNode.length > 0 && globalNode.length > 0) {
-                // Neighborhood node size info
-                const neighborhoodData = neighborhoodNode.data('size');
-                const neighborhoodStyle = neighborhoodNode.style('width');
-                const neighborhoodBbox = neighborhoodNode.boundingBox();
-                const neighborhoodImportance = neighborhoodNode.data('importance');
-
-                // Global node size info
-                const globalData = globalNode.data('size');
-                const globalStyle = globalNode.style('width');
-                const globalBbox = globalNode.boundingBox();
-                const globalImportance = globalNode.data('importance');
-
-                console.log(`[SizeDebug] ${anchorName}:`);
-                console.log(`  Global: data=${globalData}, style=${globalStyle}, bbox=${globalBbox?.w?.toFixed(1)}, importance=${globalImportance}`);
-                console.log(`  Neighborhood: data=${neighborhoodData}, style=${neighborhoodStyle}, bbox=${neighborhoodBbox?.w?.toFixed(1)}, importance=${neighborhoodImportance}`);
-
-                // Calculate expected neighborhood size based on our formula
-                const expectedSize = 9 + (neighborhoodImportance * 12); // 9-21px range
-                console.log(`  Expected neighborhood size: ${expectedSize.toFixed(1)}px (based on importance ${neighborhoodImportance?.toFixed(3)})`);
-
-                comparisonCount++;
-            } else {
-                console.log(`[SizeDebug] ${anchorName}: ❌ Node not found (neighborhood=${neighborhoodNode.length > 0}, global=${globalNode.length > 0})`);
-            }
-        });
-
-        console.log(`[SizeDebug] === END SIZE COMPARISON ===`);
-    }
 
     /**
      * Force apply neighborhood sizes to override CSS mapData
@@ -3381,7 +3300,7 @@ export class EntityGraphVisualizer {
         // Trigger a style refresh
         this.neighborhoodInstance.style().update();
     }
-
+    
     /**
      * Apply visual sizing based on computed importance values
      * This replaces CSS mapData which doesn't auto-refresh when data changes
@@ -6233,7 +6152,6 @@ export class EntityGraphVisualizer {
      */
     private filterToAnchorNodesOnly(neighborhoodData: any): any {
         if (!this.currentAnchorNodes || this.currentAnchorNodes.size === 0) {
-            console.log(`[SimplifiedTest] No anchor nodes to filter, returning empty data`);
             return { entities: [], relationships: [], metadata: neighborhoodData.metadata };
         }
 
@@ -6249,8 +6167,6 @@ export class EntityGraphVisualizer {
         const filteredRelationships = neighborhoodData.relationships.filter((rel: any) => {
             return anchorNodeNames.includes(rel.from) && anchorNodeNames.includes(rel.to);
         });
-
-        console.log(`[SimplifiedTest] Filtered data: ${filteredEntities.length} entities, ${filteredRelationships.length} relationships (from ${neighborhoodData.entities.length} entities, ${neighborhoodData.relationships.length} relationships)`);
 
         return {
             entities: filteredEntities,
@@ -6276,8 +6192,8 @@ export class EntityGraphVisualizer {
 
         // First, get the global node sizes for anchors
         const globalNodeSizes = new Map<string, number>();
-        const minNeighborhoodSize = 9; // Minimum size in neighborhood view (60% of previous 15px)
-        const maxNeighborhoodSize = 21; // Maximum size in neighborhood view (60% of previous 35px)
+        const minNeighborhoodSize = 15; // Minimum size in neighborhood view
+        const maxNeighborhoodSize = 35; // Maximum size in neighborhood view
 
         if (this.currentAnchorNodes && this.currentAnchorNodes.size > 0) {
             // Get sizes from global instance
@@ -6356,18 +6272,6 @@ export class EntityGraphVisualizer {
                         const importance = globalNode.data('importance') || 0;
                         globalNodeSizes.set(anchorName, size);
 
-                        // Store both size and importance for detailed logging
-                        if (globalNodeSizes.size <= 10) { // Increased to see more examples
-                            console.log(`[SizeExtraction] ${anchorName}: size=${size}, importance=${importance}, calculated=${importance > 0 ? (20 + importance * 20).toFixed(1) : 'N/A'}`);
-                        }
-                    } else {
-                        if (globalNodeSizes.size <= 10) {
-                            console.log(`[SizeExtraction] WARNING: ${anchorName} - No valid size (data=${globalNode.data('size')}, style=${globalNode.style('width')}, importance=${globalNode.data('importance')}, bbox=${globalNode.boundingBox()?.w})`);
-                        }
-                    }
-                } else {
-                    if (globalNodeSizes.size <= 5) {
-                        console.log(`[SizeExtraction] ERROR: Could not find global node for anchor ${anchorName}`);
                     }
                 }
             });
@@ -6380,10 +6284,6 @@ export class EntityGraphVisualizer {
                 const globalRange = maxGlobalSize - minGlobalSize;
                 const neighborhoodRange = maxNeighborhoodSize - minNeighborhoodSize;
 
-                console.log(`[ImportancePreservation] Global size range: ${minGlobalSize.toFixed(1)}-${maxGlobalSize.toFixed(1)}, Neighborhood range: ${minNeighborhoodSize}-${maxNeighborhoodSize}`);
-                console.log(`[ImportancePreservation] Found sizes for ${globalSizes.length} anchor nodes`);
-            } else {
-                console.log(`[ImportancePreservation] WARNING: No global sizes found for any anchor nodes`);
             }
         }
 
@@ -6430,12 +6330,6 @@ export class EntityGraphVisualizer {
                         // Also set as data for CSS mapData override
                         node.data('overrideSize', neighborhoodSize);
 
-                        if (anchorCount <= 5) {
-                            // Log global vs neighborhood importance comparison
-                            const neighborhoodImportance = node.data('importance') || 0;
-                            console.log(`[SimplifiedTest] ✅ Positioned anchor ${nodeName} at (${globalPosition.x.toFixed(1)}, ${globalPosition.y.toFixed(1)}) with size ${neighborhoodSize.toFixed(1)}px (importance: ${neighborhoodImportance.toFixed(3)})`);
-                            console.log(`[SizeCalculation] ${nodeName}: importance=${neighborhoodImportance.toFixed(3)} → size=${neighborhoodSize.toFixed(1)}px (range: ${minNeighborhoodSize}-${maxNeighborhoodSize})`);
-                        }
                     } else {
                         // No size data available - use default medium size
                         const defaultSize = 15; // Middle of new range (60% of previous 25px)
@@ -6450,17 +6344,11 @@ export class EntityGraphVisualizer {
                         // Also set as data for CSS mapData override
                         node.data('overrideSize', defaultSize);
 
-                        if (anchorCount <= 5) {
-                            const neighborhoodImportance = node.data('importance') || 0;
-                            console.log(`[SimplifiedTest] ✅ Positioned anchor ${nodeName} at (${globalPosition.x.toFixed(1)}, ${globalPosition.y.toFixed(1)}) with default size ${defaultSize}px`);
-                            console.log(`[ImportanceComparison] ${nodeName}: neighborhood=${neighborhoodImportance}, global=not_found`);
-                        }
                     }
                 } else {
                     // Anchor node but no global position - position at center
                     node.position(centerPosition);
                     missingCount++;
-                    console.log(`[SimplifiedTest] ⚠️ Anchor ${nodeName} missing global position, placed at center (${centerPosition.x.toFixed(1)}, ${centerPosition.y.toFixed(1)})`);
                 }
             } else {
                 // Position non-anchor nodes at center node position with minimal size
@@ -6477,19 +6365,11 @@ export class EntityGraphVisualizer {
                 // Also set as data for CSS mapData override
                 node.data('overrideSize', nonAnchorSize);
                 nonAnchorCount++;
-                if (nonAnchorCount <= 5) { // Only log first 5 to avoid spam
-                    console.log(`[SimplifiedTest] 📍 Positioned non-anchor ${nodeName} at center (${centerPosition.x.toFixed(1)}, ${centerPosition.y.toFixed(1)})`);
-                } else if (nonAnchorCount === 6) {
-                    console.log(`[SimplifiedTest] 📍 ... (suppressing further non-anchor position logs)`);
-                }
             }
         });
 
-        console.log(`[SimplifiedTest] ✅ Direct positioning complete: ${anchorCount} anchors at global coords, ${nonAnchorCount} non-anchors at center, ${missingCount} missing`);
 
         // Apply COSE layout to non-anchor nodes while preserving anchor positions
-        console.log(`[COSE Layout] 🔒 Locking ${anchorCount} anchor nodes to preserve positions`);
-
         // Lock all anchor nodes to prevent layout from moving them
         const anchorNodes = this.neighborhoodInstance.nodes().filter((node: any) => {
             const nodeData = node.data();
@@ -6499,7 +6379,6 @@ export class EntityGraphVisualizer {
         anchorNodes.forEach((node: any) => node.lock());
 
         // Apply COSE layout only to unlocked (non-anchor) nodes
-        console.log(`[COSE Layout] 🎯 Running COSE layout on ${nonAnchorCount} non-anchor nodes`);
         const layout = this.neighborhoodInstance.layout({
             name: 'cose',
             animate: false,
@@ -6528,20 +6407,6 @@ export class EntityGraphVisualizer {
         setTimeout(() => {
             anchorNodes.forEach((node: any) => node.unlock());
             console.log(`[COSE Layout] 🔓 Unlocked ${anchorCount} anchor nodes after layout completion`);
-
-            // Log final positions for verification
-            let layoutedNonAnchors = 0;
-            this.neighborhoodInstance.nodes().forEach((node: any) => {
-                const nodeData = node.data();
-                if (!nodeData.isAnchor) {
-                    const pos = node.position();
-                    if (layoutedNonAnchors < 3) { // Log first 3 for verification
-                        console.log(`[COSE Layout] 📍 Non-anchor ${nodeData.name || nodeData.id} positioned at (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
-                    }
-                    layoutedNonAnchors++;
-                }
-            });
-            console.log(`[COSE Layout] ✅ COSE layout complete: ${layoutedNonAnchors} non-anchor nodes positioned`);
         }, 50);
 
         // Apply size overrides after layout and positioning
@@ -6549,27 +6414,9 @@ export class EntityGraphVisualizer {
             this.forceApplyNeighborhoodSizes();
         }, 200);
 
-        // Comprehensive importance analysis after positioning
-        console.log(`[ImportanceAnalysis] --- COMPREHENSIVE COMPARISON ---`);
-        let sampledNodes = 0;
-        this.neighborhoodInstance.nodes().forEach((node: any) => {
-            const nodeData = node.data();
-            const nodeName = nodeData.name || nodeData.id;
-            const isAnchor = this.currentAnchorNodes && this.currentAnchorNodes.has(nodeName);
-
-            if (isAnchor && sampledNodes < 10) {
-                const neighborhoodImportance = node.data('importance') || 0;
-                const neighborhoodSize = node.data('size') || node.style('width');
-                const globalSize = globalNodeSizes.get(nodeName) || 'unknown';
-
-                console.log(`[ImportanceAnalysis] ${nodeName}: isAnchor=${isAnchor}, neighborhood[imp=${neighborhoodImportance}, size=${neighborhoodSize}], global[size=${globalSize}]`);
-                sampledNodes++;
-            }
-        });
-        console.log(`[ImportanceAnalysis] --- END COMPARISON ---`);
     }
 
-    /**
+     /**
      * Position anchor nodes directly at their global coordinates without any layout
      */
     private positionAnchorNodesDirectly(globalPositions: Map<string, { x: number; y: number }>): void {
@@ -6597,4 +6444,5 @@ export class EntityGraphVisualizer {
 
         console.log(`[SimplifiedTest] ✅ Direct positioning complete: ${positionedCount} anchors positioned, ${missingCount} missing`);
     }
+
 }
