@@ -102,10 +102,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalGraphData(): Promise<GlobalGraphResult> {
         const startTime = performance.now();
-        console.log(
-            "[GraphDataProvider] Fetching global graph data using existing backend APIs",
-        );
-
+        
         try {
             // Use proper service methods instead of direct sendMessage calls
             console.time("[GraphDataProvider] Get status");
@@ -212,20 +209,15 @@ class GraphDataProviderImpl implements GraphDataProvider {
         maxNodes: number,
     ): Promise<EntityNeighborhoodResult> {
         const startTime = performance.now();
-        console.log(
-            `[GraphDataProvider] Fetching neighborhood for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
-        );
 
         try {
             // Use the proper service method for efficient neighborhood retrieval
-            console.time("[Perf] HybridGraph - Fetch neighborhood data");
             const neighborhoodData =
                 await this.baseService.getEntityNeighborhood(
                     entityId,
                     depth,
                     maxNodes,
                 );
-            console.timeEnd("[Perf] HybridGraph - Fetch neighborhood data");
 
             if (!neighborhoodData || neighborhoodData.error) {
                 console.warn(
@@ -254,12 +246,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 };
             }
 
-            console.log(
-                `[GraphDataProvider] Retrieved neighborhood: ${neighborhoodData.neighbors?.length || 0} neighbors, ${neighborhoodData.relationships?.length || 0} relationships`,
-            );
-
             // Transform data to UI format
-            console.time("[Perf] HybridGraph - Transform to UI format");
 
             // Transform center entity
             const centerEntity = neighborhoodData.centerEntity
@@ -282,12 +269,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     neighborhoodData.relationships || [],
                 );
 
-            console.timeEnd("[Perf] HybridGraph - Transform to UI format");
-
             const queryTime = performance.now() - startTime;
-            console.log(
-                `[GraphDataProvider] Neighborhood loaded efficiently: ${neighbors.length} neighbors, ${transformedRelationships.length} relationships (${queryTime.toFixed(1)}ms)`,
-            );
 
             return {
                 centerEntity,
@@ -314,10 +296,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
     }
 
     async getGraphStatistics(): Promise<GraphStatistics> {
-        console.log(
-            "[GraphDataProvider] Fetching graph statistics using existing backend APIs",
-        );
-
         try {
             // Use proper service method for graph status
             const status = await this.baseService.getKnowledgeGraphStatus();
@@ -380,93 +358,11 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
         try {
-            console.time("[Perf] GraphDataProvider - Total importance layer fetch");
-            console.log(`[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`);
-
-            console.time("[Perf] GraphDataProvider - BaseService call");
             const result = await this.baseService.getGlobalImportanceLayer(maxNodes, true);
-            console.timeEnd("[Perf] GraphDataProvider - BaseService call");
 
-            console.log(`[Perf] Raw result structure: ${JSON.stringify({
-                hasEntities: !!result.entities,
-                entityCount: result.entities?.length || 0,
-                hasRelationships: !!result.relationships,
-                relationshipCount: result.relationships?.length || 0,
-                hasMetadata: !!result.metadata,
-                metadataKeys: result.metadata ? Object.keys(result.metadata) : []
-            })}`);
-
-            // Log first 5 raw entities with all their properties
-            console.log(`[DataSample] Raw entities (first 5): ${JSON.stringify(
-                (result.entities || []).slice(0, 5).map((entity: any, index: number) => ({
-                    index: index,
-                    keys: Object.keys(entity),
-                    sampleEntity: entity
-                }))
-            )}`);
-
-            // Log first 5 raw relationships with all their properties
-            console.log(`[DataSample] Raw relationships (first 5): ${JSON.stringify(
-                (result.relationships || []).slice(0, 5).map((rel: any, index: number) => ({
-                    index: index,
-                    keys: Object.keys(rel),
-                    sampleRelationship: rel
-                }))
-            )}`);
-
-            // Log topics and communities if they exist
-            if (result.topics) {
-                console.log(`[DataSample] Raw topics (first 5): ${JSON.stringify(
-                    result.topics.slice(0, 5).map((topic: any, index: number) => ({
-                        index: index,
-                        keys: Object.keys(topic),
-                        sampleTopic: topic
-                    }))
-                )}`);
-            }
-
-            if (result.communities) {
-                console.log(`[DataSample] Raw communities (first 5): ${JSON.stringify(
-                    result.communities.slice(0, 5).map((community: any, index: number) => ({
-                        index: index,
-                        keys: Object.keys(community),
-                        sampleCommunity: community
-                    }))
-                )}`);
-            }
-
-            console.time("[Perf] GraphDataProvider - Entity transformation");
             const transformedEntities = this.transformEntitiesToUIFormat(result.entities || []);
-            console.timeEnd("[Perf] GraphDataProvider - Entity transformation");
 
-            console.time("[Perf] GraphDataProvider - Relationship transformation");
             const transformedRelationships = this.transformRelationshipsToUIFormat(result.relationships || []);
-            console.timeEnd("[Perf] GraphDataProvider - Relationship transformation");
-
-            console.log(`[Perf] Transformation results: ${JSON.stringify({
-                originalEntityCount: result.entities?.length || 0,
-                transformedEntityCount: transformedEntities.length,
-                originalRelationshipCount: result.relationships?.length || 0,
-                transformedRelationshipCount: transformedRelationships.length
-            })}`);
-
-            // Log first 5 transformed entities
-            console.log(`[DataSample] Transformed entities (first 5): ${JSON.stringify(
-                transformedEntities.slice(0, 5).map((entity: any, index: number) => ({
-                    index: index,
-                    keys: Object.keys(entity),
-                    sampleEntity: entity
-                }))
-            )}`);
-
-            // Log first 5 transformed relationships
-            console.log(`[DataSample] Transformed relationships (first 5): ${JSON.stringify(
-                transformedRelationships.slice(0, 5).map((rel: any, index: number) => ({
-                    index: index,
-                    keys: Object.keys(rel),
-                    sampleRelationship: rel
-                }))
-            )}`);
 
             const finalResult = {
                 entities: transformedEntities,
@@ -477,50 +373,9 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 },
             };
 
-            // Log final result structure being sent over Chrome IPC
-            console.log(`[DataSample] Final result structure: ${JSON.stringify({
-                entityCount: finalResult.entities.length,
-                relationshipCount: finalResult.relationships.length,
-                metadataKeys: Object.keys(finalResult.metadata),
-                topLevelKeys: Object.keys(finalResult)
-            })}`);
-
-            // Log first 3 final entities (what goes over Chrome IPC)
-            console.log(`[DataSample] OPTIMIZED Final entities for IPC (first 3): ${JSON.stringify(
-                finalResult.entities.slice(0, 3).map((entity: any, index: number) => ({
-                    index: index,
-                    topLevelKeys: Object.keys(entity),
-                    propertiesKeys: Object.keys(entity.properties || {}),
-                    sampleEntity: entity
-                }))
-            )}`);
-
-            // Log first 3 final relationships (what goes over Chrome IPC)
-            console.log(`[DataSample] OPTIMIZED Final relationships for IPC (first 3): ${JSON.stringify(
-                finalResult.relationships.slice(0, 3).map((rel: any, index: number) => ({
-                    index: index,
-                    topLevelKeys: Object.keys(rel),
-                    propertiesKeys: Object.keys(rel.properties || {}),
-                    sampleRelationship: rel
-                }))
-            )}`);
-
-            // Calculate approximate data size and compare
-            const approximateSize = JSON.stringify(finalResult).length;
-            console.log(`[DataSample] OPTIMIZED IPC payload size: ${approximateSize} characters (${(approximateSize / 1024).toFixed(2)} KB)`);
-
-            // Log optimization impact
-            console.log(`[Optimization] Client-side transformation optimizations applied:`);
-            console.log(`[Optimization] - Removed properties duplication`);
-            console.log(`[Optimization] - Eliminated empty arrays (metrics, domains, facets, topics)`);
-            console.log(`[Optimization] - Moved size/color computation to client-side`);
-            console.log(`[Optimization] - Removed transformation metadata`);
-
-            console.timeEnd("[Perf] GraphDataProvider - Total importance layer fetch");
             return finalResult;
         } catch (error) {
             console.error("[GraphDataProvider] Error fetching global importance layer:", error);
-            console.timeEnd("[Perf] GraphDataProvider - Total importance layer fetch");
             throw error;
         }
     }
@@ -531,15 +386,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         maxNodes: number = 5000,
     ): Promise<any> {
         try {
-            console.log(
-                `[GraphDataProvider] Fetching viewport-based neighborhood for ${centerEntity} anchored by ${viewportNodeNames.length} viewport nodes`,
-            );
-            console.log(
-                `[GraphDataProvider] Viewport anchor nodes (first 10): ${JSON.stringify(viewportNodeNames.slice(0, 10))}`,
-            );
-            console.log(
-                `[GraphDataProvider] All viewport anchor nodes: ${JSON.stringify(viewportNodeNames)}`,
-            );
 
             const result = await this.baseService.getViewportBasedNeighborhood(
                 centerEntity,
@@ -553,16 +399,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 },
             );
 
-            console.log(`[GraphDataProvider] Raw service result:`, result);
-            console.log(`[GraphDataProvider] Result type:`, typeof result);
-            console.log(
-                `[GraphDataProvider] Result entities length:`,
-                result?.entities?.length || "N/A",
-            );
-            console.log(
-                `[GraphDataProvider] Result relationships length:`,
-                result?.relationships?.length || "N/A",
-            );
 
             if (!result) {
                 console.warn(
@@ -595,8 +431,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getImportanceStatistics(): Promise<any> {
         try {
-            console.log("[GraphDataProvider] Fetching importance statistics");
-
             const result = await this.baseService.getImportanceStatistics();
 
             return result;
@@ -679,10 +513,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 color: color,
                 size: computedSize,
                 borderColor: borderColor,
-
-                // REMOVED: Empty arrays (domains, facets, topics, metrics)
-                // REMOVED: Duplicate data (...hybridEntity spread)
-                // REMOVED: Transformation metadata (_source, _transformed)
             },
         };
     }
@@ -744,11 +574,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
                 // Optional fields (only if present and needed)
                 ...(hybridRel.sources && hybridRel.sources.length > 0 && { sources: hybridRel.sources }),
-
-                // REMOVED: Full spread (...hybridRel) - eliminates massive duplication
-                // REMOVED: Redundant weight field (use strength instead)
-                // REMOVED: Transformation metadata (_source, _transformed)
-                // REMOVED: Database-specific fields (rowId, sourceRef, updated)
             },
         };
     }
@@ -813,10 +638,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         };
     }
 }
-
-// ===================================================================
-// EXPORT
-// ===================================================================
 
 export {
     GraphDataProvider as GraphDataProvider,

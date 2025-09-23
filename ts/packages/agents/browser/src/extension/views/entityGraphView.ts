@@ -109,14 +109,9 @@ class EntityGraphView {
      */
     private async initialize(): Promise<void> {
         try {
-            console.time("[Perf] Total EntityGraphView initialization");
-            console.time("[Perf] Visualizer initialization");
             // Initialize visualizer
-            console.log("Initializing visualizer...");
             await this.visualizer.initialize();
-            console.log("Visualizer initialized successfully");
-            console.timeEnd("[Perf] Visualizer initialization");
-
+            
             // Ensure container is visible and has size
             const container = document.getElementById("cytoscape-container");
             if (container) {
@@ -139,13 +134,10 @@ class EntityGraphView {
             this.setupInteractiveHandlers();
 
             // Setup browser navigation AFTER basic initialization
-            console.time("[Perf] Browser navigation setup");
             this.setupBrowserNavigation();
-            console.timeEnd("[Perf] Browser navigation setup");
-
+            
             // Load based on view mode
             console.log(`Current view mode: ${this.currentViewMode.type}`);
-            console.log(`[Perf] View mode configuration: ${JSON.stringify(this.currentViewMode)}`);
 
             if (
                 this.currentViewMode.type === "entity-specific" &&
@@ -169,10 +161,8 @@ class EntityGraphView {
                 console.log("Invalid state - showing error");
                 this.showEntityParameterError();
             }
-            console.timeEnd("[Perf] Total EntityGraphView initialization");
         } catch (error) {
             console.error("Failed to initialize entity graph view:", error);
-            console.timeEnd("[Perf] Total EntityGraphView initialization");
             this.showGraphError("Failed to initialize entity graph");
         }
     }
@@ -327,11 +317,6 @@ class EntityGraphView {
                     this.searchEntity(query);
                     // Clear the input after successful search initiation
                     searchInput.value = "";
-                } else {
-                    this.showMessage(
-                        "Please enter an entity name to search",
-                        "warning",
-                    );
                 }
             };
 
@@ -430,31 +415,17 @@ class EntityGraphView {
         updateHistory: boolean = true,
     ): Promise<void> {
         try {
-            console.time(`[Perf] Navigate to entity: ${entityName}`);
-            console.log(`[Navigation] Navigating to entity: ${entityName}`);
-
             // Check if this is the same entity (prevent unnecessary navigation)
             if (
                 this.currentEntity === entityName &&
                 this.currentViewMode.type === "entity-specific"
             ) {
-                console.log(
-                    "[Navigation] Already viewing this entity - skipping navigation",
-                );
                 return;
             }
 
-            // Detect transition type for optimization
-            const previousViewMode = this.currentViewMode.type;
-            console.log(
-                `[Navigation] Transition type: ${previousViewMode} -> entity-specific`,
-            );
 
             // Set transitioning state if coming from global view
             if (this.currentViewMode.type === "global") {
-                console.log(
-                    "[Navigation] Setting visualizer to transitioning state",
-                );
                 this.visualizer.setViewMode("transitioning");
             }
 
@@ -499,10 +470,8 @@ class EntityGraphView {
             await this.loadRealEntityData(entityName);
             // Show sidebar after detail view is loaded
             this.updateSidebarVisibility(true);
-            console.timeEnd(`[Perf] Navigate to entity: ${entityName}`);
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
-            console.timeEnd(`[Perf] Navigate to entity: ${entityName}`);
             // Show user-friendly error message
             this.showNavigationError(`Failed to load entity: ${entityName}`);
         }
@@ -510,9 +479,6 @@ class EntityGraphView {
 
     async navigateToGlobalView(): Promise<void> {
         try {
-            console.time("[Perf] Navigate to global view");
-            console.log("[Navigation] Navigating to global view");
-
             // Update internal state
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
@@ -544,10 +510,8 @@ class EntityGraphView {
 
             this.updateSidebarVisibility(false);
             await this.loadGlobalViewWithImportanceLayer();
-            console.timeEnd("[Perf] Navigate to global view");
         } catch (error) {
             console.error("Failed to navigate to global view:", error);
-            console.timeEnd("[Perf] Navigate to global view");
             this.showNavigationError("Failed to load global view");
         }
     }
@@ -573,18 +537,12 @@ class EntityGraphView {
         try {
             // Navigate directly to the entity (same as URL parameter logic)
             console.log(`Searching for entity: ${query}`);
-            this.showMessage(`Loading entity "${query}"...`, "info");
+
 
             await this.navigateToEntity(query.trim());
 
-            // Show success message
-            this.showMessage(`Loaded entity: "${query}"`, "success");
         } catch (error) {
             console.error("Failed to search entity:", error);
-            this.showMessage(
-                `Failed to load entity "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
-                "error",
-            );
         }
     }
 
@@ -593,24 +551,13 @@ class EntityGraphView {
      */
     exportGraph(): void {
         try {
-            console.log("Exporting graph data...");
             const graphData = this.visualizer.exportGraph();
 
             if (!graphData) {
                 console.warn("No graph data to export");
-                this.showMessage(
-                    "No graph data available to export",
-                    "warning",
-                );
+
                 return;
             }
-
-            console.log("Graph data to export:", {
-                nodeCount: graphData.nodes?.length || 0,
-                edgeCount: graphData.edges?.length || 0,
-                layout: graphData.layout,
-                zoom: graphData.zoom,
-            });
 
             const dataStr = JSON.stringify(graphData, null, 2);
             const dataBlob = new Blob([dataStr], { type: "application/json" });
@@ -620,15 +567,9 @@ class EntityGraphView {
             link.download = `entity-graph-${this.currentEntity || "export"}-${new Date().toISOString().split("T")[0]}.json`;
             link.click();
 
-            console.log("Graph exported successfully");
-            this.showMessage("Graph exported successfully", "success");
         } catch (error) {
             console.error("Failed to export graph:", error);
-            this.showMessage(
-                "Failed to export graph: " +
-                    (error instanceof Error ? error.message : "Unknown error"),
-                "error",
-            );
+
         }
     }
 
@@ -681,9 +622,7 @@ class EntityGraphView {
 
     private async loadGlobalView(): Promise<void> {
         try {
-            console.time("[Perf] Total global view load");
             this.showGraphLoading();
-            console.log("Loading global knowledge graph");
 
             // Try dual-instance fast navigation first - skip data fetch if possible
             console.log(
@@ -694,14 +633,11 @@ class EntityGraphView {
                 console.log(
                     "[Navigation] Using dual-instance fast switch to global view - no data fetch needed",
                 );
-                console.time("[Perf] Visualizer loadGlobalGraph");
                 this.visualizer.fastSwitchToGlobal();
-                console.timeEnd("[Perf] Visualizer loadGlobalGraph");
                 this.hideGraphLoading();
                 console.log(
                     "[FastNav] Global view restored from dual-instance cache",
                 );
-                console.timeEnd("[Perf] Total global view load");
                 return;
             }
 
@@ -709,50 +645,33 @@ class EntityGraphView {
             console.log(
                 "[Navigation] Dual-instance not available - fetching data and building graph",
             );
-            console.time("[Perf] Fetch global data");
             const globalData = await this.loadGlobalGraphData();
-            console.timeEnd("[Perf] Fetch global data");
-            console.log(
-                `[Perf] Data stats: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`,
-            );
 
             if (globalData.statistics.totalEntities === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
-                console.timeEnd("[Perf] Total global view load");
                 return;
             }
 
-            console.time("[Perf] Visualizer loadGlobalGraph");
             await this.visualizer.loadGlobalGraph(globalData);
-            console.timeEnd("[Perf] Visualizer loadGlobalGraph");
 
             this.hideGraphLoading();
 
             console.log(
                 `Loaded global graph: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`,
             );
-            console.timeEnd("[Perf] Total global view load");
+
         } catch (error) {
             console.error("Failed to load global view:", error);
             this.hideGraphLoading();
             this.showGraphError("Failed to load global knowledge graph");
-            console.timeEnd("[Perf] Total global view load");
         }
     }
 
     private async loadGlobalGraphData(): Promise<any> {
-        console.time("[Perf] HybridGraph global data fetch");
-        console.log("[HybridGraph] Fetching global graph data");
-
         // Use Graph data provider for direct storage access
         const globalGraphResult =
             await this.graphDataProvider.getGlobalGraphData();
-
-        console.timeEnd("[Perf] HybridGraph global data fetch");
-        console.log(
-            `[HybridGraph] Loaded ${globalGraphResult.entities.length} entities, ${globalGraphResult.relationships.length} relationships`,
-        );
 
         // Process communities for color assignment
         const processedCommunities = globalGraphResult.communities.map(
@@ -794,10 +713,6 @@ class EntityGraphView {
      * Enhance entities with LoD properties for importance-based visualization
      */
     private enhanceEntitiesForLoD(entities: any[]): any[] {
-        console.log(
-            `[LoD] Enhancing ${entities.length} entities for importance-based LoD`,
-        );
-
         // Calculate importance statistics for proper scaling
         const importanceValues = entities
             .map((e) => e.importance || 0)
@@ -805,10 +720,6 @@ class EntityGraphView {
         const minImportance = Math.min(...importanceValues);
         const maxImportance = Math.max(...importanceValues);
         const importanceRange = maxImportance - minImportance;
-
-        console.log(
-            `[LoD] Importance range: ${minImportance.toFixed(3)} - ${maxImportance.toFixed(3)}`,
-        );
 
         return entities.map((entity: any) => {
             const importance = entity.importance || 0;
@@ -1033,17 +944,11 @@ class EntityGraphView {
     // Real data methods
     private async loadRealEntityData(entityName: string): Promise<void> {
         try {
-            console.time("[Perf] Total entity view load");
             this.showGraphLoading();
-            console.log(`Getting entity graph for: ${entityName}`);
-
-            console.time("[Perf] Entity graph data fetch");
+            
             // Load entity graph using HybridGraph data provider
             let graphData;
             try {
-                console.log(
-                    `[HybridGraph Migration] Using Graph data provider for entity "${entityName}" neighborhood`,
-                );
                 const neighborhoodResult =
                     await this.graphDataProvider.getEntityNeighborhood(
                         entityName,
@@ -1052,7 +957,6 @@ class EntityGraphView {
                     );
 
                 // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
-                console.time("[Perf] Entity View - Search enrichment data");
                 let searchData: any = null;
 
                 try {
@@ -1060,16 +964,7 @@ class EntityGraphView {
                     searchData = await (
                         extensionService as any
                     ).searchByEntities([entityName], "", 10);
-                    console.timeEnd(
-                        "[Perf] Entity View - Search enrichment data",
-                    );
-                    console.log(
-                        `[HybridGraph Migration] Fetched search enrichment data: ${searchData?.websites?.length || 0} websites, ${searchData?.topTopics?.length || 0} topics`,
-                    );
                 } catch (searchError) {
-                    console.timeEnd(
-                        "[Perf] Entity View - Search enrichment data",
-                    );
                     console.warn(
                         `[HybridGraph Migration] Could not fetch search enrichment data:`,
                         searchError,
@@ -1077,9 +972,6 @@ class EntityGraphView {
                 }
 
                 // Transform HybridGraph result to expected format with enrichment
-                console.time(
-                    "[Perf] Entity View - Combine graph and search data",
-                );
                 graphData = {
                     centerEntity: neighborhoodResult.centerEntity.name,
                     entities: [
@@ -1116,21 +1008,7 @@ class EntityGraphView {
                     };
                     graphData.entities[0] = enrichedEntity;
                 }
-                console.timeEnd(
-                    "[Perf] Entity View - Combine graph and search data",
-                );
 
-                console.log(
-                    `[HybridGraph Migration] Entity neighborhood loaded: ${graphData.entities.length} entities, ${graphData.relationships.length} relationships, ${graphData.topTopics?.length || 0} topics`,
-                );
-                console.log(`[Perf] Entity neighborhood data structure: ${JSON.stringify({
-                    entityCount: graphData.entities.length,
-                    relationshipCount: graphData.relationships.length,
-                    topicCount: graphData.topTopics?.length || 0,
-                    hasSearchData: !!searchData,
-                    searchWebsites: searchData?.websites?.length || 0,
-                    searchTopics: searchData?.topTopics?.length || 0
-                })}`);
             } catch (error) {
                 console.error(
                     `[HybridGraph Migration] Failed to load entity neighborhood for "%s":`,
@@ -1152,29 +1030,7 @@ class EntityGraphView {
                     },
                 };
             }
-            console.timeEnd("[Perf] Entity graph data fetch");
-            console.log(
-                `[Perf] Entity data: ${graphData.entities?.length || 0} entities, ${graphData.relationships?.length || 0} relationships`,
-            );
-            console.log(`[Perf] Final entity data structure: ${JSON.stringify({
-                hasEntities: !!graphData.entities,
-                entityCount: graphData.entities?.length || 0,
-                hasRelationships: !!graphData.relationships,
-                relationshipCount: graphData.relationships?.length || 0,
-                hasCenterEntity: !!graphData.centerEntity,
-                centerEntityName: graphData.centerEntity
-            })}`);
-
-            console.log(
-                `Found ${graphData.entities?.length || 0} websites for center entity`,
-            );
-
             if (graphData.entities && graphData.entities.length > 0) {
-                console.log("Expanding graph with related entities...");
-
-                console.time(
-                    "[Perf] Entity View - Data processing and validation",
-                );
                 // Process and validate the relationships data
                 const validRelationships =
                     graphData.relationships?.filter((r: any) => {
@@ -1214,14 +1070,6 @@ class EntityGraphView {
                         return hasValidFrom && hasValidTo && hasValidType;
                     }) || [];
 
-                console.log(
-                    `Generated entity graph: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
-                );
-                console.log(`[Perf] Entity processing results: ${JSON.stringify({
-                    originalRelationships: graphData.relationships?.length || 0,
-                    validRelationships: validRelationships.length,
-                    filteredRelationships: (graphData.relationships?.length || 0) - validRelationships.length
-                })}`);
 
                 // Create entity list with center entity, website entities, related entities, and topics
                 const allEntities = [
@@ -1328,25 +1176,6 @@ class EntityGraphView {
                     }
                 }
 
-                console.log(
-                    `Entity graph: ${allEntities.length} entities, ${validatedRelationships.length} relationships`,
-                );
-                console.log(
-                    `Entity types: websites=${graphData.entities.length}, related=${graphData.relatedEntities?.length || 0}, topics=${graphData.topTopics?.length || 0}`,
-                );
-                console.log(`[Perf] Final processed data: ${JSON.stringify({
-                    totalEntities: allEntities.length,
-                    websiteEntities: graphData.entities.length,
-                    relatedEntities: graphData.relatedEntities?.length || 0,
-                    topicEntities: graphData.topTopics?.length || 0,
-                    totalRelationships: validatedRelationships.length,
-                    centerEntity: graphData.centerEntity
-                })}`);
-                console.timeEnd(
-                    "[Perf] Entity View - Data processing and validation",
-                );
-
-                console.time("[Perf] Entity View - Graph visualization");
                 // Load the graph into the visualizer
                 await this.visualizer.loadEntityGraph(
                     {
@@ -1356,11 +1185,8 @@ class EntityGraphView {
                     },
                     graphData.centerEntity,
                 );
-                console.timeEnd("[Perf] Entity View - Graph visualization");
-                console.log(`[Perf] Graph visualization completed for ${allEntities.length} entities and ${validatedRelationships.length} relationships`);
 
                 // Find the center entity from allEntities (should be first)
-                console.time("[Perf] Entity sidebar data preparation");
                 const centerEntityFromGraph =
                     graphData.entities.find(
                         (e: any) =>
@@ -1406,39 +1232,15 @@ class EntityGraphView {
                     visitCount: this.calculateTotalVisits(graphData.entities),
                 };
 
-                console.timeEnd("[Perf] Entity sidebar data preparation");
-                console.log(`[Perf] Sidebar data prepared: ${JSON.stringify({
-                    entityName: centerEntityData.name,
-                    facetCount: centerEntityData.facets?.length || 0,
-                    topicCount: centerEntityData.topicAffinity?.length || 0,
-                    relationshipCount: centerEntityData.relationships?.length || 0,
-                    mentionCount: centerEntityData.mentionCount,
-                    visitCount: centerEntityData.visitCount
-                })}`);
-
-                console.time("[Perf] Entity sidebar load");
                 await this.sidebar.loadEntity(centerEntityData);
-                console.timeEnd("[Perf] Entity sidebar load");
 
                 // Show sidebar after successfully loading data
                 this.updateSidebarVisibility(true);
 
                 this.hideGraphLoading();
-                console.log(
-                    `Loaded real entity graph for ${entityName}: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
-                );
-                console.log(`[Perf] Entity view load completed successfully: ${JSON.stringify({
-                    entityName: entityName,
-                    totalDataFetchTime: 'see Entity graph data fetch timer',
-                    totalProcessingTime: 'see Data processing and validation timer',
-                    totalVisualizationTime: 'see Graph visualization timer',
-                    totalSidebarTime: 'see Entity sidebar load timer'
-                })}`);
-                console.timeEnd("[Perf] Total entity view load");
             } else {
                 this.hideGraphLoading();
                 this.showGraphError(`No data found for entity: ${entityName}`);
-                console.timeEnd("[Perf] Total entity view load");
             }
         } catch (error) {
             console.error(" Failed to load real entity data:", error);
@@ -1446,7 +1248,6 @@ class EntityGraphView {
             this.showGraphError(
                 "Failed to load entity data. Please try again.",
             );
-            console.timeEnd("[Perf] Total entity view load");
         }
     }
 
@@ -1467,33 +1268,12 @@ class EntityGraphView {
 
             if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
                 await this.loadRealEntityData(entityName);
-                this.showMessage(`Refreshed data for ${entityName}`, "success");
-            } else {
-                this.showMessage(
-                    `No updated data available for ${entityName}`,
-                    "info",
-                );
             }
         } catch (error) {
             console.error("Failed to refresh entity data:", error);
-            this.showMessage("Failed to refresh entity data", "error");
         } finally {
             this.hideGraphLoading();
         }
-    }
-
-    /**
-     * Show message to user
-     */
-    private showMessage(
-        message: string,
-        type: "success" | "info" | "warning" | "error",
-    ): void {
-        // This would show a toast or notification
-        console.log(`${type.toUpperCase()}: ${message}`);
-
-        // You could implement a toast notification here
-        // For now, just log to console
     }
 
     /**
@@ -1589,50 +1369,18 @@ class EntityGraphView {
 
     private async loadGlobalViewWithImportanceLayer(): Promise<void> {
         try {
-            console.time("[Perf] Total global view load");
-            console.time("[Perf] Global importance data fetch");
             this.showGraphLoading();
-            console.log(
-                "[HierarchicalLoading] Loading global importance layer",
-            );
 
             // Get importance layer data (top 500 most important nodes - TESTING)
             const importanceData = await this.graphDataProvider.getGlobalImportanceLayer(500);
-            console.timeEnd("[Perf] Global importance data fetch");
-
-            console.log(
-                `[HierarchicalLoading] Loaded importance layer: ${importanceData.entities.length} entities, ${importanceData.relationships.length} relationships`,
-            );
-
-            // Debug: Check the raw data structure
-            console.log(`[DEBUG-Frontend] Raw importance data sample:`, {
-                firstEntity: importanceData.entities[0],
-                firstRelationship: importanceData.relationships[0],
-                entitySample: importanceData.entities
-                    .slice(0, 3)
-                    .map((e: any) => ({
-                        name: e.name,
-                        importance: e.importance,
-                        degree: e.degree,
-                        type: e.type,
-                    })),
-            });
-            console.log(`[Perf] Global data structure: ${JSON.stringify({
-                entityCount: importanceData.entities.length,
-                relationshipCount: importanceData.relationships.length,
-                sampleEntityKeys: Object.keys(importanceData.entities[0] || {}),
-                sampleRelationshipKeys: Object.keys(importanceData.relationships[0] || {})
-            })}`);
 
             if (importanceData.entities.length === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
-                console.timeEnd("[Perf] Total global view load");
                 return;
             }
 
             // Transform data to expected format for visualizer with proper LoD properties
-            console.time("[Perf] Global data transformation");
             const transformedData = {
                 entities: this.enhanceEntitiesForLoD(importanceData.entities),
                 relationships: importanceData.relationships,
@@ -1644,28 +1392,9 @@ class EntityGraphView {
                     totalCommunities: 0,
                 },
             };
-            console.timeEnd("[Perf] Global data transformation");
-            console.log(`[Perf] Transformed data structure: ${JSON.stringify({
-                enhancedEntityCount: transformedData.entities.length,
-                relationshipCount: transformedData.relationships.length,
-                sampleEnhancedKeys: Object.keys(transformedData.entities[0] || {})
-            })}`);
-
-            console.time("[Perf] Global graph rendering and layout");
             await this.visualizer.loadGlobalGraph(transformedData);
-            console.timeEnd("[Perf] Global graph rendering and layout");
             this.hideGraphLoading();
 
-            console.log(
-                `[HierarchicalLoading] Loaded importance layer: ${importanceData.entities.length} entities, ${importanceData.relationships.length} relationships`,
-            );
-            console.timeEnd("[Perf] Total global view load");
-
-            // Show success message
-            this.showMessage(
-                `Loaded importance layer with ${importanceData.entities.length} most important entities`,
-                "success",
-            );
         } catch (error) {
             console.error(
                 "[HierarchicalLoading] Failed to load importance layer:",
@@ -1673,25 +1402,22 @@ class EntityGraphView {
             );
             this.hideGraphLoading();
             this.showGraphError("Failed to load importance layer");
-            console.timeEnd("[Perf] Total global view load");
         }
     }
 
     // ============================================================================
-    // Browser Navigation Integration (Phase 2)
+    // Browser Navigation Integration 
     // ============================================================================
 
     /**
      * Setup browser navigation event handlers
      */
     private setupBrowserNavigation(): void {
-        console.log("[Navigation] Setting up browser navigation handlers");
 
         // Handle browser back/forward buttons
         window.addEventListener("popstate", async () => {
             if (this.isHandlingPopstate) return;
 
-            console.log("[Navigation] Browser popstate event triggered");
             this.isHandlingPopstate = true;
 
             try {
@@ -1708,7 +1434,6 @@ class EntityGraphView {
         // Handle initial page load
         const initialState = this.parseCurrentUrl();
         this.addToNavigationHistory(initialState);
-        console.log("[Navigation] Browser navigation setup complete");
     }
 
     /**
@@ -1742,7 +1467,6 @@ class EntityGraphView {
     private async navigateToStateFromUrl(
         targetState: NavigationState,
     ): Promise<void> {
-        console.log(`[Navigation] Navigating to state from URL:`, targetState);
 
         if (targetState.type === "global") {
             await this.executeGlobalViewTransition();
@@ -1758,14 +1482,10 @@ class EntityGraphView {
      * Execute global view transition
      */
     private async executeGlobalViewTransition(): Promise<void> {
-        console.log("[Navigation] Executing global view transition");
 
         // Try to use hide/show logic first (same as back button)
         const restored = this.visualizer.restoreHiddenView();
         if (restored) {
-            console.log(
-                "[Navigation] Browser back: Successfully restored hidden view",
-            );
             // Update internal state to match the restored view
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
@@ -1773,9 +1493,6 @@ class EntityGraphView {
             this.updateSidebarVisibility(false);
             this.updateBackButtonText();
         } else {
-            console.log(
-                "[Navigation] Browser back: No hidden view available, falling back to loadGlobalView",
-            );
             // Fallback to original logic if no hidden view available
             this.currentEntity = null;
             this.currentViewMode = { type: "global" };
@@ -1791,9 +1508,6 @@ class EntityGraphView {
     private async executeDetailViewTransition(
         entityName: string,
     ): Promise<void> {
-        console.log(
-            `[Navigation] Executing detail view transition for ${entityName}`,
-        );
 
         // Use existing navigateToEntity logic but prevent URL update loop
         const wasHandlingPopstate = this.isHandlingPopstate;
@@ -1904,10 +1618,6 @@ class EntityGraphView {
             this.navigationHistory = this.navigationHistory.slice(-40);
             this.currentHistoryIndex = this.navigationHistory.length - 1;
         }
-
-        console.log(
-            `[Navigation] Added to history. Index: ${this.currentHistoryIndex}, Total: ${this.navigationHistory.length}`,
-        );
     }
 
     /**

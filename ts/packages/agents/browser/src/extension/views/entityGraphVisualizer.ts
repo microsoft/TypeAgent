@@ -1676,72 +1676,34 @@ export class EntityGraphVisualizer {
             return;
         }
 
-        console.log(`[TripleInstance] Loading entity graph for ${centerEntity}`);
-        console.log(`[Perf] Entity graph data structure: ${JSON.stringify({
-            entityCount: graphData.entities?.length || 0,
-            relationshipCount: graphData.relationships?.length || 0,
-            centerEntity: centerEntity,
-            hasCenterEntity: !!graphData.centerEntity
-        })}`);
-
+        
         // Store entity data
         this.currentEntity = centerEntity;
         this.entityGraphData = graphData;
 
         // Switch to detail view (makes it visible)
-        console.time("[Perf] Switch to detail view");
         this.switchToDetailView();
-        console.timeEnd("[Perf] Switch to detail view");
 
         // Clear existing elements from detail instance
-        console.time("[Perf] Clear detail instance");
         this.detailInstance.elements().remove();
-        console.timeEnd("[Perf] Clear detail instance");
 
         // Convert graph data to elements
-        console.time("[Perf] Convert to graph elements");
         const elements = this.convertToGraphElements(graphData);
-        console.timeEnd("[Perf] Convert to graph elements");
-        console.log(`[Perf] Generated ${elements.length} graph elements`);
 
         // Add elements to detail instance
-        console.time("[Perf] Add elements to detail instance");
         this.detailInstance.add(elements);
-        console.timeEnd("[Perf] Add elements to detail instance");
+
 
         // Apply detail layout focusing on center entity
-        console.time("[Perf] Apply detail layout");
         await this.applyDetailLayoutToInstance(
             this.detailInstance,
             centerEntity,
         );
-        console.timeEnd("[Perf] Apply detail layout");
 
         // Setup all interactions for detail instance (including node clicks)
-        console.log(
-            "[DEBUG-DETAIL] About to setup interactions for detail view",
-        );
-        console.log(
-            "[DEBUG-DETAIL] Detail interaction state:",
-            JSON.stringify({
-                zoomHandlersSetup: this.zoomHandlersSetup,
-                currentActiveView: this.currentActiveView,
-                cyIsDetailInstance: this.cy === this.detailInstance,
-                detailInstanceExists: !!this.detailInstance,
-                detailInstanceContainer: !!this.detailInstance?.container(),
-            }),
-        );
-
-        console.time("[Perf] Setup detail interactions");
         this.setupZoomInteractions();
         this.setupInteractions();
-        console.timeEnd("[Perf] Setup detail interactions");
 
-        console.log("[DEBUG-DETAIL] Detail interactions setup complete");
-
-        console.log(
-            `[TripleInstance] Entity detail view loaded for ${centerEntity}`,
-        );
         console.timeEnd(`[Perf] Total entity graph load: ${centerEntity}`);
     }
 
@@ -1749,108 +1711,47 @@ export class EntityGraphVisualizer {
      * Load global importance layer into global instance (Triple-Instance Architecture)
      */
     public async loadGlobalGraph(graphData: any): Promise<void> {
-        console.time("[Perf] Total global graph load");
-        console.log("[TripleInstance] Loading global graph");
-        console.log(`[Perf] Global graph data structure: ${JSON.stringify({
-            entityCount: graphData.entities?.length || 0,
-            relationshipCount: graphData.relationships?.length || 0,
-            hasStatistics: !!graphData.statistics,
-            totalEntities: graphData.statistics?.totalEntities,
-            totalRelationships: graphData.statistics?.totalRelationships
-        })}`);
-
+        
         // Clear all neighborhood state when loading global data
-        console.time("[Perf] Clear neighborhood state");
         this.clearNeighborhoodState();
-        console.timeEnd("[Perf] Clear neighborhood state");
-
+        
         // Clear and load global instance
-        console.time("[Perf] Clear and convert global data");
         this.globalInstance.elements().remove();
         const elements = this.convertToGraphElements(graphData);
-        console.timeEnd("[Perf] Clear and convert global data");
-        console.log(`[Perf] Generated ${elements.length} global graph elements`);
-
-        console.time("[Perf] Add elements to global instance");
+        
         this.globalInstance.add(elements);
-        console.timeEnd("[Perf] Add elements to global instance");
-
+        
         // Apply direct sizing based on computed importance (since CSS mapData doesn't auto-refresh)
-        console.log('[GlobalLoad] About to apply importance-based sizing...');
-        console.time("[Perf] Apply importance-based sizing");
         this.applyImportanceBasedSizing();
-        console.timeEnd("[Perf] Apply importance-based sizing");
-
+        
         // Analyze importance distribution and visual sizing AFTER applying sizing
-        console.time("[Perf] Analyze importance distribution");
         this.analyzeGlobalViewImportanceDistribution();
-        console.timeEnd("[Perf] Analyze importance distribution");
-
-        // Verify sizing was applied by re-checking a sample node
-        setTimeout(() => {
-            const pythonNode = this.globalInstance.$('[name="Python"]');
-            if (pythonNode.length > 0) {
-                const width = parseFloat(pythonNode.style("width"));
-                console.log(
-                    "[GlobalLoad] Final Python size verification:",
-                    width + "px",
-                );
-            }
-        }, 100);
 
         // Set active instance reference BEFORE setting up interactions
         this.cy = this.globalInstance;
         this.currentActiveView = "global";
 
         // Setup zoom interactions for global instance
-        console.log(
-            "[DEBUG-INIT] About to setup zoom interactions on initial load",
-        );
-        console.log(
-            "[DEBUG-INIT] Interaction state before setup:",
-            JSON.stringify({
-                zoomHandlersSetup: this.zoomHandlersSetup,
-                currentActiveView: this.currentActiveView,
-                cyIsGlobalInstance: this.cy === this.globalInstance,
-                globalInstanceExists: !!this.globalInstance,
-                globalInstanceContainer: !!this.globalInstance?.container(),
-                globalInstanceReady:
-                    this.globalInstance?._private?.cy !== undefined,
-            }),
-        );
 
         this.setupZoomInteractions();
 
-        console.log(
-            "[DEBUG-INIT] About to setup general interactions on initial load",
-        );
         this.setupInteractions();
-
-        console.log("[DEBUG-INIT] Interactions setup complete on initial load");
 
         // Store global data reference
         this.globalGraphData = graphData;
 
         // Apply layout optimized for global size
-        console.time("[Perf] Apply global layout");
         await this.applyLayoutToInstance(this.globalInstance, "cose", graphData.entities.length);
-        console.timeEnd("[Perf] Apply global layout");
 
         // Fit the graph to the viewport to let Cytoscape handle optimal sizing
-        console.time("[Perf] Fit global graph to viewport");
         this.globalInstance.fit({
             padding: 50, // Add some padding around edges
             animate: false, // No animation for initial load
         });
-        console.timeEnd("[Perf] Fit global graph to viewport");
 
         // Switch to global view
-        console.time("[Perf] Switch to global view");
         this.switchToGlobalView();
-        console.timeEnd("[Perf] Switch to global view");
 
-        console.log(`[TripleInstance] Loaded ${graphData.entities.length} entities into global instance`);
-        console.timeEnd("[Perf] Total global graph load");
     }
 
     /**
@@ -1860,9 +1761,6 @@ export class EntityGraphVisualizer {
         if (!this.globalInstance) return;
 
         const nodes = this.globalInstance.nodes();
-        console.log(
-            `[GlobalImportance] Analyzing ${nodes.length} nodes for importance distribution`,
-        );
 
         // Collect importance values and calculate rendered sizes
         const importanceData: Array<{
@@ -1962,95 +1860,6 @@ export class EntityGraphVisualizer {
             ).length,
             veryLow: importanceValues.filter((v) => v < thresholds.low).length,
         };
-
-        // Log comprehensive analysis
-        console.log(
-            "[GlobalImportance] ============ IMPORTANCE DISTRIBUTION ANALYSIS ============",
-        );
-        console.log(
-            `[GlobalImportance] Basic Statistics: ${JSON.stringify({
-                totalNodes: nodes.length,
-                importanceRange: {
-                    min: parseFloat(minImportance.toFixed(4)),
-                    max: parseFloat(maxImportance.toFixed(4)),
-                },
-                average: parseFloat(avgImportance.toFixed(4)),
-                percentiles: {
-                    p25: parseFloat(p25.toFixed(4)),
-                    p50: parseFloat(p50.toFixed(4)),
-                    p75: parseFloat(p75.toFixed(4)),
-                    p90: parseFloat(p90.toFixed(4)),
-                    p95: parseFloat(p95.toFixed(4)),
-                },
-            })}`,
-        );
-
-        console.log(
-            `[GlobalImportance] Threshold Distribution: ${JSON.stringify({
-                veryHigh: `${thresholdCounts.veryHigh} nodes (≥0.8) - ${((thresholdCounts.veryHigh / nodes.length) * 100).toFixed(1)}%`,
-                high: `${thresholdCounts.high} nodes (0.6-0.8) - ${((thresholdCounts.high / nodes.length) * 100).toFixed(1)}%`,
-                medium: `${thresholdCounts.medium} nodes (0.4-0.6) - ${((thresholdCounts.medium / nodes.length) * 100).toFixed(1)}%`,
-                low: `${thresholdCounts.low} nodes (0.2-0.4) - ${((thresholdCounts.low / nodes.length) * 100).toFixed(1)}%`,
-                veryLow: `${thresholdCounts.veryLow} nodes (<0.2) - ${((thresholdCounts.veryLow / nodes.length) * 100).toFixed(1)}%`,
-            })}`,
-        );
-
-        console.log("[GlobalImportance] Visual Size Analysis:", {
-            sizeRange: {
-                min: sizeStats.minSize.toFixed(1),
-                max: sizeStats.maxSize.toFixed(1),
-            },
-            averageSize: sizeStats.avgSize.toFixed(1),
-            sizeDistribution: {
-                small: `${sizeCounts.small} nodes (<25px) - ${((sizeCounts.small / nodes.length) * 100).toFixed(1)}%`,
-                medium: `${sizeCounts.medium} nodes (25-35px) - ${((sizeCounts.medium / nodes.length) * 100).toFixed(1)}%`,
-                large: `${sizeCounts.large} nodes (≥35px) - ${((sizeCounts.large / nodes.length) * 100).toFixed(1)}%`,
-            },
-        });
-
-        // Log top 10 most important nodes
-        console.log("[GlobalImportance] Top 10 Most Important Nodes:");
-        importanceData.slice(0, 10).forEach((node, index) => {
-            const expectedSize = getExpectedSize(node.importance);
-            console.log(
-                `  ${index + 1}. ${node.name}: importance=${node.importance.toFixed(4)}, rendered=${node.renderedWidth.toFixed(1)}px (expected=${expectedSize.toFixed(1)}px)`,
-            );
-        });
-
-        // Log bottom 10 least important nodes
-        console.log("[GlobalImportance] Bottom 10 Least Important Nodes:");
-        importanceData.slice(-10).forEach((node, index) => {
-            const expectedSize = getExpectedSize(node.importance);
-            console.log(
-                `  ${importanceData.length - 9 + index}. ${node.name}: importance=${node.importance.toFixed(4)}, rendered=${node.renderedWidth.toFixed(1)}px (expected=${expectedSize.toFixed(1)}px)`,
-            );
-        });
-
-        // Analyze visual differentiation effectiveness
-        const uniqueSizes = new Set(
-            importanceData.map((d) => Math.round(d.renderedWidth)),
-        );
-        const sizeSpread = sizeStats.maxSize - sizeStats.minSize;
-        const importanceSpread = maxImportance - minImportance;
-
-        console.log("[GlobalImportance] Visual Differentiation Analysis:", {
-            uniqueSizes: uniqueSizes.size,
-            sizeSpread: sizeSpread.toFixed(1) + "px",
-            importanceSpread: importanceSpread.toFixed(4),
-            sizesPerImportanceUnit:
-                (sizeSpread / importanceSpread).toFixed(1) +
-                "px per importance unit",
-            effectivenessRating:
-                sizeSpread > 15
-                    ? "Good"
-                    : sizeSpread > 10
-                      ? "Moderate"
-                      : "Poor",
-        });
-
-        console.log(
-            "[GlobalImportance] ========================================================",
-        );
     }
 
     /**
@@ -2061,15 +1870,9 @@ export class EntityGraphVisualizer {
         centerEntity: string,
         preserveZoom: boolean = false,
     ): Promise<void> {
-        console.log(
-            `[TripleInstance] Loading neighborhood for ${centerEntity}`,
-        );
 
         // Preserve visual continuity by extracting positions from global view
         const globalNodePositions = this.extractGlobalNodePositions();
-        console.log(
-            `[LayoutAnalysis] Extracted ${Object.keys(globalNodePositions).length} global node positions`,
-        );
 
         // Log anchor node positions from global view for comparison
         const anchorGlobalPositions: any = {};
@@ -2080,9 +1883,7 @@ export class EntityGraphVisualizer {
                     anchorGlobalPositions[anchorName] = globalPos;
                 }
             });
-            console.log(
-                `[LayoutAnalysis] Anchor global positions: ${JSON.stringify(anchorGlobalPositions)}`,
-            );
+
         }
 
         // SIMPLIFIED: Load all nodes but position non-anchors at center node
@@ -2155,46 +1956,15 @@ export class EntityGraphVisualizer {
 
             if (preservationRatio > 0.7) {
                 // High preservation: Calculate viewport to show same anchor nodes as global view
-                console.log(
-                    `[ViewportPreservation] High preservation ratio (${(preservationRatio * 100).toFixed(1)}%), calculating viewport based on anchor positions`,
-                );
 
                 this.setViewportToMatchGlobalAnchors();
             } else {
                 // Low preservation: Use standard fit
-                console.log(
-                    `[ViewportPreservation] Low preservation ratio (${(preservationRatio * 100).toFixed(1)}%), using standard viewport fit`,
-                );
-
-                const preZoomViewport = {
-                    zoom: this.neighborhoodInstance.zoom(),
-                    pan: this.neighborhoodInstance.pan(),
-                    extent: this.neighborhoodInstance.extent(),
-                };
-
                 this.neighborhoodInstance.fit({
                     padding: 30,
                     animate: false,
                 });
-
-                const actualZoom = this.neighborhoodInstance.zoom();
-                const finalViewport = {
-                    zoom: actualZoom,
-                    pan: this.neighborhoodInstance.pan(),
-                    extent: this.neighborhoodInstance.extent(),
-                };
-
-                console.log(
-                    `[LayoutAnalysis] Viewport transformation - Pre-fit: ${JSON.stringify(preZoomViewport)}, Post-fit: ${JSON.stringify(finalViewport)}`,
-                );
-                console.log(
-                    `[TripleInstance] Fitted neighborhood to viewport, zoom: ${actualZoom.toFixed(3)} for ${neighborhoodData.entities.length} nodes`,
-                );
             }
-        } else {
-            console.log(
-                `[TripleInstance] Preserving current zoom level for neighborhood reload`,
-            );
         }
 
         // Switch to neighborhood view
@@ -2202,10 +1972,6 @@ export class EntityGraphVisualizer {
 
         // Cache the neighborhood data
         this.neighborhoodCache.set(centerEntity, neighborhoodData);
-
-        console.log(
-            `[TripleInstance] Loaded ${neighborhoodData.entities.length} entities into neighborhood instance`,
-        );
     }
 
     /**
@@ -2215,10 +1981,6 @@ export class EntityGraphVisualizer {
         entityData: any,
         centerEntity: string,
     ): Promise<void> {
-        console.log(
-            `[TripleInstance] Loading entity detail for ${centerEntity}`,
-        );
-
         // Clear and load detail instance
         this.detailInstance.elements().remove();
         const elements = this.convertToGraphElements(entityData);
@@ -2239,10 +2001,6 @@ export class EntityGraphVisualizer {
 
         // Switch to detail view
         this.switchToDetailView();
-
-        console.log(
-            `[TripleInstance] Loaded ${entityData.entities.length} entities into detail instance`,
-        );
     }
 
     /**
@@ -2262,10 +2020,6 @@ export class EntityGraphVisualizer {
 
         return new Promise((resolve) => {
             layout.on("layoutstop", () => {
-                console.log(
-                    `[TripleInstance] Layout ${layoutName} completed for ${nodeCount} nodes`,
-                );
-
                 // Store original positions for dynamic spacing (global and detail views)
                 if (
                     instance === this.globalInstance ||
@@ -2325,37 +2079,6 @@ export class EntityGraphVisualizer {
      * Convert graph data to Cytoscape elements (enhanced for triple-instance)
      */
     private convertToGraphElements(graphData: any): any[] {
-        console.log(`[DEBUG] Converting graph data:`, {
-            entityCount: graphData.entities.length,
-            relationshipCount: graphData.relationships.length,
-            firstEntity: graphData.entities[0],
-            firstRelationship: graphData.relationships[0],
-        });
-
-        // Log input data structure for IPC analysis
-        console.log(`[DataSample] Input entities to Cytoscape (first 3): ${JSON.stringify(
-            (graphData.entities || []).slice(0, 3).map((entity: any, index: number) => ({
-                index: index,
-                keys: Object.keys(entity),
-                sampleEntity: entity
-            }))
-        )}`);
-
-        console.log(`[DataSample] Input relationships to Cytoscape (first 3): ${JSON.stringify(
-            (graphData.relationships || []).slice(0, 3).map((rel: any, index: number) => ({
-                index: index,
-                keys: Object.keys(rel),
-                sampleRelationship: rel
-            }))
-        )}`);
-
-        // Debug: Check the first few entities' importance values
-        console.log(`[DEBUG] First 5 entities with importance values:`);
-        graphData.entities.slice(0, 5).forEach((entity: any, index: number) => {
-            console.log(
-                `  ${index + 1}. ${entity.name}: importance=${entity.properties?.importance}, degree=${entity.properties?.degree}, type=${entity.type}`,
-            );
-        });
 
         const nodes = graphData.entities.map((entity: any) => {
             // Set appropriate importance values based on current context
@@ -2414,10 +2137,6 @@ export class EntityGraphVisualizer {
                 }
             }
         });
-
-        console.log(
-            `[DEBUG] Created ${nodeIds.size} node IDs and ${nodeNameToId.size} name mappings`,
-        );
 
         let invalidEdgeCount = 0;
         const invalidEdgeExamples: string[] = [];
@@ -2485,60 +2204,11 @@ export class EntityGraphVisualizer {
                 `[TripleInstance] Filtered ${invalidEdgeCount} invalid edges (examples: ${invalidEdgeExamples.join(", ")}${invalidEdgeCount > 3 ? "..." : ""})`,
             );
 
-            // Additional debugging for edge validation issue
-            console.log(
-                `[DEBUG] Node IDs sample (first 5):`,
-                Array.from(nodeIds).slice(0, 5),
-            );
-            console.log(
-                `[DEBUG] Edge examples with validation:`,
-                invalidEdgeExamples.slice(0, 3).map((example) => {
-                    const [source, target] = example.split("-");
-                    return {
-                        edge: example,
-                        sourceExists: nodeIds.has(source),
-                        targetExists: nodeIds.has(target),
-                        source,
-                        target,
-                    };
-                }),
-            );
         }
-
-        console.log(`[TripleInstance] Converted ${nodes.length} nodes and ${edges.length} valid edges (filtered ${invalidEdgeCount} invalid edges)`);
-        console.log(`[Perf] Graph conversion output: ${JSON.stringify({
-            nodeCount: nodes.length,
-            edgeCount: edges.length,
-            totalElements: nodes.length + edges.length,
-            invalidEdges: invalidEdgeCount
-        })}`);
-
-        // Log final Cytoscape element structure for comparison with IPC data
-        console.log(`[DataSample] Final Cytoscape nodes (first 3): ${JSON.stringify(
-            nodes.slice(0, 3).map((node: any, index: number) => ({
-                index: index,
-                group: node.group,
-                dataKeys: Object.keys(node.data),
-                sampleNodeData: node.data
-            }))
-        )}`);
-
-        console.log(`[DataSample] Final Cytoscape edges (first 3): ${JSON.stringify(
-            edges.slice(0, 3).map((edge: any, index: number) => ({
-                index: index,
-                group: edge.group,
-                dataKeys: Object.keys(edge.data),
-                sampleEdgeData: edge.data
-            }))
-        )}`);
 
         const finalElements = [...nodes, ...edges];
 
         // Calculate size of final Cytoscape elements
-        const cytoscapeElementsSize = JSON.stringify(finalElements).length;
-        console.log(`[DataSample] Final Cytoscape elements size: ${cytoscapeElementsSize} characters (${(cytoscapeElementsSize / 1024).toFixed(2)} KB)`);
-
-        console.timeEnd("[Perf] Convert graph data to elements");
 
         return finalElements;
     }
@@ -2548,8 +2218,6 @@ export class EntityGraphVisualizer {
      */
     async loadGlobalGraphLegacy(globalData: any): Promise<void> {
         if (!this.cy) return;
-
-        console.log("[TripleInstance] Loading global graph");
 
         // Store global data
         this.globalGraphData = globalData;
@@ -2561,22 +2229,11 @@ export class EntityGraphVisualizer {
 
         // Check if global instance already has data
         if (this.globalInstance.elements().length > 0) {
-            console.log(
-                "[TripleInstance] Global instance already loaded, just showing it",
-            );
             return;
         }
 
-        // Load data into global instance for the first time
-        console.log(
-            "[TripleInstance] First time loading - building global instance",
-        );
-
         // Load ALL data initially - style-based LOD will handle visibility
         const allData = this.prepareAllDataWithImportance(globalData);
-        console.log(
-            `[TripleInstance] Loading ${allData.entities.length} entities, ${allData.relationships.length} relationships`,
-        );
 
         // Convert to Cytoscape elements
         const elements = this.convertGlobalDataToElements(allData);
@@ -2591,46 +2248,13 @@ export class EntityGraphVisualizer {
         // Pre-compute LOD thresholds for performance
         this.precomputeLODThresholds();
 
-        // Setup zoom interactions for global instance
-        console.log(
-            "[DEBUG-INIT] About to setup zoom interactions on initial load",
-        );
-        console.log(
-            "[DEBUG-INIT] Interaction state before setup:",
-            JSON.stringify({
-                zoomHandlersSetup: this.zoomHandlersSetup,
-                currentActiveView: this.currentActiveView,
-                cyIsGlobalInstance: this.cy === this.globalInstance,
-                globalInstanceExists: !!this.globalInstance,
-                globalInstanceContainer: !!this.globalInstance?.container(),
-                globalInstanceReady:
-                    this.globalInstance?._private?.cy !== undefined,
-            }),
-        );
-
         this.setupZoomInteractions();
-
-        console.log(
-            "[DEBUG-INIT] About to setup general interactions on initial load",
-        );
         this.setupInteractions();
 
-        console.log("[DEBUG-INIT] Interactions setup complete on initial load");
 
-        // Test zoom event functionality immediately after setup
+        // Test zoom event functionality after setup
         setTimeout(() => {
-            console.log(
-                "[DEBUG-TEST] Testing zoom functionality 2 seconds after init",
-            );
-            console.log(
-                "[DEBUG-TEST] Current zoom before test:",
-                this.globalInstance.zoom(),
-            );
             this.globalInstance.zoom(this.globalInstance.zoom() * 1.1);
-            console.log(
-                "[DEBUG-TEST] Current zoom after test:",
-                this.globalInstance.zoom(),
-            );
         }, 2000);
 
         // Apply layout with cache
@@ -2642,8 +2266,6 @@ export class EntityGraphVisualizer {
         // Apply initial LOD
         const zoomAfterFit = this.globalInstance.zoom();
         this.updateStyleBasedLOD(zoomAfterFit);
-
-        console.log("[TripleInstance] Global view loaded successfully");
     }
 
     private async applyLayoutWithCache(cacheKey: string): Promise<void> {
@@ -2809,30 +2431,8 @@ export class EntityGraphVisualizer {
                 this.currentActiveView === "neighborhood" &&
                 zoom < exitThreshold;
 
-            console.log(
-                `[Zoom] Event #${this.zoomEventCount} on ${instanceName} instance, zoom: ${zoom.toFixed(3)} | ` +
-                    `Current view: ${this.currentActiveView} | Active: ${instance === this.cy ? "YES" : "NO"} | ` +
-                    `Thresholds: enter=${enterThreshold}, exit=${exitThreshold} | ` +
-                    `Triggers: →neighborhood=${willTriggerNeighborhood}, →global=${willTriggerGlobal}`,
-            );
-
-            console.log(
-                `[DEBUG-ZOOM] Zoom handler state:`,
-                JSON.stringify({
-                    instanceName: instanceName,
-                    zoomEventCount: this.zoomEventCount,
-                    currentActiveView: this.currentActiveView,
-                    instanceEqualsThis: instance === this.cy,
-                    instanceContainer: instance?.container()?.id || "none",
-                    thisContainer: this.cy?.container()?.id || "none",
-                }),
-            );
-
             // Only handle view transitions and LOD updates for the currently active instance
             if (instance !== this.cy) {
-                console.log(
-                    `[Zoom] Skipping LOD update - ${instanceName} instance not currently active`,
-                );
                 return;
             }
 
@@ -2850,7 +2450,6 @@ export class EntityGraphVisualizer {
             // Smooth 60fps LOD updates
             clearTimeout(this.zoomTimer);
             this.zoomTimer = setTimeout(async () => {
-                console.time("[Perf] Zoom LOD update");
 
                 // Apply appropriate LoD based on current view and instance
                 if (
@@ -2866,8 +2465,6 @@ export class EntityGraphVisualizer {
                     // Apply dynamic spacing adjustments for global and detail views
                     this.updateDynamicSpacing(zoom);
                 }
-
-                console.timeEnd("[Perf] Zoom LOD update");
 
                 // Handle hierarchical loading based on zoom level
                 // Only process if not already loading
@@ -2905,17 +2502,11 @@ export class EntityGraphVisualizer {
             this.currentActiveView === "global" &&
             newZoom > this.zoomThresholds.enterNeighborhoodMode
         ) {
-            console.log(
-                "[TripleInstance] Transitioning from global to neighborhood",
-            );
             await this.transitionToNeighborhoodMode();
         } else if (
             this.currentActiveView === "neighborhood" &&
             newZoom < this.zoomThresholds.exitNeighborhoodMode
         ) {
-            console.log(
-                "[TripleInstance] Transitioning from neighborhood to global",
-            );
             await this.transitionToGlobalMode();
         }
     }
@@ -2925,28 +2516,14 @@ export class EntityGraphVisualizer {
      */
     private async transitionToNeighborhoodMode(): Promise<void> {
         if (this.isLoadingNeighborhood) {
-            console.log(
-                "[TripleInstance] Already loading neighborhood, skipping",
-            );
             return;
         }
 
         // Store current global zoom level before transitioning away
         this.previousGlobalZoom = this.globalInstance.zoom();
-        console.log(
-            `[TripleInstance] Stored global zoom level: ${this.previousGlobalZoom} before transition`,
-        );
-
-        // Find center entity in global view using smart cursor-based selection
-        console.log(
-            `[TripleInstance] Looking for center node in ${this.currentActiveView} view`,
-        );
 
         // Get candidate nodes (viewport or all visible nodes)
         let candidateNodes = this.getNodesInViewport();
-        console.log(
-            `[TripleInstance] Found ${candidateNodes.length} nodes in viewport`,
-        );
 
         if (candidateNodes.length === 0) {
             // Fallback: use all visible nodes when viewport is too zoomed out
@@ -2960,9 +2537,6 @@ export class EntityGraphVisualizer {
                     node.style("opacity") > 0
                 );
             });
-            console.log(
-                `[TripleInstance] Fallback: Found ${candidateNodes.length} visible nodes in ${this.currentActiveView} view`,
-            );
         }
 
         // Smart center node selection: cursor-based if available, otherwise importance-based
@@ -3099,15 +2673,9 @@ export class EntityGraphVisualizer {
     private async transitionToGlobalMode(): Promise<void> {
         // Prevent duplicate calls during rapid zoom events
         if (this.isLoadingNeighborhood) {
-            console.log(
-                "[TripleInstance] Already transitioning, skipping duplicate global transition",
-            );
             return;
         }
 
-        console.log(
-            "[TripleInstance] Transitioning from neighborhood to global",
-        );
 
         // IMPORTANT: Restore viewport BEFORE making instance visible to prevent interference
         if (this.storedGlobalViewport) {
@@ -3119,22 +2687,9 @@ export class EntityGraphVisualizer {
                 this.zoomThresholds.enterNeighborhoodMode - 0.1,
             );
 
-            console.log(
-                `[ViewportPreservation] Restoring viewport BEFORE switching view:`,
-                {
-                    originalZoom: zoom,
-                    appliedZoom: globalZoomWithOffset,
-                    pan: pan,
-                },
-            );
-
             // Restore both zoom and pan position while instance is still hidden
             this.globalInstance.zoom(globalZoomWithOffset);
             this.globalInstance.pan(pan);
-
-            console.log(
-                `[ViewportPreservation] Viewport restored, now switching to global view`,
-            );
 
             // Clear stored state after restoration
             this.storedGlobalViewport = null;
@@ -3145,9 +2700,6 @@ export class EntityGraphVisualizer {
                 this.zoomThresholds.enterNeighborhoodMode - 0.1,
             );
             this.globalInstance.zoom(globalZoomWithOffset);
-            console.log(
-                `[TripleInstance] Fallback: Restored global zoom only: ${this.previousGlobalZoom} → applied: ${globalZoomWithOffset}`,
-            );
         }
 
         // Now switch to global view after viewport is already restored
@@ -3157,16 +2709,6 @@ export class EntityGraphVisualizer {
         setTimeout(() => {
             this.globalInstance.forceRender();
             const postExtent = this.globalInstance.extent();
-            console.log(`[ViewportPreservation] Post-switch viewport check:`, {
-                zoom: this.globalInstance.zoom(),
-                pan: this.globalInstance.pan(),
-                extent: {
-                    x1: postExtent.x1,
-                    y1: postExtent.y1,
-                    x2: postExtent.x2,
-                    y2: postExtent.y2,
-                },
-            });
         }, 50);
     }
 
@@ -3182,7 +2724,6 @@ export class EntityGraphVisualizer {
                 y: event.clientY - containerRect.top,
             };
             this.isCursorOverMap = true;
-            // console.log(`[CursorTracking] Cursor at container-relative position: (${this.lastCursorPosition.x.toFixed(1)}, ${this.lastCursorPosition.y.toFixed(1)})`);
         });
 
         this.container.addEventListener("mouseleave", () => {
@@ -3267,34 +2808,14 @@ export class EntityGraphVisualizer {
         const isDetailVisible = this.currentActiveView === "detail";
 
         if (this.cy === this.globalInstance && !isGlobalVisible) {
-            console.log(
-                "[DEBUG] updateStyleBasedLOD: Skipping global instance (hidden)",
-            );
             return;
         }
         if (this.cy === this.neighborhoodInstance && !isNeighborhoodVisible) {
-            console.log(
-                "[DEBUG] updateStyleBasedLOD: Skipping neighborhood instance (hidden)",
-            );
             return;
         }
         if (this.cy === this.detailInstance && !isDetailVisible) {
-            console.log(
-                "[DEBUG] updateStyleBasedLOD: Skipping detail instance (hidden)",
-            );
             return;
         }
-
-        console.log(
-            "[DEBUG] updateStyleBasedLOD called with:",
-            JSON.stringify({
-                zoomLevel: zoom,
-                currentLayer: this.currentLayer,
-                currentActiveView: this.currentActiveView,
-                totalNodes: this.cy.nodes().length,
-                totalEdges: this.cy.edges().length,
-            }),
-        );
 
         // Validate and clamp zoom value to reasonable bounds
         if (!isFinite(zoom)) {
@@ -3316,7 +2837,6 @@ export class EntityGraphVisualizer {
         // Check active instance for triple-instance architecture
         if (this.currentActiveView === "detail") {
             // In detail view instance - only update styles, no automatic transitions
-            console.log(`[Perf] Detail instance - style-only LOD update`);
             this.updateEntityViewStyles(zoom);
             // Note: No automatic transitions in triple-instance architecture
             return;
@@ -3324,32 +2844,13 @@ export class EntityGraphVisualizer {
 
         // Neighborhood view mode - specific LoD treatment
         if (this.currentActiveView === "neighborhood") {
-            console.log(
-                `[Perf] Neighborhood instance - applying neighborhood LoD`,
-            );
             this.updateNeighborhoodViewStyles(zoom);
             return;
         }
 
-        // Global view mode - style-based LOD (no data manipulation)
-        console.time("[Perf] Style-based LOD update");
-
         // Use pre-computed thresholds for performance
         const { nodeThreshold, edgeThreshold } =
             this.getFastLODThresholds(zoom);
-
-        console.log(
-            "[DEBUG] LOD thresholds:",
-            JSON.stringify({
-                nodeThreshold,
-                edgeThreshold,
-                zoomLevel: zoom,
-            }),
-        );
-
-        // Analyze importance distribution for calibration
-
-        // Calculate expected visible counts for validation
 
         // Use batch for optimal performance
         this.cy.batch(() => {
@@ -3416,26 +2917,7 @@ export class EntityGraphVisualizer {
                     edge.style("display", "none");
                 }
             });
-
-            console.log(
-                `[Perf] Style LOD: ${visibleNodes} nodes, ${visibleEdges} edges visible`,
-            );
-            console.log(
-                "[DEBUG] LOD results:",
-                JSON.stringify({
-                    visibleNodes,
-                    visibleEdges,
-                    totalNodes: this.cy.nodes().length,
-                    totalEdges: this.cy.edges().length,
-                    hiddenNodes: this.cy.nodes().length - visibleNodes,
-                    hiddenEdges: this.cy.edges().length - visibleEdges,
-                    nodeThreshold,
-                    edgeThreshold,
-                }),
-            );
         });
-
-        console.timeEnd("[Perf] Style-based LOD update");
     }
 
     /**

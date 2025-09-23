@@ -446,22 +446,11 @@ export abstract class ExtensionServiceBase {
     }
 
     async getGlobalImportanceLayer(maxNodes: number = 5000, includeConnectivity: boolean = true): Promise<any> {
-        console.time("[Perf] ExtensionService - getGlobalImportanceLayer");
-        console.log(`[Perf] ExtensionService request: getGlobalImportanceLayer(${maxNodes}, ${includeConnectivity})`);
-
         const result = await this.sendMessage({
             type: "getGlobalImportanceLayer",
             maxNodes,
             includeConnectivity,
         });
-
-        console.log(`[Perf] ExtensionService response: ${JSON.stringify({
-            hasResult: !!result,
-            entityCount: (result as any)?.entities?.length || 0,
-            relationshipCount: (result as any)?.relationships?.length || 0,
-            hasMetadata: !!(result as any)?.metadata
-        })}`);
-        console.timeEnd("[Perf] ExtensionService - getGlobalImportanceLayer");
 
         return result;
     }

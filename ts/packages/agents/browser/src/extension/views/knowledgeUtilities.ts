@@ -498,23 +498,7 @@ export class ChromeExtensionService extends ExtensionServiceBase {
     protected async sendMessage<T>(message: any): Promise<T> {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
-                const messageType = message.type || 'unknown';
-                console.time(`[Perf] Chrome runtime message: ${messageType}`);
-                console.log(`[Perf] Sending message: ${JSON.stringify({
-                    type: messageType,
-                    hasParams: Object.keys(message).length > 1,
-                    paramKeys: Object.keys(message).filter(k => k !== 'type')
-                })}`);
-
                 const response = await chrome.runtime.sendMessage(message);
-                console.timeEnd(`[Perf] Chrome runtime message: ${messageType}`);
-
-                console.log(`[Perf] Message response: ${JSON.stringify({
-                    type: messageType,
-                    hasResponse: !!response,
-                    hasError: !!(response && response.error),
-                    responseKeys: response ? Object.keys(response) : []
-                })}`);
 
                 if (response && response.error) {
                     throw new Error(response.error);
@@ -522,7 +506,6 @@ export class ChromeExtensionService extends ExtensionServiceBase {
                 return response;
             } catch (error) {
                 console.error("Chrome runtime message failed:", error);
-                console.timeEnd(`[Perf] Chrome runtime message: ${message.type || 'unknown'}`);
                 throw error;
             }
         }

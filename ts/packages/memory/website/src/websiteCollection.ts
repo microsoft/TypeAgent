@@ -1810,9 +1810,9 @@ export class WebsiteCollection
 
                     const rel = relationships.get(key)!;
                     rel.count++;
-                    const urls = JSON.parse(rel.sources);
-                    urls.push(website.metadata.url);
-                    rel.sources = JSON.stringify(urls);
+                    const existingSources = new Set(JSON.parse(rel.sources || "[]"));
+                    existingSources.add(website.metadata.url);
+                    rel.sources = JSON.stringify(Array.from(existingSources));
                 }
             }
         }
@@ -2090,11 +2090,9 @@ export class WebsiteCollection
         if (existing) {
             // Update existing relationship
             existing.count++;
-            const sources = JSON.parse(existing.sources);
-            if (!sources.includes(sourceUrl)) {
-                sources.push(sourceUrl);
-                existing.sources = JSON.stringify(sources);
-            }
+            const existingSources = new Set(JSON.parse(existing.sources || "[]"));
+            existingSources.add(sourceUrl);
+            existing.sources = JSON.stringify(Array.from(existingSources));
             existing.confidence = Math.min(existing.count / 10, 1.0);
             existing.updated = new Date().toISOString();
 
