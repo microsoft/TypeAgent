@@ -61,11 +61,12 @@ export type CommonApiSettings = {
     provider: ModelProviders;
     modelType: ModelType;
     endpoint: string;
-    maxRetryAttempts?: number;
-    retryPauseMs?: number;
     maxConcurrency?: number | undefined;
     throttler?: FetchThrottler;
     enableModelRequestLogging?: boolean | undefined;
+    timeout?: number | undefined;
+    maxRetryAttempts?: number | undefined;
+    retryPauseMs?: number | undefined;
 };
 /**
  * Settings used by OpenAI clients
@@ -87,12 +88,16 @@ export enum EnvVars {
     OPENAI_MODEL = "OPENAI_MODEL",
     OPENAI_RESPONSE_FORMAT = "OPENAI_RESPONSE_FORMAT",
     OPENAI_MAX_CONCURRENCY = "AZURE_OPENAI_MAX_CONCURRENCY",
+    OPENAI_MAX_TIMEOUT = "OPENAI_MAX_TIMEOUT",
+    OPENAI_MAX_RETRYATTEMPTS = "OPENAI_MAX_RETRYATTEMPTS",    
     OPENAI_MODEL_EMBEDDING = "OPENAI_MODEL_EMBEDDING",
 
     AZURE_OPENAI_API_KEY = "AZURE_OPENAI_API_KEY",
     AZURE_OPENAI_ENDPOINT = "AZURE_OPENAI_ENDPOINT",
     AZURE_OPENAI_RESPONSE_FORMAT = "AZURE_OPENAI_RESPONSE_FORMAT",
     AZURE_OPENAI_MAX_CONCURRENCY = "AZURE_OPENAI_MAX_CONCURRENCY",
+    AZURE_OPENAI_MAX_TIMEOUT = "AZURE_OPENAI_MAX_TIMEOUT",
+    AZURE_OPENAI_MAX_RETRYATTEMPTS = "AZURE_OPENAI_MAX_RETRYATTEMPTS",
     AZURE_OPENAI_MAX_CHARS = "AZURE_OPENAI_MAX_CHARS",
 
     AZURE_OPENAI_API_KEY_EMBEDDING = "AZURE_OPENAI_API_KEY_EMBEDDING",
@@ -587,6 +592,7 @@ function createAzureOpenAIChatModel(
             params,
             settings.maxRetryAttempts,
             settings.retryPauseMs,
+            settings.timeout
         );
         if (!result.success) {
             return result;
