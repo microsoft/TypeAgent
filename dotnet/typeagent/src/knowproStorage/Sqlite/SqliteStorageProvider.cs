@@ -96,6 +96,8 @@ CREATE TABLE IF NOT EXISTS Messages(
     )
 );
 ";
+
+    public const string SemanticRefTable = "SemanticRefs";
     public const string SemanticRefsSchema = @"
 CREATE TABLE IF NOT EXISTS SemanticRefs (
     semref_id INTEGER PRIMARY KEY,

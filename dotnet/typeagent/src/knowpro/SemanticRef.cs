@@ -27,7 +27,7 @@ public class SemanticRef
 
     // The public, strongly-typed property
     [JsonIgnore]
-    public Knowledge Knowledge { get; private set; }
+    public Knowledge Knowledge { get; set; }
 
     // Internal storage for the raw JSON
     [JsonPropertyName("knowledge")]
@@ -44,7 +44,19 @@ public class SemanticRef
         }
     }
 
-    private static Knowledge ParseKnowledge(JsonElement element, string type)
+    public static Knowledge ParseKnowledge(string json, string type)
+    {
+        return type switch
+        {
+            KnowledgeTypes.Entity => JsonSerializer.Deserialize<ConcreteEntity>(json, s_serializerOptions),
+            KnowledgeTypes.Action => JsonSerializer.Deserialize<Action>(json),
+            KnowledgeTypes.Topic => JsonSerializer.Deserialize<Topic>(json),
+            KnowledgeTypes.Tag => JsonSerializer.Deserialize<Tag>(json),
+            _ => throw new JsonException($"Unknown KnowledgeType: {type}")
+        };
+    }
+
+    public static Knowledge ParseKnowledge(JsonElement element, string type)
     {
         return type switch
         {
@@ -55,6 +67,7 @@ public class SemanticRef
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }
+
 }
 
 public static class KnowledgeTypes

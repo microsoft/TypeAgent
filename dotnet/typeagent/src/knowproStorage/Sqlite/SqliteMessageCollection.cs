@@ -202,7 +202,6 @@ ORDER BY msg_id");
         cmd.AddParameter("@tags", messageRow.TagsJson);
         cmd.AddParameter("@metadata", messageRow.MetadataJson);
         cmd.AddParameter("@extra", messageRow.ExtraJson);
-
     }
 }
 
