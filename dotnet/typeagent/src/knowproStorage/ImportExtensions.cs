@@ -5,7 +5,7 @@ using TypeAgent.KnowPro.Storage.Local;
 
 namespace TypeAgent.KnowPro.Storage;
 
-public static class ConversationExtensions
+public static class ImportExtensions
 {
     public static async Task<int> ImportMessagesAsync<TMessage>(this IConversation<TMessage> conversation, IEnumerable<TMessage> messages, CancellationToken cancellationToken = default)
         where TMessage : IMessage
@@ -24,7 +24,13 @@ public static class ConversationExtensions
     public static async Task ImportDataAsync<TMessage>(this IConversation<TMessage> conversation, ConversationData<TMessage> data, CancellationToken cancellationToken = default)
         where TMessage : IMessage
     {
-        await conversation.ImportMessagesAsync(data.Messages, cancellationToken);
-        await conversation.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken);
+        if (!data.Messages.IsNullOrEmpty())
+        {
+            await conversation.ImportMessagesAsync(data.Messages, cancellationToken);
+        }
+        if (!data.SemanticRefs.IsNullOrEmpty())
+        {
+            await conversation.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken);
+        }
     }
 }

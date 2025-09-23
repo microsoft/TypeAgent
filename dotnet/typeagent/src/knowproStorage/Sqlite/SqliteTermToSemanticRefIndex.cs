@@ -32,7 +32,7 @@ public class SqliteTermToSemanticRefIndex : ITermToSemanticRefIndex
     public string AddTerm(string term, ScoredSemanticRefOrdinal scoredOrdinal)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
-        KnowProVerify.VerifySemanticRefOrdinal(scoredOrdinal.SemanticRefOrdinal);
+        KnowProVerify.ThrowIfInvalidSemanticRefOrdinal(scoredOrdinal.SemanticRefOrdinal);
 
         term = PrepareTerm(term);
 
@@ -96,7 +96,7 @@ VALUES (@term, @semref_id, @score)
     public void RemoveTerm(string term, int semanticRefOrdinal)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
-        KnowProVerify.VerifySemanticRefOrdinal(semanticRefOrdinal);
+        KnowProVerify.ThrowIfInvalidSemanticRefOrdinal(semanticRefOrdinal);
 
         term = PrepareTerm(term);
         using var cmd = _db.CreateCommand("DELETE FROM SemanticRefIndex WHERE term = @term AND semref_id = @semref_id");

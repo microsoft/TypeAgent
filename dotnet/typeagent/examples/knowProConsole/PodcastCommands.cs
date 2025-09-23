@@ -57,15 +57,14 @@ public class PodcastCommands : ICommandModule
         var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
         if (data is null)
         {
-            ConsoleWriter.WriteError("NO data in file");
+            KnowProWriter.WriteError("NO data in file");
             return;
         }
-        Console.WriteLine($"{data.Messages.Length} messages in source file");
+        KnowProWriter.WriteDataFileStats(data);
 
         using var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, "podcast", true);
         var podcast = new Podcast(provider);
 
-        Console.WriteLine($"{data.Messages.Length} messages");
         int count = await podcast.ImportMessagesAsync(data.Messages, cancellationToken);
         Console.WriteLine($"{count} message imported");
 

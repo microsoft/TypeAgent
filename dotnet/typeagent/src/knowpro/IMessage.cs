@@ -36,12 +36,3 @@ public interface IMessageEx : IMessage
     string? SerializeExtraDataToJson();
     void DeserializeExtraDataFromJson(string json);
 }
-
-public static class MessageExtensions
-{
-    public static void ThrowIfInvalid(this IMessage message)
-    {
-        ArgumentVerify.ThrowIfNull(message, nameof(message));
-        ArgumentVerify.ThrowIfNullOrEmpty(message.TextChunks, nameof(message.TextChunks));
-    }
-}

@@ -41,7 +41,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public void Append(TMessage message)
     {
-        message.ThrowIfInvalid();
+        KnowProVerify.ThrowIfInvalid(message);
 
         MessageRow messageRow = ToMessageRow(message);
 
@@ -77,7 +77,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public TMessage Get(int msgId)
     {
-        KnowProVerify.VerifyMessageOrdinal(msgId);
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
 
         using var cmd = _db.CreateCommand(@"
 SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
@@ -130,8 +130,8 @@ FROM Messages ORDER BY msg_id");
 
     public Task<IList<TMessage>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default)
     {
-        KnowProVerify.VerifyMessageOrdinal(start);
-        KnowProVerify.VerifyMessageOrdinal(end);
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(start);
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(end);
         ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
 
         using var cmd = _db.CreateCommand(@"

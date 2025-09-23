@@ -33,7 +33,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
 
     public void Append(SemanticRef semanticRef)
     {
-        ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
+        KnowProVerify.ThrowIfInvalid(semanticRef);
 
         SemanticRefRow row = ToSemanticRefRow(semanticRef);
 

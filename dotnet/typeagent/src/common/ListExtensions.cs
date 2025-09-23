@@ -16,6 +16,11 @@ public static class ListExtensions
         return list is null || list.Count == 0;
     }
 
+    public static int GetCount<T>(this IList<T> list)
+    {
+        return list is not null ? list.Count : 0;
+    }
+
     public static IEnumerable<T> Slice<T>(this IList<T> list, int startAt, int count, int stride = 1)
     {
         if (stride < 0)
