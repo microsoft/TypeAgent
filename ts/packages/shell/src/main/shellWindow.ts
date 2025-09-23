@@ -95,7 +95,7 @@ export class ShellWindow {
 
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
-    private isReady: boolean = false;
+    private browserTabRestored = false;
     private closing: boolean = false;
 
     // Multi-tab browser support
@@ -150,15 +150,6 @@ export class ShellWindow {
             }
         });
 
-        this.browserViewManager.setTabClosedCallback((tabId: string) => {
-            this.mainWindow.webContents.send("browser-tab-closed", tabId);
-
-            // Update layout if no tabs left
-            if (!this.hasBrowserTabs()) {
-                this.updateWindowBounds(this.getWindowPositionState());
-            }
-        });
-
         const resizeHandlerCleanup = setupResizeHandler(mainWindow, () =>
             this.updateContentSize(),
         );
@@ -170,7 +161,7 @@ export class ShellWindow {
             // Remove the handler to avoid update the content size on close
             resizeHandlerCleanup();
             // Close all browser tabs on window close
-            this.browserViewManager.closeAllTabs();
+            this.browserViewManager.cleanup();
         });
 
         const chatView = createChatView(state);
@@ -312,7 +303,23 @@ export class ShellWindow {
                 );
             }
         }
+
+        this.browserTabRestored = true;
+        this.ensureAutoEmptyTab();
     }
+
+    private async ensureAutoEmptyTab() {
+        if (
+            this.contentVisible &&
+            !this.hasBrowserTabs() &&
+            this.settings.user.ui.autoEmptyTab &&
+            this.browserTabRestored &&
+            !this.closing
+        ) {
+            await this.createBrowserTab();
+        }
+    }
+
     private async ready(position: { x: number; y: number }) {
         // Send settings asap
         this.sendUserSettingChanged();
@@ -332,9 +339,6 @@ export class ShellWindow {
         // Make sure content is loaded so we can adjust the size including the divider.
         await this.waitForContentLoaded();
         await this.restoreBrowserTabs();
-
-        // Now that the browser tabs are restored, we are "ready"
-        this.isReady = true;
 
         if (!isLinux) {
             // REVIEW: on linux, setting windows bound before showing has not affect?
@@ -647,16 +651,6 @@ export class ShellWindow {
         // Set the divider position
         debugShellWindow("Divider Pos", dividerLayout);
         this.mainWindow.webContents.send("set-layout", dividerLayout);
-
-        if (
-            this.contentVisible &&
-            !this.hasBrowserTabs() &&
-            this.settings.user.ui.autoEmptyTab &&
-            this.isReady &&
-            !this.closing
-        ) {
-            this.createBrowserTab();
-        }
     }
 
     public toggleTopMost() {
@@ -730,6 +724,10 @@ export class ShellWindow {
 
             this.contentVisible = contentVisible;
         }
+
+        // contentVisible may have changed
+        this.ensureAutoEmptyTab();
+
         return bounds;
     }
 
@@ -785,8 +783,8 @@ export class ShellWindow {
                 ?.webContents,
         );
 
-        // Update layout when first tab is created
-        if (this.browserViewManager.getAllBrowserTabs().length === 1) {
+        // Update windows bound when content becomes visible
+        if (!this.contentVisible && this.hasBrowserTabs()) {
             this.updateWindowBounds(this.getWindowPositionState());
         }
 
@@ -823,7 +821,12 @@ export class ShellWindow {
     public closeBrowserTab(tabId: string): boolean {
         const success = this.browserViewManager.closeBrowserTab(tabId);
         if (success) {
-            this.updateContentSize();
+            this.mainWindow.webContents.send("browser-tab-closed", tabId);
+
+            // Update layout if no tabs left
+            if (!this.hasBrowserTabs()) {
+                this.updateWindowBounds(this.getWindowPositionState());
+            }
 
             // Restore focus to chat after closing tab
             this.focusChatInput();
