@@ -73,6 +73,8 @@ VALUES (@term, @semref_id, @score)
     {
         term = PrepareTerm(term);
         using var cmd = _db.CreateCommand("SELECT semref_id, score FROM SemanticRefIndex WHERE term = @term");
+        cmd.AddParameter("@term", term);
+
         using var reader = cmd.ExecuteReader();
         IList<ScoredSemanticRefOrdinal> matches = [];
         while (reader.Read())
