@@ -215,6 +215,11 @@ async function getErrorMessage(
     retries?: number | undefined,
     timeTaken?: number | undefined,
 ): Promise<string> {
+async function getErrorMessage(
+    response: Response,
+    retries?: number | undefined,
+    timeTaken?: number | undefined,
+): Promise<string> {
     let bodyMessage = "";
     try {
         const bodyText = await response.text();
