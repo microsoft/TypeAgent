@@ -3,7 +3,6 @@
 
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
-import { debug } from "console";
 
 const debugUrl = registerDebug("typeagent:rest:url");
 const debugHeader = registerDebug("typeagent:rest:header");
@@ -261,10 +260,6 @@ export async function fetchWithRetry(
             if (result.status === 200) {
                 return success(result);
             }
-            if (result.status === 429) {
-                const deets = await result.text();
-                debug(`Received 429: ${deets}`);
-            }
             if (
                 !isTransientHttpError(result.status) ||
                 retryCount >= retryMaxAttempts
@@ -276,8 +271,8 @@ export async function fetchWithRetry(
 
             // See if the service tells how long to wait to retry
             const pauseMs = getRetryAfterMs(result, retryPauseMs);
-            await sleep(pauseMs);
-            retryCount++;
+            retryCount++;   // use the retry count as a backoff multiplier
+            await sleep(pauseMs * retryCount);
         }
     } catch (e: any) {
         return error(`fetch error: ${e.cause?.message ?? e.message}`);
