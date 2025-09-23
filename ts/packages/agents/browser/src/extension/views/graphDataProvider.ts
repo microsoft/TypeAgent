@@ -102,9 +102,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalGraphData(): Promise<GlobalGraphResult> {
         const startTime = performance.now();
-        console.log(
-            "[GraphDataProvider] Fetching global graph data using existing backend APIs",
-        );
 
         try {
             // Use proper service methods instead of direct sendMessage calls
@@ -212,20 +209,15 @@ class GraphDataProviderImpl implements GraphDataProvider {
         maxNodes: number,
     ): Promise<EntityNeighborhoodResult> {
         const startTime = performance.now();
-        console.log(
-            `[GraphDataProvider] Fetching neighborhood for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
-        );
 
         try {
             // Use the proper service method for efficient neighborhood retrieval
-            console.time("[Perf] HybridGraph - Fetch neighborhood data");
             const neighborhoodData =
                 await this.baseService.getEntityNeighborhood(
                     entityId,
                     depth,
                     maxNodes,
                 );
-            console.timeEnd("[Perf] HybridGraph - Fetch neighborhood data");
 
             if (!neighborhoodData || neighborhoodData.error) {
                 console.warn(
@@ -254,12 +246,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 };
             }
 
-            console.log(
-                `[GraphDataProvider] Retrieved neighborhood: ${neighborhoodData.neighbors?.length || 0} neighbors, ${neighborhoodData.relationships?.length || 0} relationships`,
-            );
-
             // Transform data to UI format
-            console.time("[Perf] HybridGraph - Transform to UI format");
 
             // Transform center entity
             const centerEntity = neighborhoodData.centerEntity
@@ -282,12 +269,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     neighborhoodData.relationships || [],
                 );
 
-            console.timeEnd("[Perf] HybridGraph - Transform to UI format");
-
             const queryTime = performance.now() - startTime;
-            console.log(
-                `[GraphDataProvider] Neighborhood loaded efficiently: ${neighbors.length} neighbors, ${transformedRelationships.length} relationships (${queryTime.toFixed(1)}ms)`,
-            );
 
             return {
                 centerEntity,
@@ -314,10 +296,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
     }
 
     async getGraphStatistics(): Promise<GraphStatistics> {
-        console.log(
-            "[GraphDataProvider] Fetching graph statistics using existing backend APIs",
-        );
-
         try {
             // Use proper service method for graph status
             const status = await this.baseService.getKnowledgeGraphStatus();
@@ -380,27 +358,30 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
         try {
-            console.log(
-                `[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`,
-            );
-
             const result = await this.baseService.getGlobalImportanceLayer(
                 maxNodes,
                 true,
             );
 
-            return {
-                entities: this.transformEntitiesToUIFormat(
-                    result.entities || [],
-                ),
-                relationships: this.transformRelationshipsToUIFormat(
+            const transformedEntities = this.transformEntitiesToUIFormat(
+                result.entities || [],
+            );
+
+            const transformedRelationships =
+                this.transformRelationshipsToUIFormat(
                     result.relationships || [],
-                ),
+                );
+
+            const finalResult = {
+                entities: transformedEntities,
+                relationships: transformedRelationships,
                 metadata: {
                     ...result.metadata,
                     source: "global_importance_layer",
                 },
             };
+
+            return finalResult;
         } catch (error) {
             console.error(
                 "[GraphDataProvider] Error fetching global importance layer:",
@@ -416,16 +397,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         maxNodes: number = 5000,
     ): Promise<any> {
         try {
-            console.log(
-                `[GraphDataProvider] Fetching viewport-based neighborhood for ${centerEntity} anchored by ${viewportNodeNames.length} viewport nodes`,
-            );
-            console.log(
-                `[GraphDataProvider] Viewport anchor nodes (first 10): ${JSON.stringify(viewportNodeNames.slice(0, 10))}`,
-            );
-            console.log(
-                `[GraphDataProvider] All viewport anchor nodes: ${JSON.stringify(viewportNodeNames)}`,
-            );
-
             const result = await this.baseService.getViewportBasedNeighborhood(
                 centerEntity,
                 viewportNodeNames,
@@ -436,17 +407,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     exploreFromAllViewportNodes: true,
                     minDepthFromViewport: 1,
                 },
-            );
-
-            console.log(`[GraphDataProvider] Raw service result:`, result);
-            console.log(`[GraphDataProvider] Result type:`, typeof result);
-            console.log(
-                `[GraphDataProvider] Result entities length:`,
-                result?.entities?.length || "N/A",
-            );
-            console.log(
-                `[GraphDataProvider] Result relationships length:`,
-                result?.relationships?.length || "N/A",
             );
 
             if (!result) {
@@ -480,8 +440,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getImportanceStatistics(): Promise<any> {
         try {
-            console.log("[GraphDataProvider] Fetching importance statistics");
-
             const result = await this.baseService.getImportanceStatistics();
 
             return result;
@@ -510,9 +468,15 @@ class GraphDataProviderImpl implements GraphDataProvider {
             hybridEntity.confidence || hybridEntity.metrics?.pagerank || 0.5,
         );
 
-        // Set default visual properties to prevent Cytoscape warnings
+        // Calculate UI properties based on server data (move computation client-side)
+        const importance = hybridEntity.importance || 0;
+        const degree = hybridEntity.degree || 0;
+
+        // Compute size based on importance/degree (remove server size field dependency)
+        const computedSize = Math.max(20, 20 + Math.sqrt(importance * 1000)); // Dynamic sizing
+
+        // Compute colors based on type (remove server color field dependency)
         let color = "#6C7B7F"; // Default gray
-        let size = Math.max(20, 30 + confidence * 20); // Size 20-50 based on confidence
         let borderColor = "#4A5568"; // Default border
 
         // Type-specific styling
@@ -543,25 +507,25 @@ class GraphDataProviderImpl implements GraphDataProvider {
             type: entityType,
             confidence: confidence,
             properties: {
-                // Preserve all original data
-                ...hybridEntity,
+                // OPTIMIZATION: Only include essential data, no duplication
+                // Core server data (essential for graph logic)
+                count: hybridEntity.count,
+                degree: degree,
+                importance: importance,
+                communityId: hybridEntity.communityId,
 
-                // Ensure required UI properties exist
-                metrics: hybridEntity.metrics || {},
-                community: hybridEntity.community,
-                description: hybridEntity.description,
-                domains: hybridEntity.domains || [],
-                facets: hybridEntity.facets || [],
-                topics: hybridEntity.topics || [],
+                // Optional fields (only if non-empty)
+                ...(hybridEntity.community && {
+                    community: hybridEntity.community,
+                }),
+                ...(hybridEntity.description && {
+                    description: hybridEntity.description,
+                }),
 
-                // Add visual properties to prevent Cytoscape warnings
+                // Computed UI properties
                 color: color,
-                size: size,
+                size: computedSize,
                 borderColor: borderColor,
-
-                // Add transformation metadata
-                _source: "hybrid_graph",
-                _transformed: Date.now(),
             },
         };
     }
@@ -599,6 +563,13 @@ class GraphDataProviderImpl implements GraphDataProvider {
         const relType =
             hybridRel.relationshipType || hybridRel.type || "connected";
 
+        const strength = this.normalizeStrength(
+            hybridRel.confidence ||
+                hybridRel.strength ||
+                hybridRel.weight ||
+                0.5,
+        );
+
         return {
             id:
                 hybridRel.id ||
@@ -607,27 +578,18 @@ class GraphDataProviderImpl implements GraphDataProvider {
             from: fromEntity,
             to: toEntity,
             type: relType,
-            strength: this.normalizeStrength(
-                hybridRel.confidence ||
-                    hybridRel.strength ||
-                    hybridRel.weight ||
-                    0.5,
-            ),
+            strength: strength,
             properties: {
-                // Preserve all original data
-                ...hybridRel,
-
-                // Ensure required UI properties
-                weight:
-                    hybridRel.confidence ||
-                    hybridRel.weight ||
-                    hybridRel.strength ||
-                    0.5,
+                // OPTIMIZATION: Only essential relationship data, no duplication
+                // Core server data (minimal for graph logic)
                 confidence: hybridRel.confidence || 0.5,
+                count: hybridRel.count,
 
-                // Add transformation metadata
-                _source: "hybrid_graph",
-                _transformed: Date.now(),
+                // Optional fields (only if present and needed)
+                ...(hybridRel.sources &&
+                    hybridRel.sources.length > 0 && {
+                        sources: hybridRel.sources,
+                    }),
             },
         };
     }
@@ -692,10 +654,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         };
     }
 }
-
-// ===================================================================
-// EXPORT
-// ===================================================================
 
 export {
     GraphDataProvider as GraphDataProvider,
