@@ -7,8 +7,14 @@ public class Facet
 {
     [JsonPropertyName("name")]
     public string Name { get; set; }
+
     [JsonPropertyName("value")]
     public IFacetValue Value { get; set; }
+
+    public override string ToString()
+    {
+        return $"{this.Name}= \"{this.Value}\"";
+    }
 }
 
 public interface IFacetValue

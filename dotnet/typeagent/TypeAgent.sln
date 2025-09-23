@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "knowproTest", "src\knowproT
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "conversationMemory", "src\conversationMemory\conversationMemory.csproj", "{C0800C33-1D8A-1303-D937-161BF7838C26}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "knowpro.test", "tests\knowpro\knowpro.test.csproj", "{D75E0CEB-EBE6-497A-802B-F7394CF05EEC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -67,6 +69,10 @@ Global
 		{C0800C33-1D8A-1303-D937-161BF7838C26}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C0800C33-1D8A-1303-D937-161BF7838C26}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C0800C33-1D8A-1303-D937-161BF7838C26}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D75E0CEB-EBE6-497A-802B-F7394CF05EEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D75E0CEB-EBE6-497A-802B-F7394CF05EEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D75E0CEB-EBE6-497A-802B-F7394CF05EEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D75E0CEB-EBE6-497A-802B-F7394CF05EEC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -75,6 +81,7 @@ Global
 		{F5FE3B00-9106-4C15-B842-911C94F3DEC8} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{AEAA9F98-F563-8F79-3AF3-842872AC1892} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 		{6CFB4BDE-47CC-4A11-9650-784D8BB8D173} = {F8894106-4AA2-4BDD-8E1F-1097DA185794}
+		{D75E0CEB-EBE6-497A-802B-F7394CF05EEC} = {F8894106-4AA2-4BDD-8E1F-1097DA185794}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {15B72CD6-C976-4DA4-92A9-527B4585CD55}

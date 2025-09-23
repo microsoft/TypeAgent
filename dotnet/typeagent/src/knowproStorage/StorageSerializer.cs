@@ -3,36 +3,19 @@
 
 namespace TypeAgent.KnowPro.Storage;
 
-internal static class StorageSerializer
+internal class StorageSerializer : Serializer
 {
-    static JsonSerializerOptions s_options;
-
-    static StorageSerializer()
+    internal static string? ToJson<T>(IList<T>? list)
     {
-        s_options = Json.DefaultOptions();
+        return !list.IsNullOrEmpty() ? JsonSerializer.Serialize(list, Options) : null;
     }
 
-    internal static string? Serialize<T>(T? value)
-    {
-        return value is not null ? JsonSerializer.Serialize(value, s_options) : null;
-    }
-
-    internal static string? SerializeList<T>(IList<T>? list)
-    {
-        return !list.IsNullOrEmpty() ? JsonSerializer.Serialize(list, s_options) : null;
-    }
-
-    internal static T? Deserialize<T>(string? json)
-    {
-        return !string.IsNullOrEmpty(json) ? JsonSerializer.Deserialize<T>(json, s_options) : default;
-    }
-
-    internal static List<T> DeserializeList<T>(string? json)
+    internal static List<T> FromJsonArray<T>(string? json)
     {
         List<T>? list = null;
         if (!string.IsNullOrEmpty(json))
         {
-            list = JsonSerializer.Deserialize<List<T>>(json, s_options);
+            list = JsonSerializer.Deserialize<List<T>>(json, Options);
         }
         return list ?? [];
     }

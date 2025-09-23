@@ -55,7 +55,7 @@ public class PodcastCommands : ICommandModule
         var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
         if (data is null)
         {
-            ConsoleEx.WriteError("NO data in file");
+            ConsoleWriter.WriteError("NO data in file");
             return;
         }
         Console.WriteLine($"{data.Messages.Length} messages in source file");
@@ -88,7 +88,7 @@ public class PodcastCommands : ICommandModule
         for (int i = 0; i < count; ++i)
         {
             var semanticRef = await podcast.SemanticRefs.GetAsync(i);
-            var json = Json.Stringify(semanticRef);
+            var json = Serializer.ToJsonIndented(semanticRef);
             Console.WriteLine(json);
         }
     }
