@@ -3252,17 +3252,13 @@ export async function getKnowledgeGraphStatus(
 }
 
 export async function buildKnowledgeGraph(
-    parameters: {
-        minimalMode?: boolean;
-        urlLimit?: number;
-    },
+    parameters: {},
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
     success: boolean;
     message?: string;
     error?: string;
     stats?: {
-        urlsProcessed: number;
         entitiesFound: number;
         relationshipsCreated: number;
         communitiesDetected: number;
@@ -3283,20 +3279,15 @@ export async function buildKnowledgeGraph(
             "[Knowledge Graph] Starting knowledge graph build with parameters:",
             parameters,
         );
+
         const startTime = Date.now();
-
-        // TODO: Implement actual graph building logic here
-        // This method currently only reports stats from existing data
-        // Actual graph building should process URLs, extract entities/relationships,
-        // run community detection, and calculate metrics
-
+        await websiteCollection.buildGraph();
         const timeElapsed = Date.now() - startTime;
 
         // Get stats directly from websiteCollection using existing status method
         const status = await getKnowledgeGraphStatus({}, context);
 
         const stats = {
-            urlsProcessed: parameters.urlLimit || status.entityCount,
             entitiesFound: status.entityCount,
             relationshipsCreated: status.relationshipCount,
             communitiesDetected: status.communityCount,
@@ -3341,10 +3332,10 @@ export async function rebuildKnowledgeGraph(
         try {
             // Clear existing graph tables if they exist
             if (websiteCollection.relationships) {
-                await websiteCollection.relationships.clear();
+                websiteCollection.relationships.clear();
             }
             if (websiteCollection.communities) {
-                await websiteCollection.communities.clear();
+                websiteCollection.communities.clear();
             }
         } catch (clearError) {
             // Continue even if clearing fails, as the rebuild might overwrite
@@ -3387,8 +3378,26 @@ export async function getAllRelationships(
         const relationships =
             websiteCollection.relationships?.getAllRelationships() || [];
 
+        // Apply same optimization as getGlobalImportanceLayer for consistency
+        const optimizedRelationships = relationships.map((rel: any) => ({
+            rowId: rel.rowId,
+            fromEntity: rel.fromEntity,
+            toEntity: rel.toEntity,
+            relationshipType: rel.relationshipType,
+            confidence: rel.confidence,
+            // Deduplicate sources using Set, then limit to first 3 entries
+            sources: rel.sources
+                ? typeof rel.sources === "string"
+                    ? Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3)
+                    : Array.isArray(rel.sources)
+                      ? Array.from(new Set(rel.sources)).slice(0, 3)
+                      : rel.sources
+                : undefined,
+            count: rel.count,
+        }));
+
         return {
-            relationships: relationships,
+            relationships: optimizedRelationships,
         };
     } catch (error) {
         console.error("Error getting all relationships:", error);
@@ -3533,8 +3542,24 @@ export async function getAllEntitiesWithMetrics(
             debug(
                 `[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`,
             );
+
+            // Apply entity optimization similar to getGlobalImportanceLayer
+            const optimizedEntities = cache.entityMetrics.map(
+                (entity: any) => ({
+                    id: entity.id || entity.name,
+                    name: entity.name,
+                    type: entity.type || "entity",
+                    confidence: entity.confidence || 0.5,
+                    count: entity.count,
+                    degree: entity.degree,
+                    importance: entity.importance,
+                    communityId: entity.communityId,
+                    size: entity.size,
+                }),
+            );
+
             return {
-                entities: cache.entityMetrics,
+                entities: optimizedEntities,
             };
         }
 
@@ -3557,8 +3582,20 @@ export async function getAllEntitiesWithMetrics(
             communities,
         );
 
+        const optimizedEntities = entityMetrics.map((entity: any) => ({
+            id: entity.id || entity.name,
+            name: entity.name,
+            type: entity.type || "entity",
+            confidence: entity.confidence || 0.5,
+            count: entity.count,
+            degree: entity.degree,
+            importance: entity.importance,
+            communityId: entity.communityId,
+            size: entity.size,
+        }));
+
         return {
-            entities: entityMetrics,
+            entities: optimizedEntities,
         };
     } catch (error) {
         console.error("Error getting all entities with metrics:", error);
@@ -3696,10 +3733,48 @@ export async function getEntityNeighborhood(
             );
         }
 
-        return {
-            centerEntity: neighborhoodResult.centerEntity,
-            neighbors: neighborhoodResult.neighbors,
-            relationships: neighborhoodResult.relationships,
+        // Optimize relationships (same as other functions)
+        const optimizedRelationships = neighborhoodResult.relationships.map(
+            (rel: any) => ({
+                rowId: rel.rowId,
+                fromEntity: rel.fromEntity,
+                toEntity: rel.toEntity,
+                relationshipType: rel.relationshipType,
+                confidence: rel.confidence,
+                sources: rel.sources
+                    ? typeof rel.sources === "string"
+                        ? Array.from(new Set(JSON.parse(rel.sources))).slice(
+                              0,
+                              3,
+                          )
+                        : Array.isArray(rel.sources)
+                          ? Array.from(new Set(rel.sources)).slice(0, 3)
+                          : rel.sources
+                    : undefined,
+                count: rel.count,
+            }),
+        );
+
+        // Optimize entities (centerEntity and neighbors)
+        const optimizeEntity = (entity: any) =>
+            entity
+                ? {
+                      id: entity.id || entity.name,
+                      name: entity.name,
+                      type: entity.type || "entity",
+                      confidence: entity.confidence || 0.5,
+                      count: entity.count,
+                      degree: entity.degree,
+                      importance: entity.importance,
+                      communityId: entity.communityId,
+                      size: entity.size,
+                  }
+                : null;
+
+        const optimizedResult = {
+            centerEntity: optimizeEntity(neighborhoodResult.centerEntity),
+            neighbors: neighborhoodResult.neighbors.map(optimizeEntity),
+            relationships: optimizedRelationships,
             searchData: {
                 relatedEntities: searchData?.relatedEntities || [],
                 topTopics: searchData?.topTopics || [],
@@ -3718,6 +3793,8 @@ export async function getEntityNeighborhood(
                 },
             },
         };
+
+        return optimizedResult;
     } catch (error) {
         console.error("Error getting entity neighborhood:", error);
         return {
@@ -3998,6 +4075,7 @@ export async function getGlobalImportanceLayer(
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
+            console.log(`[ServerPerf] No website collection available`);
             return {
                 entities: [],
                 relationships: [],
@@ -4016,7 +4094,14 @@ export async function getGlobalImportanceLayer(
 
         // Get cached data
         const cache = getGraphCache(websiteCollection);
+
         if (!cache || !cache.isValid) {
+            console.log(
+                `[ServerPerf] Cache validation failed: ${JSON.stringify({
+                    hasCache: !!cache,
+                    isValid: cache?.isValid,
+                })}`,
+            );
             return {
                 entities: [],
                 relationships: [],
@@ -4059,7 +4144,6 @@ export async function getGlobalImportanceLayer(
         );
 
         let selectedEntities = sortedEntities.slice(0, maxNodes);
-
         // Ensure connectivity by adding bridge nodes if needed
         if (parameters.includeConnectivity !== false) {
             selectedEntities = ensureGlobalConnectivity(
@@ -4079,23 +4163,58 @@ export async function getGlobalImportanceLayer(
                 selectedEntityNames.has(rel.toEntity),
         );
 
+        const metadata = {
+            totalEntitiesInSystem: allEntities.length,
+            selectedEntityCount: selectedEntities.length,
+            coveragePercentage:
+                (selectedEntities.length / allEntities.length) * 100,
+            importanceThreshold:
+                selectedEntities[selectedEntities.length - 1]?.importance || 0,
+            connectedComponents: analyzeConnectivity(
+                selectedEntities,
+                selectedRelationships,
+            ),
+            layer: "global_importance",
+        };
+
+        const optimizedRelationships = selectedRelationships.map(
+            (rel: any) => ({
+                rowId: rel.rowId,
+                fromEntity: rel.fromEntity,
+                toEntity: rel.toEntity,
+                relationshipType: rel.relationshipType,
+                confidence: rel.confidence,
+                // Deduplicate sources using Set, then limit to first 3 entries
+                sources: rel.sources
+                    ? typeof rel.sources === "string"
+                        ? Array.from(new Set(JSON.parse(rel.sources))).slice(
+                              0,
+                              3,
+                          )
+                        : Array.isArray(rel.sources)
+                          ? Array.from(new Set(rel.sources)).slice(0, 3)
+                          : rel.sources
+                    : undefined,
+                count: rel.count,
+            }),
+        );
+
+        const optimizedEntities = selectedEntities.map((entity: any) => ({
+            id: entity.id || entity.name,
+            name: entity.name,
+            type: entity.type || "entity",
+            confidence: entity.confidence || 0.5,
+            count: entity.count,
+            degree: entity.degree,
+            importance: entity.importance,
+            communityId: entity.communityId,
+            size: entity.size,
+        }));
+
         return {
-            entities: selectedEntities,
-            relationships: selectedRelationships,
-            metadata: {
-                totalEntitiesInSystem: allEntities.length,
-                selectedEntityCount: selectedEntities.length,
-                coveragePercentage:
-                    (selectedEntities.length / allEntities.length) * 100,
-                importanceThreshold:
-                    selectedEntities[selectedEntities.length - 1]?.importance ||
-                    0,
-                connectedComponents: analyzeConnectivity(
-                    selectedEntities,
-                    selectedRelationships,
-                ),
-                layer: "global_importance",
-            },
+            entities: optimizedEntities,
+            relationships: optimizedRelationships,
+            metadata: metadata,
         };
     } catch (error) {
         console.error("Error getting global importance layer:", error);
