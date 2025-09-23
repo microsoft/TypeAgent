@@ -25,6 +25,7 @@ export type PlayerActions =
     | SearchForPlaylistsAction
     | ListPlaylistsAction
     | GetPlaylistAction
+    | GetFromCurrentPlaylistListAction
     | GetAlbumAction
     | GetFavoritesAction
     | FilterTracksAction
@@ -207,6 +208,14 @@ export interface GetPlaylistAction {
     parameters: {
         // name of playlist to get
         name: string;
+    };
+}
+
+export interface GetFromCurrentPlaylistListAction {
+    actionName: "getFromCurrentPlaylistList";
+    parameters: {
+        // 1-base index of playlist in the current playlist list to get
+        playlistNumber: number;
     };
 }
 
