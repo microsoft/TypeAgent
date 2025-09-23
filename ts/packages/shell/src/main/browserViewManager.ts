@@ -22,7 +22,7 @@ export interface BrowserViewContext {
 
 export interface TabCreationOptions {
     url: string;
-    background?: boolean;
+    background?: boolean; // default to false
     parentTabId?: string;
     waitForPageLoad?: boolean;
 }
