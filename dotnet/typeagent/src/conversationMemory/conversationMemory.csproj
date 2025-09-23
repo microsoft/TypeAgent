@@ -9,8 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\common\common.csproj" />
-    <ProjectReference Include="..\src\knowpro\knowpro.csproj" />
+    <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\knowpro\knowpro.csproj" />
   </ItemGroup>
 
 </Project>

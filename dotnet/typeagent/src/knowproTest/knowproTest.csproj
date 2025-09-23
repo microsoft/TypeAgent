@@ -3,17 +3,15 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>annotations</Nullable>
-    <AssemblyName>TypeAgent.KnowPro.Storage</AssemblyName>
-    <RootNamespace>TypeAgent.KnowPro.Storage</RootNamespace>
+    <Nullable>enable</Nullable>
+    <AssemblyName>TypeAgent.KnowProTest</AssemblyName>
+    <RootNamespace>TypeAgent.KnowProTest</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0-rc.1.25451.107" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\conversationMemory\conversationMemory.csproj" />
+    <ProjectReference Include="..\knowproStorage\knowproStorage.csproj" />
     <ProjectReference Include="..\knowpro\knowpro.csproj" />
   </ItemGroup>
 
