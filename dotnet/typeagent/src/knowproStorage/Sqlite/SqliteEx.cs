@@ -14,4 +14,14 @@ internal static class SqliteEx
     {
         cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value );
     }
+
+    public static IList<T> GetList<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
+    {
+        IList<T> list = [];
+        while (reader.Read())
+        {
+            list.Add(cb(reader));
+        }
+        return list;
+    }
 }
