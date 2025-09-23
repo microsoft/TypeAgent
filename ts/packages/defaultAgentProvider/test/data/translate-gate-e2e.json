@@ -348,8 +348,10 @@
               }
             },
             "alternates": {
-              "internetLookups.0": "president of the United States in 1837",
-              "internetLookups.1": "us president in 1837"
+              "internetLookups": [
+                "president of the United States in 1837",
+                "us president in 1837"
+              ]
             }            
           }
         ]
@@ -386,7 +388,7 @@
               }
             },
             "alternates": {
-              "artists.0": "johann sebastian bach"
+              "artists": "johann sebastian bach"
             }
           }
         ]
