@@ -56,6 +56,8 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public Task AppendAsync(IEnumerable<TMessage> messages)
     {
+        ArgumentVerify.ThrowIfNull(messages, nameof(messages));
+
         // TODO: Bulk operations
         foreach (var message in messages)
         {
@@ -66,6 +68,8 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public TMessage Get(int msgId)
     {
+        ArgumentVerify.ThrowIfLessThan(msgId, 0, nameof(msgId));
+
         using var cmd = _db.CreateCommand(@"
 SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id = @msg_id"
@@ -91,6 +95,8 @@ FROM Messages WHERE msg_id = @msg_id"
 
     public Task<IList<TMessage>> GetAsync(IList<int> messageIds)
     {
+        ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
+
         // TODO: Bulk operations
         IList<TMessage> messages = [];
         foreach (int msgId in messageIds)
@@ -115,6 +121,8 @@ FROM Messages ORDER BY msg_id");
 
     public Task<IList<TMessage>> GetSliceAsync(int start, int end)
     {
+        ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
+
         using var cmd = _db.CreateCommand(@"
 SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
@@ -148,11 +156,11 @@ ORDER BY msg_id");
     {
         MessageRow messageRow = new();
 
-        messageRow.ChunksJson = StorageSerializer.SerializeList<string>(message.TextChunks);
+        messageRow.ChunksJson = StorageSerializer.ToJson(message.TextChunks);
         messageRow.ChunkUri = null;
         messageRow.StartTimestamp = message.Timestamp;
-        messageRow.TagsJson = StorageSerializer.SerializeList<string>(message.Tags);
-        messageRow.MetadataJson = StorageSerializer.Serialize((TMeta)message.Metadata);
+        messageRow.TagsJson = StorageSerializer.ToJson(message.Tags);
+        messageRow.MetadataJson = StorageSerializer.ToJson((TMeta)message.Metadata);
         // Also capture any extra data on the message
         messageRow.ExtraJson = (message is IMessageEx messageEx) ?
                                messageEx.SerializeExtraDataToJson() :
@@ -164,10 +172,10 @@ ORDER BY msg_id");
     {
         TMessage message = new TMessage();
 
-        message.TextChunks = StorageSerializer.DeserializeList<string>(messageRow.ChunksJson);
-        message.Tags = StorageSerializer.DeserializeList<string>(messageRow.TagsJson);
+        message.TextChunks = StorageSerializer.FromJsonArray<string>(messageRow.ChunksJson);
+        message.Tags = StorageSerializer.FromJsonArray<string>(messageRow.TagsJson);
         message.Timestamp = messageRow.StartTimestamp;
-        message.Metadata = StorageSerializer.Deserialize<TMeta>(messageRow.MetadataJson);
+        message.Metadata = StorageSerializer.FromJson<TMeta>(messageRow.MetadataJson);
 
         // Set extra fields if any (only works for public settable properties)
         if (messageRow.ExtraJson is not null && message is IMessageEx messageEx)

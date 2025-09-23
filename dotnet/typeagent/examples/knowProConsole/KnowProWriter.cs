@@ -3,7 +3,7 @@
 
 namespace KnowProConsole;
 
-public static class KnowProWriter
+public class KnowProWriter : ConsoleWriter
 {
     public static void Write(ConcreteEntity entity)
     {

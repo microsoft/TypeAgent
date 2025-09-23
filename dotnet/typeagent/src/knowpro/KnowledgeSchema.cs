@@ -11,9 +11,9 @@ namespace TypeAgent.KnowPro;
 [JsonDerivedType(typeof(Topic), "topic")]
 [JsonDerivedType(typeof(Tag), "tag")]
 [JsonDerivedType(typeof(StructuredTag), "structuredTag")]
-public abstract class Knowledge
+public abstract class KnowledgeSchema
 {
-    public Knowledge() { }
+    public KnowledgeSchema() { }
 }
 
 public interface IKnowledgeSource
@@ -22,7 +22,7 @@ public interface IKnowledgeSource
 }
 
 
-public class ConcreteEntity : Knowledge
+public partial class ConcreteEntity : KnowledgeSchema
 {
     public ConcreteEntity() { }
 
@@ -40,7 +40,7 @@ public class ConcreteEntity : Knowledge
     public Facet[] Facets { get; set; }
 }
 
-public class Action : Knowledge
+public class Action : KnowledgeSchema
 {
     [JsonPropertyName("verbs")]
     public string[] Verbs { get; set; }
@@ -66,13 +66,13 @@ public class KnowledgeResponse
     public string[] Topics { get; set; }
 }
 
-public class Topic : Knowledge
+public class Topic : KnowledgeSchema
 {
     [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 
-public class Tag : Knowledge
+public class Tag : KnowledgeSchema
 {
     [JsonPropertyName("text")]
     public string Text { get; set; }
