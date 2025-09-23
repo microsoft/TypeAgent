@@ -3252,17 +3252,13 @@ export async function getKnowledgeGraphStatus(
 }
 
 export async function buildKnowledgeGraph(
-    parameters: {
-        minimalMode?: boolean;
-        urlLimit?: number;
-    },
+    parameters: {},
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
     success: boolean;
     message?: string;
     error?: string;
     stats?: {
-        urlsProcessed: number;
         entitiesFound: number;
         relationshipsCreated: number;
         communitiesDetected: number;
@@ -3283,23 +3279,15 @@ export async function buildKnowledgeGraph(
             "[Knowledge Graph] Starting knowledge graph build with parameters:",
             parameters,
         );
+
         const startTime = Date.now();
-
-        if (parameters.minimalMode) {
-            await websiteCollection.buildGraph({
-                urlLimit: parameters.urlLimit || 500,
-            });
-        } else {
-            await websiteCollection.buildGraph();
-        }
-
+        await websiteCollection.buildGraph();
         const timeElapsed = Date.now() - startTime;
 
         // Get stats directly from websiteCollection using existing status method
         const status = await getKnowledgeGraphStatus({}, context);
 
         const stats = {
-            urlsProcessed: parameters.urlLimit || status.entityCount,
             entitiesFound: status.entityCount,
             relationshipsCreated: status.relationshipCount,
             communitiesDetected: status.communityCount,
@@ -3344,10 +3332,10 @@ export async function rebuildKnowledgeGraph(
         try {
             // Clear existing graph tables if they exist
             if (websiteCollection.relationships) {
-                await websiteCollection.relationships.clear();
+                websiteCollection.relationships.clear();
             }
             if (websiteCollection.communities) {
-                await websiteCollection.communities.clear();
+                websiteCollection.communities.clear();
             }
         } catch (clearError) {
             // Continue even if clearing fails, as the rebuild might overwrite
