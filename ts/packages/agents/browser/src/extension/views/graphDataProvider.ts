@@ -380,32 +380,147 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
         try {
-            console.log(
-                `[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`,
-            );
+            console.time("[Perf] GraphDataProvider - Total importance layer fetch");
+            console.log(`[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`);
 
-            const result = await this.baseService.getGlobalImportanceLayer(
-                maxNodes,
-                true,
-            );
+            console.time("[Perf] GraphDataProvider - BaseService call");
+            const result = await this.baseService.getGlobalImportanceLayer(maxNodes, true);
+            console.timeEnd("[Perf] GraphDataProvider - BaseService call");
 
-            return {
-                entities: this.transformEntitiesToUIFormat(
-                    result.entities || [],
-                ),
-                relationships: this.transformRelationshipsToUIFormat(
-                    result.relationships || [],
-                ),
+            console.log(`[Perf] Raw result structure: ${JSON.stringify({
+                hasEntities: !!result.entities,
+                entityCount: result.entities?.length || 0,
+                hasRelationships: !!result.relationships,
+                relationshipCount: result.relationships?.length || 0,
+                hasMetadata: !!result.metadata,
+                metadataKeys: result.metadata ? Object.keys(result.metadata) : []
+            })}`);
+
+            // Log first 5 raw entities with all their properties
+            console.log(`[DataSample] Raw entities (first 5): ${JSON.stringify(
+                (result.entities || []).slice(0, 5).map((entity: any, index: number) => ({
+                    index: index,
+                    keys: Object.keys(entity),
+                    sampleEntity: entity
+                }))
+            )}`);
+
+            // Log first 5 raw relationships with all their properties
+            console.log(`[DataSample] Raw relationships (first 5): ${JSON.stringify(
+                (result.relationships || []).slice(0, 5).map((rel: any, index: number) => ({
+                    index: index,
+                    keys: Object.keys(rel),
+                    sampleRelationship: rel
+                }))
+            )}`);
+
+            // Log topics and communities if they exist
+            if (result.topics) {
+                console.log(`[DataSample] Raw topics (first 5): ${JSON.stringify(
+                    result.topics.slice(0, 5).map((topic: any, index: number) => ({
+                        index: index,
+                        keys: Object.keys(topic),
+                        sampleTopic: topic
+                    }))
+                )}`);
+            }
+
+            if (result.communities) {
+                console.log(`[DataSample] Raw communities (first 5): ${JSON.stringify(
+                    result.communities.slice(0, 5).map((community: any, index: number) => ({
+                        index: index,
+                        keys: Object.keys(community),
+                        sampleCommunity: community
+                    }))
+                )}`);
+            }
+
+            console.time("[Perf] GraphDataProvider - Entity transformation");
+            const transformedEntities = this.transformEntitiesToUIFormat(result.entities || []);
+            console.timeEnd("[Perf] GraphDataProvider - Entity transformation");
+
+            console.time("[Perf] GraphDataProvider - Relationship transformation");
+            const transformedRelationships = this.transformRelationshipsToUIFormat(result.relationships || []);
+            console.timeEnd("[Perf] GraphDataProvider - Relationship transformation");
+
+            console.log(`[Perf] Transformation results: ${JSON.stringify({
+                originalEntityCount: result.entities?.length || 0,
+                transformedEntityCount: transformedEntities.length,
+                originalRelationshipCount: result.relationships?.length || 0,
+                transformedRelationshipCount: transformedRelationships.length
+            })}`);
+
+            // Log first 5 transformed entities
+            console.log(`[DataSample] Transformed entities (first 5): ${JSON.stringify(
+                transformedEntities.slice(0, 5).map((entity: any, index: number) => ({
+                    index: index,
+                    keys: Object.keys(entity),
+                    sampleEntity: entity
+                }))
+            )}`);
+
+            // Log first 5 transformed relationships
+            console.log(`[DataSample] Transformed relationships (first 5): ${JSON.stringify(
+                transformedRelationships.slice(0, 5).map((rel: any, index: number) => ({
+                    index: index,
+                    keys: Object.keys(rel),
+                    sampleRelationship: rel
+                }))
+            )}`);
+
+            const finalResult = {
+                entities: transformedEntities,
+                relationships: transformedRelationships,
                 metadata: {
                     ...result.metadata,
                     source: "global_importance_layer",
                 },
             };
+
+            // Log final result structure being sent over Chrome IPC
+            console.log(`[DataSample] Final result structure: ${JSON.stringify({
+                entityCount: finalResult.entities.length,
+                relationshipCount: finalResult.relationships.length,
+                metadataKeys: Object.keys(finalResult.metadata),
+                topLevelKeys: Object.keys(finalResult)
+            })}`);
+
+            // Log first 3 final entities (what goes over Chrome IPC)
+            console.log(`[DataSample] OPTIMIZED Final entities for IPC (first 3): ${JSON.stringify(
+                finalResult.entities.slice(0, 3).map((entity: any, index: number) => ({
+                    index: index,
+                    topLevelKeys: Object.keys(entity),
+                    propertiesKeys: Object.keys(entity.properties || {}),
+                    sampleEntity: entity
+                }))
+            )}`);
+
+            // Log first 3 final relationships (what goes over Chrome IPC)
+            console.log(`[DataSample] OPTIMIZED Final relationships for IPC (first 3): ${JSON.stringify(
+                finalResult.relationships.slice(0, 3).map((rel: any, index: number) => ({
+                    index: index,
+                    topLevelKeys: Object.keys(rel),
+                    propertiesKeys: Object.keys(rel.properties || {}),
+                    sampleRelationship: rel
+                }))
+            )}`);
+
+            // Calculate approximate data size and compare
+            const approximateSize = JSON.stringify(finalResult).length;
+            console.log(`[DataSample] OPTIMIZED IPC payload size: ${approximateSize} characters (${(approximateSize / 1024).toFixed(2)} KB)`);
+
+            // Log optimization impact
+            console.log(`[Optimization] Client-side transformation optimizations applied:`);
+            console.log(`[Optimization] - Removed properties duplication`);
+            console.log(`[Optimization] - Eliminated empty arrays (metrics, domains, facets, topics)`);
+            console.log(`[Optimization] - Moved size/color computation to client-side`);
+            console.log(`[Optimization] - Removed transformation metadata`);
+
+            console.timeEnd("[Perf] GraphDataProvider - Total importance layer fetch");
+            return finalResult;
         } catch (error) {
-            console.error(
-                "[GraphDataProvider] Error fetching global importance layer:",
-                error,
-            );
+            console.error("[GraphDataProvider] Error fetching global importance layer:", error);
+            console.timeEnd("[Perf] GraphDataProvider - Total importance layer fetch");
             throw error;
         }
     }
@@ -510,9 +625,15 @@ class GraphDataProviderImpl implements GraphDataProvider {
             hybridEntity.confidence || hybridEntity.metrics?.pagerank || 0.5,
         );
 
-        // Set default visual properties to prevent Cytoscape warnings
+        // Calculate UI properties based on server data (move computation client-side)
+        const importance = hybridEntity.importance || 0;
+        const degree = hybridEntity.degree || 0;
+
+        // Compute size based on importance/degree (remove server size field dependency)
+        const computedSize = Math.max(20, 20 + Math.sqrt(importance * 1000)); // Dynamic sizing
+
+        // Compute colors based on type (remove server color field dependency)
         let color = "#6C7B7F"; // Default gray
-        let size = Math.max(20, 30 + confidence * 20); // Size 20-50 based on confidence
         let borderColor = "#4A5568"; // Default border
 
         // Type-specific styling
@@ -543,25 +664,25 @@ class GraphDataProviderImpl implements GraphDataProvider {
             type: entityType,
             confidence: confidence,
             properties: {
-                // Preserve all original data
-                ...hybridEntity,
+                // OPTIMIZATION: Only include essential data, no duplication
+                // Core server data (essential for graph logic)
+                count: hybridEntity.count,
+                degree: degree,
+                importance: importance,
+                communityId: hybridEntity.communityId,
 
-                // Ensure required UI properties exist
-                metrics: hybridEntity.metrics || {},
-                community: hybridEntity.community,
-                description: hybridEntity.description,
-                domains: hybridEntity.domains || [],
-                facets: hybridEntity.facets || [],
-                topics: hybridEntity.topics || [],
+                // Optional fields (only if non-empty)
+                ...(hybridEntity.community && { community: hybridEntity.community }),
+                ...(hybridEntity.description && { description: hybridEntity.description }),
 
-                // Add visual properties to prevent Cytoscape warnings
+                // Computed UI properties
                 color: color,
-                size: size,
+                size: computedSize,
                 borderColor: borderColor,
 
-                // Add transformation metadata
-                _source: "hybrid_graph",
-                _transformed: Date.now(),
+                // REMOVED: Empty arrays (domains, facets, topics, metrics)
+                // REMOVED: Duplicate data (...hybridEntity spread)
+                // REMOVED: Transformation metadata (_source, _transformed)
             },
         };
     }
@@ -599,6 +720,13 @@ class GraphDataProviderImpl implements GraphDataProvider {
         const relType =
             hybridRel.relationshipType || hybridRel.type || "connected";
 
+        const strength = this.normalizeStrength(
+            hybridRel.confidence ||
+                hybridRel.strength ||
+                hybridRel.weight ||
+                0.5,
+        );
+
         return {
             id:
                 hybridRel.id ||
@@ -607,27 +735,20 @@ class GraphDataProviderImpl implements GraphDataProvider {
             from: fromEntity,
             to: toEntity,
             type: relType,
-            strength: this.normalizeStrength(
-                hybridRel.confidence ||
-                    hybridRel.strength ||
-                    hybridRel.weight ||
-                    0.5,
-            ),
+            strength: strength,
             properties: {
-                // Preserve all original data
-                ...hybridRel,
-
-                // Ensure required UI properties
-                weight:
-                    hybridRel.confidence ||
-                    hybridRel.weight ||
-                    hybridRel.strength ||
-                    0.5,
+                // OPTIMIZATION: Only essential relationship data, no duplication
+                // Core server data (minimal for graph logic)
                 confidence: hybridRel.confidence || 0.5,
+                count: hybridRel.count,
 
-                // Add transformation metadata
-                _source: "hybrid_graph",
-                _transformed: Date.now(),
+                // Optional fields (only if present and needed)
+                ...(hybridRel.sources && hybridRel.sources.length > 0 && { sources: hybridRel.sources }),
+
+                // REMOVED: Full spread (...hybridRel) - eliminates massive duplication
+                // REMOVED: Redundant weight field (use strength instead)
+                // REMOVED: Transformation metadata (_source, _transformed)
+                // REMOVED: Database-specific fields (rowId, sourceRef, updated)
             },
         };
     }

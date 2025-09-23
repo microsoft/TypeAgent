@@ -3375,9 +3375,11 @@ export async function getAllRelationships(
     error?: string;
 }> {
     try {
+        console.time("[ServerPerf] getAllRelationships");
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
+            console.timeEnd("[ServerPerf] getAllRelationships");
             return {
                 relationships: [],
                 error: "Website collection not available",
@@ -3387,11 +3389,45 @@ export async function getAllRelationships(
         const relationships =
             websiteCollection.relationships?.getAllRelationships() || [];
 
+        // Log sample data for payload analysis
+        const originalPayloadSize = JSON.stringify(relationships).length;
+        console.log(`[DataSample] getAllRelationships raw data (first 3): ${JSON.stringify(
+            relationships.slice(0, 3).map((rel: any, index: number) => ({
+                index: index,
+                keys: Object.keys(rel),
+                sampleRelationship: rel
+            }))
+        )}`);
+        console.log(`[ServerPerf] getAllRelationships original payload: ${originalPayloadSize} characters (${(originalPayloadSize / 1024).toFixed(2)} KB)`);
+
+        // Apply same optimization as getGlobalImportanceLayer for consistency
+        const optimizedRelationships = relationships.map((rel: any) => ({
+            rowId: rel.rowId,
+            fromEntity: rel.fromEntity,
+            toEntity: rel.toEntity,
+            relationshipType: rel.relationshipType,
+            confidence: rel.confidence,
+            // Limit sources to first 3 entries max (was 70+ repeated URLs)
+            sources: rel.sources ? (typeof rel.sources === 'string' ?
+                JSON.parse(rel.sources).slice(0, 3) :
+                Array.isArray(rel.sources) ? rel.sources.slice(0, 3) : rel.sources
+            ) : undefined,
+            count: rel.count
+            // Removed: sourceRef (complex JSON metadata), updated (not needed for visualization)
+        }));
+
+        const optimizedPayloadSize = JSON.stringify(optimizedRelationships).length;
+        const reductionPercentage = originalPayloadSize > 0 ? ((originalPayloadSize - optimizedPayloadSize) / originalPayloadSize * 100) : 0;
+        console.log(`[ServerPerf] getAllRelationships optimized payload: ${optimizedPayloadSize} characters (${(optimizedPayloadSize / 1024).toFixed(2)} KB)`);
+        console.log(`[ServerPerf] getAllRelationships payload reduction: ${reductionPercentage.toFixed(1)}% (${((originalPayloadSize - optimizedPayloadSize) / 1024).toFixed(2)} KB saved)`);
+
+        console.timeEnd("[ServerPerf] getAllRelationships");
         return {
-            relationships: relationships,
+            relationships: optimizedRelationships,
         };
     } catch (error) {
         console.error("Error getting all relationships:", error);
+        console.timeEnd("[ServerPerf] getAllRelationships");
         return {
             relationships: [],
             error: error instanceof Error ? error.message : "Unknown error",
@@ -3407,9 +3443,11 @@ export async function getAllCommunities(
     error?: string;
 }> {
     try {
+        console.time("[ServerPerf] getAllCommunities");
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
+            console.timeEnd("[ServerPerf] getAllCommunities");
             return {
                 communities: [],
                 error: "Website collection not available",
@@ -3419,11 +3457,24 @@ export async function getAllCommunities(
         const communities =
             websiteCollection.communities?.getAllCommunities() || [];
 
+        // Log sample data for payload analysis
+        const originalPayloadSize = JSON.stringify(communities).length;
+        console.log(`[DataSample] getAllCommunities raw data (first 3): ${JSON.stringify(
+            communities.slice(0, 3).map((community: any, index: number) => ({
+                index: index,
+                keys: Object.keys(community),
+                sampleCommunity: community
+            }))
+        )}`);
+        console.log(`[ServerPerf] getAllCommunities payload: ${originalPayloadSize} characters (${(originalPayloadSize / 1024).toFixed(2)} KB)`);
+
+        console.timeEnd("[ServerPerf] getAllCommunities");
         return {
             communities: communities,
         };
     } catch (error) {
         console.error("Error getting all communities:", error);
+        console.timeEnd("[ServerPerf] getAllCommunities");
         return {
             communities: [],
             error: error instanceof Error ? error.message : "Unknown error",
@@ -3515,9 +3566,11 @@ export async function getAllEntitiesWithMetrics(
     error?: string;
 }> {
     try {
+        console.time("[ServerPerf] getAllEntitiesWithMetrics");
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
+            console.timeEnd("[ServerPerf] getAllEntitiesWithMetrics");
             return {
                 entities: [],
                 error: "Website collection not available",
@@ -3533,8 +3586,41 @@ export async function getAllEntitiesWithMetrics(
             debug(
                 `[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`,
             );
+
+            // Log sample data for payload analysis
+            const originalPayloadSize = JSON.stringify(cache.entityMetrics).length;
+            console.log(`[DataSample] getAllEntitiesWithMetrics cached data (first 3): ${JSON.stringify(
+                cache.entityMetrics.slice(0, 3).map((entity: any, index: number) => ({
+                    index: index,
+                    keys: Object.keys(entity),
+                    sampleEntity: entity
+                }))
+            )}`);
+            console.log(`[ServerPerf] getAllEntitiesWithMetrics cached payload: ${originalPayloadSize} characters (${(originalPayloadSize / 1024).toFixed(2)} KB)`);
+
+            // Apply entity optimization similar to getGlobalImportanceLayer
+            const optimizedEntities = cache.entityMetrics.map((entity: any) => ({
+                id: entity.id || entity.name,
+                name: entity.name,
+                type: entity.type || "entity",
+                confidence: entity.confidence || 0.5,
+                // Essential fields for visualization
+                count: entity.count,
+                degree: entity.degree,
+                importance: entity.importance,
+                communityId: entity.communityId,
+                size: entity.size
+                // Removed: properties duplication, empty arrays, transformation metadata
+            }));
+
+            const optimizedPayloadSize = JSON.stringify(optimizedEntities).length;
+            const reductionPercentage = originalPayloadSize > 0 ? ((originalPayloadSize - optimizedPayloadSize) / originalPayloadSize * 100) : 0;
+            console.log(`[ServerPerf] getAllEntitiesWithMetrics optimized payload: ${optimizedPayloadSize} characters (${(optimizedPayloadSize / 1024).toFixed(2)} KB)`);
+            console.log(`[ServerPerf] getAllEntitiesWithMetrics payload reduction: ${reductionPercentage.toFixed(1)}% (${((originalPayloadSize - optimizedPayloadSize) / 1024).toFixed(2)} KB saved)`);
+
+            console.timeEnd("[ServerPerf] getAllEntitiesWithMetrics");
             return {
-                entities: cache.entityMetrics,
+                entities: optimizedEntities,
             };
         }
 
@@ -3557,11 +3643,41 @@ export async function getAllEntitiesWithMetrics(
             communities,
         );
 
+        // Log and optimize live computation results too
+        const originalPayloadSize = JSON.stringify(entityMetrics).length;
+        console.log(`[DataSample] getAllEntitiesWithMetrics live computed data (first 3): ${JSON.stringify(
+            entityMetrics.slice(0, 3).map((entity: any, index: number) => ({
+                index: index,
+                keys: Object.keys(entity),
+                sampleEntity: entity
+            }))
+        )}`);
+        console.log(`[ServerPerf] getAllEntitiesWithMetrics live computed payload: ${originalPayloadSize} characters (${(originalPayloadSize / 1024).toFixed(2)} KB)`);
+
+        const optimizedEntities = entityMetrics.map((entity: any) => ({
+            id: entity.id || entity.name,
+            name: entity.name,
+            type: entity.type || "entity",
+            confidence: entity.confidence || 0.5,
+            count: entity.count,
+            degree: entity.degree,
+            importance: entity.importance,
+            communityId: entity.communityId,
+            size: entity.size
+        }));
+
+        const optimizedPayloadSize = JSON.stringify(optimizedEntities).length;
+        const reductionPercentage = originalPayloadSize > 0 ? ((originalPayloadSize - optimizedPayloadSize) / originalPayloadSize * 100) : 0;
+        console.log(`[ServerPerf] getAllEntitiesWithMetrics optimized live payload: ${optimizedPayloadSize} characters (${(optimizedPayloadSize / 1024).toFixed(2)} KB)`);
+        console.log(`[ServerPerf] getAllEntitiesWithMetrics live payload reduction: ${reductionPercentage.toFixed(1)}% (${((originalPayloadSize - optimizedPayloadSize) / 1024).toFixed(2)} KB saved)`);
+
+        console.timeEnd("[ServerPerf] getAllEntitiesWithMetrics");
         return {
-            entities: entityMetrics,
+            entities: optimizedEntities,
         };
     } catch (error) {
         console.error("Error getting all entities with metrics:", error);
+        console.timeEnd("[ServerPerf] getAllEntitiesWithMetrics");
         return {
             entities: [],
             error: error instanceof Error ? error.message : "Unknown error",
@@ -3585,9 +3701,11 @@ export async function getEntityNeighborhood(
     error?: string;
 }> {
     try {
+        console.time("[ServerPerf] getEntityNeighborhood");
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
+            console.timeEnd("[ServerPerf] getEntityNeighborhood");
             return {
                 neighbors: [],
                 relationships: [],
@@ -3596,6 +3714,7 @@ export async function getEntityNeighborhood(
         }
 
         const { entityId, depth = 2, maxNodes = 100 } = parameters;
+        console.log(`[ServerPerf] getEntityNeighborhood called for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`);
 
         // Ensure cache is populated
         await ensureGraphCache(websiteCollection);
@@ -3696,10 +3815,70 @@ export async function getEntityNeighborhood(
             );
         }
 
-        return {
+        // Log and optimize data before returning
+        const originalResult = {
             centerEntity: neighborhoodResult.centerEntity,
             neighbors: neighborhoodResult.neighbors,
             relationships: neighborhoodResult.relationships,
+            searchData: {
+                relatedEntities: searchData?.relatedEntities || [],
+                topTopics: searchData?.topTopics || [],
+                websites: searchData?.websites || [],
+            },
+        };
+
+        const originalPayloadSize = JSON.stringify(originalResult).length;
+        console.log(`[DataSample] getEntityNeighborhood raw neighborhood data: ${JSON.stringify({
+            centerEntity: neighborhoodResult.centerEntity ? {
+                keys: Object.keys(neighborhoodResult.centerEntity),
+                sample: neighborhoodResult.centerEntity
+            } : null,
+            neighborsCount: neighborhoodResult.neighbors.length,
+            firstNeighbors: neighborhoodResult.neighbors.slice(0, 3).map((neighbor: any, index: number) => ({
+                index: index,
+                keys: Object.keys(neighbor),
+                sampleNeighbor: neighbor
+            })),
+            relationshipsCount: neighborhoodResult.relationships.length,
+            firstRelationships: neighborhoodResult.relationships.slice(0, 3).map((rel: any, index: number) => ({
+                index: index,
+                keys: Object.keys(rel),
+                sampleRelationship: rel
+            }))
+        })}`);
+        console.log(`[ServerPerf] getEntityNeighborhood original payload: ${originalPayloadSize} characters (${(originalPayloadSize / 1024).toFixed(2)} KB)`);
+
+        // Optimize relationships (same as other functions)
+        const optimizedRelationships = neighborhoodResult.relationships.map((rel: any) => ({
+            rowId: rel.rowId,
+            fromEntity: rel.fromEntity,
+            toEntity: rel.toEntity,
+            relationshipType: rel.relationshipType,
+            confidence: rel.confidence,
+            sources: rel.sources ? (typeof rel.sources === 'string' ?
+                JSON.parse(rel.sources).slice(0, 3) :
+                Array.isArray(rel.sources) ? rel.sources.slice(0, 3) : rel.sources
+            ) : undefined,
+            count: rel.count
+        }));
+
+        // Optimize entities (centerEntity and neighbors)
+        const optimizeEntity = (entity: any) => entity ? ({
+            id: entity.id || entity.name,
+            name: entity.name,
+            type: entity.type || "entity",
+            confidence: entity.confidence || 0.5,
+            count: entity.count,
+            degree: entity.degree,
+            importance: entity.importance,
+            communityId: entity.communityId,
+            size: entity.size
+        }) : null;
+
+        const optimizedResult = {
+            centerEntity: optimizeEntity(neighborhoodResult.centerEntity),
+            neighbors: neighborhoodResult.neighbors.map(optimizeEntity),
+            relationships: optimizedRelationships,
             searchData: {
                 relatedEntities: searchData?.relatedEntities || [],
                 topTopics: searchData?.topTopics || [],
@@ -3718,8 +3897,17 @@ export async function getEntityNeighborhood(
                 },
             },
         };
+
+        const optimizedPayloadSize = JSON.stringify(optimizedResult).length;
+        const reductionPercentage = originalPayloadSize > 0 ? ((originalPayloadSize - optimizedPayloadSize) / originalPayloadSize * 100) : 0;
+        console.log(`[ServerPerf] getEntityNeighborhood optimized payload: ${optimizedPayloadSize} characters (${(optimizedPayloadSize / 1024).toFixed(2)} KB)`);
+        console.log(`[ServerPerf] getEntityNeighborhood payload reduction: ${reductionPercentage.toFixed(1)}% (${((originalPayloadSize - optimizedPayloadSize) / 1024).toFixed(2)} KB saved)`);
+
+        console.timeEnd("[ServerPerf] getEntityNeighborhood");
+        return optimizedResult;
     } catch (error) {
         console.error("Error getting entity neighborhood:", error);
+        console.timeEnd("[ServerPerf] getEntityNeighborhood");
         return {
             neighbors: [],
             relationships: [],
@@ -3995,9 +4183,19 @@ export async function getGlobalImportanceLayer(
     metadata: any;
 }> {
     try {
+        console.time("[ServerPerf] Total getGlobalImportanceLayer");
+        console.time("[ServerPerf] Initial setup and validation");
         const websiteCollection = context.agentContext.websiteCollection;
+        console.log(`[ServerPerf] Function called with parameters: ${JSON.stringify({
+            maxNodes: parameters.maxNodes || 500,
+            minImportanceThreshold: parameters.minImportanceThreshold,
+            includeConnectivity: parameters.includeConnectivity !== false
+        })}`);
 
         if (!websiteCollection) {
+            console.log(`[ServerPerf] No website collection available`);
+            console.timeEnd("[ServerPerf] Initial setup and validation");
+            console.timeEnd("[ServerPerf] Total getGlobalImportanceLayer");
             return {
                 entities: [],
                 relationships: [],
@@ -4010,13 +4208,24 @@ export async function getGlobalImportanceLayer(
                 },
             };
         }
+        console.timeEnd("[ServerPerf] Initial setup and validation");
 
         // Ensure cache is populated
+        console.time("[ServerPerf] Cache population");
         await ensureGraphCache(websiteCollection);
+        console.timeEnd("[ServerPerf] Cache population");
 
         // Get cached data
+        console.time("[ServerPerf] Cache retrieval");
         const cache = getGraphCache(websiteCollection);
+        console.timeEnd("[ServerPerf] Cache retrieval");
+
         if (!cache || !cache.isValid) {
+            console.log(`[ServerPerf] Cache validation failed: ${JSON.stringify({
+                hasCache: !!cache,
+                isValid: cache?.isValid
+            })}`);
+            console.timeEnd("[ServerPerf] Total getGlobalImportanceLayer");
             return {
                 entities: [],
                 relationships: [],
@@ -4028,11 +4237,21 @@ export async function getGlobalImportanceLayer(
         }
 
         // Get all entities and calculate metrics
+        console.time("[ServerPerf] Data extraction from cache");
         const allEntities = cache.entityMetrics || [];
         const allRelationships = cache.relationships || [];
         const communities = cache.communities || [];
+        console.timeEnd("[ServerPerf] Data extraction from cache");
+        console.log(`[ServerPerf] Cache data structure: ${JSON.stringify({
+            totalEntities: allEntities.length,
+            totalRelationships: allRelationships.length,
+            totalCommunities: communities.length,
+            cacheKeys: Object.keys(cache)
+        })}`);
 
         if (allEntities.length === 0) {
+            console.log(`[ServerPerf] No entities found in cache`);
+            console.timeEnd("[ServerPerf] Total getGlobalImportanceLayer");
             return {
                 entities: [],
                 relationships: [],
@@ -4046,59 +4265,140 @@ export async function getGlobalImportanceLayer(
             };
         }
 
-        const entitiesWithMetrics = calculateEntityMetrics(
-            allEntities,
-            allRelationships,
-            communities,
-        );
+        console.time("[ServerPerf] Calculate entity metrics");
+        const entitiesWithMetrics = calculateEntityMetrics(allEntities, allRelationships, communities);
+        console.timeEnd("[ServerPerf] Calculate entity metrics");
+        console.log(`[ServerPerf] Entity metrics calculation: ${JSON.stringify({
+            inputEntities: allEntities.length,
+            outputEntities: entitiesWithMetrics.length,
+            sampleImportance: entitiesWithMetrics.slice(0, 3).map(e => ({ name: e.name, importance: e.importance }))
+        })}`);
 
         // Sort by importance and select top nodes
+        console.time("[ServerPerf] Sort and select entities");
         const maxNodes = parameters.maxNodes || 500;
         const sortedEntities = entitiesWithMetrics.sort(
             (a, b) => (b.importance || 0) - (a.importance || 0),
         );
 
         let selectedEntities = sortedEntities.slice(0, maxNodes);
+        console.timeEnd("[ServerPerf] Sort and select entities");
+        console.log(`[ServerPerf] Entity selection: ${JSON.stringify({
+            maxNodes: maxNodes,
+            totalEntities: sortedEntities.length,
+            selectedCount: selectedEntities.length,
+            topImportance: selectedEntities[0]?.importance,
+            bottomImportance: selectedEntities[selectedEntities.length - 1]?.importance
+        })}`);
 
         // Ensure connectivity by adding bridge nodes if needed
         if (parameters.includeConnectivity !== false) {
+            console.time("[ServerPerf] Ensure global connectivity");
+            const beforeConnectivity = selectedEntities.length;
             selectedEntities = ensureGlobalConnectivity(
                 selectedEntities,
                 allRelationships,
                 maxNodes,
             );
+            console.timeEnd("[ServerPerf] Ensure global connectivity");
+            console.log(`[ServerPerf] Connectivity enhancement: ${JSON.stringify({
+                entitiesBeforeConnectivity: beforeConnectivity,
+                entitiesAfterConnectivity: selectedEntities.length,
+                bridgeNodesAdded: selectedEntities.length - beforeConnectivity
+            })}`);
+        } else {
+            console.log(`[ServerPerf] Connectivity checking skipped`);
         }
 
         // Get all relationships between selected entities
-        const selectedEntityNames = new Set(
-            selectedEntities.map((e) => e.name),
+        console.time("[ServerPerf] Filter relationships");
+        const selectedEntityNames = new Set(selectedEntities.map(e => e.name));
+        const selectedRelationships = allRelationships.filter((rel: any) =>
+            selectedEntityNames.has(rel.fromEntity) &&
+            selectedEntityNames.has(rel.toEntity)
         );
-        const selectedRelationships = allRelationships.filter(
-            (rel: any) =>
-                selectedEntityNames.has(rel.fromEntity) &&
-                selectedEntityNames.has(rel.toEntity),
-        );
+        console.timeEnd("[ServerPerf] Filter relationships");
+        console.log(`[ServerPerf] Relationship filtering: ${JSON.stringify({
+            totalRelationships: allRelationships.length,
+            selectedRelationships: selectedRelationships.length,
+            filterRatio: (selectedRelationships.length / allRelationships.length * 100).toFixed(2) + '%'
+        })}`);
+
+        console.time("[ServerPerf] Generate metadata");
+        const metadata = {
+            totalEntitiesInSystem: allEntities.length,
+            selectedEntityCount: selectedEntities.length,
+            coveragePercentage: (selectedEntities.length / allEntities.length) * 100,
+            importanceThreshold: selectedEntities[selectedEntities.length - 1]?.importance || 0,
+            connectedComponents: analyzeConnectivity(selectedEntities, selectedRelationships),
+            layer: "global_importance"
+        };
+        console.timeEnd("[ServerPerf] Generate metadata");
+
+        console.log(`[ServerPerf] Final result summary: ${JSON.stringify({
+            entities: selectedEntities.length,
+            relationships: selectedRelationships.length,
+            coveragePercentage: metadata.coveragePercentage.toFixed(2) + '%',
+            importanceThreshold: metadata.importanceThreshold,
+            connectedComponents: metadata.connectedComponents
+        })}`);
+
+        // Optimize data for Chrome IPC to reduce payload size (from 15MB to ~2-3MB)
+        console.time("[ServerPerf] Data optimization for IPC");
+
+        // Log original payload size
+        const originalPayloadSize = JSON.stringify({ entities: selectedEntities, relationships: selectedRelationships }).length;
+        console.log(`[ServerPerf] Original payload size: ${originalPayloadSize} characters (${(originalPayloadSize / 1024).toFixed(2)} KB)`);
+
+        // 1. OPTIMIZE RELATIONSHIPS: Remove massive sources field bloat
+        const optimizedRelationships = selectedRelationships.map((rel: any) => ({
+            rowId: rel.rowId,
+            fromEntity: rel.fromEntity,
+            toEntity: rel.toEntity,
+            relationshipType: rel.relationshipType,
+            confidence: rel.confidence,
+            // Limit sources to first 3 entries max (was 70+ repeated URLs)
+            sources: rel.sources ? (typeof rel.sources === 'string' ?
+                JSON.parse(rel.sources).slice(0, 3) :
+                Array.isArray(rel.sources) ? rel.sources.slice(0, 3) : rel.sources
+            ) : undefined,
+            count: rel.count
+            // Removed: sourceRef (complex JSON metadata), updated (not needed for visualization)
+        }));
+
+        // 2. OPTIMIZE ENTITIES: Remove duplication and unused fields
+        const optimizedEntities = selectedEntities.map((entity: any) => ({
+            id: entity.id || entity.name,
+            name: entity.name,
+            type: entity.type || "entity",
+            confidence: entity.confidence || 0.5,
+            // Essential fields for visualization
+            count: entity.count,
+            degree: entity.degree,
+            importance: entity.importance,
+            communityId: entity.communityId,
+            size: entity.size
+            // Removed: All the properties duplication, empty arrays (domains, facets, topics),
+            // transformation metadata (_source, _transformed), unused UI fields
+        }));
+
+        const optimizedPayloadSize = JSON.stringify({ entities: optimizedEntities, relationships: optimizedRelationships }).length;
+        const reductionPercentage = ((originalPayloadSize - optimizedPayloadSize) / originalPayloadSize * 100);
+
+        console.log(`[ServerPerf] Optimized payload size: ${optimizedPayloadSize} characters (${(optimizedPayloadSize / 1024).toFixed(2)} KB)`);
+        console.log(`[ServerPerf] Payload reduction: ${reductionPercentage.toFixed(1)}% (${((originalPayloadSize - optimizedPayloadSize) / 1024).toFixed(2)} KB saved)`);
+        console.timeEnd("[ServerPerf] Data optimization for IPC");
+
+        console.timeEnd("[ServerPerf] Total getGlobalImportanceLayer");
 
         return {
-            entities: selectedEntities,
-            relationships: selectedRelationships,
-            metadata: {
-                totalEntitiesInSystem: allEntities.length,
-                selectedEntityCount: selectedEntities.length,
-                coveragePercentage:
-                    (selectedEntities.length / allEntities.length) * 100,
-                importanceThreshold:
-                    selectedEntities[selectedEntities.length - 1]?.importance ||
-                    0,
-                connectedComponents: analyzeConnectivity(
-                    selectedEntities,
-                    selectedRelationships,
-                ),
-                layer: "global_importance",
-            },
+            entities: optimizedEntities,
+            relationships: optimizedRelationships,
+            metadata: metadata
         };
     } catch (error) {
         console.error("Error getting global importance layer:", error);
+        console.timeEnd("[ServerPerf] Total getGlobalImportanceLayer");
         return {
             entities: [],
             relationships: [],
