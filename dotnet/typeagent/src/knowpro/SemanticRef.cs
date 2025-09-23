@@ -34,7 +34,9 @@ public class SemanticRef
     [JsonInclude]
     internal JsonElement? KnowledgeElement
     {
-        get => default;
+        get => Knowledge is not null ?
+               JsonSerializer.SerializeToElement(Knowledge) :
+               default;
         set
         {
             if(value is not null)
