@@ -1068,8 +1068,8 @@ export async function handleMessage(
                 const result = await sendActionToAgent({
                     actionName: "getGlobalImportanceLayer",
                     parameters: {
-                        maxNodes:message.maxNodes,
-            includeConnectivity:message.includeConnectivity,
+                        maxNodes: message.maxNodes,
+                        includeConnectivity: message.includeConnectivity,
                     },
                 });
                 return result;
@@ -1119,7 +1119,7 @@ export async function handleMessage(
                             message.exploreFromAllViewportNodes,
                         minDepthFromViewport: message.minDepthFromViewport,
                     },
-                });                                                         
+                });
                 return result;
             } catch (error) {
                 console.error(

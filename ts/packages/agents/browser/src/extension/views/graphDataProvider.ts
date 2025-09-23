@@ -78,7 +78,11 @@ interface GraphDataProvider {
 
     // Hierarchical partitioned loading methods
     getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
-    getViewportBasedNeighborhood(centerEntity: string, viewportNodeNames: string[], maxNodes?: number): Promise<any>;
+    getViewportBasedNeighborhood(
+        centerEntity: string,
+        viewportNodeNames: string[],
+        maxNodes?: number,
+    ): Promise<any>;
     getImportanceStatistics(): Promise<any>;
 
     // Validation and health checks
@@ -376,29 +380,51 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
         try {
-            console.log(`[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`);
+            console.log(
+                `[GraphDataProvider] Fetching global importance layer with ${maxNodes} nodes`,
+            );
 
-            const result = await this.baseService.getGlobalImportanceLayer(maxNodes, true);
+            const result = await this.baseService.getGlobalImportanceLayer(
+                maxNodes,
+                true,
+            );
 
             return {
-                entities: this.transformEntitiesToUIFormat(result.entities || []),
-                relationships: this.transformRelationshipsToUIFormat(result.relationships || []),
+                entities: this.transformEntitiesToUIFormat(
+                    result.entities || [],
+                ),
+                relationships: this.transformRelationshipsToUIFormat(
+                    result.relationships || [],
+                ),
                 metadata: {
                     ...result.metadata,
-                    source: "global_importance_layer"
-                }
+                    source: "global_importance_layer",
+                },
             };
         } catch (error) {
-            console.error("[GraphDataProvider] Error fetching global importance layer:", error);
+            console.error(
+                "[GraphDataProvider] Error fetching global importance layer:",
+                error,
+            );
             throw error;
         }
     }
 
-    async getViewportBasedNeighborhood(centerEntity: string, viewportNodeNames: string[], maxNodes: number = 5000): Promise<any> {
+    async getViewportBasedNeighborhood(
+        centerEntity: string,
+        viewportNodeNames: string[],
+        maxNodes: number = 5000,
+    ): Promise<any> {
         try {
-            console.log(`[GraphDataProvider] Fetching viewport-based neighborhood for ${centerEntity} anchored by ${viewportNodeNames.length} viewport nodes`);
-            console.log(`[GraphDataProvider] Viewport anchor nodes (first 10): ${JSON.stringify(viewportNodeNames.slice(0, 10))}`);
-            console.log(`[GraphDataProvider] All viewport anchor nodes: ${JSON.stringify(viewportNodeNames)}`);
+            console.log(
+                `[GraphDataProvider] Fetching viewport-based neighborhood for ${centerEntity} anchored by ${viewportNodeNames.length} viewport nodes`,
+            );
+            console.log(
+                `[GraphDataProvider] Viewport anchor nodes (first 10): ${JSON.stringify(viewportNodeNames.slice(0, 10))}`,
+            );
+            console.log(
+                `[GraphDataProvider] All viewport anchor nodes: ${JSON.stringify(viewportNodeNames)}`,
+            );
 
             const result = await this.baseService.getViewportBasedNeighborhood(
                 centerEntity,
@@ -408,31 +434,46 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     importanceWeighting: true,
                     includeGlobalContext: true,
                     exploreFromAllViewportNodes: true,
-                    minDepthFromViewport: 1
-                }
+                    minDepthFromViewport: 1,
+                },
             );
 
             console.log(`[GraphDataProvider] Raw service result:`, result);
             console.log(`[GraphDataProvider] Result type:`, typeof result);
-            console.log(`[GraphDataProvider] Result entities length:`, result?.entities?.length || 'N/A');
-            console.log(`[GraphDataProvider] Result relationships length:`, result?.relationships?.length || 'N/A');
+            console.log(
+                `[GraphDataProvider] Result entities length:`,
+                result?.entities?.length || "N/A",
+            );
+            console.log(
+                `[GraphDataProvider] Result relationships length:`,
+                result?.relationships?.length || "N/A",
+            );
 
             if (!result) {
-                console.warn("[GraphDataProvider] Received null result from getViewportBasedNeighborhood service");
+                console.warn(
+                    "[GraphDataProvider] Received null result from getViewportBasedNeighborhood service",
+                );
                 throw new Error("Service returned null result");
             }
 
             return {
-                entities: this.transformEntitiesToUIFormat(result.entities || []),
-                relationships: this.transformRelationshipsToUIFormat(result.relationships || []),
+                entities: this.transformEntitiesToUIFormat(
+                    result.entities || [],
+                ),
+                relationships: this.transformRelationshipsToUIFormat(
+                    result.relationships || [],
+                ),
                 metadata: {
                     ...result.metadata,
                     source: "viewport_based_neighborhood",
-                    viewportAnchorCount: viewportNodeNames.length
-                }
+                    viewportAnchorCount: viewportNodeNames.length,
+                },
             };
         } catch (error) {
-            console.error("[GraphDataProvider] Error fetching viewport-based neighborhood:", error);
+            console.error(
+                "[GraphDataProvider] Error fetching viewport-based neighborhood:",
+                error,
+            );
             throw error;
         }
     }
@@ -445,7 +486,10 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
             return result;
         } catch (error) {
-            console.error("[GraphDataProvider] Error fetching importance statistics:", error);
+            console.error(
+                "[GraphDataProvider] Error fetching importance statistics:",
+                error,
+            );
             throw error;
         }
     }

@@ -445,11 +445,14 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getGlobalImportanceLayer(maxNodes: number = 5000, includeConnectivity: boolean = true): Promise<any> {
+    async getGlobalImportanceLayer(
+        maxNodes: number = 5000,
+        includeConnectivity: boolean = true,
+    ): Promise<any> {
         return this.sendMessage({
             type: "getGlobalImportanceLayer",
             maxNodes,
-            includeConnectivity
+            includeConnectivity,
         });
     }
 
@@ -462,13 +465,13 @@ export abstract class ExtensionServiceBase {
             includeGlobalContext?: boolean;
             exploreFromAllViewportNodes?: boolean;
             minDepthFromViewport?: number;
-        } = {}
+        } = {},
     ): Promise<any> {
         const {
             importanceWeighting = true,
             includeGlobalContext = true,
             exploreFromAllViewportNodes = true,
-            minDepthFromViewport = 1
+            minDepthFromViewport = 1,
         } = options;
 
         return this.sendMessage({
@@ -479,14 +482,13 @@ export abstract class ExtensionServiceBase {
             importanceWeighting,
             includeGlobalContext,
             exploreFromAllViewportNodes,
-            minDepthFromViewport
-
+            minDepthFromViewport,
         });
     }
 
     async getImportanceStatistics(): Promise<any> {
         return this.sendMessage({
-            type: "getImportanceStatistics"
+            type: "getImportanceStatistics",
         });
     }
 
