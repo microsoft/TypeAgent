@@ -10,6 +10,9 @@
     "playFromCurrentTrackList": {
       "trackNumber": "ordinal"
     },
+    "getFromCurrentPlaylistList": {
+      "playlistNumber": "ordinal"
+    },
     "playAlbum": {
       "albumName": "checked_wildcard",
       "artists.*": "checked_wildcard",
