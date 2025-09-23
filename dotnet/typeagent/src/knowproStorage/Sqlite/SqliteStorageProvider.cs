@@ -52,7 +52,7 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         if (fromDispose)
         {
             _db?.Dispose();
-            _db = null;
+            Clear();
         }
     }
 
@@ -63,6 +63,13 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         // Improve write performance for bulk operations
         this._db.Execute("PRAGMA synchronous = NORMAL"); // Faster than FULL, still safe
         this._db.Execute("PRAGMA journal_mode = WAL");  // Write-Ahead Logging for better concurrency
+    }
+
+    void Clear()
+    {
+        _db = null;
+        _messages = null;
+        _semanticRefs = null;
     }
 
 }

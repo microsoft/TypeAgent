@@ -20,4 +20,4 @@ public static class PropertyToSemanticRefIndexEx
     {
         return index.AddPropertyAync(propertyName, value, ScoredSemanticRefOrdinal.New(semanticRefOrdinal));
     }
-}
+}   

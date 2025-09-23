@@ -99,7 +99,7 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
 
     public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        var cmd = _db.CreateCommand(@"
+        using var cmd = _db.CreateCommand(@"
 SELECT semref_id, range_json, knowledge_type, knowledge_json
 FROM SemanticRefs WHERE semref_id = ?
 ");

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Runtime.CompilerServices;
+
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqliteDatabase : IDisposable
@@ -18,7 +20,6 @@ public class SqliteDatabase : IDisposable
         _connection = new SqliteConnection(ConnectionString(filePath));
         _connection.Open();
     }
-
 
     public SqliteCommand CreateCommand(string sql)
     {
@@ -61,9 +62,11 @@ public class SqliteDatabase : IDisposable
 
     protected virtual void Dispose(bool fromDispose)
     {
-        if (fromDispose)
+        if (fromDispose && _connection is not null)
         {
-            _connection?.Close();
+            _connection.Dispose();
+            // Without an explicit call to ClearPool, the connection is held onto and the file remains open
+            SqliteConnection.ClearPool(_connection);
             _connection = null;
         }
     }
