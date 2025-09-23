@@ -348,7 +348,8 @@
               }
             },
             "alternates": {
-              "internetLookups.0": "president of the United States in 1837"
+              "internetLookups.0": "president of the United States in 1837",
+              "internetLookups.1": "us president in 1837"
             }            
           }
         ]
