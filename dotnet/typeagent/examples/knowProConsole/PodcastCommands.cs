@@ -63,18 +63,32 @@ public class PodcastCommands : ICommandModule
         using var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, "podcast", true);
         var podcast = new Podcast(provider);
 
-        int count = 0;
+        Console.WriteLine($"{data.Messages.Length} messages");
         foreach (var message in data.Messages)
         {
             await podcast.Messages.AppendAsync(message).ConfigureAwait(false);
-            count = await podcast.Messages.GetCountAsync().ConfigureAwait(false);
-            Console.WriteLine(count);
         }
+        int count = await podcast.Messages.GetCountAsync().ConfigureAwait(false);
+        Console.WriteLine(count);
         // Read all
         for (int i = 0; i < count; ++i)
         {
             var message = await podcast.Messages.GetAsync(i);
             var json = Json.Stringify(message);
+            Console.WriteLine(json);
+        }
+
+        Console.WriteLine($"{data.SemanticRefs.Length} semantic refs");
+        foreach (var sr in data.SemanticRefs)
+        {
+            await podcast.SemanticRefs.AppendAsync(sr).ConfigureAwait(false);
+        }
+        count = await podcast.SemanticRefs.GetCountAsync().ConfigureAwait(false);
+        Console.WriteLine(count);
+        for (int i = 0; i < count; ++i)
+        {
+            var semanticRef = await podcast.SemanticRefs.GetAsync(i);
+            var json = Json.Stringify(semanticRef);
             Console.WriteLine(json);
         }
     }

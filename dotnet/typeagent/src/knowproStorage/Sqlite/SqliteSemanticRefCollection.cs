@@ -90,14 +90,30 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
         return Task.FromResult(semanticRefs);
     }
 
-    public IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        var cmd = _db.CreateCommand(@"
+SELECT semref_id, range_json, knowledge_type, knowledge_json
+FROM SemanticRefs WHERE semref_id = ?
+");
+        using var reader = cmd.ExecuteReader();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            SemanticRef semanticRef = ReadSemanticRef(reader);
+            yield return semanticRef;
+        }
+
     }
 
     public Task<IList<SemanticRef>> GetSliceAsync(int start, int end)
     {
-        throw new NotImplementedException();
+        using var cmd = _db.CreateCommand(@"
+SELECT semref_id, range_json, knowledge_type, knowledge_json
+FROM SemanticRefs WHERE semref_id >= ? AND semref_id < ?
+ORDER BY semref_id");
+        using var reader = cmd.ExecuteReader();
+        var semanticRefList = reader.GetList(ReadSemanticRef);
+        return Task.FromResult(semanticRefList);
     }
 
     int GetNextSemanicRefId()
@@ -109,9 +125,15 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     {
         if (_count < 0)
         {
-            _count = _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
+            _count = _db.GetCount(SqliteStorageProviderSchema.SemanticRefTable);
         }
         return _count;
+    }
+
+    SemanticRef ReadSemanticRef(SqliteDataReader reader)
+    {
+        var row = ReadSemanticRefRow(reader);
+        return FromSemanticRefRow(row);
     }
 
     SemanticRefRow ToSemanticRefRow(SemanticRef semanticRef)
@@ -127,6 +149,7 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     {
         SemanticRef semanticRef = new SemanticRef();
 
+        semanticRef.SemanticRefOrdinal = semanticRefRow.SemanticRefId;
         semanticRef.Range = StorageSerializer.Deserialize<TextRange>(semanticRefRow.RangeJson);
         semanticRef.KnowledgeType = semanticRefRow.KnowledgeType;
         semanticRef.Knowledge = SemanticRef.ParseKnowledge(semanticRefRow.KnowledgeJson, semanticRefRow.KnowledgeType);
@@ -139,6 +162,7 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
         SemanticRefRow row = new SemanticRefRow();
 
         int iRow = 0;
+        row.SemanticRefId = reader.GetInt32(iRow++);
         row.RangeJson = reader.GetStringOrNull(iRow++);
         row.KnowledgeType = reader.GetStringOrNull(iRow++);
         row.KnowledgeJson = reader.GetStringOrNull(iRow++);
@@ -157,6 +181,7 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
 
 internal class SemanticRefRow
 {
+    public int SemanticRefId { get; set; }
     public string? RangeJson { get; set; }
     public string? KnowledgeType { get; set; }
     public string? KnowledgeJson { get; set; }

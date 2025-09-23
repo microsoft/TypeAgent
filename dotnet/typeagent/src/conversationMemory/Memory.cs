@@ -9,11 +9,23 @@ public class Memory<TMessage> : IConversation<TMessage>
 {
     IStorageProvider<TMessage> _storageProvider;
     IMessageCollection<TMessage> _messages;
+    ISemanticRefCollection _semanticRefs;
 
     public Memory(IStorageProvider<TMessage> provider)
+        : this(provider.Messages, provider.SemanticRefs)
     {
         _storageProvider = provider;
-        _messages = provider.Messages;
+    }
+
+    public Memory(
+        IMessageCollection<TMessage> messages,
+        ISemanticRefCollection semanticRefs
+    )
+    {
+        ArgumentNullException.ThrowIfNull(messages, nameof(messages));
+        ArgumentNullException.ThrowIfNull(semanticRefs, nameof(semanticRefs));
+        _messages = messages;
+        _semanticRefs = semanticRefs;
     }
 
     public string Name { get; set; }
@@ -22,7 +34,7 @@ public class Memory<TMessage> : IConversation<TMessage>
 
     public IMessageCollection<TMessage> Messages => _messages;
 
-    public ISemanticRefCollection SemanticRefs => throw new NotImplementedException();
+    public ISemanticRefCollection SemanticRefs => _semanticRefs;
 
     public ITermToSemanticRefIndex SemanticRefIndex => throw new NotImplementedException();
 
