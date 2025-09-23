@@ -66,8 +66,7 @@ public class PodcastCommands : ICommandModule
         var podcast = new Podcast(provider);
 
         Console.WriteLine($"{data.Messages.Length} messages");
-        await podcast.ImportMessagesAsync(data.Messages, cancellationToken).ConfigureAwait(false);
-        int count = await podcast.Messages.GetCountAsync(cancellationToken).ConfigureAwait(false);
+        int count = await podcast.ImportMessagesAsync(data.Messages, cancellationToken);
         Console.WriteLine($"{count} message imported");
 
         // Read all
@@ -79,12 +78,8 @@ public class PodcastCommands : ICommandModule
         }
 
         Console.WriteLine($"{data.SemanticRefs.Length} semantic refs");
-        foreach (var sr in data.SemanticRefs)
-        {
-            await podcast.SemanticRefs.AppendAsync(sr, cancellationToken).ConfigureAwait(false);
-        }
-        count = await podcast.SemanticRefs.GetCountAsync(cancellationToken).ConfigureAwait(false);
-        Console.WriteLine(count);
+        count = await podcast.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken);
+        Console.WriteLine($"{count} semantic Refs imported");
         for (int i = 0; i < count; ++i)
         {
             var semanticRef = await podcast.SemanticRefs.GetAsync(i, cancellationToken);
