@@ -445,7 +445,10 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getGlobalImportanceLayer(maxNodes: number = 5000, includeConnectivity: boolean = true): Promise<any> {
+    async getGlobalImportanceLayer(
+        maxNodes: number = 5000,
+        includeConnectivity: boolean = true,
+    ): Promise<any> {
         const result = await this.sendMessage({
             type: "getGlobalImportanceLayer",
             maxNodes,

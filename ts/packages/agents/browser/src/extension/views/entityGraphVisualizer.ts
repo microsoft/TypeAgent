@@ -243,8 +243,12 @@ export class EntityGraphVisualizer {
      * Initialize the triple-instance system (global, neighborhood, and detail)
      */
     private initializeTripleInstances(rendererConfig: any): void {
-        console.log("[TripleInstance] Initializing global, neighborhood, and detail instances");
-        console.log(`[Perf] Renderer configuration: ${JSON.stringify(rendererConfig)}`);
+        console.log(
+            "[TripleInstance] Initializing global, neighborhood, and detail instances",
+        );
+        console.log(
+            `[Perf] Renderer configuration: ${JSON.stringify(rendererConfig)}`,
+        );
 
         // Create global instance container
         const globalContainer = document.createElement("div");
@@ -409,9 +413,11 @@ export class EntityGraphVisualizer {
         // Reset spacing state variables without clearing original positions
         this.appliedSpacingFactor = 1.0;
         this.isSpacingActive = false;
-        this.spacingTransitionDirection = 'stable';
+        this.spacingTransitionDirection = "stable";
         this.spacingHistory.clear();
-        console.log(`[DynamicSpacing] Reset spacing state for global view (preserving ${this.originalNodePositions.size} original positions)`);
+        console.log(
+            `[DynamicSpacing] Reset spacing state for global view (preserving ${this.originalNodePositions.size} original positions)`,
+        );
 
         // Notify UI of instance change
         if (this.onInstanceChangeCallback) {
@@ -458,9 +464,11 @@ export class EntityGraphVisualizer {
         // Reset spacing state without clearing original positions
         this.appliedSpacingFactor = 1.0;
         this.isSpacingActive = false;
-        this.spacingTransitionDirection = 'stable';
+        this.spacingTransitionDirection = "stable";
         this.spacingHistory.clear();
-        console.log(`[StateClearing] Reset spacing state (preserving ${this.originalNodePositions.size} original positions)`);
+        console.log(
+            `[StateClearing] Reset spacing state (preserving ${this.originalNodePositions.size} original positions)`,
+        );
 
         // Optionally clear neighborhood cache to force fresh data fetching
         if (clearCache && this.neighborhoodCache.size > 0) {
@@ -639,10 +647,12 @@ export class EntityGraphVisualizer {
         // Reset spacing state when storing new layout positions
         this.appliedSpacingFactor = 1.0;
         this.isSpacingActive = false;
-        this.spacingTransitionDirection = 'stable';
+        this.spacingTransitionDirection = "stable";
         this.spacingHistory.clear();
 
-        console.log(`[DynamicSpacing] Stored ${this.originalNodePositions.size} original node positions and reset spacing state`);
+        console.log(
+            `[DynamicSpacing] Stored ${this.originalNodePositions.size} original node positions and reset spacing state`,
+        );
     }
 
     /**
@@ -813,9 +823,11 @@ export class EntityGraphVisualizer {
         // Reset spacing state for detail view without clearing original positions
         this.appliedSpacingFactor = 1.0;
         this.isSpacingActive = false;
-        this.spacingTransitionDirection = 'stable';
+        this.spacingTransitionDirection = "stable";
         this.spacingHistory.clear();
-        console.log(`[DynamicSpacing] Reset spacing state for detail view (preserving ${this.originalNodePositions.size} original positions)`);
+        console.log(
+            `[DynamicSpacing] Reset spacing state for detail view (preserving ${this.originalNodePositions.size} original positions)`,
+        );
 
         // Hide other instances and show detail
         this.setInstanceVisibility("detail");
@@ -1676,7 +1688,6 @@ export class EntityGraphVisualizer {
             return;
         }
 
-        
         // Store entity data
         this.currentEntity = centerEntity;
         this.entityGraphData = graphData;
@@ -1692,7 +1703,6 @@ export class EntityGraphVisualizer {
 
         // Add elements to detail instance
         this.detailInstance.add(elements);
-
 
         // Apply detail layout focusing on center entity
         await this.applyDetailLayoutToInstance(
@@ -1711,19 +1721,18 @@ export class EntityGraphVisualizer {
      * Load global importance layer into global instance (Triple-Instance Architecture)
      */
     public async loadGlobalGraph(graphData: any): Promise<void> {
-        
         // Clear all neighborhood state when loading global data
         this.clearNeighborhoodState();
-        
+
         // Clear and load global instance
         this.globalInstance.elements().remove();
         const elements = this.convertToGraphElements(graphData);
-        
+
         this.globalInstance.add(elements);
-        
+
         // Apply direct sizing based on computed importance (since CSS mapData doesn't auto-refresh)
         this.applyImportanceBasedSizing();
-        
+
         // Analyze importance distribution and visual sizing AFTER applying sizing
         this.analyzeGlobalViewImportanceDistribution();
 
@@ -1741,7 +1750,11 @@ export class EntityGraphVisualizer {
         this.globalGraphData = graphData;
 
         // Apply layout optimized for global size
-        await this.applyLayoutToInstance(this.globalInstance, "cose", graphData.entities.length);
+        await this.applyLayoutToInstance(
+            this.globalInstance,
+            "cose",
+            graphData.entities.length,
+        );
 
         // Fit the graph to the viewport to let Cytoscape handle optimal sizing
         this.globalInstance.fit({
@@ -1751,7 +1764,6 @@ export class EntityGraphVisualizer {
 
         // Switch to global view
         this.switchToGlobalView();
-
     }
 
     /**
@@ -1870,7 +1882,6 @@ export class EntityGraphVisualizer {
         centerEntity: string,
         preserveZoom: boolean = false,
     ): Promise<void> {
-
         // Preserve visual continuity by extracting positions from global view
         const globalNodePositions = this.extractGlobalNodePositions();
 
@@ -1883,7 +1894,6 @@ export class EntityGraphVisualizer {
                     anchorGlobalPositions[anchorName] = globalPos;
                 }
             });
-
         }
 
         // SIMPLIFIED: Load all nodes but position non-anchors at center node
@@ -2079,7 +2089,6 @@ export class EntityGraphVisualizer {
      * Convert graph data to Cytoscape elements (enhanced for triple-instance)
      */
     private convertToGraphElements(graphData: any): any[] {
-
         const nodes = graphData.entities.map((entity: any) => {
             // Set appropriate importance values based on current context
             const baseImportance =
@@ -2203,7 +2212,6 @@ export class EntityGraphVisualizer {
             console.warn(
                 `[TripleInstance] Filtered ${invalidEdgeCount} invalid edges (examples: ${invalidEdgeExamples.join(", ")}${invalidEdgeCount > 3 ? "..." : ""})`,
             );
-
         }
 
         const finalElements = [...nodes, ...edges];
@@ -2250,7 +2258,6 @@ export class EntityGraphVisualizer {
 
         this.setupZoomInteractions();
         this.setupInteractions();
-
 
         // Test zoom event functionality after setup
         setTimeout(() => {
@@ -2450,7 +2457,6 @@ export class EntityGraphVisualizer {
             // Smooth 60fps LOD updates
             clearTimeout(this.zoomTimer);
             this.zoomTimer = setTimeout(async () => {
-
                 // Apply appropriate LoD based on current view and instance
                 if (
                     instanceName === "neighborhood" &&
@@ -2675,7 +2681,6 @@ export class EntityGraphVisualizer {
         if (this.isLoadingNeighborhood) {
             return;
         }
-
 
         // IMPORTANT: Restore viewport BEFORE making instance visible to prevent interference
         if (this.storedGlobalViewport) {

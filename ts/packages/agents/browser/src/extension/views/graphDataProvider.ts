@@ -102,7 +102,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalGraphData(): Promise<GlobalGraphResult> {
         const startTime = performance.now();
-        
+
         try {
             // Use proper service methods instead of direct sendMessage calls
             console.time("[GraphDataProvider] Get status");
@@ -358,11 +358,19 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
         try {
-            const result = await this.baseService.getGlobalImportanceLayer(maxNodes, true);
+            const result = await this.baseService.getGlobalImportanceLayer(
+                maxNodes,
+                true,
+            );
 
-            const transformedEntities = this.transformEntitiesToUIFormat(result.entities || []);
+            const transformedEntities = this.transformEntitiesToUIFormat(
+                result.entities || [],
+            );
 
-            const transformedRelationships = this.transformRelationshipsToUIFormat(result.relationships || []);
+            const transformedRelationships =
+                this.transformRelationshipsToUIFormat(
+                    result.relationships || [],
+                );
 
             const finalResult = {
                 entities: transformedEntities,
@@ -375,7 +383,10 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
             return finalResult;
         } catch (error) {
-            console.error("[GraphDataProvider] Error fetching global importance layer:", error);
+            console.error(
+                "[GraphDataProvider] Error fetching global importance layer:",
+                error,
+            );
             throw error;
         }
     }
@@ -386,7 +397,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         maxNodes: number = 5000,
     ): Promise<any> {
         try {
-
             const result = await this.baseService.getViewportBasedNeighborhood(
                 centerEntity,
                 viewportNodeNames,
@@ -398,7 +408,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     minDepthFromViewport: 1,
                 },
             );
-
 
             if (!result) {
                 console.warn(
@@ -506,8 +515,12 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 communityId: hybridEntity.communityId,
 
                 // Optional fields (only if non-empty)
-                ...(hybridEntity.community && { community: hybridEntity.community }),
-                ...(hybridEntity.description && { description: hybridEntity.description }),
+                ...(hybridEntity.community && {
+                    community: hybridEntity.community,
+                }),
+                ...(hybridEntity.description && {
+                    description: hybridEntity.description,
+                }),
 
                 // Computed UI properties
                 color: color,
@@ -573,7 +586,10 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 count: hybridRel.count,
 
                 // Optional fields (only if present and needed)
-                ...(hybridRel.sources && hybridRel.sources.length > 0 && { sources: hybridRel.sources }),
+                ...(hybridRel.sources &&
+                    hybridRel.sources.length > 0 && {
+                        sources: hybridRel.sources,
+                    }),
             },
         };
     }

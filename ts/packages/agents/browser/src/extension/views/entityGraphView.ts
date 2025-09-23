@@ -111,7 +111,7 @@ class EntityGraphView {
         try {
             // Initialize visualizer
             await this.visualizer.initialize();
-            
+
             // Ensure container is visible and has size
             const container = document.getElementById("cytoscape-container");
             if (container) {
@@ -135,7 +135,7 @@ class EntityGraphView {
 
             // Setup browser navigation AFTER basic initialization
             this.setupBrowserNavigation();
-            
+
             // Load based on view mode
             console.log(`Current view mode: ${this.currentViewMode.type}`);
 
@@ -423,7 +423,6 @@ class EntityGraphView {
                 return;
             }
 
-
             // Set transitioning state if coming from global view
             if (this.currentViewMode.type === "global") {
                 this.visualizer.setViewMode("transitioning");
@@ -538,9 +537,7 @@ class EntityGraphView {
             // Navigate directly to the entity (same as URL parameter logic)
             console.log(`Searching for entity: ${query}`);
 
-
             await this.navigateToEntity(query.trim());
-
         } catch (error) {
             console.error("Failed to search entity:", error);
         }
@@ -566,10 +563,8 @@ class EntityGraphView {
             link.href = URL.createObjectURL(dataBlob);
             link.download = `entity-graph-${this.currentEntity || "export"}-${new Date().toISOString().split("T")[0]}.json`;
             link.click();
-
         } catch (error) {
             console.error("Failed to export graph:", error);
-
         }
     }
 
@@ -660,7 +655,6 @@ class EntityGraphView {
             console.log(
                 `Loaded global graph: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`,
             );
-
         } catch (error) {
             console.error("Failed to load global view:", error);
             this.hideGraphLoading();
@@ -945,7 +939,7 @@ class EntityGraphView {
     private async loadRealEntityData(entityName: string): Promise<void> {
         try {
             this.showGraphLoading();
-            
+
             // Load entity graph using HybridGraph data provider
             let graphData;
             try {
@@ -1008,7 +1002,6 @@ class EntityGraphView {
                     };
                     graphData.entities[0] = enrichedEntity;
                 }
-
             } catch (error) {
                 console.error(
                     `[HybridGraph Migration] Failed to load entity neighborhood for "%s":`,
@@ -1069,7 +1062,6 @@ class EntityGraphView {
 
                         return hasValidFrom && hasValidTo && hasValidType;
                     }) || [];
-
 
                 // Create entity list with center entity, website entities, related entities, and topics
                 const allEntities = [
@@ -1372,7 +1364,8 @@ class EntityGraphView {
             this.showGraphLoading();
 
             // Get importance layer data (top 500 most important nodes - TESTING)
-            const importanceData = await this.graphDataProvider.getGlobalImportanceLayer(500);
+            const importanceData =
+                await this.graphDataProvider.getGlobalImportanceLayer(500);
 
             if (importanceData.entities.length === 0) {
                 this.hideGraphLoading();
@@ -1394,7 +1387,6 @@ class EntityGraphView {
             };
             await this.visualizer.loadGlobalGraph(transformedData);
             this.hideGraphLoading();
-
         } catch (error) {
             console.error(
                 "[HierarchicalLoading] Failed to load importance layer:",
@@ -1406,14 +1398,13 @@ class EntityGraphView {
     }
 
     // ============================================================================
-    // Browser Navigation Integration 
+    // Browser Navigation Integration
     // ============================================================================
 
     /**
      * Setup browser navigation event handlers
      */
     private setupBrowserNavigation(): void {
-
         // Handle browser back/forward buttons
         window.addEventListener("popstate", async () => {
             if (this.isHandlingPopstate) return;
@@ -1467,7 +1458,6 @@ class EntityGraphView {
     private async navigateToStateFromUrl(
         targetState: NavigationState,
     ): Promise<void> {
-
         if (targetState.type === "global") {
             await this.executeGlobalViewTransition();
         } else if (targetState.type === "detail" && targetState.entityName) {
@@ -1482,7 +1472,6 @@ class EntityGraphView {
      * Execute global view transition
      */
     private async executeGlobalViewTransition(): Promise<void> {
-
         // Try to use hide/show logic first (same as back button)
         const restored = this.visualizer.restoreHiddenView();
         if (restored) {
@@ -1508,7 +1497,6 @@ class EntityGraphView {
     private async executeDetailViewTransition(
         entityName: string,
     ): Promise<void> {
-
         // Use existing navigateToEntity logic but prevent URL update loop
         const wasHandlingPopstate = this.isHandlingPopstate;
         this.isHandlingPopstate = true;

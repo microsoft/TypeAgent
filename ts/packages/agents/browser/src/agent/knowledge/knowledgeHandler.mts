@@ -3286,7 +3286,9 @@ export async function buildKnowledgeGraph(
         const startTime = Date.now();
 
         if (parameters.minimalMode) {
-            await websiteCollection.buildGraph({ urlLimit: parameters.urlLimit || 500 });
+            await websiteCollection.buildGraph({
+                urlLimit: parameters.urlLimit || 500,
+            });
         } else {
             await websiteCollection.buildGraph();
         }
@@ -3388,7 +3390,6 @@ export async function getAllRelationships(
         const relationships =
             websiteCollection.relationships?.getAllRelationships() || [];
 
-
         // Apply same optimization as getGlobalImportanceLayer for consistency
         const optimizedRelationships = relationships.map((rel: any) => ({
             rowId: rel.rowId,
@@ -3397,11 +3398,14 @@ export async function getAllRelationships(
             relationshipType: rel.relationshipType,
             confidence: rel.confidence,
             // Deduplicate sources using Set, then limit to first 3 entries
-            sources: rel.sources ? (typeof rel.sources === 'string' ?
-                Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3) :
-                Array.isArray(rel.sources) ? Array.from(new Set(rel.sources)).slice(0, 3) : rel.sources
-            ) : undefined,
-            count: rel.count
+            sources: rel.sources
+                ? typeof rel.sources === "string"
+                    ? Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3)
+                    : Array.isArray(rel.sources)
+                      ? Array.from(new Set(rel.sources)).slice(0, 3)
+                      : rel.sources
+                : undefined,
+            count: rel.count,
         }));
 
         return {
@@ -3551,19 +3555,20 @@ export async function getAllEntitiesWithMetrics(
                 `[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`,
             );
 
-
             // Apply entity optimization similar to getGlobalImportanceLayer
-            const optimizedEntities = cache.entityMetrics.map((entity: any) => ({
-                id: entity.id || entity.name,
-                name: entity.name,
-                type: entity.type || "entity",
-                confidence: entity.confidence || 0.5,
-                count: entity.count,
-                degree: entity.degree,
-                importance: entity.importance,
-                communityId: entity.communityId,
-                size: entity.size
-            }));
+            const optimizedEntities = cache.entityMetrics.map(
+                (entity: any) => ({
+                    id: entity.id || entity.name,
+                    name: entity.name,
+                    type: entity.type || "entity",
+                    confidence: entity.confidence || 0.5,
+                    count: entity.count,
+                    degree: entity.degree,
+                    importance: entity.importance,
+                    communityId: entity.communityId,
+                    size: entity.size,
+                }),
+            );
 
             return {
                 entities: optimizedEntities,
@@ -3598,7 +3603,7 @@ export async function getAllEntitiesWithMetrics(
             degree: entity.degree,
             importance: entity.importance,
             communityId: entity.communityId,
-            size: entity.size
+            size: entity.size,
         }));
 
         return {
@@ -3740,34 +3745,43 @@ export async function getEntityNeighborhood(
             );
         }
 
-
-
         // Optimize relationships (same as other functions)
-        const optimizedRelationships = neighborhoodResult.relationships.map((rel: any) => ({
-            rowId: rel.rowId,
-            fromEntity: rel.fromEntity,
-            toEntity: rel.toEntity,
-            relationshipType: rel.relationshipType,
-            confidence: rel.confidence,
-            sources: rel.sources ? (typeof rel.sources === 'string' ?
-                Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3) :
-                Array.isArray(rel.sources) ? Array.from(new Set(rel.sources)).slice(0, 3) : rel.sources
-            ) : undefined,
-            count: rel.count
-        }));
+        const optimizedRelationships = neighborhoodResult.relationships.map(
+            (rel: any) => ({
+                rowId: rel.rowId,
+                fromEntity: rel.fromEntity,
+                toEntity: rel.toEntity,
+                relationshipType: rel.relationshipType,
+                confidence: rel.confidence,
+                sources: rel.sources
+                    ? typeof rel.sources === "string"
+                        ? Array.from(new Set(JSON.parse(rel.sources))).slice(
+                              0,
+                              3,
+                          )
+                        : Array.isArray(rel.sources)
+                          ? Array.from(new Set(rel.sources)).slice(0, 3)
+                          : rel.sources
+                    : undefined,
+                count: rel.count,
+            }),
+        );
 
         // Optimize entities (centerEntity and neighbors)
-        const optimizeEntity = (entity: any) => entity ? ({
-            id: entity.id || entity.name,
-            name: entity.name,
-            type: entity.type || "entity",
-            confidence: entity.confidence || 0.5,
-            count: entity.count,
-            degree: entity.degree,
-            importance: entity.importance,
-            communityId: entity.communityId,
-            size: entity.size
-        }) : null;
+        const optimizeEntity = (entity: any) =>
+            entity
+                ? {
+                      id: entity.id || entity.name,
+                      name: entity.name,
+                      type: entity.type || "entity",
+                      confidence: entity.confidence || 0.5,
+                      count: entity.count,
+                      degree: entity.degree,
+                      importance: entity.importance,
+                      communityId: entity.communityId,
+                      size: entity.size,
+                  }
+                : null;
 
         const optimizedResult = {
             centerEntity: optimizeEntity(neighborhoodResult.centerEntity),
@@ -3792,7 +3806,6 @@ export async function getEntityNeighborhood(
             },
         };
 
-        
         return optimizedResult;
     } catch (error) {
         console.error("Error getting entity neighborhood:", error);
@@ -4072,7 +4085,6 @@ export async function getGlobalImportanceLayer(
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
 
         if (!websiteCollection) {
             console.log(`[ServerPerf] No website collection available`);
@@ -4088,18 +4100,20 @@ export async function getGlobalImportanceLayer(
                 },
             };
         }
-        
+
         // Ensure cache is populated
         await ensureGraphCache(websiteCollection);
-        
+
         // Get cached data
         const cache = getGraphCache(websiteCollection);
-        
+
         if (!cache || !cache.isValid) {
-            console.log(`[ServerPerf] Cache validation failed: ${JSON.stringify({
-                hasCache: !!cache,
-                isValid: cache?.isValid
-            })}`);
+            console.log(
+                `[ServerPerf] Cache validation failed: ${JSON.stringify({
+                    hasCache: !!cache,
+                    isValid: cache?.isValid,
+                })}`,
+            );
             return {
                 entities: [],
                 relationships: [],
@@ -4114,7 +4128,7 @@ export async function getGlobalImportanceLayer(
         const allEntities = cache.entityMetrics || [];
         const allRelationships = cache.relationships || [];
         const communities = cache.communities || [];
-        
+
         if (allEntities.length === 0) {
             return {
                 entities: [],
@@ -4129,8 +4143,12 @@ export async function getGlobalImportanceLayer(
             };
         }
 
-        const entitiesWithMetrics = calculateEntityMetrics(allEntities, allRelationships, communities);
-        
+        const entitiesWithMetrics = calculateEntityMetrics(
+            allEntities,
+            allRelationships,
+            communities,
+        );
+
         // Sort by importance and select top nodes
         const maxNodes = parameters.maxNodes || 500;
         const sortedEntities = entitiesWithMetrics.sort(
@@ -4140,7 +4158,6 @@ export async function getGlobalImportanceLayer(
         let selectedEntities = sortedEntities.slice(0, maxNodes);
         // Ensure connectivity by adding bridge nodes if needed
         if (parameters.includeConnectivity !== false) {
-
             selectedEntities = ensureGlobalConnectivity(
                 selectedEntities,
                 allRelationships,
@@ -4149,35 +4166,50 @@ export async function getGlobalImportanceLayer(
         }
 
         // Get all relationships between selected entities
-        const selectedEntityNames = new Set(selectedEntities.map(e => e.name));
-        const selectedRelationships = allRelationships.filter((rel: any) =>
-            selectedEntityNames.has(rel.fromEntity) &&
-            selectedEntityNames.has(rel.toEntity)
+        const selectedEntityNames = new Set(
+            selectedEntities.map((e) => e.name),
         );
-        
+        const selectedRelationships = allRelationships.filter(
+            (rel: any) =>
+                selectedEntityNames.has(rel.fromEntity) &&
+                selectedEntityNames.has(rel.toEntity),
+        );
+
         const metadata = {
             totalEntitiesInSystem: allEntities.length,
             selectedEntityCount: selectedEntities.length,
-            coveragePercentage: (selectedEntities.length / allEntities.length) * 100,
-            importanceThreshold: selectedEntities[selectedEntities.length - 1]?.importance || 0,
-            connectedComponents: analyzeConnectivity(selectedEntities, selectedRelationships),
-            layer: "global_importance"
+            coveragePercentage:
+                (selectedEntities.length / allEntities.length) * 100,
+            importanceThreshold:
+                selectedEntities[selectedEntities.length - 1]?.importance || 0,
+            connectedComponents: analyzeConnectivity(
+                selectedEntities,
+                selectedRelationships,
+            ),
+            layer: "global_importance",
         };
-        
-        
-        const optimizedRelationships = selectedRelationships.map((rel: any) => ({
-            rowId: rel.rowId,
-            fromEntity: rel.fromEntity,
-            toEntity: rel.toEntity,
-            relationshipType: rel.relationshipType,
-            confidence: rel.confidence,
-            // Deduplicate sources using Set, then limit to first 3 entries
-            sources: rel.sources ? (typeof rel.sources === 'string' ?
-                Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3) :
-                Array.isArray(rel.sources) ? Array.from(new Set(rel.sources)).slice(0, 3) : rel.sources
-            ) : undefined,
-            count: rel.count
-        }));
+
+        const optimizedRelationships = selectedRelationships.map(
+            (rel: any) => ({
+                rowId: rel.rowId,
+                fromEntity: rel.fromEntity,
+                toEntity: rel.toEntity,
+                relationshipType: rel.relationshipType,
+                confidence: rel.confidence,
+                // Deduplicate sources using Set, then limit to first 3 entries
+                sources: rel.sources
+                    ? typeof rel.sources === "string"
+                        ? Array.from(new Set(JSON.parse(rel.sources))).slice(
+                              0,
+                              3,
+                          )
+                        : Array.isArray(rel.sources)
+                          ? Array.from(new Set(rel.sources)).slice(0, 3)
+                          : rel.sources
+                    : undefined,
+                count: rel.count,
+            }),
+        );
 
         const optimizedEntities = selectedEntities.map((entity: any) => ({
             id: entity.id || entity.name,
@@ -4188,14 +4220,13 @@ export async function getGlobalImportanceLayer(
             degree: entity.degree,
             importance: entity.importance,
             communityId: entity.communityId,
-            size: entity.size
+            size: entity.size,
         }));
-
 
         return {
             entities: optimizedEntities,
             relationships: optimizedRelationships,
-            metadata: metadata
+            metadata: metadata,
         };
     } catch (error) {
         console.error("Error getting global importance layer:", error);
