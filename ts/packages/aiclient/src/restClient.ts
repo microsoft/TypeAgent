@@ -255,7 +255,7 @@ export async function fetchWithRetry(
     retryPauseMs ??= 1000;
     timeout ??= 60_000; // default to 1 minute
 
-    const backOffFactor = 10_000;
+    const backOffFactor = 3_000;
     let retryCount = 0;
     const startTime: number = Date.now();
     try {
@@ -337,10 +337,10 @@ export function getRetryAfterMs(
 /**
  *
  * @param min - The minimum delay in milliseconds (default 1 second)
- * @param max - The maximum delay in milliseconds (default 10 seconds)
+ * @param max - The maximum delay in milliseconds (default 5 seconds)
  * @returns A random delay between the min and max
  */
-function getRandomDelay(min: number = 1_000, max: number = 10_000): number {
+function getRandomDelay(min: number = 1_000, max: number = 5_000): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
