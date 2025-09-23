@@ -244,6 +244,20 @@ body {
   align-self: flex-end;
 }
 
+.read-only .chat-input {
+  display: none;
+}
+
+.write-only {
+  .chat-input {
+    max-height: 45px;
+  }
+
+  .chat {
+    display: none;
+  }
+}
+
 .chat-input {
   display: flex;
   padding: 5px;

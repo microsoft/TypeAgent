@@ -1524,11 +1524,19 @@ async function resolveWebPage(
             return ["http://localhost:9000/"];
         case "planviewer":
             // handle browser views
-            const port = await context.getSharedLocalHostPort("browser");
-            if (port !== undefined) {
-                debug(`Resolved local site on PORT ${port}`);
+            const browserPort = await context.getSharedLocalHostPort("browser");
+            if (browserPort !== undefined) {
+                debug(`Resolved local site on PORT ${browserPort}`);
 
-                return [`http://localhost:${port}/plans`];
+                return [`http://localhost:${browserPort}/plans`];
+            }
+        case "chatview":
+            // handle browser views
+            const shellPort = await context.getSharedLocalHostPort("shell");
+            if (shellPort !== undefined) {
+                debug(`Resolved local site on PORT ${shellPort}`);
+
+                return [`http://localhost:${shellPort}/readOnlyChatView.html`];
             }
         default: {
             // if the site is a valid URL, return it directly

@@ -23,6 +23,7 @@ async function createSearchMenuUIView(_zoomFactor: number) {
             preload: path.join(__dirname, "../preload/expose.mjs"),
             sandbox: false,
             // zoomFactor,
+            //transparent: true
         },
     });
     searchMenuView.setBackgroundColor("#00000000"); // Transparent

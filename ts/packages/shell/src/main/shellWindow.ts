@@ -26,6 +26,8 @@ import {
 } from "./browserViewManager.js";
 
 import registerDebug from "debug";
+import { ChatServer } from "./chatServer.js";
+
 const debugShellWindow = registerDebug("typeagent:shell:window");
 const debugShellWindowError = registerDebug("typeagent:shell:window:error");
 
@@ -97,6 +99,9 @@ export class ShellWindow {
 
     // Multi-tab browser support
     private readonly browserViewManager: BrowserViewManager;
+
+    // Chat as a tab support
+    public chatViewServer: ChatServer | undefined;
 
     public get inlineBrowser(): WebContentsView {
         // Always use multi-tab browser
@@ -352,6 +357,34 @@ export class ShellWindow {
         });
     }
 
+    /**
+     * Starts the chat server
+     * @param port - The port upon which to start the chat server
+     */
+    public startChatServer(port: number) {
+        if (this.chatViewServer !== undefined) {
+            debugShellWindow("Chat server already started");
+        }
+
+        if (port > 0) {
+            this.chatViewServer = new ChatServer(port);
+            this.chatViewServer.onConnection(async (ws: WebSocket) => {
+                // when a new connection is established send the chat log to the client
+                try {
+                    const html: string =
+                        await this.chatView.webContents.executeJavaScript(
+                            `document.getElementById('wrapper').innerHTML`,
+                        );
+                    ws.send(html);
+                } catch (error) {
+                    console.error("Error sending chat log:", error);
+                    ws.send(JSON.stringify(error));
+                }
+            });
+            this.chatViewServer.start();
+        }
+    }
+
     private installHandler(name: string, handler: (event: any) => void) {
         this.handlers.set(name, handler);
         ipcMain.on(name, handler);
@@ -375,6 +408,11 @@ export class ShellWindow {
         globalShortcut.unregister("Alt+Right");
         globalShortcut.unregister("CommandOrControl+L");
         globalShortcut.unregister("CommandOrControl+E");
+
+        // shutdown chat server
+        if (this.chatViewServer) {
+            this.chatViewServer.stop();
+        }
     }
 
     public async close() {
@@ -1152,6 +1190,7 @@ function createMainWindow(): BrowserWindow {
     const mainWindow = new BrowserWindow({
         show: false,
         frame: false, // Remove default frame
+        //transparent: true,
         titleBarStyle: isMac ? "hiddenInset" : "hidden", // Hide title bar
         titleBarOverlay: isWindows
             ? {
