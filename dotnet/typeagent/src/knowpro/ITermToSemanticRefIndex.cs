@@ -5,19 +5,19 @@ namespace TypeAgent.KnowPro;
 
 public interface ITermToSemanticRefIndex
 {
-    Task<int> GetCountAsync();
-    Task<string[]> GetTermsAsync();
-    Task<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal);
-    Task RemoveTermAsync(string term, int semanticRefOrdinal);
-    Task ClearAsync();
+    Task<int> GetCountAsync(CancellationToken cancellation);
+    Task<string[]> GetTermsAsync(CancellationToken cancellation);
+    Task<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellation);
+    Task RemoveTermAsync(string term, int semanticRefOrdinal, CancellationToken cancellation);
+    Task ClearAsync(CancellationToken cancellation);
 
-    Task<ScoredSemanticRefOrdinal[]> LookupTermAsync(string term);
+    Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellation);
 }
 
 public static class TermToSemanticRefIndexEx
 {
     public static Task<string> AddTermAsync(this ITermToSemanticRefIndex index, string term, int semanticRefOrdinal)
     {
-        return index.AddTermAsync(term, ScoredSemanticRefOrdinal.New(semanticRefOrdinal));
+        return index.AddTermAsync(term, ScoredSemanticRefOrdinal.New(semanticRefOrdinal), default);
     }
 }

@@ -8,14 +8,23 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
     SqliteDatabase _db;
     int _count = -1;
 
-    public SqliteSemanticRefCollection(SqliteDatabase database)
+    public SqliteSemanticRefCollection(SqliteDatabase db)
     {
-        ArgumentVerify.ThrowIfNull(database, nameof(database));
-        _db = database;
+        ArgumentVerify.ThrowIfNull(db, nameof(db));
+        _db = db;
     }
 
 
     public bool IsPersistent => true;
+
+    public int GetCount()
+    {
+        if (_count < 0)
+        {
+            _count = _db.GetCount(SqliteStorageProviderSchema.SemanticRefTable);
+        }
+        return _count;
+    }
 
     public Task<int> GetCountAsync()
     {
@@ -130,15 +139,6 @@ ORDER BY semref_id");
         return GetCount();
     }
 
-    int GetCount()
-    {
-        if (_count < 0)
-        {
-            _count = _db.GetCount(SqliteStorageProviderSchema.SemanticRefTable);
-        }
-        return _count;
-    }
-
     SemanticRef ReadSemanticRef(SqliteDataReader reader)
     {
         var row = ReadSemanticRefRow(reader);
@@ -170,11 +170,11 @@ ORDER BY semref_id");
     {
         SemanticRefRow row = new SemanticRefRow();
 
-        int iRow = 0;
-        row.SemanticRefId = reader.GetInt32(iRow++);
-        row.RangeJson = reader.GetStringOrNull(iRow++);
-        row.KnowledgeType = reader.GetStringOrNull(iRow++);
-        row.KnowledgeJson = reader.GetStringOrNull(iRow++);
+        int iCol = 0;
+        row.SemanticRefId = reader.GetInt32(iCol++);
+        row.RangeJson = reader.GetStringOrNull(iCol++);
+        row.KnowledgeType = reader.GetStringOrNull(iCol++);
+        row.KnowledgeJson = reader.GetStringOrNull(iCol++);
 
         return row;
     }

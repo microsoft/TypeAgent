@@ -39,6 +39,8 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         _db.Execute(SqliteStorageProviderSchema.ConversationMetadataSchema);
         _db.Execute(SqliteStorageProviderSchema.MessagesSchema);
         _db.Execute(SqliteStorageProviderSchema.SemanticRefsSchema);
+        _db.Execute(SqliteStorageProviderSchema.SemanticRefIndexSchema);
+        _db.Execute(SqliteStorageProviderSchema.TimestampIndexSchema);
     }
 
     public void Dispose()
@@ -106,6 +108,10 @@ CREATE TABLE IF NOT EXISTS Messages(
 );
 ";
 
+    public const string TimestampIndexSchema = @"
+CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
+";
+
     public const string SemanticRefTable = "SemanticRefs";
     public const string SemanticRefsSchema = @"
 CREATE TABLE IF NOT EXISTS SemanticRefs (
@@ -115,4 +121,15 @@ CREATE TABLE IF NOT EXISTS SemanticRefs (
     knowledge_json JSON NOT NULL       -- JSON of the Knowledge object
 );
 ";
+
+    public const string SemanticRefIndexTable = "SemanticRefIndex";
+    public const string SemanticRefIndexSchema = @"
+CREATE TABLE IF NOT EXISTS SemanticRefIndex (
+    term TEXT NOT NULL,             -- lowercased, not-unique/normalized
+    semref_id INTEGER NOT NULL,
+    score REAL NOT NULL,
+    FOREIGN KEY (semref_id) REFERENCES SemanticRefs(semref_id) ON DELETE CASCADE
+);
+";
+
 }

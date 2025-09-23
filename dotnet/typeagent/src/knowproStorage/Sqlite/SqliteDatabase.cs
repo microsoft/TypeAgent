@@ -51,7 +51,6 @@ public class SqliteDatabase : IDisposable
         string sql = $"SELECT COUNT(*) FROM {tableName}";
         long count = (long)(FetchOne(sql) ?? 0);
         return (int)count;
-
     }
 
     public void Dispose()

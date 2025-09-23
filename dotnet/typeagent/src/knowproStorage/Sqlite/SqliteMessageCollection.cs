@@ -17,13 +17,22 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
     SqliteDatabase _db;
     int _count = -1;
 
-    public SqliteMessageCollection(SqliteDatabase database)
+    public SqliteMessageCollection(SqliteDatabase db)
     {
-        ArgumentVerify.ThrowIfNull(database, nameof(database));
-        _db = database;
+        ArgumentVerify.ThrowIfNull(db, nameof(db));
+        _db = db;
     }
 
     public bool IsPersistent => true;
+
+    public int GetCount()
+    {
+        if (_count < 0)
+        {
+            _count = _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
+        }
+        return _count;
+    }
 
     public Task<int> GetCountAsync()
     {
@@ -68,7 +77,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public TMessage Get(int msgId)
     {
-        ArgumentVerify.ThrowIfLessThan(msgId, 0, nameof(msgId));
+        KnowProVerify.VerifyMessageOrdinal(msgId);
 
         using var cmd = _db.CreateCommand(@"
 SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
@@ -121,6 +130,8 @@ FROM Messages ORDER BY msg_id");
 
     public Task<IList<TMessage>> GetSliceAsync(int start, int end)
     {
+        KnowProVerify.VerifyMessageOrdinal(start);
+        KnowProVerify.VerifyMessageOrdinal(end);
         ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
 
         using var cmd = _db.CreateCommand(@"
@@ -135,15 +146,6 @@ ORDER BY msg_id");
     int GetNextMessageId()
     {
         return GetCount();
-    }
-
-    int GetCount()
-    {
-        if (_count < 0)
-        {
-            _count = _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
-        }
-        return _count;
     }
 
     TMessage ReadMessage(SqliteDataReader reader)
@@ -190,13 +192,13 @@ ORDER BY msg_id");
     {
         MessageRow row = new MessageRow();
 
-        int iRow = 0;
-        row.ChunksJson = reader.GetStringOrNull(iRow++);
-        row.ChunkUri = reader.GetStringOrNull(iRow++);
-        row.StartTimestamp = reader.GetStringOrNull(iRow++);
-        row.TagsJson = reader.GetStringOrNull(iRow++);
-        row.MetadataJson = reader.GetStringOrNull(iRow++);
-        row.ExtraJson = reader.GetStringOrNull(iRow);
+        int iCol = 0;
+        row.ChunksJson = reader.GetStringOrNull(iCol++);
+        row.ChunkUri = reader.GetStringOrNull(iCol++);
+        row.StartTimestamp = reader.GetStringOrNull(iCol++);
+        row.TagsJson = reader.GetStringOrNull(iCol++);
+        row.MetadataJson = reader.GetStringOrNull(iCol++);
+        row.ExtraJson = reader.GetStringOrNull(iCol);
 
         return row;
     }
