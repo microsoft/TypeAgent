@@ -55,14 +55,39 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         return Task.CompletedTask;
     }
 
-    public Task<SemanticRef> GetAsync(int ordinal)
+    public SemanticRef Get(int semanticRefId)
     {
-        throw new NotImplementedException();
+        using var cmd = _db.CreateCommand(@"
+SELECT semref_id, range_json, knowledge_type, knowledge_json
+FROM SemanticRefs WHERE semref_id = @semref_id");
+        cmd.Parameters.AddWithValue("semref_id", semanticRefId);
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read())
+        {
+            throw new ArgumentException($"No semanticRef at ordinal {semanticRefId}");
+        }
+
+        SemanticRefRow row = ReadSemanticRefRow(reader);
+        SemanticRef semanticRef = FromSemanticRefRow(row);
+        return semanticRef;
     }
 
-    public Task<IList<SemanticRef>> GetAsync(IList<int> ordinals)
+
+    public Task<SemanticRef> GetAsync(int ordinal)
     {
-        throw new NotImplementedException();
+        return Task.FromResult(Get(ordinal));
+    }
+
+    public Task<IList<SemanticRef>> GetAsync(IList<int> ids)
+    {
+        // TODO: Bulk operations
+        IList<SemanticRef> semanticRefs = [];
+        foreach (int semrefId in ids)
+        {
+            semanticRefs.Add(Get(semrefId));
+        }
+        return Task.FromResult(semanticRefs);
     }
 
     public IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
