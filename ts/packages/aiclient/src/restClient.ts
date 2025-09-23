@@ -271,7 +271,7 @@ export async function fetchWithRetry(
 
             // See if the service tells how long to wait to retry
             const pauseMs = getRetryAfterMs(result, retryPauseMs);
-            retryCount++;   // use the retry count as a backoff multiplier
+            retryCount++; // use the retry count as a backoff multiplier
             await sleep(pauseMs * retryCount + getRandomDelay());
         }
     } catch (e: any) {
@@ -316,7 +316,7 @@ export function getRetryAfterMs(
 }
 
 /**
- * 
+ *
  * @param min - The minimum delay in milliseconds (default 1 second)
  * @param max - The maximum delay in milliseconds (default 5 seconds)
  * @returns A random delay between the min and max
