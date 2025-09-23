@@ -210,7 +210,11 @@ async function callFetch(
 
 export type FetchThrottler = (fn: () => Promise<Response>) => Promise<Response>;
 
-async function getErrorMessage(response: Response, retries?: number | undefined, timeTaken?: number | undefined): Promise<string> {
+async function getErrorMessage(
+    response: Response,
+    retries?: number | undefined,
+    timeTaken?: number | undefined,
+): Promise<string> {
     let bodyMessage = "";
     try {
         const bodyText = await response.text();
@@ -265,7 +269,9 @@ export async function fetchWithRetry(
                 !isTransientHttpError(result.status) ||
                 retryCount >= retryMaxAttempts
             ) {
-                return error(`fetch error: ${await getErrorMessage(result, retryCount, Date.now() - startTime)}`);
+                return error(
+                    `fetch error: ${await getErrorMessage(result, retryCount, Date.now() - startTime)}`,
+                );
             } else if (debugError.enabled) {
                 debugError(await getErrorMessage(result));
             }
