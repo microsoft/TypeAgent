@@ -41,7 +41,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
            @"INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
           VALUES (@semref_id, @range_json, @knowledge_type, @knowledge_json);"
         );
-        WriteSemanticRefRow(cmd, GetNextSemanicRefId(), row);
+        WriteSemanticRefRow(cmd, row);
         int rowCount = cmd.ExecuteNonQuery();
         if (rowCount > 0)
         {
@@ -148,6 +148,7 @@ ORDER BY semref_id");
     SemanticRefRow ToSemanticRefRow(SemanticRef semanticRef)
     {
         SemanticRefRow row = new();
+        row.SemanticRefId = (semanticRef.SemanticRefOrdinal < 0) ? GetNextSemanicRefId() : semanticRef.SemanticRefOrdinal;
         row.RangeJson = StorageSerializer.ToJson(semanticRef.Range);
         row.KnowledgeType = semanticRef.KnowledgeType;
         row.KnowledgeJson = StorageSerializer.ToJson(semanticRef.Knowledge);
@@ -179,9 +180,9 @@ ORDER BY semref_id");
         return row;
     }
 
-    void WriteSemanticRefRow(SqliteCommand cmd, int semanticRefId, SemanticRefRow semanticRefRow)
+    void WriteSemanticRefRow(SqliteCommand cmd, SemanticRefRow semanticRefRow)
     {
-        cmd.AddParameter("@semref_id", semanticRefId);
+        cmd.AddParameter("@semref_id", semanticRefRow.SemanticRefId);
         cmd.AddParameter("@range_json", semanticRefRow.RangeJson);
         cmd.AddParameter("@knowledge_type", semanticRefRow.KnowledgeType);
         cmd.AddParameter("@knowledge_json", semanticRefRow.KnowledgeJson);

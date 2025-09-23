@@ -8,4 +8,5 @@ public interface IStorageProvider<TMessage>
 {
     IMessageCollection<TMessage> Messages { get; }
     ISemanticRefCollection SemanticRefs { get; }
+    ITermToSemanticRefIndex SemanticRefIndex { get; }
 }

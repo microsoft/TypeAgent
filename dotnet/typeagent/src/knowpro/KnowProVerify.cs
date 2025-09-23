@@ -25,7 +25,6 @@ public class KnowProVerify
     public static void ThrowIfInvalid(SemanticRef semanticRef)
     {
         ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
-        ThrowIfInvalidSemanticRefOrdinal(semanticRef.SemanticRefOrdinal);
         ArgumentVerify.ThrowIfNull(semanticRef.Range, nameof(semanticRef.Range));
         ArgumentVerify.ThrowIfNullOrEmpty(semanticRef.KnowledgeType, nameof(semanticRef.KnowledgeType));
         ArgumentVerify.ThrowIfNull(semanticRef.Knowledge, nameof(semanticRef.Knowledge));

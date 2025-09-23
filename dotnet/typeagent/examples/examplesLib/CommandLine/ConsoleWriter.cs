@@ -26,10 +26,8 @@ public class ConsoleWriter
         }
     }
 
-    public static void Write(string value)
-    {
-        Console.Write(value);
-    }
+    public static void Write(int value) => Console.Write(value);
+    public static void Write(string value) => Console.Write(value);
 
     public static void Write(char ch, int count)
     {
@@ -39,10 +37,8 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteLine(string value)
-    {
-        Console.WriteLine(value);
-    }
+    public static void WriteLine(int value) => Console.WriteLine(value);
+    public static void WriteLine(string value) => Console.WriteLine(value);
 
     public static void WriteLineHeading(string title, int level = 1)
     {

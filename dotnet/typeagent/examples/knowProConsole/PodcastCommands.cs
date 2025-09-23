@@ -66,24 +66,33 @@ public class PodcastCommands : ICommandModule
         var podcast = new Podcast(provider);
 
         int count = await podcast.ImportMessagesAsync(data.Messages, cancellationToken);
-        Console.WriteLine($"{count} message imported");
-
+        KnowProWriter.WriteLine($"{count} message imported");
         // Read all
         for (int i = 0; i < count; ++i)
         {
             var message = await podcast.Messages.GetAsync(i, cancellationToken);
             var json = Json.Stringify(message);
-            Console.WriteLine(json);
+            KnowProWriter.WriteLine(json);
         }
 
-        Console.WriteLine($"{data.SemanticRefs.Length} semantic refs");
+        KnowProWriter.WriteLine($"{data.SemanticRefs.Length} semantic refs");
         count = await podcast.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken);
-        Console.WriteLine($"{count} semantic Refs imported");
+        KnowProWriter.WriteLine($"{count} semantic Refs imported");
         for (int i = 0; i < count; ++i)
         {
             var semanticRef = await podcast.SemanticRefs.GetAsync(i, cancellationToken);
             var json = Serializer.ToJsonIndented(semanticRef);
-            Console.WriteLine(json);
+            KnowProWriter.WriteLine(json);
+        }
+
+        if (data.SemanticIndexData is not null)
+        {
+            await podcast.ImportTermToSemanticRefIndexAsync(data.SemanticIndexData.Items, cancellationToken);
+            count = await podcast.SemanticRefIndex.GetCountAsync(cancellationToken);
+            KnowProWriter.WriteLine($"{count} index entries imported");
+
+            var matches = await podcast.SemanticRefIndex.LookupTermAsync("Children of Time", cancellationToken);
+            KnowProWriter.WriteLine($"{matches.Count} matches");
         }
     }
 }
