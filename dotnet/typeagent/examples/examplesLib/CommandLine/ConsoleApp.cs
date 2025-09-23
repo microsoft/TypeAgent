@@ -205,7 +205,7 @@ public abstract class ConsoleApp
 
     protected void WriteError(Exception ex)
     {
-        ConsoleEx.WriteError(ex);
+        ConsoleWriter.WriteError(ex);
     }
 
     protected virtual void WriteTitle()

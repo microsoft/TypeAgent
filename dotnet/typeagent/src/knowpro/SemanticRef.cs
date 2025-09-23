@@ -8,14 +8,6 @@ namespace TypeAgent.KnowPro;
 
 public class SemanticRef
 {
-    static JsonSerializerOptions s_serializerOptions;
-
-    static SemanticRef()
-    {
-        s_serializerOptions = Json.DefaultOptions();
-        s_serializerOptions.Converters.Add(new FacetValueJsonConverter());
-    }
-
     [JsonPropertyName("semanticRefOrdinal")]
     public int SemanticRefOrdinal { get; set; }
 
@@ -27,7 +19,7 @@ public class SemanticRef
 
     // The public, strongly-typed property
     [JsonIgnore]
-    public Knowledge Knowledge { get; set; }
+    public KnowledgeSchema Knowledge { get; set; }
 
     // Internal storage for the raw JSON
     [JsonPropertyName("knowledge")]
@@ -46,39 +38,39 @@ public class SemanticRef
         }
     }
 
-    public static JsonElement SerializeToElement(Knowledge knowledge, string type)
+    public static JsonElement SerializeToElement(KnowledgeSchema knowledge, string type)
     {
         return type switch
         {
-            KnowledgeTypes.Entity => JsonSerializer.SerializeToElement(knowledge as ConcreteEntity, s_serializerOptions),
-            KnowledgeTypes.Action => JsonSerializer.SerializeToElement(knowledge as Action),
-            KnowledgeTypes.Topic => JsonSerializer.SerializeToElement(knowledge as Topic),
-            KnowledgeTypes.Tag => JsonSerializer.SerializeToElement(knowledge as Tag),
+            KnowledgeTypes.Entity => Serializer.ToJsonElement(knowledge as ConcreteEntity),
+            KnowledgeTypes.Action => Serializer.ToJsonElement(knowledge as Action),
+            KnowledgeTypes.Topic => Serializer.ToJsonElement(knowledge as Topic),
+            KnowledgeTypes.Tag => Serializer.ToJsonElement(knowledge as Tag),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
 
     }
 
-    public static Knowledge Deserialize(string json, string type)
+    public static KnowledgeSchema Deserialize(string json, string type)
     {
         return type switch
         {
-            KnowledgeTypes.Entity => JsonSerializer.Deserialize<ConcreteEntity>(json, s_serializerOptions),
-            KnowledgeTypes.Action => JsonSerializer.Deserialize<Action>(json),
-            KnowledgeTypes.Topic => JsonSerializer.Deserialize<Topic>(json),
-            KnowledgeTypes.Tag => JsonSerializer.Deserialize<Tag>(json),
+            KnowledgeTypes.Entity => Serializer.FromJson<ConcreteEntity>(json),
+            KnowledgeTypes.Action => Serializer.FromJson<Action>(json),
+            KnowledgeTypes.Topic => Serializer.FromJson<Topic>(json),
+            KnowledgeTypes.Tag => Serializer.FromJson<Tag>(json),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }
 
-    public static Knowledge Deserialize(JsonElement element, string type)
+    public static KnowledgeSchema Deserialize(JsonElement element, string type)
     {
         return type switch
         {
-            KnowledgeTypes.Entity => element.Deserialize<ConcreteEntity>(s_serializerOptions),
-            KnowledgeTypes.Action => element.Deserialize<Action>(),
-            KnowledgeTypes.Topic => element.Deserialize<Topic>(),
-            KnowledgeTypes.Tag => element.Deserialize<Tag>(),
+            KnowledgeTypes.Entity => Serializer.FromJsonElement<ConcreteEntity>(element),
+            KnowledgeTypes.Action => Serializer.FromJsonElement<Action>(element),
+            KnowledgeTypes.Topic => Serializer.FromJsonElement<Topic>(element),
+            KnowledgeTypes.Tag => Serializer.FromJsonElement<Tag>(element),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }

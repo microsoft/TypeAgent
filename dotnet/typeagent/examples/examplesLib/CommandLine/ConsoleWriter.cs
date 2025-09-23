@@ -3,11 +3,11 @@
 
 namespace TypeAgent.ExamplesLib.CommandLine;
 
-public static class ConsoleEx
+public class ConsoleWriter
 {
     static Stack<ConsoleColor> s_colorStack;
 
-    static ConsoleEx()
+    static ConsoleWriter()
     {
         s_colorStack = new Stack<ConsoleColor>();
     }
@@ -26,12 +26,22 @@ public static class ConsoleEx
         }
     }
 
+    public static void Write(string value)
+    {
+        Console.Write(value);
+    }
+
     public static void Write(char ch, int count)
     {
         for (int i = 0; i < count; ++i)
         {
             Console.Write(ch);
         }
+    }
+
+    public static void WriteLine(string value)
+    {
+        Console.WriteLine(value);
     }
 
     public static void WriteLineHeading(string title, int level = 1)
@@ -58,3 +68,17 @@ public static class ConsoleEx
         WriteError(ex.Message);
     }
 }
+
+public enum ListType
+{
+    Ol, // Ordered list - numbered
+    Ul, // Unordered list - bullets
+    Plain,
+    Csv // List in csv format
+}
+
+public struct ListOptions {
+    public string? Title { get; set; }
+
+    public ListType Type { get; set; }
+};
