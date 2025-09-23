@@ -271,8 +271,8 @@ export async function fetchWithRetry(
 
             // See if the service tells how long to wait to retry
             const pauseMs = getRetryAfterMs(result, retryPauseMs);
-            await sleep(pauseMs);
-            retryCount++;
+            retryCount++; // use the retry count as a backoff multiplier
+            await sleep(pauseMs * retryCount + getRandomDelay());
         }
     } catch (e: any) {
         return error(`fetch error: ${e.cause?.message ?? e.message}`);
@@ -313,6 +313,16 @@ export function getRetryAfterMs(
         console.log(`Failed to parse Retry-After header ${err}`);
     }
     return defaultValue;
+}
+
+/**
+ *
+ * @param min - The minimum delay in milliseconds (default 1 second)
+ * @param max - The maximum delay in milliseconds (default 5 seconds)
+ * @returns A random delay between the min and max
+ */
+function getRandomDelay(min: number = 1000, max: number = 5000): number {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 async function fetchWithTimeout(

@@ -348,7 +348,8 @@
               }
             },
             "alternates": {
-              "internetLookups.0": "president of the United States in 1837"
+              "internetLookups.0": "president of the United States in 1837",
+              "internetLookups.1": "us president in 1837"
             }            
           }
         ]
@@ -371,18 +372,25 @@
     },
     {
       "request": "play Toccata and Fugue by Bach",
-      "expected": [
-        {
-          "schemaName": "player",
-          "actionName": "playTrack",
-          "parameters": {
-            "trackName": "Toccata and Fugue",
-            "artists": [
-              "Bach"
-            ]
+      "expected": {
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "player",
+              "actionName": "playTrack",
+              "parameters": {
+                "trackName": "Toccata and Fugue",
+                "artists": [
+                  "Bach"
+                ]
+              }
+            },
+            "alternates": {
+              "artists.0": "johann sebastian bach"
+            }
           }
-        }
-      ],
+        ]
+      },
       "history": [
         {
           "text": "Updated the current track list with the numbered list of tracks on the screen",

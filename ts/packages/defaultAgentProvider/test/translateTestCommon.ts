@@ -188,7 +188,7 @@ export async function defineTranslateTest(
                         validateCommandResult(step, result);
                     });
                 },
-                10000 * Math.round(repeat / concurrency),
+                30000 * Math.round(repeat / concurrency),
             );
         });
         afterAll(async () => {
