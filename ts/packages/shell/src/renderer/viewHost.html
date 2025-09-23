@@ -24,11 +24,17 @@
         --close-button-hover: #e81123;
         --text-color: #333333;
         --toolbar-bg: #e5e5e5;
+        --layout-button-left: 4px;
+        --layout-button-width: 28px;
+        --layout-button-height: 28px;
+        --layout-button-area-width: 36px;
       }
 
       /* Platform-specific adjustments */
       .platform-macos {
         --title-bar-height: 36px;
+        --layout-button-left: 78px;
+        --layout-button-area-width: calc(36px + var(--layout-button-left));
       }
 
       .platform-linux {
@@ -47,7 +53,9 @@
       .title-bar {
         position: fixed;
         top: 0;
-        left: 0;
+        left: var(
+          --layout-button-area-width
+        ); /* Start after the layout toggle button */
         right: 0;
         height: var(--title-bar-height);
         background: var(--title-bar-bg);
@@ -62,20 +70,6 @@
       }
 
       /* Layout-specific positioning */
-      body.horizontal-layout .title-bar {
-        left: 0;
-        right: 0;
-      }
-
-      body.vertical-layout .title-bar {
-        left: 0 !important; /* Force full width in vertical layout */
-        right: 0;
-      }
-
-      body.vertical-layout .browser-nav {
-        margin-left: 30px;
-      }
-
       /* When in horizontal layout with chat sidebar, browser controls should be positioned over browser area */
       body.horizontal-layout.has-sidebar .title-bar {
         left: var(--sidebar-width, 400px);
@@ -122,13 +116,23 @@
         background: transparent;
       }
 
+      .layout-toggle {
+        position: fixed;
+        top: 0;
+        left: 0xp;
+        width: var(--layout-button-area-width);
+        height: var(--title-bar-height);
+        background: var(--title-bar-bg);
+        border-bottom: 1px solid var(--border-color);
+      }
+
       /* Absolute positioned layout toggle button */
       .layout-toggle-absolute {
-        position: fixed;
+        position: relative;
         top: 8px;
-        left: 4px;
-        width: 28px;
-        height: 28px;
+        left: var(--layout-button-left);
+        width: var(--layout-button-width);
+        height: var(--layout-button-height);
         border: none;
         background: transparent;
         border-radius: 4px;
@@ -163,6 +167,11 @@
         pointer-events: none;
       }
 
+      .platform-macos .layout-toggle-absolute {
+        left: 78px;
+        top: 4px;
+      }
+
       .browser-nav {
         display: flex;
         align-items: center;
@@ -182,18 +191,29 @@
         display: flex;
         align-items: center;
         min-width: 0;
-        padding: 0 8px;
+        padding: 0px;
         position: relative;
         height: 100%;
+        -webkit-app-region: no-drag;
       }
 
       /* Draggable regions based on mode */
-      .title-bar-center.chat-only-mode {
+      .chat-only-mode .title-bar-center {
         -webkit-app-region: drag;
       }
 
-      .title-bar-center.browser-mode {
-        -webkit-app-region: no-drag;
+      .chat-only-mode .browser-nav,
+      .chat-only-mode .tab-container,
+      .chat-only-mode .window-controls {
+        display: none;
+      }
+
+      .chat-only-mode .app-title {
+        display: flex;
+      }
+
+      body.horizontal-layout.has-sidebar .app-title {
+        display: none;
       }
 
       /* Tab Container */
@@ -211,6 +231,7 @@
         min-width: 0;
         overflow: hidden;
         gap: 1px;
+        padding: 0 8px;
       }
 
       .tab-drag-region {
@@ -336,7 +357,7 @@
         cursor: default;
         text-align: center;
         margin-left: 44px; /* Account for toggle button width + safe spacing */
-        margin-bottom: 4px;
+        height: 100%;
       }
 
       /* Right Side */
@@ -391,13 +412,7 @@
 
       /* macOS specific */
       .platform-macos .window-controls {
-        order: -1;
-        margin-right: auto;
-      }
-
-      .platform-macos .traffic-light-spacer {
-        width: 78px;
-        height: var(--title-bar-height);
+        display: none;
       }
 
       /* Responsive behavior */
@@ -412,9 +427,11 @@
       .sidebar-title-bar {
         position: fixed;
         top: 0;
-        left: 36px; /* Start after the layout toggle button */
+        left: var(
+          --layout-button-area-width
+        ); /* Start after the layout toggle button */
         width: calc(
-          var(--sidebar-width, 400px) - 36px
+          var(--sidebar-width, 400px) - var(--layout-button-area-width)
         ); /* Adjust width to account for offset */
         height: var(--title-bar-height);
         background: var(--title-bar-bg);
@@ -425,25 +442,8 @@
         justify-content: center;
         z-index: 9999;
         -webkit-app-region: drag;
-        transition:
-          width 0.2s ease,
-          left 0.2s ease;
         box-sizing: border-box;
         pointer-events: auto;
-      }
-
-      /* Add a background strip for the toggle button area */
-      body.horizontal-layout.has-sidebar .sidebar-title-bar::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: -36px;
-        width: 36px;
-        height: 100%;
-        background: var(--title-bar-bg);
-        border-bottom: 1px solid var(--border-color);
-        z-index: -1;
-        pointer-events: none;
       }
 
       .sidebar-title {
@@ -456,7 +456,7 @@
         user-select: none;
         -webkit-user-select: none;
         cursor: default;
-        margin-bottom: 4px;
+        height: 100%;
       }
 
       /* Show sidebar title only in horizontal layout with sidebar */
@@ -491,56 +491,58 @@
 
   <body>
     <!-- Layout Toggle Button (always at the absolute left) -->
-    <button
-      class="layout-toggle-absolute"
-      id="layout-toggle-btn"
-      title="Toggle Layout"
-    >
-      <svg width="14" height="14" viewBox="0 0 16 16" id="layout-icon">
-        <!-- Side panel icon (default) -->
-        <g id="side-panel-icon">
-          <rect
-            x="1"
-            y="2"
-            width="6"
-            height="12"
-            fill="currentColor"
-            stroke="currentColor"
-            stroke-width="0.5"
-          />
-          <rect
-            x="9"
-            y="2"
-            width="6"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="0.5"
-          />
-        </g>
-        <!-- Bottom panel icon (hidden by default) -->
-        <g id="bottom-panel-icon" style="display: none">
-          <rect
-            x="1"
-            y="2"
-            width="14"
-            height="5"
-            fill="currentColor"
-            stroke="currentColor"
-            stroke-width="0.5"
-          />
-          <rect
-            x="1"
-            y="9"
-            width="14"
-            height="5"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="0.5"
-          />
-        </g>
-      </svg>
-    </button>
+    <div class="layout-toggle">
+      <button
+        class="layout-toggle-absolute"
+        id="layout-toggle-btn"
+        title="Toggle Layout"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" id="layout-icon">
+          <!-- Side panel icon (default) -->
+          <g id="side-panel-icon">
+            <rect
+              x="1"
+              y="2"
+              width="6"
+              height="12"
+              fill="currentColor"
+              stroke="currentColor"
+              stroke-width="0.5"
+            />
+            <rect
+              x="9"
+              y="2"
+              width="6"
+              height="12"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="0.5"
+            />
+          </g>
+          <!-- Bottom panel icon (hidden by default) -->
+          <g id="bottom-panel-icon" style="display: none">
+            <rect
+              x="1"
+              y="2"
+              width="14"
+              height="5"
+              fill="currentColor"
+              stroke="currentColor"
+              stroke-width="0.5"
+            />
+            <rect
+              x="1"
+              y="9"
+              width="14"
+              height="5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="0.5"
+            />
+          </g>
+        </svg>
+      </button>
+    </div>
 
     <!-- Sidebar Title Bar (visible in horizontal layout with sidebar) -->
     <div class="sidebar-title-bar" id="sidebar-title-bar">
@@ -591,13 +593,9 @@
         </div>
       </div>
 
-      <!-- Right Side: Draggable Area + Window Controls -->
-      <div class="title-bar-right">
-        <div class="drag-region"></div>
-        <!-- Window controls will be inserted based on platform -->
-        <div class="window-controls" id="window-controls">
-          <!-- Platform-specific buttons will be inserted here -->
-        </div>
+      <!-- Right Side: Window Controls -->
+      <div class="title-bar-right window-controls" id="window-controls">
+        <!-- Platform-specific buttons will be inserted here -->
       </div>
     </div>
 
@@ -653,10 +651,7 @@
         );
 
         // Setup window controls based on platform
-        if (isMac) {
-          // macOS: Use system traffic lights, add spacer
-          windowControls.innerHTML = '<div class="traffic-light-spacer"></div>';
-        } else {
+        if (!isMac) {
           // Windows/Linux: Custom window controls
           windowControls.innerHTML = `
             <button class="window-control minimize" id="minimize-btn" title="Minimize">
@@ -699,27 +694,12 @@
         }
 
         updateVisibility() {
-          const titleBarCenter = document.querySelector(".title-bar-center");
-          const titleBarRight = document.querySelector(".title-bar-right");
-
           if (currentMode === UIMode.BROWSER) {
-            browserNav.style.display = "flex";
-            tabContainer.style.display = "flex";
-            appTitle.style.display = "none";
-            titleBarRight.style.display = "flex";
-
             // Make center area non-draggable in browser mode
-            titleBarCenter.classList.remove("chat-only-mode");
-            titleBarCenter.classList.add("browser-mode");
+            titleBar.classList.remove("chat-only-mode");
           } else {
-            browserNav.style.display = "none";
-            tabContainer.style.display = "none";
-            appTitle.style.display = "flex";
-            titleBarRight.style.display = "none"; // Hide right side in chat-only mode
-
             // Make center area draggable in chat-only mode
-            titleBarCenter.classList.remove("browser-mode");
-            titleBarCenter.classList.add("chat-only-mode");
+            titleBar.classList.add("chat-only-mode");
           }
         }
       }
@@ -778,17 +758,11 @@
           // Update divider position immediately
           dividerVertical.style.left = `${newX}px`;
 
-          // Update title bar position immediately to remove lag
-          titleBar.style.left = `${newX}px`;
-
           // Update sidebar width CSS variable and sidebar title bar immediately
           document.documentElement.style.setProperty(
             "--sidebar-width",
             `${newX}px`,
           );
-          if (sidebarTitleBar) {
-            sidebarTitleBar.style.width = `calc(${newX}px - 36px)`;
-          }
 
           // Send IPC message for view content updates (but UI is already updated)
           ipcRenderer.send("views-resized-by-user", newX);
@@ -819,10 +793,6 @@
       layoutToggleBtn.addEventListener("click", async () => {
         try {
           const result = await ipcRenderer.invoke("toggle-layout");
-          if (result && result.verticalLayout && tabs.length === 0) {
-            // If switching to vertical layout with no tabs, create a new tab
-            ipcRenderer.send("browser-new-tab");
-          }
         } catch (error) {
           console.error("Failed to toggle layout:", error);
         }
@@ -926,13 +896,6 @@
           document.body.classList.add("vertical-layout");
           dividerVertical.style.visibility = "hidden";
 
-          // Reset title bar to full width in vertical layout
-          if (!isDragging) {
-            titleBar.style.left = "0px";
-          }
-
-          browserNav.style.paddingLeft = "28px";
-
           const newY = layout.pos;
           if (newY < 0) {
             dividerHorizontal.style.visibility = "hidden";
@@ -949,15 +912,9 @@
           const newX = layout.pos;
           if (newX < 0) {
             dividerVertical.style.visibility = "hidden";
-            // Reset title bar to full width when no sidebar in horizontal layout
-            if (!isDragging) {
-              titleBar.style.left = "0px";
-            }
           } else {
             // In horizontal layout with sidebar visible
             document.body.classList.add("has-sidebar");
-
-            browserNav.style.paddingLeft = "0px";
 
             // Only update positions if not currently dragging to avoid conflicts
             if (!isDragging) {
@@ -965,13 +922,7 @@
                 "--sidebar-width",
                 `${newX}px`,
               );
-              titleBar.style.left = `${newX}px`;
               dividerVertical.style.left = `${newX}px`;
-
-              // Update sidebar title bar width
-              if (sidebarTitleBar) {
-                sidebarTitleBar.style.width = `calc(${newX}px - 36px)`;
-              }
             }
 
             dividerVertical.style.visibility = "visible";

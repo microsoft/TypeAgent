@@ -10,6 +10,7 @@ export type UISettings = {
     verticalLayout: boolean;
     verticalContentAlwaysVisible: boolean;
     horizontalContentAlwaysVisible: boolean;
+    autoEmptyTab: boolean;
     dev: boolean;
     darkMode: boolean;
 };
@@ -48,6 +49,7 @@ export const defaultUserSettings: ShellUserSettings = {
         verticalLayout: true,
         verticalContentAlwaysVisible: true,
         horizontalContentAlwaysVisible: false,
+        autoEmptyTab: true,
         dev: false,
         darkMode: false,
     },
