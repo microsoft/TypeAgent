@@ -11,6 +11,7 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
     SqliteDatabase _db;
     SqliteMessageCollection<TMessage, TMeta> _messages;
     SqliteSemanticRefCollection _semanticRefs;
+    SqliteTermToSemanticRefIndex _semanticRefIndex;
 
     public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
         : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
@@ -28,17 +29,22 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         }
         _messages = new SqliteMessageCollection<TMessage, TMeta>(_db);
         _semanticRefs = new SqliteSemanticRefCollection(_db);
+        _semanticRefIndex = new SqliteTermToSemanticRefIndex(_db);
     }
 
     public IMessageCollection<TMessage> Messages => _messages;
 
     public ISemanticRefCollection SemanticRefs => _semanticRefs;
 
+    public ITermToSemanticRefIndex SemanticRefIndex => _semanticRefIndex;
+
     public void InitSchema()
     {
         _db.Execute(SqliteStorageProviderSchema.ConversationMetadataSchema);
         _db.Execute(SqliteStorageProviderSchema.MessagesSchema);
         _db.Execute(SqliteStorageProviderSchema.SemanticRefsSchema);
+        _db.Execute(SqliteStorageProviderSchema.SemanticRefIndexSchema);
+        _db.Execute(SqliteStorageProviderSchema.TimestampIndexSchema);
     }
 
     public void Dispose()
@@ -52,7 +58,7 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         if (fromDispose)
         {
             _db?.Dispose();
-            _db = null;
+            Clear();
         }
     }
 
@@ -63,6 +69,13 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         // Improve write performance for bulk operations
         this._db.Execute("PRAGMA synchronous = NORMAL"); // Faster than FULL, still safe
         this._db.Execute("PRAGMA journal_mode = WAL");  // Write-Ahead Logging for better concurrency
+    }
+
+    void Clear()
+    {
+        _db = null;
+        _messages = null;
+        _semanticRefs = null;
     }
 
 }
@@ -99,6 +112,10 @@ CREATE TABLE IF NOT EXISTS Messages(
 );
 ";
 
+    public const string TimestampIndexSchema = @"
+CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
+";
+
     public const string SemanticRefTable = "SemanticRefs";
     public const string SemanticRefsSchema = @"
 CREATE TABLE IF NOT EXISTS SemanticRefs (
@@ -108,4 +125,15 @@ CREATE TABLE IF NOT EXISTS SemanticRefs (
     knowledge_json JSON NOT NULL       -- JSON of the Knowledge object
 );
 ";
+
+    public const string SemanticRefIndexTable = "SemanticRefIndex";
+    public const string SemanticRefIndexSchema = @"
+CREATE TABLE IF NOT EXISTS SemanticRefIndex (
+    term TEXT NOT NULL,             -- lowercased, not-unique/normalized
+    semref_id INTEGER NOT NULL,
+    score REAL NOT NULL,
+    FOREIGN KEY (semref_id) REFERENCES SemanticRefs(semref_id) ON DELETE CASCADE
+);
+";
+
 }

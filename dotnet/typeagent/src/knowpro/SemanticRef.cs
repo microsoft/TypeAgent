@@ -9,7 +9,7 @@ namespace TypeAgent.KnowPro;
 public class SemanticRef
 {
     [JsonPropertyName("semanticRefOrdinal")]
-    public int SemanticRefOrdinal { get; set; }
+    public int SemanticRefOrdinal { get; set; } = -1;
 
     [JsonPropertyName("range")]
     public TextRange Range { get; set; }
@@ -31,7 +31,7 @@ public class SemanticRef
                default;
         set
         {
-            if(value is not null)
+            if (value is not null)
             {
                 Knowledge = Deserialize((JsonElement)value, KnowledgeType);
             }

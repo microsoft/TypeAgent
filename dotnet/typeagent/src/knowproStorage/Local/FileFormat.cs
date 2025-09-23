@@ -18,8 +18,14 @@ public class ConversationData<TMessage>
     [JsonPropertyName("messages")]
     public TMessage[] Messages { get; set; }
 
+    [JsonPropertyName("tags")]
+    public string[] Tags { get; set; }
+
     [JsonPropertyName("semanticRefs")]
     public SemanticRef[] SemanticRefs { get; set; }
+
+    [JsonPropertyName("semanticIndexData")]
+    public TermToSemanticRefIndexData? SemanticIndexData { get; set; }
 }
 
 public class ConversationJsonData<TMessage> : ConversationData<TMessage>
@@ -27,4 +33,18 @@ public class ConversationJsonData<TMessage> : ConversationData<TMessage>
 {
     [JsonPropertyName("fileHeader")]
     public FileHeader? FileHeader { get; set; }
+}
+
+public class TermToSemanticRefIndexData
+{
+    [JsonPropertyName("items")]
+    public TermToSemanticRefIndexDataItem[] Items { get; set; }
+}
+
+public class TermToSemanticRefIndexDataItem
+{
+    [JsonPropertyName("term")]
+    public string Term { get; set; }
+    [JsonPropertyName("semanticRefOrdinals")]
+    public ScoredSemanticRefOrdinal[] SemanticRefOrdinals { get; set; }
 }

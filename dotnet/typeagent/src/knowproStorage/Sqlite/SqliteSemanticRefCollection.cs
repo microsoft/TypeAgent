@@ -8,23 +8,32 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
     SqliteDatabase _db;
     int _count = -1;
 
-    public SqliteSemanticRefCollection(SqliteDatabase database)
+    public SqliteSemanticRefCollection(SqliteDatabase db)
     {
-        ArgumentVerify.ThrowIfNull(database, nameof(database));
-        _db = database;
+        ArgumentVerify.ThrowIfNull(db, nameof(db));
+        _db = db;
     }
 
 
     public bool IsPersistent => true;
 
-    public Task<int> GetCountAsync()
+    public int GetCount()
+    {
+        if (_count < 0)
+        {
+            _count = _db.GetCount(SqliteStorageProviderSchema.SemanticRefTable);
+        }
+        return _count;
+    }
+
+    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult(GetCount());
     }
 
     public void Append(SemanticRef semanticRef)
     {
-        ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
+        KnowProVerify.ThrowIfInvalid(semanticRef);
 
         SemanticRefRow row = ToSemanticRefRow(semanticRef);
 
@@ -32,7 +41,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
            @"INSERT INTO SemanticRefs (semref_id, range_json, knowledge_type, knowledge_json)
           VALUES (@semref_id, @range_json, @knowledge_type, @knowledge_json);"
         );
-        WriteSemanticRefRow(cmd, GetNextSemanicRefId(), row);
+        WriteSemanticRefRow(cmd, row);
         int rowCount = cmd.ExecuteNonQuery();
         if (rowCount > 0)
         {
@@ -40,13 +49,13 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         }
     }
 
-    public Task AppendAsync(SemanticRef semanticRef)
+    public Task AppendAsync(SemanticRef semanticRef, CancellationToken cancellationToken = default)
     {
         Append(semanticRef);
         return Task.CompletedTask;
     }
 
-    public Task AppendAsync(IEnumerable<SemanticRef> items)
+    public Task AppendAsync(IEnumerable<SemanticRef> items, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(items, nameof(items));
 
@@ -79,12 +88,12 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     }
 
 
-    public Task<SemanticRef> GetAsync(int ordinal)
+    public Task<SemanticRef> GetAsync(int ordinal, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(Get(ordinal));
     }
 
-    public Task<IList<SemanticRef>> GetAsync(IList<int> ids)
+    public Task<IList<SemanticRef>> GetAsync(IList<int> ids, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(ids, nameof(ids));
 
@@ -99,7 +108,7 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
 
     public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        var cmd = _db.CreateCommand(@"
+        using var cmd = _db.CreateCommand(@"
 SELECT semref_id, range_json, knowledge_type, knowledge_json
 FROM SemanticRefs WHERE semref_id = ?
 ");
@@ -112,7 +121,7 @@ FROM SemanticRefs WHERE semref_id = ?
 
     }
 
-    public Task<IList<SemanticRef>> GetSliceAsync(int start, int end)
+    public Task<IList<SemanticRef>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
 
@@ -130,15 +139,6 @@ ORDER BY semref_id");
         return GetCount();
     }
 
-    int GetCount()
-    {
-        if (_count < 0)
-        {
-            _count = _db.GetCount(SqliteStorageProviderSchema.SemanticRefTable);
-        }
-        return _count;
-    }
-
     SemanticRef ReadSemanticRef(SqliteDataReader reader)
     {
         var row = ReadSemanticRefRow(reader);
@@ -148,6 +148,7 @@ ORDER BY semref_id");
     SemanticRefRow ToSemanticRefRow(SemanticRef semanticRef)
     {
         SemanticRefRow row = new();
+        row.SemanticRefId = (semanticRef.SemanticRefOrdinal < 0) ? GetNextSemanicRefId() : semanticRef.SemanticRefOrdinal;
         row.RangeJson = StorageSerializer.ToJson(semanticRef.Range);
         row.KnowledgeType = semanticRef.KnowledgeType;
         row.KnowledgeJson = StorageSerializer.ToJson(semanticRef.Knowledge);
@@ -170,18 +171,18 @@ ORDER BY semref_id");
     {
         SemanticRefRow row = new SemanticRefRow();
 
-        int iRow = 0;
-        row.SemanticRefId = reader.GetInt32(iRow++);
-        row.RangeJson = reader.GetStringOrNull(iRow++);
-        row.KnowledgeType = reader.GetStringOrNull(iRow++);
-        row.KnowledgeJson = reader.GetStringOrNull(iRow++);
+        int iCol = 0;
+        row.SemanticRefId = reader.GetInt32(iCol++);
+        row.RangeJson = reader.GetStringOrNull(iCol++);
+        row.KnowledgeType = reader.GetStringOrNull(iCol++);
+        row.KnowledgeJson = reader.GetStringOrNull(iCol++);
 
         return row;
     }
 
-    void WriteSemanticRefRow(SqliteCommand cmd, int semanticRefId, SemanticRefRow semanticRefRow)
+    void WriteSemanticRefRow(SqliteCommand cmd, SemanticRefRow semanticRefRow)
     {
-        cmd.AddParameter("@semref_id", semanticRefId);
+        cmd.AddParameter("@semref_id", semanticRefRow.SemanticRefId);
         cmd.AddParameter("@range_json", semanticRefRow.RangeJson);
         cmd.AddParameter("@knowledge_type", semanticRefRow.KnowledgeType);
         cmd.AddParameter("@knowledge_json", semanticRefRow.KnowledgeJson);
