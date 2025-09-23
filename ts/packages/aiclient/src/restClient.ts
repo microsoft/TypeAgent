@@ -215,11 +215,6 @@ async function getErrorMessage(
     retries?: number | undefined,
     timeTaken?: number | undefined,
 ): Promise<string> {
-async function getErrorMessage(
-    response: Response,
-    retries?: number | undefined,
-    timeTaken?: number | undefined,
-): Promise<string> {
     let bodyMessage = "";
     try {
         const bodyText = await response.text();
@@ -246,7 +241,6 @@ async function getErrorMessage(
  * @param retryPauseMs (optional) # of milliseconds to pause before retrying
  * @param timeout (optional) set custom timeout in milliseconds
  * @param throttler (optional) function to throttle fetch calls
- * @param notToExceed (optional) total time in ms that all retries should not exceed
  * @returns Response object
  */
 export async function fetchWithRetry(
@@ -256,11 +250,10 @@ export async function fetchWithRetry(
     retryPauseMs?: number,
     timeout?: number,
     throttler?: FetchThrottler,
-    notToExceed?: number, // total time in ms that all retries should not exceed
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
-    notToExceed ??= 60_000; // default to 1 minute
+    timeout ??= 60_000; // default to 1 minute
 
     const backOffFactor = 10_000;
     let retryCount = 0;
@@ -277,9 +270,9 @@ export async function fetchWithRetry(
                 return success(result);
             }
             if (
-                !isTransientHttpError(result.status) || // non-transient error
-                retryCount >= retryMaxAttempts ||       // exceeded max retries
-                Date.now() - startTime > notToExceed    // exceeded total time allowed
+                !isTransientHttpError(result.status) ||     // non-transient error
+                retryCount >= retryMaxAttempts ||           // exceeded max retries
+                Date.now() - startTime > timeout            // exceeded total time allowed
             ) {
                 return error(
                     `fetch error: ${await getErrorMessage(result, retryCount, Date.now() - startTime)}`,
