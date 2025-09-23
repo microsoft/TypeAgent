@@ -35,18 +35,31 @@ public class SemanticRef
     internal JsonElement? KnowledgeElement
     {
         get => Knowledge is not null ?
-               JsonSerializer.SerializeToElement(Knowledge) :
+               SerializeToElement(Knowledge, KnowledgeType) :
                default;
         set
         {
             if(value is not null)
             {
-                Knowledge = ParseKnowledge((JsonElement)value, KnowledgeType);
+                Knowledge = Deserialize((JsonElement)value, KnowledgeType);
             }
         }
     }
 
-    public static Knowledge ParseKnowledge(string json, string type)
+    public static JsonElement SerializeToElement(Knowledge knowledge, string type)
+    {
+        return type switch
+        {
+            KnowledgeTypes.Entity => JsonSerializer.SerializeToElement(knowledge as ConcreteEntity, s_serializerOptions),
+            KnowledgeTypes.Action => JsonSerializer.SerializeToElement(knowledge as Action),
+            KnowledgeTypes.Topic => JsonSerializer.SerializeToElement(knowledge as Topic),
+            KnowledgeTypes.Tag => JsonSerializer.SerializeToElement(knowledge as Tag),
+            _ => throw new JsonException($"Unknown KnowledgeType: {type}")
+        };
+
+    }
+
+    public static Knowledge Deserialize(string json, string type)
     {
         return type switch
         {
@@ -58,7 +71,7 @@ public class SemanticRef
         };
     }
 
-    public static Knowledge ParseKnowledge(JsonElement element, string type)
+    public static Knowledge Deserialize(JsonElement element, string type)
     {
         return type switch
         {
