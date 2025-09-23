@@ -95,6 +95,7 @@ export class ShellWindow {
 
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
+    private isReady: boolean = false;
     private closing: boolean = false;
 
     // Multi-tab browser support
@@ -193,13 +194,7 @@ export class ShellWindow {
 
         // Browser tab management IPC handlers
         ipcMain.on("browser-new-tab", () => {
-            this.createBrowserTab(new URL("about:blank"), {
-                background: false,
-            });
-            this.sendTabsUpdate();
-
-            // Restore focus to chat after creating new tab
-            this.focusChatInput();
+            this.createBrowserTab();
         });
 
         ipcMain.on("browser-close-tab", (_, tabId: string) => {
@@ -278,37 +273,12 @@ export class ShellWindow {
 
     public focusChatInput() {
         this.chatView.webContents.focus();
-        this.chatView.webContents.send("change-chat-input-focus", true);
+        this.chatView.webContents.send("focus-chat-input");
     }
 
-    private async ready(position: { x: number; y: number }) {
-        // Send settings asap
-        this.sendUserSettingChanged();
-
-        // Make sure content is loaded so we can adjust the size including the divider.
-        await this.waitForContentLoaded();
-        if (!isLinux) {
-            // REVIEW: on linux, setting windows bound before showing has not affect?
-            this.updateContentSize();
-        }
-
-        const mainWindow = this.mainWindow;
-        mainWindow.show();
-
-        if (isLinux) {
-            // REVIEW: on linux, setting windows bound before showing has not affect?
-            this.updateWindowBounds(position);
-        }
-
-        // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
-        this.setZoomFactor(1, mainWindow.webContents);
-
-        const states = this.settings.window;
-        if (states.devTools) {
-            this.chatView.webContents.openDevTools();
-        }
-
+    private async restoreBrowserTabs() {
         // Restore browser tabs if they were previously open
+        const states = this.settings.window;
         if (states.browserTabsJson) {
             try {
                 const browserTabsState: BrowserTabState[] = JSON.parse(
@@ -342,7 +312,10 @@ export class ShellWindow {
                 );
             }
         }
-
+    }
+    private async ready(position: { x: number; y: number }) {
+        // Send settings asap
+        this.sendUserSettingChanged();
         globalShortcut.register("Alt+Right", () => {
             this.chatView.webContents.send("send-demo-event", "Alt+Right");
         });
@@ -355,6 +328,32 @@ export class ShellWindow {
         globalShortcut.register("CommandOrControl+E", () => {
             this.focusChatInput();
         });
+
+        // Make sure content is loaded so we can adjust the size including the divider.
+        await this.waitForContentLoaded();
+        await this.restoreBrowserTabs();
+
+        // Now that the browser tabs are restored, we are "ready"
+        this.isReady = true;
+
+        if (!isLinux) {
+            // REVIEW: on linux, setting windows bound before showing has not affect?
+            this.updateContentSize();
+        }
+
+        const mainWindow = this.mainWindow;
+        this.setZoomFactor(1, mainWindow.webContents);
+        mainWindow.show();
+
+        if (isLinux) {
+            // REVIEW: on linux, setting windows bound before showing has not affect?
+            this.updateWindowBounds(position);
+        }
+
+        const states = this.settings.window;
+        if (states.devTools) {
+            this.chatView.webContents.openDevTools();
+        }
     }
 
     /**
@@ -648,6 +647,16 @@ export class ShellWindow {
         // Set the divider position
         debugShellWindow("Divider Pos", dividerLayout);
         this.mainWindow.webContents.send("set-layout", dividerLayout);
+
+        if (
+            this.contentVisible &&
+            !this.hasBrowserTabs() &&
+            this.settings.user.ui.autoEmptyTab &&
+            this.isReady &&
+            !this.closing
+        ) {
+            this.createBrowserTab();
+        }
     }
 
     public toggleTopMost() {
@@ -750,7 +759,7 @@ export class ShellWindow {
      * Create a new browser tab and navigate to the specified page
      */
     public async createBrowserTab(
-        url: URL,
+        url: URL = new URL("about:blank"),
         options?: { background?: boolean; waitForPageLoad?: boolean },
     ): Promise<string> {
         // Handle custom typeagent-browser protocol
@@ -817,8 +826,7 @@ export class ShellWindow {
             this.updateContentSize();
 
             // Restore focus to chat after closing tab
-            this.chatView.webContents.focus();
-            this.chatView.webContents.send("focus-chat-input");
+            this.focusChatInput();
         }
         return success;
     }
