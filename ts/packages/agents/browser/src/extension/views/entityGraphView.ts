@@ -552,7 +552,6 @@ class EntityGraphView {
 
             if (!graphData) {
                 console.warn("No graph data to export");
-
                 return;
             }
 

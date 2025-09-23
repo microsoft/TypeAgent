@@ -499,7 +499,6 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         if (typeof chrome !== "undefined" && chrome.runtime) {
             try {
                 const response = await chrome.runtime.sendMessage(message);
-
                 if (response && response.error) {
                     throw new Error(response.error);
                 }

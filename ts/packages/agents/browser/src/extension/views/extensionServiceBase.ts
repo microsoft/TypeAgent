@@ -449,13 +449,11 @@ export abstract class ExtensionServiceBase {
         maxNodes: number = 5000,
         includeConnectivity: boolean = true,
     ): Promise<any> {
-        const result = await this.sendMessage({
+        return this.sendMessage({
             type: "getGlobalImportanceLayer",
             maxNodes,
             includeConnectivity,
         });
-
-        return result;
     }
 
     async getViewportBasedNeighborhood(

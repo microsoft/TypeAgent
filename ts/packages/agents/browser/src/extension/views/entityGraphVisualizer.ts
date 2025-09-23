@@ -2259,7 +2259,6 @@ export class EntityGraphVisualizer {
         this.setupZoomInteractions();
         this.setupInteractions();
 
-        // Test zoom event functionality after setup
         setTimeout(() => {
             this.globalInstance.zoom(this.globalInstance.zoom() * 1.1);
         }, 2000);
