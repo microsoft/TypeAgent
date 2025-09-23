@@ -240,6 +240,7 @@ async function getErrorMessage(
  * @param retryMaxAttempts (optional) maximum number of retry attempts
  * @param retryPauseMs (optional) # of milliseconds to pause before retrying
  * @param timeout (optional) set custom timeout in milliseconds
+ * @param throttler (optional) function to throttle fetch calls
  * @returns Response object
  */
 export async function fetchWithRetry(
@@ -252,6 +253,9 @@ export async function fetchWithRetry(
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
+    timeout ??= 60_000; // default to 1 minute
+
+    const backOffFactor = 3_000;
     let retryCount = 0;
     const startTime: number = Date.now();
     try {
@@ -266,8 +270,9 @@ export async function fetchWithRetry(
                 return success(result);
             }
             if (
-                !isTransientHttpError(result.status) ||
-                retryCount >= retryMaxAttempts
+                !isTransientHttpError(result.status) || // non-transient error
+                retryCount >= retryMaxAttempts || // exceeded max retries
+                Date.now() - startTime > timeout // exceeded total time allowed
             ) {
                 return error(
                     `fetch error: ${await getErrorMessage(result, retryCount, Date.now() - startTime)}`,
@@ -278,8 +283,15 @@ export async function fetchWithRetry(
 
             // See if the service tells how long to wait to retry
             const pauseMs = getRetryAfterMs(result, retryPauseMs);
-            retryCount++; // use the retry count as a backoff multiplier
-            await sleep(pauseMs * retryCount * 2 + getRandomDelay());
+
+            // wait before retrying
+            // wait at least as long as the Retry-After header, plus a back-off factor that increases with each retry
+            // plus a random delay to avoid thundering herd
+            await sleep(
+                pauseMs + retryCount * backOffFactor + getRandomDelay(),
+            );
+
+            retryCount++;
         }
     } catch (e: any) {
         return error(`fetch error: ${e.cause?.message ?? e.message}`);
