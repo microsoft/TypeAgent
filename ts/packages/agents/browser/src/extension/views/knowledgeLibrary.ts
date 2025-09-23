@@ -996,10 +996,7 @@ class WebsiteLibraryPanelFullPage {
             });
 
             // Start graph building in minimal mode for testing
-            await extensionService.buildKnowledgeGraph({
-                minimalMode: true,
-                urlLimit: 100,
-            });
+            await extensionService.buildKnowledgeGraph();
 
             // Reload status after building
             await this.loadGraphStatus();

@@ -27,24 +27,51 @@ public class SemanticRef
 
     // The public, strongly-typed property
     [JsonIgnore]
-    public Knowledge Knowledge { get; private set; }
+    public Knowledge Knowledge { get; set; }
 
     // Internal storage for the raw JSON
     [JsonPropertyName("knowledge")]
     [JsonInclude]
     internal JsonElement? KnowledgeElement
     {
-        get => default;
+        get => Knowledge is not null ?
+               SerializeToElement(Knowledge, KnowledgeType) :
+               default;
         set
         {
             if(value is not null)
             {
-                Knowledge = ParseKnowledge((JsonElement)value, KnowledgeType);
+                Knowledge = Deserialize((JsonElement)value, KnowledgeType);
             }
         }
     }
 
-    private static Knowledge ParseKnowledge(JsonElement element, string type)
+    public static JsonElement SerializeToElement(Knowledge knowledge, string type)
+    {
+        return type switch
+        {
+            KnowledgeTypes.Entity => JsonSerializer.SerializeToElement(knowledge as ConcreteEntity, s_serializerOptions),
+            KnowledgeTypes.Action => JsonSerializer.SerializeToElement(knowledge as Action),
+            KnowledgeTypes.Topic => JsonSerializer.SerializeToElement(knowledge as Topic),
+            KnowledgeTypes.Tag => JsonSerializer.SerializeToElement(knowledge as Tag),
+            _ => throw new JsonException($"Unknown KnowledgeType: {type}")
+        };
+
+    }
+
+    public static Knowledge Deserialize(string json, string type)
+    {
+        return type switch
+        {
+            KnowledgeTypes.Entity => JsonSerializer.Deserialize<ConcreteEntity>(json, s_serializerOptions),
+            KnowledgeTypes.Action => JsonSerializer.Deserialize<Action>(json),
+            KnowledgeTypes.Topic => JsonSerializer.Deserialize<Topic>(json),
+            KnowledgeTypes.Tag => JsonSerializer.Deserialize<Tag>(json),
+            _ => throw new JsonException($"Unknown KnowledgeType: {type}")
+        };
+    }
+
+    public static Knowledge Deserialize(JsonElement element, string type)
     {
         return type switch
         {
@@ -55,6 +82,7 @@ public class SemanticRef
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }
+
 }
 
 public static class KnowledgeTypes
