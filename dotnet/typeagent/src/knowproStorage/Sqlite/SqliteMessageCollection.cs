@@ -34,7 +34,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return _count;
     }
 
-    public Task<int> GetCountAsync()
+    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult(GetCount());
     }
@@ -57,13 +57,13 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         }
     }
 
-    public Task AppendAsync(TMessage message)
+    public Task AppendAsync(TMessage message, CancellationToken cancellationToken = default)
     {
         Append(message);
         return Task.CompletedTask;
     }
 
-    public Task AppendAsync(IEnumerable<TMessage> messages)
+    public Task AppendAsync(IEnumerable<TMessage> messages, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(messages, nameof(messages));
 
@@ -96,13 +96,13 @@ FROM Messages WHERE msg_id = @msg_id"
         return message;
     }
 
-    public Task<TMessage> GetAsync(int msgId)
+    public Task<TMessage> GetAsync(int msgId, CancellationToken cancellationToken = default)
     {
         TMessage message = Get(msgId);
         return Task.FromResult(message);
     }
 
-    public Task<IList<TMessage>> GetAsync(IList<int> messageIds)
+    public Task<IList<TMessage>> GetAsync(IList<int> messageIds, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
 
@@ -128,7 +128,7 @@ FROM Messages ORDER BY msg_id");
         }
     }
 
-    public Task<IList<TMessage>> GetSliceAsync(int start, int end)
+    public Task<IList<TMessage>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default)
     {
         KnowProVerify.VerifyMessageOrdinal(start);
         KnowProVerify.VerifyMessageOrdinal(end);

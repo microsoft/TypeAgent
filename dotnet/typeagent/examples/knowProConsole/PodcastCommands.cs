@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Storage;
+
 namespace KnowProConsole;
 
 public class PodcastCommands : ICommandModule
@@ -64,16 +66,14 @@ public class PodcastCommands : ICommandModule
         var podcast = new Podcast(provider);
 
         Console.WriteLine($"{data.Messages.Length} messages");
-        foreach (var message in data.Messages)
-        {
-            await podcast.Messages.AppendAsync(message).ConfigureAwait(false);
-        }
-        int count = await podcast.Messages.GetCountAsync().ConfigureAwait(false);
-        Console.WriteLine(count);
+        await podcast.ImportMessagesAsync(data.Messages, cancellationToken).ConfigureAwait(false);
+        int count = await podcast.Messages.GetCountAsync(cancellationToken).ConfigureAwait(false);
+        Console.WriteLine($"{count} message imported");
+
         // Read all
         for (int i = 0; i < count; ++i)
         {
-            var message = await podcast.Messages.GetAsync(i);
+            var message = await podcast.Messages.GetAsync(i, cancellationToken);
             var json = Json.Stringify(message);
             Console.WriteLine(json);
         }
@@ -81,13 +81,13 @@ public class PodcastCommands : ICommandModule
         Console.WriteLine($"{data.SemanticRefs.Length} semantic refs");
         foreach (var sr in data.SemanticRefs)
         {
-            await podcast.SemanticRefs.AppendAsync(sr).ConfigureAwait(false);
+            await podcast.SemanticRefs.AppendAsync(sr, cancellationToken).ConfigureAwait(false);
         }
-        count = await podcast.SemanticRefs.GetCountAsync().ConfigureAwait(false);
+        count = await podcast.SemanticRefs.GetCountAsync(cancellationToken).ConfigureAwait(false);
         Console.WriteLine(count);
         for (int i = 0; i < count; ++i)
         {
-            var semanticRef = await podcast.SemanticRefs.GetAsync(i);
+            var semanticRef = await podcast.SemanticRefs.GetAsync(i, cancellationToken);
             var json = Serializer.ToJsonIndented(semanticRef);
             Console.WriteLine(json);
         }
