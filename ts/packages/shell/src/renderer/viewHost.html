@@ -72,6 +72,10 @@
         right: 0;
       }
 
+      body.vertical-layout .browser-nav {
+        margin-left: 30px;
+      }
+
       /* When in horizontal layout with chat sidebar, browser controls should be positioned over browser area */
       body.horizontal-layout.has-sidebar .title-bar {
         left: var(--sidebar-width, 400px);
@@ -180,6 +184,7 @@
         min-width: 0;
         padding: 0 8px;
         position: relative;
+        height: 100%;
       }
 
       /* Draggable regions based on mode */

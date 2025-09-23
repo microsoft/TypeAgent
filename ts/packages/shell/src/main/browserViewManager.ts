@@ -105,14 +105,18 @@ export class BrowserViewManager {
         // wire up loaded event handlers for the webContents so we can show errors
         webContentsView.webContents.on(
             "did-fail-load",
-            (_, errorCode, errorDesc) => {
+            (_, errorCode, errorDesc, validatedURL) => {
                 debug(
                     `Tab ${tabId} failed to load URL ${options.url}: [${errorCode}] ${errorDesc}`,
                 );
 
-                webContentsView.webContents
-                    .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
-                Error Details: <br />${errorCode} - ${errorDesc}"`);
+                // only show the error if it's for the page the user was asking
+                // it's possible some other resource failed to load (image, script, etc.)
+                if (validatedURL === options.url) {
+                    webContentsView.webContents.executeJavaScript(
+                        `document.body.innerHTML = "There was an error loading '${options.url}'.<br />Error Details: <br />${errorCode} - ${errorDesc}"`,
+                    );
+                }
             },
         );
 
@@ -133,6 +137,7 @@ export class BrowserViewManager {
                             `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
                             err,
                         );
+
                         webContentsView.webContents.executeJavaScript(
                             `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
                         );

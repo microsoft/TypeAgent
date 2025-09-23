@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.IO;
-
 namespace TypeAgent.Common;
 
 /// <summary>
@@ -11,6 +9,8 @@ namespace TypeAgent.Common;
 /// </summary>
 public class Json
 {
+    public const string EmptyObject = "{}";
+    public const string EmptyArray = "[]";
     /// <summary>
     /// Create default serialization options used by the validator
     /// </summary>

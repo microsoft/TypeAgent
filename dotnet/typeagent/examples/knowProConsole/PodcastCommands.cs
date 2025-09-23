@@ -5,16 +5,26 @@ namespace KnowProConsole;
 
 public class PodcastCommands : ICommandModule
 {
+    KnowProConsoleContext _kpContext;
+
+    public PodcastCommands(KnowProConsoleContext context)
+    {
+        _kpContext = context;
+    }
+
     public IList<Command> GetCommands()
     {
-        return [PodcastLoadDef()];
+        return [
+            PodcastLoadDef(),
+            PodcastImportIndexDef()
+        ];
     }
 
     private Command PodcastLoadDef()
     {
-        Command cmd = new("podcastLoad", "Load existing podcast memory")
+        Command cmd = new("podcastLoad", "Load existing podcast memory index")
         {
-            Args.Arg<string>("filePath", "Path to existing podcast index")
+            Args.Arg<string>("filePath", "Path to existing podcast index"),
         };
         cmd.SetAction(this.PodcastLoadAsync);
         return cmd;
@@ -24,7 +34,47 @@ public class PodcastCommands : ICommandModule
     {
         NamedArgs namedArgs = new(args);
         string? filePath = namedArgs.Get("filePath");
-        var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage, PodcastMessageMeta>(filePath!);
+        var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
         return Task.CompletedTask;
+    }
+
+    private Command PodcastImportIndexDef()
+    {
+        Command cmd = new("podcastImportIndex", "Import existing podcast memory index")
+        {
+            Args.Arg<string>("filePath", "Path to existing podcast index"),
+        };
+        cmd.SetAction(this.PodcastImportIndexAsync);
+        return cmd;
+    }
+
+    private async Task PodcastImportIndexAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        NamedArgs namedArgs = new(args);
+        string? filePath = namedArgs.Get("filePath");
+        var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
+        if (data is null)
+        {
+            ConsoleEx.WriteError("NO data in file");
+            return;
+        }
+        Console.WriteLine($"{data.Messages.Length} messages in source file");
+
+        using var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, "podcast", true);
+        int count = await provider.Messages.GetCountAsync().ConfigureAwait(false);
+        Console.WriteLine(count);
+        foreach (var message in data.Messages)
+        {
+            await provider.Messages.AppendAsync(message).ConfigureAwait(false);
+            count = await provider.Messages.GetCountAsync().ConfigureAwait(false);
+            Console.WriteLine(count);
+        }
+        // Read all
+        for (int i = 0; i < count; ++i)
+        {
+            var message = await provider.Messages.GetAsync(i);
+            var json = Json.Stringify(message);
+            Console.WriteLine(json);
+        }
     }
 }

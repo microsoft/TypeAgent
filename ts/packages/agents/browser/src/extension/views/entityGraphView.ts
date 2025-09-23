@@ -4,10 +4,7 @@
 // Entity Graph View - Main entry point for entity visualization
 import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
-import {
-    ChromeExtensionService,
-    createExtensionService,
-} from "./knowledgeUtilities";
+import { createExtensionService } from "./knowledgeUtilities";
 import {
     GraphDataProvider,
     GraphDataProviderImpl,
@@ -74,8 +71,20 @@ class EntityGraphView {
                 throw new Error("Sidebar container 'entitySidebar' not found");
             }
 
+            // Hide sidebar by default
+            sidebarContainer.style.display = "none";
+
             console.log("Creating visualizer...");
             this.visualizer = new EntityGraphVisualizer(graphContainer);
+
+            // Set up hierarchical loading
+            this.visualizer.setGraphDataProvider(this.graphDataProvider);
+
+            // Set up UI callbacks
+            this.visualizer.setInstanceChangeCallback(() => {
+                // UI update callback - layer indicator removed
+            });
+
             console.log("Creating sidebar...");
             this.sidebar = new EntitySidebar(sidebarContainer);
 
@@ -137,16 +146,19 @@ class EntityGraphView {
                 this.currentEntity
             ) {
                 console.log(`Loading specific entity: ${this.currentEntity}`);
-                this.updateSidebarVisibility(true);
+                // Don't show sidebar until detail view is loaded
+                this.updateSidebarVisibility(false);
                 // Store entity name before clearing current entity to force initial load
                 const entityToLoad = this.currentEntity;
                 this.currentEntity = null; // Clear to ensure navigation doesn't skip
                 // Don't update history during initial load - already handled by setupBrowserNavigation
                 await this.navigateToEntity(entityToLoad, false);
             } else if (this.currentViewMode.type === "global") {
-                console.log("Loading global knowledge graph");
+                console.log(
+                    "Loading global knowledge graph with importance layer",
+                );
                 this.updateSidebarVisibility(false);
-                await this.loadGlobalView();
+                await this.loadGlobalViewWithImportanceLayer();
             } else {
                 console.log("Invalid state - showing error");
                 this.showEntityParameterError();
@@ -178,12 +190,14 @@ class EntityGraphView {
         const zoomOutBtn = document.getElementById("zoomOutBtn");
         const fitBtn = document.getElementById("fitBtn");
         const reLayoutBtn = document.getElementById("reLayoutBtn");
+        const debugViewportBtn = document.getElementById("debugViewportBtn");
 
         console.log("Control button elements:", {
             zoomInBtn: !!zoomInBtn,
             zoomOutBtn: !!zoomOutBtn,
             fitBtn: !!fitBtn,
             reLayoutBtn: !!reLayoutBtn,
+            debugViewportBtn: !!debugViewportBtn,
         });
 
         if (zoomInBtn) {
@@ -211,6 +225,13 @@ class EntityGraphView {
             reLayoutBtn.addEventListener("click", () => {
                 console.log("Re-run layout button clicked");
                 this.visualizer.reRunLayout();
+            });
+        }
+
+        if (debugViewportBtn) {
+            debugViewportBtn.addEventListener("click", () => {
+                console.log("Debug viewport button clicked");
+                this.visualizer.debugLogViewportNodes();
             });
         }
 
@@ -252,12 +273,24 @@ class EntityGraphView {
             refreshButton.addEventListener("click", () => this.refreshGraph());
         }
 
-        // Back to global button
+        // Back to previous view button (was "back to global" but now smarter)
         const backToGlobalBtn = document.getElementById("backToGlobalBtn");
         if (backToGlobalBtn) {
-            backToGlobalBtn.addEventListener("click", () => {
-                console.log("Back to global button clicked");
-                this.navigateToGlobalView();
+            backToGlobalBtn.addEventListener("click", async () => {
+                console.log("Back button clicked");
+
+                // Try to restore hidden view first (much simpler approach)
+                const restored = this.visualizer.restoreHiddenView();
+                if (!restored) {
+                    // Fallback to global view if no hidden view available
+                    console.log(
+                        "No hidden view available, falling back to global view",
+                    );
+                    this.navigateToGlobalView();
+                }
+
+                // Update button text after navigation
+                this.updateBackButtonText();
             });
         }
     }
@@ -436,6 +469,9 @@ class EntityGraphView {
                 backToGlobalBtn.style.display = "flex";
             }
 
+            // Update back button text to reflect what view we'll return to
+            this.updateBackButtonText();
+
             // Update URL and history - only if not handling popstate and updateHistory is true
             if (updateHistory && !this.isHandlingPopstate) {
                 this.updateUrlForEntity(entityName);
@@ -450,8 +486,10 @@ class EntityGraphView {
                 this.addToNavigationHistory(newState);
             }
 
-            this.updateSidebarVisibility(true);
+            // Don't show sidebar yet - wait for data to load
             await this.loadRealEntityData(entityName);
+            // Show sidebar after detail view is loaded
+            this.updateSidebarVisibility(true);
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
             // Show user-friendly error message
@@ -493,7 +531,7 @@ class EntityGraphView {
             }
 
             this.updateSidebarVisibility(false);
-            await this.loadGlobalView();
+            await this.loadGlobalViewWithImportanceLayer();
         } catch (error) {
             console.error("Failed to navigate to global view:", error);
             this.showNavigationError("Failed to load global view");
@@ -738,6 +776,66 @@ class EntityGraphView {
         };
     }
 
+    /**
+     * Enhance entities with LoD properties for importance-based visualization
+     */
+    private enhanceEntitiesForLoD(entities: any[]): any[] {
+        console.log(
+            `[LoD] Enhancing ${entities.length} entities for importance-based LoD`,
+        );
+
+        // Calculate importance statistics for proper scaling
+        const importanceValues = entities
+            .map((e) => e.importance || 0)
+            .filter((i) => i > 0);
+        const minImportance = Math.min(...importanceValues);
+        const maxImportance = Math.max(...importanceValues);
+        const importanceRange = maxImportance - minImportance;
+
+        console.log(
+            `[LoD] Importance range: ${minImportance.toFixed(3)} - ${maxImportance.toFixed(3)}`,
+        );
+
+        return entities.map((entity: any) => {
+            const importance = entity.importance || 0;
+            const normalizedImportance =
+                importanceRange > 0
+                    ? (importance - minImportance) / importanceRange
+                    : 0.5;
+
+            // Calculate size based on importance (10-50px range)
+            const baseSize = 10;
+            const maxSize = 50;
+            const size = baseSize + normalizedImportance * (maxSize - baseSize);
+
+            // Calculate color based on importance (blue gradient)
+            const colorIntensity = Math.max(0.3, normalizedImportance); // Minimum 30% intensity
+            const blue = Math.floor(255 * colorIntensity);
+            const color = `rgb(${Math.floor(blue * 0.3)}, ${Math.floor(blue * 0.6)}, ${blue})`;
+            const borderColor = `rgb(${Math.floor(blue * 0.2)}, ${Math.floor(blue * 0.4)}, ${Math.floor(blue * 0.8)})`;
+
+            // Enhanced entity with LoD properties
+            return {
+                ...entity,
+                size: Math.round(size),
+                color: color,
+                borderColor: borderColor,
+                // LoD properties for visibility thresholds
+                computedImportance: importance,
+                visualPriority: normalizedImportance,
+                degreeCount:
+                    entity.degree ||
+                    entity.degreeCount ||
+                    Math.max(1, importance * 10),
+                centralityScore:
+                    entity.centrality || entity.centralityScore || importance,
+                // Labels based on importance
+                showLabel: normalizedImportance > 0.3, // Only show labels for top 70% important nodes
+                labelSize: Math.max(8, 8 + normalizedImportance * 8), // 8-16px label size
+            };
+        });
+    }
+
     private assignCommunityColors(entities: any[], communities: any[]): any[] {
         const communityColors = [
             "#1f77b4",
@@ -936,7 +1034,7 @@ class EntityGraphView {
                     await this.graphDataProvider.getEntityNeighborhood(
                         entityName,
                         2,
-                        100,
+                        50,
                     );
 
                 // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
@@ -1102,33 +1200,29 @@ class EntityGraphView {
                         url: e.url,
                     })),
                     // Related entities from search results
-                    ...(graphData.relatedEntities || []).map(
-                        (entity: any, index: number) => ({
-                            name:
-                                typeof entity === "string"
-                                    ? entity
-                                    : entity.name || entity,
-                            type: "related_entity",
-                            confidence:
-                                typeof entity === "object"
-                                    ? entity.confidence || 0.7
-                                    : 0.7,
-                        }),
-                    ),
+                    ...(graphData.relatedEntities || []).map((entity: any) => ({
+                        name:
+                            typeof entity === "string"
+                                ? entity
+                                : entity.name || entity,
+                        type: "related_entity",
+                        confidence:
+                            typeof entity === "object"
+                                ? entity.confidence || 0.7
+                                : 0.7,
+                    })),
                     // Top topics as entities
-                    ...(graphData.topTopics || []).map(
-                        (topic: any, index: number) => ({
-                            name:
-                                typeof topic === "string"
-                                    ? topic
-                                    : topic.name || topic,
-                            type: "topic",
-                            confidence:
-                                typeof topic === "object"
-                                    ? topic.confidence || 0.6
-                                    : 0.6,
-                        }),
-                    ),
+                    ...(graphData.topTopics || []).map((topic: any) => ({
+                        name:
+                            typeof topic === "string"
+                                ? topic
+                                : topic.name || topic,
+                        type: "topic",
+                        confidence:
+                            typeof topic === "object"
+                                ? topic.confidence || 0.6
+                                : 0.6,
+                    })),
                 ];
 
                 // Create entity name set for validation
@@ -1271,6 +1365,9 @@ class EntityGraphView {
                 await this.sidebar.loadEntity(centerEntityData);
                 console.timeEnd("[Perf] Entity sidebar load");
 
+                // Show sidebar after successfully loading data
+                this.updateSidebarVisibility(true);
+
                 this.hideGraphLoading();
                 console.log(
                     `Loaded real entity graph for ${entityName}: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
@@ -1291,62 +1388,6 @@ class EntityGraphView {
         }
     }
 
-    private async searchRealEntity(query: string): Promise<void> {
-        try {
-            console.log(`Searching for real entity: ${query}`);
-            this.showMessage(`Searching for "${query}"...`, "info");
-
-            // Use direct entity neighborhood query for search
-            const neighborhoodResult =
-                await this.graphDataProvider.getEntityNeighborhood(
-                    query,
-                    2,
-                    10,
-                );
-            const searchResults = {
-                entities:
-                    neighborhoodResult.neighbors.length > 0
-                        ? [
-                              { name: query },
-                              ...neighborhoodResult.neighbors.slice(0, 9),
-                          ]
-                        : [{ name: query }],
-            };
-
-            if (searchResults.entities && searchResults.entities.length > 0) {
-                console.log(
-                    `Found ${searchResults.entities.length} entities for search: ${query}`,
-                );
-
-                // Navigate to the most relevant result
-                const topResult = searchResults.entities[0];
-                await this.navigateToEntity(topResult.name);
-
-                // Show search results summary
-                this.showMessage(
-                    `Found ${searchResults.entities.length} results for "${query}". Showing: ${topResult.name}`,
-                    "success",
-                );
-
-                console.log(
-                    `Real entity search for "${query}" completed successfully`,
-                );
-            } else {
-                console.log(`No results found for search: ${query}`);
-                this.showMessage(
-                    `No entities found for search: "${query}". Try different keywords or import more website data.`,
-                    "warning",
-                );
-            }
-        } catch (error) {
-            console.error("Real entity search failed:", error);
-            this.showMessage(
-                `Search failed for "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
-                "error",
-            );
-        }
-    }
-
     /**
      * Refresh entity data from source
      */
@@ -1359,7 +1400,7 @@ class EntityGraphView {
                 await this.graphDataProvider.getEntityNeighborhood(
                     entityName,
                     2,
-                    100,
+                    50,
                 );
 
             if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
@@ -1480,6 +1521,84 @@ class EntityGraphView {
         }, 0);
     }
 
+    // ===================================================================
+    // HIERARCHICAL LOADING METHODS
+    // ===================================================================
+
+    private async loadGlobalViewWithImportanceLayer(): Promise<void> {
+        try {
+            console.time("[Perf] Importance layer load");
+            this.showGraphLoading();
+            console.log(
+                "[HierarchicalLoading] Loading global importance layer",
+            );
+
+            // Get importance layer data (top 500 most important nodes - TESTING)
+            const importanceData =
+                await this.graphDataProvider.getGlobalImportanceLayer(500);
+
+            console.log(
+                `[HierarchicalLoading] Loaded importance layer: ${importanceData.entities.length} entities, ${importanceData.relationships.length} relationships`,
+            );
+
+            // Debug: Check the raw data structure
+            console.log(`[DEBUG-Frontend] Raw importance data sample:`, {
+                firstEntity: importanceData.entities[0],
+                firstRelationship: importanceData.relationships[0],
+                entitySample: importanceData.entities
+                    .slice(0, 3)
+                    .map((e: any) => ({
+                        name: e.name,
+                        importance: e.importance,
+                        degree: e.degree,
+                        type: e.type,
+                    })),
+            });
+
+            if (importanceData.entities.length === 0) {
+                this.hideGraphLoading();
+                this.showGraphEmpty();
+                console.timeEnd("[Perf] Importance layer load");
+                return;
+            }
+
+            // Transform data to expected format for visualizer with proper LoD properties
+            const transformedData = {
+                entities: this.enhanceEntitiesForLoD(importanceData.entities),
+                relationships: importanceData.relationships,
+                communities: [],
+                topics: [],
+                statistics: {
+                    totalEntities: importanceData.entities.length,
+                    totalRelationships: importanceData.relationships.length,
+                    totalCommunities: 0,
+                },
+            };
+
+            await this.visualizer.loadGlobalGraph(transformedData);
+            this.hideGraphLoading();
+
+            console.log(
+                `[HierarchicalLoading] Loaded importance layer: ${importanceData.entities.length} entities, ${importanceData.relationships.length} relationships`,
+            );
+            console.timeEnd("[Perf] Importance layer load");
+
+            // Show success message
+            this.showMessage(
+                `Loaded importance layer with ${importanceData.entities.length} most important entities`,
+                "success",
+            );
+        } catch (error) {
+            console.error(
+                "[HierarchicalLoading] Failed to load importance layer:",
+                error,
+            );
+            this.hideGraphLoading();
+            this.showGraphError("Failed to load importance layer");
+            console.timeEnd("[Perf] Importance layer load");
+        }
+    }
+
     // ============================================================================
     // Browser Navigation Integration (Phase 2)
     // ============================================================================
@@ -1491,7 +1610,7 @@ class EntityGraphView {
         console.log("[Navigation] Setting up browser navigation handlers");
 
         // Handle browser back/forward buttons
-        window.addEventListener("popstate", async (event) => {
+        window.addEventListener("popstate", async () => {
             if (this.isHandlingPopstate) return;
 
             console.log("[Navigation] Browser popstate event triggered");
@@ -1562,10 +1681,30 @@ class EntityGraphView {
      */
     private async executeGlobalViewTransition(): Promise<void> {
         console.log("[Navigation] Executing global view transition");
-        this.currentEntity = null;
-        this.currentViewMode = { type: "global" };
-        this.updateSidebarVisibility(false);
-        await this.loadGlobalView();
+
+        // Try to use hide/show logic first (same as back button)
+        const restored = this.visualizer.restoreHiddenView();
+        if (restored) {
+            console.log(
+                "[Navigation] Browser back: Successfully restored hidden view",
+            );
+            // Update internal state to match the restored view
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+            // Hide sidebar when navigating to global view
+            this.updateSidebarVisibility(false);
+            this.updateBackButtonText();
+        } else {
+            console.log(
+                "[Navigation] Browser back: No hidden view available, falling back to loadGlobalView",
+            );
+            // Fallback to original logic if no hidden view available
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+            // Hide sidebar when navigating to global view
+            this.updateSidebarVisibility(false);
+            await this.loadGlobalView();
+        }
     }
 
     /**
@@ -1606,7 +1745,10 @@ class EntityGraphView {
 
         // Update breadcrumb and UI elements
         this.updateBreadcrumbForCurrentState();
-        this.updateSidebarVisibility(state.type === "detail");
+        // Don't automatically show sidebar for detail state - let loadRealEntityData handle it
+        if (state.type === "global") {
+            this.updateSidebarVisibility(false);
+        }
     }
 
     /**
@@ -1629,6 +1771,37 @@ class EntityGraphView {
             backToGlobalBtn.style.display = this.currentEntity
                 ? "flex"
                 : "none";
+        }
+    }
+
+    /**
+     * Update back button text based on hidden view stack
+     */
+    private updateBackButtonText(): void {
+        const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+        if (!backToGlobalBtn) return;
+
+        // Check if visualizer has a hidden view available
+        if (this.visualizer && this.visualizer.hasHiddenView()) {
+            const hiddenViewType = this.visualizer.getHiddenViewType();
+            if (hiddenViewType === "global") {
+                backToGlobalBtn.innerHTML =
+                    '<i class="bi bi-arrow-left"></i> Global';
+                backToGlobalBtn.title = "Back to Global View";
+            } else if (hiddenViewType === "neighborhood") {
+                backToGlobalBtn.innerHTML =
+                    '<i class="bi bi-arrow-left"></i> Neighborhood';
+                backToGlobalBtn.title = "Back to Neighborhood View";
+            } else {
+                backToGlobalBtn.innerHTML =
+                    '<i class="bi bi-arrow-left"></i> Back';
+                backToGlobalBtn.title = "Back to Previous View";
+            }
+        } else {
+            // No hidden view, will go to global view
+            backToGlobalBtn.innerHTML =
+                '<i class="bi bi-arrow-left"></i> Global';
+            backToGlobalBtn.title = "Back to Global View";
         }
     }
 
@@ -1657,25 +1830,6 @@ class EntityGraphView {
         console.log(
             `[Navigation] Added to history. Index: ${this.currentHistoryIndex}, Total: ${this.navigationHistory.length}`,
         );
-    }
-
-    /**
-     * Get navigation context
-     */
-    private getNavigationContext(): {
-        canGoBack: boolean;
-        canGoForward: boolean;
-        previousState?: NavigationState;
-    } {
-        return {
-            canGoBack: this.currentHistoryIndex > 0,
-            canGoForward:
-                this.currentHistoryIndex < this.navigationHistory.length - 1,
-            previousState:
-                this.currentHistoryIndex > 0
-                    ? this.navigationHistory[this.currentHistoryIndex - 1]
-                    : undefined,
-        };
     }
 
     /**

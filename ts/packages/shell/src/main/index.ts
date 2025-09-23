@@ -225,6 +225,9 @@ async function initialize() {
                 performance.now(),
             );
         }
+
+        // sync the chat history with any chat history tab
+        shellWindow?.chatViewServer?.broadcast(html);
     });
 
     ipcMain.on("save-settings", (event, settings: ShellUserSettings) => {

@@ -3,8 +3,7 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface IMessageCollection<TMessage, TMeta> : IAsyncCollection<TMessage>
-    where TMessage : IMessage<TMeta>
-    where TMeta: IMessageMetadata
+public interface IMessageCollection<TMessage> : IAsyncCollection<TMessage>
+    where TMessage : IMessage
 {
 }
