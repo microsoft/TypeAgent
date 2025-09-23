@@ -20,7 +20,7 @@
         "typechat"
     ],
     "[html]": {
-        "editor.defaultFormatter": "vscode.html-language-features"
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
     "jest.virtualFolders": [
         {"name": "actionSchema", "rootPath": "packages/actionSchema"},

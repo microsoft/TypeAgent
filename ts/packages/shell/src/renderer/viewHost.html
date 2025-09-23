@@ -793,10 +793,6 @@
       layoutToggleBtn.addEventListener("click", async () => {
         try {
           const result = await ipcRenderer.invoke("toggle-layout");
-          if (result && result.verticalLayout && tabs.length === 0) {
-            // If switching to vertical layout with no tabs, create a new tab
-            ipcRenderer.send("browser-new-tab");
-          }
         } catch (error) {
           console.error("Failed to toggle layout:", error);
         }
