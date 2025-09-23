@@ -240,6 +240,8 @@ async function getErrorMessage(
  * @param retryMaxAttempts (optional) maximum number of retry attempts
  * @param retryPauseMs (optional) # of milliseconds to pause before retrying
  * @param timeout (optional) set custom timeout in milliseconds
+ * @param throttler (optional) function to throttle fetch calls
+ * @param notToExceed (optional) total time in ms that all retries should not exceed
  * @returns Response object
  */
 export async function fetchWithRetry(
@@ -249,9 +251,13 @@ export async function fetchWithRetry(
     retryPauseMs?: number,
     timeout?: number,
     throttler?: FetchThrottler,
+    notToExceed?: number, // total time in ms that all retries should not exceed
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
+    notToExceed ??= 60_000; // default to 1 minute
+
+    const backOffFactor = 10_000;
     let retryCount = 0;
     const startTime: number = Date.now();
     try {
@@ -266,8 +272,9 @@ export async function fetchWithRetry(
                 return success(result);
             }
             if (
-                !isTransientHttpError(result.status) ||
-                retryCount >= retryMaxAttempts
+                !isTransientHttpError(result.status) || // non-transient error
+                retryCount >= retryMaxAttempts ||       // exceeded max retries
+                Date.now() - startTime > notToExceed    // exceeded total time allowed
             ) {
                 return error(
                     `fetch error: ${await getErrorMessage(result, retryCount, Date.now() - startTime)}`,
@@ -277,9 +284,14 @@ export async function fetchWithRetry(
             }
 
             // See if the service tells how long to wait to retry
-            const pauseMs = getRetryAfterMs(result, retryPauseMs);
-            retryCount++; // use the retry count as a backoff multiplier
-            await sleep(pauseMs * retryCount * 2 + getRandomDelay());
+            const pauseMs = getRetryAfterMs(result, retryPauseMs);  
+            
+            // wait before retrying
+            // wait at least as long as the Retry-After header, plus a back-off factor that increases with each retry
+            // plus a random delay to avoid thundering herd
+            await sleep(pauseMs + retryCount * backOffFactor + getRandomDelay());
+
+            retryCount++;
         }
     } catch (e: any) {
         return error(`fetch error: ${e.cause?.message ?? e.message}`);
@@ -325,10 +337,10 @@ export function getRetryAfterMs(
 /**
  *
  * @param min - The minimum delay in milliseconds (default 1 second)
- * @param max - The maximum delay in milliseconds (default 5 seconds)
+ * @param max - The maximum delay in milliseconds (default 10 seconds)
  * @returns A random delay between the min and max
  */
-function getRandomDelay(min: number = 1_000, max: number = 5_000): number {
+function getRandomDelay(min: number = 1_000, max: number = 10_000): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
