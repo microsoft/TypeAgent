@@ -12,7 +12,7 @@ internal static class SqliteEx
 
     public static void AddParameter(this SqliteCommand cmd, string name, object? value)
     {
-        cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value );
+        cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value);
     }
 
     public static IList<T> GetList<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)

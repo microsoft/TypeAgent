@@ -57,7 +57,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
     public Task AppendAsync(IEnumerable<TMessage> messages)
     {
         // TODO: Bulk operations
-        foreach(var message in messages)
+        foreach (var message in messages)
         {
             Append(message);
         }
@@ -93,7 +93,7 @@ FROM Messages WHERE msg_id = @msg_id"
     {
         // TODO: Bulk operations
         IList<TMessage> messages = [];
-        foreach(int msgId in messageIds)
+        foreach (int msgId in messageIds)
         {
             messages.Add(Get(msgId));
         }

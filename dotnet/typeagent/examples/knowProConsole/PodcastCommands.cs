@@ -61,18 +61,19 @@ public class PodcastCommands : ICommandModule
         Console.WriteLine($"{data.Messages.Length} messages in source file");
 
         using var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, "podcast", true);
-        int count = await provider.Messages.GetCountAsync().ConfigureAwait(false);
-        Console.WriteLine(count);
+        var podcast = new Podcast(provider);
+
+        int count = 0;
         foreach (var message in data.Messages)
         {
-            await provider.Messages.AppendAsync(message).ConfigureAwait(false);
-            count = await provider.Messages.GetCountAsync().ConfigureAwait(false);
+            await podcast.Messages.AppendAsync(message).ConfigureAwait(false);
+            count = await podcast.Messages.GetCountAsync().ConfigureAwait(false);
             Console.WriteLine(count);
         }
         // Read all
         for (int i = 0; i < count; ++i)
         {
-            var message = await provider.Messages.GetAsync(i);
+            var message = await podcast.Messages.GetAsync(i);
             var json = Json.Stringify(message);
             Console.WriteLine(json);
         }
