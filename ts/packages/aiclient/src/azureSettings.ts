@@ -88,14 +88,14 @@ function azureChatApiSettingsFromEnv(
             env,
             EnvVars.AZURE_OPENAI_MAX_TIMEOUT,
             endpointName,
-            60_000
+            60_000,
         ),
         maxRetryAttempts: getIntFromEnv(
             env,
             EnvVars.AZURE_OPENAI_MAX_RETRYATTEMPTS,
             endpointName,
-            3
-        ),                
+            3,
+        ),
         maxPromptChars: getIntFromEnv(
             env,
             EnvVars.AZURE_OPENAI_MAX_CHARS,

@@ -89,7 +89,7 @@ export enum EnvVars {
     OPENAI_RESPONSE_FORMAT = "OPENAI_RESPONSE_FORMAT",
     OPENAI_MAX_CONCURRENCY = "AZURE_OPENAI_MAX_CONCURRENCY",
     OPENAI_MAX_TIMEOUT = "OPENAI_MAX_TIMEOUT",
-    OPENAI_MAX_RETRYATTEMPTS = "OPENAI_MAX_RETRYATTEMPTS",    
+    OPENAI_MAX_RETRYATTEMPTS = "OPENAI_MAX_RETRYATTEMPTS",
     OPENAI_MODEL_EMBEDDING = "OPENAI_MODEL_EMBEDDING",
 
     AZURE_OPENAI_API_KEY = "AZURE_OPENAI_API_KEY",
@@ -592,7 +592,7 @@ function createAzureOpenAIChatModel(
             params,
             settings.maxRetryAttempts,
             settings.retryPauseMs,
-            settings.timeout
+            settings.timeout,
         );
         if (!result.success) {
             return result;

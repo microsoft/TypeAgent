@@ -52,7 +52,7 @@ export function getIntFromEnv(
     env: Record<string, string | undefined>,
     envName: string,
     endpointName?: string,
-    defaultValue?: number | undefined
+    defaultValue?: number | undefined,
 ): number | undefined {
     const numString = getEnvSetting(env, envName, endpointName, "");
     const num = numString ? parseInt(numString) : defaultValue;

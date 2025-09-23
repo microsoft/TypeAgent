@@ -270,9 +270,9 @@ export async function fetchWithRetry(
                 return success(result);
             }
             if (
-                !isTransientHttpError(result.status) ||     // non-transient error
-                retryCount >= retryMaxAttempts ||           // exceeded max retries
-                Date.now() - startTime > timeout            // exceeded total time allowed
+                !isTransientHttpError(result.status) || // non-transient error
+                retryCount >= retryMaxAttempts || // exceeded max retries
+                Date.now() - startTime > timeout // exceeded total time allowed
             ) {
                 return error(
                     `fetch error: ${await getErrorMessage(result, retryCount, Date.now() - startTime)}`,
@@ -282,12 +282,14 @@ export async function fetchWithRetry(
             }
 
             // See if the service tells how long to wait to retry
-            const pauseMs = getRetryAfterMs(result, retryPauseMs);  
-            
+            const pauseMs = getRetryAfterMs(result, retryPauseMs);
+
             // wait before retrying
             // wait at least as long as the Retry-After header, plus a back-off factor that increases with each retry
             // plus a random delay to avoid thundering herd
-            await sleep(pauseMs + retryCount * backOffFactor + getRandomDelay());
+            await sleep(
+                pauseMs + retryCount * backOffFactor + getRandomDelay(),
+            );
 
             retryCount++;
         }
