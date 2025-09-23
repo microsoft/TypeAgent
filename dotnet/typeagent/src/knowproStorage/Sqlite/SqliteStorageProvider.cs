@@ -10,6 +10,7 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
 {
     SqliteDatabase _db;
     SqliteMessageCollection<TMessage, TMeta> _messages;
+    SqliteSemanticRefCollection _semanticRefs;
 
     public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
         : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
@@ -25,12 +26,13 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         {
             InitSchema();
         }
-        _messages = new SqliteMessageCollection<TMessage, TMeta>(this._db);
+        _messages = new SqliteMessageCollection<TMessage, TMeta>(_db);
+        _semanticRefs = new SqliteSemanticRefCollection(_db);
     }
 
     public IMessageCollection<TMessage> Messages => _messages;
 
-    public ISemanticRefCollection SemanticRefs => null;
+    public ISemanticRefCollection SemanticRefs => _semanticRefs;
 
     public void InitSchema()
     {
@@ -96,6 +98,8 @@ CREATE TABLE IF NOT EXISTS Messages(
     )
 );
 ";
+
+    public const string SemanticRefTable = "SemanticRefs";
     public const string SemanticRefsSchema = @"
 CREATE TABLE IF NOT EXISTS SemanticRefs (
     semref_id INTEGER PRIMARY KEY,

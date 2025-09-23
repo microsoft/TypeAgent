@@ -30,14 +30,14 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return Task.FromResult(GetCount());
     }
 
-    public Task AppendAsync(TMessage message)
+    public void Append(TMessage message)
     {
         message.ThrowIfInvalid();
 
         MessageRow messageRow = ToMessageRow(message);
 
         using var cmd = _db.CreateCommand(
-            @"INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
+           @"INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
           VALUES (@msg_id, @chunks, @chunk_uri, @start_timestamp, @tags, @metadata, @extra);"
         );
         WriteMessageRow(cmd, GetNextMessageId(), messageRow);
@@ -46,19 +46,29 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         {
             _count += rowCount;
         }
-        return Task.FromResult(rowCount);
     }
 
-    public Task AppendAsync(IEnumerable<TMessage> items)
+    public Task AppendAsync(TMessage message)
     {
-        throw new NotImplementedException();
+        Append(message);
+        return Task.CompletedTask;
     }
 
-    public Task<TMessage> GetAsync(int msgId)
+    public Task AppendAsync(IEnumerable<TMessage> messages)
     {
-        using var cmd = _db.CreateCommand(
-            @"SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-          FROM Messages WHERE msg_id = @msg_id"
+        // TODO: Bulk operations
+        foreach (var message in messages)
+        {
+            Append(message);
+        }
+        return Task.CompletedTask;
+    }
+
+    public TMessage Get(int msgId)
+    {
+        using var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id = @msg_id"
         );
         cmd.Parameters.AddWithValue("@msg_id", msgId);
 
@@ -70,22 +80,48 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
         MessageRow messageRow = ReadMessageRow(reader);
         TMessage message = FromMessageRow(messageRow);
+        return message;
+    }
+
+    public Task<TMessage> GetAsync(int msgId)
+    {
+        TMessage message = Get(msgId);
         return Task.FromResult(message);
     }
 
-    public Task<IList<TMessage>> GetAsync(IList<int> ordinals)
+    public Task<IList<TMessage>> GetAsync(IList<int> messageIds)
     {
-        throw new NotImplementedException();
+        // TODO: Bulk operations
+        IList<TMessage> messages = [];
+        foreach (int msgId in messageIds)
+        {
+            messages.Add(Get(msgId));
+        }
+        return Task.FromResult(messages);
     }
 
-    public IAsyncEnumerator<TMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerator<TMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        using var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages ORDER BY msg_id");
+        using var reader = cmd.ExecuteReader();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            TMessage message = ReadMessage(reader);
+            yield return message;
+        }
     }
 
     public Task<IList<TMessage>> GetSliceAsync(int start, int end)
     {
-        throw new NotImplementedException();
+        using var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
+ORDER BY msg_id");
+        using var reader = cmd.ExecuteReader();
+        var messageList = reader.GetList(ReadMessage);
+        return Task.FromResult(messageList);
     }
 
     int GetNextMessageId()
@@ -100,6 +136,12 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
             _count = _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
         }
         return _count;
+    }
+
+    TMessage ReadMessage(SqliteDataReader reader)
+    {
+        MessageRow messageRow = ReadMessageRow(reader);
+        return FromMessageRow(messageRow);
     }
 
     MessageRow ToMessageRow(TMessage message)
@@ -160,7 +202,6 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         cmd.AddParameter("@tags", messageRow.TagsJson);
         cmd.AddParameter("@metadata", messageRow.MetadataJson);
         cmd.AddParameter("@extra", messageRow.ExtraJson);
-
     }
 }
 
