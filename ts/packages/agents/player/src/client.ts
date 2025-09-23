@@ -1045,8 +1045,13 @@ export async function handleCall(
                             `Playlist: ${playlist.name}`,
                         );
                     }
+                } else {
+                    return createErrorActionResult("No playlist found");
                 }
             }
+            return createErrorActionResult("No playlist found");
+        }
+        case "getAlbum": {
             let album: SpotifyApi.AlbumObjectSimplified | undefined = undefined;
             let status: SpotifyApi.CurrentPlaybackResponse | undefined =
                 undefined;
