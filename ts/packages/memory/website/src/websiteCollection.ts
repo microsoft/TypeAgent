@@ -1810,7 +1810,9 @@ export class WebsiteCollection
 
                     const rel = relationships.get(key)!;
                     rel.count++;
-                    const existingSources = new Set(JSON.parse(rel.sources || "[]"));
+                    const existingSources = new Set(
+                        JSON.parse(rel.sources || "[]"),
+                    );
                     existingSources.add(website.metadata.url);
                     rel.sources = JSON.stringify(Array.from(existingSources));
                 }
@@ -2090,7 +2092,9 @@ export class WebsiteCollection
         if (existing) {
             // Update existing relationship
             existing.count++;
-            const existingSources = new Set(JSON.parse(existing.sources || "[]"));
+            const existingSources = new Set(
+                JSON.parse(existing.sources || "[]"),
+            );
             existingSources.add(sourceUrl);
             existing.sources = JSON.stringify(Array.from(existingSources));
             existing.confidence = Math.min(existing.count / 10, 1.0);
