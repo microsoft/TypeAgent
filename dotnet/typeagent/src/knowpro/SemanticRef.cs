@@ -42,10 +42,10 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowledgeTypes.Entity => Serializer.ToJsonElement(knowledge as ConcreteEntity),
-            KnowledgeTypes.Action => Serializer.ToJsonElement(knowledge as Action),
-            KnowledgeTypes.Topic => Serializer.ToJsonElement(knowledge as Topic),
-            KnowledgeTypes.Tag => Serializer.ToJsonElement(knowledge as Tag),
+            KnowPro.KnowledgeType.Entity => Serializer.ToJsonElement(knowledge as ConcreteEntity),
+            KnowPro.KnowledgeType.Action => Serializer.ToJsonElement(knowledge as Action),
+            KnowPro.KnowledgeType.Topic => Serializer.ToJsonElement(knowledge as Topic),
+            KnowPro.KnowledgeType.Tag => Serializer.ToJsonElement(knowledge as Tag),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
 
@@ -55,10 +55,10 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowledgeTypes.Entity => Serializer.FromJson<ConcreteEntity>(json),
-            KnowledgeTypes.Action => Serializer.FromJson<Action>(json),
-            KnowledgeTypes.Topic => Serializer.FromJson<Topic>(json),
-            KnowledgeTypes.Tag => Serializer.FromJson<Tag>(json),
+            KnowPro.KnowledgeType.Entity => Serializer.FromJson<ConcreteEntity>(json),
+            KnowPro.KnowledgeType.Action => Serializer.FromJson<Action>(json),
+            KnowPro.KnowledgeType.Topic => Serializer.FromJson<Topic>(json),
+            KnowPro.KnowledgeType.Tag => Serializer.FromJson<Tag>(json),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }
@@ -67,17 +67,17 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowledgeTypes.Entity => Serializer.FromJsonElement<ConcreteEntity>(element),
-            KnowledgeTypes.Action => Serializer.FromJsonElement<Action>(element),
-            KnowledgeTypes.Topic => Serializer.FromJsonElement<Topic>(element),
-            KnowledgeTypes.Tag => Serializer.FromJsonElement<Tag>(element),
+            KnowPro.KnowledgeType.Entity => Serializer.FromJsonElement<ConcreteEntity>(element),
+            KnowPro.KnowledgeType.Action => Serializer.FromJsonElement<Action>(element),
+            KnowPro.KnowledgeType.Topic => Serializer.FromJsonElement<Topic>(element),
+            KnowPro.KnowledgeType.Tag => Serializer.FromJsonElement<Tag>(element),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }
 
 }
 
-public static class KnowledgeTypes
+public static class KnowledgeType
 {
     public const string Entity = "entity";
     public const string Action = "action";

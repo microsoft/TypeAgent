@@ -113,7 +113,7 @@ SELECT semref_id, range_json, knowledge_type, knowledge_json
 FROM SemanticRefs WHERE semref_id = ?
 ");
         using var reader = cmd.ExecuteReader();
-        while (await reader.ReadAsync(cancellationToken))
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             SemanticRef semanticRef = ReadSemanticRef(reader);
             yield return semanticRef;

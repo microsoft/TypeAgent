@@ -29,4 +29,11 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfNullOrEmpty(semanticRef.KnowledgeType, nameof(semanticRef.KnowledgeType));
         ArgumentVerify.ThrowIfNull(semanticRef.Knowledge, nameof(semanticRef.Knowledge));
     }
+
+    public static void ThrowIfInvalid(ConcreteEntity entity)
+    {
+        ArgumentVerify.ThrowIfNull(entity, nameof(entity));
+        ArgumentVerify.ThrowIfNullOrEmpty(entity.Name, nameof(entity.Name));
+        ArgumentVerify.ThrowIfNull(entity.Type, nameof(entity.Type));
+    }
 }
