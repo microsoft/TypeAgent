@@ -10,12 +10,12 @@ export interface ExpandableTextareaHandlers {
 
 export class ExpandableTextArea {
     private readonly textEntry: HTMLSpanElement;
-    private readonly entryHandlers: ExpandableTextareaHandlers;
+    private readonly entryHandlers: ExpandableTextareaHandlers | undefined;
 
     constructor(
         id: string,
         className: string,
-        handlers: ExpandableTextareaHandlers,
+        handlers?: ExpandableTextareaHandlers,
         sendButton?: HTMLButtonElement,
     ) {
         this.entryHandlers = handlers;
@@ -24,7 +24,7 @@ export class ExpandableTextArea {
         textEntry.role = "textbox";
         textEntry.id = id;
         textEntry.addEventListener("keydown", (event) => {
-            if (this.entryHandlers.onKeydown !== undefined) {
+            if (this.entryHandlers?.onKeydown !== undefined) {
                 if (!this.entryHandlers.onKeydown(this, event)) {
                     event.preventDefault();
                     return false;
@@ -56,10 +56,10 @@ export class ExpandableTextArea {
             ) {
                 textEntry.removeChild(textEntry.childNodes[0]);
             }
-            this.entryHandlers.onChange?.(this, true);
+            this.entryHandlers?.onChange?.(this, true);
         });
         textEntry.addEventListener("paste", () => {
-            this.entryHandlers.onChange?.(this, true);
+            this.entryHandlers?.onChange?.(this, true);
         });
         textEntry.onchange = () => {
             if (sendButton !== undefined) {
@@ -67,7 +67,7 @@ export class ExpandableTextArea {
             }
         };
         textEntry.onwheel = (event) => {
-            this.entryHandlers.onMouseWheel?.(this, event);
+            this.entryHandlers?.onMouseWheel?.(this, event);
         };
         this.textEntry = textEntry;
     }
@@ -81,7 +81,7 @@ export class ExpandableTextArea {
 
     private updateCursorOnChange() {
         this.moveCursorToEnd();
-        this.entryHandlers.onChange?.(this, false);
+        this.entryHandlers?.onChange?.(this, false);
     }
     public getTextContent() {
         return this.textEntry.textContent ?? "";
@@ -136,7 +136,7 @@ export class ExpandableTextArea {
     send(sendButton?: HTMLButtonElement) {
         const html = this.getTextEntry().innerHTML;
         if (html.length > 0) {
-            this.entryHandlers.onSend(html);
+            this.entryHandlers?.onSend(html);
             this.setTextContent();
             if (sendButton) {
                 sendButton.disabled = true;
