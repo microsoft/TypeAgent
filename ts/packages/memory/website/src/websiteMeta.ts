@@ -27,15 +27,11 @@ export interface WebsiteVisitInfo {
     visitCount?: number;
     lastVisitTime?: string;
     typedCount?: number;
-
-    // NEW: Enhanced content fields
     pageContent?: PageContent;
     metaTags?: MetaTagCollection;
     structuredData?: StructuredDataCollection;
     extractedActions?: ActionInfo[];
     contentSummary?: string;
-
-    // Action detection fields
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
 }
@@ -55,15 +51,11 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     public visitCount?: number;
     public lastVisitTime?: string;
     public typedCount?: number;
-
-    // NEW: Enhanced content properties
     public pageContent?: PageContent;
     public metaTags?: MetaTagCollection;
     public structuredData?: StructuredDataCollection;
     public extractedActions?: ActionInfo[];
     public contentSummary?: string;
-
-    // NEW: Action detection properties
     public detectedActions?: DetectedAction[];
     public actionSummary?: ActionSummary;
 
@@ -91,8 +83,6 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             this.lastVisitTime = visitInfo.lastVisitTime;
         if (visitInfo.typedCount !== undefined)
             this.typedCount = visitInfo.typedCount;
-
-        // NEW: Enhanced content properties
         if (visitInfo.pageContent !== undefined)
             this.pageContent = visitInfo.pageContent;
         if (visitInfo.metaTags !== undefined)
@@ -230,89 +220,6 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
                 facets: [],
             };
 
-            // Temporal facets for ordering queries
-            if (this.bookmarkDate) {
-                const bookmarkDate = new Date(this.bookmarkDate);
-                const existingFacetNames = new Set(
-                    domainEntity.facets.map((f: any) => f.name),
-                );
-
-                if (!existingFacetNames.has("bookmarkDate")) {
-                    domainEntity.facets.push({
-                        name: "bookmarkDate",
-                        value: this.bookmarkDate,
-                    });
-                }
-                if (!existingFacetNames.has("bookmarkYear")) {
-                    domainEntity.facets.push({
-                        name: "bookmarkYear",
-                        value: bookmarkDate.getFullYear().toString(),
-                    });
-                }
-            }
-
-            if (this.visitDate) {
-                const visitDate = new Date(this.visitDate);
-                const existingFacetNames = new Set(
-                    domainEntity.facets.map((f: any) => f.name),
-                );
-
-                if (!existingFacetNames.has("visitDate")) {
-                    domainEntity.facets.push({
-                        name: "visitDate",
-                        value: this.visitDate,
-                    });
-                }
-                if (!existingFacetNames.has("visitYear")) {
-                    domainEntity.facets.push({
-                        name: "visitYear",
-                        value: visitDate.getFullYear().toString(),
-                    });
-                }
-            }
-
-            // Frequency facets for popularity queries
-            if (this.visitCount !== undefined) {
-                const existingFacetNames = new Set(
-                    domainEntity.facets.map((f: any) => f.name),
-                );
-
-                if (!existingFacetNames.has("visitCount")) {
-                    domainEntity.facets.push({
-                        name: "visitCount",
-                        value: this.visitCount.toString(),
-                    });
-                }
-                if (!existingFacetNames.has("visitFrequency")) {
-                    const frequency = this.calculateVisitFrequency();
-                    domainEntity.facets.push({
-                        name: "visitFrequency",
-                        value: frequency,
-                    });
-                }
-            }
-
-            // Category and source facets for filtering
-            if (this.pageType) {
-                const existingFacetNames = new Set(
-                    domainEntity.facets.map((f: any) => f.name),
-                );
-
-                if (!existingFacetNames.has("category")) {
-                    domainEntity.facets.push({
-                        name: "category",
-                        value: this.pageType,
-                    });
-                }
-                if (!existingFacetNames.has("categoryConfidence")) {
-                    const confidence = this.calculatePageTypeConfidence();
-                    domainEntity.facets.push({
-                        name: "categoryConfidence",
-                        value: confidence.toString(),
-                    });
-                }
-            }
-
             if (this.websiteSource) {
                 const existingFacetNames = new Set(
                     domainEntity.facets.map((f: any) => f.name),
@@ -344,48 +251,6 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             const existingEntityNames = new Set(entities.map((e) => e.name));
             if (!existingEntityNames.has(domainEntity.name)) {
                 entities.push(domainEntity);
-            }
-        }
-
-        // Frequency-derived topics
-        if (this.visitCount !== undefined) {
-            let potentialTopics: string[] = [];
-
-            if (this.visitCount > 10) {
-                potentialTopics = [
-                    "frequently visited site",
-                    "popular domain",
-                    "often visited",
-                ];
-            } else if (this.visitCount <= 2) {
-                potentialTopics = ["rarely visited site", "infrequent visit"];
-            }
-
-            // Add only unique topics
-            const existingTopics = new Set(topics);
-            for (const topic of potentialTopics) {
-                if (!existingTopics.has(topic)) {
-                    topics.push(topic);
-                    existingTopics.add(topic);
-                }
-            }
-        }
-
-        // Enhanced category topics
-        if (this.pageType) {
-            const potentialTopics = [
-                this.pageType,
-                `${this.pageType} site`,
-                `${this.pageType} website`,
-            ];
-
-            // Add only unique topics
-            const existingTopics = new Set(topics);
-            for (const topic of potentialTopics) {
-                if (!existingTopics.has(topic)) {
-                    topics.push(topic);
-                    existingTopics.add(topic);
-                }
             }
         }
 
@@ -429,116 +294,12 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             }
         }
 
-        // Enhanced action with temporal and frequency context
-        const actionVerb =
-            this.websiteSource === "bookmark" ? "bookmarked" : "visited";
-        const action: any = {
-            verbs: [actionVerb],
-            verbTense: "past",
-            subjectEntityName: "user",
-            objectEntityName: this.domain || this.url,
-            indirectObjectEntityName: "none",
-            params: [],
-        };
-
-        // Add temporal context to actions as parameters
-        const relevantDate = this.bookmarkDate || this.visitDate;
-        if (relevantDate) {
-            const date = new Date(relevantDate);
-            action.params.push({ name: "actionDate", value: relevantDate });
-            action.params.push({
-                name: "actionYear",
-                value: date.getFullYear().toString(),
-            });
-        }
-
-        // Add frequency context to actions as parameters
-        if (this.visitCount !== undefined) {
-            action.params.push({
-                name: "actionFrequency",
-                value: this.visitCount.toString(),
-            });
-        }
-
-        // Check if action already exists (compare by verb, subject, and object)
-        const actionExists = actions.some(
-            (existingAction) =>
-                existingAction.verbs?.[0] === action.verbs[0] &&
-                existingAction.subjectEntityName === action.subjectEntityName &&
-                existingAction.objectEntityName === action.objectEntityName,
-        );
-
-        if (!actionExists) {
-            actions.push(action);
-        }
-
-        // Basic content-derived knowledge
-        this.addBasicContentTopics(topics);
-
         return {
             entities,
             topics,
             actions,
             inverseActions,
         };
-    }
-
-    private calculateVisitFrequency(): "low" | "medium" | "high" {
-        if (!this.visitCount) return "low";
-        if (this.visitCount >= 20) return "high";
-        if (this.visitCount >= 5) return "medium";
-        return "low";
-    }
-
-    private calculatePageTypeConfidence(): number {
-        // Simple confidence scoring - can be enhanced later
-        if (!this.pageType) return 0.5;
-
-        // Higher confidence for URL-based detection
-        if (this.url.toLowerCase().includes(this.pageType.toLowerCase())) {
-            return 0.9;
-        }
-
-        // Medium confidence for title-based detection
-        if (this.title?.toLowerCase().includes(this.pageType.toLowerCase())) {
-            return 0.8;
-        }
-
-        // Default confidence
-        return 0.7;
-    }
-
-    private addBasicContentTopics(topics: string[]): void {
-        const existingTopics = new Set(topics);
-
-        // Basic content analysis from page content
-        if (this.pageContent) {
-            // Add headings as topics
-            this.pageContent.headings.forEach((heading) => {
-                const potentialTopics = [heading, `topic: ${heading}`];
-
-                for (const topic of potentialTopics) {
-                    if (!existingTopics.has(topic)) {
-                        topics.push(topic);
-                        existingTopics.add(topic);
-                    }
-                }
-            });
-        }
-
-        // Meta tag derived knowledge
-        if (this.metaTags?.keywords) {
-            this.metaTags.keywords.forEach((keyword) => {
-                const potentialTopics = [keyword, `keyword: ${keyword}`];
-
-                for (const topic of potentialTopics) {
-                    if (!existingTopics.has(topic)) {
-                        topics.push(topic);
-                        existingTopics.add(topic);
-                    }
-                }
-            });
-        }
     }
 }
 

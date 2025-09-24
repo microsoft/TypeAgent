@@ -997,11 +997,6 @@ export class WebsiteCollection
 
             this.db?.exec(`vacuum main into '${dbFile}'`);
             console.log(`[Knowledge Graph] Database saved successfully`);
-        } else {
-            // If we already have a persistent database, just ensure it's saved
-            console.log(
-                `[Knowledge Graph] Using existing persistent database: ${this.dbPath}`,
-            );
         }
     }
 

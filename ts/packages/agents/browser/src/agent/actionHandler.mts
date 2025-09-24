@@ -10,6 +10,7 @@ import {
     AppAgent,
     AppAgentEvent,
     AppAgentInitSettings,
+    DisplayContent,
     DisplayType,
     DynamicDisplay,
     ParsedCommandParams,
@@ -1502,6 +1503,7 @@ async function resolveWebPage(
     // Handle library pages with custom protocol
     const libraryPages: Record<string, string> = {
         annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",
+        entityGraph: "typeagent-browser://views/entityGraphView.html",
         knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
         macroslibrary: "typeagent-browser://views/macrosLibrary.html",
     };
@@ -1852,7 +1854,7 @@ async function performKnowledgeExtraction(
             parameters,
             context.sessionContext,
         )
-            .then(async (extractionResult) => {
+            .then(async (knowledge) => {
                 // Update the final state when extraction completes
                 if (activeExtraction.progressState) {
                     activeExtraction.progressState.phase = "complete";
@@ -1861,7 +1863,6 @@ async function performKnowledgeExtraction(
                 }
 
                 // Auto-save to index when extraction completes
-                const knowledge = extractionResult?.knowledge;
                 if (knowledge) {
                     try {
                         await saveKnowledgeToIndex(url, knowledge, context);
@@ -1980,13 +1981,29 @@ async function performKnowledgeExtractionWithNotifications(
 ): Promise<void> {
     try {
         const extractionId = parameters.extractionId;
+        const dynamicDisplayId = `knowledge-extraction-${extractionId}}`;
+        // Create a minimal ActionContext that routes actionIO calls to notifications
+        const actionIO: ActionIO = {
+            setDisplay(content: DisplayContent) {
+                sessionContext.notify(AppAgentEvent.Inline, content);
+            },
+            appendDisplay(content: DisplayContent, mode?: any) {
+                sessionContext.notify(AppAgentEvent.Inline, content);
+            },
+            appendDiagnosticData(_data: any) {
+                // Ignore diagnostic data for navigation contexts
+            },
+            takeAction(_action: any, _data?: unknown) {
+                // Ignore takeAction for navigation contexts
+            },
+        };
 
         // Create a minimal tracking entry
         const activeExtraction: ActiveKnowledgeExtraction = {
             extractionId,
             url,
-            actionIO: null, // No actionIO for notification-based extraction
-            dynamicDisplayId: null,
+            actionIO: actionIO, // simplified actionIO for notification-based extraction
+            dynamicDisplayId: dynamicDisplayId,
             progressState: {
                 phase: "initializing",
                 percentage: 0,
@@ -2008,7 +2025,7 @@ async function performKnowledgeExtractionWithNotifications(
         const progressHandler = async (
             progress: KnowledgeExtractionProgressEvent,
         ) => {
-            await handleKnowledgeExtractionProgressFromEvent(
+            handleKnowledgeExtractionProgressFromEvent(
                 progress,
                 activeExtraction,
             );
@@ -2024,7 +2041,7 @@ async function performKnowledgeExtractionWithNotifications(
             // Send progress notifications at key milestones
             if (percentage === 25 || percentage === 50 || percentage === 75) {
                 sessionContext.notify(
-                    AppAgentEvent.Info,
+                    AppAgentEvent.Inline,
                     `Knowledge extraction ${percentage}% complete for ${url}`,
                 );
             }
@@ -2032,39 +2049,82 @@ async function performKnowledgeExtractionWithNotifications(
 
         knowledgeProgressEvents.onProgressById(extractionId, progressHandler);
 
-        // Start extraction
-        const extractionResult = await handleKnowledgeAction(
+        // Start the extraction process without awaiting (background processing)
+        handleKnowledgeAction(
             "extractKnowledgeFromPageStreaming",
             parameters,
             sessionContext,
-        );
+        ).then(async (knowledge) => {
+            // Update the final state when extraction completes
+            if (activeExtraction.progressState) {
+                activeExtraction.progressState.phase = "complete";
+                activeExtraction.progressState.percentage = 100;
+                activeExtraction.progressState.lastUpdate = Date.now();
+            }
 
-        // Send completion notification with summary
-        if (extractionResult?.knowledge) {
-            const knowledge = extractionResult.knowledge;
-            const summary = generateKnowledgeSummary(knowledge);
+            // Send completion notification with summary
 
             // Always save to index first (critical for performance)
             try {
                 await saveKnowledgeToIndex(url, knowledge, sessionContext);
                 updateExtractionTimestamp(url);
 
-                sessionContext.notify(
-                    AppAgentEvent.Info,
-                    `Knowledge extracted and indexed for ${url}: ${summary}`,
-                );
+                const entitiesCount = knowledge.entities?.length || 0;
+                const topicsCount = knowledge.topics?.length || 0;
+                const relationshipsCount = knowledge.relationships?.length || 0;
+
+                const knowledgeHtml = generateDetailedKnowledgeCards(knowledge);
+
+                const headerText = "✅ Knowledge Extraction Complete";
+                const subText = `Successfully extracted and indexed knowledge from the ${url} page`;
+
+                sessionContext.notify(AppAgentEvent.Inline, {
+                    type: "html",
+                    content: `
+                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+                                <div style="font-weight: 600; color: #155724;">${headerText}</div>
+                                <div style="font-size: 13px; color: #155724; margin-top: 4px;">
+                                    ${subText}
+                                </div>
+                                <div style="font-size: 13px; color: #155724; margin-top: 8px;">
+                                    Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                </div>
+                            </div>
+                            ${knowledgeHtml}
+                        `,
+                });
             } catch (indexError) {
                 // Still notify about extraction, but warn about index failure
                 console.error(
                     `Failed to index knowledge for ${url}:`,
                     indexError,
                 );
-                sessionContext.notify(
-                    AppAgentEvent.Warning,
-                    `Knowledge extracted for ${url}: ${summary} (indexing failed)`,
-                );
+                const entitiesCount = knowledge.entities?.length || 0;
+                const topicsCount = knowledge.topics?.length || 0;
+                const relationshipsCount = knowledge.relationships?.length || 0;
+
+                const knowledgeHtml = generateDetailedKnowledgeCards(knowledge);
+
+                const headerText = "⚠️ Knowledge Extraction Complete (Warning)";
+                const subText = `Successfully extracted knowledge from the ${url} page, but failed to save to index`;
+
+                sessionContext.notify(AppAgentEvent.Inline, {
+                    type: "html",
+                    content: `
+                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                                <div style="font-weight: 600; color: #856404;">${headerText}</div>
+                                <div style="font-size: 13px; color: #856404; margin-top: 4px;">
+                                    ${subText}
+                                </div>
+                                <div style="font-size: 13px; color: #856404; margin-top: 8px;">
+                                    Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                </div>
+                            </div>
+                            ${knowledgeHtml}
+                        `,
+                });
             }
-        }
+        });
     } catch (error: any) {
         console.error("Knowledge extraction with notifications failed:", error);
         sessionContext.notify(
@@ -2078,21 +2138,6 @@ async function performKnowledgeExtractionWithNotifications(
             activeKnowledgeExtractions.delete(parameters.extractionId);
         }, 30000);
     }
-}
-
-function generateKnowledgeSummary(knowledge: any): string {
-    const entityCount = knowledge.entities?.length || 0;
-    const topicCount = knowledge.topics?.length || 0;
-    const relationshipCount = knowledge.relationships?.length || 0;
-
-    const parts = [];
-    if (entityCount > 0) parts.push(`${entityCount} entities`);
-    if (topicCount > 0) parts.push(`${topicCount} topics`);
-    if (relationshipCount > 0) parts.push(`${relationshipCount} relationships`);
-
-    return parts.length > 0
-        ? parts.join(", ")
-        : "No significant knowledge found";
 }
 
 function createKnowledgeActionResult(
@@ -2884,6 +2929,9 @@ async function handlePageNavigation(
     const { url, title } = params;
 
     try {
+        // Send simple navigation notification
+        context.notify(AppAgentEvent.Inline, `Navigated to "${title}"`);
+
         // Normalize URL for consistent checking (keep query params)
         const normalizedUrl = normalizeUrlForIndex(url);
 
@@ -2903,7 +2951,7 @@ async function handlePageNavigation(
                 );
             } else {
                 context.notify(
-                    AppAgentEvent.Info,
+                    AppAgentEvent.Inline,
                     `Knowledge extraction in progress for ${url}`,
                 );
             }
@@ -2944,7 +2992,7 @@ async function handlePageNavigation(
                 } else {
                     // Use notification when no ActionContext available
                     context.notify(
-                        AppAgentEvent.Info,
+                        AppAgentEvent.Inline,
                         `Using cached knowledge for ${url}: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships`,
                     );
                 }
@@ -2955,7 +3003,7 @@ async function handlePageNavigation(
                 );
             } else {
                 context.notify(
-                    AppAgentEvent.Info,
+                    AppAgentEvent.Inline,
                     `Using cached knowledge for ${url}`,
                 );
             }
@@ -3008,7 +3056,7 @@ async function handlePageNavigation(
             } else {
                 // Use notification when no ActionContext available
                 context.notify(
-                    AppAgentEvent.Info,
+                    AppAgentEvent.Inline,
                     `Updating existing knowledge for ${url}: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships`,
                 );
             }
@@ -3058,8 +3106,6 @@ async function handlePageNavigation(
             extractionPromise,
         );
     } catch (error) {
-        console.error(`Navigation handler failed for ${url}:`, error);
-
         // Send error notification
         context.notify(
             AppAgentEvent.Error,

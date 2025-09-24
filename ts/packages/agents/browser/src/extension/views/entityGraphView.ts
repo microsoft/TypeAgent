@@ -82,7 +82,8 @@ class EntityGraphView {
 
             // Set up UI callbacks
             this.visualizer.setInstanceChangeCallback(() => {
-                // UI update callback - layer indicator removed
+                // Update window title when visualizer switches views
+                this.updateWindowTitle();
             });
 
             console.log("Creating sidebar...");
@@ -161,6 +162,9 @@ class EntityGraphView {
                 console.log("Invalid state - showing error");
                 this.showEntityParameterError();
             }
+
+            // Update window title after initial load
+            this.updateWindowTitle();
         } catch (error) {
             console.error("Failed to initialize entity graph view:", error);
             this.showGraphError("Failed to initialize entity graph");
@@ -469,6 +473,9 @@ class EntityGraphView {
             await this.loadRealEntityData(entityName);
             // Show sidebar after detail view is loaded
             this.updateSidebarVisibility(true);
+
+            // Update window title after navigation completes
+            this.updateWindowTitle();
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
             // Show user-friendly error message
@@ -509,6 +516,9 @@ class EntityGraphView {
 
             this.updateSidebarVisibility(false);
             await this.loadGlobalViewWithImportanceLayer();
+
+            // Update window title for global view
+            this.updateWindowTitle();
         } catch (error) {
             console.error("Failed to navigate to global view:", error);
             this.showNavigationError("Failed to load global view");
@@ -1528,6 +1538,9 @@ class EntityGraphView {
         if (state.type === "global") {
             this.updateSidebarVisibility(false);
         }
+
+        // Update window title for restored state
+        this.updateWindowTitle();
     }
 
     /**
@@ -1638,6 +1651,35 @@ class EntityGraphView {
         } else {
             window.history.pushState({}, "", url.toString());
         }
+    }
+
+    /**
+     * Update window title based on current view mode and entity
+     */
+    private updateWindowTitle(): void {
+        let title = "Entity Graph";
+
+        if (
+            this.currentEntity &&
+            this.currentViewMode.type === "entity-specific"
+        ) {
+            // Check if we're in neighborhood view via the visualizer
+            const activeView = this.visualizer.getCurrentActiveView();
+            if (activeView === "neighborhood") {
+                title = `${this.currentEntity} Neighborhood`;
+            } else if (activeView === "detail") {
+                title = `${this.currentEntity} Details`;
+            } else {
+                // Fallback for entity-specific view
+                title = `${this.currentEntity} Details`;
+            }
+        } else {
+            // Global view
+            title = "Entity Graph";
+        }
+
+        document.title = title;
+        console.log(`[Title] Updated window title to: ${title}`);
     }
 }
 
