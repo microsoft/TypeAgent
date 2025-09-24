@@ -1109,7 +1109,7 @@ export class ShellWindow {
         }
         this.mainWindow.setTitle(title);
         this.chatView.webContents.send("setting-summary-changed", status);
-    }    
+    }
 
     /**
      * Updates the window title to include the current zoom level.
