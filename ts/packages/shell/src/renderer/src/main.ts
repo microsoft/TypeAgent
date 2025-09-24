@@ -11,7 +11,7 @@ import {
     Client,
     SearchMenuItem,
 } from "../../preload/electronTypes";
-import { ChatView } from "./chatView";
+import { ChatView } from "./chat/chatView";
 import { TabView } from "./tabView";
 import { getSpeechToken, setSpeechToken } from "./speechToken";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";

@@ -6,7 +6,7 @@ import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 
 import registerDebug from "debug";
-import { ExpandableTextarea } from "./chatInput";
+import { ExpandableTextArea } from "./chat/expandableTextArea";
 
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
@@ -54,7 +54,7 @@ export class PartialCompletion {
 
     constructor(
         private readonly container: HTMLDivElement,
-        private readonly input: ExpandableTextarea,
+        private readonly input: ExpandableTextArea,
         private readonly dispatcher: Dispatcher,
     ) {
         this.searchMenu = new SearchMenu((item) => {
