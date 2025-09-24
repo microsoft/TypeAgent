@@ -746,128 +746,7 @@ export async function handleCreateCodeBlockAction(
     }
 }
 
-export async function handleFixProblemAction2(
-    action: any,
-): Promise<ActionResult> {
-    const { target, file } = action.parameters;
-
-    try {
-        // Flatten all workspace diagnostics
-        const allProblems = collectWorkspaceDiagnostics(); // returns WorkspaceDiagnostic[]
-        if (allProblems.length === 0) {
-            return { handled: false, message: "✅ No problems found." };
-        }
-
-        // Pick problem(s) according to target
-        const problemsToFix = pickProblem(allProblems, target);
-        if (!problemsToFix) {
-            return {
-                handled: false,
-                message: `❌ No matching problem found for target "${target}".`,
-            };
-        }
-
-        // Normalize result
-        const problemsArray = (
-            Array.isArray(problemsToFix) ? problemsToFix : [problemsToFix]
-        ) as any[];
-
-        if (problemsArray.length === 0) {
-            return {
-                handled: false,
-                message: `❌ No matching problem found for target "${target}".`,
-            };
-        }
-
-        // Resolve file/document
-        const problemFile = file ?? problemsArray[0].uri;
-        const doc = await resolveOrFallbackToFile(problemFile);
-        if (!doc) {
-            return {
-                handled: false,
-                message: "❌ Could not resolve target file.",
-            };
-        }
-
-        const editor = await showDocumentInEditor(doc);
-        if (!editor) {
-            return {
-                handled: false,
-                message: "❌ Could not open document in editor.",
-            };
-        }
-
-        // Move cursor to problem location
-        const problem = problemsArray[0]; // handle "first" or "next" case
-        const range = problem.diagnostic.range;
-        editor.selection = new vscode.Selection(range.start, range.end);
-        editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-
-        // Trigger Copilot quick-fix or inline suggestion
-        const copilotAvailable = await isCopilotEnabled();
-        if (copilotAvailable) {
-            await triggerAndMaybeAcceptInlineSuggestion({ autoAccept: true });
-        }
-
-        // Push to agent history
-        pushEditHistory({ uri: problem.uri, range });
-
-        return {
-            handled: true,
-            message:
-                target === "all"
-                    ? `🔧 Attempted to fix ${problemsArray.length} problems.`
-                    : `🔧 Fixed problem at ${problem.uri.fsPath}:${range.start.line + 1}`,
-        };
-    } catch (err: any) {
-        return {
-            handled: false,
-            message: `❌ Error handling fixProblem: ${err.message}`,
-        };
-    }
-}
-
-export async function handleFixProblemAction1(
-    action: any,
-): Promise<ActionResult> {
-    const { target, hint, file } = action.parameters;
-
-    try {
-        // collect diagnostics
-        const allProblems = collectWorkspaceDiagnostics();
-        if (allProblems.length === 0) {
-            return { handled: false, message: "✅ No problems found." };
-        }
-
-        // pick one problem
-        const picked = pickProblem(allProblems, target);
-        const problem = Array.isArray(picked) ? picked[0] : picked;
-        if (!problem) {
-            return {
-                handled: false,
-                message: `❌ No matching problem found for target "${target}".`,
-            };
-        }
-
-        // apply the fix
-        const ok = await applyFixProblemAlt(problem, { hint, file });
-        if (!ok) {
-            return { handled: false, message: "❌ Could not apply fix." };
-        }
-
-        return {
-            handled: true,
-            message: `🔧 Fixed problem at ${problem.uri.fsPath}:${problem.diagnostic.range.start.line + 1}`,
-        };
-    } catch (err: any) {
-        return {
-            handled: false,
-            message: `❌ Error handling fixProblem: ${err.message}`,
-        };
-    }
-}
-
-export async function handleFixProblemAction(
+export async function handleFixCodeProblemAction(
     action: any,
 ): Promise<ActionResult> {
     const { target, file } = action.parameters;
@@ -972,6 +851,10 @@ export async function handleEditorCodeActions(
 
         case "createCodeBlock":
             actionResult = await handleCreateCodeBlockAction(action);
+            break;
+
+        case "fixCodeProblem":
+            actionResult = await handleFixCodeProblemAction(action);
             break;
 
         default:

@@ -4,9 +4,9 @@
 export type EditorCodeActions =
     | EditorActionCreateFunction
     | EditorActionCreateCodeBlock
+    | EditorActionFixProblem
     | EditorActionInsertComment
     | EditorActionGenerateWithCopilot
-    | EditorActionRepairWithCopilot
     | EditorActionCreateFile
     | EditorActionSaveCurrentFile
     | EditorActionSaveAllFiles;
@@ -41,6 +41,7 @@ export type ArgumentDefinition = {
 export type CursorTarget =
     | { type: "atCursor" }
     | { type: "insideFunction"; name: string }
+    | { type: "onLine"; line: number }
     | { type: "afterLine"; line: number }
     | { type: "beforeLine"; line: number }
     | { type: "inSelection" }
@@ -57,6 +58,7 @@ export type CodeTarget =
     | { type: "line"; lineNumber: number }
     | { type: "range"; start: number; end: number };
 
+// Do not fill the fileName unless the user explicitly specified it.
 export type FileTarget = {
     // Name of the file to create or open or edit (e.g., "utils.ts")
     fileName?: string;
@@ -140,8 +142,13 @@ export type ProblemTarget =
     | { type: "cursor"; position: CursorTarget }
     | { type: "indexInFile"; index: number; file?: FileTarget };
 
+
+// schema to fix a problem (diagnostic) in the code.
+// The target can be the first problem, the next one, all, or a specific location/index in the file.
+// Optional hints from the user (e.g. "fix the second error") or file scoping may guide the choice.
+// Used when the user requests: "fix this problem", "fix the second error", "fix all issues in this file".
 export type EditorActionFixProblem = {
-    actionName: "fixProblem";
+    actionName: "fixCodeProblem";
     parameters: {
         // Which problem to fix (e.g., "first", "next", "atCursor", or "second problem in file")
         target: ProblemTarget;

@@ -304,7 +304,7 @@ export function pushWorkspaceEditHistory(
 /**
  * Optionally: pop the last edit to undo.
  */
-export function popEditHistory(): vscode.WorkspaceEdit | undefined {
+export function popEditHistory(): EditRecord | undefined {
     return editHistory.pop();
 }
 
@@ -342,69 +342,108 @@ export type ProblemTarget =
     | { type: "cursor"; position: CursorTarget }
     | { type: "indexInFile"; index: number; file?: FileTarget };
 
+export function findDiagnosticAtCursorTargetEx(
+    editor: vscode.TextEditor,
+    diagnostics: WorkspaceDiagnostic[],
+    activeFileUri: vscode.Uri,
+    cursorTarget: CursorTarget,
+): WorkspaceDiagnostic | undefined {
+    const pos = resolvePosition(editor, cursorTarget);
+
+    return diagnostics.find(
+        (d) =>
+            d.uri.toString() === activeFileUri.toString() &&
+            d.diagnostic.range.contains(pos),
+    );
+}
+
+export function findDiagnosticAtCursorTarget(
+    editor: vscode.TextEditor,
+    diagnostics: WorkspaceDiagnostic[],
+    activeFileUri: vscode.Uri,
+    cursorTarget: CursorTarget,
+): WorkspaceDiagnostic | undefined {
+    const pos = resolvePosition(editor, cursorTarget);
+
+    // Scope diagnostics to the current file
+    const fileDiags = diagnostics.filter(
+        (d) => d.uri.toString() === activeFileUri.toString(),
+    );
+    if (fileDiags.length === 0) return undefined;
+
+    // 1. Exact match at cursor
+    const exact = fileDiags.find((d) => d.diagnostic.range.contains(pos));
+    if (exact) return exact;
+
+    // 2. Closest diagnostic by line distance
+    const cursorLine = pos.line;
+    let closest: WorkspaceDiagnostic | undefined;
+    let minDistance = Number.POSITIVE_INFINITY;
+
+    for (const d of fileDiags) {
+        const diagLine = d.diagnostic.range.start.line;
+        const distance = Math.abs(diagLine - cursorLine);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closest = d;
+        }
+    }
+    if (closest) return closest;
+
+    // 3. Fallback: first problem in the file
+    return fileDiags[0];
+}
+
 export function pickProblemForFile(
     editor: vscode.TextEditor,
     diagnostics: WorkspaceDiagnostic[],
-    target: ProblemTarget | "first" | "next" | "all" | CursorTarget,
+    target: ProblemTarget,
     activeFileUri: vscode.Uri,
     lastIndex: number = -1,
 ): WorkspaceDiagnostic | WorkspaceDiagnostic[] | undefined {
     if (diagnostics.length === 0) return undefined;
 
-    // Legacy strings for backwards compatibility
-    if (typeof target === "string") {
-        switch (target) {
-            case "first":
-                return diagnostics[0];
-            case "next": {
-                const nextIndex = (lastIndex + 1) % diagnostics.length;
-                return diagnostics[nextIndex];
-            }
-            case "all":
-                return diagnostics;
-            default:
-                return undefined;
-        }
-    }
-
-    // Legacy CursorTarget (not wrapped)
-    if ((target as CursorTarget)?.type) {
-        const pos = resolvePosition(editor, target as CursorTarget);
-        return diagnostics.find(
-            (d) =>
-                d.uri.toString() === activeFileUri.toString() &&
-                d.diagnostic.range.contains(pos),
-        );
-    }
-
-    // New ProblemTarget
     switch (target.type) {
-        case "first":
-            return diagnostics[0];
+        case "first": {
+            // Scope to current file
+            const fileDiags = diagnostics.filter(
+                (d) => d.uri.toString() === activeFileUri.toString(),
+            );
+            return fileDiags[0];
+        }
 
         case "next": {
-            const nextIndex = (lastIndex + 1) % diagnostics.length;
-            return diagnostics[nextIndex];
+            // Cycle only within current file
+            const fileDiags = diagnostics.filter(
+                (d) => d.uri.toString() === activeFileUri.toString(),
+            );
+            if (fileDiags.length === 0) return undefined;
+            const nextIndex = (lastIndex + 1) % fileDiags.length;
+            return fileDiags[nextIndex];
         }
 
-        case "all":
-            return diagnostics;
+        case "all": {
+            // Return all diagnostics for current file
+            return diagnostics.filter(
+                (d) => d.uri.toString() === activeFileUri.toString(),
+            );
+        }
 
         case "cursor": {
-            const pos = resolvePosition(editor, target.position);
-            return diagnostics.find(
-                (d) =>
-                    d.uri.toString() === activeFileUri.toString() &&
-                    d.diagnostic.range.contains(pos),
+            return findDiagnosticAtCursorTarget(
+                editor,
+                diagnostics,
+                activeFileUri,
+                target.position,
             );
         }
 
         case "indexInFile": {
-            const fileUri = target.file?.uri ?? activeFileUri; // fallback to active editor file
+            const fileUri = target.file?.fileName ?? activeFileUri;
             const fileDiags = diagnostics.filter(
                 (d) => d.uri.toString() === fileUri.toString(),
             );
-            return fileDiags[target.index]; // may be undefined if out of bounds
+            return fileDiags[target.index]; // may be undefined if OOB
         }
 
         default:
@@ -930,6 +969,7 @@ export function getIndentContextSmart(
 export type CursorTarget =
     | { type: "atCursor" }
     | { type: "insideFunction"; name: string }
+    | { type: "onLine"; line: number }
     | { type: "afterLine"; line: number }
     | { type: "beforeLine"; line: number }
     | { type: "inSelection" }
@@ -950,6 +990,14 @@ export function resolvePosition(
 
         case "atStartOfFile":
             return new vscode.Position(0, 0);
+
+        case "onLine": {
+            const line = Math.max(
+                0,
+                Math.min(target.line - 1, doc.lineCount - 1),
+            );
+            return new vscode.Position(line, 0);
+        }
 
         case "atEndOfFile": {
             //return new vscode.Position(doc.lineCount, 0);
