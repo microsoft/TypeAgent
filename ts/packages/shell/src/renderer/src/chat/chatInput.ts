@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ExpandableTextArea, ExpandableTextareaHandlers } from "./expandableTextArea";
+import {
+    ExpandableTextArea,
+    ExpandableTextareaHandlers,
+} from "./expandableTextArea";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -14,8 +17,6 @@ import { getClientAPI } from "../main";
 import { needSpeechToken, recognizeOnce } from "../speech";
 import { getSpeechToken, SpeechToken } from "../speechToken";
 import { uint8ArrayToBase64 } from "common-utils";
-
-
 
 export class ChatInput {
     private inputContainer: HTMLDivElement;

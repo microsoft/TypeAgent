@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { IdGenerator } from "../main";
-import { ChatInput} from "./chatInput";
+import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import {
