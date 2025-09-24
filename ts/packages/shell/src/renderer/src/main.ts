@@ -346,6 +346,9 @@ function registerClient(
         searchMenuCompletion(id: number, item: SearchMenuItem) {
             remoteSearchMenuUIOnCompletion(id, item);
         },
+        titleUpdated(title: string): void {
+            chatView.setTitle(title);
+        }
     };
 
     getClientAPI().registerClient(client);
