@@ -121,7 +121,7 @@ FROM Messages WHERE msg_id = @msg_id"
 SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
 FROM Messages ORDER BY msg_id");
         using var reader = cmd.ExecuteReader();
-        while (await reader.ReadAsync(cancellationToken))
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             TMessage message = ReadMessage(reader);
             yield return message;
