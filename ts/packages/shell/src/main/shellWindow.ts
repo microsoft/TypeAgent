@@ -1122,6 +1122,11 @@ export class ShellWindow {
         this.chatView.webContents.executeJavaScript(
             `document.title = '${summary}${zoomTitle}';`,
         );
+
+        this.chatView.webContents.send(
+            "updated-title",
+            `${summary}${zoomTitle}`,
+        );
     }
 
     // ================================================================
