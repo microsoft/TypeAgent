@@ -85,6 +85,9 @@ public class PodcastCommands : ICommandModule
             KnowProWriter.WriteLine(json);
         }
 
+        count = await podcast.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken);
+        KnowProWriter.WriteLine($"{count} properties imported");
+
         if (data.SemanticIndexData is not null)
         {
             await podcast.ImportTermToSemanticRefIndexAsync(data.SemanticIndexData.Items, cancellationToken);

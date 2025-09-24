@@ -34,6 +34,7 @@ public static class ImportExtensions
             return 0;
         }
         await conversation.SemanticRefs.AppendAsync(semanticRefs, cancellationToken).ConfigureAwait(false);
+
         return await conversation.SemanticRefs.GetCountAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -85,7 +86,6 @@ public static class ImportExtensions
         if (!data.SemanticRefs.IsNullOrEmpty())
         {
             await conversation.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken).ConfigureAwait(false);
-            await conversation.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken).ConfigureAwait(false);
         }
         if (data.SemanticIndexData is not null)
         {
