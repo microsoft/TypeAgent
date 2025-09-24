@@ -84,7 +84,12 @@ VALUES (@propertyName, @value, @score, @semrefId)
         propertyName = PreparePropertyName(propertyName);
         value = PreparePropertyValue(value);
 
-        using var cmd = _db.CreateCommand("SELECT semref_id, score FROM PropertyIndex WHERE prop_name = @propertyName AND value_str = @value");
+        using var cmd = _db.CreateCommand(@"
+SELECT semref_id, score FROM PropertyIndex WHERE prop_name = @propertyName AND value_str = @value"
+);
+        cmd.AddParameter("@propertyName", propertyName);
+        cmd.AddParameter("@value", value);
+
         using var reader = cmd.ExecuteReader();
         return reader.GetList((reader) =>
         {

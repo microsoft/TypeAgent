@@ -85,17 +85,25 @@ public class PodcastCommands : ICommandModule
             KnowProWriter.WriteLine(json);
         }
 
-        count = await podcast.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken);
-        KnowProWriter.WriteLine($"{count} properties imported");
-
+        IList<ScoredSemanticRefOrdinal> matches;
         if (data.SemanticIndexData is not null)
         {
             await podcast.ImportTermToSemanticRefIndexAsync(data.SemanticIndexData.Items, cancellationToken);
             count = await podcast.SemanticRefIndex.GetCountAsync(cancellationToken);
             KnowProWriter.WriteLine($"{count} index entries imported");
 
-            var matches = await podcast.SemanticRefIndex.LookupTermAsync("Children of Time", cancellationToken);
+            matches = await podcast.SemanticRefIndex.LookupTermAsync("Children of Time", cancellationToken);
             KnowProWriter.WriteLine($"{matches.Count} matches");
         }
+
+        count = await podcast.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken);
+        KnowProWriter.WriteLine($"{count} properties imported");
+        matches = await podcast.SecondaryIndexes.PropertyToSemanticRefIndex.LookupPropertyAsync(
+            KnowledgePropertyName.EntityName,
+            "Children of Time",
+            cancellationToken
+        );
+        KnowProWriter.WriteLine($"{matches.Count} matches");
+
     }
 }
