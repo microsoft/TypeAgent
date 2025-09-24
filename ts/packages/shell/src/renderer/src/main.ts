@@ -348,7 +348,7 @@ function registerClient(
         },
         titleUpdated(title: string): void {
             chatView.setTitle(title);
-        }
+        },
     };
 
     getClientAPI().registerClient(client);

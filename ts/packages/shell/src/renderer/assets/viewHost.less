@@ -2,476 +2,476 @@
 // Licensed under the MIT License.
 
 :root {
-        --title-bar-height: 40px;
-        --title-bar-bg: #e5e5e5;
-        --border-color: #d0d0d0;
-        --button-hover-bg: rgba(0, 0, 0, 0.05);
-        --button-active-bg: rgba(0, 0, 0, 0.1);
-        --tab-bg: #ffffff;
-        --tab-inactive-bg: #f0f0f0;
-        --tab-border: #d0d0d0;
-        --close-button-hover: #e81123;
-        --text-color: #333333;
-        --toolbar-bg: #e5e5e5;
-        --layout-button-left: 4px;
-        --layout-button-width: 28px;
-        --layout-button-height: 28px;
-        --layout-button-area-width: 36px;
-      }
+  --title-bar-height: 40px;
+  --title-bar-bg: #e5e5e5;
+  --border-color: #d0d0d0;
+  --button-hover-bg: rgba(0, 0, 0, 0.05);
+  --button-active-bg: rgba(0, 0, 0, 0.1);
+  --tab-bg: #ffffff;
+  --tab-inactive-bg: #f0f0f0;
+  --tab-border: #d0d0d0;
+  --close-button-hover: #e81123;
+  --text-color: #333333;
+  --toolbar-bg: #e5e5e5;
+  --layout-button-left: 4px;
+  --layout-button-width: 28px;
+  --layout-button-height: 28px;
+  --layout-button-area-width: 36px;
+}
 
-      /* Platform-specific adjustments */
-      .platform-macos {
-        --title-bar-height: 36px;
-        --layout-button-left: 78px;
-        --layout-button-area-width: calc(36px + var(--layout-button-left));
-      }
+/* Platform-specific adjustments */
+.platform-macos {
+  --title-bar-height: 36px;
+  --layout-button-left: 78px;
+  --layout-button-area-width: calc(36px + var(--layout-button-left));
+}
 
-      .platform-linux {
-        --title-bar-height: 40px;
-      }
+.platform-linux {
+  --title-bar-height: 40px;
+}
 
-      body {
-        margin: 0;
-        padding-top: 0;
-        overflow: hidden;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
+body {
+  margin: 0;
+  padding-top: 0;
+  overflow: hidden;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
 
-      /* Title Bar */
-      .title-bar {
-        position: fixed;
-        top: 0;
-        left: var(
-          --layout-button-area-width
-        ); /* Start after the layout toggle button */
-        right: 0;
-        height: var(--title-bar-height);
-        background: var(--title-bar-bg);
-        border-bottom: 1px solid var(--border-color);
-        display: flex;
-        align-items: flex-end;
-        z-index: 10000;
-        -webkit-app-region: no-drag;
-        transition:
-          left 0.2s ease,
-          right 0.2s ease;
-      }
+/* Title Bar */
+.title-bar {
+  position: fixed;
+  top: 0;
+  left: var(
+    --layout-button-area-width
+  ); /* Start after the layout toggle button */
+  right: 0;
+  height: var(--title-bar-height);
+  background: var(--title-bar-bg);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: flex-end;
+  z-index: 10000;
+  -webkit-app-region: no-drag;
+  transition:
+    left 0.2s ease,
+    right 0.2s ease;
+}
 
-      /* Layout-specific positioning */
-      /* When in horizontal layout with chat sidebar, browser controls should be positioned over browser area */
-      body.horizontal-layout.has-sidebar .title-bar {
-        left: var(--sidebar-width, 400px);
-        padding-left: 8px; /* Add some padding since navigation buttons are the first element */
-      }
+/* Layout-specific positioning */
+/* When in horizontal layout with chat sidebar, browser controls should be positioned over browser area */
+body.horizontal-layout.has-sidebar .title-bar {
+  left: var(--sidebar-width, 400px);
+  padding-left: 8px; /* Add some padding since navigation buttons are the first element */
+}
 
-      /* Left Side Controls */
-      .title-bar-left {
-        display: flex;
-        align-items: center;
-        flex-shrink: 0;
-        padding-bottom: 4px;
-      }
+/* Left Side Controls */
+.title-bar-left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+}
 
-      .title-bar-button {
-        width: 28px;
-        height: 28px;
-        border: none;
-        background: transparent;
-        border-radius: 4px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        color: var(--text-color);
-        margin: 0 1px;
-      }
+.title-bar-button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-color);
+  margin: 0 1px;
+}
 
-      .title-bar-button:hover {
-        background: var(--button-hover-bg);
-      }
+.title-bar-button:hover {
+  background: var(--button-hover-bg);
+}
 
-      .title-bar-button:active {
-        background: var(--button-active-bg);
-      }
+.title-bar-button:active {
+  background: var(--button-active-bg);
+}
 
-      .title-bar-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
+.title-bar-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
-      .title-bar-button:disabled:hover {
-        background: transparent;
-      }
+.title-bar-button:disabled:hover {
+  background: transparent;
+}
 
-      .layout-toggle {
-        position: fixed;
-        top: 0;
-        left: 0xp;
-        width: var(--layout-button-area-width);
-        height: var(--title-bar-height);
-        background: var(--title-bar-bg);
-        border-bottom: 1px solid var(--border-color);
-      }
+.layout-toggle {
+  position: fixed;
+  top: 0;
+  left: 0xp;
+  width: var(--layout-button-area-width);
+  height: var(--title-bar-height);
+  background: var(--title-bar-bg);
+  border-bottom: 1px solid var(--border-color);
+}
 
-      /* Absolute positioned layout toggle button */
-      .layout-toggle-absolute {
-        position: relative;
-        top: 8px;
-        left: var(--layout-button-left);
-        width: var(--layout-button-width);
-        height: var(--layout-button-height);
-        border: none;
-        background: transparent;
-        border-radius: 4px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        color: var(--text-color);
-        z-index: 10004;
-        -webkit-app-region: no-drag;
-        pointer-events: auto;
-      }
+/* Absolute positioned layout toggle button */
+.layout-toggle-absolute {
+  position: relative;
+  top: 8px;
+  left: var(--layout-button-left);
+  width: var(--layout-button-width);
+  height: var(--layout-button-height);
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-color);
+  z-index: 10004;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
 
-      .layout-toggle-absolute:hover {
-        background: var(--button-hover-bg);
-      }
+.layout-toggle-absolute:hover {
+  background: var(--button-hover-bg);
+}
 
-      .layout-toggle-absolute:active {
-        background: var(--button-active-bg);
-      }
+.layout-toggle-absolute:active {
+  background: var(--button-active-bg);
+}
 
-      /* Ensure toggle button area is not draggable */
-      .layout-toggle-absolute::before {
-        content: "";
-        position: absolute;
-        top: -4px;
-        left: -4px;
-        right: -4px;
-        bottom: -4px;
-        -webkit-app-region: no-drag;
-        pointer-events: none;
-      }
+/* Ensure toggle button area is not draggable */
+.layout-toggle-absolute::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
 
-      .platform-macos .layout-toggle-absolute {
-        left: 78px;
-        top: 4px;
-      }
+.platform-macos .layout-toggle-absolute {
+  left: 78px;
+  top: 4px;
+}
 
-      .browser-nav {
-        display: flex;
-        align-items: center;
-        gap: 1px;
-      }
+.browser-nav {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
 
-      .nav-separator {
-        width: 1px;
-        height: 18px;
-        background: var(--border-color);
-        margin: 0 8px;
-      }
+.nav-separator {
+  width: 1px;
+  height: 18px;
+  background: var(--border-color);
+  margin: 0 8px;
+}
 
-      /* Center Area */
-      .title-bar-center {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        min-width: 0;
-        padding: 0px;
-        position: relative;
-        height: 100%;
-        -webkit-app-region: no-drag;
-      }
+/* Center Area */
+.title-bar-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0px;
+  position: relative;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
 
-      /* Draggable regions based on mode */
-      .chat-only-mode .title-bar-center {
-        -webkit-app-region: drag;
-      }
+/* Draggable regions based on mode */
+.chat-only-mode .title-bar-center {
+  -webkit-app-region: drag;
+}
 
-      .chat-only-mode .browser-nav,
-      .chat-only-mode .tab-container,
-      .chat-only-mode .window-controls {
-        display: none;
-      }
+.chat-only-mode .browser-nav,
+.chat-only-mode .tab-container,
+.chat-only-mode .window-controls {
+  display: none;
+}
 
-      .chat-only-mode .app-title {
-        display: flex;
-      }
+.chat-only-mode .app-title {
+  display: flex;
+}
 
-      body.horizontal-layout.has-sidebar .app-title {
-        display: none;
-      }
+body.horizontal-layout.has-sidebar .app-title {
+  display: none;
+}
 
-      /* Tab Container */
-      .tab-container {
-        flex: 1;
-        display: flex;
-        align-items: flex-end;
-        min-width: 0;
-        gap: 4px;
-      }
+/* Tab Container */
+.tab-container {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+  gap: 4px;
+}
 
-      .tab-bar {
-        display: flex;
-        flex: 0 1 auto;
-        min-width: 0;
-        overflow: hidden;
-        gap: 1px;
-        padding: 0 8px;
-      }
+.tab-bar {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  gap: 1px;
+  padding: 0 8px;
+}
 
-      .tab-drag-region {
-        flex: 1;
-        height: var(--title-bar-height);
-        min-width: 50px;
-        -webkit-app-region: drag;
-        cursor: default;
-      }
+.tab-drag-region {
+  flex: 1;
+  height: var(--title-bar-height);
+  min-width: 50px;
+  -webkit-app-region: drag;
+  cursor: default;
+}
 
-      .tab {
-        min-width: 80px;
-        max-width: 200px;
-        flex: 1;
-        height: 32px;
-        background: var(--title-bar-bg);
-        border: 1px solid var(--tab-border);
-        border-bottom: 1px solid transparent;
-        border-radius: 8px 8px 0 0;
-        display: flex;
-        align-items: center;
-        padding: 0 8px;
-        cursor: pointer;
-        font-size: 12px;
-        overflow: hidden;
-        user-select: none;
-        -webkit-user-select: none;
-        position: relative;
-        margin-top: 8px;
-        z-index: 2;
-        -webkit-app-region: no-drag;
-      }
+.tab {
+  min-width: 80px;
+  max-width: 200px;
+  flex: 1;
+  height: 32px;
+  background: var(--title-bar-bg);
+  border: 1px solid var(--tab-border);
+  border-bottom: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  cursor: pointer;
+  font-size: 12px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+  margin-top: 8px;
+  z-index: 2;
+  -webkit-app-region: no-drag;
+}
 
-      .tab:hover:not(.active) {
-        background: var(--button-hover-bg);
-      }
+.tab:hover:not(.active) {
+  background: var(--button-hover-bg);
+}
 
-      .tab.active {
-        background: white;
-        border-color: var(--tab-border);
-        border-bottom: none;
-        z-index: 3;
-        position: relative;
-        top: 1px;
-      }
+.tab.active {
+  background: white;
+  border-color: var(--tab-border);
+  border-bottom: none;
+  z-index: 3;
+  position: relative;
+  top: 1px;
+}
 
-      .tab-favicon {
-        width: 16px;
-        height: 16px;
-        margin-right: 6px;
-        flex-shrink: 0;
-      }
+.tab-favicon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
 
-      .tab-title {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 11px;
-      }
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
 
-      .tab-close {
-        width: 16px;
-        height: 16px;
-        margin-left: 4px;
-        background: transparent;
-        border: none;
-        border-radius: 2px;
-        cursor: pointer;
-        font-size: 8px;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity 0.2s;
-      }
+.tab-close {
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
 
-      .tab:hover .tab-close {
-        opacity: 1;
-      }
+.tab:hover .tab-close {
+  opacity: 1;
+}
 
-      .tab-close:hover {
-        background: var(--close-button-hover);
-        color: white;
-      }
+.tab-close:hover {
+  background: var(--close-button-hover);
+  color: white;
+}
 
-      .new-tab-button {
-        width: 24px;
-        height: 24px;
-        background: transparent;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        margin-left: 4px;
-        flex-shrink: 0;
-        z-index: 1;
-        position: relative;
-        -webkit-app-region: no-drag;
-        margin-bottom: 4px;
-      }
+.new-tab-button {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  z-index: 1;
+  position: relative;
+  -webkit-app-region: no-drag;
+  margin-bottom: 4px;
+}
 
-      .new-tab-button:hover {
-        background: var(--button-hover-bg);
-      }
+.new-tab-button:hover {
+  background: var(--button-hover-bg);
+}
 
-      /* App Title (Chat-Only Mode) */
-      .app-title {
-        flex: 1;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text-color);
-        user-select: none;
-        -webkit-user-select: none;
-        -webkit-app-region: drag;
-        cursor: default;
-        text-align: center;
-        margin-left: 44px; /* Account for toggle button width + safe spacing */
-        height: 100%;
-      }
+/* App Title (Chat-Only Mode) */
+.app-title {
+  flex: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-app-region: drag;
+  cursor: default;
+  text-align: center;
+  margin-left: 44px; /* Account for toggle button width + safe spacing */
+  height: 100%;
+}
 
-      /* Right Side */
-      .title-bar-right {
-        display: flex;
-        align-items: flex-end;
-        flex-shrink: 0;
-      }
+/* Right Side */
+.title-bar-right {
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
 
-      .drag-region {
-        flex: 1;
-        height: 100%;
-        -webkit-app-region: drag;
-        min-width: 50px;
-      }
+.drag-region {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+  min-width: 50px;
+}
 
-      .tab-bar {
-        display: flex;
-        min-width: 0;
-        gap: 1px;
-        z-index: 1;
-        position: relative;
-      }
+.tab-bar {
+  display: flex;
+  min-width: 0;
+  gap: 1px;
+  z-index: 1;
+  position: relative;
+}
 
-      /* Window Controls */
-      .window-controls {
-        display: flex;
-        align-items: center;
-      }
+/* Window Controls */
+.window-controls {
+  display: flex;
+  align-items: center;
+}
 
-      .window-control {
-        width: 46px;
-        height: var(--title-bar-height);
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 10px;
-        color: var(--text-color);
-      }
+.window-control {
+  width: 46px;
+  height: var(--title-bar-height);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-color);
+}
 
-      .window-control:hover {
-        background: var(--button-hover-bg);
-      }
+.window-control:hover {
+  background: var(--button-hover-bg);
+}
 
-      .window-control.close:hover {
-        background: var(--close-button-hover);
-        color: white;
-      }
+.window-control.close:hover {
+  background: var(--close-button-hover);
+  color: white;
+}
 
-      /* macOS specific */
-      .platform-macos .window-controls {
-        display: none;
-      }
+/* macOS specific */
+.platform-macos .window-controls {
+  display: none;
+}
 
-      /* Responsive behavior */
-      @media (max-width: 800px) {
-        .tab {
-          min-width: 60px;
-          max-width: 120px;
-        }
-      }
+/* Responsive behavior */
+@media (max-width: 800px) {
+  .tab {
+    min-width: 60px;
+    max-width: 120px;
+  }
+}
 
-      /* Sidebar Title Bar */
-      .sidebar-title-bar {
-        position: fixed;
-        top: 0;
-        left: var(
-          --layout-button-area-width
-        ); /* Start after the layout toggle button */
-        width: calc(
-          var(--sidebar-width, 400px) - var(--layout-button-area-width)
-        ); /* Adjust width to account for offset */
-        height: var(--title-bar-height);
-        background: var(--title-bar-bg);
-        border-bottom: 1px solid var(--border-color);
-        border-right: 1px solid var(--border-color);
-        display: none;
-        align-items: flex-end;
-        justify-content: center;
-        z-index: 9999;
-        -webkit-app-region: drag;
-        box-sizing: border-box;
-        pointer-events: auto;
-      }
+/* Sidebar Title Bar */
+.sidebar-title-bar {
+  position: fixed;
+  top: 0;
+  left: var(
+    --layout-button-area-width
+  ); /* Start after the layout toggle button */
+  width: calc(
+    var(--sidebar-width, 400px) - var(--layout-button-area-width)
+  ); /* Adjust width to account for offset */
+  height: var(--title-bar-height);
+  background: var(--title-bar-bg);
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 9999;
+  -webkit-app-region: drag;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
 
-      .sidebar-title {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text-color);
-        user-select: none;
-        -webkit-user-select: none;
-        cursor: default;
-        height: 100%;
-      }
+.sidebar-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  height: 100%;
+}
 
-      /* Show sidebar title only in horizontal layout with sidebar */
-      body.horizontal-layout.has-sidebar .sidebar-title-bar {
-        display: flex;
-      }
+/* Show sidebar title only in horizontal layout with sidebar */
+body.horizontal-layout.has-sidebar .sidebar-title-bar {
+  display: flex;
+}
 
-      /* Dividers */
-      .divider-vertical {
-        position: absolute;
-        top: var(--title-bar-height);
-        bottom: 0;
-        left: 400px;
-        width: 5px;
-        cursor: ew-resize;
-        background-color: var(--border-color);
-        visibility: hidden;
-      }
+/* Dividers */
+.divider-vertical {
+  position: absolute;
+  top: var(--title-bar-height);
+  bottom: 0;
+  left: 400px;
+  width: 5px;
+  cursor: ew-resize;
+  background-color: var(--border-color);
+  visibility: hidden;
+}
 
-      .divider-horizontal {
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: calc(var(--title-bar-height) + 40px);
-        height: 5px;
-        cursor: ns-resize;
-        background-color: var(--border-color);
-        visibility: hidden;
-      }
+.divider-horizontal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--title-bar-height) + 40px);
+  height: 5px;
+  cursor: ns-resize;
+  background-color: var(--border-color);
+  visibility: hidden;
+}
