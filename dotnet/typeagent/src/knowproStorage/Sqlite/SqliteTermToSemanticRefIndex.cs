@@ -62,9 +62,7 @@ VALUES (@term, @semref_id, @score)
 
     public IList<string> GetTerms()
     {
-        using var cmd = _db.CreateCommand("SELECT DISTINCT term FROM SemanticRefIndex ORDER BY term");
-        using var reader = cmd.ExecuteReader();
-        return reader.GetList((r) =>
+        return _db.GetList("SELECT DISTINCT term FROM SemanticRefIndex ORDER BY term", (reader) =>
         {
             return reader.GetString(0);
         });
@@ -84,7 +82,15 @@ VALUES (@term, @semref_id, @score)
         cmd.AddParameter("@term", term);
 
         using var reader = cmd.ExecuteReader();
-        return reader.GetList(ReadScoredOrdinal);
+        return reader.GetList((reader) =>
+        {
+            int iCol = 0;
+            return new ScoredSemanticRefOrdinal
+            {
+                SemanticRefOrdinal = reader.GetInt32(iCol++),
+                Score = reader.GetFloat(iCol)
+            };
+        });
     }
 
     public Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellation = default)
@@ -119,15 +125,5 @@ VALUES (@term, @semref_id, @score)
         term = Term.PrepareTermText(term);
         ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
         return term;
-    }
-
-    private ScoredSemanticRefOrdinal ReadScoredOrdinal(SqliteDataReader reader)
-    {
-        int iCol = 0;
-        return new()
-        {
-            SemanticRefOrdinal = reader.GetInt32(iCol++),
-            Score = reader.GetFloat(iCol)
-        };
     }
 }

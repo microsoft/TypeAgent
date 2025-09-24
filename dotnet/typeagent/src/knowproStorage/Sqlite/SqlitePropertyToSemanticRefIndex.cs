@@ -30,8 +30,9 @@ public class SqlitePropertyToSemanticRefIndex : IPropertyToSemanticRefIndex
         ArgumentVerify.ThrowIfNullOrEmpty(value, nameof(value));
         KnowProVerify.ThrowIfInvalidSemanticRefOrdinal(scoredOrdinal.SemanticRefOrdinal);
 
-
         propertyName = PreparePropertyName(propertyName);
+        value = PreparePropertyValue(value);
+
         using var cmd = _db.CreateCommand(@"
 INSERT INTO PropertyIndex (prop_name, value_str, score, semref_id)
 VALUES (@propertyName, @value, @score, @semrefId)
@@ -55,20 +56,51 @@ VALUES (@propertyName, @value, @score, @semrefId)
     }
 
     public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.PropertyIndexTable);
+
     public Task ClearAsync(CancellationToken cancellationToken = default)
     {
         Clear();
         return Task.CompletedTask;
     }
 
-    public Task<string[]> GetValuesAsync(CancellationToken cancellationToken = default)
+    public IList<string> GetValues()
     {
-        throw new NotImplementedException();
+        return _db.GetList("SELECT DISTINCT value_str FROM PropertyIndex ORDER BY value_str", (reader) =>
+        {
+            return reader.GetString(0);
+        });
     }
 
-    public Task<ScoredSemanticRefOrdinal[]> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default)
+    public Task<IList<string>> GetValuesAsync(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        return Task.FromResult(GetValues());
+    }
+
+    public IList<ScoredSemanticRefOrdinal> LookupProperty(string propertyName, string value)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(propertyName, nameof(propertyName));
+        ArgumentVerify.ThrowIfNullOrEmpty(value, nameof(value));
+
+        propertyName = PreparePropertyName(propertyName);
+        value = PreparePropertyValue(value);
+
+        using var cmd = _db.CreateCommand("SELECT semref_id, score FROM PropertyIndex WHERE prop_name = @propertyName AND value_str = @value");
+        using var reader = cmd.ExecuteReader();
+        return reader.GetList((reader) =>
+        {
+            int iCol = 0;
+            return new ScoredSemanticRefOrdinal
+            {
+                SemanticRefOrdinal = reader.GetInt32(iCol++),
+                Score = reader.GetFloat(iCol)
+            };
+
+        });
+    }
+
+    public Task<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(LookupProperty(propertyName, value));
     }
 
     private string PreparePropertyName(string propertyName)
@@ -82,4 +114,15 @@ VALUES (@propertyName, @value, @score, @semrefId)
     {
         return value.Trim().ToLower();
     }
+
+    private ScoredSemanticRefOrdinal ReadScoredOrdinal(SqliteDataReader reader)
+    {
+        int iCol = 0;
+        return new()
+        {
+            SemanticRefOrdinal = reader.GetInt32(iCol++),
+            Score = reader.GetFloat(iCol)
+        };
+    }
+
 }

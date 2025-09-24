@@ -6,9 +6,13 @@ namespace TypeAgent.KnowPro;
 public interface ITermToSemanticRefIndex
 {
     Task<int> GetCountAsync(CancellationToken cancellationToken = default);
+
     Task<IList<string>> GetTermsAsync(CancellationToken cancellationToken = default);
+
     Task<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
+
     Task RemoveTermAsync(string term, int semanticRefOrdinal, CancellationToken cancellationToken = default);
+
     Task ClearAsync(CancellationToken cancellationToken = default);
 
     Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellationToken = default);
