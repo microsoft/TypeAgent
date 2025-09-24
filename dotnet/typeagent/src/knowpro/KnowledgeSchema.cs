@@ -1,10 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json.Serialization;
+
 namespace TypeAgent.KnowPro;
 
-public interface IKnowledge
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(ConcreteEntity), "entity")]
+[JsonDerivedType(typeof(Action), "action")]
+[JsonDerivedType(typeof(Topic), "topic")]
+[JsonDerivedType(typeof(Tag), "tag")]
+[JsonDerivedType(typeof(StructuredTag), "structuredTag")]
+public abstract class KnowledgeSchema
 {
+    public KnowledgeSchema() { }
 }
 
 public interface IKnowledgeSource
@@ -12,8 +21,17 @@ public interface IKnowledgeSource
     KnowledgeResponse? GetKnowledge();
 }
 
-public class ConcreteEntity : IKnowledge
+
+public partial class ConcreteEntity : KnowledgeSchema
 {
+    public ConcreteEntity() { }
+
+    public ConcreteEntity(string name, string type)
+    {
+        this.Name = name;
+        this.Type = [type];
+    }
+
     [JsonPropertyName("name")]
     public string Name { get; set; }
     [JsonPropertyName("type")]
@@ -22,7 +40,7 @@ public class ConcreteEntity : IKnowledge
     public Facet[] Facets { get; set; }
 }
 
-public class Action : IKnowledge
+public class Action : KnowledgeSchema
 {
     [JsonPropertyName("verbs")]
     public string[] Verbs { get; set; }
@@ -45,16 +63,18 @@ public class KnowledgeResponse
     [JsonPropertyName("inverseActions")]
     public Action[] InverseActions { get; set; }
     [JsonPropertyName("topics")]
-    public string[] Topic { get; set; }
+    public string[] Topics { get; set; }
 }
 
-public class Topic : IKnowledge
+public class Topic : KnowledgeSchema
 {
+    [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 
-public class Tag : IKnowledge
+public class Tag : KnowledgeSchema
 {
+    [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 

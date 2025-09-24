@@ -4,8 +4,9 @@
 namespace TypeAgent.KnowPro;
 
 public interface IStorageProvider<TMessage>
-    where TMessage : IMessage<IMessageMetadata>
+    where TMessage : IMessage
 {
-    Task<IMessageCollection<TMessage>> GetMessageCollectionAsync();
-    Task<ISemanticRefCollection> GetSemanticRefCollection();
+    IMessageCollection<TMessage> Messages { get; }
+    ISemanticRefCollection SemanticRefs { get; }
+    ITermToSemanticRefIndex SemanticRefIndex { get; }
 }

@@ -3,7 +3,12 @@
 
 import { AppAction, ActionResult, TypeAgentAction } from "./action.js";
 import { AppAgentCommandInterface } from "./command.js";
-import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
+import {
+    ActionIO,
+    DisplayType,
+    DynamicDisplay,
+    DisplayContent,
+} from "./display.js";
 import { Entity } from "./memory.js";
 import { Profiler } from "./profiler.js";
 import { TemplateSchema } from "./templateInput.js";
@@ -145,6 +150,10 @@ export enum AppAgentEvent {
     Warning = "warning",
     Info = "info",
     Debug = "debug",
+
+    // Display-focused events
+    Toast = "toast",
+    Inline = "inline",
 }
 
 export interface SessionContext<T = unknown> {
@@ -152,7 +161,7 @@ export interface SessionContext<T = unknown> {
     readonly sessionStorage: Storage | undefined;
     readonly instanceStorage: Storage | undefined; // storage that are preserved across sessions
 
-    notify(event: AppAgentEvent, message: string): void;
+    notify(event: AppAgentEvent, message: string | DisplayContent): void;
 
     // choices default to ["Yes", "No"]
     popupQuestion(

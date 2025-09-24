@@ -13,9 +13,9 @@ public abstract class ConsoleApp
         Console.OutputEncoding = Encoding.UTF8;
 
         _allCommands = new RootCommand(title);
-        _allCommands.AddCommands(new StandardCommands(_allCommands));
-
+        AddModule(new StandardCommands());
         _stopStrings = ["quit", "exit"];
+
     }
 
     public RootCommand Root => _allCommands;
@@ -193,24 +193,8 @@ public abstract class ConsoleApp
 
     public async Task<string?> ReadLineAsync(CancellationToken cancelToken = default)
     {
-#if NET7_0_OR_GREATER
         string? line = await Console.In.ReadLineAsync(cancelToken).ConfigureAwait(false);
-#else
-        string? line = await Console.In.ReadLineAsync().ConfigureAwait(false);
-#endif
         return line is not null ? line.Trim() : line;
-    }
-
-    public async Task WriteLineAsync(string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            Console.Out.WriteLine();
-        }
-        else
-        {
-            await Console.Out.WriteLineAsync(value).ConfigureAwait(false);
-        }
     }
 
     protected virtual void OnException(string input, Exception ex)
@@ -221,7 +205,7 @@ public abstract class ConsoleApp
 
     protected void WriteError(Exception ex)
     {
-        ConsolePrint.WriteError(ex);
+        ConsoleWriter.WriteError(ex);
     }
 
     protected virtual void WriteTitle()
@@ -233,20 +217,19 @@ public abstract class ConsoleApp
         }
     }
 
-    public static void WriteLines(IEnumerable<string> items)
+    public void AddModule(ICommandModule module)
     {
-        foreach (string item in items)
-        {
-            Console.WriteLine(item);
-        }
+        _allCommands.AddModule(module);
     }
 
-    /// <summary>
-    /// Add a module to this Console
-    /// </summary>
-    /// <param name="obj"></param>
-    public void AddModule(object obj)
+    public void SortCommands()
     {
-        Root.AddCommands(obj);
+        var commands = _allCommands.Subcommands.ToList();
+        _allCommands.Subcommands.Clear();
+        commands.Sort((x, y) => x.Name.CompareTo(y.Name));
+        foreach (var cmd in commands)
+        {
+            _allCommands.Add(cmd);
+        }
     }
 }

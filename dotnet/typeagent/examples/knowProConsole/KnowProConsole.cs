@@ -3,12 +3,23 @@
 
 namespace KnowProConsole;
 
+public class KnowProConsoleContext : KnowProContext
+{
+    public KnowProConsoleContext()
+    {
+    }
+}
+
 public class KnowProConsole : ConsoleApp
 {
+    KnowProConsoleContext _context;
+
     public KnowProConsole()
         : base("KnowPro Console")
     {
-        AddModule(new PodcastCommands());
+        _context = new KnowProConsoleContext();
+        AddModule(new PodcastCommands(_context));
+        SortCommands();
     }
 
     public static async Task<int> Main(string[] args)

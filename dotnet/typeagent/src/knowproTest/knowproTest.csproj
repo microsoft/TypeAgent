@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>TypeAgent.KnowProTest</AssemblyName>
+    <RootNamespace>TypeAgent.KnowProTest</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\conversationMemory\conversationMemory.csproj" />
+    <ProjectReference Include="..\knowproStorage\knowproStorage.csproj" />
+    <ProjectReference Include="..\knowpro\knowpro.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -932,6 +932,213 @@ export async function handleMessage(
             }
         }
 
+        case "getKnowledgeGraphStatus": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getKnowledgeGraphStatus",
+                    parameters: {},
+                });
+
+                return {
+                    hasGraph: result.hasGraph || false,
+                    entityCount: result.entityCount || 0,
+                    relationshipCount: result.relationshipCount || 0,
+                    communityCount: result.communityCount || 0,
+                    isBuilding: result.isBuilding || false,
+                    error: result.error || null,
+                };
+            } catch (error) {
+                console.error("Error getting knowledge graph status:", error);
+                return {
+                    hasGraph: false,
+                    entityCount: 0,
+                    relationshipCount: 0,
+                    communityCount: 0,
+                    isBuilding: false,
+                    error: "Failed to get graph status",
+                };
+            }
+        }
+
+        case "buildKnowledgeGraph": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "buildKnowledgeGraph",
+                    parameters: message.parameters || {},
+                });
+
+                return {
+                    success: result.success || false,
+                    message: result.message || "Graph building started",
+                };
+            } catch (error) {
+                console.error("Error building knowledge graph:", error);
+                return {
+                    success: false,
+                    error: "Failed to build knowledge graph",
+                };
+            }
+        }
+
+        case "rebuildKnowledgeGraph": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "rebuildKnowledgeGraph",
+                    parameters: {},
+                });
+
+                return {
+                    success: result.success || false,
+                    message: result.message || "Graph rebuilding started",
+                };
+            } catch (error) {
+                console.error("Error rebuilding knowledge graph:", error);
+                return {
+                    success: false,
+                    error: "Failed to rebuild knowledge graph",
+                };
+            }
+        }
+
+        case "getAllRelationships": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAllRelationships",
+                    parameters: {},
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Error getting all relationships:", error);
+                return [];
+            }
+        }
+
+        case "getAllCommunities": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAllCommunities",
+                    parameters: {},
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Error getting all communities:", error);
+                return [];
+            }
+        }
+
+        case "getAllEntitiesWithMetrics": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAllEntitiesWithMetrics",
+                    parameters: {},
+                });
+
+                return result;
+            } catch (error) {
+                console.error(
+                    "Error getting all entities with metrics:",
+                    error,
+                );
+                return [];
+            }
+        }
+
+        case "getEntityNeighborhood": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getEntityNeighborhood",
+                    parameters: {
+                        entityId: message.entityId,
+                        depth: message.depth,
+                        maxNodes: message.maxNodes,
+                    },
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Error getting entity neighborhood:", error);
+                return [];
+            }
+        }
+
+        case "getGlobalImportanceLayer": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getGlobalImportanceLayer",
+                    parameters: {
+                        maxNodes: message.maxNodes,
+                        includeConnectivity: message.includeConnectivity,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting global importance layer:", error);
+                return {
+                    entities: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        }
+
+        case "getImportanceStatistics": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getImportanceStatistics",
+                    parameters: {},
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting importance statistics:", error);
+                return {
+                    distribution: [],
+                    recommendedLevel: 1,
+                    levelPreview: [],
+                };
+            }
+        }
+
+        case "getViewportBasedNeighborhood": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getViewportBasedNeighborhood",
+                    parameters: {
+                        centerEntity: message.centerEntity,
+                        viewportNodeNames: message.viewportNodeNames,
+                        maxNodes: message.maxNodes,
+                        importanceWeighting: message.importanceWeighting,
+                        includeGlobalContext: message.includeGlobalContext,
+                        exploreFromAllViewportNodes:
+                            message.exploreFromAllViewportNodes,
+                        minDepthFromViewport: message.minDepthFromViewport,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error(
+                    "Error getting viewport-based neighborhood:",
+                    error,
+                );
+                return {
+                    entities: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        }
+
         default:
             return null;
     }

@@ -3,26 +3,47 @@
 
 namespace TypeAgent.ExamplesLib.CommandLine;
 
-public class StandardCommands
+public class StandardCommands : ICommandModule
 {
-    RootCommand _allCommands;
-
-    public StandardCommands(RootCommand allCommands)
+    public StandardCommands()
     {
-        ArgumentVerify.ThrowIfNull(allCommands, nameof(allCommands));
-        _allCommands = allCommands;
     }
 
-    [Command("clear")]
-    public int Clear()
+    public IList<Command> GetCommands()
+    {
+        return [ClearDef(), PingDef()];
+    }
+
+    private Command ClearDef()
+    {
+        Command cmd = new("clear", "Clear the screen");
+        cmd.SetAction(this.Clear);
+        return cmd;
+    }
+
+    private void Clear(ParseResult args)
     {
         Console.Clear();
-        return 0;
     }
 
-    [Command("help")]
-    public void Help()
+    private Command PingDef()
     {
-        _allCommands.Invoke("--help");
+        Command cmd = new("ping", "Ping pong")
+        {
+            Args.Arg<string>("msg", "Ping message"),
+            Options.Arg<int>("count", "Number of repetitions", 1)
+        };
+        cmd.SetAction(this.Ping);
+        return cmd;
+    }
+
+    private void Ping(ParseResult args)
+    {
+        NamedArgs namedArgs = new(args);
+        int count = namedArgs.Get<int>("count");
+        for (int i = 0; i < count; ++i)
+        {
+            Console.WriteLine(namedArgs.Get<string>("msg"));
+        }
     }
 }

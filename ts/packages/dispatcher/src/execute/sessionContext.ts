@@ -6,11 +6,18 @@ import {
     AppAgent,
     AppAgentManifest,
     SessionContext,
+    DisplayContent,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getStorage } from "./storageImpl.js";
 import { IndexData } from "image-memory";
 import { IndexManager } from "../context/indexManager.js";
+import registerDebug from "debug";
+
+const debugLog = registerDebug("typeagent:dispatcher:notify");
+
+// Only browser and dispatcher agents can send rich notifications
+const ALLOWED_RICH_NOTIFY_AGENTS = new Set(["browser", "dispatcher"]);
 
 export function createSessionContext<T = unknown>(
     name: string,
@@ -69,8 +76,19 @@ export function createSessionContext<T = unknown>(
         get instanceStorage() {
             return instanceStorage;
         },
-        notify(event: AppAgentEvent, message: string) {
-            context.clientIO.notify(event, undefined, message, name);
+        notify(event: AppAgentEvent, message: string | DisplayContent) {
+            // Check if agent can send rich notifications (DisplayContent objects)
+            if (
+                typeof message === "object" &&
+                !ALLOWED_RICH_NOTIFY_AGENTS.has(name)
+            ) {
+                debugLog(
+                    `Agent ${name} not allowed to send rich notifications`,
+                );
+                return;
+            }
+
+            context.clientIO.notify(event, context.requestId, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {

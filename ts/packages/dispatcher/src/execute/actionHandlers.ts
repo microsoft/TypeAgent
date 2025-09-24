@@ -57,7 +57,9 @@ import { setActivityContext } from "./activityContext.js";
 import { tryGetActionSchema } from "../translation/actionSchemaFileCache.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
-
+const debugCommandExecError = registerDebug(
+    "typeagent:dispatcher:command:exec:error",
+);
 export function getSchemaNamePrefix(
     schemaName: string,
     systemContext: CommandHandlerContext,
@@ -550,7 +552,8 @@ export async function executeCommand(
                 attachments,
             );
         } catch (e: any) {
-            displayError(e.message, actionContext);
+            displayError(`ERROR: ${e.message}`, actionContext);
+            debugCommandExecError(e.stack);
         }
     } finally {
         actionContext.profiler?.stop();

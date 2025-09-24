@@ -5,7 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public class WhenFilter
 {
-    public KnowledgeType? KnowledgeType { get; set; }
+    public string? KnowledgeType { get; set; }
     public DateRange? DateRange { get; set; }
     public IList<string>? Tags { get; set; }
     public SearchTermGroup? TagMatchingTerms { get; set; }

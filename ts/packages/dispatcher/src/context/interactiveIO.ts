@@ -10,9 +10,9 @@ import {
     DisplayContent,
     DisplayAppendMode,
     TypeAgentAction,
+    MessageContent,
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../utils/metrics.js";
-
 export type RequestId = string | undefined;
 
 export enum NotifyCommands {
@@ -101,6 +101,18 @@ export interface ClientIO {
     takeAction(action: string, data: unknown): void;
 }
 
+function messageContentToString(content: MessageContent): string {
+    if (typeof content === "string") {
+        return content;
+    }
+    if (Array.isArray(content[0])) {
+        // Table
+        return (content as string[][]).map((row) => row.join(" | ")).join("\n");
+    }
+    // Multiple lines
+    return content.join("\n");
+}
+
 export function makeClientIOMessage(
     context: CommandHandlerContext,
     message: DisplayContent,
@@ -115,7 +127,7 @@ export function makeClientIOMessage(
     ) {
         const commandResult = getCommandResult(context);
         if (commandResult !== undefined) {
-            commandResult.hasError = true;
+            commandResult.lastError = messageContentToString(message.content);
         }
     }
 

@@ -21,8 +21,8 @@ import { MetricsView } from "./metricsView";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
 import * as jose from "jose";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher } from "agent-dispatcher";
+import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
+import { ClientIO, Dispatcher, IAgentMessage } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 
@@ -242,6 +242,22 @@ function registerClient(
                         requestId,
                     });
                     break;
+
+                // Display-focused events - for now show toast notification inline
+                // TODO: Design for toast notifications in shell
+                case AppAgentEvent.Inline:
+                case AppAgentEvent.Toast:
+                    handleInlineNotification(data, source, requestId, chatView);
+                    // Also add to notifications list for @notify show
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
+                    break;
+
                 default:
                 // ignore
             }
@@ -513,7 +529,7 @@ function watchForDOMChanges(element: HTMLDivElement) {
         setTimeout(() => {
             hasTimeout = false;
             const idleTime = Date.now() - lastModifiedTime;
-            if (idleTime >= 3000) {
+            if (idleTime >= 250) {
                 // been idle for 3 seconds, save the chat history
                 getClientAPI().saveChatHistory(element.innerHTML);
             } else {
@@ -571,4 +587,26 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     } else {
         return date1.toLocaleDateString("en-US", { weekday: "long" });
     }
+}
+
+function handleInlineNotification(
+    data: string | DisplayContent,
+    source: string,
+    requestId: string | undefined,
+    chatView: ChatView,
+): void {
+    const agentRequestId =
+        requestId && requestId.startsWith("agent-")
+            ? requestId
+            : `agent-${source}-${Date.now()}`;
+
+    const agentMessage: IAgentMessage = {
+        message: data,
+        requestId: agentRequestId,
+        source: source,
+        actionIndex: 0,
+    };
+
+    // Add to chat view with notification flag
+    chatView.addAgentMessage(agentMessage, { notification: true });
 }

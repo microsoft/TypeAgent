@@ -4,17 +4,35 @@
 namespace TypeAgent.KnowPro;
 
 
-public interface IMessage<T>
-    where T : IMessageMetadata
+public interface IMessage : IKnowledgeSource
 {
-    string[] TextChunks { get; set; }
-    string[]? Tags { get; set; }
+    IList<string> TextChunks { get; set; }
+    IList<string>? Tags { get; set; }
     string? Timestamp { get; set; }
-    T? Metadata { get; set; }
+    IMessageMetadata? Metadata { get; set; }
 }
 
 public interface IMessageMetadata
 {
-    string[]? Source { get; set; }
-    string[]? Dest { get; set; }
+    [JsonIgnore]
+    string Source { get; }
+
+    [JsonIgnore]
+    IList<string>? Dest { get; }
+}
+
+public class Message : IMessage
+{
+    public IList<string> TextChunks { get; set; }
+    public IList<string>? Tags { get; set; }
+    public string? Timestamp { get; set; }
+    public IMessageMetadata? Metadata { get; set; }
+
+    public KnowledgeResponse? GetKnowledge() { return null; }
+}
+
+public interface IMessageEx : IMessage
+{
+    string? SerializeExtraDataToJson();
+    void DeserializeExtraDataFromJson(string json);
 }

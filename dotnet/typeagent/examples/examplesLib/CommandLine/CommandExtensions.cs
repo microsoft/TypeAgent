@@ -15,16 +15,9 @@ public static class CommandExtensions
         return command;
     }
 
-    public static Command AddCommands(this Command command, object instance)
+    public static Command AddModule(this Command command, ICommandModule module)
     {
-        command.AddCommands(CommandBuilder.Default.FromObject(instance));
-
-        return command;
-    }
-
-    public static Command AddCommands(this Command command, Type type)
-    {
-        command.AddCommands(CommandBuilder.Default.FromType(type));
+        command.AddCommands(module.GetCommands());
 
         return command;
     }

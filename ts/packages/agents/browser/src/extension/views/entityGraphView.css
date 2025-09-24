@@ -100,6 +100,26 @@ body {
   color: var(--text-secondary);
 }
 
+.back-to-global-btn {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-left: 12px;
+}
+
+.back-to-global-btn:hover {
+  background: var(--secondary-color);
+}
+
 /* Entity Search */
 .entity-search {
   position: relative;
@@ -170,11 +190,7 @@ body {
 .entity-header {
   padding: 20px;
   border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(
-    135deg,
-    var(--primary-color),
-    var(--secondary-color)
-  );
+  background: var(--primary-color);
   color: white;
 }
 

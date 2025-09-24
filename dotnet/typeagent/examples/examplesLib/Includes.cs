@@ -14,3 +14,6 @@ global using System.CommandLine.Parsing;
 global using System.CommandLine.NamingConventionBinder;
 
 global using TypeAgent.Common;
+global using TypeAgent.KnowPro;
+global using TypeAgent.KnowPro.Storage;
+global using TypeAgent.KnowPro.Storage.Local;

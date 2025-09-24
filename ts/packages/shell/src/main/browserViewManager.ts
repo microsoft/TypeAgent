@@ -22,7 +22,7 @@ export interface BrowserViewContext {
 
 export interface TabCreationOptions {
     url: string;
-    background?: boolean;
+    background?: boolean; // default to false
     parentTabId?: string;
     waitForPageLoad?: boolean;
 }
@@ -34,7 +34,6 @@ export class BrowserViewManager {
     private onTabUpdateCallback?: () => void;
     private onNavigationUpdateCallback?: () => void;
     private onPageLoadCompleteCallback?: (tabId: string) => void;
-    private onTabClosedCallback?: (tabId: string) => void;
     private viewBounds: Electron.Rectangle | null = null;
     constructor(private readonly shellWindow: ShellWindow) {
         debug("BrowserViewManager initialized");
@@ -59,14 +58,6 @@ export class BrowserViewManager {
      */
     setPageLoadCompleteCallback(callback: (tabId: string) => void): void {
         this.onPageLoadCompleteCallback = callback;
-    }
-
-    /**
-     * Set callback for tab closed
-     * @param callback - The tab closed callback
-     */
-    setTabClosedCallback(callback: (tabId: string) => void): void {
-        this.onTabClosedCallback = callback;
     }
 
     /**
@@ -105,14 +96,18 @@ export class BrowserViewManager {
         // wire up loaded event handlers for the webContents so we can show errors
         webContentsView.webContents.on(
             "did-fail-load",
-            (_, errorCode, errorDesc) => {
+            (_, errorCode, errorDesc, validatedURL) => {
                 debug(
                     `Tab ${tabId} failed to load URL ${options.url}: [${errorCode}] ${errorDesc}`,
                 );
 
-                webContentsView.webContents
-                    .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
-                Error Details: <br />${errorCode} - ${errorDesc}"`);
+                // only show the error if it's for the page the user was asking
+                // it's possible some other resource failed to load (image, script, etc.)
+                if (validatedURL === options.url) {
+                    webContentsView.webContents.executeJavaScript(
+                        `document.body.innerHTML = "There was an error loading '${options.url}'.<br />Error Details: <br />${errorCode} - ${errorDesc}"`,
+                    );
+                }
             },
         );
 
@@ -133,6 +128,7 @@ export class BrowserViewManager {
                             `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
                             err,
                         );
+
                         webContentsView.webContents.executeJavaScript(
                             `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
                         );
@@ -320,9 +316,6 @@ export class BrowserViewManager {
             }
         }
 
-        // remove the tab from the browser header
-        this.onTabClosedCallback?.(tabId);
-
         debug(`Browser tab closed: ${tabId}`);
         return true;
     }
@@ -405,7 +398,6 @@ export class BrowserViewManager {
         const headerHeight = 40; // Height of the tab/navigation header
         const browserViewBounds = { ...this.viewBounds };
         browserViewBounds.y = headerHeight;
-        browserViewBounds.height -= headerHeight;
 
         activeView.webContentsView.setBounds(browserViewBounds);
         debug(`Updated active browser view bounds:`, browserViewBounds);
@@ -494,7 +486,7 @@ export class BrowserViewManager {
     /**
      * Clean up all browser tabs
      */
-    closeAllTabs(): void {
+    cleanup(): void {
         debug("Closing all browser tabs");
 
         for (const [tabId] of this.browserViews) {

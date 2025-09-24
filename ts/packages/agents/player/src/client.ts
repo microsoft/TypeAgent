@@ -14,6 +14,8 @@ import {
     PlayRandomAction,
     PlayTrackAction,
     SearchTracksAction,
+    SearchForPlaylistsAction,
+    GetFromCurrentPlaylistListAction,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -41,6 +43,7 @@ import {
     shuffle,
     getQueue,
     getAlbum,
+    followPlaylist,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -53,6 +56,7 @@ import {
     UserData,
     addFullTracks,
     getPlaylistsFromUserData,
+    updatePlaylists,
 } from "./userData.js";
 
 import {
@@ -96,6 +100,7 @@ import {
     setMaxVolumeAction,
     setVolumeAction,
 } from "./volume.js";
+import e from "express";
 
 function createWarningActionResult(message: string) {
     debugSpotifyError(message);
@@ -127,6 +132,7 @@ function getTypeChatLanguageModel() {
 export interface IClientContext {
     service: SpotifyService;
     currentTrackList?: ITrackCollection;
+    currentPlaylistList?: SpotifyApi.PlaylistObjectSimplified[];
     lastTrackStartIndex?: number;
     lastTrackEndIndex?: number;
     trackListMap: Map<string, ITrackCollection>;
@@ -210,6 +216,46 @@ export async function loadHistoryFile(
     } catch (e: any) {
         throw new Error(`Error reading history file: ${e.message}`);
     }
+}
+
+async function htmlPlaylistNames(
+    playlists: SpotifyApi.PlaylistObjectSimplified[],
+    headText = "Playlists",
+) {
+    const displayContent: DisplayContent = {
+        type: "html",
+        content: "",
+    };
+
+    const actionResult: ActionResult = {
+        displayContent,
+        historyText: "",
+        entities: [],
+    };
+    let prevUrl = "";
+    let content = `<div class='playlist-list scroll_enabled'><div>${headText}...</div><ol>\n`;
+    for (const playlist of playlists) {
+        if (playlist) {
+            // if the playlist has an image, use it
+            if (
+                playlist.images &&
+                playlist.images.length > 0 &&
+                playlist.images[0].url &&
+                playlist.images[0].url != prevUrl
+            ) {
+                content += `  <li><div class='track-album-cover-container'>\n <div class='track-info'> <div class='playlist-title'>${playlist.name}</div></div>\n`;
+                content += `  <img src='${playlist.images[0].url}' alt='playlist image' class='track-album-cover' />\n`;
+                prevUrl = playlist.images[0].url;
+                content += `  </div></li>\n`;
+            } else {
+                content += `  <li><span class='playlist-title'>${playlist.name}</span></li>\n`;
+            }
+        }
+    }
+    content += "</ol></div>";
+    displayContent.content = content;
+    actionResult.historyText = `Updated the current playlist list with the numbered list of playlists on the screen`;
+    return actionResult;
 }
 
 async function htmlTrackNames(
@@ -339,6 +385,13 @@ async function htmlTrackNames(
     return actionResult;
 }
 
+function updatePlaylistList(
+    playlists: SpotifyApi.PlaylistObjectSimplified[],
+    context: IClientContext,
+) {
+    context.currentPlaylistList = playlists;
+}
+
 async function updateTrackListAndPrint(
     collection: ITrackCollection,
     clientContext: IClientContext,
@@ -404,6 +457,22 @@ export async function searchTracks(
     const data = await search(query, context.service);
     if (data && data.tracks && data.tracks.items.length > 0) {
         return new TrackCollection(data.tracks.items);
+    }
+}
+
+export async function searchForPlaylists(
+    queryString: string,
+    context: IClientContext,
+) {
+    const query: SpotifyApi.SearchForItemParameterObject = {
+        q: queryString,
+        type: "playlist",
+        limit: 20,
+        offset: 0,
+    };
+    const data = await search(query, context.service);
+    if (data && data.playlists && data.playlists.items.length > 0) {
+        return data.playlists.items;
     }
 }
 
@@ -839,6 +908,19 @@ export async function handleCall(
             }
             return createNotFoundActionResult("tracks", queryString);
         }
+        case "searchForPlaylists": {
+            const searchPlaylistsAction = action as SearchForPlaylistsAction;
+            const queryString = searchPlaylistsAction.parameters.query;
+            const playlists = await searchForPlaylists(
+                queryString,
+                clientContext,
+            );
+            if (playlists) {
+                updatePlaylistList(playlists, clientContext);
+                return htmlPlaylistNames(playlists, "PlaylistSearch Results");
+            }
+            return createNotFoundActionResult("playlists", queryString);
+        }
         case "listPlaylists": {
             if (clientContext.userData !== undefined) {
                 const playlists = await getPlaylistsFromUserData(
@@ -846,9 +928,13 @@ export async function handleCall(
                     clientContext.userData.data,
                 );
                 if (playlists) {
+                    const sortedPlaylists = playlists.sort((a, b) =>
+                        a.name.localeCompare(b.name),
+                    );
+
                     let html = "<div>Playlists...</div>";
-                    for (const playlist of playlists) {
-                        html += `<div>${playlist.name} (<span>${playlist.tracks.total} tracks</span>)</div>`;
+                    for (const playlist of sortedPlaylists) {
+                        html += `<div><span class="playlist-title">${playlist.name}</span> (<span>${playlist.tracks.total} tracks</span>)</div>`;
                     }
                     const actionResult =
                         createActionResultFromHtmlDisplay(html);
@@ -868,11 +954,38 @@ export async function handleCall(
                 clientContext.service,
                 clientContext.userData!.data,
             );
-            const playlist = playlists?.find((pl) => {
+            let playlist = playlists?.find((pl) => {
                 return pl.name
                     .toLowerCase()
                     .includes(playlistName.toLowerCase());
             });
+            if (!playlist) {
+                //look for playlist through search
+                const searchPlaylists = await searchForPlaylists(
+                    playlistName,
+                    clientContext,
+                );
+                if (searchPlaylists && searchPlaylists.length > 0) {
+                    for (const pl of searchPlaylists) {
+                        if (
+                            pl.name
+                                .toLowerCase()
+                                .includes(playlistName.toLowerCase())
+                        ) {
+                            playlist = pl;
+                            await followPlaylist(
+                                clientContext.service,
+                                playlist.id,
+                            );
+                            await updatePlaylists(
+                                clientContext.service,
+                                clientContext.userData!.data,
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
             if (playlist) {
                 const playlistResponse = await getPlaylistTracks(
                     clientContext.service,
@@ -892,6 +1005,55 @@ export async function handleCall(
                 }
             }
             return createNotFoundActionResult(`playlist ${playlistName}`);
+        }
+        case "getFromCurrentPlaylistList": {
+            const getFromCurrentPlaylistListAction =
+                action as GetFromCurrentPlaylistListAction;
+            let playlists = clientContext.currentPlaylistList;
+            if (!playlists) {
+                return createErrorActionResult("No playlists found");
+            } else {
+                const index =
+                    getFromCurrentPlaylistListAction.parameters.playlistNumber -
+                    1;
+                if (index < 0 || index >= playlists.length) {
+                    return createErrorActionResult(
+                        `Playlist number ${getFromCurrentPlaylistListAction.parameters.playlistNumber} not found in current playlist list`,
+                    );
+                }
+                const playlist = playlists[index];
+                if (playlist) {
+                    await followPlaylist(clientContext.service, playlist.id);
+                    await updatePlaylists(
+                        clientContext.service,
+                        clientContext.userData!.data,
+                    );
+
+                    const playlistResponse = await getPlaylistTracks(
+                        clientContext.service,
+                        playlist.id,
+                    );
+
+                    if (playlistResponse) {
+                        const collection = new PlaylistTrackCollection(
+                            playlist,
+                            playlistResponse.items.map((item) => item.track!),
+                        );
+                        console.log(chalk.magentaBright("Playlist:"));
+                        await updateTrackListAndPrint(
+                            collection,
+                            clientContext,
+                        );
+                        return htmlTrackNames(
+                            collection,
+                            `Playlist: ${playlist.name}`,
+                        );
+                    }
+                } else {
+                    return createErrorActionResult("No playlist found");
+                }
+            }
+            return createErrorActionResult("No playlist found");
         }
         case "getAlbum": {
             let album: SpotifyApi.AlbumObjectSimplified | undefined = undefined;

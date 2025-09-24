@@ -16,8 +16,8 @@ public interface IPropertyToSemanticRefIndex
 
 public static class PropertyToSemanticRefIndexEx
 {
-    public static Task<string> AddPropertyTermAsync(this IPropertyToSemanticRefIndex index, string propertyName, string value, SemanticRefOrdinal ordinal)
+    public static Task<string> AddPropertyTermAsync(this IPropertyToSemanticRefIndex index, string propertyName, string value, int semanticRefOrdinal)
     {
-        return index.AddPropertyAync(propertyName, value, ScoredSemanticRefOrdinal.New(ordinal));
+        return index.AddPropertyAync(propertyName, value, ScoredSemanticRefOrdinal.New(semanticRefOrdinal));
     }
-}
+}   

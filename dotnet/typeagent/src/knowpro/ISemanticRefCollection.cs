@@ -3,6 +3,6 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface ISemanticRefCollection : IAsyncCollection<SemanticRef, SemanticRefOrdinal>
+public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 {
 }

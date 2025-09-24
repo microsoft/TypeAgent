@@ -144,7 +144,7 @@ export async function getTabHTMLFragments(
                 fullSize: fullSize,
                 frameId: 0,
             },
-            50000,
+            5000,
             window.top,
             "0",
         ),
@@ -170,7 +170,7 @@ export async function getTabHTMLFragments(
                     fullSize: fullSize,
                     frameId: index,
                 },
-                50000,
+                5000,
                 frameElement.contentWindow,
                 index.toString(),
             ),
@@ -183,15 +183,31 @@ export async function getTabHTMLFragments(
         if (frameHTML) {
             let frameText = "";
             if (extractText) {
-                frameText = await sendScriptAction(
-                    {
-                        type: "get_page_text",
-                        inputHtml: frameHTML,
-                        frameId: i,
-                    },
-                    1000,
-                    frames[i],
-                );
+                if (i == 0) {
+                    frameText = await sendScriptAction(
+                        {
+                            type: "get_page_text",
+                            inputHtml: frameHTML,
+                            frameId: 0,
+                        },
+                        1000,
+                        window.top,
+                        "0",
+                    );
+                } else {
+                    const index = i - 1;
+                    const frameElement = iframeElements[index];
+                    frameText = await sendScriptAction(
+                        {
+                            type: "get_page_text",
+                            inputHtml: frameHTML,
+                            frameId: index,
+                        },
+                        1000,
+                        frameElement.contentWindow,
+                        index.toString(),
+                    );
+                }
             }
 
             htmlFragments.push({

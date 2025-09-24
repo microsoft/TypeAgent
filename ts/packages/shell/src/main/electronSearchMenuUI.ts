@@ -6,11 +6,11 @@ import { ipcMain, WebContents, WebContentsView } from "electron";
 import {
     getShellWindowForChatViewIpcEvent,
     getShellWindowForIpcEvent,
-    ShellWindow,
-} from "./shellWindow.js";
+} from "./instance.js";
 import type { SearchMenuUIUpdateData } from "../preload/electronTypes.js";
 import path from "node:path";
 import registerDebug from "debug";
+import { ShellWindow } from "./shellWindow.js";
 const debug = registerDebug("typeagent:shell:searchMenuUI");
 const debugError = registerDebug("typeagent:shell:searchMenuUI:error");
 
@@ -23,6 +23,7 @@ async function createSearchMenuUIView(_zoomFactor: number) {
             preload: path.join(__dirname, "../preload/expose.mjs"),
             sandbox: false,
             // zoomFactor,
+            //transparent: true
         },
     });
     searchMenuView.setBackgroundColor("#00000000"); // Transparent

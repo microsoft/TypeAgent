@@ -222,6 +222,17 @@ body {
   padding-right: 8px;
 }
 
+.playlist-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border-radius: 8px;
+  padding-right: 8px;
+}
+
+.playlist-title {
+  color: purple;
+}
+
 .track-artist {
   color: black;
 }
@@ -242,6 +253,20 @@ body {
 .track-album-cover {
   height: 64px;
   align-self: flex-end;
+}
+
+.read-only .chat-input {
+  display: none;
+}
+
+.write-only {
+  .chat-input {
+    max-height: 45px;
+  }
+
+  .chat {
+    display: none;
+  }
 }
 
 .chat-input {

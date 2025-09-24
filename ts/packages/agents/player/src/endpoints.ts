@@ -479,6 +479,16 @@ export async function next(service: SpotifyService, deviceId: string) {
     );
 }
 
+export async function followPlaylist(
+    service: SpotifyService,
+    playlistId: string,
+) {
+    const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(
+        playlistId,
+    )}/followers`;
+    return fetchPutEmptyResult(service, url);
+}
+
 export async function getPlaylists(service: SpotifyService) {
     return fetchGet<SpotifyApi.ListOfCurrentUsersPlaylistsResponse>(
         service,
