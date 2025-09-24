@@ -928,9 +928,13 @@ export async function handleCall(
                     clientContext.userData.data,
                 );
                 if (playlists) {
+                    const sortedPlaylists = playlists.sort((a, b) =>
+                        a.name.localeCompare(b.name),
+                    );
+
                     let html = "<div>Playlists...</div>";
-                    for (const playlist of playlists) {
-                        html += `<div>${playlist.name} (<span>${playlist.tracks.total} tracks</span>)</div>`;
+                    for (const playlist of sortedPlaylists) {
+                        html += `<div><span class="playlist-title">${playlist.name}</span> (<span>${playlist.tracks.total} tracks</span>)</div>`;
                     }
                     const actionResult =
                         createActionResultFromHtmlDisplay(html);
