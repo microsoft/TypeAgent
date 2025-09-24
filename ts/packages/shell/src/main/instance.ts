@@ -237,7 +237,7 @@ export async function initializeInstance(
     );
 
     const shellWindow = new ShellWindow(shellSettings);
-    const { mainWindow, chatView } = shellWindow;
+    const { chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {
         const status = dispatcher.getStatus();
@@ -250,12 +250,10 @@ export async function initializeInstance(
         const newTitle = `${app.getName()} v${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
         if (newTitle !== title) {
             title = newTitle;
-            chatView.webContents.send(
-                "setting-summary-changed",
+            shellWindow.updateSummary(
+                newTitle,
                 status.agents.map((agent) => [agent.name, agent.emoji]),
             );
-
-            mainWindow.setTitle(newTitle);
         }
 
         return newSettingSummary;
@@ -283,6 +281,7 @@ export async function initializeInstance(
             app.quit();
             return;
         }
+
         updateTitle(dispatcher);
         setPendingUpdateCallback((version, background) => {
             updateTitle(dispatcher);
