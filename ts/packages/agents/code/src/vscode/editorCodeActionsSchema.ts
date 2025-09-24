@@ -142,7 +142,6 @@ export type ProblemTarget =
     | { type: "cursor"; position: CursorTarget }
     | { type: "indexInFile"; index: number; file?: FileTarget };
 
-
 // schema to fix a problem (diagnostic) in the code.
 // The target can be the first problem, the next one, all, or a specific location/index in the file.
 // Optional hints from the user (e.g. "fix the second error") or file scoping may guide the choice.
