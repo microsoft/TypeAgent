@@ -40,7 +40,8 @@ public static class ImportExtensions
     public static async Task ImportTermToSemanticRefIndexAsync<TMessage>(this IConversation<TMessage> conversation, IEnumerable<TermToSemanticRefIndexDataItem> indexItems, CancellationToken cancellationToken = default)
         where TMessage : IMessage
     {
-        if (indexItems is null)
+        var semanticRefIndex = conversation.SemanticRefIndex;
+        if (semanticRefIndex is null || indexItems is null)
         {
             return;
         }
@@ -49,12 +50,11 @@ public static class ImportExtensions
         {
             if (!indexItem.SemanticRefOrdinals.IsNullOrEmpty())
             {
-                await conversation.SemanticRefIndex.AddEntriesAsync(indexItem.Term, indexItem.SemanticRefOrdinals, cancellationToken).ConfigureAwait(false);
+                await semanticRefIndex.AddEntriesAsync(indexItem.Term, indexItem.SemanticRefOrdinals, cancellationToken).ConfigureAwait(false);
             }
         }
     }
 
-    /*
     public static async Task<int> ImportPropertyIndexAsync<TMessage>(
         this IConversation<TMessage> conversation,
         IEnumerable<SemanticRef> semanticRefs,
@@ -62,12 +62,18 @@ public static class ImportExtensions
     )
         where TMessage : IMessage
     {
-        if (semanticRefs is null)
+        var propertyIndex = conversation.SecondaryIndexes?.PropertyToSemanticRefIndex;
+        if (propertyIndex is null || semanticRefs is null)
         {
             return 0;
         }
+
+        foreach (var semanticRef in semanticRefs)
+        {
+            await propertyIndex.AddSemanticRefAsync(semanticRef, cancellationToken).ConfigureAwait(false);
+        }
+        return await propertyIndex.GetCountAsync(cancellationToken).ConfigureAwait(false);
     }
-    */
 
     public static async Task ImportDataAsync<TMessage>(this IConversation<TMessage> conversation, ConversationData<TMessage> data, CancellationToken cancellationToken = default)
         where TMessage : IMessage
@@ -79,6 +85,7 @@ public static class ImportExtensions
         if (!data.SemanticRefs.IsNullOrEmpty())
         {
             await conversation.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken).ConfigureAwait(false);
+            await conversation.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken).ConfigureAwait(false);
         }
         if (data.SemanticIndexData is not null)
         {

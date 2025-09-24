@@ -12,12 +12,11 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
     SqliteMessageCollection<TMessage, TMeta> _messages;
     SqliteSemanticRefCollection _semanticRefs;
     SqliteTermToSemanticRefIndex _semanticRefIndex;
-    SqlitePropertyToSemanticRefIndex _propertyIndex;
+    ConversationSecondaryIndexes _secondaryIndexes;
 
     public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
         : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
     {
-
     }
 
     public SqliteStorageProvider(string dbPath, bool createNew = false)
@@ -31,7 +30,7 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         _messages = new SqliteMessageCollection<TMessage, TMeta>(_db);
         _semanticRefs = new SqliteSemanticRefCollection(_db);
         _semanticRefIndex = new SqliteTermToSemanticRefIndex(_db);
-        _propertyIndex = new SqlitePropertyToSemanticRefIndex(_db);
+        _secondaryIndexes = new ConversationSecondaryIndexes(new SqlitePropertyToSemanticRefIndex(_db));
     }
 
     public IMessageCollection<TMessage> Messages => _messages;
@@ -40,7 +39,7 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
 
     public ITermToSemanticRefIndex SemanticRefIndex => _semanticRefIndex;
 
-    public IPropertyToSemanticRefIndex PropertyIndex => _propertyIndex;
+    public IConversationSecondaryIndexes Secondaryindexes => _secondaryIndexes;
 
     public void InitSchema()
     {
@@ -78,5 +77,4 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         _messages = null;
         _semanticRefs = null;
     }
-
 }
