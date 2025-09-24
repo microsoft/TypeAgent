@@ -24,9 +24,34 @@ public class SqlitePropertyToSemanticRefIndex : IPropertyToSemanticRefIndex
         return Task.FromResult(GetCount());
     }
 
-    public Task<string> AddPropertyAync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default)
+    public void AddProperty(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal)
     {
-        throw new NotImplementedException();
+        ArgumentVerify.ThrowIfNullOrEmpty(propertyName, nameof(propertyName));
+        ArgumentVerify.ThrowIfNullOrEmpty(value, nameof(value));
+        KnowProVerify.ThrowIfInvalidSemanticRefOrdinal(scoredOrdinal.SemanticRefOrdinal);
+
+
+        propertyName = PreparePropertyName(propertyName);
+        using var cmd = _db.CreateCommand(@"
+INSERT INTO PropertyIndex (prop_name, value_str, score, semref_id)
+VALUES (@propertyName, @value, @score, @semrefId)
+");
+        cmd.AddParameter("@propertyName", propertyName);
+        cmd.AddParameter("@value", value);
+        cmd.AddParameter("@score", scoredOrdinal.Score);
+        cmd.AddParameter("@semrefId", scoredOrdinal.SemanticRefOrdinal);
+
+        cmd.ExecuteNonQuery();
+    }
+
+    public Task AddPropertyAync(
+        string propertyName,
+        string value,
+        ScoredSemanticRefOrdinal scoredOrdinal,
+        CancellationToken cancellationToken = default)
+    {
+        AddProperty(propertyName, value, scoredOrdinal);
+        return Task.CompletedTask;
     }
 
     public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.PropertyIndexTable);
@@ -44,5 +69,17 @@ public class SqlitePropertyToSemanticRefIndex : IPropertyToSemanticRefIndex
     public Task<ScoredSemanticRefOrdinal[]> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
+    }
+
+    private string PreparePropertyName(string propertyName)
+    {
+        propertyName = propertyName.Trim().ToLower();
+        ArgumentVerify.ThrowIfNullOrEmpty(propertyName, nameof(propertyName));
+        return propertyName;
+    }
+
+    private string PreparePropertyValue(string value)
+    {
+        return value.Trim().ToLower();
     }
 }

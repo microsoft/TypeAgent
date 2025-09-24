@@ -13,4 +13,10 @@ public class Term
     /// Optional weighting for the term
     /// </summary>
     public float? Weight { get; set; }
+
+    public static string PrepareTermText(string termText)
+    {
+        termText = termText.Trim();
+        return termText.ToLower();
+    }
 }
