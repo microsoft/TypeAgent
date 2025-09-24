@@ -522,7 +522,9 @@ export class ShellWindow {
     }
 
     public updateSummary(title: string, status: [string, string][]) {
-        if (this.closing) { return; }
+        if (this.closing) {
+            return;
+        }
         this.mainWindow.setTitle(title);
         this.chatView.webContents.send("setting-summary-changed", status);
     }
