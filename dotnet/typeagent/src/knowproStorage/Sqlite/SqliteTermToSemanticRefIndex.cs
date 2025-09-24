@@ -76,18 +76,7 @@ VALUES (@term, @semref_id, @score)
         cmd.AddParameter("@term", term);
 
         using var reader = cmd.ExecuteReader();
-        IList<ScoredSemanticRefOrdinal> matches = [];
-        while (reader.Read())
-        {
-            int iCol = 0;
-            ScoredSemanticRefOrdinal scoredOrdinal = new()
-            {
-                SemanticRefOrdinal = reader.GetInt32(iCol++),
-                Score = reader.GetFloat(iCol)
-            };
-            matches.Add(scoredOrdinal);
-        }
-        return matches;
+        return reader.GetList(ReadScoredOrdinal);
     }
 
     public Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellation = default)
@@ -118,5 +107,15 @@ VALUES (@term, @semref_id, @score)
         term = term.Trim();
         term = term.ToLower();
         return term;
+    }
+
+    private ScoredSemanticRefOrdinal ReadScoredOrdinal(SqliteDataReader reader)
+    {
+        int iCol = 0;
+        return new()
+        {
+            SemanticRefOrdinal = reader.GetInt32(iCol++),
+            Score = reader.GetFloat(iCol)
+        };
     }
 }
