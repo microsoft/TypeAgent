@@ -339,7 +339,7 @@
 
         tabElement.innerHTML = `
           <img class="tab-favicon" src="${faviconSrc}" alt="" onerror="this.src='data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#ccc"/></svg>')}'">
-          <span class="tab-title">${tab.title || "New Tab"}</span>
+          <span class="tab-title" title="${tab.url}">${tab.title || "New Tab"}</span>
           <button class="tab-close"><i class="fas fa-times"></i></button>
         `;
 
