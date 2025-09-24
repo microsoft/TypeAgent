@@ -36,6 +36,7 @@ export class ChatView {
     chatInput: ChatInput;
     private partialCompletionEnabled: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
+    private titleDiv: HTMLDivElement;
 
     private commandBackStack: string[] = [];
     private commandBackStackIndex = 0;
@@ -49,8 +50,15 @@ export class ChatView {
         private readonly agents: Map<string, string>,
         public tts?: TTS,
     ) {
+        // the main container
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
+
+        // Add the app title to the chat view
+        this.titleDiv = document.createElement("div");
+        this.titleDiv.className = "chat-title";
+        this.topDiv.appendChild(this.titleDiv);
+
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
         this.messageDiv.addEventListener("scrollend", () => {
@@ -627,5 +635,9 @@ export class ChatView {
             //this.topDiv.parentElement?.classList.remove("write-only");
             this.topDiv.parentElement?.classList.remove("read-only");
         }
+    }
+
+    public setTitle(title: string) {
+        this.titleDiv.innerText = title;
     }
 }
