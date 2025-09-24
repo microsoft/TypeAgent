@@ -113,6 +113,36 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
         lastAppendMode = appendMode;
     }
 
+    function displayInlineNotification(
+        data: string | DisplayContent,
+        source: string,
+        timestamp: number,
+    ): void {
+        const time = new Date(timestamp).toLocaleTimeString();
+
+        // Format the notification with timestamp and source
+        const header = chalk.dim(`[${time}] ${source}:`);
+        const content = formatDisplayContent(data);
+        const formattedMessage = `${header}\n  ${content}`;
+
+        displayContent(formattedMessage);
+    }
+
+    function displayToastNotification(
+        data: string | DisplayContent,
+        source: string,
+        timestamp: number,
+    ): void {
+        // Display toast header
+        displayContent(chalk.bgCyan.black("\n ▶ NOTIFICATION "));
+
+        // Display the notification content
+        displayInlineNotification(data, source, timestamp);
+
+        // Add spacing
+        displayContent("");
+    }
+
     return {
         clear(): void {
             console.clear();
@@ -179,6 +209,8 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
             data: any,
             source: string,
         ): void {
+            const timestamp = Date.now();
+
             switch (event) {
                 case AppAgentEvent.Error:
                     console.error(chalk.red(data));
@@ -189,6 +221,16 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
                 case AppAgentEvent.Info:
                     console.info(data);
                     break;
+
+                // New display-focused events
+                case AppAgentEvent.Inline:
+                    displayInlineNotification(data, source, timestamp);
+                    break;
+
+                case AppAgentEvent.Toast:
+                    displayToastNotification(data, source, timestamp);
+                    break;
+
                 default:
                 // ignored.
             }
@@ -224,6 +266,19 @@ function initializeConsole(rl?: readline.promises.Interface) {
     });
     process.stdin.resume();
     readline.emitKeypressEvents(process.stdin);
+}
+
+function formatDisplayContent(content: string | DisplayContent): string {
+    if (typeof content === "string") {
+        return content;
+    }
+    if (Array.isArray(content)) {
+        return messageContentToText(content);
+    }
+    if (content && typeof content === "object" && "content" in content) {
+        return messageContentToText(content.content);
+    }
+    return String(content);
 }
 
 let usingConsole = false;
