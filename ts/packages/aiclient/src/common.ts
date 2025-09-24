@@ -55,7 +55,10 @@ export function getIntFromEnv(
     defaultValue?: number | undefined,
 ): number | undefined {
     const numString = getEnvSetting(env, envName, endpointName, "");
-    const num = numString ? parseInt(numString) : defaultValue;
+    if (!numString) {
+        return defaultValue;
+    }
+    const num = parseInt(numString);
 
     if (num !== undefined && (num.toString() !== numString || num <= 0)) {
         throw new Error(`Invalid value for ${envName}: ${numString}`);
