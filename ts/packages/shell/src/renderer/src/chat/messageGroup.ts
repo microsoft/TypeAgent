@@ -10,9 +10,9 @@ import {
 } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
-import { MessageContainer } from "./messageContainer";
-import { ChatView } from "./chat/chatView";
-import { SettingsView } from "./settingsView";
+import { MessageContainer } from "../messageContainer";
+import { ChatView } from "./chatView";
+import { SettingsView } from "../settingsView";
 
 export class MessageGroup {
     public metricsDiv?: {

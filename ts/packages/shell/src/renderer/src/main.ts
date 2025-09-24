@@ -17,7 +17,7 @@ import { getSpeechToken, setSpeechToken } from "./speechToken";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
-import { MetricsView } from "./metricsView";
+import { MetricsView } from "./chat/metricsView";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
 import * as jose from "jose";

@@ -22,7 +22,7 @@ import {
 
 import { PartialCompletion } from "../partial";
 import { InputChoice } from "../choicePanel";
-import { MessageGroup } from "../messageGroup";
+import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "common-utils";
 
