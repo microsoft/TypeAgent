@@ -52,11 +52,7 @@ VALUES (@term, @semref_id, @score)
         return Task.FromResult<string>(AddTerm(term, scoredOrdinal));
     }
 
-    public void Clear()
-    {
-        using var cmd = _db.CreateCommand("DELETE FROM SemanticRefIndex");
-        cmd.ExecuteNonQuery();
-    }
+    public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.SemanticRefIndexTable);
 
     public Task ClearAsync(CancellationToken cancellation = default)
     {

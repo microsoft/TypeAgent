@@ -11,7 +11,6 @@ public interface IPropertyToSemanticRefIndex
     Task ClearAsync(CancellationToken cancellationToken = default);
 
     Task<ScoredSemanticRefOrdinal[]> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default);
-
 }
 
 public static class PropertyToSemanticRefIndexEx
@@ -20,4 +19,4 @@ public static class PropertyToSemanticRefIndexEx
     {
         return index.AddPropertyAync(propertyName, value, ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken);
     }
-}   
+}

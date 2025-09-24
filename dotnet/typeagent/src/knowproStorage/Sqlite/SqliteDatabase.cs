@@ -53,6 +53,12 @@ public class SqliteDatabase : IDisposable
         return (int)count;
     }
 
+    public void ClearTable(string tableName)
+    {
+        using var cmd = CreateCommand($"DELETE FROM {tableName}");
+        cmd.ExecuteNonQuery();
+    }
+
     public void Dispose()
     {
         Dispose(true);

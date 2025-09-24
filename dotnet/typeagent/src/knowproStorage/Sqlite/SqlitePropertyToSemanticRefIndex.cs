@@ -14,19 +14,26 @@ public class SqlitePropertyToSemanticRefIndex : IPropertyToSemanticRefIndex
         _db = db;
     }
 
+    public int GetCount()
+    {
+        return _db.GetCount(SqliteStorageProviderSchema.PropertyIndexTable);
+    }
+
+    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(GetCount());
+    }
+
     public Task<string> AddPropertyAync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }
 
+    public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.PropertyIndexTable);
     public Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
-    }
-
-    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
+        Clear();
+        return Task.CompletedTask;
     }
 
     public Task<string[]> GetValuesAsync(CancellationToken cancellationToken = default)
