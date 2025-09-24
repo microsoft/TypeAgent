@@ -52,11 +52,7 @@ VALUES (@term, @semref_id, @score)
         return Task.FromResult<string>(AddTerm(term, scoredOrdinal));
     }
 
-    public void Clear()
-    {
-        using var cmd = _db.CreateCommand("DELETE FROM SemanticRefIndex");
-        cmd.ExecuteNonQuery();
-    }
+    public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.SemanticRefIndexTable);
 
     public Task ClearAsync(CancellationToken cancellation = default)
     {
@@ -64,30 +60,37 @@ VALUES (@term, @semref_id, @score)
         return Task.CompletedTask;
     }
 
-    public Task<string[]> GetTermsAsync(CancellationToken cancellation = default)
+    public IList<string> GetTerms()
     {
-        throw new NotImplementedException();
+        return _db.GetList("SELECT DISTINCT term FROM SemanticRefIndex ORDER BY term", (reader) =>
+        {
+            return reader.GetString(0);
+        });
+    }
+
+    public Task<IList<string>> GetTermsAsync(CancellationToken cancellation = default)
+    {
+        return Task.FromResult(GetTerms());
     }
 
     public IList<ScoredSemanticRefOrdinal> LookupTerm(string term)
     {
+        ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
+
         term = PrepareTerm(term);
         using var cmd = _db.CreateCommand("SELECT semref_id, score FROM SemanticRefIndex WHERE term = @term");
         cmd.AddParameter("@term", term);
 
         using var reader = cmd.ExecuteReader();
-        IList<ScoredSemanticRefOrdinal> matches = [];
-        while (reader.Read())
+        return reader.GetList((reader) =>
         {
             int iCol = 0;
-            ScoredSemanticRefOrdinal scoredOrdinal = new()
+            return new ScoredSemanticRefOrdinal
             {
                 SemanticRefOrdinal = reader.GetInt32(iCol++),
                 Score = reader.GetFloat(iCol)
             };
-            matches.Add(scoredOrdinal);
-        }
-        return matches;
+        });
     }
 
     public Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellation = default)
@@ -101,6 +104,10 @@ VALUES (@term, @semref_id, @score)
         KnowProVerify.ThrowIfInvalidSemanticRefOrdinal(semanticRefOrdinal);
 
         term = PrepareTerm(term);
+
+        ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
+        KnowProVerify.ThrowIfInvalidSemanticRefOrdinal(semanticRefOrdinal);
+
         using var cmd = _db.CreateCommand("DELETE FROM SemanticRefIndex WHERE term = @term AND semref_id = @semref_id");
         cmd.AddParameter("@term", term);
         cmd.AddParameter("@semref_id", semanticRefOrdinal);
@@ -115,8 +122,8 @@ VALUES (@term, @semref_id, @score)
 
     private string PrepareTerm(string term)
     {
-        term = term.Trim();
-        term = term.ToLower();
+        term = Term.PrepareTermText(term);
+        ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
         return term;
     }
 }
