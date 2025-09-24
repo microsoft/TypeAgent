@@ -10,7 +10,6 @@ import {
     AppAgent,
     AppAgentEvent,
     AppAgentInitSettings,
-    DisplayContent,
     DisplayType,
     DynamicDisplay,
     ParsedCommandParams,
@@ -1981,29 +1980,13 @@ async function performKnowledgeExtractionWithNotifications(
 ): Promise<void> {
     try {
         const extractionId = parameters.extractionId;
-        const dynamicDisplayId = `knowledge-extraction-${extractionId}}`;
-        // Create a minimal ActionContext that routes actionIO calls to notifications
-        const actionIO: ActionIO = {
-            setDisplay(content: DisplayContent) {
-                sessionContext.notify(AppAgentEvent.Inline, content);
-            },
-            appendDisplay(content: DisplayContent, mode?: any) {
-                sessionContext.notify(AppAgentEvent.Inline, content);
-            },
-            appendDiagnosticData(_data: any) {
-                // Ignore diagnostic data for navigation contexts
-            },
-            takeAction(_action: any, _data?: unknown) {
-                // Ignore takeAction for navigation contexts
-            },
-        };
 
         // Create a minimal tracking entry
         const activeExtraction: ActiveKnowledgeExtraction = {
             extractionId,
             url,
-            actionIO: actionIO, // simplified actionIO for notification-based extraction
-            dynamicDisplayId: dynamicDisplayId,
+            actionIO: null, // No actionIO for notification-based extraction
+            dynamicDisplayId: null,
             progressState: {
                 phase: "initializing",
                 percentage: 0,

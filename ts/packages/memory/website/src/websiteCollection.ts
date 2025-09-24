@@ -1013,9 +1013,6 @@ export class WebsiteCollection
             const fs = await import("fs");
             if (fs.existsSync(dbFile)) {
                 dbPath = dbFile;
-                console.log(
-                    `[Knowledge Graph] Loading existing SQLite database from: ${dbFile}`,
-                );
             } else {
                 console.log(
                     `[Knowledge Graph] No existing database found at: ${dbFile}`,
