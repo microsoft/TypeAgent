@@ -5,6 +5,7 @@ export type EditorCodeActions =
     | EditorActionCreateFunction
     | EditorActionCreateCodeBlock
     | EditorActionFixProblem
+    | EditorActionMoveCursor
     | EditorActionInsertComment
     | EditorActionGenerateWithCopilot
     | EditorActionCreateFile
@@ -155,6 +156,22 @@ export type EditorActionFixProblem = {
         hint?: string;
         // File scope (defaults to active editor)
         file?: FileTarget;
+    };
+};
+
+// Action to move the cursor in a file to a specified position.
+export type EditorActionMoveCursor = {
+    actionName: "moveCursorInFile";
+    parameters: {
+        //Target position for the cursor. Supports symbolic locations, line-based positions, or file-relative positions.
+        target: CursorTarget;
+
+        // Optional file where the cursor should be moved. Defaults to the active editor if not provided.
+        file?: FileTarget;
+
+        // Optional user or agent hint to clarify ambiguous positioning.
+        // Example: "after function declaration", "before import statements".
+        hint?: string;
     };
 };
 

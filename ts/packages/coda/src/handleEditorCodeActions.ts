@@ -20,10 +20,6 @@ import {
     triggerCopilotThenRemovePromptComment,
     placeCursorAfterCurrentFunction,
     ensureSingleBlankLineAtCursor,
-    pushEditHistory,
-    collectWorkspaceDiagnostics,
-    pickProblem,
-    applyFixProblemAlt,
     pickProblemForFile,
     WorkspaceDiagnostic,
     requestCopilotFix,
@@ -821,6 +817,55 @@ export async function handleFixCodeProblemAction(
     }
 }
 
+export async function handleMoveCursorInFileAction(
+    action: any,
+): Promise<ActionResult> {
+    const { target, file, hint } = action.parameters;
+
+    try {
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const pos = resolvePosition(editor, target);
+        if (!pos) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve cursor position.",
+            };
+        }
+
+        // move the cursor & reveal it ---
+        const newSel = new vscode.Selection(pos, pos);
+        editor.selection = newSel;
+        editor.revealRange(new vscode.Range(pos, pos));
+
+        return {
+            handled: true,
+            message: `✅ Cursor moved to ${pos.line + 1}:${pos.character + 1}${
+                hint ? ` (hint: ${hint})` : ""
+            }.`,
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Error handling moveCursorInFile: ${err.message}`,
+        };
+    }
+}
+
 export async function handleEditorCodeActions(
     action: any,
 ): Promise<ActionResult> {
@@ -855,6 +900,10 @@ export async function handleEditorCodeActions(
 
         case "fixCodeProblem":
             actionResult = await handleFixCodeProblemAction(action);
+            break;
+
+        case "moveCursorInFile":
+            actionResult = await handleMoveCursorInFileAction(action);
             break;
 
         default:
