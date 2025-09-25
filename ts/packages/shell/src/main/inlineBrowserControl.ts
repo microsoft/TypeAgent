@@ -366,20 +366,17 @@ export function createInlineBrowserControl(
                             if (window.electronAPI) {
                                 const storage = await window.electronAPI.getStorage([
                                     'autoIndexing',
-                                    'indexingDelay', 
                                     'extractionMode'
                                 ]);
                                 
                                 return {
                                     autoIndexing: storage.autoIndexing === true,
-                                    indexingDelay: storage.indexingDelay || 3000,
                                     extractionMode: storage.extractionMode || 'content'
                                 };
                             } else {
                                 console.error('electronAPI not available');
                                 return {
                                     autoIndexing: false,
-                                    indexingDelay: 3000,
                                     extractionMode: 'content'
                                 };
                             }
@@ -387,7 +384,6 @@ export function createInlineBrowserControl(
                             console.error('Failed to get browser settings:', error);
                             return {
                                 autoIndexing: false,
-                                indexingDelay: 3000,
                                 extractionMode: 'content'
                             };
                         }
@@ -402,7 +398,6 @@ export function createInlineBrowserControl(
                 );
                 return {
                     autoIndexing: false,
-                    indexingDelay: 3000,
                     extractionMode: "content",
                 };
             }
