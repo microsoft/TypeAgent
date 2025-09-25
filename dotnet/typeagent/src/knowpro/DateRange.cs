@@ -13,5 +13,8 @@ public struct DateRange
     /// The (optional) end date of the range (inclusive).
     /// </summary>
     public DateTimeOffset? End { get; set; }
+
+    [JsonIgnore]
+    public readonly bool HasEnd => End is not null;
 }
 
