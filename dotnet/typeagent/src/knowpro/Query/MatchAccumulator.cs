@@ -7,7 +7,7 @@ internal class MatchAccumulator<T>
 {
     private Dictionary<T, Match<T>> _matches;
 
-    public MatchAccumulator(IEqualityComparer<T> comparer)
+    public MatchAccumulator(IEqualityComparer<T> comparer = null)
     {
         _matches = new Dictionary<T, Match<T>>(comparer);
     }

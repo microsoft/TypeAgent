@@ -18,3 +18,8 @@ public interface IConversation<TMessage>
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
 }
+
+public interface IConversation : IConversation<IMessage>
+{
+
+}
