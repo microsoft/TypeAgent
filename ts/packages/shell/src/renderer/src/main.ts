@@ -11,13 +11,13 @@ import {
     Client,
     SearchMenuItem,
 } from "../../preload/electronTypes";
-import { ChatView } from "./chatView";
+import { ChatView } from "./chat/chatView";
 import { TabView } from "./tabView";
 import { getSpeechToken, setSpeechToken } from "./speechToken";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
-import { MetricsView } from "./metricsView";
+import { MetricsView } from "./chat/metricsView";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
 import * as jose from "jose";
@@ -347,6 +347,10 @@ function registerClient(
             remoteSearchMenuUIOnCompletion(id, item);
         },
         titleUpdated(title: string): void {
+            // update document title
+            document.title = title;
+
+            // update chatview title
             chatView.setTitle(title);
         },
     };

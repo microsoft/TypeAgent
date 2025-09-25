@@ -17,7 +17,7 @@ interface AIModelStatus {
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
-    websocketHost: "ws://localhost:8080/",
+    websocketHost: "ws://localhost:8081/",
     defaultExtractionMode: "content",
     maxConcurrentExtractions: 3,
     qualityThreshold: 0.3,
