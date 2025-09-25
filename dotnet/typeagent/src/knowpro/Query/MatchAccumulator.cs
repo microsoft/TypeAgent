@@ -25,6 +25,10 @@ internal class MatchAccumulator<T>
         _matches.Clear();
     }
 
+    public IEnumerable<Match<T>> GetMatches() => _matches.Values;
+
+    public IEnumerable<T> GetMatchedValues => _matches.Keys;
+
     public void SetMatches(IEnumerable<Match<T>> matches, bool clear = false)
     {
         ArgumentVerify.ThrowIfNull(matches, nameof(matches));
@@ -114,6 +118,20 @@ internal class MatchAccumulator<T>
                 _matches[otherMatch.Value] = otherMatch;
             }
         }
+    }
+
+    public MatchAccumulator<T> Intersect(MatchAccumulator<T> other, MatchAccumulator<T> intersection)
+    {
+        foreach (var thisMatch in GetMatches())
+        {
+            var otherMatch = other[thisMatch.Value];
+            if (otherMatch is not null)
+            {
+                CombineMatches(thisMatch, otherMatch);
+                intersection.SetMatch(thisMatch);
+            }
+        }
+        return intersection;
     }
 
     private void CombineMatches(Match<T> target, Match<T> source)
