@@ -564,6 +564,18 @@ export async function getTracksFromIds(
     return trackResponses;
 }
 
+export async function addTracksToPlaylist(
+    service: SpotifyService,
+    playlistId: string,
+    trackUris: string[],
+) {
+    return fetchPost<SpotifyApi.AddTracksToPlaylistResponse>(
+        service,
+        `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`,
+        { uris: trackUris },
+    );
+}
+
 export async function getPlaylistTracks(
     service: SpotifyService,
     playlistId: string,
