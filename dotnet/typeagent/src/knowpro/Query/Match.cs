@@ -13,5 +13,5 @@ internal class Match<T>
 
     public double RelatedScore { get; set; } // Cumulative from matching related terms or phrases
 
-    public double RelatedHitCount { get; set; } // # of hits from related term matches or phrases
+    public int RelatedHitCount { get; set; } // # of hits from related term matches or phrases
 }

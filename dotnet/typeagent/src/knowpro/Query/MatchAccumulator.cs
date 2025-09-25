@@ -27,6 +27,11 @@ internal class MatchAccumulator<T>
 
     public IEnumerable<Match<T>> GetMatches() => _matches.Values;
 
+    public IEnumerable<Match<T>> GetMatches(Func<Match<T>, bool> predicate)
+    {
+        return _matches.Values.Where(predicate);
+    }
+
     public IEnumerable<T> GetMatchedValues => _matches.Keys;
 
     public void SetMatches(IEnumerable<Match<T>> matches, bool clear = false)
@@ -134,6 +139,27 @@ internal class MatchAccumulator<T>
         return intersection;
     }
 
+    public void CalculateTotalScore(Action<Match<T>>? scorer = null)
+    {
+        scorer ??= Ranker.AddSmoothRelatedScoreToMatchScore;
+        foreach (var match in GetMatches())
+        {
+            scorer(match);
+        }
+    }
+
+    public IList<Match<T>> GetSortedByScore(int minHitCount)
+    {
+        if (_matches.Count == 0)
+        {
+            return [];
+        }
+        List<Match<T>> matches = [.. MatchesWithMinHitCount(minHitCount)];
+        matches.Sort((x, y) => y.Score.CompareTo(x.Score));
+        return matches;
+    }
+
+
     private void CombineMatches(Match<T> target, Match<T> source)
     {
         target.HitCount += source.HitCount;
@@ -141,4 +167,12 @@ internal class MatchAccumulator<T>
         target.RelatedHitCount += source.RelatedHitCount;
         target.RelatedScore += source.RelatedScore;
     }
+
+    private IEnumerable<Match<T>> MatchesWithMinHitCount(int minHitCount)
+    {
+        return minHitCount > 0
+            ? GetMatches((m) => m.HitCount >= minHitCount)
+            : GetMatches();
+    }
+
 }
