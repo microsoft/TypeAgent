@@ -16,6 +16,22 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfLessThan(semanticRefOrdinal, 0, nameof(semanticRefOrdinal));
     }
 
+    public static void ThrowIfInvalid(TextLocation location)
+    {
+        ThrowIfInvalidMessageOrdinal(location.MessageOrdinal);
+        ArgumentVerify.ThrowIfLessThan(location.ChunkOrdinal, 0, nameof(location.ChunkOrdinal));
+    }
+
+    public static void ThrowIfInvalid(TextRange range)
+    {
+        ArgumentVerify.ThrowIfNull(range, nameof(range));
+        ThrowIfInvalid(range.Start);
+        if (range.End is not null)
+        {
+            ThrowIfInvalid(range.End.Value);
+        }
+    }
+
     public static void ThrowIfInvalid(IMessage message)
     {
         ArgumentVerify.ThrowIfNull(message, nameof(message));

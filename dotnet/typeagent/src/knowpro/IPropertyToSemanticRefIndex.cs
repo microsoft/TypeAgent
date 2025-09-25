@@ -19,7 +19,7 @@ public interface IPropertyToSemanticRefIndex
 /// <summary>
 /// PropertyIndex API implemented as extension methods
 /// </summary>
-public static class PropertyToSemanticRefIndexEx
+public static class PropertyToSemanticRefIndexExtensions
 {
     public static Task AddPropertyAsync(
         this IPropertyToSemanticRefIndex propertyIndex,

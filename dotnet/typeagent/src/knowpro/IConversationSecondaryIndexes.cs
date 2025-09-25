@@ -5,5 +5,8 @@ namespace TypeAgent.KnowPro;
 public interface IConversationSecondaryIndexes
 {
     IPropertyToSemanticRefIndex PropertyToSemanticRefIndex { get; }
+
+    ITimestampToTextRangeIndex TimestampIndex { get; }
+
     ITermToRelatedTermIndex TermToRelatedTermsIndex { get; }
 }
