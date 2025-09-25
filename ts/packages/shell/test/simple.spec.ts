@@ -28,7 +28,10 @@ test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
 });
 
 test("startShell", { tag: "@smoke" }, async ({}) => {
-    await startShell();
+    const mainWindow = await startShell();
+
+    // close the application
+    await exitApplication(mainWindow);
 });
 
 test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
