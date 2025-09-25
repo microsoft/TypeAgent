@@ -3,22 +3,24 @@
 
 namespace TypeAgent.Common;
 
+
 public class TopNCollection<T>
 {
-    private List<ScoredItem<T>> _items;
+    private List<ScoredItem<T>>? _items;
     private int _count; // Actual count, since items always ha a
     private int _maxCount;
 
-    public TopNCollection(int maxCount)
+    public TopNCollection(int maxCount, List<ScoredItem<T>> buffer = null)
     {
         ArgumentVerify.ThrowIfLessThan(maxCount, 1, nameof(maxCount));
-        _items = [];
-        _count = 0;
+
         _maxCount = maxCount;
-        _items.Add(new ScoredItem<T>() { Score = double.MinValue, Item = default });
+        _items = buffer;
+        _items?.Clear();
+        _count = 0;
     }
 
-    public int Count => _items.Count;
+    public int Count => _count;
 
     public ScoredItem<T> GetTop()
     {
@@ -26,14 +28,15 @@ public class TopNCollection<T>
         return _items[1];
     }
 
-    public void Reset()
+    public void Clear()
     {
-        _items.Clear();
-        _items.Add(new ScoredItem<T>() { Score = double.MinValue, Item = default });
+        _items?.Clear();
+        _count = 0;
     }
 
     public void Add(T item, double score)
     {
+        EnsureInitialized();
         if (_count == _maxCount)
         {
             if (score < _items[1].Score)
@@ -52,10 +55,40 @@ public class TopNCollection<T>
         UpHeap(_count);
     }
 
-    private ScoredItem<T> RemoveTop()
+    /// <summary>
+    /// Sorts the colletion by Rank
+    /// Returns the sorted buffer, and clears the collection
+    /// </summary>
+    /// <returns></returns>
+    public IList<ScoredItem<T>> ByRankAndClear()
     {
         VerifyNotEmpty();
 
+        SortDescending();
+        _items.Shift();
+
+        var retVal = _items;
+        _items = null;
+        return retVal;
+    }
+
+    // Heap sort in place
+    private void SortDescending()
+    {
+        var count = this._count;
+        var i = count;
+        while (this._count > 0)
+        {
+            // this de-queues the item with the current LOWEST relevancy
+            // We take that and place it at the 'back' of the array - thus inverting it
+            var item = RemoveTop();
+            _items[i--] = item;
+        }
+        _count = count;
+    }
+
+    private ScoredItem<T> RemoveTop()
+    {
         // At the top
         var item = _items[1];
         _items[1] = _items[_count];
@@ -109,9 +142,18 @@ public class TopNCollection<T>
         _items[i] = item;
     }
 
+    private void EnsureInitialized()
+    {
+        if(_items is null)
+        {
+            _items = [];
+            _items.Add(new ScoredItem<T>() { Score = double.MinValue, Item = default });
+        }
+    }
+
     private void VerifyNotEmpty()
     {
-        if (_count == 0)
+        if (_items is null || _count == 0)
         {
             throw new InvalidOperationException("TopNCollection is empty");
         }

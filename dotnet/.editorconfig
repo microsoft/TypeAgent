@@ -254,6 +254,7 @@ dotnet_diagnostic.IDE0110.severity = none # Remove unnecessary discards
 dotnet_diagnostic.IDE00130.severity = none # 
 dotnet_diagnostic.IDE0160.severity = none # Use block-scoped namespace
 
+dotnet_diagnostic.IDE0251.severity = none
 dotnet_diagnostic.IDE0290.severity = none
 
 ###############################
