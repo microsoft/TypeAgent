@@ -95,6 +95,7 @@ export class ShellWindow {
 
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
+    private readyP = Promise.withResolvers<void>();
     private browserTabRestored = false;
     private closing: boolean = false;
 
@@ -242,16 +243,8 @@ export class ShellWindow {
         this.contentLoadP = contentLoadP;
     }
 
-    public async waitForContentLoaded() {
-        try {
-            await Promise.all(this.contentLoadP);
-        } catch (e) {
-            if (this.closing) {
-                // Ignore errors if the window is closing
-                return;
-            }
-            throw e;
-        }
+    public waitForReady(): Promise<void> {
+        return this.readyP.promise;
     }
 
     public showAndFocus() {
@@ -259,10 +252,10 @@ export class ShellWindow {
             return;
         }
         this.mainWindow.show();
-        this.mainWindow.focus();
+        this.focusChatInput();
     }
 
-    public focusChatInput() {
+    private focusChatInput() {
         this.chatView.webContents.focus();
         this.chatView.webContents.send("focus-chat-input");
     }
@@ -321,42 +314,49 @@ export class ShellWindow {
     }
 
     private async ready(position: { x: number; y: number }) {
-        // Send settings asap
-        this.sendUserSettingChanged();
-        globalShortcut.register("Alt+Right", () => {
-            this.chatView.webContents.send("send-demo-event", "Alt+Right");
-        });
+        try {
+            // Send settings asap
+            this.sendUserSettingChanged();
+            globalShortcut.register("Alt+Right", () => {
+                this.chatView.webContents.send("send-demo-event", "Alt+Right");
+            });
 
-        // Register Ctrl+L / Cmd+L and Ctrl+E / Cmd+E to focus chat input
-        globalShortcut.register("CommandOrControl+L", () => {
-            this.focusChatInput();
-        });
+            // Register Ctrl+L / Cmd+L and Ctrl+E / Cmd+E to focus chat input
+            globalShortcut.register("CommandOrControl+L", () => {
+                this.showAndFocus();
+            });
 
-        globalShortcut.register("CommandOrControl+E", () => {
-            this.focusChatInput();
-        });
+            globalShortcut.register("CommandOrControl+E", () => {
+                this.showAndFocus();
+            });
 
-        // Make sure content is loaded so we can adjust the size including the divider.
-        await this.waitForContentLoaded();
-        await this.restoreBrowserTabs();
+            // Make sure content is loaded so we can adjust the size including the divider.
+            await Promise.all(this.contentLoadP);
+            await this.restoreBrowserTabs();
 
-        if (!isLinux) {
-            // REVIEW: on linux, setting windows bound before showing has not affect?
-            this.updateContentSize();
-        }
+            if (!isLinux) {
+                // REVIEW: on linux, setting windows bound before showing has not affect?
+                this.updateContentSize();
+            }
 
-        const mainWindow = this.mainWindow;
-        this.setZoomFactor(1, mainWindow.webContents);
-        mainWindow.show();
+            const mainWindow = this.mainWindow;
+            this.setZoomFactor(1, mainWindow.webContents);
+            this.showAndFocus();
 
-        if (isLinux) {
-            // REVIEW: on linux, setting windows bound before showing has not affect?
-            this.updateWindowBounds(position);
-        }
+            if (isLinux) {
+                // REVIEW: on linux, setting windows bound before showing has not affect?
+                this.updateWindowBounds(position);
+            }
 
-        const states = this.settings.window;
-        if (states.devTools) {
-            this.chatView.webContents.openDevTools();
+            const states = this.settings.window;
+            if (states.devTools) {
+                this.chatView.webContents.openDevTools();
+            }
+            this.readyP.resolve();
+        } catch (e) {
+            if (!this.closing) {
+                this.readyP.reject(e);
+            }
         }
     }
 
@@ -415,6 +415,18 @@ export class ShellWindow {
         // shutdown chat server
         if (this.chatViewServer) {
             this.chatViewServer.stop();
+        }
+    }
+
+    public minimize() {
+        this.mainWindow.minimize();
+    }
+
+    public toggleMaximize() {
+        if (this.mainWindow.isMaximized()) {
+            this.mainWindow.unmaximize();
+        } else {
+            this.mainWindow.maximize();
         }
     }
 

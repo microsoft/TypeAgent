@@ -222,7 +222,7 @@ async function initializeDispatcher(
     }
 }
 
-export async function initializeInstance(
+export function initializeInstance(
     instanceDir: string,
     shellSettings: ShellSettingManager,
     startTime: number = performance.now(),
@@ -237,7 +237,7 @@ export async function initializeInstance(
     );
 
     const shellWindow = new ShellWindow(shellSettings);
-    const { mainWindow, chatView } = shellWindow;
+    const { chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {
         const status = dispatcher.getStatus();
@@ -254,9 +254,6 @@ export async function initializeInstance(
                 newTitle,
                 status.agents.map((agent) => [agent.name, agent.emoji]),
             );
-            chatView.webContents.send("updated-title", title);
-
-            mainWindow.setTitle(newTitle);
         }
 
         return newSettingSummary;
@@ -307,8 +304,14 @@ export async function initializeInstance(
         ipcMain.removeListener("chat-view-ready", onChatViewReady);
     });
 
+    shellWindow.waitForReady().catch(fatal);
     instance = { shellWindow, dispatcherP };
-    return shellWindow.waitForContentLoaded();
+    return shellWindow;
+}
+
+export function fatal(e: Error) {
+    dialog.showErrorBox("Error starting shell", e.stack ?? e.message);
+    app.quit();
 }
 
 async function cleanupInstance() {
@@ -356,7 +359,7 @@ export async function closeInstance(quit: boolean = false) {
     const shellWindow = instance.shellWindow;
 
     // Close the window first without clearing the instance
-    await shellWindow.mainWindow.close();
+    await shellWindow.close();
 
     // Ensure the instance is fulling cleaned up.
     return ensureCleanupInstance();
