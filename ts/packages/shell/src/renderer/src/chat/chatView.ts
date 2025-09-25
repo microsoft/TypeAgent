@@ -34,7 +34,7 @@ export class ChatView {
     private _settingsView: SettingsView | undefined;
     private _dispatcher: Dispatcher | undefined;
     private readonly idToMessageGroup: Map<string, MessageGroup> = new Map();
-    private chatInput: ChatInput;
+    public chatInput: ChatInput;
     private partialCompletionEnabled: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
     private titleDiv: HTMLDivElement;

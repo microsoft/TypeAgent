@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ipcMain, BrowserWindow, dialog, WebContentsView } from "electron";
+import { ipcMain, dialog, WebContentsView, BaseWindow } from "electron";
 import { readFileSync } from "fs";
 
-async function openDemoFile(window: BrowserWindow) {
+async function openDemoFile(window: BaseWindow) {
     const options = {
         filters: [{ name: "Text files", extensions: ["txt"] }],
     };
@@ -62,7 +62,7 @@ function sendChatInputText(message: string, chatView: WebContentsView) {
 }
 
 export async function runDemo(
-    window: BrowserWindow,
+    window: BaseWindow,
     chatView: WebContentsView,
     awaitKeyboardInput: boolean,
 ) {
