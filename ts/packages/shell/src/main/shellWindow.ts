@@ -1103,6 +1103,14 @@ export class ShellWindow {
         onZoomChanged?.(zoomFactor);
     }
 
+    public updateSummary(title: string, status: [string, string][]) {
+        if (this.closing) {
+            return;
+        }
+        this.mainWindow.setTitle(title);
+        this.chatView.webContents.send("setting-summary-changed", status);
+    }
+
     /**
      * Updates the window title to include the current zoom level.
      * @param zoomFactor - The zoom factor to show in the title
@@ -1119,8 +1127,9 @@ export class ShellWindow {
         this.mainWindow.setTitle(`${summary}${zoomTitle}`);
 
         // Update the page title to match the window title as well for backwards compat with Playwright tests
-        this.chatView.webContents.executeJavaScript(
-            `document.title = '${summary}${zoomTitle}';`,
+        this.chatView.webContents.send(
+            "updated-title",
+            `${summary}${zoomTitle}`,
         );
 
         this.chatView.webContents.send(
