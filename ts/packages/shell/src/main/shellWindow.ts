@@ -1108,6 +1108,7 @@ export class ShellWindow {
             return;
         }
         this.mainWindow.setTitle(title);
+        this.chatView.webContents.send("updated-title", title);
         this.chatView.webContents.send("setting-summary-changed", status);
     }
 
@@ -1127,11 +1128,6 @@ export class ShellWindow {
         this.mainWindow.setTitle(`${summary}${zoomTitle}`);
 
         // Update the page title to match the window title as well for backwards compat with Playwright tests
-        this.chatView.webContents.send(
-            "updated-title",
-            `${summary}${zoomTitle}`,
-        );
-
         this.chatView.webContents.send(
             "updated-title",
             `${summary}${zoomTitle}`,
