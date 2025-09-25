@@ -236,6 +236,341 @@ export async function findMatchingFoldersByName(
     return foundFolders;
 }
 
+export type WorkspaceDiagnostic = {
+    uri: vscode.Uri;
+    diagnostic: vscode.Diagnostic;
+};
+
+/**
+ * Collect all diagnostics across the workspace (all open files).
+ */
+export function collectWorkspaceDiagnostics(): WorkspaceDiagnostic[] {
+    const diagnostics: WorkspaceDiagnostic[] = [];
+
+    // `vscode.languages.getDiagnostics()` returns [uri, Diagnostic[]][]
+    for (const [uri, diags] of vscode.languages.getDiagnostics()) {
+        for (const diag of diags) {
+            diagnostics.push({ uri, diagnostic: diag });
+        }
+    }
+
+    return diagnostics;
+}
+
+// --- Global history store ---
+export const editWorkspaceHistory: vscode.WorkspaceEdit[] = [];
+
+// --- Global history store ---
+type EditRecord = {
+    uri: vscode.Uri;
+    range: vscode.Range;
+    originalText?: string; // optional: store original text for undo
+};
+
+export const editHistory: EditRecord[] = [];
+
+/**
+ * Push a simple edit record to history.
+ */
+export function pushEditHistory(
+    record: { uri: vscode.Uri; range: vscode.Range; originalText?: string },
+    limit: number = 50,
+) {
+    editHistory.push(record);
+
+    if (editHistory.length > limit) {
+        editHistory.shift();
+    }
+}
+
+/**
+ * Push a WorkspaceEdit to the global history stack.
+ * Optional: limit the history size.
+ */
+export function pushWorkspaceEditHistory(
+    edit: vscode.WorkspaceEdit,
+    limit: number = 50,
+) {
+    if (!edit) return;
+
+    editWorkspaceHistory.push(edit);
+
+    // Enforce limit
+    if (editWorkspaceHistory.length > limit) {
+        editWorkspaceHistory.shift();
+    }
+}
+
+/**
+ * Optionally: pop the last edit to undo.
+ */
+export function popEditHistory(): EditRecord | undefined {
+    return editHistory.pop();
+}
+
+/**
+ * Pick a diagnostic (problem) from the current document based on a selector.
+ */
+export function pickProblem(
+    diagnostics: WorkspaceDiagnostic[],
+    selector: "first" | "next" | "all" = "first",
+    lastIndex: number = -1,
+): WorkspaceDiagnostic | WorkspaceDiagnostic[] | undefined {
+    if (diagnostics.length === 0) return undefined;
+
+    switch (selector) {
+        case "first":
+            return diagnostics[0];
+
+        case "next": {
+            const nextIndex = (lastIndex + 1) % diagnostics.length;
+            return diagnostics[nextIndex];
+        }
+
+        case "all":
+            return diagnostics;
+
+        default:
+            return undefined;
+    }
+}
+
+export type ProblemTarget =
+    | { type: "first" }
+    | { type: "next" }
+    | { type: "all" }
+    | { type: "cursor"; position: CursorTarget }
+    | { type: "indexInFile"; index: number; file?: FileTarget };
+
+export function findDiagnosticAtCursorTargetEx(
+    editor: vscode.TextEditor,
+    diagnostics: WorkspaceDiagnostic[],
+    activeFileUri: vscode.Uri,
+    cursorTarget: CursorTarget,
+): WorkspaceDiagnostic | undefined {
+    const pos = resolvePosition(editor, cursorTarget);
+
+    return diagnostics.find(
+        (d) =>
+            d.uri.toString() === activeFileUri.toString() &&
+            d.diagnostic.range.contains(pos),
+    );
+}
+
+export function findDiagnosticAtCursorTarget(
+    editor: vscode.TextEditor,
+    diagnostics: WorkspaceDiagnostic[],
+    activeFileUri: vscode.Uri,
+    cursorTarget: CursorTarget,
+): WorkspaceDiagnostic | undefined {
+    const pos = resolvePosition(editor, cursorTarget);
+
+    // Scope diagnostics to the current file
+    const fileDiags = diagnostics.filter(
+        (d) => d.uri.toString() === activeFileUri.toString(),
+    );
+    if (fileDiags.length === 0) return undefined;
+
+    // 1. Exact match at cursor
+    const exact = fileDiags.find((d) => d.diagnostic.range.contains(pos));
+    if (exact) return exact;
+
+    // 2. Closest diagnostic by line distance
+    const cursorLine = pos.line;
+    let closest: WorkspaceDiagnostic | undefined;
+    let minDistance = Number.POSITIVE_INFINITY;
+
+    for (const d of fileDiags) {
+        const diagLine = d.diagnostic.range.start.line;
+        const distance = Math.abs(diagLine - cursorLine);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closest = d;
+        }
+    }
+    if (closest) return closest;
+
+    // 3. Fallback: first problem in the file
+    return fileDiags[0];
+}
+
+export function pickProblemForFile(
+    editor: vscode.TextEditor,
+    diagnostics: WorkspaceDiagnostic[],
+    target: ProblemTarget,
+    activeFileUri: vscode.Uri,
+    lastIndex: number = -1,
+): WorkspaceDiagnostic | WorkspaceDiagnostic[] | undefined {
+    if (diagnostics.length === 0) return undefined;
+
+    switch (target.type) {
+        case "first": {
+            // Scope to current file
+            const fileDiags = diagnostics.filter(
+                (d) => d.uri.toString() === activeFileUri.toString(),
+            );
+            return fileDiags[0];
+        }
+
+        case "next": {
+            // Cycle only within current file
+            const fileDiags = diagnostics.filter(
+                (d) => d.uri.toString() === activeFileUri.toString(),
+            );
+            if (fileDiags.length === 0) return undefined;
+            const nextIndex = (lastIndex + 1) % fileDiags.length;
+            return fileDiags[nextIndex];
+        }
+
+        case "all": {
+            // Return all diagnostics for current file
+            return diagnostics.filter(
+                (d) => d.uri.toString() === activeFileUri.toString(),
+            );
+        }
+
+        case "cursor": {
+            return findDiagnosticAtCursorTarget(
+                editor,
+                diagnostics,
+                activeFileUri,
+                target.position,
+            );
+        }
+
+        case "indexInFile": {
+            const fileUri = target.file?.fileName ?? activeFileUri;
+            const fileDiags = diagnostics.filter(
+                (d) => d.uri.toString() === fileUri.toString(),
+            );
+            return fileDiags[target.index]; // may be undefined if OOB
+        }
+
+        default:
+            return undefined;
+    }
+}
+
+/**
+ * Insert a temporary prompt comment, ask Copilot to fix, then remove the prompt.
+ * Returns true if a suggestion was accepted.
+ */
+export async function requestCopilotFixAlt(
+    editor: vscode.TextEditor,
+    diagnostic: vscode.Diagnostic,
+): Promise<boolean> {
+    const line = diagnostic.range.start.line;
+    const comment = `// Copilot: fix this ${diagnostic.severity === vscode.DiagnosticSeverity.Error ? "error" : "diagnostic"} → ${diagnostic.message}`;
+
+    // Insert comment line above the problem
+    await editor.edit((editBuilder) => {
+        editBuilder.insert(new vscode.Position(line, 0), comment + "\n");
+    });
+
+    // Trigger Copilot and remove the prompt afterwards
+    await triggerCopilotThenRemovePromptComment(editor, line);
+
+    return true;
+}
+
+// Ask Copilot for a fix at the given diagnostic (optionally guided by hint)
+export async function requestCopilotFix(
+    editor: vscode.TextEditor,
+    diagnostic: vscode.Diagnostic,
+    hint?: string,
+): Promise<boolean> {
+    try {
+        // Move cursor to diagnostic
+        editor.selection = new vscode.Selection(
+            diagnostic.range.start,
+            diagnostic.range.end,
+        );
+        editor.revealRange(
+            diagnostic.range,
+            vscode.TextEditorRevealType.InCenter,
+        );
+
+        // Optionally insert a comment prompt for Copilot
+        if (hint) {
+            await editor.edit((edit) =>
+                edit.insert(diagnostic.range.start, `// Fix: ${hint}\n`),
+            );
+        }
+
+        // Trigger Copilot suggestion & auto-accept
+        await triggerAndMaybeAcceptInlineSuggestion({ autoAccept: true });
+
+        // If we added a prompt comment, remove it after suggestion
+        if (hint) {
+            const line = diagnostic.range.start.line;
+            await triggerCopilotThenRemovePromptComment(editor, line);
+        }
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function applyFixProblem(target: "first" | "next" | "all") {
+    const history: vscode.WorkspaceEdit[] = [];
+
+    // Flatten diagnostics across workspace into a single WorkspaceDiagnostic[] so pickProblem accepts it.
+    const diagnosticsArr = vscode.languages
+        .getDiagnostics()
+        .flatMap(([uri, diags]) => diags.map((d) => ({ uri, diagnostic: d })));
+
+    const picked = pickProblem(diagnosticsArr, target);
+    if (!picked) return;
+
+    const problems = Array.isArray(picked) ? picked : [picked];
+
+    for (const p of problems) {
+        const { uri, diagnostic: problem } = p;
+        // Open the document for the diagnostic and show it in the editor
+        let doc: vscode.TextDocument;
+        try {
+            doc = await vscode.workspace.openTextDocument(uri);
+        } catch {
+            continue;
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) continue;
+
+        // Capture original text for the diagnostic range so we can detect changes
+        const originalText = doc.getText(problem.range);
+
+        // Insert prompt and let Copilot attempt a fix
+        const accepted = await requestCopilotFix(editor, problem);
+        if (!accepted) continue;
+
+        // If the text in the diagnostic range changed, record the change as a WorkspaceEdit
+        const newText = editor.document.getText(problem.range);
+        if (newText !== originalText) {
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(uri, problem.range, newText);
+            await vscode.workspace.applyEdit(edit);
+            history.push(edit);
+        }
+    }
+
+    return history;
+}
+
+export async function applyFixProblemAlt(
+    problem: { uri: vscode.Uri; diagnostic: vscode.Diagnostic },
+    opts: { hint?: string; file?: FileTarget },
+): Promise<boolean> {
+    const doc = await resolveOrFallbackToFile(opts.file ?? undefined);
+    if (!doc) return false;
+
+    const editor = await showDocumentInEditor(doc);
+    if (!editor) return false;
+
+    return requestCopilotFix(editor, problem.diagnostic, opts.hint);
+}
+
 export async function resolveFileTarget(
     file: FileTarget,
 ): Promise<vscode.TextDocument | undefined> {
@@ -634,6 +969,7 @@ export function getIndentContextSmart(
 export type CursorTarget =
     | { type: "atCursor" }
     | { type: "insideFunction"; name: string }
+    | { type: "onLine"; line: number }
     | { type: "afterLine"; line: number }
     | { type: "beforeLine"; line: number }
     | { type: "inSelection" }
@@ -646,15 +982,22 @@ export type CursorTarget =
 export function resolvePosition(
     editor: vscode.TextEditor,
     target: CursorTarget,
-): vscode.Position | undefined {
+): vscode.Position {
     const doc = editor.document;
-
     switch (target.type) {
         case "atCursor":
             return editor.selection.active;
 
         case "atStartOfFile":
             return new vscode.Position(0, 0);
+
+        case "onLine": {
+            const line = Math.max(
+                0,
+                Math.min(target.line - 1, doc.lineCount - 1),
+            );
+            return new vscode.Position(line, 0);
+        }
 
         case "atEndOfFile": {
             //return new vscode.Position(doc.lineCount, 0);
@@ -694,7 +1037,8 @@ export function resolvePosition(
                         !target.containingText ||
                         commentBlock.includes(target.containingText)
                     ) {
-                        return new vscode.Position(endLine + 1, 0);
+                        const line = Math.min(endLine + 1, doc.lineCount - 1);
+                        return new vscode.Position(line, 0);
                     }
 
                     // Reset search
