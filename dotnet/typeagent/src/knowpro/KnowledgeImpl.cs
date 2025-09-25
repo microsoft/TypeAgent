@@ -5,6 +5,9 @@ namespace TypeAgent.KnowPro;
 
 public partial class ConcreteEntity
 {
+    [JsonIgnore]
+    public bool HasFacets => !Facets.IsNullOrEmpty();
+
     public string ToJson()
     {
         return Serializer.ToJson(this);

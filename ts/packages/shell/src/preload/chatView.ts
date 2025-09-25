@@ -35,6 +35,9 @@ function registerClient(client: Client) {
     ipcRenderer.on("setting-summary-changed", (_, updatedAgents) => {
         client.updateRegisterAgents(updatedAgents);
     });
+    ipcRenderer.on("updated-title", (_, title) => {
+        client.titleUpdated(title);
+    });
     ipcRenderer.on("send-input-text", async (_, message) => {
         await client.showInputText(message);
         ipcRenderer.send("send-input-text-complete");

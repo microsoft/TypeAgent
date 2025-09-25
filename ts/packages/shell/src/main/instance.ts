@@ -254,6 +254,7 @@ export async function initializeInstance(
                 "setting-summary-changed",
                 status.agents.map((agent) => [agent.name, agent.emoji]),
             );
+            chatView.webContents.send("updated-title", title);
 
             mainWindow.setTitle(newTitle);
         }
