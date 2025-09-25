@@ -17,9 +17,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { PromptSection, Result } from "typechat";
-import {
-    displayError,
-} from "@typeagent/agent-sdk/helpers/display";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 import {
     GreetingAction,
     PersonalizedGreetingAction,
@@ -129,11 +127,14 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
      */
     public async run(context: ActionContext<GreetingAgentContext>) {
         // Initial output to let the user know the agent is thinking...
-        context.actionIO.appendDisplay({ 
-            type: "html", 
-            content: `<div><style>.wait-dot{display: inline-block;animation: bounce 1.2s infinite;} .wait-dot.one{animation-delay: 0s;} .wait-dot.two{animation-delay: 0.2s;} .wait-dot.three {animation-delay: 0.4s;} @keyframes bounce {0%, 80%, 100% {transform: translateY(0);}40% {transform: translateY(-6px);}}</style><span class="wait-dot one">.</span><span class="wait-dot two">.</span><span class="wait-dot three">.</span></div>`,
-            kind: "status"
-        }, "temporary");
+        context.actionIO.appendDisplay(
+            {
+                type: "html",
+                content: `<div><style>.wait-dot{display: inline-block;animation: bounce 1.2s infinite;} .wait-dot.one{animation-delay: 0s;} .wait-dot.two{animation-delay: 0.2s;} .wait-dot.three {animation-delay: 0.4s;} @keyframes bounce {0%, 80%, 100% {transform: translateY(0);}40% {transform: translateY(-6px);}}</style><span class="wait-dot one">.</span><span class="wait-dot two">.</span><span class="wait-dot three">.</span></div>`,
+                kind: "status",
+            },
+            "temporary",
+        );
 
         // wait until we have the user's name
         if (context.sessionContext.agentContext.userPromise) {
