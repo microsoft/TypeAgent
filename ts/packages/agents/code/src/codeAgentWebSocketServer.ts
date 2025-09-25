@@ -17,40 +17,40 @@ export class CodeAgentWebSocketServer {
         this.setupHandlers();
         debug(`CodeAgentWebSocketServer listening on port ${port}`);
 
-        this.server.on('error', (error) => {
-            debug('Server error:', error);
+        this.server.on("error", (error) => {
+            debug("Server error:", error);
         });
     }
 
     private setupHandlers(): void {
-        this.server.on('connection', (ws: WebSocket) => {
+        this.server.on("connection", (ws: WebSocket) => {
             const clientId = `client-${++this.clientIdCounter}-${Date.now()}`;
-            debug('New client connected');
+            debug("New client connected");
             this.clients.set(clientId, ws);
 
             // Store client ID on the WebSocket for reference
             (ws as any).clientId = clientId;
 
-            ws.on('message', (message: Buffer) => {
+            ws.on("message", (message: Buffer) => {
                 const messageStr = message.toString();
                 if (this.onMessage) {
                     this.onMessage(messageStr);
                 }
             });
 
-            ws.on('close', () => {
-                debug('Client disconnected');
+            ws.on("close", () => {
+                debug("Client disconnected");
                 this.clients.delete(clientId);
             });
 
-            ws.on('error', (error) => {
-                debug('Client error:', error);
+            ws.on("error", (error) => {
+                debug("Client error:", error);
                 this.clients.delete(clientId);
             });
         });
 
-        this.server.on('error', (error) => {
-            debug('Server error:', error);
+        this.server.on("error", (error) => {
+            debug("Server error:", error);
         });
     }
 
@@ -64,7 +64,7 @@ export class CodeAgentWebSocketServer {
                     client.send(message);
                     successCount++;
                 } catch (error) {
-                    debug('Failed to send to client:', error);
+                    debug("Failed to send to client:", error);
                     clientsToRemove.push(clientId);
                 }
             } else {
@@ -73,7 +73,7 @@ export class CodeAgentWebSocketServer {
         }
 
         // Remove failed clients
-        clientsToRemove.forEach(clientId => this.clients.delete(clientId));
+        clientsToRemove.forEach((clientId) => this.clients.delete(clientId));
 
         return successCount;
     }
@@ -104,16 +104,21 @@ export class CodeAgentWebSocketServer {
     public getClientStates(): string[] {
         const states: string[] = [];
         for (const [clientId, client] of this.clients.entries()) {
-            const state = client.readyState === WebSocket.OPEN ? 'OPEN' :
-                         client.readyState === WebSocket.CONNECTING ? 'CONNECTING' :
-                         client.readyState === WebSocket.CLOSING ? 'CLOSING' : 'CLOSED';
+            const state =
+                client.readyState === WebSocket.OPEN
+                    ? "OPEN"
+                    : client.readyState === WebSocket.CONNECTING
+                      ? "CONNECTING"
+                      : client.readyState === WebSocket.CLOSING
+                        ? "CLOSING"
+                        : "CLOSED";
             states.push(`${clientId}: ${state}`);
         }
         return states;
     }
 
     public close(): void {
-        debug('Closing CodeAgentWebSocketServer');
+        debug("Closing CodeAgentWebSocketServer");
         for (const [, client] of this.clients.entries()) {
             if (client.readyState === WebSocket.OPEN) {
                 client.close();
