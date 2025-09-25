@@ -1,16 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IdGenerator } from "./main";
-import { ChatInput, ExpandableTextarea } from "./chatInput";
-import { iconCheckMarkCircle, iconX } from "./icon";
+import { IdGenerator } from "../main";
+import { ChatInput } from "./chatInput";
+import { ExpandableTextArea } from "./expandableTextArea";
+import { iconCheckMarkCircle, iconX } from "../icon";
 import {
     DisplayAppendMode,
     DisplayContent,
     DynamicDisplay,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { TTS } from "./tts/tts";
+import { TTS } from "../tts/tts";
 import {
     Dispatcher,
     IAgentMessage,
@@ -19,10 +20,10 @@ import {
     TemplateEditConfig,
 } from "agent-dispatcher";
 
-import { PartialCompletion } from "./partial";
-import { InputChoice } from "./choicePanel";
+import { PartialCompletion } from "../partial";
+import { InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
-import { SettingsView } from "./settingsView";
+import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "common-utils";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
@@ -36,6 +37,7 @@ export class ChatView {
     chatInput: ChatInput;
     private partialCompletionEnabled: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
+    private titleDiv: HTMLDivElement;
 
     private commandBackStack: string[] = [];
     private commandBackStackIndex = 0;
@@ -49,8 +51,15 @@ export class ChatView {
         private readonly agents: Map<string, string>,
         public tts?: TTS,
     ) {
+        // the main container
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
+
+        // Add the app title to the chat view
+        this.titleDiv = document.createElement("div");
+        this.titleDiv.className = "chat-title";
+        this.topDiv.appendChild(this.titleDiv);
+
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
         this.messageDiv.addEventListener("scrollend", () => {
@@ -69,7 +78,7 @@ export class ChatView {
                 content: messageHtml,
             });
         };
-        const onChange = (_eta: ExpandableTextarea, isInput: boolean) => {
+        const onChange = (_eta: ExpandableTextArea, isInput: boolean) => {
             if (this.partialCompletion) {
                 console.log(`Partial completion on change: ${isInput}`);
                 if (isInput) {
@@ -79,10 +88,10 @@ export class ChatView {
                 }
             }
         };
-        const onMouseWheel = (_eta: ExpandableTextarea, ev: WheelEvent) => {
+        const onMouseWheel = (_eta: ExpandableTextArea, ev: WheelEvent) => {
             this.partialCompletion?.handleMouseWheel(ev);
         };
-        const onKeydown = (_eta: ExpandableTextarea, ev: KeyboardEvent) => {
+        const onKeydown = (_eta: ExpandableTextArea, ev: KeyboardEvent) => {
             if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
                 return false;
             }
@@ -627,5 +636,9 @@ export class ChatView {
             //this.topDiv.parentElement?.classList.remove("write-only");
             this.topDiv.parentElement?.classList.remove("read-only");
         }
+    }
+
+    public setTitle(title: string) {
+        this.titleDiv.innerText = title;
     }
 }

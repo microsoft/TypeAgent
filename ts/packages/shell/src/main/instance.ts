@@ -250,10 +250,11 @@ export async function initializeInstance(
         const newTitle = `${app.getName()} v${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
         if (newTitle !== title) {
             title = newTitle;
-            chatView.webContents.send(
-                "setting-summary-changed",
+            shellWindow.updateSummary(
+                newTitle,
                 status.agents.map((agent) => [agent.name, agent.emoji]),
             );
+            chatView.webContents.send("updated-title", title);
 
             mainWindow.setTitle(newTitle);
         }

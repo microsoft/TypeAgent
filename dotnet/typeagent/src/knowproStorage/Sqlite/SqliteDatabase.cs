@@ -37,7 +37,7 @@ public class SqliteDatabase : IDisposable
         command.ExecuteNonQuery();
     }
 
-    public object? FetchOne(string commandText)
+    public object? GetOne(string commandText)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
 
@@ -46,11 +46,26 @@ public class SqliteDatabase : IDisposable
         return command.ExecuteScalar();
     }
 
+    public IList<T> GetList<T>(string commandText, Func<SqliteDataReader, T> cb)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
+
+        using var command = CreateCommand(commandText);
+        using var reader = command.ExecuteReader();
+        return reader.GetList<T>(cb);
+    }
+
     public int GetCount(string tableName)
     {
         string sql = $"SELECT COUNT(*) FROM {tableName}";
-        long count = (long)(FetchOne(sql) ?? 0);
+        long count = (long)(GetOne(sql) ?? 0);
         return (int)count;
+    }
+
+    public void ClearTable(string tableName)
+    {
+        using var cmd = CreateCommand($"DELETE FROM {tableName}");
+        cmd.ExecuteNonQuery();
     }
 
     public void Dispose()

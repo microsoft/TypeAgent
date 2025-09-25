@@ -51,7 +51,7 @@ export async function createWebSocket(): Promise<WebSocket | undefined> {
         settings = await getSettings();
     }
 
-    let socketEndpoint = settings.websocketHost ?? "ws://localhost:8080/";
+    let socketEndpoint = settings.websocketHost ?? "ws://localhost:8081/";
 
     socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {

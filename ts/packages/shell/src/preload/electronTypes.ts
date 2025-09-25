@@ -87,6 +87,7 @@ export interface Client {
     fileSelected(fileName: string, fileContent: string): void;
     listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void;
     focusInput(): void;
+    titleUpdated(title: string): void;
 
     searchMenuCompletion(id: number, item: SearchMenuItem);
 }

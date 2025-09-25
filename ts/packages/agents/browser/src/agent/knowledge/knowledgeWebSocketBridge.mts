@@ -41,7 +41,7 @@ export class KnowledgeWebSocketBridge {
         };
 
         sendKnowledgeExtractionProgressViaWebSocket(
-            this.context.agentContext.webSocket,
+            this.context.agentContext.currentClient,
             progress.extractionId,
             websocketProgress,
         );

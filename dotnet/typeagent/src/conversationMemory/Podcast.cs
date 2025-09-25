@@ -3,7 +3,7 @@
 
 namespace TypeAgent.ConversationMemory;
 
-public class Podcast : Memory<PodcastMessage>
+public class Podcast : ConversationMemory<PodcastMessage>
 {
     public Podcast(IStorageProvider<PodcastMessage> provider)
         : base(provider)

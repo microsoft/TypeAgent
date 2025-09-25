@@ -3,6 +3,7 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { WebSocket } from "ws";
+import { BrowserClient } from "../agentWebSocketServer.mjs";
 import { BrowserActionContext } from "../browserActions.mjs";
 import { searchByEntities, searchWebMemories } from "../searchWebMemories.mjs";
 import * as website from "website-memory";
@@ -47,12 +48,12 @@ const debug = registerDebug("typeagent:browser:knowledge");
  * Knowledge extraction progress update helper function
  */
 export function sendKnowledgeExtractionProgressViaWebSocket(
-    webSocket: WebSocket | undefined,
+    client: BrowserClient | undefined,
     extractionId: string,
     progress: KnowledgeExtractionProgress,
 ) {
     try {
-        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+        if (client && client.socket.readyState === WebSocket.OPEN) {
             // Send progress update message via WebSocket
             const progressMessage = {
                 method: "knowledgeExtractionProgress",
@@ -63,9 +64,9 @@ export function sendKnowledgeExtractionProgressViaWebSocket(
                 source: "browserAgent",
             };
 
-            webSocket.send(JSON.stringify(progressMessage));
+            client.socket.send(JSON.stringify(progressMessage));
             debug(
-                `Knowledge Extraction Progress [${extractionId}] sent via WebSocket:`,
+                `Knowledge Extraction Progress [${extractionId}] sent to client ${client.id}:`,
                 progress,
             );
         } else {
@@ -515,6 +516,7 @@ export async function extractKnowledgeFromPage(
 
     if (extractionInputs.length === 0) {
         return {
+            title: parameters.title,
             entities: [],
             relationships: [],
             keyTopics: [],
@@ -541,6 +543,7 @@ export async function extractKnowledgeFromPage(
         const aggregatedResults = aggregateExtractionResults(extractionResults);
 
         return {
+            title: parameters.title,
             ...aggregatedResults,
         };
     } catch (error) {
@@ -611,6 +614,7 @@ export async function extractKnowledgeFromPageStreaming(
                 "Insufficient content to extract knowledge",
             );
             return {
+                title: parameters.title,
                 entities: [],
                 relationships: [],
                 keyTopics: [],
@@ -637,6 +641,7 @@ export async function extractKnowledgeFromPageStreaming(
         await sendProgressUpdate("basic", "Processing basic page information");
 
         let aggregatedResults: any = {
+            title: parameters.title,
             entities: [],
             relationships: [],
             keyTopics: [],
@@ -685,6 +690,7 @@ export async function extractKnowledgeFromPageStreaming(
                 3,
             );
             aggregatedResults = aggregateExtractionResults(basicResults);
+            aggregatedResults.title = parameters.title;
 
             await sendProgressUpdate(
                 "basic",
@@ -921,7 +927,7 @@ export async function extractKnowledgeFromPageStreaming(
         };
 
         sendKnowledgeExtractionProgressViaWebSocket(
-            context.agentContext.webSocket,
+            context.agentContext.currentClient,
             extractionId,
             errorProgress,
         );
@@ -2135,6 +2141,7 @@ export async function getPageIndexedKnowledge(
                 return {
                     isIndexed: true,
                     knowledge: {
+                        title: "",
                         entities: [],
                         relationships: [],
                         keyTopics: [],
@@ -2229,6 +2236,7 @@ export async function getPageIndexedKnowledge(
             return {
                 isIndexed: true,
                 knowledge: {
+                    title: (knowledge as any).title || "",
                     entities,
                     relationships,
                     keyTopics,
@@ -2250,6 +2258,7 @@ export async function getPageIndexedKnowledge(
             return {
                 isIndexed: true,
                 knowledge: {
+                    title: "",
                     entities: [],
                     relationships: [],
                     keyTopics: [],
