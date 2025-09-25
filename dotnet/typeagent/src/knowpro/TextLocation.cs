@@ -5,9 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public struct TextLocation
 {
-    public TextLocation() { }
-
-    public TextLocation(int messageOrdinal, int chunkOrdinal)
+    public TextLocation(int messageOrdinal, int chunkOrdinal = 0)
     {
         this.MessageOrdinal = messageOrdinal;
         this.ChunkOrdinal = chunkOrdinal;
