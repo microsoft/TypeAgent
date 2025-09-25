@@ -995,14 +995,10 @@ async function updateBrowserContext(
 
                     if (
                         (context.agentContext.useExternalBrowserControl &&
-                            client.type !== "extension") ||
+                            client.type === "extension") ||
                         (!context.agentContext.useExternalBrowserControl &&
-                            client.type === "extension")
+                            client.type === "electron")
                     ) {
-                        console.log(
-                            `ignoring ${client.type} browser message when in ${context.agentContext.useExternalBrowserControl ? "external" : "internal"} browser control mode`,
-                        );
-                    } else {
                         if (browserControls) {
                             await processBrowserAgentMessage(
                                 data,
@@ -1011,6 +1007,10 @@ async function updateBrowserContext(
                                 client,
                             );
                         }
+                    } else {
+                        debug(
+                            `ignoring ${client.type} browser message when in ${context.agentContext.useExternalBrowserControl ? "external" : "internal"} browser control mode`,
+                        );                        
                     }
                 }
             };
@@ -1771,7 +1771,7 @@ async function saveKnowledgeToIndex(
         // Use the existing indexWebPageContent function with extracted knowledge
         const parameters = {
             url,
-            title: knowledge.title || "Extracted Page",
+            title: knowledge.title,
             extractKnowledge: true,
             timestamp: new Date().toISOString(),
             extractedKnowledge: knowledge,

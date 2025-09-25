@@ -516,6 +516,7 @@ export async function extractKnowledgeFromPage(
 
     if (extractionInputs.length === 0) {
         return {
+            title: parameters.title,
             entities: [],
             relationships: [],
             keyTopics: [],
@@ -540,8 +541,9 @@ export async function extractKnowledgeFromPage(
 
         // Aggregate results from all fragments
         const aggregatedResults = aggregateExtractionResults(extractionResults);
-
+        
         return {
+            title: parameters.title,
             ...aggregatedResults,
         };
     } catch (error) {
@@ -612,6 +614,7 @@ export async function extractKnowledgeFromPageStreaming(
                 "Insufficient content to extract knowledge",
             );
             return {
+                title: parameters.title,
                 entities: [],
                 relationships: [],
                 keyTopics: [],
@@ -638,6 +641,7 @@ export async function extractKnowledgeFromPageStreaming(
         await sendProgressUpdate("basic", "Processing basic page information");
 
         let aggregatedResults: any = {
+            title: parameters.title,
             entities: [],
             relationships: [],
             keyTopics: [],
@@ -686,6 +690,7 @@ export async function extractKnowledgeFromPageStreaming(
                 3,
             );
             aggregatedResults = aggregateExtractionResults(basicResults);
+            aggregatedResults.title = parameters.title;
 
             await sendProgressUpdate(
                 "basic",
@@ -2136,6 +2141,7 @@ export async function getPageIndexedKnowledge(
                 return {
                     isIndexed: true,
                     knowledge: {
+                        title: "",
                         entities: [],
                         relationships: [],
                         keyTopics: [],
@@ -2230,6 +2236,7 @@ export async function getPageIndexedKnowledge(
             return {
                 isIndexed: true,
                 knowledge: {
+                    title: (knowledge as any).title || "",
                     entities,
                     relationships,
                     keyTopics,
@@ -2251,6 +2258,7 @@ export async function getPageIndexedKnowledge(
             return {
                 isIndexed: true,
                 knowledge: {
+                    title:"",
                     entities: [],
                     relationships: [],
                     keyTopics: [],
