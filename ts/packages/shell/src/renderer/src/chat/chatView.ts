@@ -3,7 +3,6 @@
 
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
-=======
 import { ExpandableTextArea } from "./expandableTextArea";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import {
@@ -34,7 +33,7 @@ export class ChatView {
     private readonly idToMessageGroup: Map<string, MessageGroup> = new Map();
     private inputContainer: HTMLDivElement | undefined;
     private _settingsView: SettingsView | undefined;
-    private _dispatcher: Dispatcher | undefined;    
+    private _dispatcher: Dispatcher | undefined;
     private partialCompletionEnabled: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
     private titleDiv: HTMLDivElement;
@@ -122,7 +121,6 @@ export class ChatView {
         this.chatInput?.textarea.enable(true);
         this.chatInput?.focus();
 
-
         // delay initialization.
         if (this.partialCompletionEnabled) {
             this.ensurePartialCompletion();
@@ -135,7 +133,6 @@ export class ChatView {
             this._dispatcher !== undefined &&
             this.inputContainer !== undefined &&
             this.chatInput !== undefined
-
         ) {
             this.partialCompletion = new PartialCompletion(
                 this.inputContainer,
@@ -570,7 +567,6 @@ export class ChatView {
      * @param input The chat input to set. This method can only be called once.
      */
     public setChatInput(input: ChatInput) {
-
         if (this.chatInput !== undefined) {
             throw new Error("Chat input already set");
         }
@@ -584,7 +580,10 @@ export class ChatView {
             });
         };
 
-        input.textarea.onChange = (_eta: ExpandableTextArea, isInput: boolean) => {
+        input.textarea.onChange = (
+            _eta: ExpandableTextArea,
+            isInput: boolean,
+        ) => {
             if (this.partialCompletion) {
                 console.log(`Partial completion on change: ${isInput}`);
                 if (isInput) {
@@ -595,11 +594,17 @@ export class ChatView {
             }
         };
 
-        input.textarea.onMouseWheel = (_eta: ExpandableTextArea, ev: WheelEvent) => {
+        input.textarea.onMouseWheel = (
+            _eta: ExpandableTextArea,
+            ev: WheelEvent,
+        ) => {
             this.partialCompletion?.handleMouseWheel(ev);
         };
 
-        input.textarea.onKeydown = (_eta: ExpandableTextArea, ev: KeyboardEvent) => {
+        input.textarea.onKeydown = (
+            _eta: ExpandableTextArea,
+            ev: KeyboardEvent,
+        ) => {
             if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
                 return false;
             }
@@ -645,8 +650,10 @@ export class ChatView {
                     }
 
                     if (this.chatInput) {
-                        const content = this.commandBackStack[this.commandBackStackIndex];
-                        this.chatInput.textarea.getTextEntry().innerHTML = content;
+                        const content =
+                            this.commandBackStack[this.commandBackStackIndex];
+                        this.chatInput.textarea.getTextEntry().innerHTML =
+                            content;
                     }
 
                     this.chatInput?.textarea.moveCursorToEnd();
@@ -657,7 +664,7 @@ export class ChatView {
 
             return true;
         };
-        
+
         this.chatInput = input;
         this.inputContainer = this.chatInput.getInputContainer();
 

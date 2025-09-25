@@ -153,25 +153,31 @@ export class ExpandableTextArea {
 
     public set onSend(handler: (html: string) => void) {
         if (this.entryHandlers !== undefined) {
-           this.entryHandlers.onSend = handler;
+            this.entryHandlers.onSend = handler;
         }
     }
 
-    public set onChange(handler: (eta: ExpandableTextArea, isInput: boolean) => void) {
+    public set onChange(
+        handler: (eta: ExpandableTextArea, isInput: boolean) => void,
+    ) {
         if (this.entryHandlers !== undefined) {
-           this.entryHandlers.onChange = handler;
+            this.entryHandlers.onChange = handler;
         }
     }
 
-    public set onMouseWheel(handler: (eta: ExpandableTextArea, event: WheelEvent) => void) {
+    public set onMouseWheel(
+        handler: (eta: ExpandableTextArea, event: WheelEvent) => void,
+    ) {
         if (this.entryHandlers !== undefined) {
-           this.entryHandlers.onMouseWheel = handler;
+            this.entryHandlers.onMouseWheel = handler;
         }
     }
 
-    public set onKeydown(handler: (eta: ExpandableTextArea, event: KeyboardEvent) => boolean) {
+    public set onKeydown(
+        handler: (eta: ExpandableTextArea, event: KeyboardEvent) => boolean,
+    ) {
         if (this.entryHandlers !== undefined) {
-           this.entryHandlers.onKeydown = handler;
+            this.entryHandlers.onKeydown = handler;
         }
     }
 }
