@@ -5,7 +5,6 @@ export type ExtractionMode = "basic" | "summary" | "content" | "full";
 
 export interface BrowserSettings {
     autoIndexing: boolean;
-    indexingDelay: number;
     extractionMode: ExtractionMode;
 }
 

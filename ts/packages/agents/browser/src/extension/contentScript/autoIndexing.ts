@@ -3,7 +3,6 @@
 
 interface AutoIndexingSettings {
     autoIndexing: boolean;
-    indexingDelay: number;
     excludeSensitiveSites: boolean;
     indexingQuality: "fast" | "balanced" | "deep";
     indexOnlyTextContent: boolean;
@@ -15,7 +14,6 @@ class AutoIndexingManager {
     private isIndexing: boolean = false;
     private settings: AutoIndexingSettings = {
         autoIndexing: false,
-        indexingDelay: 3,
         excludeSensitiveSites: true,
         indexingQuality: "balanced",
         indexOnlyTextContent: false,
@@ -46,7 +44,6 @@ class AutoIndexingManager {
     }): boolean {
         const relevantKeys = [
             "autoIndexing",
-            "indexingDelay",
             "excludeSensitiveSites",
             "indexingQuality",
             "indexOnlyTextContent",
@@ -58,7 +55,6 @@ class AutoIndexingManager {
         try {
             const result = await chrome.storage.sync.get([
                 "autoIndexing",
-                "indexingDelay",
                 "excludeSensitiveSites",
                 "indexingQuality",
                 "indexOnlyTextContent",
@@ -66,7 +62,6 @@ class AutoIndexingManager {
 
             this.settings = {
                 autoIndexing: result.autoIndexing || false,
-                indexingDelay: result.indexingDelay || 3,
                 excludeSensitiveSites: result.excludeSensitiveSites !== false, // default true
                 indexingQuality: result.indexingQuality || "balanced",
                 indexOnlyTextContent: result.indexOnlyTextContent || false,
@@ -170,7 +165,7 @@ class AutoIndexingManager {
             return;
         }
 
-        const delay = this.settings.indexingDelay * 1000;
+        const delay = 500; // Fixed 500ms delay
 
         this.indexingTimeout = window.setTimeout(async () => {
             if (!this.isIndexing && this.isPageReady()) {
