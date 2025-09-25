@@ -77,6 +77,9 @@ public class SemanticRef
 
 }
 
+/// <summary>
+/// TODO: Make this strongly typed to be a discriminated union like Typescript
+/// </summary>
 public static class KnowledgeType
 {
     /// <summary>
@@ -95,5 +98,9 @@ public static class KnowledgeType
     /// <see cref="KnowPro.Tag"/>
     /// </summary>
     public const string Tag = "tag";
+    /// <summary>
+    /// <see cref="KnowPro.StructuredTag"/>
+    /// </summary>
+    public const string STag = "sTag";
 }
 

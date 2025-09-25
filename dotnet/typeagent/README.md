@@ -2,7 +2,7 @@
 
 
 Explores .NET versions of the following TypeAgent libraries:
-* KnowPro
+* [KnowPro](../../ts/packages/knowPro/README.md)
 
 This sample code is in very early stage experimental developement with **frequent changes**. 
 

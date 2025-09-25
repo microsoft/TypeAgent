@@ -46,6 +46,13 @@ public class KnowProVerify
 
     public static void ThrowIfInvalid(Action action)
     {
+        ArgumentVerify.ThrowIfNull(action, nameof(action));
+        ArgumentVerify.ThrowIfNullOrEmpty(action.Verbs, nameof(action.Verbs));
+    }
 
+    public static void ThrowIfInvalid(Tag tag)
+    {
+        ArgumentVerify.ThrowIfNull(tag, nameof(tag));
+        ArgumentVerify.ThrowIfNullOrEmpty(tag.Text, nameof(tag.Text));
     }
 }
