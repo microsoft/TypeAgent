@@ -11,13 +11,16 @@ import * as website from "website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { MacroStore } from "./storage/index.mjs";
 import { WebAgentChannels } from "./webTypeAgent.mjs";
-import { BrowserClient, AgentWebSocketServer } from "./agentWebSocketServer.mjs";
+import {
+    BrowserClient,
+    AgentWebSocketServer,
+} from "./agentWebSocketServer.mjs";
 
 export type BrowserActionContext = {
     clientBrowserControl?: BrowserControl | undefined;
     externalBrowserControl?: BrowserControl | undefined;
     useExternalBrowserControl: boolean;
-    preferredClientType?: 'extension' | 'electron';
+    preferredClientType?: "extension" | "electron";
     agentWebSocketServer?: AgentWebSocketServer;
     browserConnector?: BrowserConnector;
     currentClient?: BrowserClient;

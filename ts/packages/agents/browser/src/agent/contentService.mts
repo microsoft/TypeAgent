@@ -20,7 +20,10 @@ export class ContentService {
         this.sessionContext = sessionContext;
 
         const agentContext = sessionContext?.agentContext;
-        if (agentContext?.agentWebSocketServer && agentContext.externalBrowserControl) {
+        if (
+            agentContext?.agentWebSocketServer &&
+            agentContext.externalBrowserControl
+        ) {
             this.browserConnector = new BrowserConnector(
                 agentContext.agentWebSocketServer,
                 agentContext.externalBrowserControl,

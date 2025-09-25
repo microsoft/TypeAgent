@@ -9,7 +9,7 @@ const debug = registerDebug("typeagent:browser:agent-ws");
 
 export interface BrowserClient {
     id: string;
-    type: 'extension' | 'electron';
+    type: "extension" | "electron";
     socket: WebSocket;
     connectedAt: Date;
     lastActivity: Date;
@@ -20,7 +20,7 @@ export class AgentWebSocketServer {
     private clients = new Map<string, BrowserClient>();
     private activeClientId: string | null = null;
     public onClientMessage?: (client: BrowserClient, message: string) => void;
-    public getPreferredClientType?: () => 'extension' | 'electron' | undefined;
+    public getPreferredClientType?: () => "extension" | "electron" | undefined;
     public onClientConnected?: (client: BrowserClient) => void;
     public onClientDisconnected?: (client: BrowserClient) => void;
 
@@ -59,10 +59,10 @@ export class AgentWebSocketServer {
 
         const client: BrowserClient = {
             id: clientId,
-            type: clientId === 'inlineBrowser' ? 'electron' : 'extension',
+            type: clientId === "inlineBrowser" ? "electron" : "extension",
             socket: ws,
             connectedAt: new Date(),
-            lastActivity: new Date()
+            lastActivity: new Date(),
         };
 
         this.clients.set(clientId, client);
@@ -72,11 +72,13 @@ export class AgentWebSocketServer {
             this.selectActiveClient(this.getPreferredClientType?.());
         }
 
-        ws.send(JSON.stringify({
-            type: 'welcome',
-            clientId: clientId,
-            isActive: this.activeClientId === clientId
-        }));
+        ws.send(
+            JSON.stringify({
+                type: "welcome",
+                clientId: clientId,
+                isActive: this.activeClientId === clientId,
+            }),
+        );
 
         // Notify about new client connection
         if (this.onClientConnected) {
@@ -88,7 +90,10 @@ export class AgentWebSocketServer {
 
             try {
                 const data = JSON.parse(message);
-                if (data.method === "keepAlive" || data.messageType === "keepAlive") {
+                if (
+                    data.method === "keepAlive" ||
+                    data.messageType === "keepAlive"
+                ) {
                     return;
                 }
             } catch {}
@@ -118,7 +123,9 @@ export class AgentWebSocketServer {
         });
     }
 
-    public selectActiveClient(preferredClientType?: 'extension' | 'electron'): void {
+    public selectActiveClient(
+        preferredClientType?: "extension" | "electron",
+    ): void {
         // If we have a preferred client type, use it
         if (preferredClientType) {
             for (const [id, client] of this.clients) {
@@ -131,7 +138,7 @@ export class AgentWebSocketServer {
 
         // Default behavior: prefer electron over extension
         for (const [id, client] of this.clients) {
-            if (client.type === 'electron') {
+            if (client.type === "electron") {
                 this.setActiveClient(id);
                 return;
             }
@@ -150,13 +157,20 @@ export class AgentWebSocketServer {
         this.selectActiveClient(this.getPreferredClientType?.());
     }
 
-    public getActiveClient(fallbackType?: 'extension' | 'electron'): BrowserClient | null {
+    public getActiveClient(
+        fallbackType?: "extension" | "electron",
+    ): BrowserClient | null {
         // First try to get the currently active client
-        const activeClient = this.activeClientId ? this.clients.get(this.activeClientId) || null : null;
+        const activeClient = this.activeClientId
+            ? this.clients.get(this.activeClientId) || null
+            : null;
 
         // If we have an active client and either no fallback type specified
         // or the active client matches the fallback type, return it
-        if (activeClient && (!fallbackType || activeClient.type === fallbackType)) {
+        if (
+            activeClient &&
+            (!fallbackType || activeClient.type === fallbackType)
+        ) {
             return activeClient;
         }
 
@@ -187,10 +201,12 @@ export class AgentWebSocketServer {
             this.activeClientId = clientId;
 
             for (const [id, client] of this.clients) {
-                client.socket.send(JSON.stringify({
-                    type: 'active-status-changed',
-                    isActive: id === clientId
-                }));
+                client.socket.send(
+                    JSON.stringify({
+                        type: "active-status-changed",
+                        isActive: id === clientId,
+                    }),
+                );
             }
 
             debug(`Active client set to: ${clientId}`);

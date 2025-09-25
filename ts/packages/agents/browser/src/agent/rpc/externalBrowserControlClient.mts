@@ -17,7 +17,7 @@ export function createExternalBrowserClient(
 ): BrowserControl {
     const browserControlChannel = createGenericChannel((message) => {
         // Message to the active browser extension client (fallback to extension type only)
-        const activeClient = agentWebSocketServer.getActiveClient('extension');
+        const activeClient = agentWebSocketServer.getActiveClient("extension");
         if (activeClient && activeClient.socket.readyState === WebSocket.OPEN) {
             activeClient.socket.send(
                 JSON.stringify({
@@ -46,7 +46,8 @@ export function createExternalBrowserClient(
     };
 
     // Store reference to our handler so it can be cleaned up if needed
-    (browserControlChannel as any)._messageHandler = handleBrowserControlMessage;
+    (browserControlChannel as any)._messageHandler =
+        handleBrowserControlMessage;
 
     // Wrap the existing onClientMessage handler to include our browser control handling
     const originalOnClientMessage = agentWebSocketServer.onClientMessage;

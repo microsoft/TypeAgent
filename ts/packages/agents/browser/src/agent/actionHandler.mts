@@ -1010,7 +1010,7 @@ async function updateBrowserContext(
                     } else {
                         debug(
                             `ignoring ${client.type} browser message when in ${context.agentContext.useExternalBrowserControl ? "external" : "internal"} browser control mode`,
-                        );                        
+                        );
                     }
                 }
             };

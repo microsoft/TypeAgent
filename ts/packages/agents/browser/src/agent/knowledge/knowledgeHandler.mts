@@ -541,7 +541,7 @@ export async function extractKnowledgeFromPage(
 
         // Aggregate results from all fragments
         const aggregatedResults = aggregateExtractionResults(extractionResults);
-        
+
         return {
             title: parameters.title,
             ...aggregatedResults,
@@ -2258,7 +2258,7 @@ export async function getPageIndexedKnowledge(
             return {
                 isIndexed: true,
                 knowledge: {
-                    title:"",
+                    title: "",
                     entities: [],
                     relationships: [],
                     keyTopics: [],

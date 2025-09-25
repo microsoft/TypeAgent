@@ -3,7 +3,10 @@
 
 import { AppAction } from "@typeagent/agent-sdk";
 import { BrowserControl } from "../common/browserControl.mjs";
-import { BrowserClient, AgentWebSocketServer } from "./agentWebSocketServer.mjs";
+import {
+    BrowserClient,
+    AgentWebSocketServer,
+} from "./agentWebSocketServer.mjs";
 
 export class BrowserConnector {
     constructor(
@@ -14,7 +17,7 @@ export class BrowserConnector {
     async sendActionToBrowser(
         action: AppAction,
         schemaName?: string,
-        targetClientId?: string
+        targetClientId?: string,
     ): Promise<any> {
         const client = targetClientId
             ? this.agentServer.getClient(targetClientId)
@@ -30,14 +33,14 @@ export class BrowserConnector {
     private async sendToClient(
         client: BrowserClient,
         action: AppAction,
-        schemaName?: string
+        schemaName?: string,
     ): Promise<any> {
         return new Promise((resolve, reject) => {
             const callId = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
             const message = {
                 id: callId,
                 method: `${schemaName || "browser"}/${action.actionName}`,
-                params: action.parameters
+                params: action.parameters,
             };
 
             const timeout = setTimeout(() => {
@@ -68,7 +71,6 @@ export class BrowserConnector {
         });
     }
 
-
     async getHtmlFragments(useTimestampIds?: boolean): Promise<any[]> {
         const result = await this.sendActionToBrowser({
             actionName: "getHTML",
@@ -77,7 +79,7 @@ export class BrowserConnector {
                 downloadAsFile: false,
                 extractText: true,
                 useTimestampIds: useTimestampIds,
-            }
+            },
         });
         return Array.isArray(result?.data) ? result.data : [];
     }
@@ -91,7 +93,7 @@ export class BrowserConnector {
             parameters: {
                 fragments: inputHtmlFragments,
                 cssSelectorsToKeep: cssSelectorsToKeep,
-            }
+            },
         });
         return Array.isArray(result?.data) ? result.data : [];
     }
@@ -129,7 +131,7 @@ export class BrowserConnector {
             actionName: "captureAnnotatedScreenshot",
             parameters: {
                 downloadAsFile: true,
-            }
+            },
         });
         return typeof result?.data === "string" ? result.data : "";
     }
@@ -137,14 +139,14 @@ export class BrowserConnector {
     async clickOn(cssSelector: string): Promise<any> {
         return this.sendActionToBrowser({
             actionName: "clickOnElement",
-            parameters: { cssSelector }
+            parameters: { cssSelector },
         });
     }
 
     async setDropdown(cssSelector: string, optionLabel: string): Promise<any> {
         return this.sendActionToBrowser({
             actionName: "setDropdownValue",
-            parameters: { cssSelector, optionLabel }
+            parameters: { cssSelector, optionLabel },
         });
     }
 
@@ -153,20 +155,22 @@ export class BrowserConnector {
         cssSelector?: string,
         submitForm?: boolean,
     ): Promise<any> {
-        const actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
+        const actionName = cssSelector
+            ? "enterTextInElement"
+            : "enterTextOnPage";
         return this.sendActionToBrowser({
             actionName,
             parameters: {
                 value: textValue,
                 cssSelector,
-                submitForm
-            }
+                submitForm,
+            },
         });
     }
 
     async awaitPageLoad(timeout?: number): Promise<any> {
         const actionPromise = this.sendActionToBrowser({
-            actionName: "awaitPageLoad"
+            actionName: "awaitPageLoad",
         });
 
         if (timeout) {
