@@ -16,7 +16,7 @@ import {
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent, swapContent } from "./setContent";
-import { ChatView } from "./chatView";
+import { ChatView } from "./chat/chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
 import { SettingsView } from "./settingsView";

@@ -6,7 +6,7 @@ import {
     defaultUserSettings,
     ShellUserSettings,
 } from "../../preload/shellSettingsType.js";
-import { ChatView } from "./chatView.js";
+import { ChatView } from "./chat/chatView.js";
 import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 import { iconMoon, iconSun } from "./icon.js";
 import { DisplayType } from "@typeagent/agent-sdk";
