@@ -14,8 +14,8 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
     where TMessage : class, IMessage, new()
     where TMeta : IMessageMetadata
 {
-    SqliteDatabase _db;
-    int _count = -1;
+    private SqliteDatabase _db;
+    private int _count = -1;
 
     public SqliteMessageCollection(SqliteDatabase db)
     {

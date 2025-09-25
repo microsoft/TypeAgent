@@ -7,7 +7,7 @@ namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqliteDatabase : IDisposable
 {
-    SqliteConnection _connection;
+    private SqliteConnection _connection;
 
     public SqliteDatabase(string filePath, bool createNew = false)
     {

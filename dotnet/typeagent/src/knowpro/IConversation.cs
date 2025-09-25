@@ -18,16 +18,3 @@ public interface IConversation<TMessage>
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
 }
-
-public static class ConversationExtensions
-{
-    public static void SearchConversation<TMessage>(
-        this IConversation<TMessage> conversation,
-        SearchTermGroup searchTermGroup,
-        WhenFilter? whenFilter = null
-    )
-        where TMessage : IMessage
-    {
-
-    }
-}

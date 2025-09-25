@@ -17,9 +17,29 @@ public class PodcastCommands : ICommandModule
     public IList<Command> GetCommands()
     {
         return [
+            TestDef(),
             PodcastLoadDef(),
             PodcastImportIndexDef()
         ];
+    }
+
+    private Command TestDef()
+    {
+        Command cmd = new("test")
+        {
+            Args.Arg<string>("name", "Name"),
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(Test);
+        return cmd;
+    }
+
+    private void Test(ParseResult args)
+    {
+        foreach(var token in args.UnmatchedTokens)
+        {
+            Console.WriteLine(token);
+        }
     }
 
     private Command PodcastLoadDef()
