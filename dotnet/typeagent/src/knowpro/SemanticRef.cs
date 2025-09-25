@@ -79,9 +79,21 @@ public class SemanticRef
 
 public static class KnowledgeType
 {
+    /// <summary>
+    /// <see cref="ConcreteEntity"/>
+    /// </summary>
     public const string Entity = "entity";
+    /// <summary>
+    /// <see cref="KnowPro.Action"/>
+    /// </summary>
     public const string Action = "action";
+    /// <summary>
+    /// <see cref="KnowPro.Topic"/>
+    /// </summary>
     public const string Topic = "topic";
+    /// <summary>
+    /// <see cref="KnowPro.Tag"/>
+    /// </summary>
     public const string Tag = "tag";
 }
 

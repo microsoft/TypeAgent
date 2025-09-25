@@ -6,6 +6,12 @@ namespace TypeAgent.KnowPro;
 public partial class ConcreteEntity
 {
     [JsonIgnore]
+    public bool HasName => !string.IsNullOrEmpty(Name);
+
+    [JsonIgnore]
+    public bool HasTypes => !Type.IsNullOrEmpty();
+
+    [JsonIgnore]
     public bool HasFacets => !Facets.IsNullOrEmpty();
 
     public string ToJson()
@@ -22,6 +28,9 @@ public partial class ConcreteEntity
 public partial class Action
 {
     const string NoneEntityName = "none";
+
+    [JsonIgnore]
+    public bool HasVerbs => !Verbs.IsNullOrEmpty();
 
     [JsonIgnore]
     public bool HasSubject => IsDefined(SubjectEntityName);
