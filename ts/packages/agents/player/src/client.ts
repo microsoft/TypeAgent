@@ -16,6 +16,7 @@ import {
     SearchTracksAction,
     SearchForPlaylistsAction,
     GetFromCurrentPlaylistListAction,
+    AddCurrentTrackToPlaylistAction,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -44,6 +45,7 @@ import {
     getQueue,
     getAlbum,
     followPlaylist,
+    addTracksToPlaylist,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -1245,12 +1247,51 @@ export async function handleCall(
             });
             if (playlist !== undefined) {
                 await deletePlaylist(clientContext.service, playlist.id);
+                await updatePlaylists(
+                    clientContext.service,
+                    clientContext.userData!.data,
+                );
                 return createActionResultFromTextDisplay(
                     chalk.magentaBright(`playlist ${playlist.name} deleted`),
                 );
             }
             return createErrorActionResult(
                 `playlist ${playlistName} not found`,
+            );
+        }
+        case "addCurrentTrackToPlaylist": {
+            const addAction = action as AddCurrentTrackToPlaylistAction;
+            const playlistName = addAction.parameters.playlistName;
+            if (clientContext.userData === undefined) {
+                return createErrorActionResult("No user data found");
+            }
+            const playlists = await getPlaylistsFromUserData(
+                clientContext.service,
+                clientContext.userData!.data,
+            );
+            const playlist = playlists?.find((pl) => {
+                return pl.name
+                    .toLowerCase()
+                    .includes(playlistName.toLowerCase());
+            });
+            if (!playlist) {
+                return createErrorActionResult(
+                    `playlist ${playlistName} not found`,
+                );
+            }
+            const state = await getSelectedDevicePlaybackState(clientContext);
+            if (!state || !state.item || state.item.type !== "track") {
+                return createErrorActionResult("No current track playing");
+            }
+            const track = state.item as SpotifyApi.TrackObjectFull;
+            await addTracksToPlaylist(clientContext.service, playlist.id, [
+                track.uri,
+            ]);
+
+            return createActionResultFromTextDisplay(
+                chalk.magentaBright(
+                    `Added track ${track.name} to playlist ${playlist.name}`,
+                ),
             );
         }
         default:
