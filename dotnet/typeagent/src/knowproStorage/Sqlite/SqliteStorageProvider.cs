@@ -9,10 +9,6 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
     where TMeta : IMessageMetadata, new()
 {
     SqliteDatabase _db;
-    SqliteMessageCollection<TMessage, TMeta> _messages;
-    SqliteSemanticRefCollection _semanticRefs;
-    SqliteTermToSemanticRefIndex _semanticRefIndex;
-    ConversationSecondaryIndexes _secondaryIndexes;
 
     public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
         : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
@@ -27,19 +23,22 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         {
             InitSchema();
         }
-        _messages = new SqliteMessageCollection<TMessage, TMeta>(_db);
-        _semanticRefs = new SqliteSemanticRefCollection(_db);
-        _semanticRefIndex = new SqliteTermToSemanticRefIndex(_db);
-        _secondaryIndexes = new ConversationSecondaryIndexes(new SqlitePropertyToSemanticRefIndex(_db));
+        Messages = new SqliteMessageCollection<TMessage, TMeta>(_db);
+        SemanticRefs = new SqliteSemanticRefCollection(_db);
+        SemanticRefIndex = new SqliteTermToSemanticRefIndex(_db);
+        SecondaryIndexes = new ConversationSecondaryIndexes(
+            new SqlitePropertyToSemanticRefIndex(_db),
+            new SqliteTimestampToTextRangeIndex(_db)
+        );
     }
 
-    public IMessageCollection<TMessage> Messages => _messages;
+    public IMessageCollection<TMessage> Messages { get; private set; }
 
-    public ISemanticRefCollection SemanticRefs => _semanticRefs;
+    public ISemanticRefCollection SemanticRefs { get; private set; }
 
-    public ITermToSemanticRefIndex SemanticRefIndex => _semanticRefIndex;
+    public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 
-    public IConversationSecondaryIndexes Secondaryindexes => _secondaryIndexes;
+    public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
 
     public void InitSchema()
     {
@@ -55,9 +54,9 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
 
     protected virtual void Dispose(bool fromDispose)
     {
-        if (fromDispose)
+        if (fromDispose && _db is not null)
         {
-            _db?.Dispose();
+            _db.Dispose();
             Clear();
         }
     }
@@ -74,7 +73,9 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
     void Clear()
     {
         _db = null;
-        _messages = null;
-        _semanticRefs = null;
+        Messages = null;
+        SemanticRefs = null;
+        SemanticRefIndex = null;
+        SecondaryIndexes = null;
     }
 }
