@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createWebSocket } from "common-utils/ws";
-import { WebSocket } from "ws";
 import {
     ActionContext,
     ActionIO,
@@ -36,6 +34,7 @@ import {
 } from "./crossword/actionHandler.mjs";
 
 import { BrowserConnector } from "./browserConnector.mjs";
+import { BrowserClient } from "./agentWebSocketServer.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
@@ -101,7 +100,6 @@ import {
 } from "../common/browserControl.mjs";
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
-import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 import {
@@ -125,6 +123,7 @@ import {
     LookupAndAnswerActions,
     LookupAndAnswerInternet,
 } from "./lookupAndAnswerSchema.mjs";
+import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -871,9 +870,11 @@ async function initializeBrowserContext(
     return {
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
+        preferredClientType:
+            clientBrowserControl === undefined ? "extension" : "electron",
         index: undefined,
         localHostPort,
-        macrosStore: undefined, // Will be initialized in updateBrowserContext
+        macrosStore: undefined,
         resolverSettings: {
             searchResolver: true,
             keywordResolver: true,
@@ -931,28 +932,51 @@ async function updateBrowserContext(
                 await createViewServiceHost(context);
         }
 
-        if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
-            return;
-        }
-
-        const webSocket = await createWebSocket("browser", "dispatcher");
-        if (webSocket) {
-            context.agentContext.webSocket = webSocket;
-            const browserControls = createExternalBrowserClient(webSocket);
-            context.agentContext.externalBrowserControl = browserControls;
-            context.agentContext.browserConnector = new BrowserConnector(
-                webSocket,
-                browserControls,
+        if (!context.agentContext.agentWebSocketServer) {
+            const { AgentWebSocketServer } = await import(
+                "./agentWebSocketServer.mjs"
             );
+            context.agentContext.agentWebSocketServer =
+                new AgentWebSocketServer(8081);
 
-            webSocket.onclose = (event: object) => {
-                debugWebSocket("Browser webSocket connection closed.");
-                context.agentContext.webSocket = undefined;
+            context.agentContext.agentWebSocketServer.getPreferredClientType =
+                () => {
+                    return context.agentContext.preferredClientType;
+                };
+
+            context.agentContext.agentWebSocketServer.onClientConnected = (
+                client: BrowserClient,
+            ) => {
+                // Recreate externalBrowserControl when a new extension client connects
+                if (client.type === "extension") {
+                    debug(
+                        `Extension client connected: ${client.id}, recreating externalBrowserControl`,
+                    );
+                    context.agentContext.externalBrowserControl =
+                        createExternalBrowserClient(
+                            context.agentContext.agentWebSocketServer!,
+                        );
+                }
             };
-            webSocket.addEventListener("message", async (event: any) => {
-                const text = event.data.toString();
-                const data = JSON.parse(text);
-                debugWebSocket(`Received message from browser: ${text}`);
+
+            context.agentContext.agentWebSocketServer.onClientDisconnected = (
+                client: BrowserClient,
+            ) => {
+                // Log disconnection for debugging
+                if (client.type === "extension") {
+                    debug(`Extension client disconnected: ${client.id}`);
+                }
+            };
+
+            context.agentContext.agentWebSocketServer.onClientMessage = async (
+                client: BrowserClient,
+                message: string,
+            ) => {
+                const data = JSON.parse(message);
+                debugWebSocket(
+                    `Received message from browser client ${client.id}: ${message}`,
+                );
+
                 if (isWebAgentMessage(data)) {
                     await processWebAgentMessage(data, context);
                     return;
@@ -964,19 +988,62 @@ async function updateBrowserContext(
                 }
 
                 if (data.method) {
-                    await processBrowserAgentMessage(
-                        data,
-                        browserControls,
-                        context,
-                        webSocket,
-                    );
-                }
-            });
+                    const browserControls = context.agentContext
+                        .useExternalBrowserControl
+                        ? context.agentContext.externalBrowserControl
+                        : context.agentContext.clientBrowserControl;
 
-            initializeWebSocketBridge(context);
-            initializeImportWebSocketHandler(context);
-            debug("Import progress event system initialized");
+                    if (
+                        (context.agentContext.useExternalBrowserControl &&
+                            client.type === "extension") ||
+                        (!context.agentContext.useExternalBrowserControl &&
+                            client.type === "electron")
+                    ) {
+                        if (browserControls) {
+                            await processBrowserAgentMessage(
+                                data,
+                                browserControls,
+                                context,
+                                client,
+                            );
+                        }
+                    } else {
+                        debug(
+                            `ignoring ${client.type} browser message when in ${context.agentContext.useExternalBrowserControl ? "external" : "internal"} browser control mode`,
+                        );
+                    }
+                }
+            };
         }
+
+        // Initialize external browser control using the AgentWebSocketServer
+        if (
+            !context.agentContext.externalBrowserControl &&
+            context.agentContext.agentWebSocketServer
+        ) {
+            context.agentContext.externalBrowserControl =
+                createExternalBrowserClient(
+                    context.agentContext.agentWebSocketServer,
+                );
+        }
+
+        if (!context.agentContext.browserConnector) {
+            const browserControls = context.agentContext
+                .useExternalBrowserControl
+                ? context.agentContext.externalBrowserControl
+                : context.agentContext.clientBrowserControl;
+
+            if (browserControls && context.agentContext.agentWebSocketServer) {
+                context.agentContext.browserConnector = new BrowserConnector(
+                    context.agentContext.agentWebSocketServer,
+                    browserControls,
+                );
+            }
+        }
+
+        initializeWebSocketBridge(context);
+        initializeImportWebSocketHandler(context);
+        debug("Browser agent WebSocket server initialized");
 
         // rehydrate cached settings
         const sessionDir: string | undefined =
@@ -1007,13 +1074,10 @@ async function updateBrowserContext(
                 context.agentContext.searchProviders[0];
         }
     } else {
-        const webSocket = context.agentContext.webSocket;
-        if (webSocket) {
-            webSocket.onclose = null;
-            webSocket.close();
+        if (context.agentContext.agentWebSocketServer) {
+            context.agentContext.agentWebSocketServer.stop();
+            delete context.agentContext.agentWebSocketServer;
         }
-
-        context.agentContext.webSocket = undefined;
 
         // shut down service
         if (context.agentContext.browserProcess) {
@@ -1085,7 +1149,7 @@ async function processBrowserAgentMessage(
     data: any,
     browserControls: BrowserControl,
     context: SessionContext<BrowserActionContext>,
-    webSocket: WebSocket,
+    client: BrowserClient,
 ) {
     switch (data.method) {
         case "knowledgeExtractionProgress": {
@@ -1168,7 +1232,7 @@ async function processBrowserAgentMessage(
                 context,
             );
 
-            webSocket.send(
+            client.socket.send(
                 JSON.stringify({
                     id: data.id,
                     result: discoveryResult.data,
@@ -1203,7 +1267,7 @@ async function processBrowserAgentMessage(
                 context,
             );
 
-            webSocket.send(
+            client.socket.send(
                 JSON.stringify({
                     id: data.id,
                     result: knowledgeResult,
@@ -1231,7 +1295,7 @@ async function processBrowserAgentMessage(
                 context,
             );
 
-            webSocket.send(
+            client.socket.send(
                 JSON.stringify({
                     id: data.id,
                     result: websiteResult,
@@ -1246,7 +1310,7 @@ async function processBrowserAgentMessage(
                 context,
             );
 
-            webSocket.send(
+            client.socket.send(
                 JSON.stringify({
                     id: data.id,
                     result: libraryStatsResult,
@@ -1263,7 +1327,7 @@ async function processBrowserAgentMessage(
                 context,
             );
 
-            webSocket.send(
+            client.socket.send(
                 JSON.stringify({
                     id: data.id,
                     result: macrosResult,
@@ -1276,7 +1340,7 @@ async function processBrowserAgentMessage(
             const actionsResult = {
                 url: `http://localhost:${context.agentContext.localHostPort}`,
             };
-            webSocket.send(
+            client.socket.send(
                 JSON.stringify({
                     id: data.id,
                     result: actionsResult,
@@ -2708,9 +2772,8 @@ async function executeBrowserAction(
                 }
             }
     }
-    const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
-    if (webSocketEndpoint) {
+    if (connector) {
         try {
             context.actionIO.setDisplay("Running remote action.");
 
@@ -2768,7 +2831,7 @@ async function executeBrowserAction(
             throw new Error("Unable to contact browser backend.");
         }
     } else {
-        throw new Error("No websocket connection.");
+        throw new Error("No WebSocket server available.");
     }
     return undefined;
 }
@@ -3102,10 +3165,10 @@ async function handleTabIndexActions(
     context: SessionContext<BrowserActionContext>,
     requestId: string | undefined,
 ) {
-    const webSocketEndpoint = context.agentContext.webSocket;
+    const agentServer = context.agentContext.agentWebSocketServer;
     const tabTitleIndex = context.agentContext.tabTitleIndex;
 
-    if (webSocketEndpoint && tabTitleIndex) {
+    if (agentServer && tabTitleIndex) {
         try {
             const actionName =
                 action.actionName ?? action.fullActionName.split(".").at(-1);
@@ -3144,12 +3207,15 @@ async function handleTabIndexActions(
                 }
             }
 
-            webSocketEndpoint.send(
-                JSON.stringify({
-                    id: requestId,
-                    result: responseBody,
-                }),
-            );
+            const activeClient = agentServer.getActiveClient();
+            if (activeClient) {
+                activeClient.socket.send(
+                    JSON.stringify({
+                        id: requestId,
+                        result: responseBody,
+                    }),
+                );
+            }
         } catch (ex: any) {
             if (ex instanceof Error) {
                 console.error(ex);
@@ -3160,7 +3226,7 @@ async function handleTabIndexActions(
             throw new Error("Unable to contact browser backend.");
         }
     } else {
-        throw new Error("No websocket connection.");
+        throw new Error("No WebSocket server available.");
     }
     return undefined;
 }
@@ -4211,6 +4277,15 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = true;
+                        agentContext.preferredClientType = "extension";
+
+                        // Re-select active client based on new preference
+                        if (agentContext.agentWebSocketServer) {
+                            agentContext.agentWebSocketServer.selectActiveClient(
+                                "extension",
+                            );
+                        }
+
                         await context.queueToggleTransientAgent(
                             "browser.external",
                             true,
@@ -4234,6 +4309,15 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = false;
+                        agentContext.preferredClientType = "electron";
+
+                        // Re-select active client based on new preference
+                        if (agentContext.agentWebSocketServer) {
+                            agentContext.agentWebSocketServer.selectActiveClient(
+                                "electron",
+                            );
+                        }
+
                         await context.queueToggleTransientAgent(
                             "browser.external",
                             false,

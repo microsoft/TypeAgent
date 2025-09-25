@@ -348,6 +348,10 @@ function registerClient(
             remoteSearchMenuUIOnCompletion(id, item);
         },
         titleUpdated(title: string): void {
+            // update document title
+            document.title = title;
+
+            // update chatview title
             chatView.setTitle(title);
         },
     };

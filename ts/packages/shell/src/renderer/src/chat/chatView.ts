@@ -3,6 +3,8 @@
 
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
+=======
+import { ExpandableTextArea } from "./expandableTextArea";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import {
     DisplayAppendMode,
@@ -24,7 +26,6 @@ import { InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "common-utils";
-import { ExpandableTextArea } from "./expandableTextArea";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {
@@ -72,95 +73,8 @@ export class ChatView {
                 this.messageDiv.scrollTo(0, 0);
             }
         });
-        // const onSend = (messageHtml: string) => {
-        //     // message from chat input are from innerHTML
-        //     this.addUserMessage({
-        //         type: "html",
-        //         content: messageHtml,
-        //     });
-        // };
-        // const onChange = (_eta: ExpandableTextArea, isInput: boolean) => {
-        //     if (this.partialCompletion) {
-        //         console.log(`Partial completion on change: ${isInput}`);
-        //         if (isInput) {
-        //             this.partialCompletion.update(true);
-        //         } else {
-        //             this.partialCompletion.close();
-        //         }
-        //     }
-        // };
-        // const onMouseWheel = (_eta: ExpandableTextArea, ev: WheelEvent) => {
-        //     this.partialCompletion?.handleMouseWheel(ev);
-        // };
-        // const onKeydown = (_eta: ExpandableTextArea, ev: KeyboardEvent) => {
-        //     if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
-        //         return false;
-        //     }
-
-        //     // history
-        //     if (!ev.altKey && !ev.ctrlKey) {
-        //         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-        //             const currentContent: string =
-        //                 this.chatInput.textarea.getTextEntry().innerHTML ?? "";
-
-        //             if (
-        //                 this.commandBackStack.length === 0 ||
-        //                 this.commandBackStack[this.commandBackStackIndex] !==
-        //                     currentContent
-        //             ) {
-        //                 const messages: NodeListOf<Element> =
-        //                     this.messageDiv.querySelectorAll(
-        //                         ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
-        //                     );
-        //                 this.commandBackStack = Array.from(messages).map(
-        //                     (m: Element) =>
-        //                         m.firstElementChild?.innerHTML.replace(
-        //                             'class="chat-input-image"',
-        //                             'class="chat-input-dropImage"',
-        //                         ) ?? "",
-        //                 );
-
-        //                 this.commandBackStack.unshift(currentContent);
-        //                 this.commandBackStackIndex = 0;
-        //             }
-
-        //             if (
-        //                 ev.key == "ArrowUp" &&
-        //                 this.commandBackStackIndex <
-        //                     this.commandBackStack.length - 1
-        //             ) {
-        //                 this.commandBackStackIndex++;
-        //             } else if (
-        //                 ev.key == "ArrowDown" &&
-        //                 this.commandBackStackIndex > 0
-        //             ) {
-        //                 this.commandBackStackIndex--;
-        //             }
-
-        //             const content =
-        //                 this.commandBackStack[this.commandBackStackIndex];
-        //             this.chatInput.textarea.getTextEntry().innerHTML = content;
-
-        //             this.chatInput.textarea.moveCursorToEnd();
-
-        //             return false;
-        //         }
-        //     }
-
-        //     return true;
-        // };
-        // this.chatInput = new ChatInput({
-        //     onSend,
-        //     onChange,
-        //     onKeydown,
-        //     onMouseWheel,
-        // }, "phraseDiv");
-        // this.inputContainer = this.chatInput.getInputContainer();
 
         this.topDiv.appendChild(this.messageDiv);
-
-        // // Add the input div at the bottom so it's always visible
-        // this.topDiv.append(this.inputContainer);
 
         // wire up messages from slide show iframes
         window.onmessage = (e) => {
@@ -208,6 +122,7 @@ export class ChatView {
         this.chatInput?.textarea.enable(true);
         this.chatInput?.focus();
 
+
         // delay initialization.
         if (this.partialCompletionEnabled) {
             this.ensurePartialCompletion();
@@ -220,6 +135,7 @@ export class ChatView {
             this._dispatcher !== undefined &&
             this.inputContainer !== undefined &&
             this.chatInput !== undefined
+
         ) {
             this.partialCompletion = new PartialCompletion(
                 this.inputContainer,
@@ -649,7 +565,6 @@ export class ChatView {
     public setTitle(title: string) {
         this.titleDiv.innerText = title;
     }
-
     /**
      * Hosts a chat input control within the chat view.
      * @param input The chat input to set. This method can only be called once.

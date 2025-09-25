@@ -25,8 +25,8 @@ export class ImportWebSocketHandler {
 
     private forwardProgressToWebSocket(progress: ImportProgressEvent) {
         try {
-            const webSocket = this.context.agentContext.webSocket;
-            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            const client = this.context.agentContext.currentClient;
+            if (client && client.socket.readyState === WebSocket.OPEN) {
                 const websocketProgress = {
                     type: "importProgress",
                     totalItems: progress.total,
@@ -60,7 +60,7 @@ export class ImportWebSocketHandler {
                     source: "browserAgent",
                 };
 
-                webSocket.send(JSON.stringify(progressMessage));
+                client.socket.send(JSON.stringify(progressMessage));
             }
         } catch (error) {
             console.error(
