@@ -62,7 +62,7 @@ export async function clearRecordedActions(): Promise<void> {
  */
 export async function getSettings(): Promise<Record<string, string>> {
     const settings = await chrome.storage.sync.get({
-        websocketHost: "ws://localhost:8080/",
+        websocketHost: "ws://localhost:8081/",
     });
     return settings;
 }

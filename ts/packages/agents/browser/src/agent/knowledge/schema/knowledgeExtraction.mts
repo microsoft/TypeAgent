@@ -12,6 +12,7 @@ export interface KnowledgeExtractionResult {
 
 export interface EnhancedKnowledgeExtractionResult
     extends KnowledgeExtractionResult {
+    title: string;
     contentActions?: kpLib.Action[];
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
