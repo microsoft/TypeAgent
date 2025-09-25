@@ -40,7 +40,7 @@ public partial class ConcreteEntity : KnowledgeSchema
     public Facet[] Facets { get; set; }
 }
 
-public class Action : KnowledgeSchema
+public partial class Action : KnowledgeSchema
 {
     [JsonPropertyName("verbs")]
     public string[] Verbs { get; set; }

@@ -36,4 +36,14 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfNullOrEmpty(entity.Name, nameof(entity.Name));
         ArgumentVerify.ThrowIfNull(entity.Type, nameof(entity.Type));
     }
+
+    public static void ThrowIfInvalid(Facet facet)
+    {
+
+    }
+
+    public static void ThrowIfInvalid(Action action)
+    {
+
+    }
 }

@@ -47,6 +47,14 @@ public static class PropertyToSemanticRefIndexEx
                     cancellationToken
                 ).ConfigureAwait(false);
                 break;
+
+            case KnowledgeType.Action:
+                await propertyIndex.AddActionPropertiesAsync(
+                    semanticRef.Knowledge as Action,
+                    semanticRef.SemanticRefOrdinal,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                break;
         }
     }
 
@@ -111,6 +119,8 @@ public static class PropertyToSemanticRefIndexEx
         CancellationToken cancellationToken
     )
     {
+        KnowProVerify.ThrowIfInvalid(facet);
+
         // TODO: Bulk operations
         await propertyIndex.AddPropertyAsync(
                 KnowledgePropertyName.FacetName,
@@ -130,4 +140,50 @@ public static class PropertyToSemanticRefIndexEx
         }
     }
 
+    public static async Task AddActionPropertiesAsync(
+        this IPropertyToSemanticRefIndex propertyIndex,
+        Action action,
+        int semanticRefOrdinal,
+        CancellationToken cancellationToken
+    )
+    {
+        KnowProVerify.ThrowIfInvalid(action);
+
+        await propertyIndex.AddPropertyAsync(
+            KnowledgePropertyName.Verb,
+            string.Join(" ", action.Verbs),
+            semanticRefOrdinal,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (action.HasSubject)
+        {
+            await propertyIndex.AddPropertyAsync(
+                KnowledgePropertyName.Subject,
+                action.SubjectEntityName,
+                semanticRefOrdinal,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
+        if (action.HasObject)
+        {
+            await propertyIndex.AddPropertyAsync(
+                KnowledgePropertyName.Object,
+                action.ObjectEntityName,
+                semanticRefOrdinal,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
+        if (action.HasIndirectObject)
+        {
+            await propertyIndex.AddPropertyAsync(
+                KnowledgePropertyName.IndirectObject,
+                action.IndirectObjectEntityName,
+                semanticRefOrdinal,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+    }
 }
