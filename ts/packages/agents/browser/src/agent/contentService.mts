@@ -20,9 +20,9 @@ export class ContentService {
         this.sessionContext = sessionContext;
 
         const agentContext = sessionContext?.agentContext;
-        if (agentContext?.webSocket && agentContext.externalBrowserControl) {
+        if (agentContext?.agentWebSocketServer && agentContext.externalBrowserControl) {
             this.browserConnector = new BrowserConnector(
-                agentContext.webSocket,
+                agentContext.agentWebSocketServer,
                 agentContext.externalBrowserControl,
             );
             debug("Initialized with browser download capabilities");
@@ -144,7 +144,7 @@ export class ContentService {
     isBrowserAvailable(): boolean {
         return (
             !!this.browserConnector &&
-            !!this.sessionContext?.agentContext.webSocket
+            !!this.sessionContext?.agentContext.agentWebSocketServer
         );
     }
 
@@ -153,16 +153,16 @@ export class ContentService {
      */
     getStatus(): {
         browserAvailable: boolean;
-        webSocketConnected: boolean;
+        agentWebSocketServerConnected: boolean;
         capabilities: string[];
     } {
-        const webSocketConnected =
-            !!this.sessionContext?.agentContext.webSocket;
+        const agentWebSocketServerConnected =
+            !!this.sessionContext?.agentContext.agentWebSocketServer;
         const browserAvailable = this.isBrowserAvailable();
 
         return {
             browserAvailable,
-            webSocketConnected,
+            agentWebSocketServerConnected,
             capabilities: browserAvailable
                 ? [
                       "content-download",

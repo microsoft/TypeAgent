@@ -11,17 +11,20 @@ import * as website from "website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { MacroStore } from "./storage/index.mjs";
 import { WebAgentChannels } from "./webTypeAgent.mjs";
-import { WebSocket } from "ws";
+import { BrowserClient, AgentWebSocketServer } from "./agentWebSocketServer.mjs";
 
 export type BrowserActionContext = {
     clientBrowserControl?: BrowserControl | undefined;
     externalBrowserControl?: BrowserControl | undefined;
     useExternalBrowserControl: boolean;
-    webSocket?: WebSocket | undefined;
+    preferredClientType?: 'extension' | 'electron';
+    agentWebSocketServer?: AgentWebSocketServer;
+    browserConnector?: BrowserConnector;
+    currentClient?: BrowserClient;
+    extractionClients?: Map<string, string>;
     webAgentChannels?: WebAgentChannels | undefined;
     crosswordCachedSchemas?: Map<string, Crossword> | undefined;
     crossWordState?: Crossword | undefined;
-    browserConnector?: BrowserConnector | undefined;
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
