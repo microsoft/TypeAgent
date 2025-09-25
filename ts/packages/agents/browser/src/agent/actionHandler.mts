@@ -1771,7 +1771,7 @@ async function saveKnowledgeToIndex(
         // Use the existing indexWebPageContent function with extracted knowledge
         const parameters = {
             url,
-            title: knowledge.title,
+            title: knowledge.title || "Extracted Page",
             extractKnowledge: true,
             timestamp: new Date().toISOString(),
             extractedKnowledge: knowledge,
