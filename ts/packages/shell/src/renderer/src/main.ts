@@ -25,6 +25,7 @@ import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
 import { ClientIO, Dispatcher, IAgentMessage } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
+import { ChatInput } from "./chat/chatInput";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -331,17 +332,17 @@ function registerClient(
             settingsView.shellSettings = settings;
         },
         fileSelected(fileName: string, fileContent: string): void {
-            chatView.chatInput.loadImageContent(fileName, fileContent);
+            chatView.chatInput?.loadImageContent(fileName, fileContent);
         },
         listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void {
             if (token !== undefined) {
                 setSpeechToken(token);
             }
 
-            chatView.chatInput.recognizeOnce(token, useLocalWhisper);
+            chatView.chatInput?.recognizeOnce(token, useLocalWhisper);
         },
         focusInput(): void {
-            chatView.chatInput.focus();
+            chatView.chatInput?.focus();
         },
         searchMenuCompletion(id: number, item: SearchMenuItem) {
             remoteSearchMenuUIOnCompletion(id, item);
@@ -451,6 +452,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
+    const chatInput = new ChatInput({}, "new_phraseDiv");
+
+    chatView.setChatInput(chatInput);
+
     initializeChatHistory(chatView);
 
     const cameraView = new CameraView((image: HTMLImageElement) => {
@@ -459,9 +464,9 @@ document.addEventListener("DOMContentLoaded", async function () {
         newImage.src = image.src;
 
         newImage.classList.add("chat-input-dropImage");
-        chatView.chatInput.textarea.getTextEntry().append(newImage);
+        chatView.chatInput?.textarea.getTextEntry().append(newImage);
 
-        if (chatView.chatInput.sendButton !== undefined) {
+        if (chatView.chatInput?.sendButton !== undefined) {
             chatView.chatInput.sendButton.disabled =
                 chatView.chatInput.textarea.getTextEntry().innerHTML.length ==
                 0;
@@ -471,11 +476,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
 
-    chatView.chatInput.camButton.onclick = () => {
+    chatView.chatInput!.camButton.onclick = () => {
         cameraView.toggleVisibility();
     };
 
-    chatView.chatInput.attachButton.onclick = () => {
+    chatView.chatInput!.attachButton.onclick = () => {
         getClientAPI().openImageFile();
     };
 
