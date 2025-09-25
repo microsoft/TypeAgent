@@ -30,11 +30,10 @@ const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {
     private readonly topDiv: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
-    private readonly inputContainer: HTMLDivElement;
+    private readonly idToMessageGroup: Map<string, MessageGroup> = new Map();
+    private inputContainer: HTMLDivElement | undefined;
     private _settingsView: SettingsView | undefined;
     private _dispatcher: Dispatcher | undefined;
-    private readonly idToMessageGroup: Map<string, MessageGroup> = new Map();
-    chatInput: ChatInput;
     private partialCompletionEnabled: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
     private titleDiv: HTMLDivElement;
@@ -43,9 +42,11 @@ export class ChatView {
     private commandBackStackIndex = 0;
 
     private hideMetrics = true;
-    public userGivenName: string = "";
-
     private isScrolling = false;
+
+    public userGivenName: string = "";
+    public chatInput: ChatInput | undefined;
+
     constructor(
         private idGenerator: IdGenerator,
         private readonly agents: Map<string, string>,
@@ -71,95 +72,8 @@ export class ChatView {
                 this.messageDiv.scrollTo(0, 0);
             }
         });
-        const onSend = (messageHtml: string) => {
-            // message from chat input are from innerHTML
-            this.addUserMessage({
-                type: "html",
-                content: messageHtml,
-            });
-        };
-        const onChange = (_eta: ExpandableTextArea, isInput: boolean) => {
-            if (this.partialCompletion) {
-                console.log(`Partial completion on change: ${isInput}`);
-                if (isInput) {
-                    this.partialCompletion.update(true);
-                } else {
-                    this.partialCompletion.close();
-                }
-            }
-        };
-        const onMouseWheel = (_eta: ExpandableTextArea, ev: WheelEvent) => {
-            this.partialCompletion?.handleMouseWheel(ev);
-        };
-        const onKeydown = (_eta: ExpandableTextArea, ev: KeyboardEvent) => {
-            if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
-                return false;
-            }
-
-            // history
-            if (!ev.altKey && !ev.ctrlKey) {
-                if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                    const currentContent: string =
-                        this.chatInput.textarea.getTextEntry().innerHTML ?? "";
-
-                    if (
-                        this.commandBackStack.length === 0 ||
-                        this.commandBackStack[this.commandBackStackIndex] !==
-                            currentContent
-                    ) {
-                        const messages: NodeListOf<Element> =
-                            this.messageDiv.querySelectorAll(
-                                ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
-                            );
-                        this.commandBackStack = Array.from(messages).map(
-                            (m: Element) =>
-                                m.firstElementChild?.innerHTML.replace(
-                                    'class="chat-input-image"',
-                                    'class="chat-input-dropImage"',
-                                ) ?? "",
-                        );
-
-                        this.commandBackStack.unshift(currentContent);
-                        this.commandBackStackIndex = 0;
-                    }
-
-                    if (
-                        ev.key == "ArrowUp" &&
-                        this.commandBackStackIndex <
-                            this.commandBackStack.length - 1
-                    ) {
-                        this.commandBackStackIndex++;
-                    } else if (
-                        ev.key == "ArrowDown" &&
-                        this.commandBackStackIndex > 0
-                    ) {
-                        this.commandBackStackIndex--;
-                    }
-
-                    const content =
-                        this.commandBackStack[this.commandBackStackIndex];
-                    this.chatInput.textarea.getTextEntry().innerHTML = content;
-
-                    this.chatInput.textarea.moveCursorToEnd();
-
-                    return false;
-                }
-            }
-
-            return true;
-        };
-        this.chatInput = new ChatInput({
-            onSend,
-            onChange,
-            onKeydown,
-            onMouseWheel,
-        });
-        this.inputContainer = this.chatInput.getInputContainer();
 
         this.topDiv.appendChild(this.messageDiv);
-
-        // Add the input div at the bottom so it's always visible
-        this.topDiv.append(this.inputContainer);
 
         // wire up messages from slide show iframes
         window.onmessage = (e) => {
@@ -197,10 +111,15 @@ export class ChatView {
         if (this._dispatcher !== undefined) {
             throw new Error("Dispatcher already initialized");
         }
+
+        if (this.chatInput === undefined) {
+            throw new Error("Chat input is not initialized");
+        }
+
         this._dispatcher = dispatcher;
 
-        this.chatInput.textarea.enable(true);
-        this.chatInput.focus();
+        this.chatInput?.textarea.enable(true);
+        this.chatInput?.focus();
 
         // delay initialization.
         if (this.partialCompletionEnabled) {
@@ -211,7 +130,9 @@ export class ChatView {
     private ensurePartialCompletion() {
         if (
             this.partialCompletion === undefined &&
-            this._dispatcher !== undefined
+            this._dispatcher !== undefined &&
+            this.inputContainer !== undefined &&
+            this.chatInput !== undefined
         ) {
             this.partialCompletion = new PartialCompletion(
                 this.inputContainer,
@@ -543,7 +464,7 @@ export class ChatView {
         );
     }
     public chatInputFocus() {
-        this.chatInput.focus();
+        this.chatInput?.focus();
     }
 
     public async askYesNo(
@@ -610,7 +531,7 @@ export class ChatView {
     }
 
     async showInputText(message: string) {
-        return this.chatInput.showInputText(message);
+        return this.chatInput?.showInputText(message);
     }
 
     public setMetricsVisible(visible: boolean) {
@@ -640,5 +561,114 @@ export class ChatView {
 
     public setTitle(title: string) {
         this.titleDiv.innerText = title;
+    }
+    /**
+     * Hosts a chat input control within the chat view.
+     * @param input The chat input to set. This method can only be called once.
+     */
+    public setChatInput(input: ChatInput) {
+        if (this.chatInput !== undefined) {
+            throw new Error("Chat input already set");
+        }
+
+        // event handler for the text entry send event
+        input.textarea.onSend = (messageHtml: string) => {
+            // message from chat input are from innerHTML
+            this.addUserMessage({
+                type: "html",
+                content: messageHtml,
+            });
+        };
+
+        input.textarea.onChange = (
+            _eta: ExpandableTextArea,
+            isInput: boolean,
+        ) => {
+            if (this.partialCompletion) {
+                console.log(`Partial completion on change: ${isInput}`);
+                if (isInput) {
+                    this.partialCompletion.update(true);
+                } else {
+                    this.partialCompletion.close();
+                }
+            }
+        };
+
+        input.textarea.onMouseWheel = (
+            _eta: ExpandableTextArea,
+            ev: WheelEvent,
+        ) => {
+            this.partialCompletion?.handleMouseWheel(ev);
+        };
+
+        input.textarea.onKeydown = (
+            _eta: ExpandableTextArea,
+            ev: KeyboardEvent,
+        ) => {
+            if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
+                return false;
+            }
+
+            // history
+            if (!ev.altKey && !ev.ctrlKey) {
+                if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
+                    const currentContent: string =
+                        this.chatInput?.textarea.getTextEntry().innerHTML ?? "";
+
+                    if (
+                        this.commandBackStack.length === 0 ||
+                        this.commandBackStack[this.commandBackStackIndex] !==
+                            currentContent
+                    ) {
+                        const messages: NodeListOf<Element> =
+                            this.messageDiv.querySelectorAll(
+                                ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
+                            );
+                        this.commandBackStack = Array.from(messages).map(
+                            (m: Element) =>
+                                m.firstElementChild?.innerHTML.replace(
+                                    'class="chat-input-image"',
+                                    'class="chat-input-dropImage"',
+                                ) ?? "",
+                        );
+
+                        this.commandBackStack.unshift(currentContent);
+                        this.commandBackStackIndex = 0;
+                    }
+
+                    if (
+                        ev.key == "ArrowUp" &&
+                        this.commandBackStackIndex <
+                            this.commandBackStack.length - 1
+                    ) {
+                        this.commandBackStackIndex++;
+                    } else if (
+                        ev.key == "ArrowDown" &&
+                        this.commandBackStackIndex > 0
+                    ) {
+                        this.commandBackStackIndex--;
+                    }
+
+                    if (this.chatInput) {
+                        const content =
+                            this.commandBackStack[this.commandBackStackIndex];
+                        this.chatInput.textarea.getTextEntry().innerHTML =
+                            content;
+                    }
+
+                    this.chatInput?.textarea.moveCursorToEnd();
+
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
+        this.chatInput = input;
+        this.inputContainer = this.chatInput.getInputContainer();
+
+        // Add the input div at the bottom so it's always visible
+        this.topDiv.append(this.inputContainer);
     }
 }
