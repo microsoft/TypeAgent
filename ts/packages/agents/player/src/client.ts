@@ -1245,6 +1245,10 @@ export async function handleCall(
             });
             if (playlist !== undefined) {
                 await deletePlaylist(clientContext.service, playlist.id);
+                await updatePlaylists(
+                    clientContext.service,
+                    clientContext.userData!.data,
+                );
                 return createActionResultFromTextDisplay(
                     chalk.magentaBright(`playlist ${playlist.name} deleted`),
                 );
