@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessageV2, createWebSocket } from "common-utils";
-import { WebSocket } from "ws";
+import { WebSocketMessageV2 } from "common-utils";
+import { CodeAgentWebSocketServer } from "./codeAgentWebSocketServer.js";
 import {
     ActionContext,
     AppAction,
@@ -30,7 +30,7 @@ export function instantiate(): AppAgent {
 
 type CodeActionContext = {
     enabled: Set<string>;
-    webSocket: WebSocket | undefined;
+    webSocketServer?: CodeAgentWebSocketServer | undefined;
     nextCallId: number;
     pendingCall: Map<
         number,
@@ -44,7 +44,7 @@ type CodeActionContext = {
 async function initializeCodeContext(): Promise<CodeActionContext> {
     return {
         enabled: new Set(),
-        webSocket: undefined,
+        webSocketServer: undefined,
         nextCallId: 0,
         pendingCall: new Map(),
     };
@@ -58,49 +58,48 @@ async function updateCodeContext(
     const agentContext = context.agentContext;
     if (enable) {
         agentContext.enabled.add(schemaName);
-        if (agentContext.webSocket?.readyState === WebSocket.OPEN) {
+        if (agentContext.webSocketServer?.isConnected()) {
             return;
         }
 
-        const webSocket = await createWebSocket("code", "dispatcher");
-        if (webSocket) {
-            agentContext.webSocket = webSocket;
+        if (!context.agentContext.webSocketServer) {
+            const port = parseInt(process.env["CODE_WEBSOCKET_PORT"] || "8082");
+            const webSocketServer = new CodeAgentWebSocketServer(port);
+            agentContext.webSocketServer = webSocketServer;
             agentContext.pendingCall = new Map();
-            webSocket.onclose = (event: Object) => {
-                console.error("Code webSocket connection closed.");
-                debug(chalk.yellow("Code webSocket connection closed."));
-                agentContext.webSocket = undefined;
-            };
-            webSocket.onmessage = async (event: any) => {
-                const text = event.data.toString();
-                const data = JSON.parse(text) as WebSocketMessageV2;
 
-                if (data.id !== undefined && data.result !== undefined) {
-                    const pendingCall = agentContext.pendingCall.get(
-                        Number(data.id),
-                    );
+            webSocketServer.onMessage = (message: string) => {
+                try {
+                    const data = JSON.parse(message) as WebSocketMessageV2;
 
-                    if (pendingCall) {
-                        agentContext.pendingCall.delete(Number(data.id));
-                        const { resolve, context } = pendingCall;
-                        if (context?.actionIO) {
-                            context.actionIO.setDisplay(data.result);
+                    if (data.id !== undefined && data.result !== undefined) {
+                        const pendingCall = agentContext.pendingCall.get(
+                            Number(data.id),
+                        );
+
+                        if (pendingCall) {
+                            agentContext.pendingCall.delete(Number(data.id));
+                            const { resolve, context } = pendingCall;
+                            if (context?.actionIO) {
+                                context.actionIO.setDisplay(data.result);
+                            }
+                            resolve();
                         }
-                        resolve();
                     }
+                } catch (error) {
+                    debug("Error parsing WebSocket message:", error);
                 }
             };
-        }
-    } else {
-        agentContext.enabled.delete(schemaName);
-        if (agentContext.enabled.size === 0) {
-            const webSocket = context.agentContext.webSocket;
-            if (webSocket) {
-                webSocket.onclose = null;
-                webSocket.close();
-            }
+        } else {
+            agentContext.enabled.delete(schemaName);
+            if (agentContext.enabled.size === 0) {
+                const webSocketServer = context.agentContext.webSocketServer;
+                if (webSocketServer) {
+                    webSocketServer.close();
+                }
 
-            context.agentContext.webSocket = undefined;
+                delete context.agentContext.webSocketServer;
+            }
         }
     }
 }
@@ -180,8 +179,8 @@ async function ensureVSCodeProcess(): Promise<void> {
 async function sendPingToCodaExtension(
     agentContext: CodeActionContext,
 ): Promise<boolean> {
-    const ws = agentContext.webSocket;
-    if (!ws || ws.readyState !== 1) return false;
+    const server = agentContext.webSocketServer;
+    if (!server || !server.isConnected()) return false;
 
     const callId = agentContext.nextCallId++;
     return new Promise((resolve) => {
@@ -198,7 +197,7 @@ async function sendPingToCodaExtension(
             context: undefined as any,
         });
 
-        ws.send(
+        server.broadcast(
             JSON.stringify({
                 id: callId,
                 method: "code/ping",
@@ -219,9 +218,9 @@ export async function getActiveFileFromVSCode(
     agentContext: CodeActionContext,
     timeoutMs = 2000,
 ): Promise<ActiveFile | undefined> {
-    const ws = agentContext.webSocket;
+    const server = agentContext.webSocketServer;
 
-    if (!ws || ws.readyState !== 1 /* OPEN */) {
+    if (!server || !server.isConnected()) {
         return undefined;
     }
 
@@ -244,7 +243,7 @@ export async function getActiveFileFromVSCode(
         });
 
         try {
-            ws.send(
+            server.broadcast(
                 JSON.stringify({
                     id: callId,
                     method: "code/getActiveFile",
@@ -269,9 +268,9 @@ async function executeCodeAction(
     }
 
     const agentContext = context.sessionContext.agentContext;
-    const webSocketEndpoint = agentContext.webSocket;
+    const webSocketServer = agentContext.webSocketServer;
 
-    if (webSocketEndpoint) {
+    if (webSocketServer && webSocketServer.isConnected()) {
         try {
             const isExtensionAlive =
                 await sendPingToCodaExtension(agentContext);
@@ -287,7 +286,7 @@ async function executeCodeAction(
                     resolve,
                     context,
                 });
-                webSocketEndpoint.send(
+                webSocketServer.broadcast(
                     JSON.stringify({
                         id: callId,
                         method: `code/${action.actionName}`,
