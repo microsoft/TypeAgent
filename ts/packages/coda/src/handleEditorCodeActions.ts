@@ -20,6 +20,13 @@ import {
     triggerCopilotThenRemovePromptComment,
     placeCursorAfterCurrentFunction,
     ensureSingleBlankLineAtCursor,
+    pushEditHistory,
+    collectWorkspaceDiagnostics,
+    pickProblem,
+    applyFixProblemAlt,
+    pickProblemForFile,
+    WorkspaceDiagnostic,
+    requestCopilotFix,
 } from "./helpers";
 import {
     ensureFunctionDeclarationClosure,
@@ -739,6 +746,81 @@ export async function handleCreateCodeBlockAction(
     }
 }
 
+export async function handleFixCodeProblemAction(
+    action: any,
+): Promise<ActionResult> {
+    const { target, file } = action.parameters;
+
+    try {
+        // Resolve document
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const activeFileUri = doc.uri;
+
+        // Collect diagnostics for this file
+        const allDiagnostics: WorkspaceDiagnostic[] = vscode.languages
+            .getDiagnostics(doc.uri)
+            .map((d) => ({ uri: doc.uri, diagnostic: d }));
+
+        if (allDiagnostics.length === 0) {
+            return {
+                handled: false,
+                message: "✅ No problems found in this file.",
+            };
+        }
+
+        // Pick the problem based on the target
+        const problemToFix = pickProblemForFile(
+            editor,
+            allDiagnostics,
+            target,
+            activeFileUri,
+        ) as WorkspaceDiagnostic | undefined;
+
+        if (!problemToFix) {
+            return {
+                handled: false,
+                message: `❌ No matching problem found for target "${JSON.stringify(target)}".`,
+            };
+        }
+
+        // Apply Copilot fix
+        const { diagnostic } = problemToFix;
+        const accepted = await requestCopilotFix(editor, diagnostic);
+
+        if (!accepted) {
+            return {
+                handled: false,
+                message: "❌ Copilot did not provide a fix.",
+            };
+        }
+
+        return {
+            handled: true,
+            message: `🔧 Fixed problem at ${activeFileUri.fsPath}:${diagnostic.range.start.line + 1}`,
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Error handling fixProblem: ${err.message}`,
+        };
+    }
+}
+
 export async function handleEditorCodeActions(
     action: any,
 ): Promise<ActionResult> {
@@ -769,6 +851,10 @@ export async function handleEditorCodeActions(
 
         case "createCodeBlock":
             actionResult = await handleCreateCodeBlockAction(action);
+            break;
+
+        case "fixCodeProblem":
+            actionResult = await handleFixCodeProblemAction(action);
             break;
 
         default:
