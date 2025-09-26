@@ -6,32 +6,21 @@ using System.Text.Json.Nodes;
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteMessageCollectionBase
-{
-    internal SqliteDatabase _db;
-
-    internal SqliteMessageCollectionBase(SqliteDatabase db)
-    {
-        ArgumentVerify.ThrowIfNull(db, nameof(db));
-        _db = db;
-    }
-}
-
 /// <summary>
 /// Schema is in SqliteStorageProviderSchema.cs
 /// </summary>
 /// <typeparam name="TMessage"></typeparam>
-public class SqliteMessageCollection<TMessage, TMeta> :
-    SqliteMessageCollectionBase,
-    IMessageCollection<TMessage>
+public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMessage>
     where TMessage : class, IMessage, new()
     where TMeta : IMessageMetadata
 {
+    SqliteDatabase _db;
     private int _count = -1;
 
     public SqliteMessageCollection(SqliteDatabase db)
-        : base(db)
     {
+        ArgumentVerify.ThrowIfNull(db, nameof(db));
+        _db = db;
     }
 
     public bool IsPersistent => true;
@@ -217,14 +206,16 @@ internal class MessageRow
     }
 }
 
-public class SqliteMessageCollection : SqliteMessageCollectionBase, IReadOnlyMessageCollection
+public class SqliteMessageCollection : IReadOnlyMessageCollection
 {
+    SqliteDatabase _db;
     Type _messageType;
     Type _metadataType;
 
     public SqliteMessageCollection(SqliteDatabase db, Type messageType, Type metadataType)
-        : base(db)
     {
+        ArgumentVerify.ThrowIfNull(db, nameof(db));
+        _db = db;
         _messageType = messageType;
         _metadataType = metadataType;
     }
