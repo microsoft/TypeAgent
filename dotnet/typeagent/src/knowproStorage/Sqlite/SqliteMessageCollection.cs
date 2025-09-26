@@ -104,7 +104,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public async IAsyncEnumerator<TMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        await foreach(var message in MessagesTable.GetAllMessagesAsync(_db, cancellationToken))
+        await foreach (var message in MessagesTable.GetAllMessagesAsync(_db, cancellationToken))
         {
             yield return FromMessageRow(message);
         }
@@ -201,7 +201,7 @@ internal class MessageRow
 
 }
 
-public class SqliteMessageCollection : IReadOnlyMessageCollection
+public class SqliteMessageCollection : IMessageCollection
 {
     SqliteDatabase _db;
     Type _messageType;

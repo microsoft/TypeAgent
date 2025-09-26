@@ -8,7 +8,7 @@ public interface IMessageCollection<TMessage> : IAsyncCollection<TMessage>
 {
 }
 
-public interface IReadOnlyMessageCollection : IReadOnlyAsyncCollection<IMessage>
+public interface IMessageCollection : IReadOnlyAsyncCollection<IMessage>
 {
 
 }

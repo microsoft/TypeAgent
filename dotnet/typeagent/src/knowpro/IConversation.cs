@@ -24,3 +24,15 @@ public interface IConversation<TMessage>
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
 }
+
+
+public interface IConversation
+{
+    IMessageCollection Messages { get; }
+
+    ISemanticRefCollection SemanticRefs { get; }
+
+    ITermToSemanticRefIndex SemanticRefIndex { get; }
+
+    IConversationSecondaryIndexes SecondaryIndexes { get; }
+}

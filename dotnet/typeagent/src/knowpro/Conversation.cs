@@ -10,7 +10,7 @@ public class Conversation<TMessage> : IConversation<TMessage>
 
     public Conversation(IStorageProvider<TMessage> provider)
         : this(
-              provider.Messages,
+              provider.TypedMessages,
               provider.SemanticRefs,
               provider.SemanticRefIndex,
               provider.SecondaryIndexes
@@ -48,6 +48,22 @@ public class Conversation<TMessage> : IConversation<TMessage>
     public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 
     public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
+
+    public static implicit operator Conversation(Conversation<TMessage> conversation)
+    {
+        return new Conversation();
+    }
+}
+
+public class Conversation : IConversation
+{
+    public IMessageCollection Messages => throw new NotImplementedException();
+
+    public ISemanticRefCollection SemanticRefs => throw new NotImplementedException();
+
+    public ITermToSemanticRefIndex SemanticRefIndex => throw new NotImplementedException();
+
+    public IConversationSecondaryIndexes SecondaryIndexes => throw new NotImplementedException();
 }
 
 public class ConversationSecondaryIndexes : IConversationSecondaryIndexes

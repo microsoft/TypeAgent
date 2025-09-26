@@ -3,11 +3,17 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface IStorageProvider<TMessage>
-    where TMessage : IMessage
+public interface IStorageProvider
 {
-    IMessageCollection<TMessage> Messages { get; }
+    IMessageCollection Messages { get; }
     ISemanticRefCollection SemanticRefs { get; }
     ITermToSemanticRefIndex SemanticRefIndex { get; }
     IConversationSecondaryIndexes SecondaryIndexes { get; }
+
+}
+
+public interface IStorageProvider<TMessage> : IStorageProvider
+    where TMessage : IMessage
+{
+    IMessageCollection<TMessage> TypedMessages { get; }
 }

@@ -36,7 +36,7 @@ public class PodcastCommands : ICommandModule
 
     private void Test(ParseResult args)
     {
-        foreach(var token in args.UnmatchedTokens)
+        foreach (var token in args.UnmatchedTokens)
         {
             Console.WriteLine(token);
         }
@@ -95,7 +95,7 @@ public class PodcastCommands : ICommandModule
             //var message = await provider.MessagesReadOnly.GetAsync(i, cancellationToken);
             KnowProWriter.WriteJson(message);
         }*/
-        await foreach(var message in podcast.Messages)
+        await foreach (var message in provider.Messages)
         {
             KnowProWriter.WriteJson(message);
         }
