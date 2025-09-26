@@ -15,29 +15,6 @@ public class SqliteMessageCollectionBase
         ArgumentVerify.ThrowIfNull(db, nameof(db));
         _db = db;
     }
-
-    internal SqliteCommand CreateGetSliceCommand(int startOrdinal, int endOrdinal)
-    {
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(startOrdinal);
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(endOrdinal);
-        ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
-
-        var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
-ORDER BY msg_id");
-        try
-        {
-            cmd.AddParameter("@start_id", startOrdinal);
-            cmd.AddParameter("@end_id", endOrdinal);
-        }
-        catch
-        {
-            cmd.Dispose();
-            throw;
-        }
-        return cmd;
-    }
 }
 
 /// <summary>
@@ -144,15 +121,14 @@ public class SqliteMessageCollection<TMessage, TMeta> :
         }
     }
 
-    public Task<IList<TMessage>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default)
+    public IList<TMessage> GetSlice(int startOrdinal, int endOrdinal)
     {
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(start);
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(end);
-        ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
+        return MessagesTable.GetSlice(_db, startOrdinal, endOrdinal).Map(FromMessageRow);
+    }
 
-        using var cmd = CreateGetSliceCommand(start, end);
-        using var reader = cmd.ExecuteReader();
-        var messageList = reader.GetList(ReadMessage);
+    public Task<IList<TMessage>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    {
+        var messageList = GetSlice(startOrdinal, endOrdinal);
         return Task.FromResult(messageList);
     }
 
@@ -293,22 +269,21 @@ public class SqliteMessageCollection : SqliteMessageCollectionBase, IReadOnlyMes
 
     public async IAsyncEnumerator<IMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        await foreach(var messageRow in MessagesTable.GetAllMessagesAsync(_db, cancellationToken))
+        await foreach (var messageRow in MessagesTable.GetAllMessagesAsync(_db, cancellationToken))
         {
             IMessage message = FromMessageRow(messageRow);
             yield return message;
         }
     }
 
-    public Task<IList<IMessage>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default)
+    public IList<IMessage> GetSlice(int startOrdinal, int endOrdinal)
     {
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(start);
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(end);
-        ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
+        return MessagesTable.GetSlice(_db, startOrdinal, endOrdinal).Map(FromMessageRow);
+    }
 
-        using var cmd = CreateGetSliceCommand(start, end);
-        using var reader = cmd.ExecuteReader();
-        var messageList = reader.GetList(ReadMessage);
+    public Task<IList<IMessage>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    {
+        var messageList = GetSlice(startOrdinal, endOrdinal);
         return Task.FromResult(messageList);
     }
 
@@ -372,6 +347,25 @@ SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
 FROM Messages ORDER BY msg_id",
             ReadMessageRow,
             cancellation
+        );
+    }
+
+    public static IEnumerable<MessageRow> GetSlice(SqliteDatabase db, int startOrdinal, int endOrdinal)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(startOrdinal);
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(endOrdinal);
+        ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
+
+        return db.Enumerate(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
+ORDER BY msg_id",
+            (cmd) =>
+            {
+                cmd.AddParameter("@start_id", startOrdinal);
+                cmd.AddParameter("@end_id", endOrdinal);
+            },
+            ReadMessageRow
         );
     }
 

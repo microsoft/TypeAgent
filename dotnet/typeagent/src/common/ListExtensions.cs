@@ -51,18 +51,4 @@ public static class ListExtensions
             list.RemoveAt(0);
         }
     }
-
-    public static IList<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
-    {
-        ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
-
-        List<TResult> results = [];
-        int count = list.Count;
-        for (int i = 0; i < count; ++i)
-        {
-            results.Add(mapFn(list[i]));
-        }
-        return results;
-    }
-
 }
