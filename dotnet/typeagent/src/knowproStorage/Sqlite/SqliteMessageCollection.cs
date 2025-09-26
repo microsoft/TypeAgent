@@ -6,21 +6,45 @@ using System.Text.Json.Nodes;
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
+public class SqliteMessageCollectionBase
+{
+    internal SqliteDatabase _db;
+
+    internal SqliteMessageCollectionBase(SqliteDatabase db)
+    {
+        ArgumentVerify.ThrowIfNull(db, nameof(db));
+        _db = db;
+    }
+
+    internal SqliteCommand CreateGetCommand(int msgId)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
+
+        var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id = @msg_id"
+        );
+        cmd.Parameters.AddWithValue("@msg_id", msgId);
+        return cmd;
+    }
+
+}
+
 /// <summary>
 /// Schema is in SqliteStorageProviderSchema.cs
 /// </summary>
 /// <typeparam name="TMessage"></typeparam>
-public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMessage>
+public class SqliteMessageCollection<TMessage, TMeta> :
+    SqliteMessageCollectionBase,
+    IMessageCollection<TMessage>
     where TMessage : class, IMessage, new()
     where TMeta : IMessageMetadata
 {
-    private SqliteDatabase _db;
     private int _count = -1;
 
     public SqliteMessageCollection(SqliteDatabase db)
+        : base(db)
     {
-        ArgumentVerify.ThrowIfNull(db, nameof(db));
-        _db = db;
     }
 
     public bool IsPersistent => true;
@@ -49,7 +73,8 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
            @"INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
           VALUES (@msg_id, @chunks, @chunk_uri, @start_timestamp, @tags, @metadata, @extra);"
         );
-        WriteMessageRow(cmd, GetNextMessageId(), messageRow);
+        messageRow.Write(cmd, GetNextMessageId());
+
         int rowCount = cmd.ExecuteNonQuery();
         if (rowCount > 0)
         {
@@ -77,14 +102,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public TMessage Get(int msgId)
     {
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
-
-        using var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages WHERE msg_id = @msg_id"
-        );
-        cmd.Parameters.AddWithValue("@msg_id", msgId);
-
+        using var cmd = CreateGetCommand(msgId);
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
         {
@@ -190,28 +208,7 @@ ORDER BY msg_id");
 
     MessageRow ReadMessageRow(SqliteDataReader reader)
     {
-        MessageRow row = new MessageRow();
-
-        int iCol = 0;
-        row.ChunksJson = reader.GetStringOrNull(iCol++);
-        row.ChunkUri = reader.GetStringOrNull(iCol++);
-        row.StartTimestamp = reader.GetStringOrNull(iCol++);
-        row.TagsJson = reader.GetStringOrNull(iCol++);
-        row.MetadataJson = reader.GetStringOrNull(iCol++);
-        row.ExtraJson = reader.GetStringOrNull(iCol);
-
-        return row;
-    }
-
-    void WriteMessageRow(SqliteCommand cmd, int messageId, MessageRow messageRow)
-    {
-        cmd.AddParameter("@msg_id", messageId);
-        cmd.AddParameter("@chunks", messageRow.ChunksJson);
-        cmd.AddParameter("@chunk_uri", messageRow.ChunkUri);
-        cmd.AddParameter("@start_timestamp", messageRow.StartTimestamp);
-        cmd.AddParameter("@tags", messageRow.TagsJson);
-        cmd.AddParameter("@metadata", messageRow.MetadataJson);
-        cmd.AddParameter("@extra", messageRow.ExtraJson);
+        return new MessageRow().Read(reader);
     }
 }
 
@@ -223,17 +220,40 @@ internal class MessageRow
     public string? TagsJson { get; set; }
     public string? MetadataJson { get; set; }
     public string? ExtraJson { get; set; }
+
+    public MessageRow Read(SqliteDataReader reader)
+    {
+        int iCol = 0;
+        ChunksJson = reader.GetStringOrNull(iCol++);
+        ChunkUri = reader.GetStringOrNull(iCol++);
+        StartTimestamp = reader.GetStringOrNull(iCol++);
+        TagsJson = reader.GetStringOrNull(iCol++);
+        MetadataJson = reader.GetStringOrNull(iCol++);
+        ExtraJson = reader.GetStringOrNull(iCol);
+
+        return this;
+    }
+
+    public void Write(SqliteCommand cmd, int messageId)
+    {
+        cmd.AddParameter("@msg_id", messageId);
+        cmd.AddParameter("@chunks", ChunksJson);
+        cmd.AddParameter("@chunk_uri", ChunkUri);
+        cmd.AddParameter("@start_timestamp", StartTimestamp);
+        cmd.AddParameter("@tags", TagsJson);
+        cmd.AddParameter("@metadata", MetadataJson);
+        cmd.AddParameter("@extra", ExtraJson);
+    }
 }
 
-public class SqliteMessageCollection : IReadOnlyMessageCollection
+public class SqliteMessageCollection : SqliteMessageCollectionBase, IReadOnlyMessageCollection
 {
-    SqliteDatabase _db;
     Type _messageType;
     Type _metadataType;
 
     public SqliteMessageCollection(SqliteDatabase db, Type messageType, Type metadataType)
+        : base(db)
     {
-        _db = db;
         _messageType = messageType;
         _metadataType = metadataType;
     }
@@ -252,14 +272,7 @@ public class SqliteMessageCollection : IReadOnlyMessageCollection
 
     public IMessage Get(int msgId)
     {
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
-
-        using var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages WHERE msg_id = @msg_id"
-        );
-        cmd.Parameters.AddWithValue("@msg_id", msgId);
-
+        using var cmd = CreateGetCommand(msgId);
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
         {
@@ -349,16 +362,6 @@ ORDER BY msg_id");
 
     MessageRow ReadMessageRow(SqliteDataReader reader)
     {
-        MessageRow row = new MessageRow();
-
-        int iCol = 0;
-        row.ChunksJson = reader.GetStringOrNull(iCol++);
-        row.ChunkUri = reader.GetStringOrNull(iCol++);
-        row.StartTimestamp = reader.GetStringOrNull(iCol++);
-        row.TagsJson = reader.GetStringOrNull(iCol++);
-        row.MetadataJson = reader.GetStringOrNull(iCol++);
-        row.ExtraJson = reader.GetStringOrNull(iCol);
-
-        return row;
+        return new MessageRow().Read(reader);
     }
 }
