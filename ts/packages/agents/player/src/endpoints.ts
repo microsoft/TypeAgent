@@ -588,11 +588,12 @@ export async function getRecommendationsFromTracks(
 export async function getRecommendationsFromTrackCollection(
     service: SpotifyService,
     trackCollection: { getTracks(): SpotifyApi.TrackObjectFull[] },
+    startIndex = 0,
     limit = 20,
 ) {
     const seedTracks = trackCollection
         .getTracks()
-        .slice(0, 5)
+        .slice(startIndex, startIndex + 5)
         .map((track) => track.id);
     return getRecommendations(service, { seed_tracks: seedTracks, limit });
 }
