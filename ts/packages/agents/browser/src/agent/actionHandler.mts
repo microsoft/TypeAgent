@@ -2337,14 +2337,6 @@ async function openWebPage(
     // Start knowledge extraction directly (dedupe cache will prevent duplicates from navigation handler)
     if (await shouldRunKnowledgeExtraction(url, context)) {
         const browserSettings = await browserControl.getBrowserSettings();
-        // Wait for page to load based on indexingDelay
-
-        if (browserSettings.indexingDelay > 0) {
-            await new Promise((resolve) =>
-                setTimeout(resolve, browserSettings.indexingDelay),
-            );
-        }
-
         try {
             const extractionInfo = await performKnowledgeExtraction(
                 url,
@@ -2975,9 +2967,6 @@ async function handlePageNavigation(
     const { url, title } = params;
 
     try {
-        // Send simple navigation notification
-        context.notify(AppAgentEvent.Inline, `Navigated to "${title}"`);
-
         // Normalize URL for consistent checking (keep query params)
         const normalizedUrl = normalizeUrlForIndex(url);
 
@@ -3035,12 +3024,6 @@ async function handlePageNavigation(
                         },
                         "block",
                     );
-                } else {
-                    // Use notification when no ActionContext available
-                    context.notify(
-                        AppAgentEvent.Inline,
-                        `Using cached knowledge for ${url}: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships`,
-                    );
                 }
             } else if (cachedContext) {
                 displayStatus(
@@ -3073,6 +3056,12 @@ async function handlePageNavigation(
         if (!shouldExtract) {
             return;
         }
+
+        // Send simple navigation notification
+        context.notify(
+            AppAgentEvent.Inline,
+            `Navigated to "${title}". Analyzing the page ...`,
+        );
 
         // Check for existing knowledge in index before starting new extraction
         const existingKnowledge = await checkKnowledgeInIndex(url, context);
@@ -3767,184 +3756,6 @@ class ExtractKnowledgeHandler implements CommandHandlerNoParams {
     }
 }
 
-// Command handlers for auto-indexing management
-class AutoIndexStatusHandler implements CommandHandlerNoParams {
-    public readonly description = "Check auto-indexing status";
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-    ): Promise<void> {
-        let browserControl;
-        let settings;
-
-        try {
-            browserControl = getActionBrowserControl(context);
-            settings = await browserControl.getBrowserSettings();
-        } catch (error) {
-            displayError(
-                "Browser control is not available. Please ensure a browser session is active.",
-                context,
-            );
-            return;
-        }
-
-        const statusIcon = settings.autoIndexing ? "✅" : "❌";
-        const statusText = settings.autoIndexing ? "Enabled" : "Disabled";
-        const delayText = `${settings.indexingDelay}ms`;
-        const modeText = settings.extractionMode;
-
-        context.actionIO.setDisplay({
-            type: "html",
-            content: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 12px; background: #f8f9fa; border-radius: 4px;">
-                <div style="font-weight: 600; margin-bottom: 8px;">📊 Auto-Indexing Status</div>
-                <div style="margin: 4px 0;"><strong>Status:</strong> ${statusIcon} ${statusText}</div>
-                <div style="margin: 4px 0;"><strong>Delay:</strong> ${delayText}</div>
-                <div style="margin: 4px 0;"><strong>Mode:</strong> ${modeText}</div>
-                <div style="margin-top: 8px; font-size: 12px; color: #6c757d;">
-                    Use <code>@browser autoIndex on/off</code> to toggle auto-indexing
-                </div>
-            </div>
-            `,
-        });
-    }
-}
-
-class AutoIndexOnHandler implements CommandHandlerNoParams {
-    public readonly description = "Enable auto-indexing";
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-    ): Promise<void> {
-        let browserControl;
-        let currentSettings;
-
-        try {
-            browserControl = getActionBrowserControl(context);
-            currentSettings = await browserControl.getBrowserSettings();
-        } catch (error) {
-            displayError(
-                "Browser control is not available. Please ensure a browser session is active.",
-                context,
-            );
-            return;
-        }
-
-        if (currentSettings.autoIndexing) {
-            displayStatus("Auto-indexing is already enabled", context);
-            return;
-        }
-
-        displayError(
-            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
-            context,
-        );
-    }
-}
-
-class AutoIndexOffHandler implements CommandHandlerNoParams {
-    public readonly description = "Disable auto-indexing";
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-    ): Promise<void> {
-        let browserControl;
-        let currentSettings;
-
-        try {
-            browserControl = getActionBrowserControl(context);
-            currentSettings = await browserControl.getBrowserSettings();
-        } catch (error) {
-            displayError(
-                "Browser control is not available. Please ensure a browser session is active.",
-                context,
-            );
-            return;
-        }
-
-        if (!currentSettings.autoIndexing) {
-            displayStatus("Auto-indexing is already disabled", context);
-            return;
-        }
-
-        displayError(
-            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
-            context,
-        );
-    }
-}
-
-class AutoIndexDelayHandler implements CommandHandler {
-    public readonly description = "Set auto-indexing delay in milliseconds";
-    public readonly parameters = {
-        args: {
-            delay: {
-                description: "Delay in milliseconds (0-30000)",
-                type: "number" as const,
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-        params: any,
-    ): Promise<void> {
-        let browserControl;
-
-        try {
-            browserControl = getActionBrowserControl(context);
-            await browserControl.getBrowserSettings();
-        } catch (error) {
-            displayError(
-                "Browser control is not available. Please ensure a browser session is active.",
-                context,
-            );
-            return;
-        }
-
-        displayError(
-            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
-            context,
-        );
-    }
-}
-
-class AutoIndexModeHandler implements CommandHandler {
-    public readonly description = "Set extraction mode for auto-indexing";
-    public readonly parameters = {
-        args: {
-            mode: {
-                description:
-                    "Extraction mode (smart, full, minimal, content, basic)",
-                type: "string" as const,
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-        params: any,
-    ): Promise<void> {
-        let browserControl;
-
-        try {
-            browserControl = getActionBrowserControl(context);
-            await browserControl.getBrowserSettings();
-        } catch (error) {
-            displayError(
-                "Browser control is not available. Please ensure a browser session is active.",
-                context,
-            );
-            return;
-        }
-
-        displayError(
-            "Auto-indexing settings cannot be modified from this interface. Settings are read-only.",
-            context,
-        );
-    }
-}
-
 async function handleWebsiteAction(
     actionName: string,
     parameters: any,
@@ -4395,17 +4206,6 @@ export const handlers: CommandHandlerTable = {
             },
         },
         extractKnowledge: new ExtractKnowledgeHandler(),
-        autoIndex: {
-            description: "Control automatic knowledge indexing",
-            defaultSubCommand: "status",
-            commands: {
-                status: new AutoIndexStatusHandler(),
-                on: new AutoIndexOnHandler(),
-                off: new AutoIndexOffHandler(),
-                delay: new AutoIndexDelayHandler(),
-                mode: new AutoIndexModeHandler(),
-            },
-        },
         search: new SearchProviderCommandHandlerTable(),
     },
 };

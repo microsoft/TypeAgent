@@ -43,6 +43,15 @@ public static class ListExtensions
     {
         return list.Slice(startAt, list.Count - startAt);
     }
+
+    public static void Shift<T>(this IList<T> list)
+    {
+        if (list.Count > 0)
+        {
+            list.RemoveAt(0);
+        }
+    }
+
     public static IList<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
@@ -55,4 +64,5 @@ public static class ListExtensions
         }
         return results;
     }
+
 }

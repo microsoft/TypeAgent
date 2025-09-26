@@ -2,7 +2,6 @@
 @session new --memory
 @config action -*
 @config schema -* player calendar
-@config serviceHost off
 
 # Initialize context
 Tell me about the phrase "Why birds suddenly appear every time you are near"?

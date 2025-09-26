@@ -1,7 +1,6 @@
 # ====== Init =======
 @config action -* player calendar
 @config schema -* player calendar
-@config serviceHost off
 
 # -------------------------------------
 # Player scenario and explanation

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 export interface ExpandableTextareaHandlers {
-    onSend: (html: string) => void;
+    onSend?: (html: string) => void;
     onChange?: (eta: ExpandableTextArea, isInput: boolean) => void;
     onKeydown?: (eta: ExpandableTextArea, event: KeyboardEvent) => boolean;
     onMouseWheel?: (eta: ExpandableTextArea, event: WheelEvent) => void;
@@ -133,10 +133,13 @@ export class ExpandableTextArea {
         return lastChild;
     }
 
-    send(sendButton?: HTMLButtonElement) {
+    public send(sendButton?: HTMLButtonElement) {
         const html = this.getTextEntry().innerHTML;
         if (html.length > 0) {
-            this.entryHandlers?.onSend(html);
+            if (this.entryHandlers !== undefined) {
+                this.entryHandlers.onSend?.(html);
+            }
+
             this.setTextContent();
             if (sendButton) {
                 sendButton.disabled = true;
@@ -146,5 +149,35 @@ export class ExpandableTextArea {
 
     public focus() {
         setTimeout(() => this.textEntry.focus(), 0);
+    }
+
+    public set onSend(handler: (html: string) => void) {
+        if (this.entryHandlers !== undefined) {
+            this.entryHandlers.onSend = handler;
+        }
+    }
+
+    public set onChange(
+        handler: (eta: ExpandableTextArea, isInput: boolean) => void,
+    ) {
+        if (this.entryHandlers !== undefined) {
+            this.entryHandlers.onChange = handler;
+        }
+    }
+
+    public set onMouseWheel(
+        handler: (eta: ExpandableTextArea, event: WheelEvent) => void,
+    ) {
+        if (this.entryHandlers !== undefined) {
+            this.entryHandlers.onMouseWheel = handler;
+        }
+    }
+
+    public set onKeydown(
+        handler: (eta: ExpandableTextArea, event: KeyboardEvent) => boolean,
+    ) {
+        if (this.entryHandlers !== undefined) {
+            this.entryHandlers.onKeydown = handler;
+        }
     }
 }

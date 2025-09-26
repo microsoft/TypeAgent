@@ -200,23 +200,25 @@ export class SettingsView {
 
         const updateInputs = () => {
             if (this.shellSettings.multiModalContent) {
-                chatView.chatInput.camButton.classList.remove(
+                chatView.chatInput?.camButton.classList.remove(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.attachButton.classList.remove(
+                chatView.chatInput?.attachButton.classList.remove(
                     "chat-message-hidden",
                 );
             } else {
-                chatView.chatInput.camButton.classList.add(
+                chatView.chatInput?.camButton.classList.add(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.attachButton.classList.add(
+                chatView.chatInput?.attachButton.classList.add(
                     "chat-message-hidden",
                 );
             }
 
-            chatView.chatInput.dragEnabled =
-                this.shellSettings.multiModalContent;
+            if (chatView.chatInput !== undefined) {
+                chatView.chatInput.dragEnabled =
+                    this.shellSettings.multiModalContent;
+            }
         };
 
         const updateTTSSelections = async () =>

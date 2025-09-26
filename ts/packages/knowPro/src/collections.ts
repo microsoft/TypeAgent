@@ -150,20 +150,6 @@ export class MatchAccumulator<T = any> {
         return intersection;
     }
 
-    public intersectIter(
-        other: IterableIterator<Match<T>> | Array<Match<T>>,
-        intersection: MatchAccumulator,
-    ): MatchAccumulator {
-        for (const otherMatch of other) {
-            const thisMatch = this.getMatch(otherMatch.value);
-            if (thisMatch) {
-                this.combineMatches(thisMatch, otherMatch);
-                intersection.setMatch(thisMatch);
-            }
-        }
-        return intersection;
-    }
-
     private combineMatches(match: Match, other: Match) {
         match.hitCount += other.hitCount;
         match.score += other.score;
