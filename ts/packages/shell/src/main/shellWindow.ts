@@ -367,6 +367,7 @@ export class ShellWindow {
     public startChatServer(port: number) {
         if (this.chatViewServer !== undefined) {
             debugShellWindow("Chat server already started");
+            return;
         }
 
         if (port > 0) {

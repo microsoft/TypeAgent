@@ -125,9 +125,24 @@ export async function awaitPageLoad() {
     /*
     return new Promise<string | undefined>((resolve, reject) => {
         // use window API to await pageload
-        
+
     });
     */
+}
+
+export async function awaitPageIncrementalLoad(): Promise<boolean> {
+    try {
+        const result = await sendScriptAction(
+            {
+                type: "await_page_incremental_load",
+            },
+            5000,
+        );
+        return result === "true";
+    } catch (error) {
+        console.error("Content script page load detection failed:", error);
+        return true; // fallback - assume page is ready
+    }
 }
 
 export async function getTabHTMLFragments(
