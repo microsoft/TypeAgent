@@ -866,6 +866,78 @@ export async function handleMoveCursorInFileAction(
     }
 }
 
+export async function handleUpsertLinesAction(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        operation,
+        count = 1,
+        position = { type: "atCursor" },
+        file,
+        force = true,
+    } = action.parameters;
+
+    try {
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const pos = resolvePosition(editor, position);
+        let targetLine = pos.line;
+
+        await editor.edit((editBuilder) => {
+            if (operation === "insert") {
+                // Insert N empty lines
+                const emptyLines = Array(count).fill("").join("\n") + "\n";
+                editBuilder.insert(
+                    new vscode.Position(targetLine, 0),
+                    emptyLines,
+                );
+            } else if (operation === "delete") {
+                // Delete N lines starting from target line
+                const startLine = targetLine;
+                const endLine = Math.min(startLine + count, doc.lineCount);
+
+                for (let i = startLine; i < endLine; i++) {
+                    if (i < doc.lineCount) {
+                        const line = doc.lineAt(i);
+                        if (force || line.isEmptyOrWhitespace) {
+                            editBuilder.delete(line.rangeIncludingLineBreak);
+                        }
+                    }
+                }
+            }
+        });
+
+        return {
+            handled: true,
+            message:
+                operation === "insert"
+                    ? `➕ Inserted ${count} empty line(s).`
+                    : force
+                      ? `🗑️ Deleted ${count} line(s) (force).`
+                      : `➖ Deleted up to ${count} empty line(s).`,
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Error modifying empty lines: ${err.message}`,
+        };
+    }
+}
+
 export async function handleEditorCodeActions(
     action: any,
 ): Promise<ActionResult> {
@@ -904,6 +976,10 @@ export async function handleEditorCodeActions(
 
         case "moveCursorInFile":
             actionResult = await handleMoveCursorInFileAction(action);
+            break;
+
+        case "insertOrDeleteLines":
+            actionResult = await handleUpsertLinesAction(action);
             break;
 
         default:
