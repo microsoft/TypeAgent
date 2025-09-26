@@ -2,7 +2,6 @@
 @session new --memory
 @config action -* player calendar
 @config schema -* player calendar
-@config serviceHost off
 
 # =============================================
 # Demonstrate dynamic creation of constructions

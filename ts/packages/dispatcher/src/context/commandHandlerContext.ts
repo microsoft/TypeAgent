@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChildProcess } from "child_process";
 import { DeepPartialUndefined, Limiter, createLimiter } from "common-utils";
 import {
     ChildLogger,
@@ -28,7 +27,6 @@ import {
 } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
-import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
 import { ClientIO, nullClientIO, RequestId } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 
@@ -133,7 +131,6 @@ export type CommandHandlerContext = {
     agentCache: AgentCache;
     currentScriptDir: string;
     logger?: Logger | undefined;
-    serviceHost: ChildProcess | undefined;
     requestId?: RequestId;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
@@ -220,7 +217,6 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
 
     // Additional integration options
     agentInstaller?: AppAgentInstaller;
-    enableServiceHost?: boolean; // default to false,
     constructionProvider?: ConstructionProvider;
     explanationAsynchronousMode?: boolean; // default to true
 
@@ -427,11 +423,6 @@ export async function initializeCommandHandlerContext(
             activationId: randomUUID(),
         });
 
-        var serviceHost = undefined;
-        if (options?.enableServiceHost) {
-            serviceHost = await createServiceHost();
-        }
-
         const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;
         const embeddingCacheDir = options?.embeddingCacheDir;
         if (embeddingCacheDir) {
@@ -472,7 +463,6 @@ export async function initializeCommandHandlerContext(
                 session.getConfig().execution.history,
             ),
             logger,
-            serviceHost,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             batchMode: false,
             instanceDirLock,
@@ -585,7 +575,6 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
-    context.serviceHost?.kill();
     // Save the session because the token count is in it.
     context.session.save();
     await context.agents.close();

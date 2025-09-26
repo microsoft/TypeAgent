@@ -83,7 +83,6 @@ export default class Interactive extends Command {
                 explainer: { name: flags.explainer },
                 persistSession: !flags.memory,
                 persistDir: !flags.memory ? getInstanceDir() : undefined,
-                enableServiceHost: true,
                 clientIO,
                 dblogging: true,
                 indexingServiceRegistry: await getIndexingServiceRegistry(

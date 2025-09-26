@@ -130,7 +130,6 @@ async function initializeDispatcher(
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
             persistSession: true,
             persistDir: instanceDir,
-            enableServiceHost: true,
             metrics: true,
             dblogging: true,
             clientId: getClientId(),
