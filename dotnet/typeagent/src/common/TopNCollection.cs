@@ -144,7 +144,7 @@ public class TopNCollection<T>
 
     private void EnsureInitialized()
     {
-        if(_items is null)
+        if (_items is null)
         {
             _items = [];
             _items.Add(new ScoredItem<T>() { Score = double.MinValue, Item = default });

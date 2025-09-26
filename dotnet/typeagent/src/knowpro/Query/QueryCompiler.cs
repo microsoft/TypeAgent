@@ -4,7 +4,7 @@
 namespace TypeAgent.KnowPro.Query;
 
 internal class QueryCompiler<TMessage>
-    where TMessage : IMessage
+    where TMessage: IMessage
 {
     private IConversation<TMessage> _conversation;
 
