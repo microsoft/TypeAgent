@@ -29,7 +29,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
     {
         if (_count < 0)
         {
-            _count = _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
+            _count = MessagesTable.GetCount(_db);
         }
         return _count;
     }
@@ -126,12 +126,6 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return GetCount();
     }
 
-    TMessage ReadMessage(SqliteDataReader reader)
-    {
-        MessageRow messageRow = ReadMessageRow(reader);
-        return FromMessageRow(messageRow);
-    }
-
     MessageRow ToMessageRow(TMessage message)
     {
         MessageRow messageRow = new();
@@ -165,11 +159,6 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
         return message;
     }
-
-    MessageRow ReadMessageRow(SqliteDataReader reader)
-    {
-        return new MessageRow().Read(reader);
-    }
 }
 
 internal class MessageRow
@@ -193,6 +182,10 @@ internal class MessageRow
 
         return this;
     }
+    public static MessageRow ReadNew(SqliteDataReader reader)
+    {
+        return new MessageRow().Read(reader);
+    }
 
     public void Write(SqliteCommand cmd, int messageId)
     {
@@ -204,6 +197,8 @@ internal class MessageRow
         cmd.AddParameter("@metadata", MetadataJson);
         cmd.AddParameter("@extra", ExtraJson);
     }
+
+
 }
 
 public class SqliteMessageCollection : IReadOnlyMessageCollection
@@ -222,10 +217,7 @@ public class SqliteMessageCollection : IReadOnlyMessageCollection
 
     public bool IsPersistent => true;
 
-    public int GetCount()
-    {
-        return _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
-    }
+    public int GetCount() => MessagesTable.GetCount(_db);
 
     public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
@@ -278,12 +270,6 @@ public class SqliteMessageCollection : IReadOnlyMessageCollection
         return Task.FromResult(messageList);
     }
 
-    IMessage ReadMessage(SqliteDataReader reader)
-    {
-        MessageRow messageRow = ReadMessageRow(reader);
-        return FromMessageRow(messageRow);
-    }
-
     IMessage FromMessageRow(MessageRow messageRow)
     {
         IMessage message = (IMessage)Activator.CreateInstance(_messageType);
@@ -301,16 +287,16 @@ public class SqliteMessageCollection : IReadOnlyMessageCollection
 
         return message;
     }
-
-    MessageRow ReadMessageRow(SqliteDataReader reader)
-    {
-        return new MessageRow().Read(reader);
-    }
 }
 
 
 internal static class MessagesTable
 {
+    public static int GetCount(SqliteDatabase db)
+    {
+        return db.GetCount(SqliteStorageProviderSchema.MessagesTable);
+    }
+
     public static MessageRow GetMessage(SqliteDatabase db, int msgId)
     {
         KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
