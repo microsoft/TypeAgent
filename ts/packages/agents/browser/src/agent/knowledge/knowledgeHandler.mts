@@ -1166,6 +1166,26 @@ export async function indexWebPageContent(
             } catch (error) {
                 console.error("Error persisting website collection:", error);
             }
+
+            try {
+                if (aggregatedResults.entities?.length > 0) {
+                    await context.agentContext.websiteCollection.updateGraph([
+                        websiteObj,
+                    ]);
+                    debug(
+                        `Updated knowledge graph with ${aggregatedResults.entities.length} entities from ${parameters.url}`,
+                    );
+                } else {
+                    debug(
+                        `Skipped graph update for ${parameters.url} - no entities extracted`,
+                    );
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to update knowledge graph incrementally:",
+                    error,
+                );
+            }
         }
 
         const entityCount = aggregatedResults.entities?.length || 0;
