@@ -41,6 +41,11 @@ public class Serializer
         return JsonSerializer.Deserialize<T>(json, s_options);
     }
 
+    public static object? FromJson(string json, Type type)
+    {
+        return JsonSerializer.Deserialize(json, type, s_options);
+    }
+
     public static T FromJsonElement<T>(JsonElement json)
     {
         return json.Deserialize<T>( s_options);

@@ -7,3 +7,8 @@ public interface IMessageCollection<TMessage> : IAsyncCollection<TMessage>
     where TMessage : IMessage
 {
 }
+
+public interface IReadOnlyMessageCollection : IReadOnlyAsyncCollection<IMessage>
+{
+
+}

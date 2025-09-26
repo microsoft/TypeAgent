@@ -224,3 +224,141 @@ internal class MessageRow
     public string? MetadataJson { get; set; }
     public string? ExtraJson { get; set; }
 }
+
+public class SqliteMessageCollection : IReadOnlyMessageCollection
+{
+    SqliteDatabase _db;
+    Type _messageType;
+    Type _metadataType;
+
+    public SqliteMessageCollection(SqliteDatabase db, Type messageType, Type metadataType)
+    {
+        _db = db;
+        _messageType = messageType;
+        _metadataType = metadataType;
+    }
+
+    public bool IsPersistent => true;
+
+    public int GetCount()
+    {
+        return _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
+    }
+
+    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(GetCount());
+    }
+
+    public IMessage Get(int msgId)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
+
+        using var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id = @msg_id"
+        );
+        cmd.Parameters.AddWithValue("@msg_id", msgId);
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read())
+        {
+            throw new ArgumentException($"No message at ordinal {msgId}");
+        }
+
+        MessageRow messageRow = ReadMessageRow(reader);
+        IMessage message = FromMessageRow(messageRow);
+        return message;
+    }
+
+    public Task<IMessage> GetAsync(int msgId, CancellationToken cancellationToken = default)
+    {
+        IMessage message = Get(msgId);
+        return Task.FromResult(message);
+    }
+
+    public Task<IList<IMessage>> GetAsync(IList<int> messageIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
+
+        // TODO: Bulk operations
+        IList<IMessage> messages = [];
+        foreach (int msgId in messageIds)
+        {
+            messages.Add(Get(msgId));
+        }
+        return Task.FromResult(messages);
+    }
+
+    public async IAsyncEnumerator<IMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    {
+        using var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages ORDER BY msg_id");
+        using var reader = cmd.ExecuteReader();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            IMessage message = ReadMessage(reader);
+            yield return message;
+        }
+    }
+
+    public Task<IList<IMessage>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(start);
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(end);
+        ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
+
+        using var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
+ORDER BY msg_id");
+        using var reader = cmd.ExecuteReader();
+        var messageList = reader.GetList(ReadMessage);
+        return Task.FromResult(messageList);
+    }
+
+    int GetNextMessageId()
+    {
+        return GetCount();
+    }
+
+    IMessage ReadMessage(SqliteDataReader reader)
+    {
+        MessageRow messageRow = ReadMessageRow(reader);
+        return FromMessageRow(messageRow);
+    }
+
+    IMessage FromMessageRow(MessageRow messageRow)
+    {
+        IMessage message = (IMessage)Activator.CreateInstance(_messageType);
+
+        message.TextChunks = StorageSerializer.FromJsonArray<string>(messageRow.ChunksJson);
+        message.Tags = StorageSerializer.FromJsonArray<string>(messageRow.TagsJson);
+        message.Timestamp = messageRow.StartTimestamp;
+        message.Metadata = (IMessageMetadata)StorageSerializer.FromJson(messageRow.MetadataJson, _metadataType);
+
+        // Set extra fields if any (only works for public settable properties)
+        if (messageRow.ExtraJson is not null && message is IMessageEx messageEx)
+        {
+            messageEx.DeserializeExtraDataFromJson(messageRow.ExtraJson);
+        }
+
+        return message;
+    }
+
+    MessageRow ReadMessageRow(SqliteDataReader reader)
+    {
+        MessageRow row = new MessageRow();
+
+        int iCol = 0;
+        row.ChunksJson = reader.GetStringOrNull(iCol++);
+        row.ChunkUri = reader.GetStringOrNull(iCol++);
+        row.StartTimestamp = reader.GetStringOrNull(iCol++);
+        row.TagsJson = reader.GetStringOrNull(iCol++);
+        row.MetadataJson = reader.GetStringOrNull(iCol++);
+        row.ExtraJson = reader.GetStringOrNull(iCol);
+
+        return row;
+    }
+}

@@ -91,6 +91,7 @@ public class PodcastCommands : ICommandModule
         for (int i = 0; i < count; ++i)
         {
             var message = await podcast.Messages.GetAsync(i, cancellationToken);
+            //var message = await provider.MessagesReadOnly.GetAsync(i, cancellationToken);
             var json = Json.Stringify(message);
             KnowProWriter.WriteLine(json);
         }
