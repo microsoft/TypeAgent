@@ -1,4 +1,3 @@
-@config serviceHost on
 @config spotify on
 @const new
 @clear

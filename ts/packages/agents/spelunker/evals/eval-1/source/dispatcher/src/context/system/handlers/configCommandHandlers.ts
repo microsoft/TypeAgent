@@ -10,7 +10,6 @@ import {
     changeContextConfig,
 } from "../../commandHandlerContext.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
-import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 
 import { simpleStarRegex } from "common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
@@ -1127,7 +1126,6 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     },
                 },
             },
-            serviceHost: getServiceHostCommandHandlers(),
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {

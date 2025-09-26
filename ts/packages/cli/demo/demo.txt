@@ -3,7 +3,7 @@
 @config action -x *
 @config schema -x * 
 @config schema player calendar
-@config serviceHost off
+
 
 # =============================================
 # Demonstrate dynamic creation of constructions
