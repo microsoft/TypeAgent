@@ -7,6 +7,15 @@ namespace TypeAgent.ExamplesLib;
 
 public class KnowProWriter : ConsoleWriter
 {
+    public static async Task WriteMessagesAsync(Conversation conversation)
+    {
+        await foreach (var message in conversation.Messages)
+        {
+            KnowProWriter.WriteJson(message);
+        }
+
+    }
+
     public static void Write(ConcreteEntity entity)
     {
         if (entity is not null)

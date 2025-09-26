@@ -51,20 +51,48 @@ public class Conversation<TMessage> : IConversation<TMessage>
 
     public static implicit operator Conversation(Conversation<TMessage> conversation)
     {
-        return new Conversation();
+        return new Conversation(conversation._storageProvider);
     }
 }
 
 public class Conversation : IConversation
 {
-    public IMessageCollection Messages => throw new NotImplementedException();
+    public Conversation(IStorageProvider provider)
+        : this(
+              provider.Messages,
+              provider.SemanticRefs,
+              provider.SemanticRefIndex,
+              provider.SecondaryIndexes
+          )
+    {
+    }
 
-    public ISemanticRefCollection SemanticRefs => throw new NotImplementedException();
+    public Conversation(
+        IMessageCollection messages,
+        ISemanticRefCollection semanticRefs,
+        ITermToSemanticRefIndex semanticRefIndex,
+        IConversationSecondaryIndexes secondaryIndexes
+    )
+    {
+        ArgumentNullException.ThrowIfNull(messages, nameof(messages));
+        ArgumentNullException.ThrowIfNull(semanticRefs, nameof(semanticRefs));
+        ArgumentNullException.ThrowIfNull(semanticRefIndex, nameof(semanticRefIndex));
+        ArgumentNullException.ThrowIfNull(secondaryIndexes, nameof(secondaryIndexes));
 
-    public ITermToSemanticRefIndex SemanticRefIndex => throw new NotImplementedException();
+        Messages = messages;
+        SemanticRefs = semanticRefs;
+        SemanticRefIndex = semanticRefIndex;
+        SecondaryIndexes = secondaryIndexes;
+    }
 
-    public IConversationSecondaryIndexes SecondaryIndexes => throw new NotImplementedException();
-}
+    public IMessageCollection Messages { get; private set; }
+
+    public ISemanticRefCollection SemanticRefs { get; private set; }
+
+    public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
+
+    public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
+};
 
 public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
 {

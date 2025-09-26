@@ -95,10 +95,13 @@ public class PodcastCommands : ICommandModule
             //var message = await provider.MessagesReadOnly.GetAsync(i, cancellationToken);
             KnowProWriter.WriteJson(message);
         }*/
+        /*
         await foreach (var message in provider.Messages)
         {
             KnowProWriter.WriteJson(message);
         }
+        */
+        await KnowProWriter.WriteMessagesAsync(podcast);
         // Read some
         var messages = await podcast.Messages.GetAsync([1, 2, 3, 4], cancellationToken);
         KnowProWriter.WriteJson(messages);
