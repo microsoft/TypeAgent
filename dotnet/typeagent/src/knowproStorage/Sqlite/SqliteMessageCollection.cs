@@ -16,33 +16,6 @@ public class SqliteMessageCollectionBase
         _db = db;
     }
 
-    internal SqliteCommand CreateGetCommand(int msgId)
-    {
-        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
-
-        var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages WHERE msg_id = @msg_id"
-        );
-        try
-        {
-            cmd.Parameters.AddWithValue("@msg_id", msgId);
-        }
-        catch
-        {
-            cmd.Dispose();
-            throw;
-        }
-        return cmd;
-    }
-
-    internal SqliteCommand CreateGetAllCommand()
-    {
-        return _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages ORDER BY msg_id");
-    }
-
     internal SqliteCommand CreateGetSliceCommand(int startOrdinal, int endOrdinal)
     {
         KnowProVerify.ThrowIfInvalidMessageOrdinal(startOrdinal);
@@ -139,14 +112,7 @@ public class SqliteMessageCollection<TMessage, TMeta> :
 
     public TMessage Get(int msgId)
     {
-        using var cmd = CreateGetCommand(msgId);
-        using var reader = cmd.ExecuteReader();
-        if (!reader.Read())
-        {
-            throw new ArgumentException($"No message at ordinal {msgId}");
-        }
-
-        MessageRow messageRow = ReadMessageRow(reader);
+        MessageRow messageRow = MessagesTable.GetMessage(_db, msgId);
         TMessage message = FromMessageRow(messageRow);
         return message;
     }
@@ -172,12 +138,9 @@ public class SqliteMessageCollection<TMessage, TMeta> :
 
     public async IAsyncEnumerator<TMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        using var cmd = CreateGetAllCommand();
-        using var reader = cmd.ExecuteReader();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        await foreach(var message in MessagesTable.GetAllMessagesAsync(_db, cancellationToken))
         {
-            TMessage message = ReadMessage(reader);
-            yield return message;
+            yield return FromMessageRow(message);
         }
     }
 
@@ -304,14 +267,7 @@ public class SqliteMessageCollection : SqliteMessageCollectionBase, IReadOnlyMes
 
     public IMessage Get(int msgId)
     {
-        using var cmd = CreateGetCommand(msgId);
-        using var reader = cmd.ExecuteReader();
-        if (!reader.Read())
-        {
-            throw new ArgumentException($"No message at ordinal {msgId}");
-        }
-
-        MessageRow messageRow = ReadMessageRow(reader);
+        MessageRow messageRow = MessagesTable.GetMessage(_db, msgId);
         IMessage message = FromMessageRow(messageRow);
         return message;
     }
@@ -337,11 +293,9 @@ public class SqliteMessageCollection : SqliteMessageCollectionBase, IReadOnlyMes
 
     public async IAsyncEnumerator<IMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        using var cmd = CreateGetAllCommand();
-        using var reader = cmd.ExecuteReader();
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        await foreach(var messageRow in MessagesTable.GetAllMessagesAsync(_db, cancellationToken))
         {
-            IMessage message = ReadMessage(reader);
+            IMessage message = FromMessageRow(messageRow);
             yield return message;
         }
     }
@@ -386,4 +340,44 @@ public class SqliteMessageCollection : SqliteMessageCollectionBase, IReadOnlyMes
     {
         return new MessageRow().Read(reader);
     }
+}
+
+
+internal static class MessagesTable
+{
+    public static MessageRow GetMessage(SqliteDatabase db, int msgId)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
+
+        return db.Get(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id = @msg_id",
+        (cmd) =>
+        {
+            cmd.AddParameter("@msg_id", msgId);
+        },
+        (reader) =>
+        {
+            return reader.Read() ?
+                   ReadMessageRow(reader) :
+                   throw new ArgumentException($"No message at ordinal {msgId}");
+        }
+        );
+    }
+
+    public static IAsyncEnumerable<MessageRow> GetAllMessagesAsync(SqliteDatabase db, CancellationToken cancellation = default)
+    {
+        return db.EnumerateAsync<MessageRow>(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages ORDER BY msg_id",
+            ReadMessageRow,
+            cancellation
+        );
+    }
+
+    public static MessageRow ReadMessageRow(SqliteDataReader reader)
+    {
+        return new MessageRow().Read(reader);
+    }
+
 }
