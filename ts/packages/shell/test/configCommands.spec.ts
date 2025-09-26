@@ -1,19 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import test, {
-    _electron,
-    _electron as electron,
-    expect,
-    Page,
-} from "@playwright/test";
+import test, { expect, Page } from "@playwright/test";
 import {
     exitApplication,
-    getAppPath,
-    sendUserRequest,
     sendUserRequestAndWaitForResponse,
     startShell,
-    waitForAgentMessage,
 } from "./testHelper";
 
 // Annotate entire file as serial.

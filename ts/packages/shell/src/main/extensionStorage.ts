@@ -8,14 +8,12 @@ import { debugShell } from "./debug.js";
 
 export type ExtensionStorageData = {
     autoIndexing?: boolean;
-    indexingDelay?: number;
     extractionMode?: string;
     [key: string]: any;
 };
 
 const defaultExtensionStorage: ExtensionStorageData = {
     autoIndexing: false,
-    indexingDelay: 3000,
     extractionMode: "content",
 };
 

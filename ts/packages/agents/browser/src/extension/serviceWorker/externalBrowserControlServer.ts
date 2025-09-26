@@ -374,20 +374,17 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             try {
                 const result = await chrome.storage.sync.get([
                     "autoIndexing",
-                    "indexingDelay",
                     "extractionMode",
                 ]);
 
                 return {
                     autoIndexing: result.autoIndexing === true,
-                    indexingDelay: result.indexingDelay || 3000,
                     extractionMode: result.extractionMode || "content",
                 };
             } catch (error) {
                 console.error("Failed to get browser settings:", error);
                 return {
                     autoIndexing: false,
-                    indexingDelay: 3000,
                     extractionMode: "content",
                 };
             }

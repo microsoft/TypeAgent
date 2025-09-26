@@ -31,6 +31,7 @@ export type PlayerActions =
     | FilterTracksAction
     | CreatePlaylistAction
     | DeletePlaylistAction
+    | AddCurrentTrackToPlaylistAction
     | GetQueueAction;
 
 export type PlayerEntities = MusicDevice;
@@ -267,6 +268,15 @@ export interface DeletePlaylistAction {
     parameters: {
         // name of playlist to delete
         name: string;
+    };
+}
+
+// add the currently playing track to a playlist
+export interface AddCurrentTrackToPlaylistAction {
+    actionName: "addCurrentTrackToPlaylist";
+    parameters: {
+        // name of playlist to add the current track to
+        playlistName: string;
     };
 }
 

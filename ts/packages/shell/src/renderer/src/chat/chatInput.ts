@@ -37,7 +37,7 @@ export class ChatInput {
 
     constructor(
         handlers: ExpandableTextareaHandlers,
-        inputId: string = "phraseDiv", // id for the text area for testing.
+        inputId: string, // id for the text area for testing.
     ) {
         this.inputContainer = document.createElement("div");
         this.inputContainer.className = "chat-input";
