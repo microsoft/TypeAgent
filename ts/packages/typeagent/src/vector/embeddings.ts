@@ -207,11 +207,6 @@ export class TopNCollection<T = number> {
         this._count = 0;
     }
 
-    // Returns the lowest scoring item in the collection
-    public get pop(): ScoredItem<T> {
-        return this.removeTop();
-    }
-
     public get top(): ScoredItem<T> {
         return this._items[1];
     }

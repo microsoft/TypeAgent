@@ -3,6 +3,12 @@
 
 namespace TypeAgent.KnowPro;
 
+
+/// <summary>
+/// For IConversation levelAPIs:
+/// <see cref="ConversationExtensions"/>
+/// </summary>
+/// <typeparam name="TMessage"></typeparam>
 public interface IConversation<TMessage>
     where TMessage : IMessage
 {
@@ -17,17 +23,4 @@ public interface IConversation<TMessage>
     ITermToSemanticRefIndex SemanticRefIndex { get; }
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
-}
-
-public static class ConversationExtensions
-{
-    public static void SearchConversation<TMessage>(
-        this IConversation<TMessage> conversation,
-        SearchTermGroup searchTermGroup,
-        WhenFilter? whenFilter = null
-    )
-        where TMessage : IMessage
-    {
-
-    }
 }

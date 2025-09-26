@@ -6,7 +6,7 @@ namespace TypeAgent.KnowPro;
 public class Conversation<TMessage> : IConversation<TMessage>
     where TMessage : IMessage, new()
 {
-    IStorageProvider<TMessage> _storageProvider;
+    private IStorageProvider<TMessage> _storageProvider;
 
     public Conversation(IStorageProvider<TMessage> provider)
         : this(
