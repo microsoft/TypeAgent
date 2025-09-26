@@ -135,7 +135,8 @@ export class BrowserAgentIpc {
     public async send(message: WebSocketMessageV2) {
         const webSocket = await this.ensureWebsocketConnected();
         if (!webSocket) {
-            throw new Error("WebSocket not connected");
+            debugBrowserIPC("WebSocket not [yet] connected!");
+            return;
         }
         debugBrowserIPC("Browser -> Dispatcher", message);
         webSocket.send(JSON.stringify(message));
