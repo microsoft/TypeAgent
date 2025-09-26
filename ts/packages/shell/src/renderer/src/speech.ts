@@ -182,3 +182,93 @@ export function recognizeOnce(
         );
     }
 }
+
+export class ContinousSpeechRecognizer {
+    private whisperRecognizer: WhisperRecognizer | undefined;
+    private reco: speechSDK.SpeechRecognizer | undefined;
+    private audioConfig: speechSDK.AudioConfig | undefined;
+    private speechConfig: speechSDK.SpeechConfig | undefined;
+    private token: SpeechToken | undefined;
+    private onRecognizing: (text: string) => void;
+    private onRecognized: (text: string) => void;
+    private onError: (error: string) => void;
+    private started: boolean = false;
+
+    constructor(useWhisper: boolean = false, 
+        token: SpeechToken | undefined = undefined,
+        onRecognizing: (text: string) => void,
+        onRecognized: (text: string) => void,
+        onError: (error: string) => void) {
+
+        this.onRecognizing = onRecognizing;
+        this.onRecognized = onRecognized;
+        this.onError = onError;
+
+        if (useWhisper) {
+            this.whisperRecognizer = new WhisperRecognizer();
+
+            this.whisperRecognizer.onRecognizing((data) => {
+                this.onRecognizing(data.text);
+            });
+
+            this.whisperRecognizer.onRecognized((data) => {
+                const result = new speechSDK.SpeechRecognitionResult(
+                    undefined,
+                    speechSDK.ResultReason.RecognizedSpeech,
+                    data.text,
+                );
+                onRecognizedResult(result, this.onRecognized, this.onError);
+            });
+
+            this.whisperRecognizer.initialize().then(() => {
+                this.whisperRecognizer?.startRecording();
+            }); 
+        } else if (getAndroidAPI()?.isSpeechRecognitionSupported() === true) {
+            throw new Error("Continuous recognition not supported on Android"); 
+        } else {
+            this.token = token;
+            this.audioConfig = getAudioConfig();
+            this.speechConfig = getSpeechConfig(this.token);
+            this.reco = new speechSDK.SpeechRecognizer(this.speechConfig!, this.audioConfig!);
+            // The 'recognizing' event signals that an intermediate recognition result is received.
+            // Intermediate results arrive while audio is being processed and represent the current "best guess" about
+            // what's been spoken so far.
+            this.reco.recognizing = (_s, e) => {
+                this.onRecognizing(e.result.text);
+            };
+            // Note: this scenario sample demonstrates result handling via continuation on the recognizeOnceAsync call.
+            // The 'recognized' event handler can be used in a similar fashion.
+            this.reco?.recognizeOnceAsync(
+                (result) => {
+                    onRecognizedResult(result, this.onRecognized, this.onError);
+                },
+                (err) => {
+                    debugError(err);
+                    this.onError(`[ERROR: ${err}]`);
+                },
+            );
+        }  
+    }
+
+    public start()  {
+
+        // don't do anything if already started
+        if (this.started) return;
+        
+        this.started = true;
+
+        if (this.whisperRecognizer) {
+            this.whisperRecognizer.startRecording();
+        } else {
+            this.reco!.startContinuousRecognitionAsync(() => {
+                console.log("continuous recognition started");    
+            }, (error) => {
+                console.log(error);
+            })
+        }
+    }
+
+    public stop() {
+        if (!this.started) return;
+    }
+}
