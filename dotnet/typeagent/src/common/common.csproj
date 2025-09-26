@@ -2,10 +2,14 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <ImplicitUsings>annotations</ImplicitUsings>
+    <Nullable>annotations</Nullable>
     <AssemblyName>TypeAgent.Common</AssemblyName>
     <RootNamespace>TypeAgent.Common</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Collections\" />
+  </ItemGroup>
 
 </Project>

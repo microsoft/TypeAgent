@@ -13,6 +13,10 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
+// These need to be in sync with the UI
+const chatViewTitle = "Chat View"; // See chatView.html title tag
+const inputDivId = "new_phraseDiv";
+
 const runningApplications: Map<string, ElectronApplication> = new Map<
     string,
     ElectronApplication
@@ -82,7 +86,6 @@ export async function startShell(): Promise<Page> {
     );
 }
 
-const chatViewTitle = "Chat View"; // See chatView.html title tag
 async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
     let attempts = 0;
     do {
@@ -152,13 +155,17 @@ export function getLaunchArgs(): string[] {
     return args;
 }
 
+export async function getInputElementHandle(page: Page) {
+    return page.waitForSelector(`#${inputDivId}`);
+}
+
 /**
  * Submits a user request to the system via the chat input box.
  * @param prompt The user request/prompt.
  * @param page The main page from the electron host application.
  */
 export async function sendUserRequest(prompt: string, page: Page) {
-    const locator: Locator = page.locator("#phraseDiv");
+    const locator: Locator = page.locator(`#${inputDivId}`);
     await locator.waitFor({ timeout: 30000, state: "visible" });
     await locator.focus({ timeout: 30000 });
     await locator.fill(prompt, { timeout: 30000 });
@@ -171,7 +178,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
  * @param page The main page from the electron host application.
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {
-    const locator: Locator = page.locator("#phraseDiv");
+    const locator: Locator = page.locator(`#${inputDivId}`);
     await locator.waitFor({ timeout: 5000, state: "visible" });
     await locator.fill(prompt, { timeout: 5000 });
     page.keyboard.down("Enter");

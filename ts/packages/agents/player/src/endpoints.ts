@@ -564,6 +564,49 @@ export async function getTracksFromIds(
     return trackResponses;
 }
 
+// get recommendations based on seed tracks, artists or genres
+export async function getRecommendations(
+    service: SpotifyService,
+    params: SpotifyApi.RecommendationsOptionsObject,
+) {
+    return fetchGet<SpotifyApi.RecommendationsFromSeedsResponse>(
+        service,
+        "https://api.spotify.com/v1/recommendations",
+        params,
+    );
+}
+
+export async function getRecommendationsFromTracks(
+    service: SpotifyService,
+    trackIds: string[],
+    limit = 20,
+) {
+    const seedTracks = trackIds.slice(0, 5);
+    return getRecommendations(service, { seed_tracks: seedTracks, limit });
+}
+
+export async function getRecommendationsFromTrackCollection(
+    service: SpotifyService,
+    trackCollection: { getTracks(): SpotifyApi.TrackObjectFull[] },
+    startIndex = 0,
+    limit = 20,
+) {
+    const seedTracks = trackCollection
+        .getTracks()
+        .slice(startIndex, startIndex + 5)
+        .map((track) => track.id);
+    return getRecommendations(service, { seed_tracks: seedTracks, limit });
+}
+
+export async function getRecommendationsFromArtists(
+    service: SpotifyService,
+    artistIds: string[],
+    limit = 20,
+) {
+    const seedArtists = artistIds.slice(0, 5);
+    return getRecommendations(service, { seed_artists: seedArtists, limit });
+}
+
 export async function addTracksToPlaylist(
     service: SpotifyService,
     playlistId: string,

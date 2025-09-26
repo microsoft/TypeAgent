@@ -1,7 +1,6 @@
 # ====== Init =======
 @config action -* desktop browser code calendar email  
 @config schema -* desktop browser code calendar email
-@config serviceHost on
 
 # -------------------------------------
 # Calendar

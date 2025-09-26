@@ -24,7 +24,6 @@ import {
 import { TypeAgentTranslator } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
-import { createServiceHost } from "./system/handlers/serviceHost/serviceHostCommandHandler.js";
 import { ClientIO, RequestId, nullClientIO } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import {
@@ -115,7 +114,6 @@ export type CommandHandlerContext = {
     agentCache: AgentCache;
     currentScriptDir: string;
     logger?: Logger | undefined;
-    serviceHost: ChildProcess | undefined;
     requestId?: RequestId;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
@@ -163,7 +161,6 @@ export type DispatcherOptions = SessionOptions & {
     persistSession?: boolean; // default to false,
     persist?: boolean; // default to false,
     clientIO?: ClientIO | undefined; // undefined to disable any IO.
-    enableServiceHost?: boolean; // default to false,
     metrics?: boolean; // default to false
     dblogging?: boolean; // default to false
     constructionProvider?: ConstructionProvider;
@@ -334,11 +331,6 @@ export async function initializeCommandHandlerContext(
             activationId: randomUUID(),
         });
 
-        var serviceHost = undefined;
-        if (options?.enableServiceHost) {
-            serviceHost = await createServiceHost();
-        }
-
         const cacheDirPath = instanceDir
             ? ensureCacheDir(instanceDir)
             : undefined;
@@ -370,7 +362,6 @@ export async function initializeCommandHandlerContext(
                 session.getConfig().execution.history,
             ),
             logger,
-            serviceHost,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             batchMode: false,
             instanceDirLock,
@@ -473,7 +464,6 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
-    context.serviceHost?.kill();
     // Save the session because the token count is in it.
     context.session.save();
     await context.agents.close();

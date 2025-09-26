@@ -26,6 +26,7 @@ import {
     getShellWindow,
     getShellWindowForChatViewIpcEvent,
     getShellWindowForMainWindowIpcEvent,
+    fatal,
 } from "./instance.js";
 
 import {
@@ -258,21 +259,17 @@ async function initialize() {
     // Window control handlers
     ipcMain.on("window-minimize", (event) => {
         const shellWindow = getShellWindowForMainWindowIpcEvent(event);
-        shellWindow?.mainWindow.minimize();
+        shellWindow?.minimize();
     });
 
     ipcMain.on("window-maximize", (event) => {
         const shellWindow = getShellWindowForMainWindowIpcEvent(event);
-        if (shellWindow?.mainWindow.isMaximized()) {
-            shellWindow.mainWindow.unmaximize();
-        } else {
-            shellWindow?.mainWindow.maximize();
-        }
+        shellWindow?.toggleMaximize();
     });
 
     ipcMain.on("window-close", (event) => {
         const shellWindow = getShellWindowForMainWindowIpcEvent(event);
-        shellWindow?.mainWindow.close();
+        shellWindow?.close();
     });
 
     ipcMain.on("open-image-file", async (event) => {
@@ -343,30 +340,29 @@ async function initialize() {
 
     initializeQuit();
 
-    app.on("activate", async function () {
+    app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
         if (getShellWindow() === undefined)
-            await initializeInstance(instanceDir, shellSettings);
+            initializeInstance(instanceDir, shellSettings);
     });
 
-    await initializeInstance(instanceDir, shellSettings, time);
+    // Start up the first instance
+    const shellWindow = initializeInstance(instanceDir, shellSettings, time);
 
-    if (shellSettings.user.autoUpdate.intervalMs !== -1) {
-        startBackgroundUpdateCheck(
-            shellSettings.user.autoUpdate.intervalMs,
-            shellSettings.user.autoUpdate.restart,
-            shellSettings.user.autoUpdate.initialIntervalMs,
-        );
-    }
+    shellWindow.waitForReady().then(() => {
+        // Wait until the first shell is ready before we start background update check.
+        if (shellSettings.user.autoUpdate.intervalMs !== -1) {
+            startBackgroundUpdateCheck(
+                shellSettings.user.autoUpdate.intervalMs,
+                shellSettings.user.autoUpdate.restart,
+                shellSettings.user.autoUpdate.initialIntervalMs,
+            );
+        }
+    });
 }
 
-app.whenReady()
-    .then(initialize)
-    .catch((e) => {
-        dialog.showErrorBox("Error starting shell", e.stack);
-        app.quit();
-    });
+app.whenReady().then(initialize).catch(fatal);
 
 let reloadingInstance = false;
 export async function reloadInstance() {
