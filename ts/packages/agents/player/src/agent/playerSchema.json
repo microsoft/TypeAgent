@@ -48,6 +48,9 @@
     },
     "deletePlaylist": {
       "name": "checked_wildcard"
+    },
+    "addCurrentTrackToPlaylist": {
+      "playlistName": "checked_wildcard"
     }
   },
   "paramCompletionEmojis": {

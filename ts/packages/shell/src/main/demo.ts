@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ipcMain, BrowserWindow, dialog, WebContentsView } from "electron";
+import { ipcMain, dialog, WebContentsView, BrowserWindow } from "electron";
 import { readFileSync } from "fs";
 
 async function openDemoFile(window: BrowserWindow) {

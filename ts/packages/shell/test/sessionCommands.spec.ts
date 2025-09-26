@@ -1,23 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import test, {
-    _electron,
-    _electron as electron,
-    expect,
-    Page,
-} from "@playwright/test";
+import test, { expect, Page } from "@playwright/test";
 import {
     exitApplication,
-    getAppPath,
-    getLastAgentMessage,
-    sendUserRequest,
     sendUserRequestAndWaitForCompletion,
     sendUserRequestFast,
     startShell,
-    waitForAgentMessage,
 } from "./testHelper";
-import { session } from "electron";
 
 // Annotate entire file as serial.
 test.describe.configure({ mode: "serial" });
