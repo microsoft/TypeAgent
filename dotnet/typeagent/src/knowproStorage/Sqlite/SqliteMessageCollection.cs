@@ -24,10 +24,47 @@ public class SqliteMessageCollectionBase
 SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id = @msg_id"
         );
-        cmd.Parameters.AddWithValue("@msg_id", msgId);
+        try
+        {
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+        }
+        catch
+        {
+            cmd.Dispose();
+            throw;
+        }
         return cmd;
     }
 
+    internal SqliteCommand CreateGetAllCommand()
+    {
+        return _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages ORDER BY msg_id");
+    }
+
+    internal SqliteCommand CreateGetSliceCommand(int startOrdinal, int endOrdinal)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(startOrdinal);
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(endOrdinal);
+        ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
+
+        var cmd = _db.CreateCommand(@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
+ORDER BY msg_id");
+        try
+        {
+            cmd.AddParameter("@start_id", startOrdinal);
+            cmd.AddParameter("@end_id", endOrdinal);
+        }
+        catch
+        {
+            cmd.Dispose();
+            throw;
+        }
+        return cmd;
+    }
 }
 
 /// <summary>
@@ -135,9 +172,7 @@ public class SqliteMessageCollection<TMessage, TMeta> :
 
     public async IAsyncEnumerator<TMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        using var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages ORDER BY msg_id");
+        using var cmd = CreateGetAllCommand();
         using var reader = cmd.ExecuteReader();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -152,10 +187,7 @@ FROM Messages ORDER BY msg_id");
         KnowProVerify.ThrowIfInvalidMessageOrdinal(end);
         ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
 
-        using var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
-ORDER BY msg_id");
+        using var cmd = CreateGetSliceCommand(start, end);
         using var reader = cmd.ExecuteReader();
         var messageList = reader.GetList(ReadMessage);
         return Task.FromResult(messageList);
@@ -305,9 +337,7 @@ public class SqliteMessageCollection : SqliteMessageCollectionBase, IReadOnlyMes
 
     public async IAsyncEnumerator<IMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        using var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages ORDER BY msg_id");
+        using var cmd = CreateGetAllCommand();
         using var reader = cmd.ExecuteReader();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -322,18 +352,10 @@ FROM Messages ORDER BY msg_id");
         KnowProVerify.ThrowIfInvalidMessageOrdinal(end);
         ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
 
-        using var cmd = _db.CreateCommand(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
-FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
-ORDER BY msg_id");
+        using var cmd = CreateGetSliceCommand(start, end);
         using var reader = cmd.ExecuteReader();
         var messageList = reader.GetList(ReadMessage);
         return Task.FromResult(messageList);
-    }
-
-    int GetNextMessageId()
-    {
-        return GetCount();
     }
 
     IMessage ReadMessage(SqliteDataReader reader)
