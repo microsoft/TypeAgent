@@ -5,9 +5,9 @@ import {
     knowledgeProgressEvents,
     KnowledgeExtractionProgressEvent,
 } from "./knowledgeProgressEvents.mjs";
-import { sendKnowledgeExtractionProgressViaWebSocket } from "./knowledgeHandler.mjs";
+import { sendKnowledgeExtractionProgressViaWebSocket } from "./extractionProgressManager.mjs";
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "../browserActions.mjs";
+import { BrowserActionContext } from "../../browserActions.mjs";
 
 export class KnowledgeWebSocketBridge {
     private context: SessionContext<BrowserActionContext>;
