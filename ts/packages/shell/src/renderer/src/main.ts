@@ -341,6 +341,9 @@ function registerClient(
 
             chatView.chatInput?.recognizeOnce(token, useLocalWhisper);
         },
+        toggleAlwaysListen(): void {
+            chatView.chatInput?.toggleContinuous();
+        },
         focusInput(): void {
             chatView.chatInput?.focus();
         },
@@ -354,6 +357,10 @@ function registerClient(
             // update chatview title
             chatView.setTitle(title);
         },
+        continuousSpeechProcessed(text: string): void {
+            // TODO: process messages and only add questions/requests.
+            chatView.addUserMessage(text);
+        }
     };
 
     getClientAPI().registerClient(client);
@@ -456,7 +463,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
-    const chatInput = new ChatInput({}, "new_phraseDiv");
+    const chatInput = new ChatInput({}, "phraseDiv");
 
     chatView.setChatInput(chatInput);
 

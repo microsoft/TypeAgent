@@ -36,7 +36,7 @@ export class ChatInput {
         token: SpeechToken | undefined,
         useLocalWhisper: boolean,
     ) => void;
-    public readonly startContinous: () => void;
+    public readonly toggleContinuous: () => void;
     private continousRecognizer: ContinousSpeechRecognizer | undefined = undefined;
     private micIcon: HTMLElement;
     private listeningMic: HTMLElement;
@@ -187,36 +187,49 @@ export class ChatInput {
                 useLocalWhisper,
             );
         };
-        this.startContinous = () => {
-            if (this.continousRecognizer === undefined) {
-                this.continousRecognizer = new ContinousSpeechRecognizer(
-                    this.uselocalWhisper,
-                    this.token,
-                    (text) => this.onRecognizing(text),
-                    (text) => this.onRecognized(text),
-                    (error) => this.onError(error),
-                )
+        this.toggleContinuous = () => {
+
+            this.continuous = !this.continuous;
+            this.listening = this.continuous;
+            this.micButton.disabled = false;
+
+            if (this.continuous) {
+                if (this.continousRecognizer === undefined) {
+
+                    this.continousRecognizer = new ContinousSpeechRecognizer(
+                        this.uselocalWhisper,
+                        this.token,
+                        (text) => this.onRecognizing(text),
+                        (text) => this.onRecognized(text),
+                        (error) => this.onError(error),
+                    )
+                }                
+                this.continousRecognizer?.start();
+
+                this.micIcon.classList.add("chat-message-hidden");
+                this.listeningMic.classList.add("chat-message-hidden");
+                this.disabledMic.classList.add("chat-message-hidden");
+                this.alwaysOnMic.classList.remove("chat-message-hidden");                
+                
+            } else {
+                this.continuous = false;
+                this.continousRecognizer?.stop();
+                this.micReady();
             }
-            this.continousRecognizer.start();
         };
         this.micButton.addEventListener("click", async (event) => {
 
             if (event.altKey || event.metaKey) {
-                this.micContinuesListening();                
+                this.toggleContinuous();
             } else {
-                
                 if (!this.listening && !this.continuous) {
                     this.startReco();
                 } else if (this.continuous) {
-                    this.continousRecognizer?.stop();
+                    this.toggleContinuous();
                 }
                 
                 this.micReady();
             }
-        });
-
-        this.micButton.addEventListener("doubleclick", async () => {
-            
         });
 
         this.camButton = document.createElement("button");
@@ -262,7 +275,19 @@ export class ChatInput {
         );
 
         if (this.continuous) {
-            // TODO: prefilter before sending    
+            // TODO: prefilter before sending
+            getClientAPI().continuousSpeechProcessing(text).then((response) => {
+                if (response) {
+                    this.textarea.setTextContent(
+                        this.textarea
+                            .getTextContent()
+                            .replace(
+                                /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
+                                "$1$2",
+                            ) + `${response}\r\n`,
+                    );
+                }
+            });
         }
     }
 
@@ -311,28 +336,7 @@ export class ChatInput {
         this.listeningMic.classList.add("chat-message-hidden");
         this.disabledMic.classList.remove("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
-    }
-
-    private micContinuesListening() {
-        
-        this.continuous = !this.continuous;
-        this.listening = this.continuous;
-        this.micButton.disabled = false;
-
-        if (this.continuous) {
-
-            this.startContinous();
-
-            this.micIcon.classList.add("chat-message-hidden");
-            this.listeningMic.classList.add("chat-message-hidden");
-            this.disabledMic.classList.add("chat-message-hidden");
-            this.alwaysOnMic.classList.remove("chat-message-hidden");
-        } else {
-            this.continuous = false;
-            this.continousRecognizer?.stop();
-            this.micReady();
-        }
-    }    
+    }   
 
     /**
      * Starts speech recognition
@@ -348,7 +352,7 @@ export class ChatInput {
                     useLocalWhisper,
                 );        
         }
-    }
+    } 
 
     /**
      * Loads the contents of the supplied image into the input text box.

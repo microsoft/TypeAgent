@@ -198,7 +198,7 @@ export class ContinousSpeechRecognizer {
         token: SpeechToken | undefined = undefined,
         onRecognizing: (text: string) => void,
         onRecognized: (text: string) => void,
-        onError: (error: string) => void) {
+        onError: (error: string) => void) {                   
 
         this.onRecognizing = onRecognizing;
         this.onRecognized = onRecognized;

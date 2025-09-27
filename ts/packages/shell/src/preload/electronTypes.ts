@@ -75,6 +75,7 @@ export interface ClientAPI {
     searchMenuAdjustSelection(id: number, deltaY: number): void;
     searchMenuSelectCompletion(id: number): void;
     searchMenuClose(id: number): void;
+    continuousSpeechProcessing(text: string): Promise<string | undefined>;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -86,10 +87,12 @@ export interface Client {
     updateSettings(settings: ShellUserSettings): void;
     fileSelected(fileName: string, fileContent: string): void;
     listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void;
+    toggleAlwaysListen(): void;
     focusInput(): void;
     titleUpdated(title: string): void;
 
     searchMenuCompletion(id: number, item: SearchMenuItem);
+    continuousSpeechProcessed(text: string): void;
 }
 
 export interface ElectronWindowFields {

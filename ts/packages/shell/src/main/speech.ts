@@ -10,6 +10,7 @@ import {
     getShellWindow,
     getShellWindowForChatViewIpcEvent,
 } from "./instance.js";
+import { SpeechProcessing } from "./speechProcessing.js";
 const debugShell = registerDebug("typeagent:shell:speech");
 const debugShellError = registerDebug("typeagent:shell:speech:error");
 
@@ -65,6 +66,17 @@ export async function triggerRecognitionOnce() {
     chatView.webContents.send("listen-event", speechToken, useLocalWhisper);
 }
 
+export async function toggleContinuousRecognition() {
+    const shellWindow = getShellWindow();
+    if (shellWindow === undefined) {
+        return;
+    }
+    const chatView = shellWindow.chatView;
+    const speechToken = await getSpeechToken(false);
+    const useLocalWhisper = isLocalWhisperEnabled();
+    chatView.webContents.send("listen-always", speechToken, useLocalWhisper);
+}
+
 export function initializeSpeech() {
     const key = process.env["SPEECH_SDK_KEY"] ?? "identity";
     const region = process.env["SPEECH_SDK_REGION"];
@@ -81,8 +93,7 @@ export function initializeSpeech() {
 
     ipcMain.handle("get-speech-token", async (event, silent: boolean) => {
         // Make sure the request comes from the chat view
-        const shellWindow = getShellWindowForChatViewIpcEvent(event);
-        if (shellWindow === undefined) {
+        if (getShellWindowForChatViewIpcEvent(event) === undefined) {
             return undefined;
         }
         return getSpeechToken(silent);
@@ -90,19 +101,48 @@ export function initializeSpeech() {
 
     ipcMain.handle("get-localWhisper-status", async (event) => {
         // Make sure the request comes from the chat view
-        const shellWindow = getShellWindowForChatViewIpcEvent(event);
-        if (shellWindow === undefined) {
+        if (getShellWindowForChatViewIpcEvent(event) === undefined) {
             return undefined;
         }
         return isLocalWhisperEnabled();
     });
 
-    const ret = globalShortcut.register("Alt+M", triggerRecognitionOnce);
+    ipcMain.handle("continuous-speech-processing", async (event, text: string) => {
+        // Make sure the request comes from the chat view
+        if (getShellWindowForChatViewIpcEvent(event) === undefined) {
+            return undefined;
+        }
 
+        // TODO: Process the text and return the result
+        console.log("Continuous speech processing: " + text);
+
+
+        const shellWindow = getShellWindow();
+        if (shellWindow === undefined) {
+            return;
+        }
+        const chatView = shellWindow.chatView;
+        SpeechProcessing.getInstance().processSpeech(text).then((text) => {
+            chatView.webContents.send("continuous-speech-processed", text);
+        });
+        
+    });
+
+    const ret = globalShortcut.register("Alt+M", triggerRecognitionOnce);
     if (ret) {
         // Double check whether a shortcut is registered.
         debugShell(
             `Global shortcut Alt+M: ${globalShortcut.isRegistered("Alt+M")}`,
+        );
+    } else {
+        debugShellError("Global shortcut registration failed");
+    }
+
+    const ret2 = globalShortcut.register("Alt+Shift+M", toggleContinuousRecognition);
+    if (ret2) {
+        // Double check whether a shortcut is registered.
+        debugShell(
+            `Global shortcut Alt+Shift+M: ${globalShortcut.isRegistered("Alt+Shift+M")}`,
         );
     } else {
         debugShellError("Global shortcut registration failed");
