@@ -48,7 +48,7 @@ public class Conversation<TMessage> : IConversation<TMessage>
     public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 
     public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
-
+    
     public static implicit operator Conversation(Conversation<TMessage> conversation)
     {
         return new Conversation(conversation._storageProvider);

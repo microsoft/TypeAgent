@@ -51,4 +51,17 @@ public static class ListExtensions
             list.RemoveAt(0);
         }
     }
+
+    public static IList<T> Filter<T>(this IList<T> list, Func<T, bool> filter)
+    {
+        IList<T> filtered = [];
+        foreach (T item in list)
+        {
+            if (filter(item))
+            {
+                filtered.Add(item);
+            }
+        }
+        return filtered;
+    }
 }

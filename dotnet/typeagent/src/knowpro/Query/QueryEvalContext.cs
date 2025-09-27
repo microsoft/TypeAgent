@@ -5,4 +5,10 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class QueryEvalContext
 {
+    public QueryEvalContext(IConversation conversation)
+    {
+
+    }
+
+    public IConversation Conversation { get; private set; }
 }

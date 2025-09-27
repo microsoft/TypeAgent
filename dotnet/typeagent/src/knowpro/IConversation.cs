@@ -3,7 +3,6 @@
 
 namespace TypeAgent.KnowPro;
 
-
 /// <summary>
 /// For IConversation levelAPIs:
 /// <see cref="ConversationExtensions"/>
