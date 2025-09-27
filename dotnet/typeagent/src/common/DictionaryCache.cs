@@ -145,23 +145,16 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
     }
 }
 
-public class Cache<TKey, TValue> : ICache<TKey, TValue>
+public class DictionaryCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey, TValue>
 {
-    Dictionary<TKey, TValue> _items;
-
-    public Cache(IEqualityComparer<TKey> comparer = null)
+    public DictionaryCache(IEqualityComparer<TKey> comparer = null)
+        : base(comparer)
     {
-        _items = [];
     }
 
-    public void Add(TKey key, TValue value)
-    {
-        _items[key] = value;
-    }
+    public bool Contains(TKey key) => base.ContainsKey(key);
 
-    public bool Contains(TKey key) => _items.ContainsKey(key);
-
-    public bool TryGet(TKey key, out TValue value) => _items.TryGetValue(key, out value);
+    public bool TryGet(TKey key, out TValue value) => base.TryGetValue(key, out value);
 }
 
 public static class CacheExtensions

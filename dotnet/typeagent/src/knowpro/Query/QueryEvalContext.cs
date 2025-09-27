@@ -5,12 +5,12 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class QueryEvalContext
 {
-    Cache<int, SemanticRef> _semanticRefs;
+    DictionaryCache<int, SemanticRef> _semanticRefs;
 
     public QueryEvalContext(IConversation conversation)
     {
         Conversation = conversation;
-        _semanticRefs = new Cache<int, SemanticRef>();
+        _semanticRefs = new DictionaryCache<int, SemanticRef>();
     }
 
     public IConversation Conversation { get; private set; }
