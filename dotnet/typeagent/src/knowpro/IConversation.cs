@@ -29,7 +29,7 @@ public interface IConversation
 {
     IReadOnlyAsyncCollection<IMessage> Messages { get; }
 
-    IReadOnlyAsyncCollection<SemanticRef> SemanticRefs { get; }
+    ISemanticRefCollection SemanticRefs { get; }
 
     ITermToSemanticRefIndex SemanticRefIndex { get; }
 

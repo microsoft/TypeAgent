@@ -50,7 +50,7 @@ public class Conversation<TMessage> : IConversation<TMessage>
     public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 
     public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
-    
+
     public static implicit operator Conversation(Conversation<TMessage> conversation)
     {
         return conversation._readonlyConversation;
@@ -71,7 +71,7 @@ public class Conversation : IConversation
 
     public Conversation(
         IReadOnlyAsyncCollection<IMessage> messages,
-        IReadOnlyAsyncCollection<SemanticRef> semanticRefs,
+        ISemanticRefCollection semanticRefs,
         ITermToSemanticRefIndex semanticRefIndex,
         IConversationSecondaryIndexes secondaryIndexes
     )
@@ -89,7 +89,7 @@ public class Conversation : IConversation
 
     public IReadOnlyAsyncCollection<IMessage> Messages { get; private set; }
 
-    public IReadOnlyAsyncCollection<SemanticRef> SemanticRefs { get; private set; }
+    public ISemanticRefCollection SemanticRefs { get; private set; }
 
     public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 
