@@ -18,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { InstanceConfigProvider } from "../src/utils/config.js";
-import { setObjectProperty } from "common-utils";
+import { getObjectProperty, setObjectProperty } from "common-utils";
 import chalk from "chalk";
 import { normalizeAction } from "./constructionCacheTestCommon.js";
 
@@ -265,6 +265,31 @@ type PossibleMatch = {
     partial: boolean;
 };
 
+// This function validates the test data, to make sure the alternatives are valid.
+function validateAlternatives(
+    action: FullAction,
+    name: string,
+    values: ParamValueType[],
+) {
+    const expectedType = typeof getObjectProperty(action.parameters, name);
+    const valueType = typeof values[0];
+    // Allow alternates to fill in optional fields.
+    if (expectedType !== "undefined" && expectedType !== valueType) {
+        // Error checking the testing alternates.  Make sure it is replacing existing properties
+        throw new Error(
+            `Invalid alternatives: type mismatch with action for parameter '${name}'. Expected type '${expectedType}' but got '${valueType}'`,
+        );
+    }
+
+    for (const v of values) {
+        if (typeof v !== valueType) {
+            throw new Error(
+                `Invalid alternatives: inconsistent types for parameter '${name}'. Expected type '${valueType}' but got '${typeof v}'`,
+            );
+        }
+    }
+}
+
 function expandAlternates(
     expectedMatch: ActionMatchWithAlternates,
 ): { action: FullAction; partial: boolean }[] {
@@ -278,6 +303,9 @@ function expandAlternates(
     if (expectedMatch.alternates !== undefined) {
         for (const [name, v] of Object.entries(expectedMatch.alternates)) {
             const values = Array.isArray(v) ? v : [v];
+
+            validateAlternatives(expectedMatch.action, name, values);
+
             expandedActions.push(
                 ...values.flatMap((v) =>
                     expandedActions.map((a) => {
@@ -360,6 +388,9 @@ function validateExpectedAction(
             ,
             chalk.green(`Expected: ${JSON.stringify(possibleMatches)}`),
             chalk.red(`Received: ${JSON.stringify(normalizedAction, null, 2)}`),
+
+            chalk.yellow("Errors from each alternatives:"),
+            ...errors,
         ].join("\n"),
     );
 }

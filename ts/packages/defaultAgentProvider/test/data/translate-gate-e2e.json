@@ -348,7 +348,7 @@
               }
             },
             "alternates": {
-              "internetLookups": [
+              "internetLookups.0": [
                 "president of the united states in 1837",
                 "us president in 1837"
               ]
@@ -389,7 +389,7 @@
             },
             "alternates": {
               "trackName": "toccata and fugue",
-              "artists": "johann sebastian bach"
+              "artists.0": "johann sebastian bach"
             }
           }
         ]
