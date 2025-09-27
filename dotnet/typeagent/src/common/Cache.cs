@@ -166,7 +166,22 @@ public class Cache<TKey, TValue> : ICache<TKey, TValue>
 
 public static class CacheExtensions
 {
-    public static async Task<IList<TValue>> GetFromCachedOrFetchAsync<TKey, TValue> (
+    public static async Task<TValue> GetCachedOrFetchAsync<TKey, TValue>(
+        this ICache<TKey, TValue> cache,
+        TKey key,
+        Func<TKey, Task<TValue>> resolver
+    )
+        where TValue : class
+    {
+        if (!cache.TryGet(key, out TValue value))
+        {
+            value = await resolver(key);
+            cache.Add(key, value);
+        }
+        return value;
+    }
+
+    public static async Task<IList<TValue>> GetCachedOrFetchAsync<TKey, TValue> (
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
         Func<IList<TKey>, Task<IList<TValue>>> resolver
