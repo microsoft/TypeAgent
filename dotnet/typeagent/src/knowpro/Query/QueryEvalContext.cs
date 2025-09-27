@@ -17,7 +17,7 @@ internal class QueryEvalContext
 
     public Task<SemanticRef> GetSemanticRef(int semanticRefOrdinal, CancellationToken cancellationToken)
     {
-        return _semanticRefs.GetCachedOrFetchAsync(
+        return _semanticRefs.GetCachedOrLoadAsync(
             semanticRefOrdinal,
             (ordinal) => Conversation.SemanticRefs.GetAsync(ordinal, cancellationToken)
         );
@@ -25,7 +25,7 @@ internal class QueryEvalContext
 
     public Task<IList<SemanticRef>> GetSemanticRefs(IList<int> semanticRefOrdinals, CancellationToken cancellationToken)
     {
-        return _semanticRefs.GetCachedOrFetchAsync(
+        return _semanticRefs.GetCachedOrLoadAsync(
             semanticRefOrdinals,
             (ordinals) => Conversation.SemanticRefs.GetAsync(ordinals, cancellationToken)
         );

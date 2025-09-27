@@ -159,37 +159,37 @@ public class DictionaryCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TK
 
 public static class CacheExtensions
 {
-    public static async Task<TValue> GetCachedOrFetchAsync<TKey, TValue>(
+    public static async Task<TValue> GetCachedOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         TKey key,
-        Func<TKey, Task<TValue>> resolver
+        Func<TKey, Task<TValue>> loader
     )
         where TValue : class
     {
         if (!cache.TryGet(key, out TValue value))
         {
-            value = await resolver(key).ConfigureAwait(false);
+            value = await loader(key).ConfigureAwait(false);
             cache.Add(key, value);
         }
         return value;
     }
 
-    public static async Task<IList<TValue>> GetCachedOrFetchAsync<TKey, TValue> (
+    public static async Task<IList<TValue>> GetCachedOrLoadAsync<TKey, TValue> (
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
-        Func<IList<TKey>, Task<IList<TValue>>> resolver
+        Func<IList<TKey>, Task<IList<TValue>>> loader
     )
         where TValue : class
     {
         ArgumentVerify.ThrowIfNullOrEmpty(keys, nameof(keys));
-        ArgumentVerify.ThrowIfNull(resolver, nameof(resolver));
+        ArgumentVerify.ThrowIfNull(loader, nameof(loader));
 
         (var values, var pendingKeys) = cache.ResolveKeys(keys);
         if (pendingKeys.IsNullOrEmpty())
         {
             return values;
         }
-        IList<TValue> pendingValues = await resolver(pendingKeys).ConfigureAwait(false);
+        IList<TValue> pendingValues = await loader(pendingKeys).ConfigureAwait(false);
         if (values.Count != pendingKeys.Count)
         {
             throw new TypeAgentException("Resolver returned incorrect number of values");
