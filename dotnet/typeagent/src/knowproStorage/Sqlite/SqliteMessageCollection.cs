@@ -201,7 +201,7 @@ internal class MessageRow
 
 }
 
-public class SqliteMessageCollection : IMessageCollection
+public class SqliteMessageCollection : IReadOnlyAsyncCollection<IMessage>
 {
     SqliteDatabase _db;
     Type _messageType;

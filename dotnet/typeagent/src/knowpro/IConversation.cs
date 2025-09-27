@@ -27,7 +27,7 @@ public interface IConversation<TMessage>
 
 public interface IConversation
 {
-    IMessageCollection Messages { get; }
+    IReadOnlyAsyncCollection<IMessage> Messages { get; }
 
     IReadOnlyAsyncCollection<SemanticRef> SemanticRefs { get; }
 

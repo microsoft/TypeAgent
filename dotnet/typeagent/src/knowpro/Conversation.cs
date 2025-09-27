@@ -70,7 +70,7 @@ public class Conversation : IConversation
     }
 
     public Conversation(
-        IMessageCollection messages,
+        IReadOnlyAsyncCollection<IMessage> messages,
         IReadOnlyAsyncCollection<SemanticRef> semanticRefs,
         ITermToSemanticRefIndex semanticRefIndex,
         IConversationSecondaryIndexes secondaryIndexes
@@ -87,7 +87,7 @@ public class Conversation : IConversation
         SecondaryIndexes = secondaryIndexes;
     }
 
-    public IMessageCollection Messages { get; private set; }
+    public IReadOnlyAsyncCollection<IMessage> Messages { get; private set; }
 
     public IReadOnlyAsyncCollection<SemanticRef> SemanticRefs { get; private set; }
 
