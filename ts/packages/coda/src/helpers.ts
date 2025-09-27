@@ -236,6 +236,15 @@ export async function findMatchingFoldersByName(
     return foundFolders;
 }
 
+export function normalizeLineNumber(
+    line: number,
+    doc: vscode.TextDocument,
+): number {
+    // User provides 1-based line numbers, convert to 0-based.
+    // Clamp to document bounds.
+    return Math.max(0, Math.min(line - 1, doc.lineCount - 1));
+}
+
 export type WorkspaceDiagnostic = {
     uri: vscode.Uri;
     diagnostic: vscode.Diagnostic;
@@ -1006,12 +1015,26 @@ export function resolvePosition(
         }
 
         case "afterLine": {
-            const line = Math.min(target.line + 1, doc.lineCount - 1);
+            //const line = Math.min(target.line + 1, doc.lineCount - 1);
+            //return new vscode.Position(line, 0);
+
+            // user says "after line N" → insert at N (1-based) + 1
+            const line = Math.min(
+                Math.max(0, target.line), // normalize to 0-based
+                doc.lineCount - 1,
+            );
             return new vscode.Position(line, 0);
         }
 
         case "beforeLine": {
-            const line = Math.max(0, target.line - 1);
+            //const line = Math.max(0, target.line - 1);
+            //return new vscode.Position(line, 0);
+
+            // user says "before line N" → insert at N (1-based) - 1
+            const line = Math.max(
+                0,
+                Math.min(target.line - 2, doc.lineCount - 1), // subtract 2 because N → 0-based, then one before
+            );
             return new vscode.Position(line, 0);
         }
 

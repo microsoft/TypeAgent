@@ -5,6 +5,8 @@ export type EditorCodeActions =
     | EditorActionCreateFunction
     | EditorActionCreateCodeBlock
     | EditorActionFixProblem
+    | EditorActionMoveCursor
+    | EditorActionUpsertLines
     | EditorActionInsertComment
     | EditorActionGenerateWithCopilot
     | EditorActionCreateFile
@@ -155,6 +157,45 @@ export type EditorActionFixProblem = {
         hint?: string;
         // File scope (defaults to active editor)
         file?: FileTarget;
+    };
+};
+
+// Action to move the cursor in a file to a specified position.
+export type EditorActionMoveCursor = {
+    actionName: "moveCursorInFile";
+    parameters: {
+        //Target position for the cursor. Supports symbolic locations, line-based positions, or file-relative positions.
+        target: CursorTarget;
+        // Optional file where the cursor should be moved. Defaults to the active editor if not provided.
+        file?: FileTarget;
+        // Optional user or agent hint to clarify ambiguous positioning.
+        // Example: "after function declaration", "before import statements".
+        hint?: string;
+    };
+};
+
+// Action for inserting or deleting lines in a file.
+export type EditorActionUpsertLines = {
+    actionName: "insertOrDeleteLines";
+    parameters: {
+        // Operation to perform:
+        // "insert": add new empty lines at the target position
+        // "delete": remove lines starting from the target position
+        operation: "insert" | "delete";
+        // Number of lines to insert or delete (default: 1).
+        count?: number;
+        // Position where the operation should happen.
+        // Examples:
+        //   { type: "atCursor" }
+        //   { type: "afterLine", line: 10 }
+        //   { type: "atEndOfFile" }
+        position?: CursorTarget;
+        // Optional target file (defaults to the active editor).
+        file?: FileTarget;
+        // When deleting:
+        //   - true: allow deleting non-empty lines (default)
+        //   - false: only delete if lines are empty/whitespace
+        force?: boolean;
     };
 };
 

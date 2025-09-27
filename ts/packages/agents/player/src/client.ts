@@ -46,6 +46,7 @@ import {
     getAlbum,
     followPlaylist,
     addTracksToPlaylist,
+    getRecommendationsFromTrackCollection,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -434,6 +435,28 @@ export async function getClientContext(
             ? await initializeUserData(instanceStorage, service)
             : undefined,
     };
+}
+
+export async function trackCollectionRadio(
+    trackCollection: ITrackCollection,
+    clientContext: IClientContext,
+    nsamples = 2,
+) {
+    const totalRecommendations = [] as SpotifyApi.RecommendationTrackObject[];
+    for (let i = 0; i < nsamples; i++) {
+        const recommendations = await getRecommendationsFromTrackCollection(
+            clientContext.service,
+            trackCollection,
+        );
+        totalRecommendations.push(...recommendations.tracks);
+    }
+    if (totalRecommendations.length > 0) {
+        const collection =
+            TrackCollection.fromRecommendationTracks(totalRecommendations);
+        return collection;
+    } else {
+        return undefined;
+    }
 }
 
 function internTrackCollection(
