@@ -4,6 +4,7 @@
 import test, { expect, Page } from "@playwright/test";
 import {
     exitApplication,
+    getInputElementHandle,
     sendUserRequestAndWaitForCompletion,
     sendUserRequestAndWaitForResponse,
     startShell,
@@ -140,7 +141,7 @@ test.describe("Shell interface tests", () => {
         ).toBeDisabled();
 
         // put some text in the text box
-        const element = await mainWindow.waitForSelector("#phraseDiv");
+        const element = await getInputElementHandle(mainWindow);
         await element.fill("This is a test...");
         await element.press("Space");
 
@@ -166,7 +167,7 @@ test.describe("Shell interface tests", () => {
         }
 
         // get the input box
-        const element = await mainWindow.waitForSelector("#phraseDiv");
+        const element = await getInputElementHandle(mainWindow);
 
         // go through the command back stack to the end and make sure we get the expected
         // results. (command and cursor location)
