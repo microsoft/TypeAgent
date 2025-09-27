@@ -175,7 +175,7 @@ public static class CacheExtensions
     {
         if (!cache.TryGet(key, out TValue value))
         {
-            value = await resolver(key);
+            value = await resolver(key).ConfigureAwait(false);
             cache.Add(key, value);
         }
         return value;
@@ -196,7 +196,7 @@ public static class CacheExtensions
         {
             return values;
         }
-        IList<TValue> pendingValues = await resolver(pendingKeys);
+        IList<TValue> pendingValues = await resolver(pendingKeys).ConfigureAwait(false);
         if (values.Count != pendingKeys.Count)
         {
             throw new TypeAgentException("Resolver returned incorrect number of values");

@@ -13,7 +13,14 @@ public class KnowProWriter : ConsoleWriter
         {
             KnowProWriter.WriteJson(message);
         }
+    }
 
+    public static async Task WriteSemanticRefsAsync(Conversation conversation)
+    {
+        await foreach (var sr in conversation.SemanticRefs)
+        {
+            KnowProWriter.WriteJson(sr);
+        }
     }
 
     public static void Write(ConcreteEntity entity)

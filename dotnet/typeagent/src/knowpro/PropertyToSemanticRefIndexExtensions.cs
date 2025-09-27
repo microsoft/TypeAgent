@@ -77,7 +77,7 @@ public static class PropertyToSemanticRefIndexExtensions
         // TODO: Bulk operations
         foreach(var semanticRef in semanticRefs)
         {
-            await propertyIndex.AddSemanticRefAsync(semanticRef, cancellationToken);
+            await propertyIndex.AddSemanticRefAsync(semanticRef, cancellationToken).ConfigureAwait(false);
         }
     }
 

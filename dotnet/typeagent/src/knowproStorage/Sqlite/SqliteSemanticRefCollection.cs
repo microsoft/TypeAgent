@@ -74,7 +74,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         using var cmd = _db.CreateCommand(@"
 SELECT semref_id, range_json, knowledge_type, knowledge_json
 FROM SemanticRefs WHERE semref_id = @semref_id");
-        cmd.Parameters.AddWithValue("semref_id", semanticRefId);
+        cmd.AddParameter("semref_id", semanticRefId);
 
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
@@ -110,7 +110,8 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     {
         using var cmd = _db.CreateCommand(@"
 SELECT semref_id, range_json, knowledge_type, knowledge_json
-FROM SemanticRefs WHERE semref_id = ?
+FROM SemanticRefs
+ORDER BY semref_id
 ");
         using var reader = cmd.ExecuteReader();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -121,14 +122,17 @@ FROM SemanticRefs WHERE semref_id = ?
 
     }
 
-    public Task<IList<SemanticRef>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default)
+    public Task<IList<SemanticRef>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
     {
-        ArgumentVerify.ThrowIfGreaterThan(start, end, nameof(start));
+        ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
 
         using var cmd = _db.CreateCommand(@"
 SELECT semref_id, range_json, knowledge_type, knowledge_json
-FROM SemanticRefs WHERE semref_id >= ? AND semref_id < ?
+FROM SemanticRefs WHERE semref_id >= @start_id AND semref_id < @end_id
 ORDER BY semref_id");
+        cmd.AddParameter("@start_id", startOrdinal);
+        cmd.AddParameter("@end_id", endOrdinal);
+
         using var reader = cmd.ExecuteReader();
         var semanticRefList = reader.GetList(ReadSemanticRef);
         return Task.FromResult(semanticRefList);

@@ -7,6 +7,7 @@ public class Conversation<TMessage> : IConversation<TMessage>
     where TMessage : IMessage, new()
 {
     private IStorageProvider<TMessage> _storageProvider;
+    private Conversation _readonlyConversation;
 
     public Conversation(IStorageProvider<TMessage> provider)
         : this(
@@ -17,6 +18,7 @@ public class Conversation<TMessage> : IConversation<TMessage>
           )
     {
         _storageProvider = provider;
+        _readonlyConversation = new Conversation(provider);
     }
 
     public Conversation(
@@ -51,7 +53,7 @@ public class Conversation<TMessage> : IConversation<TMessage>
     
     public static implicit operator Conversation(Conversation<TMessage> conversation)
     {
-        return new Conversation(conversation._storageProvider);
+        return conversation._readonlyConversation;
     }
 }
 
@@ -69,7 +71,7 @@ public class Conversation : IConversation
 
     public Conversation(
         IMessageCollection messages,
-        ISemanticRefCollection semanticRefs,
+        IReadOnlyAsyncCollection<SemanticRef> semanticRefs,
         ITermToSemanticRefIndex semanticRefIndex,
         IConversationSecondaryIndexes secondaryIndexes
     )
@@ -87,7 +89,7 @@ public class Conversation : IConversation
 
     public IMessageCollection Messages { get; private set; }
 
-    public ISemanticRefCollection SemanticRefs { get; private set; }
+    public IReadOnlyAsyncCollection<SemanticRef> SemanticRefs { get; private set; }
 
     public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 

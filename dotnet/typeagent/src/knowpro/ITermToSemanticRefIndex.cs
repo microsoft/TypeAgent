@@ -30,7 +30,7 @@ public static class TermToSemanticRefIndexEx
         // TODO: Bulk operations
         foreach (var entry in entries)
         {
-            await index.AddTermAsync(term, entry, cancellationToken);
+            await index.AddTermAsync(term, entry, cancellationToken).ConfigureAwait(false);
         }
     }
 }

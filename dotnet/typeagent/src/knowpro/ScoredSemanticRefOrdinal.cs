@@ -8,5 +8,13 @@ public struct ScoredSemanticRefOrdinal
     public int SemanticRefOrdinal { get; set; }
     public float Score { get; set; }
 
-    public static ScoredSemanticRefOrdinal New(int semanticRefOrdinal) { return new ScoredSemanticRefOrdinal { SemanticRefOrdinal = semanticRefOrdinal, Score = 1 }; }
+    public static ScoredSemanticRefOrdinal New(int semanticRefOrdinal)
+    {
+        return new ScoredSemanticRefOrdinal { SemanticRefOrdinal = semanticRefOrdinal, Score = 1 };
+    }
+
+    public static IList<int> ToSemanticRefOrdinals(IList<ScoredSemanticRefOrdinal> items)
+    {
+        return items.Map((s) => s.SemanticRefOrdinal);
+    }
 }

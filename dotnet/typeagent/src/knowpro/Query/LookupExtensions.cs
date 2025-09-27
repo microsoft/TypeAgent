@@ -13,15 +13,18 @@ internal static class LookupExtensions
         CancellationToken cancellationToken = default
     )
     {
-        var scoredRefs = await semanticRefIndex.LookupTermAsync(term.Text, cancellationToken);
+        var scoredRefs = await semanticRefIndex.LookupTermAsync(term.Text, cancellationToken).ConfigureAwait(false);
         if (scoredRefs.IsNullOrEmpty())
         {
             return null;
         }
-        IList<SemanticRef> selectedRefs = await semanticRefs.GetAsync([.. scoredRefs.Select((sr) => sr.SemanticRefOrdinal)], cancellationToken);
+        IList<SemanticRef> selectedRefs = await semanticRefs.GetAsync(
+            ScoredSemanticRefOrdinal.ToSemanticRefOrdinals(scoredRefs),
+            cancellationToken
+        ).ConfigureAwait(false);
         if (selectedRefs.IsNullOrEmpty() || selectedRefs.Count != scoredRefs.Count)
         {
-            throw new InvalidOperationException();
+            throw new TypeAgentException();
         }
         IList<ScoredSemanticRefOrdinal> filtered = [];
         for (int i = 0; i < selectedRefs.Count; ++i)

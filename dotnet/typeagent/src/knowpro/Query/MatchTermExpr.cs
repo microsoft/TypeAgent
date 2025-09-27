@@ -21,12 +21,12 @@ internal class MatchSearchTermExpr : MatchTermExpr
 
     public SearchTerm SearchTerm { get; private set; }
 
-    public Func<SearchTerm, SemanticRef,ScoredSemanticRefOrdinal, ScoredSemanticRefOrdinal>? ScoreBooster { get; set; }
+    public Func<SearchTerm, SemanticRef, ScoredSemanticRefOrdinal, ScoredSemanticRefOrdinal>? ScoreBooster { get; set; }
 
 
     private async Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(QueryEvalContext context, Term term)
     {
-        var matches = await context.Conversation.SemanticRefIndex.LookupTermAsync(term.Text);
+        var matches = await context.Conversation.SemanticRefIndex.LookupTermAsync(term.Text).ConfigureAwait(false);
 
         if (matches.IsNullOrEmpty() && ScoreBooster is not null)
         {
