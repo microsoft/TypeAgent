@@ -37,25 +37,39 @@ public class ConsoleWriter
         }
     }
 
+    public static void WriteLine() => Console.WriteLine();
     public static void WriteLine(int value) => Console.WriteLine(value);
     public static void WriteLine(string value) => Console.WriteLine(value);
+
+    public static void WriteJson(object value)
+    {
+        WriteLine(Json.Stringify(value, true));
+    }
+
+    public static void WriteJson(Array values)
+    {
+        foreach (var value in values)
+        {
+            WriteJson(value);
+        }
+    }
 
     public static void WriteLineHeading(string title, int level = 1)
     {
         Write('#', level);
         if (!string.IsNullOrEmpty(title))
         {
-            Console.Write(" ");
-            Console.Write(title);
+            Write(" ");
+            Write(title);
         }
-        Console.WriteLine();
+        WriteLine();
     }
 
     public static void WriteError(string message)
     {
         PushColor(ConsoleColor.Red);
         WriteLineHeading("ERROR");
-        Console.WriteLine(message);
+        WriteLine(message);
         PopColor();
     }
 

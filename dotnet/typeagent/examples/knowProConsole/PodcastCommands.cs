@@ -36,7 +36,7 @@ public class PodcastCommands : ICommandModule
 
     private void Test(ParseResult args)
     {
-        foreach(var token in args.UnmatchedTokens)
+        foreach (var token in args.UnmatchedTokens)
         {
             Console.WriteLine(token);
         }
@@ -88,12 +88,23 @@ public class PodcastCommands : ICommandModule
         int count = await podcast.ImportMessagesAsync(data.Messages, cancellationToken);
         KnowProWriter.WriteLine($"{count} message imported");
         // Read all
+        /*
         for (int i = 0; i < count; ++i)
         {
             var message = await podcast.Messages.GetAsync(i, cancellationToken);
-            var json = Json.Stringify(message);
-            KnowProWriter.WriteLine(json);
+            //var message = await provider.MessagesReadOnly.GetAsync(i, cancellationToken);
+            KnowProWriter.WriteJson(message);
+        }*/
+        /*
+        await foreach (var message in provider.Messages)
+        {
+            KnowProWriter.WriteJson(message);
         }
+        */
+        await KnowProWriter.WriteMessagesAsync(podcast);
+        // Read some
+        var messages = await podcast.Messages.GetAsync([1, 2, 3, 4], cancellationToken);
+        KnowProWriter.WriteJson(messages);
 
         KnowProWriter.WriteLine($"{data.SemanticRefs.Length} semantic refs");
         count = await podcast.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken);

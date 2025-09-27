@@ -23,7 +23,8 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         {
             InitSchema();
         }
-        Messages = new SqliteMessageCollection<TMessage, TMeta>(_db);
+        TypedMessages = new SqliteMessageCollection<TMessage, TMeta>(_db);
+        Messages = new SqliteMessageCollection(_db, typeof(TMessage), typeof(TMeta));
         SemanticRefs = new SqliteSemanticRefCollection(_db);
         SemanticRefIndex = new SqliteTermToSemanticRefIndex(_db);
         SecondaryIndexes = new ConversationSecondaryIndexes(
@@ -32,7 +33,9 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         );
     }
 
-    public IMessageCollection<TMessage> Messages { get; private set; }
+    public IMessageCollection<TMessage> TypedMessages { get; private set; }
+
+    public IMessageCollection Messages { get; private set; }
 
     public ISemanticRefCollection SemanticRefs { get; private set; }
 

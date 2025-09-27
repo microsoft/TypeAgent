@@ -3,7 +3,6 @@
 
 namespace TypeAgent.KnowPro;
 
-
 /// <summary>
 /// For IConversation levelAPIs:
 /// <see cref="ConversationExtensions"/>
@@ -17,6 +16,18 @@ public interface IConversation<TMessage>
     IList<string> Tags { get; }
 
     IMessageCollection<TMessage> Messages { get; }
+
+    ISemanticRefCollection SemanticRefs { get; }
+
+    ITermToSemanticRefIndex SemanticRefIndex { get; }
+
+    IConversationSecondaryIndexes SecondaryIndexes { get; }
+}
+
+
+public interface IConversation
+{
+    IMessageCollection Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
 

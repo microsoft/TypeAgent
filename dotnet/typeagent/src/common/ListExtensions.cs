@@ -52,17 +52,16 @@ public static class ListExtensions
         }
     }
 
-    public static IList<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
+    public static IList<T> Filter<T>(this IList<T> list, Func<T, bool> filter)
     {
-        ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
-
-        List<TResult> results = [];
-        int count = list.Count;
-        for (int i = 0; i < count; ++i)
+        IList<T> filtered = [];
+        foreach (T item in list)
         {
-            results.Add(mapFn(list[i]));
+            if (filter(item))
+            {
+                filtered.Add(item);
+            }
         }
-        return results;
+        return filtered;
     }
-
 }

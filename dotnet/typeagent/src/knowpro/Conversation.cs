@@ -10,7 +10,7 @@ public class Conversation<TMessage> : IConversation<TMessage>
 
     public Conversation(IStorageProvider<TMessage> provider)
         : this(
-              provider.Messages,
+              provider.TypedMessages,
               provider.SemanticRefs,
               provider.SemanticRefIndex,
               provider.SecondaryIndexes
@@ -48,7 +48,51 @@ public class Conversation<TMessage> : IConversation<TMessage>
     public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 
     public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
+    
+    public static implicit operator Conversation(Conversation<TMessage> conversation)
+    {
+        return new Conversation(conversation._storageProvider);
+    }
 }
+
+public class Conversation : IConversation
+{
+    public Conversation(IStorageProvider provider)
+        : this(
+              provider.Messages,
+              provider.SemanticRefs,
+              provider.SemanticRefIndex,
+              provider.SecondaryIndexes
+          )
+    {
+    }
+
+    public Conversation(
+        IMessageCollection messages,
+        ISemanticRefCollection semanticRefs,
+        ITermToSemanticRefIndex semanticRefIndex,
+        IConversationSecondaryIndexes secondaryIndexes
+    )
+    {
+        ArgumentNullException.ThrowIfNull(messages, nameof(messages));
+        ArgumentNullException.ThrowIfNull(semanticRefs, nameof(semanticRefs));
+        ArgumentNullException.ThrowIfNull(semanticRefIndex, nameof(semanticRefIndex));
+        ArgumentNullException.ThrowIfNull(secondaryIndexes, nameof(secondaryIndexes));
+
+        Messages = messages;
+        SemanticRefs = semanticRefs;
+        SemanticRefIndex = semanticRefIndex;
+        SecondaryIndexes = secondaryIndexes;
+    }
+
+    public IMessageCollection Messages { get; private set; }
+
+    public ISemanticRefCollection SemanticRefs { get; private set; }
+
+    public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
+
+    public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
+};
 
 public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
 {

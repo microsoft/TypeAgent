@@ -26,6 +26,11 @@ public class Serializer
         return JsonSerializer.Serialize<T>(value, s_options);
     }
 
+    public static string ToJson(object value, Type type)
+    {
+        return JsonSerializer.Serialize(value, type, s_options);
+    }
+
     public static string ToJsonIndented<T>(T value)
     {
         return JsonSerializer.Serialize<T>(value, s_optionsIndent);
@@ -39,6 +44,11 @@ public class Serializer
     public static T FromJson<T>(string json)
     {
         return JsonSerializer.Deserialize<T>(json, s_options);
+    }
+
+    public static object? FromJson(string json, Type type)
+    {
+        return JsonSerializer.Deserialize(json, type, s_options);
     }
 
     public static T FromJsonElement<T>(JsonElement json)
