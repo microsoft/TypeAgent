@@ -19,7 +19,7 @@ public class SemanticRef
 
     // The public, strongly-typed property
     [JsonIgnore]
-    public KnowledgeObject Knowledge { get; set; }
+    public Knowledge Knowledge { get; set; }
 
     // Internal storage for the raw JSON
     [JsonPropertyName("knowledge")]
@@ -38,7 +38,7 @@ public class SemanticRef
         }
     }
 
-    public static JsonElement SerializeToElement(KnowledgeObject knowledge, string type)
+    public static JsonElement SerializeToElement(Knowledge knowledge, string type)
     {
         return type switch
         {
@@ -54,7 +54,7 @@ public class SemanticRef
 
     }
 
-    public static KnowledgeObject Deserialize(string json, string type)
+    public static Knowledge Deserialize(string json, string type)
     {
         return type switch
         {
@@ -69,7 +69,7 @@ public class SemanticRef
         };
     }
 
-    public static KnowledgeObject Deserialize(JsonElement element, string type)
+    public static Knowledge Deserialize(JsonElement element, string type)
     {
         return type switch
         {
