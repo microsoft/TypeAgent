@@ -41,9 +41,17 @@ public class Serializer
         return JsonSerializer.SerializeToElement<T>(value, s_options);
     }
 
-    public static T FromJson<T>(string json)
+    public static T? FromJson<T>(string json)
     {
         return JsonSerializer.Deserialize<T>(json, s_options);
+    }
+
+    public static T FromJsonRequired<T>(string json)
+    {
+        T? value = JsonSerializer.Deserialize<T>(json, s_options);
+        return value is not null ?
+               value :
+               throw new KnowProException(KnowProException.ErrorCode.DeserializeNull);
     }
 
     public static object? FromJson(string json, Type type)
@@ -51,8 +59,11 @@ public class Serializer
         return JsonSerializer.Deserialize(json, type, s_options);
     }
 
-    public static T FromJsonElement<T>(JsonElement json)
+    public static T FromJsonElementRequired<T>(JsonElement json)
     {
-        return json.Deserialize<T>( s_options);
+        T? value = json.Deserialize<T>(s_options);
+        return value is not null ?
+               value :
+               throw new KnowProException(KnowProException.ErrorCode.DeserializeNull);
     }
 }

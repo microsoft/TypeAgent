@@ -8,10 +8,12 @@ public class SearchTermGroup : ISearchTerm
     public SearchTermGroup(SearchTermBooleanOp booleanOp)
     {
         ArgumentVerify.ThrowIfNull(booleanOp, nameof(booleanOp));
-        this.BooleanOp = booleanOp;
+        BooleanOp = booleanOp;
+        Terms = [];
     }
 
     public SearchTermBooleanOp BooleanOp { get; private set; }
+
     public IList<SearchTerm> Terms { get; set; }
 
 }

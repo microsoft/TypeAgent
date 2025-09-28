@@ -161,12 +161,13 @@ ORDER BY semref_id");
 
     SemanticRef FromSemanticRefRow(SemanticRefRow semanticRefRow)
     {
-        SemanticRef semanticRef = new SemanticRef();
-
-        semanticRef.SemanticRefOrdinal = semanticRefRow.SemanticRefId;
-        semanticRef.Range = StorageSerializer.FromJson<TextRange>(semanticRefRow.RangeJson);
-        semanticRef.KnowledgeType = semanticRefRow.KnowledgeType;
-        semanticRef.Knowledge = SemanticRef.Deserialize(semanticRefRow.KnowledgeJson, semanticRefRow.KnowledgeType);
+        SemanticRef semanticRef = new()
+        {
+            SemanticRefOrdinal = semanticRefRow.SemanticRefId,
+            Range = StorageSerializer.FromJson<TextRange>(semanticRefRow.RangeJson),
+            KnowledgeType = semanticRefRow.KnowledgeType,
+            Knowledge = SemanticRef.Deserialize(semanticRefRow.KnowledgeJson, semanticRefRow.KnowledgeType)
+        };
 
         return semanticRef;
     }

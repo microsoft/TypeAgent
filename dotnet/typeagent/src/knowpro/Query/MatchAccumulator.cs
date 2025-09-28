@@ -4,10 +4,11 @@
 namespace TypeAgent.KnowPro.Query;
 
 internal class MatchAccumulator<T>
+    where T : notnull
 {
     private Dictionary<T, Match<T>> _matches;
 
-    public MatchAccumulator(IEqualityComparer<T> comparer = null)
+    public MatchAccumulator(IEqualityComparer<T>? comparer = null)
     {
         _matches = new Dictionary<T, Match<T>>(comparer);
     }

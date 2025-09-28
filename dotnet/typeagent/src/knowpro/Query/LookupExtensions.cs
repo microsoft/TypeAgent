@@ -14,10 +14,11 @@ internal static class LookupExtensions
     )
     {
         var scoredRefs = await semanticRefIndex.LookupTermAsync(term.Text, cancellationToken).ConfigureAwait(false);
-        if (scoredRefs.IsNullOrEmpty())
+        if (scoredRefs is null || scoredRefs.IsNullOrEmpty())
         {
             return null;
         }
+
         IList<SemanticRef> selectedRefs = await semanticRefs.GetAsync(
             ScoredSemanticRefOrdinal.ToSemanticRefOrdinals(scoredRefs),
             cancellationToken
@@ -26,6 +27,7 @@ internal static class LookupExtensions
         {
             throw new TypeAgentException();
         }
+
         IList<ScoredSemanticRefOrdinal> filtered = [];
         for (int i = 0; i < selectedRefs.Count; ++i)
         {

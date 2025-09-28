@@ -6,20 +6,23 @@ namespace TypeAgent.KnowPro.Query;
 internal class QueryEvalContext
 {
     DictionaryCache<int, SemanticRef> _semanticRefs;
-
-    public QueryEvalContext(IConversation conversation)
+    public QueryEvalContext(IConversation conversation, CancellationToken cancellationToken)
     {
         Conversation = conversation;
-        _semanticRefs = new DictionaryCache<int, SemanticRef>();
+        _semanticRefs = [];
+        CancellationToken = cancellationToken;
     }
 
     public IConversation Conversation { get; private set; }
+
+    public CancellationToken CancellationToken { get; private set; }
 
     public Task<SemanticRef> GetSemanticRef(int semanticRefOrdinal, CancellationToken cancellationToken)
     {
         return _semanticRefs.GetCachedOrLoadAsync(
             semanticRefOrdinal,
-            (ordinal) => Conversation.SemanticRefs.GetAsync(ordinal, cancellationToken)
+            LoadSemanticRef,
+            CancellationToken
         );
     }
 
@@ -27,7 +30,18 @@ internal class QueryEvalContext
     {
         return _semanticRefs.GetCachedOrLoadAsync(
             semanticRefOrdinals,
-            (ordinals) => Conversation.SemanticRefs.GetAsync(ordinals, cancellationToken)
+            LoadSemanticRefs,
+            CancellationToken
         );
+    }
+
+    Task<IList<SemanticRef>> LoadSemanticRefs(IList<int> ordinals, CancellationToken cancellationToken)
+    {
+        return Conversation.SemanticRefs.GetAsync(ordinals, cancellationToken);
+    }
+
+    Task<SemanticRef> LoadSemanticRef(int ordinal, CancellationToken cancellationToken)
+    {
+        return Conversation.SemanticRefs.GetAsync(ordinal, cancellationToken);
     }
 }

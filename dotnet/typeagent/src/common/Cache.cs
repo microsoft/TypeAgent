@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Threading;
+
 namespace TypeAgent.Common;
 
 public interface ICache<TKey, TValue>
@@ -162,13 +164,14 @@ public static class CacheExtensions
     public static async Task<TValue> GetCachedOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         TKey key,
-        Func<TKey, Task<TValue>> loader
+        Func<TKey, CancellationToken, Task<TValue>> loader,
+        CancellationToken cancellationToken = default
     )
         where TValue : class
     {
         if (!cache.TryGet(key, out TValue value))
         {
-            value = await loader(key).ConfigureAwait(false);
+            value = await loader(key, cancellationToken).ConfigureAwait(false);
             cache.Add(key, value);
         }
         return value;
@@ -177,7 +180,8 @@ public static class CacheExtensions
     public static async Task<IList<TValue>> GetCachedOrLoadAsync<TKey, TValue> (
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
-        Func<IList<TKey>, Task<IList<TValue>>> loader
+        Func<IList<TKey>, CancellationToken, Task<IList<TValue>>> loader,
+        CancellationToken cancellationToken = default
     )
         where TValue : class
     {
@@ -189,7 +193,7 @@ public static class CacheExtensions
         {
             return values;
         }
-        IList<TValue> pendingValues = await loader(pendingKeys).ConfigureAwait(false);
+        IList<TValue> pendingValues = await loader(pendingKeys, cancellationToken).ConfigureAwait(false);
         if (values.Count != pendingKeys.Count)
         {
             throw new TypeAgentException("Resolver returned incorrect number of values");

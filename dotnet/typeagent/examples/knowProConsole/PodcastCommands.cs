@@ -112,7 +112,7 @@ public class PodcastCommands : ICommandModule
 
         await KnowProWriter.WriteSemanticRefsAsync(podcast);
 
-        IList<ScoredSemanticRefOrdinal> matches;
+        IList<ScoredSemanticRefOrdinal>? matches;
         if (data.SemanticIndexData is not null)
         {
             await podcast.ImportTermToSemanticRefIndexAsync(data.SemanticIndexData.Items, cancellationToken);
@@ -120,7 +120,7 @@ public class PodcastCommands : ICommandModule
             KnowProWriter.WriteLine($"{count} index entries imported");
 
             matches = await podcast.SemanticRefIndex.LookupTermAsync("Children of Time", cancellationToken);
-            KnowProWriter.WriteLine($"{matches.Count} matches");
+            KnowProWriter.WriteLine($"{matches?.Count ?? 0} matches");
         }
 
         count = await podcast.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken);

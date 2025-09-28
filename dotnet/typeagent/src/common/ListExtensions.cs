@@ -11,12 +11,12 @@ public static class ListExtensions
     /// <typeparam name="T"></typeparam>
     /// <param name="list"></param>
     /// <returns></returns>
-    public static bool IsNullOrEmpty<T>(this IList<T> list)
+    public static bool IsNullOrEmpty<T>(this IList<T>? list)
     {
         return list is null || list.Count == 0;
     }
 
-    public static int GetCount<T>(this IList<T> list)
+    public static int GetCount<T>(this IList<T>? list)
     {
         return list is not null ? list.Count : 0;
     }

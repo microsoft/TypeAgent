@@ -13,21 +13,18 @@ public partial class ConcreteEntity
 
     [JsonIgnore]
     public bool HasFacets => !Facets.IsNullOrEmpty();
-
-    public string ToJson()
-    {
-        return Serializer.ToJson(this);
-    }
-
-    public static ConcreteEntity FromJson(string json)
-    {
-        return Serializer.FromJson<ConcreteEntity>(json);
-    }
 }
 
 public partial class Action
 {
     const string NoneEntityName = "none";
+
+    public Action()
+    {
+        SubjectEntityName = NoneEntityName;
+        ObjectEntityName = NoneEntityName;
+        IndirectObjectEntityName = NoneEntityName;
+    }
 
     [JsonIgnore]
     public bool HasVerbs => !Verbs.IsNullOrEmpty();

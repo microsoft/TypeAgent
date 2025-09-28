@@ -39,7 +39,7 @@ public partial class ConcreteEntity : KnowledgeSchema
     public string[] Type { get; set; }
 
     [JsonPropertyName("facets")]
-    public Facet[] Facets { get; set; }
+    public Facet[]? Facets { get; set; }
 }
 
 public partial class Action : KnowledgeSchema
@@ -58,18 +58,23 @@ public partial class Action : KnowledgeSchema
 
     [JsonPropertyName("indirecObjectEntityName")]
     public string IndirectObjectEntityName { get; set; }
+    //
+    // TODO: Support Params
+    //
 }
 
 public class KnowledgeResponse
 {
     [JsonPropertyName("entities")]
+    [JsonRequired]
     public ConcreteEntity[] Entities { get; set; }
 
     [JsonPropertyName("actions")]
+    [JsonRequired]
     public Action[] Actions { get; set; }
 
     [JsonPropertyName("inverseActions")]
-    public Action[] InverseActions { get; set; }
+    public Action[]? InverseActions { get; set; }
 
     [JsonPropertyName("topics")]
     public string[] Topics { get; set; }

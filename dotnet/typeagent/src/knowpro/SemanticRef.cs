@@ -55,10 +55,10 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.FromJson<ConcreteEntity>(json),
-            KnowPro.KnowledgeType.Action => Serializer.FromJson<Action>(json),
-            KnowPro.KnowledgeType.Topic => Serializer.FromJson<Topic>(json),
-            KnowPro.KnowledgeType.Tag => Serializer.FromJson<Tag>(json),
+            KnowPro.KnowledgeType.Entity => Serializer.FromJsonRequired<ConcreteEntity>(json),
+            KnowPro.KnowledgeType.Action => Serializer.FromJsonRequired<Action>(json),
+            KnowPro.KnowledgeType.Topic => Serializer.FromJsonRequired<Topic>(json),
+            KnowPro.KnowledgeType.Tag => Serializer.FromJsonRequired<Tag>(json),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }
@@ -67,10 +67,10 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.FromJsonElement<ConcreteEntity>(element),
-            KnowPro.KnowledgeType.Action => Serializer.FromJsonElement<Action>(element),
-            KnowPro.KnowledgeType.Topic => Serializer.FromJsonElement<Topic>(element),
-            KnowPro.KnowledgeType.Tag => Serializer.FromJsonElement<Tag>(element),
+            KnowPro.KnowledgeType.Entity => Serializer.FromJsonElementRequired<ConcreteEntity>(element),
+            KnowPro.KnowledgeType.Action => Serializer.FromJsonElementRequired<Action>(element),
+            KnowPro.KnowledgeType.Topic => Serializer.FromJsonElementRequired<Topic>(element),
+            KnowPro.KnowledgeType.Tag => Serializer.FromJsonElementRequired<Tag>(element),
             _ => throw new JsonException($"Unknown KnowledgeType: {type}")
         };
     }

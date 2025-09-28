@@ -24,7 +24,7 @@ internal class MatchSearchTermExpr : MatchTermExpr
     public Func<SearchTerm, SemanticRef, ScoredSemanticRefOrdinal, ScoredSemanticRefOrdinal>? ScoreBooster { get; set; }
 
 
-    private async Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(QueryEvalContext context, Term term)
+    private async Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
     {
         var matches = await context.Conversation.SemanticRefIndex.LookupTermAsync(term.Text).ConfigureAwait(false);
 

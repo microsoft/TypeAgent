@@ -6,50 +6,23 @@ namespace TypeAgent.KnowPro;
 public class Conversation<TMessage> : IConversation<TMessage>
     where TMessage : IMessage, new()
 {
-    private IStorageProvider<TMessage> _storageProvider;
-    private Conversation _readonlyConversation;
+    private readonly IStorageProvider<TMessage> _storageProvider;
+    private readonly Conversation _readonlyConversation;
 
     public Conversation(IStorageProvider<TMessage> provider)
-        : this(
-              provider.TypedMessages,
-              provider.SemanticRefs,
-              provider.SemanticRefIndex,
-              provider.SecondaryIndexes
-          )
     {
+        ArgumentVerify.ThrowIfNull(provider, nameof(provider));
         _storageProvider = provider;
         _readonlyConversation = new Conversation(provider);
     }
 
-    public Conversation(
-        IMessageCollection<TMessage> messages,
-        ISemanticRefCollection semanticRefs,
-        ITermToSemanticRefIndex semanticRefIndex,
-        IConversationSecondaryIndexes secondaryIndexes
-    )
-    {
-        ArgumentNullException.ThrowIfNull(messages, nameof(messages));
-        ArgumentNullException.ThrowIfNull(semanticRefs, nameof(semanticRefs));
-        ArgumentNullException.ThrowIfNull(semanticRefIndex, nameof(semanticRefIndex));
-        ArgumentNullException.ThrowIfNull(secondaryIndexes, nameof(secondaryIndexes));
+    public IMessageCollection<TMessage> Messages => _storageProvider.TypedMessages;
 
-        Messages = messages;
-        SemanticRefs = semanticRefs;
-        SemanticRefIndex = semanticRefIndex;
-        SecondaryIndexes = secondaryIndexes;
-    }
+    public ISemanticRefCollection SemanticRefs => _storageProvider.SemanticRefs;
 
-    public string Name { get; set; }
+    public ITermToSemanticRefIndex SemanticRefIndex => _storageProvider.SemanticRefIndex;
 
-    public IList<string> Tags { get; set; }
-
-    public IMessageCollection<TMessage> Messages { get; private set; }
-
-    public ISemanticRefCollection SemanticRefs { get; private set; }
-
-    public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
-
-    public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
+    public IConversationSecondaryIndexes SecondaryIndexes => _storageProvider.SecondaryIndexes;
 
     public static implicit operator Conversation(Conversation<TMessage> conversation)
     {
@@ -98,7 +71,10 @@ public class Conversation : IConversation
 
 public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
 {
-    public ConversationSecondaryIndexes(IPropertyToSemanticRefIndex propertyIndex, ITimestampToTextRangeIndex timestampIndex)
+    public ConversationSecondaryIndexes(
+        IPropertyToSemanticRefIndex propertyIndex,
+        ITimestampToTextRangeIndex timestampIndex
+    )
     {
         ArgumentVerify.ThrowIfNull(propertyIndex, nameof(propertyIndex));
         ArgumentVerify.ThrowIfNull(timestampIndex, nameof(timestampIndex));
@@ -111,5 +87,5 @@ public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
 
     public ITimestampToTextRangeIndex TimestampIndex { get; private set; }
 
-    public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; private set; }
+    //public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; private set; }
 }
