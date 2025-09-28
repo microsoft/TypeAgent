@@ -51,7 +51,7 @@ public class Serializer
         T? value = JsonSerializer.Deserialize<T>(json, s_options);
         return value is not null ?
                value :
-               throw new KnowProException(KnowProException.ErrorCode.DeserializeNull);
+               throw new KnowProException(KnowProException.ErrorCode.DeserializeIsNull);
     }
 
     public static object? FromJson(string json, Type type)
@@ -64,6 +64,6 @@ public class Serializer
         T? value = json.Deserialize<T>(s_options);
         return value is not null ?
                value :
-               throw new KnowProException(KnowProException.ErrorCode.DeserializeNull);
+               throw new KnowProException(KnowProException.ErrorCode.DeserializeIsNull);
     }
 }
