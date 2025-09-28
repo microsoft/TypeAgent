@@ -21,7 +21,7 @@ internal class QueryEvalContext
 
     public CancellationToken CancellationToken { get; private set; }
 
-    public Task<SemanticRef> GetSemanticRefAsync(int semanticRefOrdinal)
+    public ValueTask<SemanticRef> GetSemanticRefAsync(int semanticRefOrdinal)
     {
         return _semanticRefs.GetOrLoadAsync(
             semanticRefOrdinal,
@@ -30,7 +30,7 @@ internal class QueryEvalContext
         );
     }
 
-    public Task<IList<SemanticRef>> GetSemanticRefsAsync(IList<int> semanticRefOrdinals)
+    public ValueTask<IList<SemanticRef>> GetSemanticRefsAsync(IList<int> semanticRefOrdinals)
     {
         return _semanticRefs.GetOrLoadAsync(
             semanticRefOrdinals,
@@ -39,7 +39,7 @@ internal class QueryEvalContext
         );
     }
 
-    public Task<IList<SemanticRef>> GetSemanticRefsAsync(IList<ScoredSemanticRefOrdinal> scoredOrdinals)
+    public ValueTask<IList<SemanticRef>> GetSemanticRefsAsync(IList<ScoredSemanticRefOrdinal> scoredOrdinals)
     {
         IList<int> ordinals = [.. scoredOrdinals.ToSemanticRefOrdinals()];
         return GetSemanticRefsAsync(ordinals);

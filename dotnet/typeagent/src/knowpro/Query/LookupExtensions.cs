@@ -5,7 +5,7 @@ namespace TypeAgent.KnowPro.Query;
 
 internal static class LookupExtensions
 {
-    internal static async Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
+    internal static async ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
         this ITermToSemanticRefIndex semanticRefIndex,
         QueryEvalContext context,
         Term term,
@@ -53,7 +53,7 @@ internal static class LookupExtensions
         return filtered ?? scoredOrdinals;
     }
 
-    public static Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
+    public static ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
         this ITermToSemanticRefIndex semanticRefIndex,
         QueryEvalContext context,
         Term term,
@@ -62,19 +62,16 @@ internal static class LookupExtensions
         ScoreBooster? scoreBooster = null
     )
     {
-        if (rangesInScope is not null)
-        {
-            // If rangesInScope has no actual text ranges, then lookups can't possibly match
-            return semanticRefIndex.LookupTermAsync(
-                context,
-                term,
-                (sr, ordinal) =>
-                {
-                    return (kType is null || sr.KnowledgeType == kType) && rangesInScope.IsRangeInScope(sr.Range);
-                },
-                scoreBooster
-            );
-        }
-        return semanticRefIndex.LookupTermAsync(term.Text, context.CancellationToken);
+        // If rangesInScope has no actual text ranges, then lookups can't possibly match
+        return semanticRefIndex.LookupTermAsync(
+            context,
+            term,
+            (sr, ordinal) =>
+            {
+                return (kType is null || sr.KnowledgeType == kType) &&
+                (rangesInScope is null || rangesInScope.IsRangeInScope(sr.Range));
+            },
+            scoreBooster
+        );
     }
 }

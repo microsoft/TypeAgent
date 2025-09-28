@@ -29,7 +29,7 @@ internal class MatchSearchTermExpr : MatchTermExpr
 
     public ScoreBooster? ScoreBooster { get; set; }
 
-    private Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
+    private ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
     {
         return context.SemanticRefIndex.LookupTermAsync(
             context,

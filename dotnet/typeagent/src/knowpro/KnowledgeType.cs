@@ -6,7 +6,7 @@ namespace TypeAgent.KnowPro;
 /// <summary>
 /// TODO: Make this strongly typed to be a discriminated union like Typescript
 /// </summary>
-public struct KnowledgeType
+public readonly struct KnowledgeType
 {
     /// <summary>
     /// <see cref="ConcreteEntity"/>
