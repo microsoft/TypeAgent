@@ -11,21 +11,34 @@ public static class KnowledgeType
     /// <summary>
     /// <see cref="ConcreteEntity"/>
     /// </summary>
-    public const string Entity = "entity";
+    internal const string EntityTypeName = "entity";
     /// <summary>
     /// <see cref="KnowPro.Action"/>
     /// </summary>
-    public const string Action = "action";
+    internal const string ActionTypeName = "action";
     /// <summary>
     /// <see cref="KnowPro.Topic"/>
     /// </summary>
-    public const string Topic = "topic";
+    internal const string TopicTypeName = "topic";
     /// <summary>
     /// <see cref="KnowPro.Tag"/>
     /// </summary>
-    public const string Tag = "tag";
+    internal const string TagTypeName = "tag";
     /// <summary>
     /// <see cref="KnowPro.StructuredTag"/>
     /// </summary>
-    public const string STag = "sTag";
+    internal const string STagTypeName = "sTag";
+
+    public static bool IsKnowledgeType(string type)
+    {
+        return (
+            type == EntityTypeName ||
+            type == ActionTypeName ||
+            type == TopicTypeName ||
+            type == STagTypeName ||
+            type == TagTypeName
+        );
+    }
+
+
 }

@@ -14,17 +14,26 @@ public class SemanticRef
     [JsonPropertyName("range")]
     public TextRange Range { get; set; }
 
-    [JsonPropertyName("knowledgeType")]
+    [JsonIgnore]
     public string KnowledgeType { get; set; }
 
     // The public, strongly-typed property
     [JsonIgnore]
     public Knowledge Knowledge { get; set; }
 
-    // Internal storage for the raw JSON
+
+    // For serialization
+    [JsonPropertyName("knowledgeType")]
+    [JsonInclude]
+    private string KType
+    {
+        get => KnowledgeType;
+        set => KnowledgeType = value;
+    }
+
     [JsonPropertyName("knowledge")]
     [JsonInclude]
-    internal JsonElement? KnowledgeElement
+    private JsonElement? KnowledgeElement
     {
         get => Knowledge is not null ?
                SerializeToElement(Knowledge, KnowledgeType) :
@@ -42,10 +51,11 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.ToJsonElement(knowledge as ConcreteEntity),
-            KnowPro.KnowledgeType.Action => Serializer.ToJsonElement(knowledge as Action),
-            KnowPro.KnowledgeType.Topic => Serializer.ToJsonElement(knowledge as Topic),
-            KnowPro.KnowledgeType.Tag => Serializer.ToJsonElement(knowledge as Tag),
+            KnowPro.KnowledgeType.EntityTypeName => Serializer.ToJsonElement(knowledge as ConcreteEntity),
+            KnowPro.KnowledgeType.ActionTypeName => Serializer.ToJsonElement(knowledge as Action),
+            KnowPro.KnowledgeType.TopicTypeName => Serializer.ToJsonElement(knowledge as Topic),
+            KnowPro.KnowledgeType.STagTypeName => Serializer.ToJsonElement(knowledge as StructuredTag),
+            KnowPro.KnowledgeType.TagTypeName => Serializer.ToJsonElement(knowledge as Tag),
             _ => throw new KnowProException(
                 KnowProException.ErrorCode.InvalidKnowledgeType,
                 ToError(type)
@@ -58,10 +68,11 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.FromJsonRequired<ConcreteEntity>(json),
-            KnowPro.KnowledgeType.Action => Serializer.FromJsonRequired<Action>(json),
-            KnowPro.KnowledgeType.Topic => Serializer.FromJsonRequired<Topic>(json),
-            KnowPro.KnowledgeType.Tag => Serializer.FromJsonRequired<Tag>(json),
+            KnowPro.KnowledgeType.EntityTypeName => Serializer.FromJsonRequired<ConcreteEntity>(json),
+            KnowPro.KnowledgeType.ActionTypeName => Serializer.FromJsonRequired<Action>(json),
+            KnowPro.KnowledgeType.TopicTypeName => Serializer.FromJsonRequired<Topic>(json),
+            KnowPro.KnowledgeType.STagTypeName => Serializer.FromJsonRequired<StructuredTag>(json),
+            KnowPro.KnowledgeType.TagTypeName => Serializer.FromJsonRequired<Tag>(json),
             _ => throw new KnowProException(
                 KnowProException.ErrorCode.InvalidKnowledgeType,
                 ToError(type)
@@ -73,10 +84,11 @@ public class SemanticRef
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.FromJsonElementRequired<ConcreteEntity>(element),
-            KnowPro.KnowledgeType.Action => Serializer.FromJsonElementRequired<Action>(element),
-            KnowPro.KnowledgeType.Topic => Serializer.FromJsonElementRequired<Topic>(element),
-            KnowPro.KnowledgeType.Tag => Serializer.FromJsonElementRequired<Tag>(element),
+            KnowPro.KnowledgeType.EntityTypeName => Serializer.FromJsonElementRequired<ConcreteEntity>(element),
+            KnowPro.KnowledgeType.ActionTypeName => Serializer.FromJsonElementRequired<Action>(element),
+            KnowPro.KnowledgeType.TopicTypeName => Serializer.FromJsonElementRequired<Topic>(element),
+            KnowPro.KnowledgeType.STagTypeName => Serializer.FromJsonElementRequired<StructuredTag>(element),
+            KnowPro.KnowledgeType.TagTypeName => Serializer.FromJsonElementRequired<Tag>(element),
             _ => throw new KnowProException(
                 KnowProException.ErrorCode.InvalidKnowledgeType,
                 ToError(type)

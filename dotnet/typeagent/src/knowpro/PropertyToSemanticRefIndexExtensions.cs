@@ -32,7 +32,7 @@ public static class PropertyToSemanticRefIndexExtensions
             default:
                 break;
 
-            case KnowledgeType.Entity:
+            case KnowledgeType.EntityTypeName:
                 var entity = semanticRef.Knowledge as ConcreteEntity;
                 KnowProVerify.ThrowIfInvalid(entity);
 
@@ -43,7 +43,7 @@ public static class PropertyToSemanticRefIndexExtensions
                 );
                 break;
 
-            case KnowledgeType.Action:
+            case KnowledgeType.ActionTypeName:
                 var action = semanticRef.Knowledge as Action;
                 KnowProVerify.ThrowIfInvalid(action);
 
@@ -54,7 +54,7 @@ public static class PropertyToSemanticRefIndexExtensions
                 );
                 break;
 
-            case KnowledgeType.Tag:
+            case KnowledgeType.TagTypeName:
                 var tag = semanticRef.Knowledge as Tag;
                 KnowProVerify.ThrowIfInvalid(tag);
 
@@ -65,7 +65,7 @@ public static class PropertyToSemanticRefIndexExtensions
                 );
                 break;
 
-            case KnowledgeType.STag:
+            case KnowledgeType.STagTypeName:
                 var sTag = semanticRef.Knowledge as StructuredTag;
                 KnowProVerify.ThrowIfInvalid(sTag);
 
