@@ -84,20 +84,6 @@ export class BrowserConnector {
         return Array.isArray(result?.data) ? result.data : [];
     }
 
-    async getFilteredHtmlFragments(
-        inputHtmlFragments: any[],
-        cssSelectorsToKeep: string[],
-    ): Promise<any[]> {
-        const result = await this.sendActionToBrowser({
-            actionName: "getFilteredHTMLFragments",
-            parameters: {
-                fragments: inputHtmlFragments,
-                cssSelectorsToKeep: cssSelectorsToKeep,
-            },
-        });
-        return Array.isArray(result?.data) ? result.data : [];
-    }
-
     async getCurrentPageScreenshot(): Promise<string> {
         return await Promise.race<string>([
             (async () => {
@@ -124,16 +110,6 @@ export class BrowserConnector {
                 ),
             ),
         ]);
-    }
-
-    async getCurrentPageAnnotatedScreenshot(): Promise<string> {
-        const result = await this.sendActionToBrowser({
-            actionName: "captureAnnotatedScreenshot",
-            parameters: {
-                downloadAsFile: true,
-            },
-        });
-        return typeof result?.data === "string" ? result.data : "";
     }
 
     async clickOn(cssSelector: string): Promise<any> {

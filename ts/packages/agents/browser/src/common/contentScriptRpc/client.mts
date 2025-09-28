@@ -22,5 +22,15 @@ export function createContentScriptRpcClient(
             contentScriptRpcClient.invoke("getPageLinksByPosition", position),
         runPaleoBioDbAction: (action: any) =>
             contentScriptRpcClient.invoke("runPaleoBioDbAction", action),
+        clickOn: (cssSelector: string) =>
+            contentScriptRpcClient.invoke("clickOn", cssSelector),
+        setDropdown: (cssSelector: string, optionLabel: string) =>
+            contentScriptRpcClient.invoke("setDropdown", cssSelector, optionLabel),
+        enterTextIn: (textValue: string, cssSelector?: string, submitForm?: boolean) =>
+            contentScriptRpcClient.invoke("enterTextIn", textValue, cssSelector, submitForm),
+        awaitPageLoad: (timeout?: number) =>
+            contentScriptRpcClient.invoke("awaitPageLoad", timeout),
+        awaitPageInteraction: (timeout?: number) =>
+            contentScriptRpcClient.invoke("awaitPageInteraction", timeout),
     };
 }

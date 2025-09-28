@@ -368,7 +368,7 @@ export function createInlineBrowserControl(
                                     'autoIndexing',
                                     'extractionMode'
                                 ]);
-                                
+
                                 return {
                                     autoIndexing: storage.autoIndexing === true,
                                     extractionMode: storage.extractionMode || 'content'
@@ -401,6 +401,92 @@ export function createInlineBrowserControl(
                     extractionMode: "content",
                 };
             }
+        },
+        async getHtmlFragments(useTimestampIds?: boolean): Promise<any[]> {
+            try {
+                const webContents = getActiveBrowserWebContents();
+
+                // Call the runBrowserAction function that is exposed via contextBridge in webView.ts
+                const result = await webContents.executeJavaScript(`
+                    (async () => {
+                        try {
+                            // Check if browserConnect is available (exposed via contextBridge)
+                            if (window.browserConnect && typeof window.browserConnect.runBrowserAction === 'function') {
+                                const response = await window.browserConnect.runBrowserAction({
+                                    actionName: "getHTML",
+                                    parameters: {
+                                        fullHTML: false,
+                                        downloadAsFile: false,
+                                        extractText: true,
+                                        useTimestampIds: ${useTimestampIds === true}
+                                    }
+                                });
+                                return response;
+                            } else if (window.browserConnect && typeof window.browserConnect.getTabHTMLFragments === 'function') {
+                                // Fallback to direct getTabHTMLFragments if available
+                                const fragments = await window.browserConnect.getTabHTMLFragments(false, true);
+                                return {
+                                    message: "OK",
+                                    data: fragments
+                                };
+                            } else {
+                                throw new Error('browserConnect API with HTML fragment extraction not available in webView context');
+                            }
+                        } catch (error) {
+                            console.error('Failed to get HTML fragments:', error);
+                            throw error;
+                        }
+                    })()
+                `);
+
+                // Extract the data from the response format
+                if (result && result.data) {
+                    return Array.isArray(result.data) ? result.data : [];
+                }
+                return [];
+            } catch (error) {
+                console.error(
+                    "Failed to get HTML fragments from inline browser:",
+                    error,
+                );
+                return [];
+            }
+        },
+
+        async clickOn(cssSelector: string): Promise<any> {
+            return await contentScriptControl.clickOn(cssSelector);
+        },
+
+        async setDropdown(cssSelector: string, optionLabel: string): Promise<any> {
+            return await contentScriptControl.setDropdown(cssSelector, optionLabel);
+        },
+
+        async enterTextIn(textValue: string, cssSelector?: string, submitForm?: boolean): Promise<any> {
+            return await contentScriptControl.enterTextIn(textValue, cssSelector, submitForm);
+        },
+
+        async awaitPageLoad(timeout?: number): Promise<string> {
+            const webContents = getActiveBrowserWebContents();
+
+            // Wait for Electron webContents to be ready if still loading
+            if (webContents.isLoading()) {
+                await new Promise(resolve => {
+                    const handler = () => {
+                        webContents.removeListener('did-finish-load', handler);
+                        resolve(undefined);
+                    };
+                    webContents.on('did-finish-load', handler);
+                });
+            }
+
+            // Wait for incremental content updates via contentScript
+            await contentScriptControl.awaitPageLoad(timeout);
+
+            return webContents.getURL();
+        },
+
+        async awaitPageInteraction(timeout?: number): Promise<void> {
+            return await contentScriptControl.awaitPageInteraction(timeout);
         },
     };
     return {
