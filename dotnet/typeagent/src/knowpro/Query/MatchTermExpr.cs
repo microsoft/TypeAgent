@@ -15,6 +15,15 @@ internal class MatchTermExpr : QueryOpExprAsync<SemanticRefAccumulator?>
         : base()
     {
     }
+
+    protected virtual ValueTask AccumulateMatchesAsync(
+        QueryEvalContext context,
+        SemanticRefAccumulator matches
+    )
+    {
+        return ValueTask.CompletedTask;
+    }
+
 }
 
 internal class MatchSearchTermExpr : MatchTermExpr
