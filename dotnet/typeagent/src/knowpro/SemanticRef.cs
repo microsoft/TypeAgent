@@ -15,7 +15,7 @@ public class SemanticRef
     public TextRange Range { get; set; }
 
     [JsonIgnore]
-    public string KnowledgeType { get; set; }
+    public KnowledgeType KnowledgeType { get; set; }
 
     // The public, strongly-typed property
     [JsonIgnore]
@@ -58,7 +58,7 @@ public class SemanticRef
             KnowPro.KnowledgeType.TagTypeName => Serializer.ToJsonElement(knowledge as Tag),
             _ => throw new KnowProException(
                 KnowProException.ErrorCode.InvalidKnowledgeType,
-                ToError(type)
+                type
             )
         };
 
@@ -75,7 +75,7 @@ public class SemanticRef
             KnowPro.KnowledgeType.TagTypeName => Serializer.FromJsonRequired<Tag>(json),
             _ => throw new KnowProException(
                 KnowProException.ErrorCode.InvalidKnowledgeType,
-                ToError(type)
+                type
             )
         };
     }
@@ -91,14 +91,9 @@ public class SemanticRef
             KnowPro.KnowledgeType.TagTypeName => Serializer.FromJsonElementRequired<Tag>(element),
             _ => throw new KnowProException(
                 KnowProException.ErrorCode.InvalidKnowledgeType,
-                ToError(type)
+                type
             )
         };
-    }
-
-    static string ToError(string type)
-    {
-        return $"Unknown KnowledgeType: {type}";
     }
 }
 
