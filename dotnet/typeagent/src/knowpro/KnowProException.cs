@@ -9,7 +9,7 @@ public class KnowProException : TypeAgentException<KnowProException.ErrorCode>
     {
         None = 0,
         DeserializeIsNull,
-        InvalidKnowledgeType
+        InvalidKnowledgeType,
     }
 
     public KnowProException(ErrorCode errorCode)

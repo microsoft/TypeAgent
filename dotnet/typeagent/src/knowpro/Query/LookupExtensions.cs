@@ -5,67 +5,76 @@ namespace TypeAgent.KnowPro.Query;
 
 internal static class LookupExtensions
 {
-    internal static async Task<IList<ScoredSemanticRefOrdinal>?> LookupTermFilteredAsync(
+    internal static async Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
         this ITermToSemanticRefIndex semanticRefIndex,
+        QueryEvalContext context,
         Term term,
-        ISemanticRefCollection semanticRefs,
-        Func<SemanticRef, ScoredSemanticRefOrdinal, bool> filter,
-        CancellationToken cancellationToken = default
+        Func<SemanticRef, ScoredSemanticRefOrdinal, bool>? filter = null,
+        ScoreBooster? scoreBooster = null
     )
     {
-        var scoredRefs = await semanticRefIndex.LookupTermAsync(term.Text, cancellationToken).ConfigureAwait(false);
-        if (scoredRefs is null || scoredRefs.IsNullOrEmpty())
+        var scoredOrdinals = await semanticRefIndex.LookupTermAsync(
+            term.Text,
+            context.CancellationToken
+            ).ConfigureAwait(false);
+
+        if (scoredOrdinals is null ||
+            scoredOrdinals.IsNullOrEmpty()
+        )
         {
             return null;
         }
-
-        IList<SemanticRef> selectedRefs = await semanticRefs.GetAsync(
-            ScoredSemanticRefOrdinal.ToSemanticRefOrdinals(scoredRefs),
-            cancellationToken
-        ).ConfigureAwait(false);
-        if (selectedRefs.IsNullOrEmpty() || selectedRefs.Count != scoredRefs.Count)
+        if (filter is null && scoreBooster is null)
         {
-            throw new TypeAgentException();
+            return scoredOrdinals;
         }
 
-        IList<ScoredSemanticRefOrdinal> filtered = [];
+        IList<SemanticRef> selectedRefs = await context.GetSemanticRefsAsync(scoredOrdinals).ConfigureAwait(false);
+
+        IList<ScoredSemanticRefOrdinal>? filtered = null;
         for (int i = 0; i < selectedRefs.Count; ++i)
         {
-            if (filter(selectedRefs[i], scoredRefs[i]))
+            SemanticRef semanticRef = selectedRefs[i];
+            ScoredSemanticRefOrdinal scoredOrdinal = scoredOrdinals[i];
+            if (filter is not null)
             {
-                filtered.Add(scoredRefs[i]);
+                if (!filter(semanticRef, scoredOrdinal))
+                {
+                    continue;
+                }
+                filtered ??= [];
+                filtered.Add(scoredOrdinal);
+            }
+            if (scoreBooster is not null)
+            {
+                scoredOrdinals[i] = scoreBooster(term, semanticRef, scoredOrdinal);
             }
         }
-        return filtered;
+        return filtered ?? scoredOrdinals;
     }
 
     public static Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
         this ITermToSemanticRefIndex semanticRefIndex,
+        QueryEvalContext context,
         Term term,
-        ISemanticRefCollection semanticRefs,
         TextRangesInScope? rangesInScope,
-        string? kType,
-        CancellationToken cancellationToken = default
+        KnowledgeType? kType = null,
+        ScoreBooster? scoreBooster = null
     )
     {
         if (rangesInScope is not null)
         {
             // If rangesInScope has no actual text ranges, then lookups can't possibly match
-            return semanticRefIndex.LookupTermFilteredAsync(
+            return semanticRefIndex.LookupTermAsync(
+                context,
                 term,
-                semanticRefs,
                 (sr, ordinal) =>
                 {
-                    if (kType is not null && sr.KnowledgeType != kType)
-                    {
-                        return false;
-                    }
-                    return rangesInScope.IsRangeInScope(sr.Range);
+                    return (kType is null || sr.KnowledgeType == kType) && rangesInScope.IsRangeInScope(sr.Range);
                 },
-                cancellationToken
+                scoreBooster
             );
         }
-        return semanticRefIndex.LookupTermAsync(term.Text, cancellationToken);
+        return semanticRefIndex.LookupTermAsync(term.Text, context.CancellationToken);
     }
-
 }

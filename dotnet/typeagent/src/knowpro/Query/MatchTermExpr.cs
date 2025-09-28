@@ -3,6 +3,12 @@
 
 namespace TypeAgent.KnowPro.Query;
 
+internal delegate ScoredSemanticRefOrdinal ScoreBooster(
+    Term term,
+    SemanticRef semanticRef,
+    ScoredSemanticRefOrdinal scoredOrdinal
+    );
+
 internal class MatchTermExpr : QueryOpExprAsync<SemanticRefAccumulator?>
 {
     public MatchTermExpr()
@@ -21,27 +27,16 @@ internal class MatchSearchTermExpr : MatchTermExpr
 
     public SearchTerm SearchTerm { get; private set; }
 
-    public Func<SearchTerm, SemanticRef, ScoredSemanticRefOrdinal, ScoredSemanticRefOrdinal>? ScoreBooster { get; set; }
+    public ScoreBooster? ScoreBooster { get; set; }
 
-
-    private async Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
+    private Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
     {
-        var matches = await context.Conversation.SemanticRefIndex.LookupTermAsync(term.Text).ConfigureAwait(false);
-
-        if (matches.IsNullOrEmpty() && ScoreBooster is not null)
-        {
-            /*
-            for (int i = 0; i < matches.Count; ++i)
-            {
-                matches[i] = ScoreBooster(
-                    SearchTerm,
-                    context.getSemanticRef(matches[i].semanticRefOrdinal),
-                    matches[i],
-                );
-            }
-            */
-        }
-
-        return matches;
+        return context.SemanticRefIndex.LookupTermAsync(
+            context,
+            term,
+            context.TextRangesInScope,
+            null,
+            ScoreBooster
+        );
     }
 }

@@ -161,7 +161,7 @@ public class DictionaryCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TK
 
 public static class CacheExtensions
 {
-    public static async Task<TValue> GetCachedOrLoadAsync<TKey, TValue>(
+    public static async Task<TValue> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         TKey key,
         Func<TKey, CancellationToken, Task<TValue>> loader,
@@ -177,7 +177,7 @@ public static class CacheExtensions
         return value;
     }
 
-    public static async Task<IList<TValue>> GetCachedOrLoadAsync<TKey, TValue> (
+    public static async Task<IList<TValue>> GetOrLoadAsync<TKey, TValue> (
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
         Func<IList<TKey>, CancellationToken, Task<IList<TValue>>> loader,

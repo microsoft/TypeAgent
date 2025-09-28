@@ -13,11 +13,4 @@ public struct ScoredSemanticRefOrdinal
     {
         return new ScoredSemanticRefOrdinal { SemanticRefOrdinal = semanticRefOrdinal, Score = 1 };
     }
-
-    public static IList<int> ToSemanticRefOrdinals(IList<ScoredSemanticRefOrdinal>? items)
-    {
-        return items is not null ?
-               items.Map((s) => s.SemanticRefOrdinal) :
-               [];
-    }
 }
