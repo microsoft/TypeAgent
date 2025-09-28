@@ -2,9 +2,7 @@
 // Licensed under the MIT License.
 
 import { BoundingBox, HTMLFragment } from "./types";
-import {
-    downloadStringAsFile,
-} from "./tabManager";
+import { downloadStringAsFile } from "./tabManager";
 
 /**
  * Gets HTML fragments from a tab

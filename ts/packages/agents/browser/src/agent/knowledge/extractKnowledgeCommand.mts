@@ -59,9 +59,7 @@ function convertStoredKnowledgeToDisplayFormat(storedKnowledge: any): any {
 
 async function checkKnowledgeInIndex(
     url: string,
-    context:
-        | ActionContext<BrowserActionContext>
-        | any,
+    context: ActionContext<BrowserActionContext> | any,
 ): Promise<any | null> {
     try {
         // Get the session context - either directly or from action context
@@ -96,9 +94,7 @@ async function checkKnowledgeInIndex(
 async function saveKnowledgeToIndex(
     url: string,
     knowledge: any,
-    context:
-        | ActionContext<BrowserActionContext>
-        | any,
+    context: ActionContext<BrowserActionContext> | any,
 ): Promise<void> {
     try {
         if (!knowledge || !url) {

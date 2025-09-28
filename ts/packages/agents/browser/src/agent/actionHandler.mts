@@ -69,9 +69,7 @@ import {
     generateDetailedKnowledgeCards,
     generateDynamicKnowledgeHtml,
 } from "./knowledge/ui/knowledgeCardRenderer.mjs";
-import {
-    actionContextCache,
-} from "./knowledge/cache/actionContextCache.mjs";
+import { actionContextCache } from "./knowledge/cache/actionContextCache.mjs";
 import {
     normalizeUrlForIndex,
     runningExtractionsCache,
@@ -151,8 +149,6 @@ const debugWebSocket = registerDebug("typeagent:browser:ws");
 const dynamicDisplayRetryCounters = new Map<string, number>();
 const MAX_RETRY_CYCLES = 2;
 
-
-
 // Set up periodic cleanup for running extractions cache and retry counters
 setInterval(
     () => {
@@ -169,7 +165,6 @@ setInterval(
     },
     5 * 60 * 1000,
 ); // Clean up every 5 minutes
-
 
 // getDynamicDisplay implementation for browser agent
 async function getDynamicDisplayImpl(
@@ -524,7 +519,6 @@ async function updateBrowserContext(
         }
     }
 }
-
 
 async function processBrowserAgentMessage(
     data: any,
@@ -1070,7 +1064,6 @@ async function resolveWebPage(
     throw new Error(`Unable to find a URL for: '${site}'`);
 }
 
-
 function createKnowledgeActionResult(
     url: string,
     knowledge: any,
@@ -1119,7 +1112,6 @@ function createKnowledgeActionResult(
 
     return result;
 }
-
 
 async function openWebPage(
     context: ActionContext<BrowserActionContext>,
@@ -2345,7 +2337,6 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
         // REVIEW: command doesn't clear the activity context
     }
 }
-
 
 async function handleWebsiteAction(
     actionName: string,

@@ -3,10 +3,7 @@
 
 import { matchLinks, matchLinksByPosition } from "./domUtils";
 import { getReadablePageContent } from "./pageContent";
-import {
-    getPageHTML,
-    getPageHTMLFragments,
-} from "./htmlUtils";
+import { getPageHTML, getPageHTMLFragments } from "./htmlUtils";
 import { getPageText } from "./pageContent";
 import {
     getInteractiveElementsBoundingBoxes,
@@ -158,20 +155,26 @@ function setupMessageListeners(): void {
         clickOn: async (cssSelector: string) => {
             return await sendUIEventsRequest({
                 actionName: "clickOnElement",
-                parameters: { cssSelector }
+                parameters: { cssSelector },
             });
         },
         setDropdown: async (cssSelector: string, optionLabel: string) => {
             return await sendUIEventsRequest({
                 actionName: "setDropdownValue",
-                parameters: { cssSelector, optionLabel }
+                parameters: { cssSelector, optionLabel },
             });
         },
-        enterTextIn: async (textValue: string, cssSelector?: string, submitForm?: boolean) => {
-            const actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
+        enterTextIn: async (
+            textValue: string,
+            cssSelector?: string,
+            submitForm?: boolean,
+        ) => {
+            const actionName = cssSelector
+                ? "enterTextInElement"
+                : "enterTextOnPage";
             return await sendUIEventsRequest({
                 actionName,
-                parameters: { value: textValue, cssSelector, submitForm }
+                parameters: { value: textValue, cssSelector, submitForm },
             });
         },
         awaitPageLoad: async (timeout?: number) => {
@@ -179,7 +182,7 @@ function setupMessageListeners(): void {
         },
         awaitPageInteraction: async (timeout?: number) => {
             const delay = timeout || 400;
-            return new Promise(resolve => setTimeout(resolve, delay));
+            return new Promise((resolve) => setTimeout(resolve, delay));
         },
     };
 

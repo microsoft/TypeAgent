@@ -16,9 +16,7 @@ import {
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
-import {
-    getTabHTMLFragments,
-} from "./capture";
+import { getTabHTMLFragments } from "./capture";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "aiclient";
 
@@ -401,7 +399,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 false,
                 false,
                 true,
-                useTimestampIds
+                useTimestampIds,
             );
         },
         clickOn: async (cssSelector: string) => {
@@ -437,7 +435,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
             return contentScriptRpc.awaitPageInteraction(timeout);
         },
-    //};
+        //};
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

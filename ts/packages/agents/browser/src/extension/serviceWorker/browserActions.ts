@@ -8,9 +8,7 @@ import {
     awaitPageLoad,
     awaitPageIncrementalUpdates,
 } from "./tabManager";
-import {
-    getTabHTMLFragments,
-} from "./capture";
+import { getTabHTMLFragments } from "./capture";
 
 /**
  * Executes a browser action

@@ -4,9 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../browserActions.mjs";
 import { searchWebMemories } from "../searchWebMemories.mjs";
-import {
-    KnowledgeExtractionResult,
-} from "./schema/knowledgeExtraction.mjs";
+import { KnowledgeExtractionResult } from "./schema/knowledgeExtraction.mjs";
 import {
     extractKnowledgeFromPage,
     extractKnowledgeFromPageStreaming,
@@ -159,7 +157,12 @@ export async function handleKnowledgeAction(
             return await getImportanceStatistics(parameters, context);
 
         case "generateSmartSuggestedQuestions":
-            return await generateSmartSuggestedQuestions(parameters.knowledge, parameters.extractionResult, parameters.url, context);
+            return await generateSmartSuggestedQuestions(
+                parameters.knowledge,
+                parameters.extractionResult,
+                parameters.url,
+                context,
+            );
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);

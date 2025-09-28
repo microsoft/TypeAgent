@@ -25,9 +25,22 @@ export function createContentScriptRpcClient(
         clickOn: (cssSelector: string) =>
             contentScriptRpcClient.invoke("clickOn", cssSelector),
         setDropdown: (cssSelector: string, optionLabel: string) =>
-            contentScriptRpcClient.invoke("setDropdown", cssSelector, optionLabel),
-        enterTextIn: (textValue: string, cssSelector?: string, submitForm?: boolean) =>
-            contentScriptRpcClient.invoke("enterTextIn", textValue, cssSelector, submitForm),
+            contentScriptRpcClient.invoke(
+                "setDropdown",
+                cssSelector,
+                optionLabel,
+            ),
+        enterTextIn: (
+            textValue: string,
+            cssSelector?: string,
+            submitForm?: boolean,
+        ) =>
+            contentScriptRpcClient.invoke(
+                "enterTextIn",
+                textValue,
+                cssSelector,
+                submitForm,
+            ),
         awaitPageLoad: (timeout?: number) =>
             contentScriptRpcClient.invoke("awaitPageLoad", timeout),
         awaitPageInteraction: (timeout?: number) =>

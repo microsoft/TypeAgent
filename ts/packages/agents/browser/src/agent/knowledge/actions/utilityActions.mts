@@ -3,11 +3,8 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import {
-    AIModelRequiredError,
-} from "website-memory";
+import { AIModelRequiredError } from "website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
-
 
 export async function checkAIModelStatus(
     parameters: {},

@@ -457,12 +457,26 @@ export function createInlineBrowserControl(
             return await contentScriptControl.clickOn(cssSelector);
         },
 
-        async setDropdown(cssSelector: string, optionLabel: string): Promise<any> {
-            return await contentScriptControl.setDropdown(cssSelector, optionLabel);
+        async setDropdown(
+            cssSelector: string,
+            optionLabel: string,
+        ): Promise<any> {
+            return await contentScriptControl.setDropdown(
+                cssSelector,
+                optionLabel,
+            );
         },
 
-        async enterTextIn(textValue: string, cssSelector?: string, submitForm?: boolean): Promise<any> {
-            return await contentScriptControl.enterTextIn(textValue, cssSelector, submitForm);
+        async enterTextIn(
+            textValue: string,
+            cssSelector?: string,
+            submitForm?: boolean,
+        ): Promise<any> {
+            return await contentScriptControl.enterTextIn(
+                textValue,
+                cssSelector,
+                submitForm,
+            );
         },
 
         async awaitPageLoad(timeout?: number): Promise<string> {
@@ -470,12 +484,12 @@ export function createInlineBrowserControl(
 
             // Wait for Electron webContents to be ready if still loading
             if (webContents.isLoading()) {
-                await new Promise(resolve => {
+                await new Promise((resolve) => {
                     const handler = () => {
-                        webContents.removeListener('did-finish-load', handler);
+                        webContents.removeListener("did-finish-load", handler);
                         resolve(undefined);
                     };
-                    webContents.on('did-finish-load', handler);
+                    webContents.on("did-finish-load", handler);
                 });
             }
 

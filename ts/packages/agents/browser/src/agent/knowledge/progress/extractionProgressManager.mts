@@ -79,7 +79,8 @@ export async function handleKnowledgeExtractionProgress(
     debug(`Knowledge Extraction 2 Progress [${extractionId}]:`, progress);
 
     // Get active extraction tracking (it should already exist)
-    let activeExtraction: ActiveKnowledgeExtraction | undefined = getActiveKnowledgeExtraction(extractionId);
+    let activeExtraction: ActiveKnowledgeExtraction | undefined =
+        getActiveKnowledgeExtraction(extractionId);
     if (!activeExtraction) {
         console.warn(
             `No active extraction found for ${extractionId}, progress will be logged but not displayed`,

@@ -53,7 +53,9 @@ export interface KnowledgeResult {
  * Generates detailed knowledge cards with entities, topics, and relationships
  * This is the main function for rendering knowledge extraction results
  */
-export function generateDetailedKnowledgeCards(knowledgeResult: KnowledgeResult): string {
+export function generateDetailedKnowledgeCards(
+    knowledgeResult: KnowledgeResult,
+): string {
     const entities = knowledgeResult.entities || [];
     const topics = knowledgeResult.topics || [];
     let relationships = knowledgeResult.relationships || [];

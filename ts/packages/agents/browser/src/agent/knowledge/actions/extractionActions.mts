@@ -21,10 +21,7 @@ import {
     Entity,
     Relationship,
 } from "../schema/knowledgeExtraction.mjs";
-import {
-    ExtractionMode,
-    ExtractionInput,
-} from "website-memory";
+import { ExtractionMode, ExtractionInput } from "website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
 import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
 import {
@@ -1219,7 +1216,9 @@ export async function shouldRunKnowledgeExtraction(
 export { checkKnowledgeInIndex, saveKnowledgeToIndex };
 
 // Export function to access active extractions for dynamic display purposes
-export function getActiveKnowledgeExtraction(extractionId: string): ActiveKnowledgeExtraction | undefined {
+export function getActiveKnowledgeExtraction(
+    extractionId: string,
+): ActiveKnowledgeExtraction | undefined {
     return activeKnowledgeExtractions.get(extractionId);
 }
 

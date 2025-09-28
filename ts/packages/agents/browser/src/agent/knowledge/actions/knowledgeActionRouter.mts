@@ -6,13 +6,13 @@ import { BrowserActionContext } from "../../browserActions.mjs";
 import { searchWebMemories } from "../../searchWebMemories.mjs";
 import {
     extractKnowledgeFromPage,
-    extractKnowledgeFromPageStreaming
+    extractKnowledgeFromPageStreaming,
 } from "./extractionActions.mjs";
 import {
     indexWebPageContent,
     checkPageIndexStatus,
     getKnowledgeIndexStats,
-    clearKnowledgeIndex
+    clearKnowledgeIndex,
 } from "./indexingActions.mjs";
 import {
     getExtractionAnalytics,
@@ -22,7 +22,7 @@ import {
     getRecentKnowledgeItems,
     getTopDomains,
     getActivityTrends,
-    getDetailedKnowledgeStats
+    getDetailedKnowledgeStats,
 } from "./analyticsActions.mjs";
 import {
     getKnowledgeGraphStatus,
@@ -34,16 +34,16 @@ import {
     getEntityNeighborhood,
     getGlobalImportanceLayer,
     getViewportBasedNeighborhood,
-    getImportanceStatistics
+    getImportanceStatistics,
 } from "./graphActions.mjs";
 import {
     checkAIModelStatus,
-    checkActionDetectionStatus
+    checkActionDetectionStatus,
 } from "./utilityActions.mjs";
 import {
     getPageIndexedKnowledge,
     getDiscoverInsights,
-    generateSmartSuggestedQuestions
+    generateSmartSuggestedQuestions,
 } from "./queryActions.mjs";
 
 export async function handleKnowledgeAction(
@@ -118,7 +118,12 @@ export async function handleKnowledgeAction(
         case "checkActionDetectionStatus":
             return await checkActionDetectionStatus(parameters, context);
         case "generateSmartSuggestedQuestions":
-            return await generateSmartSuggestedQuestions(parameters.knowledge, parameters.extractionResult, parameters.url, context);
+            return await generateSmartSuggestedQuestions(
+                parameters.knowledge,
+                parameters.extractionResult,
+                parameters.url,
+                context,
+            );
 
         // Search Actions (kept in searchWebMemories)
         case "searchWebMemories":
