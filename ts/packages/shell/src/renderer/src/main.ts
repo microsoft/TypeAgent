@@ -456,7 +456,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
-    const chatInput = new ChatInput({}, "new_phraseDiv");
+    const chatInput = new ChatInput({}, "phraseDiv");
 
     chatView.setChatInput(chatInput);
 

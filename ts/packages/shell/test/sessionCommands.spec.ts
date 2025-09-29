@@ -3,9 +3,10 @@
 
 import test, { expect, Page } from "@playwright/test";
 import {
+    clearMessages,
     exitApplication,
     sendUserRequestAndWaitForCompletion,
-    sendUserRequestFast,
+    sendUserRequestAndWaitForResponse,
     startShell,
 } from "./testHelper";
 
@@ -73,7 +74,7 @@ test.describe("@session Commands", () => {
         const sessionName: string = sessions[sessions.length - 1];
 
         // issue delete session command
-        msg = await sendUserRequestAndWaitForCompletion(
+        msg = await sendUserRequestAndWaitForResponse(
             `@session delete ${sessions[0]}`,
             mainWindow,
         );
@@ -93,7 +94,7 @@ test.describe("@session Commands", () => {
         );
 
         // reissue delete session command
-        msg = await sendUserRequestAndWaitForCompletion(
+        msg = await sendUserRequestAndWaitForResponse(
             `@session delete ${sessions[0]}`,
             mainWindow,
         );
@@ -131,7 +132,7 @@ test.describe("@session Commands", () => {
         const mainWindow: Page = await startShell();
 
         // clear the history so we don't have two confirmation dialogs in the chat view
-        sendUserRequestFast(`@clear`, mainWindow);
+        await clearMessages(mainWindow);
 
         // reset
         let msg = await sendUserRequestAndWaitForCompletion(
@@ -141,7 +142,7 @@ test.describe("@session Commands", () => {
         expect(msg).toContain("Session settings revert to default.");
 
         // issue clear session command
-        msg = await sendUserRequestAndWaitForCompletion(
+        msg = await sendUserRequestAndWaitForResponse(
             `@session clear`,
             mainWindow,
         );

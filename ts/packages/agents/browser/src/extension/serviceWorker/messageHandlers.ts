@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getActiveTab } from "./tabManager";
-import { getTabHTMLFragments, getTabAnnotatedScreenshot } from "./capture";
+import { getTabHTMLFragments } from "./capture";
 import { getRecordedActions, saveRecordedActions } from "./storage";
 import {
     sendActionToAgent,
