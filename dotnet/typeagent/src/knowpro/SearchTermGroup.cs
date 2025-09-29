@@ -14,7 +14,7 @@ public class SearchTermGroup : ISearchTerm
 
     public SearchTermBooleanOp BooleanOp { get; private set; }
 
-    public IList<SearchTerm> Terms { get; set; }
+    public IList<ISearchTerm> Terms { get; set; }
 
 }
 

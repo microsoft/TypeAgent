@@ -26,7 +26,25 @@ internal class QueryCompiler
 
     public (IList<CompiledTermGroup>, QueryOpExpr) CompileSearchTermGroup(SearchTermGroup searchGroup)
     {
-        return ([], null);
+        IList<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
+
+        IList<QueryOpExpr> termExpressions = [];
+        foreach (var term in searchGroup.Terms)
+        {
+            switch(term)
+            {
+                default:
+                    break;
+
+                case SearchTerm searchTerm:
+                    break;
+
+                case SearchTermGroup subGroup:
+                    break;
+            }
+        }
+
+        return (compiledTerms, null);
     }
 
     private QueryOpExpr CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
