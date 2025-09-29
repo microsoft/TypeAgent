@@ -8,8 +8,28 @@ internal class QueryCompiler<TMessage>
 {
     private IConversation<TMessage> _conversation;
 
-    internal QueryCompiler(IConversation<TMessage> conversation)
+    public QueryCompiler(IConversation<TMessage> conversation)
     {
         _conversation = conversation;
     }
+
+    public float EntityTermMatchWeight { get; set; } = 100;
+
+    public float DefaultTermMatchWeight { get; set; } = 10;
+
+    public double RelatedIsExactThreshold { get; set; } = 0.95;
+
+    private QueryOpExpr<SemanticRefAccumulator?> CompileSearchTerm(SearchTerm searchTerm)
+    {
+        float boostWeight =
+            EntityTermMatchWeight / DefaultTermMatchWeight;
+
+        return new MatchSearchTermExpr(
+            searchTerm,
+            (term, semanticRef, scoredOrdinal) =>
+        {
+            return Ranker.BoostEntities(semanticRef, scoredOrdinal, boostWeight);
+        });
+    }
+
 }

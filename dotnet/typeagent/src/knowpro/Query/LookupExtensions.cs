@@ -5,6 +5,15 @@ namespace TypeAgent.KnowPro.Query;
 
 internal static class LookupExtensions
 {
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="semanticRefIndex"></param>
+    /// <param name="context"></param>
+    /// <param name="term">The actual term from SearchTerm to lookup</param>
+    /// <param name="filter"></param>
+    /// <param name="scoreBooster"></param>
+    /// <returns></returns>
     internal static async ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
         this ITermToSemanticRefIndex semanticRefIndex,
         QueryEvalContext context,

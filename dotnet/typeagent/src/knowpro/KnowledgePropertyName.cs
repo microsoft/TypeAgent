@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro;
 
-public readonly struct KnowledgePropertyName
+public class KnowledgePropertyName
 {
     /// <summary>
     /// The name of an entity
@@ -48,6 +48,8 @@ public readonly struct KnowledgePropertyName
     }
 
     public string Value { get; }
+
+    public override string ToString() => Value;
 
     public static implicit operator string(KnowledgePropertyName propertyName)
     {

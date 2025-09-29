@@ -7,9 +7,9 @@ internal delegate ScoredSemanticRefOrdinal ScoreBooster(
     Term term,
     SemanticRef semanticRef,
     ScoredSemanticRefOrdinal scoredOrdinal
-    );
+);
 
-internal class MatchTermExpr : QueryOpExprAsync<SemanticRefAccumulator?>
+internal class MatchTermExpr : QueryOpExpr<SemanticRefAccumulator?>
 {
     public MatchTermExpr()
         : base()
@@ -40,15 +40,16 @@ internal class MatchTermExpr : QueryOpExprAsync<SemanticRefAccumulator?>
 
 internal class MatchSearchTermExpr : MatchTermExpr
 {
-    public MatchSearchTermExpr(SearchTerm searchTerm)
+    public MatchSearchTermExpr(SearchTerm searchTerm, ScoreBooster? scoreBooster = null)
     {
         ArgumentVerify.ThrowIfNull(searchTerm, nameof(searchTerm));
         SearchTerm = searchTerm;
+        ScoreBooster = scoreBooster;
     }
 
-    public SearchTerm SearchTerm { get; private set; }
+    public SearchTerm SearchTerm { get; }
 
-    public ScoreBooster? ScoreBooster { get; set; }
+    public ScoreBooster? ScoreBooster { get; }
 
     protected override async ValueTask AccumulateMatchesAsync(
         QueryEvalContext context,

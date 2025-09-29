@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace TypeAgent.KnowPro;
 
 /// <summary>
 /// TODO: Make this strongly typed to be a discriminated union like Typescript
 /// </summary>
-public readonly struct KnowledgeType
+public class KnowledgeType
 {
     /// <summary>
     /// <see cref="ConcreteEntity"/>
@@ -52,6 +54,8 @@ public readonly struct KnowledgeType
     }
 
     public string Value { get; }
+
+    public override string ToString() => Value;
 
     public static implicit operator string(KnowledgeType type)
     {

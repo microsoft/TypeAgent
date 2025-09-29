@@ -47,6 +47,14 @@ public class SemanticRef
         }
     }
 
+    [JsonIgnore]
+    public bool IsEntity => KnowledgeType == KnowledgeType.Entity;
+
+    public ConcreteEntity? AsEntity()
+    {
+        return IsEntity ? Knowledge as ConcreteEntity : null;
+    }
+
     public static JsonElement SerializeToElement(Knowledge knowledge, string type)
     {
         return type switch
