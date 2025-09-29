@@ -35,7 +35,7 @@ test("startShell", { tag: "@smoke" }, async ({}) => {
 });
 
 test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
-    console.log(`Running test '${testInfo.title}`);
+    console.log(`Running test '${testInfo.title}'`);
 
     // launch the app
     const mainWindow: Page = await startShell();

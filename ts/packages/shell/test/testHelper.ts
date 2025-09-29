@@ -9,7 +9,7 @@ import {
     Page,
 } from "@playwright/test";
 import fs from "node:fs";
-import path from "node:path";
+import path, { relative } from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
@@ -22,7 +22,7 @@ const runningApplications: Map<string, ElectronApplication> = new Map<
     ElectronApplication
 >();
 
-function waitForPromiseWithTimeout<T>(
+async function waitForPromiseWithTimeout<T>(
     promise: Promise<T>,
     timeoutMs: number,
 ): Promise<T> {
@@ -41,6 +41,32 @@ function waitForPromiseWithTimeout<T>(
                 reject(err);
             });
     });
+}
+
+async function closeInstance(instanceName: string, force: boolean = false) {
+    const existing = runningApplications.get(instanceName);
+    if (existing) {
+        if (force) {
+            console.log(`Force closing instance ${instanceName}`);
+        }
+        try {
+            await waitForPromiseWithTimeout(existing.close(), 10000);
+        } catch (e: any) {
+            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName}`;
+
+            existing.process().kill();
+            if (force) {
+                console.log(errMsg);
+            } else {
+                throw new Error(errMsg);
+            }
+        } finally {
+            runningApplications.delete(instanceName);
+        }
+        if (force) {
+            console.log(`Force closed instance ${instanceName}`);
+        }
+    }
 }
 
 /**
@@ -93,20 +119,7 @@ export async function startShell(): Promise<Page> {
             );
             retryAttempt++;
 
-            const existing = runningApplications.get(instanceName);
-            if (existing) {
-                console.log(`Force closing instance ${instanceName}`);
-                try {
-                    await waitForPromiseWithTimeout(existing.close(), 10000);
-                } catch (e: any) {
-                    console.log(
-                        `Failed to close instance ${instanceName}: ${e.message}`,
-                    );
-                    existing.process().kill();
-                }
-                runningApplications.delete(instanceName);
-                console.log(`Force closed instance ${instanceName}`);
-            }
+            await closeInstance(instanceName, true);
         }
     } while (retryAttempt <= maxRetries);
 
@@ -146,9 +159,7 @@ async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
  */
 export async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
-    const instanceName = process.env["INSTANCE_NAME"]!;
-    await runningApplications.get(instanceName)!.close();
-    runningApplications.delete(instanceName);
+    await closeInstance(process.env["INSTANCE_NAME"]!);
 }
 
 /**
