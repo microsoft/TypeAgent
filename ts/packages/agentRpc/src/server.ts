@@ -386,11 +386,21 @@ export function createAgentRpcServer(
             instanceStorage: hasInstanceStorage
                 ? getStorage(contextId, false)
                 : undefined,
-            notify: (event: AppAgentEvent, message: string): void => {
+            notify: (
+                event: AppAgentEvent,
+                message: string | DisplayContent,
+                eventSetId?: string,
+            ): void => {
+                // Use eventSetId if provided, otherwise use contextId for compatibility
+                const finalRequestId = eventSetId
+                    ? `agent-eventset-${eventSetId}`
+                    : `agent-context-${contextId}`;
+
                 rpc.send("notify", {
                     contextId,
                     event,
                     message,
+                    requestId: finalRequestId,
                 });
             },
             popupQuestion: async (

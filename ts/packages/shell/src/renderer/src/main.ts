@@ -607,6 +607,10 @@ function handleInlineNotification(
     requestId: string | undefined,
     chatView: ChatView,
 ): void {
+    // Check if this request uses eventSetId pattern for notification replacement
+    const isEventSetNotification = requestId?.startsWith("agent-eventset-");
+
+    // Use the provided requestId if it follows eventSetId pattern, otherwise generate new one
     const agentRequestId =
         requestId && requestId.startsWith("agent-")
             ? requestId
@@ -620,5 +624,10 @@ function handleInlineNotification(
     };
 
     // Add to chat view with notification flag
-    chatView.addAgentMessage(agentMessage, { notification: true });
+    // Use dynamicUpdate for eventSet notifications to replace previous messages
+    chatView.addAgentMessage(agentMessage, {
+        appendMode: "temporary",
+        notification: true,
+        dynamicUpdate: isEventSetNotification,
+    });
 }

@@ -72,6 +72,10 @@ export class BrowserConnector {
     }
 
     async getHtmlFragments(useTimestampIds?: boolean): Promise<any[]> {
+        if (this.browserControl) {
+            return this.browserControl.getHtmlFragments(useTimestampIds);
+        }
+        // Fallback to sending action to browser if browserControl is not available
         const result = await this.sendActionToBrowser({
             actionName: "getHTML",
             parameters: {
@@ -113,6 +117,10 @@ export class BrowserConnector {
     }
 
     async clickOn(cssSelector: string): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.clickOn(cssSelector);
+        }
+
         return this.sendActionToBrowser({
             actionName: "clickOnElement",
             parameters: { cssSelector },
@@ -120,6 +128,9 @@ export class BrowserConnector {
     }
 
     async setDropdown(cssSelector: string, optionLabel: string): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.setDropdown(cssSelector, optionLabel);
+        }
         return this.sendActionToBrowser({
             actionName: "setDropdownValue",
             parameters: { cssSelector, optionLabel },
@@ -131,6 +142,14 @@ export class BrowserConnector {
         cssSelector?: string,
         submitForm?: boolean,
     ): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.enterTextIn(
+                textValue,
+                cssSelector,
+                submitForm,
+            );
+        }
+
         const actionName = cssSelector
             ? "enterTextInElement"
             : "enterTextOnPage";
@@ -145,6 +164,10 @@ export class BrowserConnector {
     }
 
     async awaitPageLoad(timeout?: number): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.awaitPageLoad(timeout);
+        }
+
         const actionPromise = this.sendActionToBrowser({
             actionName: "awaitPageLoad",
         });
@@ -158,6 +181,10 @@ export class BrowserConnector {
     }
 
     async awaitPageInteraction(timeout?: number) {
+        if (this.browserControl) {
+            return this.browserControl.awaitPageInteraction(timeout);
+        }
+
         if (!timeout) {
             timeout = 400;
         }

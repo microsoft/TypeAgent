@@ -57,7 +57,8 @@ export function generateDetailedKnowledgeCards(
     knowledgeResult: KnowledgeResult,
 ): string {
     const entities = knowledgeResult.entities || [];
-    const topics = knowledgeResult.topics || [];
+    const topics =
+        knowledgeResult.topics || (knowledgeResult as any).keyTopics || [];
     let relationships = knowledgeResult.relationships || [];
 
     if (relationships.length === 0 && knowledgeResult.actions) {

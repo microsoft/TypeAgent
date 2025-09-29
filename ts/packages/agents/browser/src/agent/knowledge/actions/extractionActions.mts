@@ -370,7 +370,7 @@ export async function extractKnowledgeFromPageStreaming(
     let processedItems = 0;
     const startTime = Date.now();
 
-    const sendProgressUpdate = async (
+    const sendProgressUpdate = (
         phase: KnowledgeExtractionProgress["phase"],
         currentItem?: string,
         incrementalData?: Partial<any>,
@@ -425,20 +425,16 @@ export async function extractKnowledgeFromPageStreaming(
         }
 
         // Phase 1: Content retrieval feedback
-        await sendProgressUpdate(
-            "content",
-            "Analyzing page structure and content",
-            {
-                contentMetrics: extractContentMetrics(extractionInputs),
-                url,
-                title: parameters.title,
-            },
-        );
+        sendProgressUpdate("content", "Analyzing page structure and content", {
+            contentMetrics: extractContentMetrics(extractionInputs),
+            url,
+            title: parameters.title,
+        });
 
         const extractor = new BrowserKnowledgeExtractor(context);
 
         // Phase 2: Basic extraction
-        await sendProgressUpdate("basic", "Processing basic page information");
+        sendProgressUpdate("basic", "Processing basic page information");
 
         let aggregatedResults: any = {
             title: parameters.title,
@@ -492,7 +488,7 @@ export async function extractKnowledgeFromPageStreaming(
             aggregatedResults = aggregateExtractionResults(basicResults);
             aggregatedResults.title = parameters.title;
 
-            await sendProgressUpdate(
+            sendProgressUpdate(
                 "basic",
                 "Basic analysis complete",
                 aggregatedResults,
@@ -501,7 +497,7 @@ export async function extractKnowledgeFromPageStreaming(
 
         // Phase 3: Summary mode (if enabled)
         if (shouldIncludeMode("summary", extractionMode)) {
-            await sendProgressUpdate("summary", "Generating content summary");
+            sendProgressUpdate("summary", "Generating content summary");
 
             const summaryResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
@@ -518,7 +514,7 @@ export async function extractKnowledgeFromPageStreaming(
                         totalItems = progress.total;
                         processedItems = progress.processed;
 
-                        await sendProgressUpdate(
+                        sendProgressUpdate(
                             "summary",
                             `Summarizing: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
@@ -551,7 +547,7 @@ export async function extractKnowledgeFromPageStreaming(
                 aggregatedResults.relationships = summaryData.relationships;
             }
 
-            await sendProgressUpdate(
+            sendProgressUpdate(
                 "summary",
                 "Summary analysis complete",
                 aggregatedResults, // Send the full aggregated results, not just summary/topics
@@ -560,10 +556,7 @@ export async function extractKnowledgeFromPageStreaming(
 
         // Phase 4: Content analysis (if enabled)
         if (shouldIncludeMode("content", extractionMode)) {
-            await sendProgressUpdate(
-                "analyzing",
-                "Discovering entities and topics",
-            );
+            sendProgressUpdate("analyzing", "Discovering entities and topics");
 
             const contentResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
@@ -579,7 +572,7 @@ export async function extractKnowledgeFromPageStreaming(
                         );
                         totalItems = progress.total;
                         processedItems = progress.processed;
-                        await sendProgressUpdate(
+                        sendProgressUpdate(
                             "analyzing",
                             `Analyzing content: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
@@ -623,7 +616,7 @@ export async function extractKnowledgeFromPageStreaming(
                 ];
             }
 
-            await sendProgressUpdate(
+            sendProgressUpdate(
                 "analyzing",
                 "Discovered entities and topics",
                 aggregatedResults, // Send full accumulated results
@@ -632,10 +625,7 @@ export async function extractKnowledgeFromPageStreaming(
 
         // Phase 5: Full extraction with relationships (if enabled)
         if (shouldIncludeMode("full", extractionMode)) {
-            await sendProgressUpdate(
-                "extracting",
-                "Analyzing entity relationships",
-            );
+            sendProgressUpdate("extracting", "Analyzing entity relationships");
 
             const fullResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
@@ -651,7 +641,7 @@ export async function extractKnowledgeFromPageStreaming(
                         );
                         totalItems = progress.total;
                         processedItems = progress.processed;
-                        await sendProgressUpdate(
+                        sendProgressUpdate(
                             "extracting",
                             `Extracting relationships: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
@@ -686,7 +676,7 @@ export async function extractKnowledgeFromPageStreaming(
                 ];
             }
 
-            await sendProgressUpdate(
+            sendProgressUpdate(
                 "extracting",
                 "Analyzed entity relationships",
                 aggregatedResults, // Send full accumulated results
@@ -694,7 +684,7 @@ export async function extractKnowledgeFromPageStreaming(
         }
 
         // Final completion
-        await sendProgressUpdate(
+        sendProgressUpdate(
             "complete",
             "Knowledge extraction completed successfully",
             aggregatedResults,
@@ -1022,6 +1012,8 @@ export async function performKnowledgeExtractionWithNotifications(
     extractionMode: string,
     parameters: any,
 ): Promise<void> {
+    let progressInterval: NodeJS.Timeout | null = null;
+
     try {
         const extractionId = parameters.extractionId;
 
@@ -1048,122 +1040,228 @@ export async function performKnowledgeExtractionWithNotifications(
 
         activeKnowledgeExtractions.set(extractionId, activeExtraction);
 
-        // Subscribe to progress events
-        const progressHandler = async (
+        // Subscribe to progress events to update internal state only
+        const progressHandler = (
             progress: KnowledgeExtractionProgressEvent,
         ) => {
             handleKnowledgeExtractionProgressFromEvent(
                 progress,
                 activeExtraction,
             );
+        };
 
-            // Calculate percentage from progress
-            const percentage =
-                progress.totalItems > 0
-                    ? Math.round(
-                          (progress.processedItems / progress.totalItems) * 100,
-                      )
-                    : 0;
+        knowledgeProgressEvents.onProgressById(extractionId, progressHandler);
 
-            // Send progress notifications at key milestones
-            if (percentage === 25 || percentage === 50 || percentage === 75) {
+        // Set up periodic notification callback similar to dynamic display system
+        let lastNotificationState: string | null = null;
+
+        const sendPeriodicProgress = () => {
+            if (
+                !activeExtraction.progressState ||
+                !activeExtraction.aggregatedKnowledge
+            ) {
+                return;
+            }
+
+            const { progressState, aggregatedKnowledge } = activeExtraction;
+            const entitiesCount = aggregatedKnowledge.entities?.length || 0;
+            const topicsCount = aggregatedKnowledge.topics?.length || 0;
+            const relationshipsCount =
+                aggregatedKnowledge.relationships?.length || 0;
+
+            // Only send notification if knowledge has changed
+            const currentState = `${entitiesCount}-${topicsCount}-${relationshipsCount}-${progressState.phase}`;
+            if (
+                currentState !== lastNotificationState &&
+                (entitiesCount > 0 || topicsCount > 0 || relationshipsCount > 0)
+            ) {
+                lastNotificationState = currentState;
+
+                const knowledgeHtml =
+                    generateDetailedKnowledgeCards(aggregatedKnowledge);
+                const headerText = "🔄 Knowledge Extraction Progress";
+                const subText = `Extracting knowledge from ${url}`;
+
                 sessionContext.notify(
                     AppAgentEvent.Inline,
-                    `Knowledge extraction ${percentage}% complete for ${url}`,
+                    {
+                        type: "html",
+                        content: `
+                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">
+                                <div style="font-weight: 600; color: #0d47a1;">${headerText}</div>
+                                <div style="font-size: 13px; color: #0d47a1; margin-top: 4px;">
+                                    ${subText}
+                                </div>
+                                <div style="font-size: 13px; color: #0d47a1; margin-top: 8px;">
+                                    Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                </div>
+                            </div>
+                            ${knowledgeHtml}
+                        `,
+                    },
+                    extractionId,
                 );
             }
         };
 
-        knowledgeProgressEvents.onProgressById(extractionId, progressHandler);
+        // Start periodic progress notifications every 1.5 seconds (same as dynamic display)
+        progressInterval = setInterval(() => {
+            if (
+                activeExtraction.progressState?.phase === "complete" ||
+                activeExtraction.progressState?.phase === "error"
+            ) {
+                if (progressInterval) clearInterval(progressInterval);
+                return;
+            }
+            sendPeriodicProgress();
+        }, 1500);
 
         // Start the extraction process without awaiting (background processing)
         handleKnowledgeAction(
             "extractKnowledgeFromPageStreaming",
             parameters,
             sessionContext,
-        ).then(async (knowledge) => {
-            // Update the final state when extraction completes
-            if (activeExtraction.progressState) {
-                activeExtraction.progressState.phase = "complete";
-                activeExtraction.progressState.percentage = 100;
-                activeExtraction.progressState.lastUpdate = Date.now();
-            }
+        )
+            .then(async (knowledge) => {
+                // Clear the interval when extraction completes
+                if (progressInterval) clearInterval(progressInterval);
 
-            // Send completion notification with summary
+                // Update the final state when extraction completes
+                if (activeExtraction.progressState) {
+                    activeExtraction.progressState.phase = "complete";
+                    activeExtraction.progressState.percentage = 100;
+                    activeExtraction.progressState.lastUpdate = Date.now();
+                }
 
-            // Always save to index first (critical for performance)
-            try {
-                await saveKnowledgeToIndex(url, knowledge, sessionContext);
-                updateExtractionTimestamp(url);
+                // Send completion notification with summary
 
-                const entitiesCount = knowledge.entities?.length || 0;
-                const topicsCount = knowledge.topics?.length || 0;
-                const relationshipsCount = knowledge.relationships?.length || 0;
+                // Always save to index first (critical for performance)
+                try {
+                    await saveKnowledgeToIndex(url, knowledge, sessionContext);
+                    updateExtractionTimestamp(url);
 
-                const knowledgeHtml = generateDetailedKnowledgeCards(knowledge);
+                    const entitiesCount = knowledge.entities?.length || 0;
+                    const topicsCount = knowledge.topics?.length || 0;
+                    const relationshipsCount =
+                        knowledge.relationships?.length || 0;
 
-                const headerText = "✅ Knowledge Extraction Complete";
-                const subText = `Successfully extracted and indexed knowledge from the ${url} page`;
+                    const knowledgeHtml =
+                        generateDetailedKnowledgeCards(knowledge);
 
-                sessionContext.notify(AppAgentEvent.Inline, {
-                    type: "html",
-                    content: `
-                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
-                                <div style="font-weight: 600; color: #155724;">${headerText}</div>
-                                <div style="font-size: 13px; color: #155724; margin-top: 4px;">
-                                    ${subText}
+                    const headerText = "✅ Knowledge Extraction Complete";
+                    const subText = `Successfully extracted and indexed knowledge from the ${url} page`;
+
+                    sessionContext.notify(
+                        AppAgentEvent.Inline,
+                        {
+                            type: "html",
+                            content: `
+                                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
+                                    <div style="font-weight: 600; color: #155724;">${headerText}</div>
+                                    <div style="font-size: 13px; color: #155724; margin-top: 4px;">
+                                        ${subText}
+                                    </div>
+                                    <div style="font-size: 13px; color: #155724; margin-top: 8px;">
+                                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                    </div>
                                 </div>
-                                <div style="font-size: 13px; color: #155724; margin-top: 8px;">
-                                    Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                ${knowledgeHtml}
+                            `,
+                        },
+                        extractionId,
+                    );
+                } catch (indexError) {
+                    // Still notify about extraction, but warn about index failure
+                    console.error(
+                        `Failed to index knowledge for ${url}:`,
+                        indexError,
+                    );
+                    const entitiesCount = knowledge.entities?.length || 0;
+                    const topicsCount = knowledge.topics?.length || 0;
+                    const relationshipsCount =
+                        knowledge.relationships?.length || 0;
+
+                    const knowledgeHtml =
+                        generateDetailedKnowledgeCards(knowledge);
+
+                    const headerText =
+                        "⚠️ Knowledge Extraction Complete (Warning)";
+                    const subText = `Successfully extracted knowledge from the ${url} page, but failed to save to index`;
+
+                    sessionContext.notify(
+                        AppAgentEvent.Inline,
+                        {
+                            type: "html",
+                            content: `
+                                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                                    <div style="font-weight: 600; color: #856404;">${headerText}</div>
+                                    <div style="font-size: 13px; color: #856404; margin-top: 4px;">
+                                        ${subText}
+                                    </div>
+                                    <div style="font-size: 13px; color: #856404; margin-top: 8px;">
+                                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                    </div>
                                 </div>
-                            </div>
-                            ${knowledgeHtml}
-                        `,
-                });
-            } catch (indexError) {
-                // Still notify about extraction, but warn about index failure
-                console.error(
-                    `Failed to index knowledge for ${url}:`,
-                    indexError,
+                                ${knowledgeHtml}
+                            `,
+                        },
+                        extractionId,
+                    );
+                }
+
+                // Cleanup when extraction completes
+                knowledgeProgressEvents.removeProgressListener(
+                    parameters.extractionId,
                 );
-                const entitiesCount = knowledge.entities?.length || 0;
-                const topicsCount = knowledge.topics?.length || 0;
-                const relationshipsCount = knowledge.relationships?.length || 0;
+                setTimeout(() => {
+                    activeKnowledgeExtractions.delete(parameters.extractionId);
+                }, 30000);
+            })
+            .catch((error: any) => {
+                // Clear the interval on error
+                if (progressInterval) clearInterval(progressInterval);
 
-                const knowledgeHtml = generateDetailedKnowledgeCards(knowledge);
-
-                const headerText = "⚠️ Knowledge Extraction Complete (Warning)";
-                const subText = `Successfully extracted knowledge from the ${url} page, but failed to save to index`;
-
-                sessionContext.notify(AppAgentEvent.Inline, {
-                    type: "html",
-                    content: `
-                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                                <div style="font-weight: 600; color: #856404;">${headerText}</div>
-                                <div style="font-size: 13px; color: #856404; margin-top: 4px;">
-                                    ${subText}
+                console.error(
+                    "Knowledge extraction with notifications failed:",
+                    error,
+                );
+                // Send final error notification with the same eventSetId to replace progress
+                sessionContext.notify(
+                    AppAgentEvent.Inline,
+                    {
+                        type: "html",
+                        content: `
+                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
+                                <div style="font-weight: 600; color: #721c24;">❌ Knowledge Extraction Failed</div>
+                                <div style="font-size: 13px; color: #721c24; margin-top: 4px;">
+                                    Failed to extract knowledge from ${url}
                                 </div>
-                                <div style="font-size: 13px; color: #856404; margin-top: 8px;">
-                                    Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+                                <div style="font-size: 12px; color: #721c24; margin-top: 8px;">
+                                    Error: ${error.message}
                                 </div>
                             </div>
-                            ${knowledgeHtml}
                         `,
-                });
-            }
-        });
+                    },
+                    extractionId,
+                );
+
+                // Cleanup on error
+                knowledgeProgressEvents.removeProgressListener(
+                    parameters.extractionId,
+                );
+                setTimeout(() => {
+                    activeKnowledgeExtractions.delete(parameters.extractionId);
+                }, 30000);
+            });
     } catch (error: any) {
-        console.error("Knowledge extraction with notifications failed:", error);
+        // Clear the interval if setup fails
+        if (progressInterval) clearInterval(progressInterval);
+
+        console.error("Knowledge extraction setup failed:", error);
         sessionContext.notify(
             AppAgentEvent.Error,
-            `Knowledge extraction failed for ${url}: ${error.message}`,
+            `Knowledge extraction setup failed for ${url}: ${error.message}`,
         );
-    } finally {
-        // Cleanup
-        knowledgeProgressEvents.removeProgressListener(parameters.extractionId);
-        setTimeout(() => {
-            activeKnowledgeExtractions.delete(parameters.extractionId);
-        }, 30000);
     }
 }
 

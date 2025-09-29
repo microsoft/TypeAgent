@@ -161,7 +161,11 @@ export interface SessionContext<T = unknown> {
     readonly sessionStorage: Storage | undefined;
     readonly instanceStorage: Storage | undefined; // storage that are preserved across sessions
 
-    notify(event: AppAgentEvent, message: string | DisplayContent): void;
+    notify(
+        event: AppAgentEvent,
+        message: string | DisplayContent,
+        eventSetId?: string,
+    ): void;
 
     // choices default to ["Yes", "No"]
     popupQuestion(

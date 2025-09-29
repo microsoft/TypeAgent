@@ -377,8 +377,17 @@ export async function createAgentRpcClient(
             contextId: number;
             event: AppAgentEvent;
             message: string;
+            requestId?: string;
         }) => {
-            contextMap.get(param.contextId).notify(param.event, param.message);
+            // Extract eventSetId from requestId if it follows the pattern
+            let eventSetId: string | undefined;
+            if (param.requestId?.startsWith("agent-eventset-")) {
+                eventSetId = param.requestId.replace("agent-eventset-", "");
+            }
+
+            contextMap
+                .get(param.contextId)
+                .notify(param.event, param.message, eventSetId);
         },
         setDisplay: (param: {
             actionContextId: number;
