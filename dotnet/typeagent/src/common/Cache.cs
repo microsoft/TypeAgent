@@ -177,7 +177,7 @@ public static class CacheExtensions
         return value;
     }
 
-    public static async ValueTask<IList<TValue>> GetOrLoadAsync<TKey, TValue> (
+    public static async ValueTask<IList<TValue>> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
         Func<IList<TKey>, CancellationToken, Task<IList<TValue>>> loader,

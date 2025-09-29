@@ -56,3 +56,20 @@ public partial class Action
         return !string.IsNullOrEmpty(value) && value != NoneEntityName;
     }
 }
+
+public partial class Topic
+{
+    public static implicit operator string(Topic topic)
+    {
+        return topic.Text;
+    }
+}
+
+public partial class Tag
+{
+    public static implicit operator string(Tag tag)
+    {
+        return tag.Text;
+    }
+}
+

@@ -72,19 +72,19 @@ public class KnowledgeResponse
     public string[] Topics { get; set; }
 }
 
-public class Topic : Knowledge
+public partial class Topic : Knowledge
 {
     [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 
-public class Tag : Knowledge
+public partial class Tag : Knowledge
 {
     [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 
-public class StructuredTag : ConcreteEntity
+public partial class StructuredTag : ConcreteEntity
 {
 
 }

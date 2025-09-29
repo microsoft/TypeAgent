@@ -1,11 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Buffers;
+
 namespace TypeAgent.KnowPro.Query;
 
 internal class QueryEvalContext
 {
     DictionaryCache<int, SemanticRef> _semanticRefs;
+
     public QueryEvalContext(IConversation conversation, CancellationToken cancellationToken)
     {
         Conversation = conversation;
@@ -43,6 +46,15 @@ internal class QueryEvalContext
     {
         IList<int> ordinals = [.. scoredOrdinals.ToSemanticRefOrdinals()];
         return GetSemanticRefsAsync(ordinals);
+    }
+
+    public SemanticRefAccumulator AllocSemanticRefAccumulator()
+    {
+        return new SemanticRefAccumulator();
+    }
+
+    public void Free(SemanticRefAccumulator accumulator)
+    {
     }
 
     Task<IList<SemanticRef>> LoadSemanticRefs(IList<int> ordinals, CancellationToken cancellationToken)
