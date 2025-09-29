@@ -22,6 +22,27 @@ const runningApplications: Map<string, ElectronApplication> = new Map<
     ElectronApplication
 >();
 
+function waitForPromiseWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error("Operation timed out"));
+        }, timeoutMs);
+
+        promise
+            .then((result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            })
+            .catch((err) => {
+                clearTimeout(timeout);
+                reject(err);
+            });
+    });
+}
+
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
@@ -74,9 +95,17 @@ export async function startShell(): Promise<Page> {
 
             const existing = runningApplications.get(instanceName);
             if (existing) {
-                console.log(`Closing instance ${instanceName}`);
-                await existing.close();
+                console.log(`Force closing instance ${instanceName}`);
+                try {
+                    await waitForPromiseWithTimeout(existing.close(), 10000);
+                } catch (e: any) {
+                    console.log(
+                        `Failed to close instance ${instanceName}: ${e.message}`,
+                    );
+                    existing.process().kill();
+                }
                 runningApplications.delete(instanceName);
+                console.log(`Force closed instance ${instanceName}`);
             }
         }
     } while (retryAttempt <= maxRetries);
