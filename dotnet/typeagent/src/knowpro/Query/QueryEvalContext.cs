@@ -9,20 +9,29 @@ internal class QueryEvalContext
 {
     DictionaryCache<int, SemanticRef> _semanticRefs;
 
-    public QueryEvalContext(IConversation conversation, CancellationToken cancellationToken)
+    public QueryEvalContext(IConversation conversation, CancellationToken cancellationToken = default)
     {
+        CancellationToken = cancellationToken;
+
         Conversation = conversation;
         _semanticRefs = [];
-        CancellationToken = cancellationToken;
+        MatchedTerms = new TermSet();
     }
 
     public IConversation Conversation { get; private set; }
 
     public ITermToSemanticRefIndex SemanticRefIndex => Conversation.SemanticRefIndex;
 
+    public TermSet MatchedTerms { get; private set; }
+
     public TextRangesInScope? TextRangesInScope { get; set; }
 
     public CancellationToken CancellationToken { get; private set; }
+
+    public void ClearMatchedTerms()
+    {
+        MatchedTerms.Clear();
+    }
 
     public ValueTask<SemanticRef> GetSemanticRefAsync(int semanticRefOrdinal)
     {

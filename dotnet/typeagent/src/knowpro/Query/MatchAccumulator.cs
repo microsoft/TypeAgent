@@ -102,6 +102,18 @@ internal class MatchAccumulator<T>
         }
     }
 
+    public void Add(T value, double score, bool isExact)
+    {
+        if (isExact)
+        {
+            AddExact(value, score);
+        }
+        else
+        {
+            AddRelated(value, score);
+        }
+    }
+
     public void AddUnion(MatchAccumulator<T> other)
     {
         ArgumentVerify.ThrowIfNull(other, nameof(other));
