@@ -10,6 +10,7 @@ import {
     ShellUserSettings,
     Client,
     SearchMenuItem,
+    UserExpression,
 } from "../../preload/electronTypes";
 import { ChatView } from "./chat/chatView";
 import { TabView } from "./tabView";
@@ -357,9 +358,18 @@ function registerClient(
             // update chatview title
             chatView.setTitle(title);
         },
-        continuousSpeechProcessed(text: string): void {
+        continuousSpeechProcessed(expressions: UserExpression[]): void {
             // TODO: process messages and only add questions/requests.
-            chatView.addUserMessage(text);
+
+            console.log(`Continuous speech processed: ${JSON.stringify(expressions)}`);
+
+            for (const expression of expressions) {
+                if (expression.complete_statement) {
+                    if (expression.type === "question" || expression.type === "command") {
+                        chatView.addUserMessage(JSON.stringify(expression));
+                    }
+                }
+            }
         }
     };
 

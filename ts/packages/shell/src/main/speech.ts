@@ -122,8 +122,8 @@ export function initializeSpeech() {
             return;
         }
         const chatView = shellWindow.chatView;
-        SpeechProcessing.getInstance().processSpeech(text).then((text) => {
-            chatView.webContents.send("continuous-speech-processed", text);
+        SpeechProcessing.getInstance().processSpeech(text).then((expression) => {
+            chatView.webContents.send("continuous-speech-processed", expression);
         });
         
     });

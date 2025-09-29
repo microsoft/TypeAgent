@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { contextBridge, ipcRenderer } from "electron";
-import { Client, ClientAPI, ShellUserSettings } from "./electronTypes.js"; // Custom APIs for renderer
+import { Client, ClientAPI, ShellUserSettings, UserExpression } from "./electronTypes.js"; // Custom APIs for renderer
 import { Dispatcher } from "agent-dispatcher";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
@@ -69,8 +69,8 @@ function registerClient(client: Client) {
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 
-    ipcRenderer.on("continuous-speech-processed", (_event, text: string) => {
-        client.continuousSpeechProcessed(text);
+    ipcRenderer.on("continuous-speech-processed", (_event, userExpressions: UserExpression[]) => {
+        client.continuousSpeechProcessed(userExpressions);
     });
 }
 

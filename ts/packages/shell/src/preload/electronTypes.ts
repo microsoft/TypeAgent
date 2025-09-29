@@ -92,7 +92,7 @@ export interface Client {
     titleUpdated(title: string): void;
 
     searchMenuCompletion(id: number, item: SearchMenuItem);
-    continuousSpeechProcessed(text: string): void;
+    continuousSpeechProcessed(userExpressions: UserExpression[]): void;
 }
 
 export interface ElectronWindowFields {
@@ -101,3 +101,11 @@ export interface ElectronWindowFields {
 }
 
 export type ElectronWindow = typeof globalThis & ElectronWindowFields;
+
+export type UserExpression = {
+    type: "statement" | "question" | "command" | "other";
+    other_explanation?: string;
+    confidence: "low" | "medium" | "high";
+    complete_statement: boolean;
+    text: string;
+}

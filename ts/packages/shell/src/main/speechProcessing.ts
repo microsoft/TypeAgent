@@ -4,7 +4,7 @@
 import { ChatModelWithStreaming, openai } from "aiclient";
 import registerDebug from "debug";
 import { createTypeChat } from "typeagent";
-import { SpeechProcessingAction } from "./speechProcessingSchema.js";
+import { SpeechProcessingAction, UserExpression } from "./speechProcessingSchema.js";
 
 const debug = registerDebug("typeagent:shell:speechProcessing");
 
@@ -22,66 +22,9 @@ export class SpeechProcessing {
     private model: ChatModelWithStreaming | null = null;
 
     private instructions: string = `
-You are a system that processes speech recognition results from an open microphone.  Your goal is to annotate the speech recognition results and to classify the incoming strings so that a downstream component can take action when the user has a question or needs an action taken. 
-
-Here is the XSD schema for the XML strings that you produce:
-\`\`\`
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-
-  <!-- Root element -->
-  <xs:element name="Text">
-    <xs:complexType>
-      <xs:sequence>
-        <!-- Individual intents -->
-        <xs:element name="Statement" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
-        <xs:element name="Question" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
-        <xs:element name="Request" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
-
-        <!-- Compound intent container -->
-        <xs:element name="Compound" minOccurs="0" maxOccurs="unbounded">
-          <xs:complexType>
-            <xs:sequence>
-              <xs:element name="Statement" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
-              <xs:element name="Question" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
-              <xs:element name="Request" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
-            </xs:sequence>
-          </xs:complexType>
-        </xs:element>
-
-      </xs:sequence>
-    </xs:complexType>
-  </xs:element>
-
-</xs:schema>
-\`\`\`
-
-Example input: 
-\`\`\`
-Hello, team! We’ve made great progress on the prototype. Can we schedule a demo for next week? I think the UI still needs some polish. Could someone review the layout before Monday? Do we have final approval from legal? Please confirm with the compliance team. Send me the updated specs when ready.
-\`\`\`
-
-Example output:
-\`\`\`
-<Text>
-  <Statement>Hello, team!</Statement>
-  <Statement>We’ve made great progress on the prototype.</Statement>
-  <Question>Can we schedule a demo for next week?</Question>
-
-  <Compound>
-    <Statement>I think the UI still needs some polish.</Statement>
-    <Request>Could someone review the layout before Monday?</Request>
-  </Compound>
-
-  <Compound>
-    <Question>Do we have final approval from legal?</Question>
-    <Request>Please confirm with the compliance team.</Request>
-  </Compound>
-
-  <Request>Send me the updated specs when ready.</Request>
-</Text>
-\`\`\`
-
-Return only valid XML    
+You are a system that processes speech recognition results from an open microphone.  
+Your goal is to annotate the speech recognition results and to classify the incoming strings so that a downstream component can take action when the user has a question or needs an action taken. 
+Only classify statements as questions or requests if they are complete statements and actionable.
 `;
 
 
@@ -104,7 +47,7 @@ Return only valid XML
 
     }
 
-    public async processSpeech(speechText: string): Promise<string | undefined> {
+    public async processSpeech(speechText: string): Promise<UserExpression[] | undefined> {
 
         debug("Processing speech: " + speechText);
 
@@ -113,17 +56,25 @@ Return only valid XML
                 this.model!,
                 //loadSchema(["speechProcessingSchema.ts"], import.meta.url),
                 `
-                // An action that processes speech input and returns processed text
-                // Processed text is in XML format that has been annotated to indicate user intent.
-                export type SpeechProcessingAction = {
-                    actionName: "speechProcessingAction";
-                    parameters: {
-                        // The original, unmodified speech input
-                        inputText: string;
-                        // An XML string containing the processed text
-                        processedText: string;
-                    }
-                }               
+// An action that processes speech input and returns processed text
+// Processed text has been annotated to indicate user intent.
+export type SpeechProcessingAction = {
+    actionName: "speechProcessingAction";
+    parameters: {
+        // The original, unmodified speech input
+        inputText: string;
+        // An XML string containing the processed text
+        processedText: UserExpression[];
+    }
+}
+
+export type UserExpression = {
+    type: "statement" | "question" | "command" | "other";
+    other_explanation?: string;
+    confidence: "low" | "medium" | "high";
+    complete_statement: boolean;
+    text: string;
+}            
                 `,
                 "SpeechProcessingAction",
                 this.instructions,
