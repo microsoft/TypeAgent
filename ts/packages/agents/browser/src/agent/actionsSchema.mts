@@ -132,12 +132,13 @@ export type ZoomReset = {
     actionName: "zoomReset";
 };
 
+// Read the web page contents aloud
 export type ReadPageContent = {
-    actionName: "readPage";
+    actionName: "readPageContent";
 };
 
 export type StopReadPageContent = {
-    actionName: "stopReadPage";
+    actionName: "stopReadPageContent";
 };
 
 export type CaptureScreenshot = {
