@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 // These need to be in sync with the UI
 const chatViewTitle = "Chat View"; // See chatView.html title tag
-const inputDivId = "new_phraseDiv";
+const inputDivId = "phraseDiv";
 
 const runningApplications: Map<string, ElectronApplication> = new Map<
     string,
