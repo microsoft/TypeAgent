@@ -9,7 +9,7 @@ import {
     Page,
 } from "@playwright/test";
 import fs from "node:fs";
-import path, { relative } from "node:path";
+import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
@@ -52,7 +52,7 @@ async function closeInstance(instanceName: string, force: boolean = false) {
         try {
             await waitForPromiseWithTimeout(existing.close(), 10000);
         } catch (e: any) {
-            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName} PID: ${existing.process().pid}`;
+            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName}`;
 
             existing.process().kill();
             if (force) {
