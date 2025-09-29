@@ -6,10 +6,12 @@ namespace TypeAgent.KnowPro.Query;
 internal class QueryCompiler
 {
     private IConversation _conversation;
+    private List<CompiledTermGroup> _allSearchTerms;
 
     public QueryCompiler(IConversation conversation)
     {
         _conversation = conversation;
+        _allSearchTerms = [];
     }
 
     public float EntityTermMatchWeight { get; set; } = 100;
@@ -18,7 +20,7 @@ internal class QueryCompiler
 
     public double RelatedIsExactThreshold { get; set; } = 0.95;
 
-    public ValueTask<QueryOpExpr<object>> CompileKnowledgeQueryAsync(
+    public ValueTask<QueryOpExpr<SemanticRefAccumulator>> CompileKnowledgeQueryAsync(
         SearchTermGroup searchGroup,
         WhenFilter? whenFilter,
         SearchOptions? searchOptions
@@ -28,14 +30,17 @@ internal class QueryCompiler
         return ValueTask.FromResult(query);
     }
 
-    public (IList<CompiledTermGroup>, QueryOpExpr) CompileSearchTermGroup(SearchTermGroup searchGroup)
+    public (IList<CompiledTermGroup>, QueryOpExpr<T>) CompileSearchTermGroup<T>(
+        SearchTermGroup searchGroup,
+        Func<IList<QueryOpExpr<T>>, SearchTermBooleanOp, QueryOpExpr<T>> boolExprCreator
+    )
     {
         IList<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
 
-        IList<QueryOpExpr> termExpressions = [];
+        IList<QueryOpExpr<T>> termExpressions = [];
         foreach (var term in searchGroup.Terms)
         {
-            switch(term)
+            switch (term)
             {
                 default:
                     break;
@@ -48,13 +53,25 @@ internal class QueryCompiler
             }
         }
 
-        return (compiledTerms, null);
+        var boolExpr = boolExprCreator(termExpressions, searchGroup.BooleanOp);
+        return (compiledTerms, boolExpr);
     }
 
-    private QueryOpExpr<object> CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    private QueryOpExpr<SemanticRefAccumulator> CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
     {
-        return null;
+        return CompileSelect(searchGroup);
     }
+
+    private QueryOpExpr<SemanticRefAccumulator> CompileSelect(SearchTermGroup searchGroup)
+    {
+        var (searchTermsUsed, selectExpr) = CompileSearchTermGroup<SemanticRefAccumulator>(
+            searchGroup,
+            MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr
+        );
+        _allSearchTerms.AddRange(searchTermsUsed);
+        return selectExpr;
+    }
+
     private QueryOpExpr<SemanticRefAccumulator?> CompileSearchTerm(SearchTerm searchTerm)
     {
         float boostWeight =

@@ -17,18 +17,7 @@ public static class ConversationAPI
     {
         QueryCompiler compiler = new QueryCompiler(conversation);
         var query = await compiler.CompileKnowledgeQueryAsync(searchGroup, whenFilter, options);
-        await conversation.RunQueryAsync<object>(query, cancellationToken);
+        await conversation.RunQueryAsync<SemanticRefAccumulator>(query, cancellationToken);
         return null;
-    }
-
-
-    private static ValueTask<T> RunQueryAsync<T>(
-        this IConversation conversation,
-        QueryOpExpr<T> queryExpr,
-        CancellationToken cancellationToken = default
-    )
-    {
-        QueryEvalContext context = new QueryEvalContext(conversation, cancellationToken);
-        return queryExpr.EvalAsync(context);
     }
 }
