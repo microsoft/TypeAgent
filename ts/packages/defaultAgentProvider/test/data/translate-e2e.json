@@ -17,7 +17,7 @@
     }
   },
   {
-    "request": "play some Symphony by Beethoven please",
+    "request": "play Symphony by Beethoven please",
     "expected": {
       "schemaName": "player",
       "actionName": "playTrack",
