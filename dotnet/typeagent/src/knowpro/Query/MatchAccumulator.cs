@@ -4,10 +4,11 @@
 namespace TypeAgent.KnowPro.Query;
 
 internal class MatchAccumulator<T>
+    where T : notnull
 {
     private Dictionary<T, Match<T>> _matches;
 
-    public MatchAccumulator(IEqualityComparer<T> comparer = null)
+    public MatchAccumulator(IEqualityComparer<T>? comparer = null)
     {
         _matches = new Dictionary<T, Match<T>>(comparer);
     }
@@ -98,6 +99,18 @@ internal class MatchAccumulator<T>
                 RelatedHitCount = 1,
                 RelatedScore = score
             };
+        }
+    }
+
+    public void Add(T value, double score, bool isExact)
+    {
+        if (isExact)
+        {
+            AddExact(value, score);
+        }
+        else
+        {
+            AddRelated(value, score);
         }
     }
 

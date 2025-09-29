@@ -10,10 +10,17 @@ public interface ISearchTerm
 
 public class SearchTerm : ISearchTerm
 {
+    public SearchTerm(Term term)
+    {
+        ArgumentVerify.ThrowIfNull(term, nameof(term));
+        Term = term;
+    }
+
     /// <summary>
     /// Term being searched for
     /// </summary>
-    public Term Term { get; set; }
+    public Term Term { get; }
+
     /// <summary>
     ///  Additional terms related to term.
     /// </summary>

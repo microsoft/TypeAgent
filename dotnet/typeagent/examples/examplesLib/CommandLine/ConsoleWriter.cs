@@ -27,7 +27,13 @@ public class ConsoleWriter
     }
 
     public static void Write(int value) => Console.Write(value);
-    public static void Write(string value) => Console.Write(value);
+    public static void Write(string value)
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            Console.Write(value);
+        }
+    }
 
     public static void Write(char ch, int count)
     {
@@ -51,6 +57,68 @@ public class ConsoleWriter
         foreach (var value in values)
         {
             WriteJson(value);
+        }
+    }
+
+    public static void WriteList(IEnumerable<string> list)
+    {
+        WriteList(list, new() { Type = ListType.Plain });
+    }
+
+    public static void WriteList(IEnumerable<string> list, ListOptions options)
+    {
+        var isInline = options.Type == ListType.Plain || options.Type == ListType.Csv;
+        if (!string.IsNullOrEmpty(options.Title))
+        {
+            if (isInline)
+            {
+                Write(options.Title + ": ");
+            }
+            else
+            {
+                WriteLine(options.Title);
+            }
+        }
+        if (isInline)
+        {
+            var sep = options.Type == ListType.Plain ? " " : ", ";
+            foreach (var (i, item) in list.Enumerate())
+            {
+                if (i > 0)
+                {
+                    Write(sep);
+                }
+                Write(item);
+            }
+            WriteLine();
+        }
+        else
+        {
+            foreach (var (i, item) in list.Enumerate())
+            {
+                WriteListItem(i, item, options);
+            }
+        }
+
+    }
+
+    private static void WriteListItem(int i, string item, ListOptions options)
+    {
+        if (!string.IsNullOrEmpty(item))
+        {
+            switch (options.Type)
+            {
+                default:
+                    WriteLine(item);
+                    break;
+                case ListType.Ol:
+                    WriteLine($"{i}. ${item}");
+                    break;
+                case ListType.Ul:
+                    WriteLine("• " + item);
+                    break;
+            }
+
         }
     }
 
@@ -87,7 +155,8 @@ public enum ListType
     Csv // List in csv format
 }
 
-public struct ListOptions {
+public struct ListOptions
+{
     public string? Title { get; set; }
 
     public ListType Type { get; set; }

@@ -3,12 +3,39 @@
 
 namespace TypeAgent.KnowPro.Query;
 
+internal delegate ScoredSemanticRefOrdinal ScoreBooster(
+    Term term,
+    SemanticRef semanticRef,
+    ScoredSemanticRefOrdinal scoredOrdinal
+    );
+
 internal class MatchTermExpr : QueryOpExprAsync<SemanticRefAccumulator?>
 {
     public MatchTermExpr()
         : base()
     {
     }
+
+    public override async ValueTask<SemanticRefAccumulator?> EvalAsync(QueryEvalContext context)
+    {
+        var matches = context.AllocSemanticRefAccumulator();
+        await AccumulateMatchesAsync(context, matches).ConfigureAwait(false);
+        if (matches.Count > 0)
+        {
+            return matches;
+        }
+        context.Free(matches);
+        return null;
+    }
+
+    protected virtual ValueTask AccumulateMatchesAsync(
+        QueryEvalContext context,
+        SemanticRefAccumulator matches
+    )
+    {
+        return ValueTask.CompletedTask;
+    }
+
 }
 
 internal class MatchSearchTermExpr : MatchTermExpr
@@ -21,27 +48,85 @@ internal class MatchSearchTermExpr : MatchTermExpr
 
     public SearchTerm SearchTerm { get; private set; }
 
-    public Func<SearchTerm, SemanticRef,ScoredSemanticRefOrdinal, ScoredSemanticRefOrdinal>? ScoreBooster { get; set; }
+    public ScoreBooster? ScoreBooster { get; set; }
 
-
-    private async Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(QueryEvalContext context, Term term)
+    protected override async ValueTask AccumulateMatchesAsync(
+        QueryEvalContext context,
+        SemanticRefAccumulator matches
+    )
     {
-        var matches = await context.Conversation.SemanticRefIndex.LookupTermAsync(term.Text);
-
-        if (matches.IsNullOrEmpty() && ScoreBooster is not null)
+        // Match the search term
+        await AccumulateMatchesAsync(context, matches, SearchTerm.Term).ConfigureAwait(false);
+        // And any related terms
+        if (!SearchTerm.RelatedTerms.IsNullOrEmpty())
         {
-            /*
-            for (int i = 0; i < matches.Count; ++i)
+            foreach (var relatedTerm in SearchTerm.RelatedTerms)
             {
-                matches[i] = ScoreBooster(
-                    SearchTerm,
-                    context.getSemanticRef(matches[i].semanticRefOrdinal),
-                    matches[i],
+                await AccumulateMatchesAsync(
+                    context,
+                    matches,
+                    SearchTerm.Term,
+                    relatedTerm
                 );
             }
-            */
+        }
+    }
+
+    private async ValueTask AccumulateMatchesAsync(
+        QueryEvalContext context,
+        SemanticRefAccumulator matches,
+        Term term
+    )
+    {
+        if (context.MatchedTerms.Has(term))
+        {
+            return;
+        }
+        var semanticRefs = await LookupTermAsync(context, term).ConfigureAwait(false);
+        if (!semanticRefs.IsNullOrEmpty())
+        {
+            matches.AddTermMatches(term, semanticRefs, true);
+            context.MatchedTerms.Add(term);
+        }
+    }
+
+    private async ValueTask AccumulateMatchesAsync(
+        QueryEvalContext context,
+        SemanticRefAccumulator matches,
+        Term term,
+        Term relatedTerm
+    )
+    {
+        if (context.MatchedTerms.Has(relatedTerm))
+        {
+            return;
         }
 
-        return matches;
+        // If this related term had not already matched as a related term for some other term
+        // Minimize over counting
+        var semanticRefs = await LookupTermAsync(context, relatedTerm).ConfigureAwait(false);
+        if (!semanticRefs.IsNullOrEmpty())
+        {
+            // This will only consider semantic refs that have not already matched this expression. In other words, if a semantic
+            // ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+            matches.AddTermMatchesIfNew(
+                term,
+                semanticRefs,
+                false,
+                relatedTerm.Weight
+            );
+            context.MatchedTerms.Add(relatedTerm);
+        }
+    }
+
+    private ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
+    {
+        return context.SemanticRefIndex.LookupTermAsync(
+            context,
+            term,
+            context.TextRangesInScope,
+            null,
+            ScoreBooster
+        );
     }
 }

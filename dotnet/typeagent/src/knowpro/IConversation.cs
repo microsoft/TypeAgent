@@ -11,10 +11,6 @@ namespace TypeAgent.KnowPro;
 public interface IConversation<TMessage>
     where TMessage : IMessage
 {
-    string Name { get; }
-
-    IList<string> Tags { get; }
-
     IMessageCollection<TMessage> Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
@@ -27,7 +23,7 @@ public interface IConversation<TMessage>
 
 public interface IConversation
 {
-    IMessageCollection Messages { get; }
+    IReadOnlyAsyncCollection<IMessage> Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
 

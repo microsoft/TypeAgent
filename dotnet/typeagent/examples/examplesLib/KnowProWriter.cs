@@ -13,14 +13,35 @@ public class KnowProWriter : ConsoleWriter
         {
             KnowProWriter.WriteJson(message);
         }
-
     }
 
-    public static void Write(ConcreteEntity entity)
+    public static async Task WriteSemanticRefsAsync(Conversation conversation)
+    {
+        await foreach (var sr in conversation.SemanticRefs)
+        {
+            if (sr.KnowledgeType == KnowledgeType.Entity)
+            {
+                WriteLine(sr.Knowledge as ConcreteEntity);
+                WriteLine();
+            }
+            else
+            {
+                KnowProWriter.WriteJson(sr);
+            }
+        }
+    }
+
+    public static void WriteLine(ConcreteEntity? entity)
     {
         if (entity is not null)
         {
             WriteLine(entity.Name.ToUpper());
+            WriteList(entity.Type, new ListOptions() { Type = ListType.Csv });
+            if (!entity.Facets.IsNullOrEmpty())
+            {
+                var facetList = entity.Facets!.Map((f) => f.ToString());
+                WriteList(facetList, new ListOptions() { Type = ListType.Ul });
+            }
         }
     }
 

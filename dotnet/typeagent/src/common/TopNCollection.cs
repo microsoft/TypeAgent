@@ -3,7 +3,6 @@
 
 namespace TypeAgent.Common;
 
-
 public class TopNCollection<T>
 {
     private List<ScoredItem<T>>? _items;
@@ -155,7 +154,7 @@ public class TopNCollection<T>
     {
         if (_items is null || _count == 0)
         {
-            throw new InvalidOperationException("TopNCollection is empty");
+            throw new TypeAgentException("TopNCollection is empty");
         }
     }
 }

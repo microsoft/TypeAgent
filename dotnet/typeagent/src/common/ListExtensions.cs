@@ -11,12 +11,12 @@ public static class ListExtensions
     /// <typeparam name="T"></typeparam>
     /// <param name="list"></param>
     /// <returns></returns>
-    public static bool IsNullOrEmpty<T>(this IList<T> list)
+    public static bool IsNullOrEmpty<T>(this IList<T>? list)
     {
         return list is null || list.Count == 0;
     }
 
-    public static int GetCount<T>(this IList<T> list)
+    public static int GetCount<T>(this IList<T>? list)
     {
         return list is not null ? list.Count : 0;
     }
@@ -50,6 +50,18 @@ public static class ListExtensions
         {
             list.RemoveAt(0);
         }
+    }
+
+    public static IList<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
+    {
+        ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
+
+        List<TResult> results = new List<TResult>(list.Count);
+        foreach (var item in list)
+        {
+            results.Add(mapFn(item));
+        }
+        return results;
     }
 
     public static IList<T> Filter<T>(this IList<T> list, Func<T, bool> filter)

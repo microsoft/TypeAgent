@@ -5,6 +5,16 @@ namespace TypeAgent.Common;
 
 public static class EnumerationExtensions
 {
+    public static IEnumerable<(int, T)> Enumerate<T>(this IEnumerable<T> list)
+    {
+        int i = 0;
+        foreach (var item in list)
+        {
+            yield return (i, item);
+            ++i;
+        }
+    }
+
     public static IList<TResult> Map<T, TResult>(this IEnumerable<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
