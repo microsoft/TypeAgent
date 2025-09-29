@@ -5,7 +5,7 @@ namespace TypeAgent.KnowPro;
 
 /// <summary>
 /// For IConversation levelAPIs:
-/// <see cref="ConversationExtensions"/>
+/// <see cref="ConversationAPI"/>
 /// </summary>
 /// <typeparam name="TMessage"></typeparam>
 public interface IConversation<TMessage>

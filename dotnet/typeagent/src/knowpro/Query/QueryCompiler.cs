@@ -3,12 +3,11 @@
 
 namespace TypeAgent.KnowPro.Query;
 
-internal class QueryCompiler<TMessage>
-    where TMessage: IMessage
+internal class QueryCompiler
 {
-    private IConversation<TMessage> _conversation;
+    private IConversation _conversation;
 
-    public QueryCompiler(IConversation<TMessage> conversation)
+    public QueryCompiler(IConversation conversation)
     {
         _conversation = conversation;
     }
@@ -19,11 +18,21 @@ internal class QueryCompiler<TMessage>
 
     public double RelatedIsExactThreshold { get; set; } = 0.95;
 
+    public ValueTask<QueryOpExpr> CompileKnowledgeQueryAsync(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    {
+        var query = CompileQuery(searchGroup, whenFilter);
+        return ValueTask.FromResult(query);
+    }
+
     public (IList<CompiledTermGroup>, QueryOpExpr) CompileSearchTermGroup(SearchTermGroup searchGroup)
     {
         return ([], null);
     }
 
+    private QueryOpExpr CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    {
+        return null;
+    }
     private QueryOpExpr<SemanticRefAccumulator?> CompileSearchTerm(SearchTerm searchTerm)
     {
         float boostWeight =

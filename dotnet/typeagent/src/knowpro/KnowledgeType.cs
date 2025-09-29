@@ -57,6 +57,8 @@ public class KnowledgeType
 
     public override string ToString() => Value;
 
+    public override int GetHashCode() => Value.GetHashCode();
+
     public static implicit operator string(KnowledgeType type)
     {
         return type.Value;
