@@ -11,9 +11,9 @@ namespace TypeAgent.KnowPro;
 [JsonDerivedType(typeof(Topic), "topic")]
 [JsonDerivedType(typeof(Tag), "tag")]
 [JsonDerivedType(typeof(StructuredTag), "structuredTag")]
-public abstract class KnowledgeSchema
+public abstract class Knowledge
 {
-    public KnowledgeSchema() { }
+    public Knowledge() { }
 }
 
 public interface IKnowledgeSource
@@ -22,16 +22,8 @@ public interface IKnowledgeSource
 }
 
 
-public partial class ConcreteEntity : KnowledgeSchema
+public partial class ConcreteEntity : Knowledge
 {
-    public ConcreteEntity() { }
-
-    public ConcreteEntity(string name, string type)
-    {
-        this.Name = name;
-        this.Type = [type];
-    }
-
     [JsonPropertyName("name")]
     public string Name { get; set; }
 
@@ -39,10 +31,10 @@ public partial class ConcreteEntity : KnowledgeSchema
     public string[] Type { get; set; }
 
     [JsonPropertyName("facets")]
-    public Facet[] Facets { get; set; }
+    public Facet[]? Facets { get; set; }
 }
 
-public partial class Action : KnowledgeSchema
+public partial class Action : Knowledge
 {
     [JsonPropertyName("verbs")]
     public string[] Verbs { get; set; }
@@ -58,36 +50,41 @@ public partial class Action : KnowledgeSchema
 
     [JsonPropertyName("indirecObjectEntityName")]
     public string IndirectObjectEntityName { get; set; }
+    //
+    // TODO: Support Params
+    //
 }
 
 public class KnowledgeResponse
 {
     [JsonPropertyName("entities")]
+    [JsonRequired]
     public ConcreteEntity[] Entities { get; set; }
 
     [JsonPropertyName("actions")]
+    [JsonRequired]
     public Action[] Actions { get; set; }
 
     [JsonPropertyName("inverseActions")]
-    public Action[] InverseActions { get; set; }
+    public Action[]? InverseActions { get; set; }
 
     [JsonPropertyName("topics")]
     public string[] Topics { get; set; }
 }
 
-public class Topic : KnowledgeSchema
+public partial class Topic : Knowledge
 {
     [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 
-public class Tag : KnowledgeSchema
+public partial class Tag : Knowledge
 {
     [JsonPropertyName("text")]
     public string Text { get; set; }
 }
 
-public class StructuredTag : ConcreteEntity
+public partial class StructuredTag : ConcreteEntity
 {
 
 }

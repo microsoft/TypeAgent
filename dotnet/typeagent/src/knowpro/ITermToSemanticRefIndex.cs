@@ -15,7 +15,16 @@ public interface ITermToSemanticRefIndex
 
     Task ClearAsync(CancellationToken cancellationToken = default);
 
-    Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Looks up a term and retrieves its associated scored semantic reference ordinals.
+    /// </summary>
+    /// <param name="term">The term to look up</param>
+    /// <param name="cancellationToken"></param>
+    /// <returns>
+    /// If term found: A list of scored semantic ref ordinals
+    /// If term not found: null
+    /// </returns>
+    Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(string term, CancellationToken cancellationToken = default);
 }
 
 public static class TermToSemanticRefIndexEx
@@ -30,7 +39,7 @@ public static class TermToSemanticRefIndexEx
         // TODO: Bulk operations
         foreach (var entry in entries)
         {
-            await index.AddTermAsync(term, entry, cancellationToken);
+            await index.AddTermAsync(term, entry, cancellationToken).ConfigureAwait(false);
         }
     }
 }

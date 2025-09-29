@@ -4,6 +4,7 @@
 import test, { expect, Page } from "@playwright/test";
 import {
     exitApplication,
+    getInputElementHandle,
     sendUserRequestAndWaitForCompletion,
     sendUserRequestAndWaitForResponse,
     startShell,
@@ -20,7 +21,7 @@ test.describe("Shell interface tests", () => {
     test("remember window position", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}`);
 
-        const firstWindow = await startShell(true); // have to wait, commands don't run till this is done
+        const firstWindow = await startShell();
 
         // verify shell title
         const title = await firstWindow.title();
@@ -78,7 +79,7 @@ test.describe("Shell interface tests", () => {
         console.log(`Running test '${testInfo.title}`);
 
         // start the app
-        const mainWindow = await startShell(true);
+        const mainWindow = await startShell();
 
         // test 80% zoom
         await testZoomLevel(80, mainWindow);
@@ -140,7 +141,7 @@ test.describe("Shell interface tests", () => {
         ).toBeDisabled();
 
         // put some text in the text box
-        const element = await mainWindow.waitForSelector("#phraseDiv");
+        const element = await getInputElementHandle(mainWindow);
         await element.fill("This is a test...");
         await element.press("Space");
 
@@ -157,7 +158,7 @@ test.describe("Shell interface tests", () => {
         console.log(`Running test '${testInfo.title}`);
 
         // start the app
-        const mainWindow = await startShell(true);
+        const mainWindow = await startShell();
 
         // issue some commands
         const commands: string[] = ["@history", "@help", "@config agent"];
@@ -166,7 +167,7 @@ test.describe("Shell interface tests", () => {
         }
 
         // get the input box
-        const element = await mainWindow.waitForSelector("#phraseDiv");
+        const element = await getInputElementHandle(mainWindow);
 
         // go through the command back stack to the end and make sure we get the expected
         // results. (command and cursor location)

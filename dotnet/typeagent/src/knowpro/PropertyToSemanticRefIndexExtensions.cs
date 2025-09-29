@@ -24,46 +24,60 @@ public static class PropertyToSemanticRefIndexExtensions
         CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
+        KnowProVerify.ThrowIfInvalid(semanticRef);
 
-        Task result = null;
-        switch(semanticRef.KnowledgeType)
+        Task result = Task.CompletedTask;
+        switch (semanticRef.KnowledgeType)
         {
             default:
                 break;
 
-            case KnowledgeType.Entity:
+            case KnowledgeType.EntityTypeName:
+                var entity = semanticRef.Knowledge as ConcreteEntity;
+                KnowProVerify.ThrowIfInvalid(entity);
+
                 result = propertyIndex.AddEntityPropertiesAsync(
-                    semanticRef.Knowledge as ConcreteEntity,
+                    entity!,
                     semanticRef.SemanticRefOrdinal,
                     cancellationToken
                 );
                 break;
 
-            case KnowledgeType.Action:
+            case KnowledgeType.ActionTypeName:
+                var action = semanticRef.Knowledge as Action;
+                KnowProVerify.ThrowIfInvalid(action);
+
                 result = propertyIndex.AddActionPropertiesAsync(
-                    semanticRef.Knowledge as Action,
+                    action!,
                     semanticRef.SemanticRefOrdinal,
                     cancellationToken
                 );
                 break;
 
-            case KnowledgeType.Tag:
+            case KnowledgeType.TagTypeName:
+                var tag = semanticRef.Knowledge as Tag;
+                KnowProVerify.ThrowIfInvalid(tag);
+
                 result = propertyIndex.AddTagPropertiesAsync(
-                    semanticRef.Knowledge as Tag,
+                    tag!,
                     semanticRef.SemanticRefOrdinal,
                     cancellationToken
                 );
                 break;
 
-            case KnowledgeType.STag:
+            case KnowledgeType.STagTypeName:
+                var sTag = semanticRef.Knowledge as StructuredTag;
+                KnowProVerify.ThrowIfInvalid(sTag);
+
                 result = propertyIndex.AddEntityPropertiesAsync(
-                    semanticRef.Knowledge as StructuredTag,
+                    sTag!,
                     semanticRef.SemanticRefOrdinal,
                     cancellationToken
                 );
                 break;
         }
-        return result ?? Task.CompletedTask;
+
+        return result;
     }
 
     public static async Task AddSemanticRefsAsync(
@@ -75,9 +89,9 @@ public static class PropertyToSemanticRefIndexExtensions
         ArgumentVerify.ThrowIfNull(semanticRefs, nameof(semanticRefs));
 
         // TODO: Bulk operations
-        foreach(var semanticRef in semanticRefs)
+        foreach (var semanticRef in semanticRefs)
         {
-            await propertyIndex.AddSemanticRefAsync(semanticRef, cancellationToken);
+            await propertyIndex.AddSemanticRefAsync(semanticRef, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -112,7 +126,7 @@ public static class PropertyToSemanticRefIndexExtensions
         // add every facet name as a separate term
         if (entity.HasFacets)
         {
-            foreach (var facet in entity.Facets)
+            foreach (var facet in entity.Facets!)
             {
                 await propertyIndex.AddFacetAsync(facet, semanticRefOrdinal, cancellationToken).ConfigureAwait(false);
             }
@@ -141,7 +155,7 @@ public static class PropertyToSemanticRefIndexExtensions
         {
             await propertyIndex.AddPropertyAsync(
                 KnowledgePropertyName.FacetValue,
-                facet.Value.ToString(),
+                facet.Value.ToString()!,
                 semanticRefOrdinal,
                 cancellationToken
             ).ConfigureAwait(false);

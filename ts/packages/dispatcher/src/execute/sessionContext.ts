@@ -76,7 +76,11 @@ export function createSessionContext<T = unknown>(
         get instanceStorage() {
             return instanceStorage;
         },
-        notify(event: AppAgentEvent, message: string | DisplayContent) {
+        notify(
+            event: AppAgentEvent,
+            message: string | DisplayContent,
+            eventSetId?: string,
+        ) {
             // Check if agent can send rich notifications (DisplayContent objects)
             if (
                 typeof message === "object" &&
@@ -88,7 +92,19 @@ export function createSessionContext<T = unknown>(
                 return;
             }
 
-            context.clientIO.notify(event, context.requestId, message, name);
+            // Use eventSetId if provided, otherwise use context.requestId
+            // If no eventSetId and no context.requestId, generate a unique ID for standalone notifications
+            let requestId: string;
+            if (eventSetId) {
+                requestId = `agent-eventset-${eventSetId}`;
+            } else if (context.requestId) {
+                requestId = context.requestId;
+            } else {
+                // Fallback for notifications without a request context (e.g., background events)
+                requestId = `agent-${name}-${Date.now()}`;
+            }
+
+            context.clientIO.notify(event, requestId, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {
