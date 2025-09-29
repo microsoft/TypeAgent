@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace TypeAgent.KnowPro.Query;
+namespace TypeAgent.KnowPro;
 
-public static class ConversationExtensions
+public class SearchOptions
 {
 }

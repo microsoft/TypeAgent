@@ -18,7 +18,11 @@ internal class QueryCompiler
 
     public double RelatedIsExactThreshold { get; set; } = 0.95;
 
-    public ValueTask<QueryOpExpr> CompileKnowledgeQueryAsync(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    public ValueTask<QueryOpExpr<object>> CompileKnowledgeQueryAsync(
+        SearchTermGroup searchGroup,
+        WhenFilter? whenFilter,
+        SearchOptions? searchOptions
+    )
     {
         var query = CompileQuery(searchGroup, whenFilter);
         return ValueTask.FromResult(query);
@@ -47,7 +51,7 @@ internal class QueryCompiler
         return (compiledTerms, null);
     }
 
-    private QueryOpExpr CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    private QueryOpExpr<object> CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
     {
         return null;
     }
