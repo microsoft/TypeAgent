@@ -77,6 +77,7 @@ export interface ClientIO {
         requestId: RequestId,
         data: any,
         source: string,
+        eventSetId?: string,
     ): void;
     notify(
         event: "explained",

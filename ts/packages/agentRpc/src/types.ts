@@ -29,7 +29,8 @@ export type AgentContextCallFunctions = {
     notify(param: {
         contextId: number;
         event: AppAgentEvent;
-        message: string;
+        message: string | DisplayContent;
+        requestId?: string;
     }): void;
     setDisplay: (param: {
         actionContextId: number;
