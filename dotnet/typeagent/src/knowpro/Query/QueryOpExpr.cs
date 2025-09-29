@@ -3,8 +3,11 @@
 
 namespace TypeAgent.KnowPro.Query;
 
+internal class QueryOpExpr
+{
+}
 
-internal class QueryOpExpr<T>
+internal class QueryOpExpr<T> : QueryOpExpr
 {
     public bool IsAsync => true;
 

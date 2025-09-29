@@ -19,6 +19,11 @@ internal class QueryCompiler<TMessage>
 
     public double RelatedIsExactThreshold { get; set; } = 0.95;
 
+    public (IList<CompiledTermGroup>, QueryOpExpr) CompileSearchTermGroup(SearchTermGroup searchGroup)
+    {
+        return ([], null);
+    }
+
     private QueryOpExpr<SemanticRefAccumulator?> CompileSearchTerm(SearchTerm searchTerm)
     {
         float boostWeight =
@@ -32,4 +37,8 @@ internal class QueryCompiler<TMessage>
         });
     }
 
+    private QueryOpExpr<SemanticRefAccumulator?> CompilePropertyTerm(PropertySearchTerm propertyTerm)
+    {
+        throw new NotImplementedException();
+    }
 }
