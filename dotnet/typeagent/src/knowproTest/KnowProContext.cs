@@ -15,4 +15,6 @@ public class KnowProContext
 
     public string BasePath { get; set; }
     public string DotnetPath { get; set; }
+
+    public IConversation? Conversation { get; set; }
 }

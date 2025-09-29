@@ -6,9 +6,33 @@ namespace TypeAgent.KnowPro;
 public class Conversation<TMessage> : IConversation<TMessage>
     where TMessage : IMessage, new()
 {
-    private IStorageProvider<TMessage> _storageProvider;
+    private readonly IStorageProvider<TMessage> _storageProvider;
+    private readonly Conversation _readonlyConversation;
 
     public Conversation(IStorageProvider<TMessage> provider)
+    {
+        ArgumentVerify.ThrowIfNull(provider, nameof(provider));
+        _storageProvider = provider;
+        _readonlyConversation = new Conversation(provider);
+    }
+
+    public IMessageCollection<TMessage> Messages => _storageProvider.TypedMessages;
+
+    public ISemanticRefCollection SemanticRefs => _storageProvider.SemanticRefs;
+
+    public ITermToSemanticRefIndex SemanticRefIndex => _storageProvider.SemanticRefIndex;
+
+    public IConversationSecondaryIndexes SecondaryIndexes => _storageProvider.SecondaryIndexes;
+
+    public static implicit operator Conversation(Conversation<TMessage> conversation)
+    {
+        return conversation._readonlyConversation;
+    }
+}
+
+public class Conversation : IConversation
+{
+    public Conversation(IStorageProvider provider)
         : this(
               provider.Messages,
               provider.SemanticRefs,
@@ -16,11 +40,10 @@ public class Conversation<TMessage> : IConversation<TMessage>
               provider.SecondaryIndexes
           )
     {
-        _storageProvider = provider;
     }
 
     public Conversation(
-        IMessageCollection<TMessage> messages,
+        IReadOnlyAsyncCollection<IMessage> messages,
         ISemanticRefCollection semanticRefs,
         ITermToSemanticRefIndex semanticRefIndex,
         IConversationSecondaryIndexes secondaryIndexes
@@ -37,22 +60,21 @@ public class Conversation<TMessage> : IConversation<TMessage>
         SecondaryIndexes = secondaryIndexes;
     }
 
-    public string Name { get; set; }
-
-    public IList<string> Tags { get; set; }
-
-    public IMessageCollection<TMessage> Messages { get; private set; }
+    public IReadOnlyAsyncCollection<IMessage> Messages { get; private set; }
 
     public ISemanticRefCollection SemanticRefs { get; private set; }
 
     public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
 
     public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
-}
+};
 
 public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
 {
-    public ConversationSecondaryIndexes(IPropertyToSemanticRefIndex propertyIndex, ITimestampToTextRangeIndex timestampIndex)
+    public ConversationSecondaryIndexes(
+        IPropertyToSemanticRefIndex propertyIndex,
+        ITimestampToTextRangeIndex timestampIndex
+    )
     {
         ArgumentVerify.ThrowIfNull(propertyIndex, nameof(propertyIndex));
         ArgumentVerify.ThrowIfNull(timestampIndex, nameof(timestampIndex));
@@ -65,5 +87,5 @@ public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
 
     public ITimestampToTextRangeIndex TimestampIndex { get; private set; }
 
-    public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; private set; }
+    //public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; private set; }
 }

@@ -58,6 +58,17 @@ export type BrowserControlInvokeFunctions = {
     // Settings access methods
     getAutoIndexSetting(): Promise<boolean>;
     getBrowserSettings(): Promise<BrowserSettings>;
+
+    getHtmlFragments(useTimestampIds?: boolean): Promise<any[]>;
+    clickOn(cssSelector: string): Promise<any>;
+    setDropdown(cssSelector: string, optionLabel: string): Promise<any>;
+    enterTextIn(
+        textValue: string,
+        cssSelector?: string,
+        submitForm?: boolean,
+    ): Promise<any>;
+    awaitPageLoad(timeout?: number): Promise<string>;
+    awaitPageInteraction(timeout?: number): Promise<void>;
 };
 
 export type BrowserControlCallFunctions = {

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 // These need to be in sync with the UI
 const chatViewTitle = "Chat View"; // See chatView.html title tag
-const inputDivId = "new_phraseDiv";
+const inputDivId = "phraseDiv";
 
 const runningApplications: Map<string, ElectronApplication> = new Map<
     string,
@@ -25,9 +25,7 @@ const runningApplications: Map<string, ElectronApplication> = new Map<
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
-export async function startShell(
-    waitForAgentGreeting: boolean = true,
-): Promise<Page> {
+export async function startShell(): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     const instanceName = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
@@ -64,9 +62,8 @@ export async function startShell(
             const mainWindow: Page = await getChatViewWindow(app);
 
             // wait for agent greeting
-            if (waitForAgentGreeting) {
-                await waitForAgentMessage(mainWindow, 30000, 1, false, ["..."]);
-            }
+
+            await waitForAgentMessage(mainWindow, 30000, 1, false, ["..."]);
 
             return mainWindow;
         } catch (e) {
@@ -270,7 +267,7 @@ async function getAgentMessageFromContainer(locator: Locator): Promise<string> {
  * @param timeout The maximum amount of time to wait for the agent message
  * @param expectedMessageCount The expected # of agent messages at this time.
  * @param waitForMessageCompletion A flag indicating if we should block util the message is completed.
- * @param ignore A list of messges that this method will consider noise and will reject as false positivies
+ * @param ignore A list of messages that this method will consider noise and will reject as false positives
  *          i.e. [".."] and this method will ignore agent messages that are "..." and will continue waiting.
  *          This is useful when an agent sends status messages.
  *
@@ -315,6 +312,22 @@ async function waitForAgentMessage(
         await page.waitForTimeout(1000);
         timeWaited += 1000;
     }
+}
+
+export async function clearMessages(page: Page): Promise<void> {
+    sendUserRequestFast("@clear", page);
+    let attempts = 0;
+    do {
+        attempts++;
+        const locators = await page
+            .locator(".chat-message-container-agent")
+            .all();
+        if (locators.length === 0) {
+            return;
+        }
+        await page.waitForTimeout(1000);
+    } while (attempts < 30);
+    throw new Error("Timeout waiting for clear to complete");
 }
 
 /**

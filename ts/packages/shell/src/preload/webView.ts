@@ -327,6 +327,9 @@ contextBridge.exposeInMainWorld("browserConnect", {
             });
         }
     },
+    // Expose HTML fragment extraction functions for inline browser control
+    runBrowserAction: runBrowserAction,
+    getTabHTMLFragments: getTabHTMLFragments,
 });
 
 // Add extension service adapter API for view pages

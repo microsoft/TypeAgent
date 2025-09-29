@@ -108,67 +108,6 @@ export function getPageHTMLFragments(
 }
 
 /**
- * Gets HTML sub-fragments from the page using the new consolidated system
- * @param mainSelector Main CSS selector
- * @param subSelectors Sub-selectors within the main selector
- * @param frameId The frame ID
- * @param useTimestampIds Whether to use timestamp IDs
- * @param filterToReadingView Whether to apply readability filter
- * @param keepMetaTags Whether to preserve meta tags when using readability
- * @returns Array of HTML fragments
- */
-export function getPageHTMLSubFragments(
-    mainSelector: string,
-    subSelectors: string[],
-    frameId: number,
-    useTimestampIds?: boolean,
-    filterToReadingView?: boolean,
-    keepMetaTags?: boolean,
-): HtmlFragment[] {
-    if (frameId !== undefined) {
-        setIdsOnAllElements(frameId, useTimestampIds);
-    }
-    markInvisibleNodesForCleanup();
-
-    let documentHtml = document.children[0].outerHTML;
-
-    // Apply Readability filter if requested
-    if (filterToReadingView) {
-        documentHtml = applyReadabilityFilter(documentHtml, keepMetaTags);
-    }
-
-    const fragments: HtmlFragment[] = [];
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(documentHtml, "text/html");
-
-    const mainElements = doc.querySelectorAll(mainSelector);
-    mainElements.forEach((mainElement) => {
-        if (mainElement instanceof HTMLElement) {
-            for (const subSelector of subSelectors) {
-                const subElements = mainElement.querySelectorAll(subSelector);
-                subElements.forEach((subElement) => {
-                    if (subElement instanceof HTMLElement) {
-                        const reducer = new CrossContextHtmlReducer();
-                        reducer.removeDivs = false;
-
-                        if (filterToReadingView && keepMetaTags) {
-                            reducer.removeMetaTags = false;
-                        }
-
-                        fragments.push({
-                            frameId: frameId,
-                            content: reducer.reduce(subElement.outerHTML),
-                        });
-                    }
-                });
-            }
-        }
-    });
-
-    return fragments;
-}
-
-/**
  * Apply readability filter to HTML content
  * @param html HTML content to filter
  * @param keepMetaTags Whether to preserve meta tags

@@ -16,6 +16,7 @@ import {
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
+import { getTabHTMLFragments } from "./capture";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "aiclient";
 
@@ -389,6 +390,52 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 };
             }
         },
+
+        getHtmlFragments: async (useTimestampIds?: boolean) => {
+            const targetTab = await ensureActiveTab();
+
+            return getTabHTMLFragments(
+                targetTab!,
+                false,
+                false,
+                true,
+                useTimestampIds,
+            );
+        },
+        clickOn: async (cssSelector: string) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.clickOn(cssSelector);
+        },
+        setDropdown: async (cssSelector: string, optionLabel: string) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.setDropdown(cssSelector, optionLabel);
+        },
+        enterTextIn: async (
+            textValue: string,
+            cssSelector?: string,
+            submitForm?: boolean,
+        ) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.enterTextIn(
+                textValue,
+                cssSelector,
+                submitForm,
+            );
+        },
+        awaitPageLoad: async (timeout?: number) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.awaitPageLoad(timeout);
+        },
+        awaitPageInteraction: async (timeout?: number) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.awaitPageInteraction(timeout);
+        },
+        //};
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

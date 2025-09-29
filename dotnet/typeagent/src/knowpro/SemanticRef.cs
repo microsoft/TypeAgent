@@ -14,17 +14,26 @@ public class SemanticRef
     [JsonPropertyName("range")]
     public TextRange Range { get; set; }
 
-    [JsonPropertyName("knowledgeType")]
-    public string KnowledgeType { get; set; }
+    [JsonIgnore]
+    public KnowledgeType KnowledgeType { get; set; }
 
     // The public, strongly-typed property
     [JsonIgnore]
-    public KnowledgeSchema Knowledge { get; set; }
+    public Knowledge Knowledge { get; set; }
 
-    // Internal storage for the raw JSON
+
+    // For serialization
+    [JsonPropertyName("knowledgeType")]
+    [JsonInclude]
+    private string KType
+    {
+        get => KnowledgeType;
+        set => KnowledgeType = value;
+    }
+
     [JsonPropertyName("knowledge")]
     [JsonInclude]
-    internal JsonElement? KnowledgeElement
+    private JsonElement? KnowledgeElement
     {
         get => Knowledge is not null ?
                SerializeToElement(Knowledge, KnowledgeType) :
@@ -38,69 +47,53 @@ public class SemanticRef
         }
     }
 
-    public static JsonElement SerializeToElement(KnowledgeSchema knowledge, string type)
+    public static JsonElement SerializeToElement(Knowledge knowledge, string type)
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.ToJsonElement(knowledge as ConcreteEntity),
-            KnowPro.KnowledgeType.Action => Serializer.ToJsonElement(knowledge as Action),
-            KnowPro.KnowledgeType.Topic => Serializer.ToJsonElement(knowledge as Topic),
-            KnowPro.KnowledgeType.Tag => Serializer.ToJsonElement(knowledge as Tag),
-            _ => throw new JsonException($"Unknown KnowledgeType: {type}")
+            KnowPro.KnowledgeType.EntityTypeName => Serializer.ToJsonElement(knowledge as ConcreteEntity),
+            KnowPro.KnowledgeType.ActionTypeName => Serializer.ToJsonElement(knowledge as Action),
+            KnowPro.KnowledgeType.TopicTypeName => Serializer.ToJsonElement(knowledge as Topic),
+            KnowPro.KnowledgeType.STagTypeName => Serializer.ToJsonElement(knowledge as StructuredTag),
+            KnowPro.KnowledgeType.TagTypeName => Serializer.ToJsonElement(knowledge as Tag),
+            _ => throw new KnowProException(
+                KnowProException.ErrorCode.InvalidKnowledgeType,
+                type
+            )
         };
 
     }
 
-    public static KnowledgeSchema Deserialize(string json, string type)
+    public static Knowledge Deserialize(string json, string type)
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.FromJson<ConcreteEntity>(json),
-            KnowPro.KnowledgeType.Action => Serializer.FromJson<Action>(json),
-            KnowPro.KnowledgeType.Topic => Serializer.FromJson<Topic>(json),
-            KnowPro.KnowledgeType.Tag => Serializer.FromJson<Tag>(json),
-            _ => throw new JsonException($"Unknown KnowledgeType: {type}")
+            KnowPro.KnowledgeType.EntityTypeName => Serializer.FromJsonRequired<ConcreteEntity>(json),
+            KnowPro.KnowledgeType.ActionTypeName => Serializer.FromJsonRequired<Action>(json),
+            KnowPro.KnowledgeType.TopicTypeName => Serializer.FromJsonRequired<Topic>(json),
+            KnowPro.KnowledgeType.STagTypeName => Serializer.FromJsonRequired<StructuredTag>(json),
+            KnowPro.KnowledgeType.TagTypeName => Serializer.FromJsonRequired<Tag>(json),
+            _ => throw new KnowProException(
+                KnowProException.ErrorCode.InvalidKnowledgeType,
+                type
+            )
         };
     }
 
-    public static KnowledgeSchema Deserialize(JsonElement element, string type)
+    public static Knowledge Deserialize(JsonElement element, string type)
     {
         return type switch
         {
-            KnowPro.KnowledgeType.Entity => Serializer.FromJsonElement<ConcreteEntity>(element),
-            KnowPro.KnowledgeType.Action => Serializer.FromJsonElement<Action>(element),
-            KnowPro.KnowledgeType.Topic => Serializer.FromJsonElement<Topic>(element),
-            KnowPro.KnowledgeType.Tag => Serializer.FromJsonElement<Tag>(element),
-            _ => throw new JsonException($"Unknown KnowledgeType: {type}")
+            KnowPro.KnowledgeType.EntityTypeName => Serializer.FromJsonElementRequired<ConcreteEntity>(element),
+            KnowPro.KnowledgeType.ActionTypeName => Serializer.FromJsonElementRequired<Action>(element),
+            KnowPro.KnowledgeType.TopicTypeName => Serializer.FromJsonElementRequired<Topic>(element),
+            KnowPro.KnowledgeType.STagTypeName => Serializer.FromJsonElementRequired<StructuredTag>(element),
+            KnowPro.KnowledgeType.TagTypeName => Serializer.FromJsonElementRequired<Tag>(element),
+            _ => throw new KnowProException(
+                KnowProException.ErrorCode.InvalidKnowledgeType,
+                type
+            )
         };
     }
-
-}
-
-/// <summary>
-/// TODO: Make this strongly typed to be a discriminated union like Typescript
-/// </summary>
-public static class KnowledgeType
-{
-    /// <summary>
-    /// <see cref="ConcreteEntity"/>
-    /// </summary>
-    public const string Entity = "entity";
-    /// <summary>
-    /// <see cref="KnowPro.Action"/>
-    /// </summary>
-    public const string Action = "action";
-    /// <summary>
-    /// <see cref="KnowPro.Topic"/>
-    /// </summary>
-    public const string Topic = "topic";
-    /// <summary>
-    /// <see cref="KnowPro.Tag"/>
-    /// </summary>
-    public const string Tag = "tag";
-    /// <summary>
-    /// <see cref="KnowPro.StructuredTag"/>
-    /// </summary>
-    public const string STag = "sTag";
 }
 
