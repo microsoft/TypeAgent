@@ -97,7 +97,7 @@ import {
     ChangeTabs,
     Search,
     DisabledBrowserActions,
-} from "./actionsSchema.mjs";
+} from "./browserActionSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteDataFromSession,
