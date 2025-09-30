@@ -878,7 +878,7 @@ async function getDocumentContentFromView(
 // NOTE: Function commented out per Flow 1 consolidation
 // Collaboration server now managed by view process
 
-export async function createViewServiceHost(filePath: string, port: number) {
+async function createViewServiceHost(filePath: string, port: number) {
     let timeoutHandle: NodeJS.Timeout;
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {

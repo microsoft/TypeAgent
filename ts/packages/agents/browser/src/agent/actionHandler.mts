@@ -2148,7 +2148,7 @@ async function handleGetActionRequest(
     }
 }
 
-export async function createViewServiceHost(
+async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
 ) {
     let timeoutHandle: NodeJS.Timeout;
