@@ -24,6 +24,8 @@ function registerClient(c: Client) {
     // Establish the clientIO RPC
     client = c;
     createClientIORpcServer(client.clientIO, clientIOChannel.channel);
+
+    c.dispatcherInitialized(webDispatcher);
 }
 
 export const webapi: ClientAPI = {
@@ -81,9 +83,7 @@ const dispatcherChannel = createGenericChannel((message: any) =>
     ),
 );
 
-export const webdispatcher = createDispatcherRpcClient(
-    dispatcherChannel.channel,
-);
+const webDispatcher = createDispatcherRpcClient(dispatcherChannel.channel);
 
 export async function createWebSocket(autoReconnect: boolean = true) {
     let url = window.location;
