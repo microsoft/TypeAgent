@@ -1515,7 +1515,9 @@ async function executeBrowserAction(
                     await getActionBrowserControl(context).readPageContent();
                     return;
                 case "stopReadPageContent":
-                    await getActionBrowserControl(context).stopReadPageContent();
+                    await getActionBrowserControl(
+                        context,
+                    ).stopReadPageContent();
                     return;
                 case "captureScreenshot":
                     const dataUrl =
