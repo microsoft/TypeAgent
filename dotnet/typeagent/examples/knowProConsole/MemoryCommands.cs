@@ -16,7 +16,8 @@ public class MemoryCommands : ICommandModule
     public IList<Command> GetCommands()
     {
         return [
-            SearchTermsDef()
+            SearchTermsDef(),
+            MessagesDef()
         ];
     }
 
@@ -37,9 +38,37 @@ public class MemoryCommands : ICommandModule
         // Hard coded test for now
         SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
         {
-            Terms = [new SearchTerm("Children of Time")]
+            Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
         };
         await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+    }
+
+    private Command MessagesDef()
+    {
+        Command command = new("kpMessages");
+        command.SetAction(this.MessagesAsync);
+        return command;
+    }
+    private async Task MessagesAsync(ParseResult parseResult, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        await KnowProWriter.WriteMessagesAsync(conversation);
+
+    }
+
+    private Command SemanticRefsDef()
+    {
+        Command command = new("kpSemanticRefs");
+        command.SetAction(this.SemanticRefsAsync);
+        return command;
+    }
+    private async Task SemanticRefsAsync(ParseResult parseResult, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        await KnowProWriter.WriteSemanticRefsAsync(conversation);
+
     }
 
     private IConversation EnsureConversation()

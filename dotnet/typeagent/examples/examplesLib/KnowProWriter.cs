@@ -7,7 +7,7 @@ namespace TypeAgent.ExamplesLib;
 
 public class KnowProWriter : ConsoleWriter
 {
-    public static async Task WriteMessagesAsync(Conversation conversation)
+    public static async Task WriteMessagesAsync(IConversation conversation)
     {
         await foreach (var message in conversation.Messages)
         {
@@ -15,19 +15,19 @@ public class KnowProWriter : ConsoleWriter
         }
     }
 
-    public static async Task WriteSemanticRefsAsync(Conversation conversation)
+    public static async Task WriteSemanticRefsAsync(IConversation conversation)
     {
         await foreach (var sr in conversation.SemanticRefs)
         {
             if (sr.KnowledgeType == KnowledgeType.Entity)
             {
                 WriteLine(sr.Knowledge as ConcreteEntity);
-                WriteLine();
             }
             else
             {
                 KnowProWriter.WriteJson(sr);
             }
+            WriteLine();
         }
     }
 

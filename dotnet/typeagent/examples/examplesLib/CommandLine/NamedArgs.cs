@@ -15,9 +15,16 @@ public class NamedArgs
         _argPrefix = argPrefix ?? Options.ArgPrefix;
     }
 
-    public string? Get(string  name)
+    public string? Get(string name)
     {
         return Get<string>(name);
+    }
+
+    public string GetRequired(string name)
+    {
+        string? value = Get(name);
+        ArgumentVerify.ThrowIfNullOrEmpty(value, name);
+        return value!;
     }
 
     public T? Get<T>(string name)
