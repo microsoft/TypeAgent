@@ -313,7 +313,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             // todo return search provider URL
             return new URL(`/?q=${query}`);
         },
-        readPage: async () => {
+        readPageContent: async () => {
             const targetTab = await getActiveTab();
             const article = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "read_page_content",
@@ -337,7 +337,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 });
             }
         },
-        stopReadPage: async () => {
+        stopReadPageContent: async () => {
             chrome.tts.stop();
         },
         captureScreenshot: async () => {

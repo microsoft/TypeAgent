@@ -50,8 +50,8 @@ export type BrowserControlInvokeFunctions = {
     switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean>;
 
     // REVIEW: external browser only
-    readPage(): Promise<void>;
-    stopReadPage(): Promise<void>;
+    readPageContent(): Promise<void>;
+    stopReadPageContent(): Promise<void>;
     captureScreenshot(): Promise<string>;
     getPageTextContent(): Promise<string>;
 

@@ -316,10 +316,10 @@ export function createInlineBrowserControl(
 
             return searchUrl;
         },
-        async readPage() {
+        async readPageContent() {
             throw new Error("Reading page is not supported in inline browser.");
         },
-        async stopReadPage() {
+        async stopReadPageContent() {
             throw new Error(
                 "Stopping reading page is not supported in inline browser.",
             );

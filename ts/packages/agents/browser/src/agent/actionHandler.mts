@@ -1511,11 +1511,13 @@ async function executeBrowserAction(
                             context,
                         ).getPageTextContent(),
                     );
-                case "readPage":
-                    await getActionBrowserControl(context).readPage();
+                case "readPageContent":
+                    await getActionBrowserControl(context).readPageContent();
                     return;
-                case "stopReadPage":
-                    await getActionBrowserControl(context).stopReadPage();
+                case "stopReadPageContent":
+                    await getActionBrowserControl(
+                        context,
+                    ).stopReadPageContent();
                     return;
                 case "captureScreenshot":
                     const dataUrl =
