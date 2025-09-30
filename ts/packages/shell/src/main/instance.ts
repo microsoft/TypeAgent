@@ -224,6 +224,7 @@ async function initializeDispatcher(
 export function initializeInstance(
     instanceDir: string,
     shellSettings: ShellSettingManager,
+    mockGreetings: boolean,
     startTime: number = performance.now(),
 ) {
     if (instance !== undefined) {
@@ -293,7 +294,11 @@ export function initializeInstance(
 
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {
-            dispatcher.processCommand("@greeting", "agent-0", []);
+            dispatcher.processCommand(
+                `@greeting${mockGreetings ? " --mock" : ""}`,
+                "agent-0",
+                [],
+            );
         }
     };
     ipcMain.on("chat-view-ready", onChatViewReady);
