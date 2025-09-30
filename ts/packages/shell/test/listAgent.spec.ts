@@ -22,7 +22,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("List Agent Tests", () => {
     test("create_update_clear_list", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         await testUserRequest(
             [

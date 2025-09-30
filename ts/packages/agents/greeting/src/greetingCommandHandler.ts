@@ -6,12 +6,13 @@ import {
     AppAgent,
     ActionResult,
     ActionResultSuccess,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { createTypeChat } from "typeagent";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { randomInt } from "node:crypto";
 import {
-    CommandHandlerNoParams,
+    CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -115,17 +116,32 @@ export interface GenericGreeting {
 /**
  * Implements the @greeting command.
  */
-export class GreetingCommandHandler implements CommandHandlerNoParams {
+export class GreetingCommandHandler implements CommandHandler {
     public readonly description =
         "Have the agent generate a personalized greeting.";
-    private instructions = `You are a breezy greeting generator. You also help the user remember unfished work like projects.`;
+    public readonly parameters = {
+        flags: {
+            mock: {
+                description: "Use mock greetings instead of generating.",
+                default: false,
+            },
+        },
+    } as const;
+    private instructions = `You are a breezy greeting generator. You also help the user remember unfinished work like projects.`;
 
     /**
      * Handle the @greeting command
      *
      * @param context The command context.
      */
-    public async run(context: ActionContext<GreetingAgentContext>) {
+    public async run(
+        context: ActionContext<GreetingAgentContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        if (params.flags.mock) {
+            context.actionIO.appendDisplay("Hello.  How can I help you today?");
+            return;
+        }
         // Initial output to let the user know the agent is thinking...
         context.actionIO.appendDisplay(
             {

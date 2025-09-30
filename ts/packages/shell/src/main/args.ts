@@ -11,6 +11,7 @@ type ShellCommandLineArgs = {
     update?: string;
     data?: string;
     env?: string;
+    mockGreetings?: boolean;
 };
 
 export function parseShellCommandLine() {
@@ -74,6 +75,11 @@ export function parseShellCommandLine() {
 
             if (arg === "--test") {
                 result.test = true;
+                continue;
+            }
+
+            if (arg === "--mock-greetings") {
+                result.mockGreetings = true;
                 continue;
             }
         }

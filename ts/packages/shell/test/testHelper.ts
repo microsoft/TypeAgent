@@ -9,7 +9,7 @@ import {
     Page,
 } from "@playwright/test";
 import fs from "node:fs";
-import path from "node:path";
+import path, { relative } from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
@@ -22,7 +22,7 @@ const runningApplications: Map<string, ElectronApplication> = new Map<
     ElectronApplication
 >();
 
-function waitForPromiseWithTimeout<T>(
+async function waitForPromiseWithTimeout<T>(
     promise: Promise<T>,
     timeoutMs: number,
 ): Promise<T> {
@@ -43,10 +43,38 @@ function waitForPromiseWithTimeout<T>(
     });
 }
 
+async function closeInstance(instanceName: string, force: boolean = false) {
+    const existing = runningApplications.get(instanceName);
+    if (existing) {
+        if (force) {
+            console.log(`Force closing instance ${instanceName}`);
+        }
+        try {
+            await waitForPromiseWithTimeout(existing.close(), 10000);
+        } catch (e: any) {
+            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName} PID: ${existing.process().pid}`;
+
+            existing.process().kill();
+            if (force) {
+                console.log(errMsg);
+            } else {
+                throw new Error(errMsg);
+            }
+        } finally {
+            runningApplications.delete(instanceName);
+        }
+        if (force) {
+            console.log(`Force closed instance ${instanceName}`);
+        }
+    }
+}
+
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
-export async function startShell(): Promise<Page> {
+export async function startShell(
+    testGreetings: boolean = false,
+): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     const instanceName = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
@@ -75,7 +103,7 @@ export async function startShell(): Promise<Page> {
 
             console.log(`Starting electron instance '${instanceName}'`);
             const app: ElectronApplication = await electron.launch({
-                args: getLaunchArgs(),
+                args: getLaunchArgs(testGreetings),
             });
             runningApplications.set(instanceName, app);
 
@@ -93,20 +121,7 @@ export async function startShell(): Promise<Page> {
             );
             retryAttempt++;
 
-            const existing = runningApplications.get(instanceName);
-            if (existing) {
-                console.log(`Force closing instance ${instanceName}`);
-                try {
-                    await waitForPromiseWithTimeout(existing.close(), 10000);
-                } catch (e: any) {
-                    console.log(
-                        `Failed to close instance ${instanceName}: ${e.message}`,
-                    );
-                    existing.process().kill();
-                }
-                runningApplications.delete(instanceName);
-                console.log(`Force closed instance ${instanceName}`);
-            }
+            await closeInstance(instanceName, true);
         }
     } while (retryAttempt <= maxRetries);
 
@@ -146,9 +161,7 @@ async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
  */
 export async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
-    const instanceName = process.env["INSTANCE_NAME"]!;
-    await runningApplications.get(instanceName)!.close();
-    runningApplications.delete(instanceName);
+    await closeInstance(process.env["INSTANCE_NAME"]!);
 }
 
 /**
@@ -168,7 +181,7 @@ export function getAppPath(): string {
  * Get electron launch arguments
  * @returns The arguments to pass to the electron application
  */
-export function getLaunchArgs(): string[] {
+export function getLaunchArgs(testGreetings: boolean): string[] {
     const appPath = getAppPath();
     const args = [
         appPath,
@@ -179,6 +192,9 @@ export function getLaunchArgs(): string[] {
     if (os.platform() === "linux") {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
         args.push("--no-sandbox");
+    }
+    if (!testGreetings) {
+        args.push("--mock-greetings");
     }
 
     return args;
