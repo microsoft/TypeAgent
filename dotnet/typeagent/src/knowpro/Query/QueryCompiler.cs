@@ -30,14 +30,11 @@ internal class QueryCompiler
         return ValueTask.FromResult(query);
     }
 
-    public (IList<CompiledTermGroup>, QueryOpExpr<T>) CompileSearchTermGroup<T>(
-        SearchTermGroup searchGroup,
-        Func<IList<QueryOpExpr<T>>, SearchTermBooleanOp, QueryOpExpr<T>> boolExprCreator
-    )
+    public (IList<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchTermGroup(SearchTermGroup searchGroup)
     {
         IList<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
 
-        IList<QueryOpExpr<T>> termExpressions = [];
+        IList<QueryOpExpr<SemanticRefAccumulator?>> termExpressions = [];
         foreach (var term in searchGroup.Terms)
         {
             switch (term)
@@ -46,6 +43,8 @@ internal class QueryCompiler
                     break;
 
                 case SearchTerm searchTerm:
+                    var searchTermExpr = CompileSearchTerm(searchTerm);
+                    termExpressions.Add(searchTermExpr);
                     break;
 
                 case SearchTermGroup subGroup:
@@ -53,7 +52,7 @@ internal class QueryCompiler
             }
         }
 
-        var boolExpr = boolExprCreator(termExpressions, searchGroup.BooleanOp);
+        var boolExpr = MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr(termExpressions, searchGroup.BooleanOp);
         return (compiledTerms, boolExpr);
     }
 
@@ -64,10 +63,7 @@ internal class QueryCompiler
 
     private QueryOpExpr<SemanticRefAccumulator> CompileSelect(SearchTermGroup searchGroup)
     {
-        var (searchTermsUsed, selectExpr) = CompileSearchTermGroup<SemanticRefAccumulator>(
-            searchGroup,
-            MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr
-        );
+        var (searchTermsUsed, selectExpr) = CompileSearchTermGroup(searchGroup);
         _allSearchTerms.AddRange(searchTermsUsed);
         return selectExpr;
     }
