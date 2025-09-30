@@ -1512,10 +1512,10 @@ async function executeBrowserAction(
                         ).getPageTextContent(),
                     );
                 case "readPageContent":
-                    await getActionBrowserControl(context).readPage();
+                    await getActionBrowserControl(context).readPageContent();
                     return;
                 case "stopReadPageContent":
-                    await getActionBrowserControl(context).stopReadPage();
+                    await getActionBrowserControl(context).stopReadPageContent();
                     return;
                 case "captureScreenshot":
                     const dataUrl =

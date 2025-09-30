@@ -122,10 +122,10 @@ export function createExternalBrowserClient(
         search: async (query?: string) => {
             return rpc.invoke("search", query);
         },
-        readPage: async () => {
+        readPageContent: async () => {
             return rpc.invoke("readPageContent");
         },
-        stopReadPage: async () => {
+        stopReadPageContent: async () => {
             return rpc.invoke("stopReadPageContent");
         },
         captureScreenshot: async () => {
