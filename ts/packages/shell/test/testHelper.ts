@@ -52,7 +52,7 @@ async function closeInstance(instanceName: string, force: boolean = false) {
         try {
             await waitForPromiseWithTimeout(existing.close(), 10000);
         } catch (e: any) {
-            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName}`;
+            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName} PID: ${existing.process().pid}`;
 
             existing.process().kill();
             if (force) {
@@ -72,7 +72,9 @@ async function closeInstance(instanceName: string, force: boolean = false) {
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
-export async function startShell(): Promise<Page> {
+export async function startShell(
+    testGreetings: boolean = false,
+): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     const instanceName = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
@@ -101,7 +103,7 @@ export async function startShell(): Promise<Page> {
 
             console.log(`Starting electron instance '${instanceName}'`);
             const app: ElectronApplication = await electron.launch({
-                args: getLaunchArgs(),
+                args: getLaunchArgs(testGreetings),
             });
             runningApplications.set(instanceName, app);
 
@@ -179,7 +181,7 @@ export function getAppPath(): string {
  * Get electron launch arguments
  * @returns The arguments to pass to the electron application
  */
-export function getLaunchArgs(): string[] {
+export function getLaunchArgs(testGreetings: boolean): string[] {
     const appPath = getAppPath();
     const args = [
         appPath,
@@ -190,6 +192,9 @@ export function getLaunchArgs(): string[] {
     if (os.platform() === "linux") {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
         args.push("--no-sandbox");
+    }
+    if (!testGreetings) {
+        args.push("--mock-greetings");
     }
 
     return args;

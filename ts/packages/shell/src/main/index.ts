@@ -83,6 +83,7 @@ export const isProd = parsedArgs.prod ?? app.isPackaged;
 debugShell("Is prod", isProd);
 export const isTest = parsedArgs.test ?? false;
 debugShell("Is test", isTest);
+const mockGreetings = parsedArgs.mockGreetings ?? false;
 
 // Use single instance lock in prod to make the existing instance focus
 // Allow multiple instance for dev build, with lock for data directory "instanceDir".
@@ -344,11 +345,16 @@ async function initialize() {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
         if (getShellWindow() === undefined)
-            initializeInstance(instanceDir, shellSettings);
+            initializeInstance(instanceDir, shellSettings, mockGreetings);
     });
 
     // Start up the first instance
-    const shellWindow = initializeInstance(instanceDir, shellSettings, time);
+    const shellWindow = initializeInstance(
+        instanceDir,
+        shellSettings,
+        mockGreetings,
+        time,
+    );
 
     shellWindow.waitForReady().then(() => {
         // Wait until the first shell is ready before we start background update check.
@@ -370,7 +376,7 @@ export async function reloadInstance() {
     try {
         await closeInstance();
         const shellSettings = new ShellSettingManager(instanceDir);
-        await initializeInstance(instanceDir, shellSettings);
+        await initializeInstance(instanceDir, shellSettings, mockGreetings);
     } finally {
         reloadingInstance = false;
     }
