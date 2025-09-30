@@ -52,7 +52,7 @@ async function closeInstance(instanceName: string, force: boolean = false) {
         try {
             await waitForPromiseWithTimeout(existing.close(), 10000);
         } catch (e: any) {
-            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName}`;
+            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName} PID: ${existing.process().pid}`;
 
             existing.process().kill();
             if (force) {
