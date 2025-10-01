@@ -31,7 +31,7 @@ export type BrowserEntities = WebPageMoniker | WebSearchResult;
 // A web site name OR search terms for a specific web page.
 // Do NOT convert search terms into a URL.
 // If the user supplies a protocol with any URL (https://, ftp://, typeagent-browser://, etc.), use it as is.
-// Fully qualified domain names provided by the user are assumed to have HTTP as the protocol.  
+// Fully qualified domain names provided by the user are assumed to have HTTP as the protocol.
 export type WebPageMoniker = string;
 
 // show/open/display web page in the current view.
