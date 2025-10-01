@@ -10,6 +10,11 @@ public interface ISearchTerm
 
 public class SearchTerm : ISearchTerm
 {
+    public SearchTerm(string term)
+        : this(new Term(term))
+    {
+
+    }
     public SearchTerm(Term term)
     {
         ArgumentVerify.ThrowIfNull(term, nameof(term));
@@ -25,4 +30,10 @@ public class SearchTerm : ISearchTerm
     ///  Additional terms related to term.
     /// </summary>
     public IList<Term>? RelatedTerms { get; set; }
+
+
+    public static implicit operator SearchTerm(string value)
+    {
+        return new SearchTerm(value);
+    }
 }

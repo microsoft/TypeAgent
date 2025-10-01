@@ -16,4 +16,14 @@ public static class AsyncExtensions
     {
         return task.ConfigureAwait(false).GetAwaiter().GetResult();
     }
+
+    public static void WaitForResult(this ValueTask task)
+    {
+        task.ConfigureAwait(false).GetAwaiter().GetResult();
+    }
+
+    public static T WaitForResult<T>(this ValueTask<T> task)
+    {
+        return task.ConfigureAwait(false).GetAwaiter().GetResult();
+    }
 }

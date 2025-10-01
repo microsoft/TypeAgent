@@ -5,10 +5,10 @@ namespace TypeAgent.KnowPro;
 
 /// <summary>
 /// For IConversation levelAPIs:
-/// <see cref="ConversationExtensions"/>
+/// <see cref="ConversationAPI"/>
 /// </summary>
 /// <typeparam name="TMessage"></typeparam>
-public interface IConversation<TMessage>
+public interface IConversation<TMessage> : IDisposable
     where TMessage : IMessage
 {
     IMessageCollection<TMessage> Messages { get; }
@@ -23,7 +23,7 @@ public interface IConversation<TMessage>
 
 public interface IConversation
 {
-    IReadOnlyAsyncCollection<IMessage> Messages { get; }
+    IMessageCollection Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
 

@@ -18,7 +18,10 @@ public class KnowProConsole : ConsoleApp
         : base("KnowPro Console")
     {
         _context = new KnowProConsoleContext();
-        AddModule(new PodcastCommands(_context));
+        AddModules(
+            new MemoryCommands(_context),
+            new PodcastCommands(_context)
+        );
         SortCommands();
     }
 

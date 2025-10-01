@@ -55,4 +55,22 @@ internal static class Ranker
         }
     }
 
+    public static ScoredSemanticRefOrdinal BoostEntities(
+        SemanticRef semanticRef,
+        ScoredSemanticRefOrdinal scoredOrdinal,
+        float boostWeight
+    )
+    {
+        ConcreteEntity? entity = semanticRef.AsEntity();
+        if (entity is not null)
+        {
+            scoredOrdinal = new ScoredSemanticRefOrdinal()
+            {
+                SemanticRefOrdinal = scoredOrdinal.SemanticRefOrdinal,
+                Score = scoredOrdinal.Score * boostWeight
+            };
+        }
+        return scoredOrdinal;
+    }
+
 }

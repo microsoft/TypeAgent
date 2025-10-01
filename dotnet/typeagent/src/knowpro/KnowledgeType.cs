@@ -1,12 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace TypeAgent.KnowPro;
 
-/// <summary>
-/// TODO: Make this strongly typed to be a discriminated union like Typescript
-/// </summary>
-public readonly struct KnowledgeType
+public struct KnowledgeType : IEquatable<KnowledgeType>
 {
     /// <summary>
     /// <see cref="ConcreteEntity"/>
@@ -52,6 +51,35 @@ public readonly struct KnowledgeType
     }
 
     public string Value { get; }
+
+    public override string ToString() => Value;
+
+    public override int GetHashCode() => Value.GetHashCode();
+
+    public override bool Equals([NotNullWhen(true)] object? obj)
+    {
+        if (obj is not null && obj is var kType)
+        {
+            return Equals(kType);
+        }
+
+        return false;
+    }
+
+    public bool Equals(KnowledgeType other)
+    {
+        return Value == other.Value;
+    }
+
+    public static bool operator==(KnowledgeType x, KnowledgeType y)
+    {
+        return x.Value == y.Value;
+    }
+
+    public static bool operator !=(KnowledgeType x, KnowledgeType y)
+    {
+        return x.Value != y.Value;
+    }
 
     public static implicit operator string(KnowledgeType type)
     {
