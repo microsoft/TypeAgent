@@ -11,7 +11,7 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         SearchTermMatches = [];
     }
 
-    public HashSet<string> SearchTermMatches { get; }
+    public HashSet<string> SearchTermMatches { get; set; }
 
     public void AddTermMatches(
         Term term,
@@ -56,4 +56,17 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         }
         this.SearchTermMatches.Add(term.Text);
     }
+
+    public IList<ScoredSemanticRefOrdinal> ToScoredSemanticRefs()
+    {
+        return GetSortedByScore(0).Map((m) =>
+        {
+            return new ScoredSemanticRefOrdinal()
+            {
+                SemanticRefOrdinal = m.Value,
+                Score = m.Score,
+            };
+        });
+    }
+
 }

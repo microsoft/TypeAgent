@@ -46,6 +46,12 @@ public class ConsoleWriter
     public static void WriteLine() => Console.WriteLine();
     public static void WriteLine(int value) => Console.WriteLine(value);
     public static void WriteLine(string value) => Console.WriteLine(value);
+    public static void WriteLine(ConsoleColor color, string value)
+    {
+        PushColor(color);
+        WriteLine(value);
+        PopColor();
+    }
 
     public static void WriteJson(object value)
     {

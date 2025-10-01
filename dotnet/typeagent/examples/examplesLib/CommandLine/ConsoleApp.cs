@@ -222,6 +222,14 @@ public abstract class ConsoleApp
         _allCommands.AddModule(module);
     }
 
+    public void AddModules(params ICommandModule[] modules)
+    {
+        foreach (var module in modules)
+        {
+            AddModule(module);
+        }
+    }
+
     public void SortCommands()
     {
         var commands = _allCommands.Subcommands.ToList();

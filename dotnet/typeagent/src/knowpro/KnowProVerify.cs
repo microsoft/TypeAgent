@@ -46,6 +46,13 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfNull(semanticRef.Knowledge, nameof(semanticRef.Knowledge));
     }
 
+    public static void ThrowIfNotKnowledgeType(SemanticRef semanticRef, KnowledgeType type)
+    {
+        if (semanticRef.KnowledgeType != type)
+        {
+            throw new KnowProException(KnowProException.ErrorCode.KnowledgeTypeMismatch, $"Expected: {type}; Actual: {semanticRef.KnowledgeType}");
+        }
+    }
     public static void ThrowIfInvalid(ConcreteEntity? entity)
     {
         ArgumentVerify.ThrowIfNull(entity, nameof(entity));
@@ -74,4 +81,5 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfNull(tag, nameof(tag));
         ArgumentVerify.ThrowIfNullOrEmpty(tag!.Text, nameof(tag.Text));
     }
+
 }

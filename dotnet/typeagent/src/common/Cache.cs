@@ -194,9 +194,9 @@ public static class CacheExtensions
             return values;
         }
         IList<TValue> pendingValues = await loader(pendingKeys, cancellationToken).ConfigureAwait(false);
-        if (values.Count != pendingKeys.Count)
+        if (pendingValues.Count != pendingKeys.Count)
         {
-            throw new TypeAgentException("Resolver returned incorrect number of values");
+            throw new TypeAgentException($"Cache Resolver: Expected {pendingKeys.Count}, Got: ${pendingValues.Count}");
         }
         // Merge the batch into results
         cache.MergePendingResults(keys, values, pendingValues);

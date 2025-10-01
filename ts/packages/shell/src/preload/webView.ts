@@ -145,10 +145,28 @@ export async function awaitPageIncrementalLoad(): Promise<boolean> {
     }
 }
 
+// Compression mode enum (matching browser extension implementation)
+enum CompressionMode {
+    None = "None",
+    Automation = "automation",
+    KnowledgeExtraction = "knowledgeExtraction",
+}
+
 export async function getTabHTMLFragments(
-    fullSize: boolean,
+    compressionModeOrFullSize: CompressionMode | boolean,
     extractText: boolean,
 ) {
+    // Convert legacy boolean or new CompressionMode to boolean for backward compatibility
+    const fullSize =
+        typeof compressionModeOrFullSize === "boolean"
+            ? compressionModeOrFullSize
+            : compressionModeOrFullSize === CompressionMode.None;
+
+    // For knowledge extraction, disable text extraction since textpro will handle HTML-to-markdown conversion
+    const shouldExtractText =
+        extractText &&
+        (typeof compressionModeOrFullSize !== "object" ||
+            compressionModeOrFullSize !== CompressionMode.KnowledgeExtraction);
     let htmlFragments: any[] = [];
     let htmlPromises: Promise<any>[] = [];
 
@@ -156,7 +174,11 @@ export async function getTabHTMLFragments(
         sendScriptAction(
             {
                 type: "get_reduced_html",
-                fullSize: fullSize,
+                compressionMode:
+                    typeof compressionModeOrFullSize === "object"
+                        ? compressionModeOrFullSize
+                        : undefined,
+                fullSize: fullSize, // Keep for backward compatibility
                 frameId: 0,
             },
             5000,
@@ -182,7 +204,11 @@ export async function getTabHTMLFragments(
             sendScriptAction(
                 {
                     type: "get_reduced_html",
-                    fullSize: fullSize,
+                    compressionMode:
+                        typeof compressionModeOrFullSize === "object"
+                            ? compressionModeOrFullSize
+                            : undefined,
+                    fullSize: fullSize, // Keep for backward compatibility
                     frameId: index,
                 },
                 5000,
@@ -197,7 +223,7 @@ export async function getTabHTMLFragments(
         const frameHTML = htmlResults[i];
         if (frameHTML) {
             let frameText = "";
-            if (extractText) {
+            if (shouldExtractText) {
                 if (i == 0) {
                     frameText = await sendScriptAction(
                         {
@@ -256,8 +282,12 @@ async function runBrowserAction(action: any) {
         action.actionName ?? action.fullActionName.split(".").at(-1);
     switch (actionName) {
         case "getHTML": {
+            // Convert legacy fullHTML parameter to CompressionMode
+            const compressionMode = action.parameters?.fullHTML
+                ? CompressionMode.None
+                : CompressionMode.Automation;
             responseObject = await getTabHTMLFragments(
-                action.parameters.fullHTML,
+                compressionMode,
                 action.parameters?.extractText,
             );
 

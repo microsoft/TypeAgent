@@ -402,7 +402,10 @@ export function createInlineBrowserControl(
                 };
             }
         },
-        async getHtmlFragments(useTimestampIds?: boolean): Promise<any[]> {
+        async getHtmlFragments(
+            useTimestampIds?: boolean,
+            compressionMode?: string,
+        ): Promise<any[]> {
             try {
                 const webContents = getActiveBrowserWebContents();
 
@@ -412,19 +415,25 @@ export function createInlineBrowserControl(
                         try {
                             // Check if browserConnect is available (exposed via contextBridge)
                             if (window.browserConnect && typeof window.browserConnect.runBrowserAction === 'function') {
+                                // Determine fullHTML based on compression mode
+                                const fullHTML = ${compressionMode ? `"${compressionMode}" === "None"` : "false"};
+                                // For knowledge extraction, disable text extraction since textpro will handle HTML-to-markdown conversion
+                                const extractText = ${compressionMode ? `"${compressionMode}" !== "knowledgeExtraction"` : "true"};
                                 const response = await window.browserConnect.runBrowserAction({
                                     actionName: "getHTML",
                                     parameters: {
-                                        fullHTML: false,
+                                        fullHTML: fullHTML,
                                         downloadAsFile: false,
-                                        extractText: true,
+                                        extractText: extractText,
                                         useTimestampIds: ${useTimestampIds === true}
                                     }
                                 });
                                 return response;
                             } else if (window.browserConnect && typeof window.browserConnect.getTabHTMLFragments === 'function') {
                                 // Fallback to direct getTabHTMLFragments if available
-                                const fragments = await window.browserConnect.getTabHTMLFragments(false, true);
+                                const compressionModeValue = ${compressionMode ? `"${compressionMode}"` : '"automation"'};
+                                const extractText = ${compressionMode ? `"${compressionMode}" !== "knowledgeExtraction"` : "true"};
+                                const fragments = await window.browserConnect.getTabHTMLFragments(compressionModeValue, extractText);
                                 return {
                                     message: "OK",
                                     data: fragments

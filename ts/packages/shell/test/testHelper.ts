@@ -9,12 +9,12 @@ import {
     Page,
 } from "@playwright/test";
 import fs from "node:fs";
-import path, { relative } from "node:path";
+import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 // These need to be in sync with the UI
-const chatViewTitle = "Chat View"; // See chatView.html title tag
+const chatViewUrlSuffix = "/chatView.html";
 const inputDivId = "phraseDiv";
 
 const runningApplications: Map<string, ElectronApplication> = new Map<
@@ -133,15 +133,15 @@ export async function startShell(
 async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
     let attempts = 0;
     do {
-        let windows: Page[] = await app.windows();
+        const windows: Page[] = app.windows();
         // wait for each window to load and return the one we are interested in
         for (const window of windows) {
             try {
                 await window.waitForLoadState("domcontentloaded");
 
                 // is this the correct window?
-                const title = await window.title();
-                if (title === chatViewTitle) {
+                const url = window.url();
+                if (url.endsWith(chatViewUrlSuffix)) {
                     return window;
                 }
             } catch (e) {

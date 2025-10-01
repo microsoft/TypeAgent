@@ -17,4 +17,10 @@ public class KnowProContext
     public string DotnetPath { get; set; }
 
     public IConversation? Conversation { get; set; }
+
+    public void SetConversation<TMessage>(Conversation<TMessage> conversation)
+        where TMessage : IMessage, new()
+    {
+        Conversation = conversation.AsConversation();
+    }
 }

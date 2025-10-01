@@ -97,7 +97,7 @@ import {
     ChangeTabs,
     Search,
     DisabledBrowserActions,
-} from "./actionsSchema.mjs";
+} from "./browserActionSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteDataFromSession,
@@ -1933,7 +1933,10 @@ async function handlePageNavigation(
 
         // Get page contents
         const htmlFragments =
-            await context.agentContext.browserConnector?.getHtmlFragments();
+            await context.agentContext.browserConnector?.getHtmlFragments(
+                false,
+                "knowledgeExtraction",
+            );
 
         if (!htmlFragments) {
             return;
@@ -2150,7 +2153,7 @@ async function handleGetActionRequest(
     }
 }
 
-export async function createViewServiceHost(
+async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
 ) {
     let timeoutHandle: NodeJS.Timeout;

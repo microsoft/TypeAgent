@@ -10,7 +10,7 @@ import {
 } from "./actions";
 import { captureUIState, captureAnnotatedScreenshot } from "./capture";
 import { setIdsOnAllElements } from "../domUtils";
-import { getPageHTML } from "../htmlUtils";
+import { getPageHTML, CompressionMode } from "../htmlUtils";
 
 // State variables
 let recording = false;
@@ -75,7 +75,7 @@ export async function stopRecording(): Promise<any> {
     const screenshot = await captureAnnotatedScreenshot();
     recordedActionScreenshot.push(screenshot);
 
-    const pageHTML = getPageHTML(false, "", 0, false);
+    const pageHTML = getPageHTML(CompressionMode.Automation, "", 0, false);
     recordedActionHtml.push(pageHTML);
     recordedHtmlIndex = recordedActionHtml.length;
 
@@ -211,7 +211,12 @@ window.addEventListener("spa-navigation", async () => {
         recordedActionScreenshot.push(screenshot);
 
         if (lastPagehtml.length == 0) {
-            lastPagehtml = getPageHTML(false, "", 0, false);
+            lastPagehtml = getPageHTML(
+                CompressionMode.Automation,
+                "",
+                0,
+                false,
+            );
         }
 
         recordedActionHtml.push(lastPagehtml);
