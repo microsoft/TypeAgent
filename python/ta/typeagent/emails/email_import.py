@@ -9,7 +9,7 @@ from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import Datetime
 from ..storage.utils import create_storage_provider
 
-from .emailMemory import EmailMessage, EmailMessageMeta
+from .email_memory import EmailMessage, EmailMessageMeta
 from email.message import Message
 
 def import_email_file(email_filePath: str) -> EmailMessage:
