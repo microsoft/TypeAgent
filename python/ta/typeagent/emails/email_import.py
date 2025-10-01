@@ -3,12 +3,12 @@
 
 import os
 import re
-import email
 
 from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import Datetime
 from ..storage.utils import create_storage_provider
 
+from email import message_from_file
 from .email_memory import EmailMessage, EmailMessageMeta
 from email.message import Message
 
@@ -16,8 +16,12 @@ def import_email_file(email_filePath: str) -> EmailMessage:
     msg: Message
        
     with open(email_filePath, "r") as f:
-        msg = email.message_from_file(f)
-    
+        msg = message_from_file(f)
+
+    email: EmailMessage = import_email_message(msg)
+    return email
+
+def import_email_message(msg: Message) -> EmailMessage:
     # Extract metadata from
     email_meta = EmailMessageMeta(
         sender=msg.get("From"),
@@ -57,6 +61,8 @@ def extract_email_body(msg: Message) -> str:
 def _decode_email_payload(part: Message) -> str | None:
     """Decodes the payload of an email part to a string using its charset."""
     payload = part.get_payload(decode=True)
-    if payload is not None:
+    if payload is None:
         return None
-    return payload.decode(part.get_content_charset() or "utf-8")
+    
+    body: str = payload.decode(part.get_content_charset() or "utf-8")
+    return body
