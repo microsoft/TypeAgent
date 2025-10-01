@@ -40,7 +40,17 @@ public class MemoryCommands : ICommandModule
         {
             Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
         };
-        await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        if (results is null)
+        {
+            KnowProWriter.WriteError("No results");
+            return;
+        }
+        foreach (var kType in results.Keys)
+        {
+            KnowProWriter.WriteLine($"{kType} {results[kType].SemanticRefMatches.Count} matches");
+        }
+
     }
 
     private Command MessagesDef()

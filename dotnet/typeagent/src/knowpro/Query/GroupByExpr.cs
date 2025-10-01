@@ -25,7 +25,7 @@ internal class GroupByKnowledgeTypeExpr : QueryOpExpr<IDictionary<KnowledgeType,
         {
             var semanticRef = await context.GetSemanticRefAsync(match.Value);
             var group = groups.GetValueOrDefault(semanticRef.KnowledgeType);
-            if (group is not null)
+            if (group is null)
             {
                 group = new SemanticRefAccumulator();
                 group.SearchTermMatches = semanticRefMatches.SearchTermMatches;
