@@ -36,6 +36,9 @@ import { Website, WebsiteMeta } from "./websiteMeta.js";
 import { WebsiteDocPart } from "./websiteDocPart.js";
 import path from "node:path";
 import fs from "node:fs";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:memory:websiteCollection");
 
 export interface WebsiteCollectionData
     extends IConversationDataWithIndexes<WebsiteDocPart> {}
@@ -186,13 +189,13 @@ export class WebsiteCollection
 
             // Preserve richer data: prefer entries with more content/knowledge
             if (this.shouldReplaceExisting(existing, docPart)) {
-                console.log(
+                debug(
                     `[WebsiteCollection] Replacing existing entry for ${url} with richer data`,
                 );
                 // Update existing entry with new data
                 (this.messages as any).items[existingIndex] = docPart;
             } else {
-                console.log(
+                debug(
                     `[WebsiteCollection] Skipping duplicate entry for ${url} - existing data is richer`,
                 );
                 return;
@@ -228,7 +231,7 @@ export class WebsiteCollection
         const existingScore = this.calculateRichnessScore(existing);
         const newScore = this.calculateRichnessScore(newEntry);
 
-        console.log(
+        debug(
             `[WebsiteCollection] Existing richness: ${existingScore}, New richness: ${newScore}`,
         );
 
@@ -709,7 +712,7 @@ export class WebsiteCollection
                     originalTopicCount - knowledge.topics.length;
                 if (removedCount > 0) {
                     cleanedCount += removedCount;
-                    console.log(
+                    debug(
                         `[WebsiteCollection] Cleaned ${removedCount} synthetic topics from ${websitePart.url}`,
                     );
                 }
@@ -717,7 +720,7 @@ export class WebsiteCollection
         }
 
         if (cleanedCount > 0) {
-            console.log(
+            debug(
                 `[WebsiteCollection] Total cleanup: removed ${cleanedCount} synthetic temporal topics`,
             );
         }
@@ -980,23 +983,19 @@ export class WebsiteCollection
         // if we have an in-memory database we need to write it out to disk
         if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
             const dbFile = `${path.join(dirPath, baseFileName)}_dataFrames.sqlite`;
-            console.log(
-                `[Knowledge Graph] Saving SQLite database to: ${dbFile}`,
-            );
+            debug(`[Knowledge Graph] Saving SQLite database to: ${dbFile}`);
 
             // Only delete if it's a memory database being saved for the first time
             // If we already have a persistent database, don't delete it
             if (fs.existsSync(dbFile) && this.dbPath === ":memory:") {
-                console.log(
-                    `[Knowledge Graph] Backing up existing database file`,
-                );
+                debug(`[Knowledge Graph] Backing up existing database file`);
                 const backupFile = `${dbFile}.backup.${Date.now()}`;
                 fs.copyFileSync(dbFile, backupFile);
                 fs.unlinkSync(dbFile);
             }
 
             this.db?.exec(`vacuum main into '${dbFile}'`);
-            console.log(`[Knowledge Graph] Database saved successfully`);
+            debug(`[Knowledge Graph] Database saved successfully`);
         }
     }
 
@@ -1014,7 +1013,7 @@ export class WebsiteCollection
             if (fs.existsSync(dbFile)) {
                 dbPath = dbFile;
             } else {
-                console.log(
+                debug(
                     `[Knowledge Graph] No existing database found at: ${dbFile}`,
                 );
             }
@@ -1553,37 +1552,37 @@ export class WebsiteCollection
         const urlLimit = options?.urlLimit;
         const isMinimalMode = urlLimit !== undefined;
 
-        console.log(
+        debug(
             `[Knowledge Graph] Starting graph build${isMinimalMode ? ` (minimal mode: ${urlLimit} URLs)` : " (full mode)"}`,
         );
         const startTime = Date.now();
 
         // Extract entities from websites (limited in minimal mode)
         const entities = await this.extractEntities(urlLimit);
-        console.log(
+        debug(
             `[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - startTime}ms`,
         );
 
         // Store entities in knowledge entities table
         await this.storeEntitiesInDatabase(entities, urlLimit);
-        console.log(`[Knowledge Graph] Stored entities in database`);
+        debug(`[Knowledge Graph] Stored entities in database`);
 
         // Build relationships between entities
         const relationshipStartTime = Date.now();
         await this.buildRelationships(entities, urlLimit);
-        console.log(
+        debug(
             `[Knowledge Graph] Built relationships in ${Date.now() - relationshipStartTime}ms`,
         );
 
         // Detect communities
         const communityStartTime = Date.now();
         await this.detectCommunities(entities);
-        console.log(
+        debug(
             `[Knowledge Graph] Detected communities in ${Date.now() - communityStartTime}ms`,
         );
 
         const totalTime = Date.now() - startTime;
-        console.log(
+        debug(
             `[Knowledge Graph] Graph build completed in ${totalTime}ms with ${entities.length} entities`,
         );
     }
@@ -1592,7 +1591,7 @@ export class WebsiteCollection
      * Update graph when new websites are added
      */
     public async updateGraph(newWebsites: Website[]): Promise<void> {
-        console.log(
+        debug(
             `Updating knowledge graph with ${newWebsites.length} new websites`,
         );
 
@@ -1620,7 +1619,7 @@ export class WebsiteCollection
             ? websites.slice(0, urlLimit)
             : websites;
 
-        console.log(
+        debug(
             `[Knowledge Graph] Extracting entities from ${websitesToProcess.length} of ${websites.length} websites`,
         );
 
@@ -1631,7 +1630,7 @@ export class WebsiteCollection
                 processedCount % 20 === 0 ||
                 processedCount === websitesToProcess.length
             ) {
-                console.log(
+                debug(
                     `[Knowledge Graph] Entity extraction progress: ${processedCount}/${websitesToProcess.length} websites`,
                 );
             }
@@ -1643,7 +1642,7 @@ export class WebsiteCollection
             }
         }
 
-        console.log(`[Knowledge Graph] Found ${entities.size} unique entities`);
+        debug(`[Knowledge Graph] Found ${entities.size} unique entities`);
         return Array.from(entities);
     }
 
@@ -1654,9 +1653,7 @@ export class WebsiteCollection
         entities: string[],
         urlLimit?: number,
     ): Promise<void> {
-        console.log(
-            `[Knowledge Graph] Storing entities and topics in database...`,
-        );
+        debug(`[Knowledge Graph] Storing entities and topics in database...`);
 
         // Get websites to process (same limitation as entity extraction)
         const websites = this.getWebsites();
@@ -1736,7 +1733,7 @@ export class WebsiteCollection
             }
         }
 
-        console.log(
+        debug(
             `[Knowledge Graph] Stored ${entityCount} entity records and ${topicCount} topic records`,
         );
     }
@@ -1756,7 +1753,7 @@ export class WebsiteCollection
             ? websites.slice(0, urlLimit)
             : websites;
 
-        console.log(
+        debug(
             `[Knowledge Graph] Building relationships from ${websitesToProcess.length} websites`,
         );
 
@@ -1770,7 +1767,7 @@ export class WebsiteCollection
                 processedCount % 20 === 0 ||
                 processedCount === websitesToProcess.length
             ) {
-                console.log(
+                debug(
                     `[Knowledge Graph] Relationship building progress: ${processedCount}/${websitesToProcess.length} websites, ${relationshipCount} relationships found`,
                 );
             }
@@ -1811,12 +1808,12 @@ export class WebsiteCollection
             }
         }
 
-        console.log(
+        debug(
             `[Knowledge Graph] Found ${relationships.size} unique relationships from ${processedCount} websites`,
         );
 
         // Calculate confidence scores and store relationships
-        console.log(`[Knowledge Graph] Storing relationships in database...`);
+        debug(`[Knowledge Graph] Storing relationships in database...`);
         let storedCount = 0;
         for (const [, rel] of relationships) {
             rel.confidence = Math.min(rel.count / 10, 1.0); // Normalize to 0-1
@@ -1835,12 +1832,12 @@ export class WebsiteCollection
             await this.relationships.addRows(relationshipRow);
 
             if (storedCount % 100 === 0 || storedCount === relationships.size) {
-                console.log(
+                debug(
                     `[Knowledge Graph] Stored ${storedCount}/${relationships.size} relationships`,
                 );
             }
         }
-        console.log(
+        debug(
             `[Knowledge Graph] Finished storing ${storedCount} relationships`,
         );
     }
@@ -1849,7 +1846,7 @@ export class WebsiteCollection
      * Detect and store communities using simple clustering
      */
     private async detectCommunities(entities: string[]): Promise<void> {
-        console.log(
+        debug(
             `[Knowledge Graph] Starting community detection for ${entities.length} entities`,
         );
 
@@ -1857,9 +1854,7 @@ export class WebsiteCollection
         // For now, group entities that appear together frequently
         const communities = await this.runCommunityDetection(entities);
 
-        console.log(
-            `[Knowledge Graph] Detected ${communities.length} communities`,
-        );
+        debug(`[Knowledge Graph] Detected ${communities.length} communities`);
 
         let storedCount = 0;
         for (const community of communities) {
@@ -1884,14 +1879,12 @@ export class WebsiteCollection
             await this.communities.addRows(communityRow);
 
             if (storedCount % 10 === 0 || storedCount === communities.length) {
-                console.log(
+                debug(
                     `[Knowledge Graph] Stored ${storedCount}/${communities.length} communities`,
                 );
             }
         }
-        console.log(
-            `[Knowledge Graph] Finished storing ${storedCount} communities`,
-        );
+        debug(`[Knowledge Graph] Finished storing ${storedCount} communities`);
     }
 
     /**
@@ -1905,9 +1898,7 @@ export class WebsiteCollection
             density: number;
         }>
     > {
-        console.log(
-            `[Knowledge Graph] Running community detection algorithm...`,
-        );
+        debug(`[Knowledge Graph] Running community detection algorithm...`);
 
         // For now, implement a simple clustering based on co-occurrence strength
         const communities: Array<{
@@ -1919,7 +1910,7 @@ export class WebsiteCollection
 
         // Group entities that have strong relationships (confidence > 0.5)
         const strongRelationships = await this.getStrongRelationships();
-        console.log(
+        debug(
             `[Knowledge Graph] Found ${strongRelationships.length} strong relationships for clustering`,
         );
 

@@ -13,16 +13,67 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
+// These need to be in sync with the UI
+const chatViewUrlSuffix = "/chatView.html";
+const inputDivId = "phraseDiv";
+
 const runningApplications: Map<string, ElectronApplication> = new Map<
     string,
     ElectronApplication
 >();
 
+async function waitForPromiseWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error("Operation timed out"));
+        }, timeoutMs);
+
+        promise
+            .then((result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            })
+            .catch((err) => {
+                clearTimeout(timeout);
+                reject(err);
+            });
+    });
+}
+
+async function closeInstance(instanceName: string, force: boolean = false) {
+    const existing = runningApplications.get(instanceName);
+    if (existing) {
+        if (force) {
+            console.log(`Force closing instance ${instanceName}`);
+        }
+        try {
+            await waitForPromiseWithTimeout(existing.close(), 10000);
+        } catch (e: any) {
+            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName} PID: ${existing.process().pid}`;
+
+            existing.process().kill();
+            if (force) {
+                console.log(errMsg);
+            } else {
+                throw new Error(errMsg);
+            }
+        } finally {
+            runningApplications.delete(instanceName);
+        }
+        if (force) {
+            console.log(`Force closed instance ${instanceName}`);
+        }
+    }
+}
+
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
 export async function startShell(
-    waitForAgentGreeting: boolean = true,
+    testGreetings: boolean = false,
 ): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     const instanceName = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
@@ -52,7 +103,7 @@ export async function startShell(
 
             console.log(`Starting electron instance '${instanceName}'`);
             const app: ElectronApplication = await electron.launch({
-                args: getLaunchArgs(),
+                args: getLaunchArgs(testGreetings),
             });
             runningApplications.set(instanceName, app);
 
@@ -60,9 +111,8 @@ export async function startShell(
             const mainWindow: Page = await getChatViewWindow(app);
 
             // wait for agent greeting
-            if (waitForAgentGreeting) {
-                await waitForAgentMessage(mainWindow, 30000, 1, false, ["..."]);
-            }
+
+            await waitForAgentMessage(mainWindow, 30000, 1, false, ["..."]);
 
             return mainWindow;
         } catch (e) {
@@ -71,12 +121,7 @@ export async function startShell(
             );
             retryAttempt++;
 
-            const existing = runningApplications.get(instanceName);
-            if (existing) {
-                console.log(`Closing instance ${instanceName}`);
-                await existing.close();
-                runningApplications.delete(instanceName);
-            }
+            await closeInstance(instanceName, true);
         }
     } while (retryAttempt <= maxRetries);
 
@@ -85,19 +130,18 @@ export async function startShell(
     );
 }
 
-const chatViewTitle = "Chat View"; // See chatView.html title tag
 async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
     let attempts = 0;
     do {
-        let windows: Page[] = await app.windows();
+        const windows: Page[] = app.windows();
         // wait for each window to load and return the one we are interested in
         for (const window of windows) {
             try {
                 await window.waitForLoadState("domcontentloaded");
 
                 // is this the correct window?
-                const title = await window.title();
-                if (title === chatViewTitle) {
+                const url = window.url();
+                if (url.endsWith(chatViewUrlSuffix)) {
                     return window;
                 }
             } catch (e) {
@@ -117,9 +161,7 @@ async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
  */
 export async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
-    const instanceName = process.env["INSTANCE_NAME"]!;
-    await runningApplications.get(instanceName)!.close();
-    runningApplications.delete(instanceName);
+    await closeInstance(process.env["INSTANCE_NAME"]!);
 }
 
 /**
@@ -139,7 +181,7 @@ export function getAppPath(): string {
  * Get electron launch arguments
  * @returns The arguments to pass to the electron application
  */
-export function getLaunchArgs(): string[] {
+export function getLaunchArgs(testGreetings: boolean): string[] {
     const appPath = getAppPath();
     const args = [
         appPath,
@@ -151,8 +193,15 @@ export function getLaunchArgs(): string[] {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
         args.push("--no-sandbox");
     }
+    if (!testGreetings) {
+        args.push("--mock-greetings");
+    }
 
     return args;
+}
+
+export async function getInputElementHandle(page: Page) {
+    return page.waitForSelector(`#${inputDivId}`);
 }
 
 /**
@@ -161,7 +210,7 @@ export function getLaunchArgs(): string[] {
  * @param page The main page from the electron host application.
  */
 export async function sendUserRequest(prompt: string, page: Page) {
-    const locator: Locator = page.locator("#phraseDiv");
+    const locator: Locator = page.locator(`#${inputDivId}`);
     await locator.waitFor({ timeout: 30000, state: "visible" });
     await locator.focus({ timeout: 30000 });
     await locator.fill(prompt, { timeout: 30000 });
@@ -174,7 +223,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
  * @param page The main page from the electron host application.
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {
-    const locator: Locator = page.locator("#phraseDiv");
+    const locator: Locator = page.locator(`#${inputDivId}`);
     await locator.waitFor({ timeout: 5000, state: "visible" });
     await locator.fill(prompt, { timeout: 5000 });
     page.keyboard.down("Enter");
@@ -263,7 +312,7 @@ async function getAgentMessageFromContainer(locator: Locator): Promise<string> {
  * @param timeout The maximum amount of time to wait for the agent message
  * @param expectedMessageCount The expected # of agent messages at this time.
  * @param waitForMessageCompletion A flag indicating if we should block util the message is completed.
- * @param ignore A list of messges that this method will consider noise and will reject as false positivies
+ * @param ignore A list of messages that this method will consider noise and will reject as false positives
  *          i.e. [".."] and this method will ignore agent messages that are "..." and will continue waiting.
  *          This is useful when an agent sends status messages.
  *
@@ -308,6 +357,22 @@ async function waitForAgentMessage(
         await page.waitForTimeout(1000);
         timeWaited += 1000;
     }
+}
+
+export async function clearMessages(page: Page): Promise<void> {
+    sendUserRequestFast("@clear", page);
+    let attempts = 0;
+    do {
+        attempts++;
+        const locators = await page
+            .locator(".chat-message-container-agent")
+            .all();
+        if (locators.length === 0) {
+            return;
+        }
+        await page.waitForTimeout(1000);
+    } while (attempts < 30);
+    throw new Error("Timeout waiting for clear to complete");
 }
 
 /**

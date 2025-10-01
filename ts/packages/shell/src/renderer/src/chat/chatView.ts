@@ -118,8 +118,8 @@ export class ChatView {
 
         this._dispatcher = dispatcher;
 
-        this.chatInput?.textarea.enable(true);
-        this.chatInput?.focus();
+        this.chatInput.textarea.enable(true);
+        this.chatInput.focus();
 
         // delay initialization.
         if (this.partialCompletionEnabled) {

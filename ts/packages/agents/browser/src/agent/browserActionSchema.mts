@@ -59,12 +59,12 @@ export type OpenWebPage = {
     };
 };
 
-// Make another tab the activbe tab
+// Make another tab the active tab
 export type ChangeTabs = {
     actionName: "changeTab";
     parameters: {
         tabDescription: string;
-        // The numerical index referred to by the descripton if applicable.  (i.e. first = 1, second = 2, etc.)
+        // The numerical index referred to by the description if applicable.  (i.e. first = 1, second = 2, etc.)
         tabIndex?: number;
     };
 };
@@ -132,12 +132,13 @@ export type ZoomReset = {
     actionName: "zoomReset";
 };
 
+// Read the web page contents aloud
 export type ReadPageContent = {
-    actionName: "readPage";
+    actionName: "readPageContent";
 };
 
 export type StopReadPageContent = {
-    actionName: "stopReadPage";
+    actionName: "stopReadPageContent";
 };
 
 export type CaptureScreenshot = {

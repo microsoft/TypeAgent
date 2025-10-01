@@ -122,11 +122,11 @@ export function createExternalBrowserClient(
         search: async (query?: string) => {
             return rpc.invoke("search", query);
         },
-        readPage: async () => {
-            return rpc.invoke("readPage");
+        readPageContent: async () => {
+            return rpc.invoke("readPageContent");
         },
-        stopReadPage: async () => {
-            return rpc.invoke("stopReadPage");
+        stopReadPageContent: async () => {
+            return rpc.invoke("stopReadPageContent");
         },
         captureScreenshot: async () => {
             return rpc.invoke("captureScreenshot");
@@ -139,6 +139,24 @@ export function createExternalBrowserClient(
         },
         getBrowserSettings: async () => {
             return rpc.invoke("getBrowserSettings");
+        },
+        getHtmlFragments: async (...args) => {
+            return rpc.invoke("getHtmlFragments", ...args);
+        },
+        clickOn: async (...args) => {
+            return rpc.invoke("clickOn", ...args);
+        },
+        setDropdown: async (...args) => {
+            return rpc.invoke("setDropdown", ...args);
+        },
+        enterTextIn: async (...args) => {
+            return rpc.invoke("enterTextIn", ...args);
+        },
+        awaitPageLoad: async (...args) => {
+            return rpc.invoke("awaitPageLoad", ...args);
+        },
+        awaitPageInteraction: async (...args) => {
+            return rpc.invoke("awaitPageInteraction", ...args);
         },
     };
 }

@@ -3,40 +3,25 @@
 
 namespace TypeAgent.KnowPro.Query;
 
-internal interface IQueryOpExpr<T>
+internal class QueryOpExpr
 {
-    bool IsAsync { get; }
-
-    T Eval(QueryEvalContext context);
-    Task<T> EvalAsync(QueryEvalContext context);
+    public virtual ValueTask<object> GetResultAsync(QueryEvalContext context)
+    {
+        return ValueTask.FromResult<object>(null);
+    }
 }
 
-internal class QueryOpExprAsync<T> : IQueryOpExpr<T>
+internal class QueryOpExpr<T> : QueryOpExpr
 {
     public bool IsAsync => true;
 
-    public virtual T Eval(QueryEvalContext context)
+    public override async ValueTask<object> GetResultAsync(QueryEvalContext context)
     {
-        return EvalAsync(context).WaitForResult();
+        return await EvalAsync(context);
     }
 
-    public virtual Task<T> EvalAsync(QueryEvalContext context)
+    public virtual ValueTask<T> EvalAsync(QueryEvalContext context)
     {
         throw new NotImplementedException();
-    }
-}
-
-internal class QueryOpExpr<T> : IQueryOpExpr<T>
-{
-    public bool IsAsync => false;
-
-    public virtual T Eval(QueryEvalContext context)
-    {
-        throw new NotImplementedException();
-    }
-
-    public virtual Task<T> EvalAsync(QueryEvalContext context)
-    {
-        return Task.FromResult(Eval(context));
     }
 }

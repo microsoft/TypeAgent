@@ -37,6 +37,18 @@ public class SqliteDatabase : IDisposable
         command.ExecuteNonQuery();
     }
 
+    public T Get<T>(string sql, Action<SqliteCommand>? addParams, Func<SqliteDataReader, T> rowDeserializer)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = sql;
+        if (addParams is not null)
+        {
+            addParams(cmd);
+        }
+        using var reader = cmd.ExecuteReader();
+        return rowDeserializer(reader);
+    }
+
     public object? GetOne(string commandText)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
@@ -53,6 +65,53 @@ public class SqliteDatabase : IDisposable
         using var command = CreateCommand(commandText);
         using var reader = command.ExecuteReader();
         return reader.GetList<T>(cb);
+    }
+
+    public IEnumerable<T> Enumerate<T>(string sql, Func<SqliteDataReader, T> rowDeserializer)
+    {
+        return Enumerate<T>(sql, null, rowDeserializer);
+    }
+
+    public IEnumerable<T> Enumerate<T>(string sql, Action<SqliteCommand>? addParams, Func<SqliteDataReader, T> rowDeserializer)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = sql;
+        addParams(cmd);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            yield return rowDeserializer(reader);
+        }
+    }
+
+    public IAsyncEnumerable<T> EnumerateAsync<T>(
+        string sql,
+        Func<SqliteDataReader, T> rowDeserializer,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return EnumerateAsync(sql, null, rowDeserializer, cancellationToken);
+    }
+
+    public async IAsyncEnumerable<T> EnumerateAsync<T>(
+        string sql,
+        Action<SqliteCommand>? addParams,
+        Func<SqliteDataReader, T> rowDeserializer,
+        [EnumeratorCancellation]
+        CancellationToken cancellationToken = default
+    )
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = sql;
+        if (addParams is not null)
+        {
+            addParams(cmd);
+        }
+        using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            yield return rowDeserializer(reader);
+        }
     }
 
     public int GetCount(string tableName)

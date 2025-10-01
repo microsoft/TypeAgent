@@ -71,28 +71,24 @@ export class BrowserConnector {
         });
     }
 
-    async getHtmlFragments(useTimestampIds?: boolean): Promise<any[]> {
+    async getHtmlFragments(
+        useTimestampIds?: boolean,
+        compressionMode?: string,
+    ): Promise<any[]> {
+        if (this.browserControl) {
+            return this.browserControl.getHtmlFragments(
+                useTimestampIds,
+                compressionMode,
+            );
+        }
+        // Fallback to sending action to browser if browserControl is not available
         const result = await this.sendActionToBrowser({
             actionName: "getHTML",
             parameters: {
-                fullHTML: false,
+                fullHTML: compressionMode === "None",
                 downloadAsFile: false,
                 extractText: true,
                 useTimestampIds: useTimestampIds,
-            },
-        });
-        return Array.isArray(result?.data) ? result.data : [];
-    }
-
-    async getFilteredHtmlFragments(
-        inputHtmlFragments: any[],
-        cssSelectorsToKeep: string[],
-    ): Promise<any[]> {
-        const result = await this.sendActionToBrowser({
-            actionName: "getFilteredHTMLFragments",
-            parameters: {
-                fragments: inputHtmlFragments,
-                cssSelectorsToKeep: cssSelectorsToKeep,
             },
         });
         return Array.isArray(result?.data) ? result.data : [];
@@ -126,17 +122,11 @@ export class BrowserConnector {
         ]);
     }
 
-    async getCurrentPageAnnotatedScreenshot(): Promise<string> {
-        const result = await this.sendActionToBrowser({
-            actionName: "captureAnnotatedScreenshot",
-            parameters: {
-                downloadAsFile: true,
-            },
-        });
-        return typeof result?.data === "string" ? result.data : "";
-    }
-
     async clickOn(cssSelector: string): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.clickOn(cssSelector);
+        }
+
         return this.sendActionToBrowser({
             actionName: "clickOnElement",
             parameters: { cssSelector },
@@ -144,6 +134,9 @@ export class BrowserConnector {
     }
 
     async setDropdown(cssSelector: string, optionLabel: string): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.setDropdown(cssSelector, optionLabel);
+        }
         return this.sendActionToBrowser({
             actionName: "setDropdownValue",
             parameters: { cssSelector, optionLabel },
@@ -155,6 +148,14 @@ export class BrowserConnector {
         cssSelector?: string,
         submitForm?: boolean,
     ): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.enterTextIn(
+                textValue,
+                cssSelector,
+                submitForm,
+            );
+        }
+
         const actionName = cssSelector
             ? "enterTextInElement"
             : "enterTextOnPage";
@@ -169,6 +170,10 @@ export class BrowserConnector {
     }
 
     async awaitPageLoad(timeout?: number): Promise<any> {
+        if (this.browserControl) {
+            return this.browserControl.awaitPageLoad(timeout);
+        }
+
         const actionPromise = this.sendActionToBrowser({
             actionName: "awaitPageLoad",
         });
@@ -182,6 +187,10 @@ export class BrowserConnector {
     }
 
     async awaitPageInteraction(timeout?: number) {
+        if (this.browserControl) {
+            return this.browserControl.awaitPageInteraction(timeout);
+        }
+
         if (!timeout) {
             timeout = 400;
         }

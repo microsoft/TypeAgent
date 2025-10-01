@@ -7,11 +7,41 @@ namespace TypeAgent.ExamplesLib;
 
 public class KnowProWriter : ConsoleWriter
 {
-    public static void Write(ConcreteEntity entity)
+    public static async Task WriteMessagesAsync(IConversation conversation)
+    {
+        await foreach (var message in conversation.Messages)
+        {
+            KnowProWriter.WriteJson(message);
+        }
+    }
+
+    public static async Task WriteSemanticRefsAsync(IConversation conversation)
+    {
+        await foreach (var sr in conversation.SemanticRefs)
+        {
+            if (sr.KnowledgeType == KnowledgeType.Entity)
+            {
+                WriteLine(sr.Knowledge as ConcreteEntity);
+            }
+            else
+            {
+                KnowProWriter.WriteJson(sr);
+            }
+            WriteLine();
+        }
+    }
+
+    public static void WriteLine(ConcreteEntity? entity)
     {
         if (entity is not null)
         {
             WriteLine(entity.Name.ToUpper());
+            WriteList(entity.Type, new ListOptions() { Type = ListType.Csv });
+            if (!entity.Facets.IsNullOrEmpty())
+            {
+                var facetList = entity.Facets!.Map((f) => f.ToString());
+                WriteList(facetList, new ListOptions() { Type = ListType.Ul });
+            }
         }
     }
 

@@ -176,11 +176,9 @@ export async function initializeBrowserExtension(appPath: string) {
                         messageId,
                         hasParams: !!(message.params || message.parameters),
                     });
-                    reject(
-                        new Error(
-                            `Inline-browser message timeout - ${messageInfo}`,
-                        ),
-                    );
+                    resolve({
+                        error: `Inline-browser message timeout - ${messageInfo}`,
+                    });
                 }, timeout);
             });
         } catch (error) {

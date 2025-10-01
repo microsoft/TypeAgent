@@ -46,6 +46,8 @@ import {
     getAlbum,
     followPlaylist,
     addTracksToPlaylist,
+    getRecommendationsFromTrackCollection,
+    getRecentlyPlayed,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -436,6 +438,28 @@ export async function getClientContext(
     };
 }
 
+export async function trackCollectionRadio(
+    trackCollection: ITrackCollection,
+    clientContext: IClientContext,
+    nsamples = 2,
+) {
+    const totalRecommendations = [] as SpotifyApi.RecommendationTrackObject[];
+    for (let i = 0; i < nsamples; i++) {
+        const recommendations = await getRecommendationsFromTrackCollection(
+            clientContext.service,
+            trackCollection,
+        );
+        totalRecommendations.push(...recommendations.tracks);
+    }
+    if (totalRecommendations.length > 0) {
+        const collection =
+            TrackCollection.fromRecommendationTracks(totalRecommendations);
+        return collection;
+    } else {
+        return undefined;
+    }
+}
+
 function internTrackCollection(
     trackCollection: ITrackCollection,
     clientContext: IClientContext,
@@ -481,20 +505,43 @@ export async function searchForPlaylists(
 async function playTrackCollection(
     trackCollection: ITrackCollection,
     clientContext: IClientContext,
+    trackIndex = 0,
 ) {
     const deviceId = await ensureSelectedDeviceId(clientContext);
     const tracks = trackCollection.getTracks();
-    const uris = tracks.map((track) => track.uri);
-    console.log(chalk.cyanBright("Playing..."));
-    await printTrackNames(trackCollection, clientContext);
-    const actionResult = await htmlTrackNames(trackCollection, "Playing");
-    await play(
-        clientContext.service,
-        deviceId,
-        uris,
-        trackCollection.getContext(),
+    const playContext = trackCollection.getContext();
+    // todo put context in action result
+    const actionResult = await htmlTrackNames(
+        new TrackCollection([tracks[trackIndex]]),
+        "Playing",
     );
+    if (playContext === undefined) {
+        const uris = tracks.map((track) => track.uri);
+        await play(
+            clientContext.service,
+            deviceId,
+            uris,
+            trackCollection.getContext(),
+        );
+    } else {
+        await play(
+            clientContext.service,
+            deviceId,
+            undefined,
+            playContext,
+            trackIndex,
+        );
+    }
     return actionResult;
+}
+
+function randomShuffle<T>(array: T[]) {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
 }
 
 async function playRandomAction(
@@ -502,17 +549,17 @@ async function playRandomAction(
     action: PlayRandomAction,
 ) {
     const quantity = action.parameters?.quantity ?? 0;
-    const savedTracks = await getFavoriteTracks(clientContext.service);
+    const savedTracks = await getRecentlyPlayed(clientContext.service);
     if (savedTracks && savedTracks.length > 0) {
         if (quantity > 0) {
             savedTracks.splice(quantity);
         }
 
-        const tracks = savedTracks.map((track) => track.track);
+        const tracks = randomShuffle(savedTracks.map((track) => track.track));
         const collection = new TrackCollection(tracks);
         return playTrackCollection(collection, clientContext);
     }
-    const message = "No favorite tracks found";
+    const message = "No recently played tracks found";
     return createActionResultFromTextDisplay(chalk.red(message), message);
 }
 
@@ -631,10 +678,7 @@ async function playFromCurrentTrackListAction(
         const tracks = trackList.getTracks();
         const trackIndex = action.parameters.trackNumber - 1;
         if (trackIndex < tracks.length) {
-            return playTrackCollection(
-                new TrackCollection([tracks[trackIndex]]),
-                clientContext,
-            );
+            return playTrackCollection(trackList, clientContext, trackIndex);
         } else {
             return createErrorActionResult(
                 `Track number ${action.parameters.trackNumber} not found in current track list`,

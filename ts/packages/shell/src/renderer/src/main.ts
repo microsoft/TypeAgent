@@ -19,7 +19,7 @@ import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./chat/metricsView";
 import { CameraView } from "./cameraView";
-import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
+import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
 import { ClientIO, Dispatcher, IAgentMessage } from "agent-dispatcher";
@@ -43,14 +43,7 @@ export function getAndroidAPI() {
     return globalThis.Android;
 }
 
-async function getDispatcher(): Promise<Dispatcher> {
-    if (globalThis.dispatcher !== undefined) {
-        return globalThis.dispatcher;
-    }
-    return getWebDispatcher();
-}
-
-export function getWebSocketAPI(): ClientAPI {
+function getWebSocketAPI(): ClientAPI {
     if (globalThis.webApi === undefined) {
         globalThis.webApi = webapi;
 
@@ -58,14 +51,6 @@ export function getWebSocketAPI(): ClientAPI {
     }
 
     return globalThis.webApi;
-}
-
-export function getWebDispatcher(): Dispatcher {
-    if (globalThis.webDispatcher === undefined) {
-        globalThis.webDispatcher = webdispatcher;
-    }
-
-    return globalThis.webDispatcher;
 }
 
 async function initializeChatHistory(chatView: ChatView) {
@@ -312,6 +297,9 @@ function registerClient(
 
     const client: Client = {
         clientIO,
+        dispatcherInitialized(dispatcher: Dispatcher): void {
+            chatView.initializeDispatcher(dispatcher);
+        },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();
             for (const [key, value] of updatedAgents) {
@@ -456,7 +444,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
-    const chatInput = new ChatInput({}, "new_phraseDiv");
+    const chatInput = new ChatInput({}, "phraseDiv");
 
     chatView.setChatInput(chatInput);
 
@@ -522,10 +510,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     watchForDOMChanges(chatView.getScrollContainer());
-
-    getDispatcher().then((dispatcher) => {
-        chatView.initializeDispatcher(dispatcher);
-    });
 });
 
 function watchForDOMChanges(element: HTMLDivElement) {
@@ -607,6 +591,10 @@ function handleInlineNotification(
     requestId: string | undefined,
     chatView: ChatView,
 ): void {
+    // Check if this request uses eventSetId pattern for notification replacement
+    const isEventSetNotification = requestId?.startsWith("agent-eventset-");
+
+    // Use the provided requestId if it follows eventSetId pattern, otherwise generate new one
     const agentRequestId =
         requestId && requestId.startsWith("agent-")
             ? requestId
@@ -620,5 +608,10 @@ function handleInlineNotification(
     };
 
     // Add to chat view with notification flag
-    chatView.addAgentMessage(agentMessage, { notification: true });
+    // Use dynamicUpdate for eventSet notifications to replace previous messages
+    chatView.addAgentMessage(agentMessage, {
+        appendMode: "temporary",
+        notification: true,
+        dynamicUpdate: isEventSetNotification,
+    });
 }

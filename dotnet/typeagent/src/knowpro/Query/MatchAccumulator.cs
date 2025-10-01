@@ -4,10 +4,11 @@
 namespace TypeAgent.KnowPro.Query;
 
 internal class MatchAccumulator<T>
+    where T : notnull
 {
     private Dictionary<T, Match<T>> _matches;
 
-    public MatchAccumulator(IEqualityComparer<T> comparer = null)
+    public MatchAccumulator(IEqualityComparer<T>? comparer = null)
     {
         _matches = new Dictionary<T, Match<T>>(comparer);
     }
@@ -32,7 +33,7 @@ internal class MatchAccumulator<T>
         return _matches.Values.Where(predicate);
     }
 
-    public IEnumerable<T> GetMatchedValues => _matches.Keys;
+    public IEnumerable<T> GetMatchedValues() => _matches.Keys;
 
     public void SetMatches(IEnumerable<Match<T>> matches, bool clear = false)
     {
@@ -101,6 +102,18 @@ internal class MatchAccumulator<T>
         }
     }
 
+    public void Add(T value, double score, bool isExact)
+    {
+        if (isExact)
+        {
+            AddExact(value, score);
+        }
+        else
+        {
+            AddRelated(value, score);
+        }
+    }
+
     public void AddUnion(MatchAccumulator<T> other)
     {
         ArgumentVerify.ThrowIfNull(other, nameof(other));
@@ -157,6 +170,36 @@ internal class MatchAccumulator<T>
         List<Match<T>> matches = [.. MatchesWithMinHitCount(minHitCount)];
         matches.Sort((x, y) => y.Score.CompareTo(x.Score));
         return matches;
+    }
+
+    public IList<Match<T>> GetTopNScoring(int maxMatches = -1, int minHitCount = -1)
+    {
+        if (Count == 0)
+        {
+            return [];
+        }
+
+        if (maxMatches > 0)
+        {
+            var topList = new TopNCollection<Match<T>>(maxMatches);
+            foreach (var match in MatchesWithMinHitCount(minHitCount))
+            {
+                topList.Add(match, match.Score);
+            }
+            var ranked = topList.ByRankAndClear();
+            return ranked.Map((m) => m.Item);
+        }
+        else
+        {
+            return GetSortedByScore(minHitCount);
+        }
+    }
+
+    public int SelectTopNScoring(int maxMatches = -1, int minHitCount = -1)
+    {
+        var topN = GetTopNScoring(maxMatches, minHitCount);
+        this.SetMatches(topN, true);
+        return topN.Count;
     }
 
 

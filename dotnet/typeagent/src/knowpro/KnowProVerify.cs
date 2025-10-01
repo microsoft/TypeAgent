@@ -32,43 +32,54 @@ public class KnowProVerify
         }
     }
 
-    public static void ThrowIfInvalid(IMessage message)
+    public static void ThrowIfInvalid(IMessage? message)
     {
         ArgumentVerify.ThrowIfNull(message, nameof(message));
-        ArgumentVerify.ThrowIfNullOrEmpty(message.TextChunks, nameof(message.TextChunks));
+        ArgumentVerify.ThrowIfNullOrEmpty(message!.TextChunks, nameof(message.TextChunks));
     }
 
-    public static void ThrowIfInvalid(SemanticRef semanticRef)
+    public static void ThrowIfInvalid(SemanticRef? semanticRef)
     {
         ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
-        ArgumentVerify.ThrowIfNull(semanticRef.Range, nameof(semanticRef.Range));
+        ArgumentVerify.ThrowIfNull(semanticRef!.Range, nameof(semanticRef.Range));
         ArgumentVerify.ThrowIfNullOrEmpty(semanticRef.KnowledgeType, nameof(semanticRef.KnowledgeType));
         ArgumentVerify.ThrowIfNull(semanticRef.Knowledge, nameof(semanticRef.Knowledge));
     }
 
-    public static void ThrowIfInvalid(ConcreteEntity entity)
+    public static void ThrowIfNotKnowledgeType(SemanticRef semanticRef, KnowledgeType type)
+    {
+        if (semanticRef.KnowledgeType != type)
+        {
+            throw new KnowProException(KnowProException.ErrorCode.KnowledgeTypeMismatch, $"Expected: {type}; Actual: {semanticRef.KnowledgeType}");
+        }
+    }
+    public static void ThrowIfInvalid(ConcreteEntity? entity)
     {
         ArgumentVerify.ThrowIfNull(entity, nameof(entity));
-        ArgumentVerify.ThrowIfNullOrEmpty(entity.Name, nameof(entity.Name));
+        ArgumentVerify.ThrowIfNullOrEmpty(entity!.Name, nameof(entity.Name));
         ArgumentVerify.ThrowIfNull(entity.Type, nameof(entity.Type));
     }
 
-    public static void ThrowIfInvalid(Facet facet)
+    public static void ThrowIfInvalid(Facet? facet)
     {
         ArgumentVerify.ThrowIfNull(facet, nameof(facet));
-        ArgumentVerify.ThrowIfNullOrEmpty(facet.Name, nameof(facet.Name));
+        ArgumentVerify.ThrowIfNullOrEmpty(facet!.Name, nameof(facet.Name));
         ArgumentVerify.ThrowIfNull(facet.Value, nameof(facet.Value));
     }
 
-    public static void ThrowIfInvalid(Action action)
+    public static void ThrowIfInvalid(Action? action)
     {
         ArgumentVerify.ThrowIfNull(action, nameof(action));
-        ArgumentVerify.ThrowIfNullOrEmpty(action.Verbs, nameof(action.Verbs));
+        ArgumentVerify.ThrowIfNullOrEmpty(action!.Verbs, nameof(action.Verbs));
+        ArgumentVerify.ThrowIfNullOrEmpty(action.SubjectEntityName, nameof(action.SubjectEntityName));
+        ArgumentVerify.ThrowIfNullOrEmpty(action.ObjectEntityName, nameof(action.ObjectEntityName));
+        ArgumentVerify.ThrowIfNullOrEmpty(action.IndirectObjectEntityName, nameof(action.IndirectObjectEntityName));
     }
 
-    public static void ThrowIfInvalid(Tag tag)
+    public static void ThrowIfInvalid(Tag? tag)
     {
         ArgumentVerify.ThrowIfNull(tag, nameof(tag));
-        ArgumentVerify.ThrowIfNullOrEmpty(tag.Text, nameof(tag.Text));
+        ArgumentVerify.ThrowIfNullOrEmpty(tag!.Text, nameof(tag.Text));
     }
+
 }

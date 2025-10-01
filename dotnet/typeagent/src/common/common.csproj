@@ -8,8 +8,4 @@
     <RootNamespace>TypeAgent.Common</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Folder Include="Collections\" />
-  </ItemGroup>
-
 </Project>
