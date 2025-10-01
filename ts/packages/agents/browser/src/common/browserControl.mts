@@ -59,7 +59,10 @@ export type BrowserControlInvokeFunctions = {
     getAutoIndexSetting(): Promise<boolean>;
     getBrowserSettings(): Promise<BrowserSettings>;
 
-    getHtmlFragments(useTimestampIds?: boolean): Promise<any[]>;
+    getHtmlFragments(
+        useTimestampIds?: boolean,
+        compressionMode?: string,
+    ): Promise<any[]>;
     clickOn(cssSelector: string): Promise<any>;
     setDropdown(cssSelector: string, optionLabel: string): Promise<any>;
     enterTextIn(

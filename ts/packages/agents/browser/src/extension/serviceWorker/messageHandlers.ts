@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getActiveTab } from "./tabManager";
-import { getTabHTMLFragments } from "./capture";
+import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { getRecordedActions, saveRecordedActions } from "./storage";
 import {
     sendActionToAgent,
@@ -228,7 +228,10 @@ export async function handleMessage(
         case "captureHtmlFragments": {
             const targetTab = await getActiveTab();
             if (targetTab) {
-                const htmlFragments = await getTabHTMLFragments(targetTab);
+                const htmlFragments = await getTabHTMLFragments(
+                    targetTab,
+                    CompressionMode.Automation,
+                );
                 return htmlFragments;
             }
             return [];
@@ -277,7 +280,7 @@ export async function handleMessage(
                 try {
                     const htmlFragments = await getTabHTMLFragments(
                         targetTab,
-                        false,
+                        CompressionMode.KnowledgeExtraction,
                         false,
                         true,
                         false, // useTimestampIds
@@ -366,7 +369,7 @@ export async function handleMessage(
                 try {
                     const htmlFragments = await getTabHTMLFragments(
                         targetTab,
-                        false,
+                        CompressionMode.KnowledgeExtraction,
                         false,
                         true,
                         false, // useTimestampIds
@@ -1545,7 +1548,7 @@ async function indexPageContent(
         } else {
             htmlFragments = await getTabHTMLFragments(
                 tab,
-                false,
+                CompressionMode.KnowledgeExtraction,
                 false,
                 true, // extract text
                 false, // useTimestampIds

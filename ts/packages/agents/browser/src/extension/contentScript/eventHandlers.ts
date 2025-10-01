@@ -3,7 +3,11 @@
 
 import { matchLinks, matchLinksByPosition } from "./domUtils";
 import { getReadablePageContent } from "./pageContent";
-import { getPageHTML, getPageHTMLFragments } from "./htmlUtils";
+import {
+    getPageHTML,
+    getPageHTMLFragments,
+    CompressionMode,
+} from "./htmlUtils";
 import { getPageText } from "./pageContent";
 import {
     getInteractiveElementsBoundingBoxes,
@@ -236,12 +240,28 @@ export async function handleMessage(
             }
 
             case "get_reduced_html": {
+                // Determine compression mode from new parameter or legacy fullSize
+                let compressionMode: CompressionMode;
+                let shouldFilterToReadingView = message.filterToReadingView;
+
+                if (message.compressionMode) {
+                    // CompressionMode parameter takes precedence
+                    compressionMode =
+                        message.compressionMode as CompressionMode;
+                    // Enforce readable view when compressionMode is explicitly passed
+                    shouldFilterToReadingView = true;
+                } else {
+                    compressionMode = message.fullSize
+                        ? CompressionMode.None
+                        : CompressionMode.Automation;
+                }
+
                 const html = getPageHTML(
-                    message.fullSize,
+                    compressionMode,
                     message.inputHtml,
                     message.frameId,
                     message.useTimestampIds,
-                    message.filterToReadingView,
+                    shouldFilterToReadingView,
                     message.keepMetaTags,
                 );
                 sendResponse(html);

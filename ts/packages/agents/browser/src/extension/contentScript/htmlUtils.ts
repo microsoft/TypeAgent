@@ -7,9 +7,15 @@ import { setIdsOnAllElements, markInvisibleNodesForCleanup } from "./domUtils";
 import { HtmlFragment } from "./types";
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 
+export enum CompressionMode {
+    None = "None",
+    Automation = "automation",
+    KnowledgeExtraction = "knowledgeExtraction",
+}
+
 /**
  * Gets the HTML of the page using the new consolidated HTML processing system
- * @param fullSize Whether to get the full HTML
+ * @param compressionMode The compression mode to use (defaults to automation)
  * @param documentHtml The HTML to process
  * @param frameId The frame ID
  * @param useTimestampIds Whether to use timestamp IDs
@@ -18,7 +24,7 @@ import { Readability, isProbablyReaderable } from "@mozilla/readability";
  * @returns The processed HTML
  */
 export function getPageHTML(
-    fullSize?: boolean,
+    compressionMode: CompressionMode = CompressionMode.Automation,
     documentHtml?: string,
     frameId?: number,
     useTimestampIds?: boolean,
@@ -38,12 +44,18 @@ export function getPageHTML(
         documentHtml = applyReadabilityFilter(documentHtml, keepMetaTags);
     }
 
-    if (fullSize) {
+    if (compressionMode === CompressionMode.None) {
         return documentHtml;
     }
 
     const reducer = new CrossContextHtmlReducer();
     reducer.removeDivs = false;
+
+    // Apply more aggressive filtering for knowledge extraction
+    if (compressionMode === CompressionMode.KnowledgeExtraction) {
+        reducer.removeMiscTags = true;
+        reducer.removeAllClasses = true;
+    }
 
     // Preserve meta tags if requested and readability was used
     if (filterToReadingView && keepMetaTags) {
@@ -60,6 +72,7 @@ export function getPageHTML(
  * @param useTimestampIds Whether to use timestamp IDs
  * @param filterToReadingView Whether to apply readability filter
  * @param keepMetaTags Whether to preserve meta tags when using readability
+ * @param compressionMode The compression mode to use (defaults to automation)
  * @returns Array of HTML fragments
  */
 export function getPageHTMLFragments(
@@ -68,6 +81,7 @@ export function getPageHTMLFragments(
     useTimestampIds?: boolean,
     filterToReadingView?: boolean,
     keepMetaTags?: boolean,
+    compressionMode: CompressionMode = CompressionMode.Automation,
 ): HtmlFragment[] {
     if (frameId !== undefined) {
         setIdsOnAllElements(frameId, useTimestampIds);
@@ -89,8 +103,22 @@ export function getPageHTMLFragments(
         const elements = doc.querySelectorAll(selector);
         elements.forEach((element) => {
             if (element instanceof HTMLElement) {
+                if (compressionMode === CompressionMode.None) {
+                    fragments.push({
+                        frameId: frameId,
+                        content: element.outerHTML,
+                    });
+                    return;
+                }
+
                 const reducer = new CrossContextHtmlReducer();
                 reducer.removeDivs = false;
+
+                // Apply more aggressive filtering for knowledge extraction
+                if (compressionMode === CompressionMode.KnowledgeExtraction) {
+                    reducer.removeMiscTags = true;
+                    reducer.removeAllClasses = true;
+                }
 
                 if (filterToReadingView && keepMetaTags) {
                     reducer.removeMetaTags = false;
