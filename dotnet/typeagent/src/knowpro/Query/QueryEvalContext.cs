@@ -57,15 +57,6 @@ internal class QueryEvalContext
         return GetSemanticRefsAsync(ordinals);
     }
 
-    public SemanticRefAccumulator AllocSemanticRefAccumulator()
-    {
-        return new SemanticRefAccumulator();
-    }
-
-    public void Free(SemanticRefAccumulator accumulator)
-    {
-    }
-
     Task<IList<SemanticRef>> LoadSemanticRefs(IList<int> ordinals, CancellationToken cancellationToken)
     {
         return Conversation.SemanticRefs.GetAsync(ordinals, cancellationToken);

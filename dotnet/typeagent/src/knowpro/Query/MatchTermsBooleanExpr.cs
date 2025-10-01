@@ -57,7 +57,6 @@ internal class MatchTermsOrExpr : MatchTermsBooleanExpr
                 if (allMatches is not null)
                 {
                     allMatches.AddUnion(termMatches);
-                    context.Free(termMatches);
                 }
                 else
                 {
@@ -68,6 +67,6 @@ internal class MatchTermsOrExpr : MatchTermsBooleanExpr
 
         allMatches?.CalculateTotalScore();
 
-        return allMatches ?? context.AllocSemanticRefAccumulator();
+        return allMatches ?? new SemanticRefAccumulator();
     }
 }

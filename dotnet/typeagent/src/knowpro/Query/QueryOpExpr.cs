@@ -20,11 +20,6 @@ internal class QueryOpExpr<T> : QueryOpExpr
         return await EvalAsync(context);
     }
 
-    public virtual T Eval(QueryEvalContext context)
-    {
-        return EvalAsync(context).WaitForResult();
-    }
-
     public virtual ValueTask<T> EvalAsync(QueryEvalContext context)
     {
         throw new NotImplementedException();

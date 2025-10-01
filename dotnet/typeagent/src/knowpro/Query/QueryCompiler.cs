@@ -20,14 +20,15 @@ internal class QueryCompiler
 
     public double RelatedIsExactThreshold { get; set; } = 0.95;
 
-    public ValueTask<QueryOpExpr<SemanticRefAccumulator>> CompileKnowledgeQueryAsync(
+    public ValueTask<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>>> CompileKnowledgeQueryAsync(
         SearchTermGroup searchGroup,
         WhenFilter? whenFilter,
         SearchOptions? searchOptions
     )
     {
-        var query = CompileQuery(searchGroup, whenFilter);
-        return ValueTask.FromResult(query);
+        var queryExpr = CompileQuery(searchGroup, whenFilter);
+        QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> resultExpr = new GroupSearchResultsExpr(queryExpr);
+        return ValueTask.FromResult(resultExpr);
     }
 
     public (IList<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchTermGroup(SearchTermGroup searchGroup)
@@ -56,9 +57,12 @@ internal class QueryCompiler
         return (compiledTerms, boolExpr);
     }
 
-    private QueryOpExpr<SemanticRefAccumulator> CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    private QueryOpExpr<IDictionary<KnowledgeType, SemanticRefAccumulator>> CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
     {
-        return CompileSelect(searchGroup);
+        var selectExpr = CompileSelect(searchGroup);
+        return new SelectTopNKnowledgeGroupExpr(
+            new GroupByKnowledgeTypeExpr(selectExpr)
+        );
     }
 
     private QueryOpExpr<SemanticRefAccumulator> CompileSelect(SearchTermGroup searchGroup)

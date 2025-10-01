@@ -5,4 +5,6 @@ namespace TypeAgent.KnowPro;
 
 public class SemanticRefSearchResult
 {
+    public ISet<string> TermMatches { get; set; }
+    public IList<ScoredSemanticRefOrdinal> SemanticRefMatches { get; set; }
 }

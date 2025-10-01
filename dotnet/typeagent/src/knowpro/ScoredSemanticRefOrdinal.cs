@@ -9,7 +9,7 @@ public struct ScoredSemanticRefOrdinal
     public int SemanticRefOrdinal { get; set; }
 
     [JsonPropertyName("score")]
-    public float Score { get; set; }
+    public double Score { get; set; }
 
     public static ScoredSemanticRefOrdinal New(int semanticRefOrdinal)
     {

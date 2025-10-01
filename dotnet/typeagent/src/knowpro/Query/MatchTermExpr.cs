@@ -18,14 +18,9 @@ internal class MatchTermExpr : QueryOpExpr<SemanticRefAccumulator?>
 
     public override async ValueTask<SemanticRefAccumulator?> EvalAsync(QueryEvalContext context)
     {
-        var matches = context.AllocSemanticRefAccumulator();
+        var matches = new SemanticRefAccumulator();
         await AccumulateMatchesAsync(context, matches).ConfigureAwait(false);
-        if (matches.Count > 0)
-        {
-            return matches;
-        }
-        context.Free(matches);
-        return null;
+        return matches.Count > 0 ? matches : null;
     }
 
     protected virtual ValueTask AccumulateMatchesAsync(
