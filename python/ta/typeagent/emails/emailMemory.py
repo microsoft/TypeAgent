@@ -46,12 +46,11 @@ from ..storage.memory.collections import (
 @pydantic_dataclass
 class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
     """Metadata for email messages."""
+    sender: str
+    recipients: list[str] = Field(default_factory=list)
     cc: list[str] = Field(default_factory=list)
     bcc: list[str] = Field(default_factory=list)
     subject: str | None = None
-    sent_on: Datetime | None = None
-    received_on: Datetime | None = None
-    importance: str | None = None
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         # Example implementation, should be replaced with actual knowledge extraction logic
@@ -60,17 +59,10 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
         )
 
 @pydantic_dataclass
-class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
-    """Metadata for email messages."""
-    cc: list[str] = Field(default_factory=list)
-    bcc: list[str] = Field(default_factory=list)
-    subject: str | None = None
-    sent_on: Datetime | None = None
-    received_on: Datetime | None = None
-    importance: str | None = None
-
-@pydantic_dataclass
 class EmailMessage(IMessage):
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+    
     text_chunks: list[str] = CamelCaseField("The text chunks of the email message")
     metadata: EmailMessageMeta = CamelCaseField(
         "Metadata associated with the email message"
@@ -98,3 +90,4 @@ class EmailMessage(IMessage):
     @staticmethod
     def deserialize(message_data: dict) -> "EmailMessage":
         return EmailMessage.__pydantic_validator__.validate_python(message_data)  # type: ignore
+    
