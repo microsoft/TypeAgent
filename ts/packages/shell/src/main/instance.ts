@@ -210,8 +210,6 @@ async function initializeDispatcher(
         ipcMain.on("dispatcher-rpc-call", onDispatcherRpcCall);
         createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
 
-        shellWindow.dispatcherInitialized();
-
         debugShellInit("Dispatcher initialized", performance.now() - startTime);
 
         return dispatcher;
@@ -224,6 +222,7 @@ async function initializeDispatcher(
 export function initializeInstance(
     instanceDir: string,
     shellSettings: ShellSettingManager,
+    mockGreetings: boolean,
     startTime: number = performance.now(),
 ) {
     if (instance !== undefined) {
@@ -291,9 +290,19 @@ export function initializeInstance(
             }
         });
 
+        // Notify the renderer process that the dispatcher is initialized
+        chatView.webContents.send("dispatcher-initialized");
+
+        // Give focus to the chat view once initialization is done.
+        chatView.webContents.focus();
+
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {
-            dispatcher.processCommand("@greeting", "agent-0", []);
+            dispatcher.processCommand(
+                `@greeting${mockGreetings ? " --mock" : ""}`,
+                "agent-0",
+                [],
+            );
         }
     };
     ipcMain.on("chat-view-ready", onChatViewReady);

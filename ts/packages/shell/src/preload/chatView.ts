@@ -63,6 +63,24 @@ function registerClient(client: Client) {
         client.searchMenuCompletion(id, item);
     });
 
+    ipcRenderer.on("dispatcher-initialized", () => {
+        // Resolve the dispatcher promise when the dispatcher is initialized)
+        // set up dispatch RPC client
+        const dispatcherChannel = createGenericChannel((message: any) =>
+            ipcRenderer.send("dispatcher-rpc-call", message),
+        );
+
+        ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
+            dispatcherChannel.message(message);
+        });
+
+        const dispatcher: Dispatcher = createDispatcherRpcClient(
+            dispatcherChannel.channel,
+        );
+
+        client.dispatcherInitialized(dispatcher);
+    });
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 }
@@ -108,41 +126,16 @@ const api: ClientAPI = {
     },
 };
 
-const dispatcherPromiseResolvers = Promise.withResolvers<Dispatcher>();
-ipcRenderer.on("dispatcher-initialized", () => {
-    // Resolve the dispatcher promise when the dispatcher is initialized)
-    // set up dispatch RPC client
-    const dispatcherChannel = createGenericChannel((message: any) =>
-        ipcRenderer.send("dispatcher-rpc-call", message),
-    );
-
-    ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
-        dispatcherChannel.message(message);
-    });
-
-    const dispatcher: Dispatcher = createDispatcherRpcClient(
-        dispatcherChannel.channel,
-    );
-
-    dispatcherPromiseResolvers.resolve(dispatcher);
-});
-
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
 if (process.contextIsolated) {
     try {
         contextBridge.exposeInMainWorld("api", api);
-        contextBridge.exposeInMainWorld(
-            "dispatcher",
-            dispatcherPromiseResolvers.promise,
-        );
     } catch (error) {
         console.error(error);
     }
 } else {
     // @ts-ignore (define in dts)
     window.api = api;
-    // @ts-ignore (define in dts)
-    window.dispatcher = dispatcherPromiseResolvers.promise;
 }

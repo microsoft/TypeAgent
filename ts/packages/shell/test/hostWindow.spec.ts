@@ -19,7 +19,7 @@ test.describe("Shell interface tests", () => {
      */
     // robgruen - 09.11.2025 - temporarily skipping while we redo UI layout to support different modes
     test("remember window position", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         const firstWindow = await startShell();
 
@@ -76,7 +76,7 @@ test.describe("Shell interface tests", () => {
      * Ensures zoom level is working
      */
     test("zoom level", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         // start the app
         const mainWindow = await startShell();
@@ -128,7 +128,7 @@ test.describe("Shell interface tests", () => {
      * Ensure send button is behaving
      */
     test("send button state", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         // start the app
         const mainWindow = await startShell();
@@ -155,7 +155,7 @@ test.describe("Shell interface tests", () => {
     });
 
     test("command backstack", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         // start the app
         const mainWindow = await startShell();
