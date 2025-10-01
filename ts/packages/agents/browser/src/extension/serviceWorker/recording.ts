@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getActiveTab } from "./tabManager";
-import { getTabHTMLFragments } from "./capture";
+import { getTabHTMLFragments, CompressionMode } from "./capture";
 import {
     saveRecordedActions,
     getRecordedActions,
@@ -61,7 +61,7 @@ export async function takeScreenshot(): Promise<string> {
 export async function captureHtmlFragments(): Promise<any[]> {
     const targetTab = await getActiveTab();
     if (targetTab) {
-        return await getTabHTMLFragments(targetTab);
+        return await getTabHTMLFragments(targetTab, CompressionMode.Automation);
     }
     return [];
 }

@@ -1933,7 +1933,10 @@ async function handlePageNavigation(
 
         // Get page contents
         const htmlFragments =
-            await context.agentContext.browserConnector?.getHtmlFragments();
+            await context.agentContext.browserConnector?.getHtmlFragments(
+                false,
+                "knowledgeExtraction",
+            );
 
         if (!htmlFragments) {
             return;

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getPageHTML } from "../htmlUtils";
+import { getPageHTML, CompressionMode } from "../htmlUtils";
 import { getRecordingState, setLastScreenshot, setLastPageHtml } from "./index";
 
 /**
@@ -17,7 +17,7 @@ export async function captureUIState(): Promise<void> {
         console.error("Error capturing screenshot:", error);
     }
 
-    setLastPageHtml(getPageHTML(false, "", 0, false));
+    setLastPageHtml(getPageHTML(CompressionMode.Automation, "", 0, false));
 }
 
 /**

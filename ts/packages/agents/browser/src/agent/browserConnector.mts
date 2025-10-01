@@ -71,15 +71,21 @@ export class BrowserConnector {
         });
     }
 
-    async getHtmlFragments(useTimestampIds?: boolean): Promise<any[]> {
+    async getHtmlFragments(
+        useTimestampIds?: boolean,
+        compressionMode?: string,
+    ): Promise<any[]> {
         if (this.browserControl) {
-            return this.browserControl.getHtmlFragments(useTimestampIds);
+            return this.browserControl.getHtmlFragments(
+                useTimestampIds,
+                compressionMode,
+            );
         }
         // Fallback to sending action to browser if browserControl is not available
         const result = await this.sendActionToBrowser({
             actionName: "getHTML",
             parameters: {
-                fullHTML: false,
+                fullHTML: compressionMode === "None",
                 downloadAsFile: false,
                 extractText: true,
                 useTimestampIds: useTimestampIds,

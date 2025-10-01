@@ -23,6 +23,7 @@ import {
 } from "../schema/knowledgeExtraction.mjs";
 import { ExtractionMode, ExtractionInput } from "website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
+import * as tp from "textpro";
 import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
 import {
     generateDetailedKnowledgeCards,
@@ -61,19 +62,40 @@ export function createExtractionInputsFromFragments(
     timestamp?: string,
 ): ExtractionInput[] {
     return htmlFragments
-        .filter((fragment) => fragment.text && fragment.text.trim().length > 50) // Filter out empty/tiny fragments
-        .map((fragment, index) => ({
-            url: `${url}#iframe-${fragment.frameId || index}`, // Include frame context in URL
-            title: `${title} (Frame ${fragment.frameId || index})`,
-            htmlFragments: [fragment], // Keep individual fragment context
-            textContent: fragment.text.trim(),
-            source: source,
-            ...(timestamp && { timestamp }), // Only include timestamp if it exists
-            metadata: {
-                frameId: fragment.frameId,
-                isIframe: fragment.frameId !== 0, // Main frame is typically 0
-            },
-        }));
+        .map((fragment, index) => {
+            // Extract text content - use existing text or convert HTML to markdown
+            let textContent = "";
+            if (fragment.text && fragment.text.trim().length > 0) {
+                // Use existing text if available
+                textContent = fragment.text.trim();
+            } else if (fragment.content && fragment.content.trim().length > 0) {
+                // Use textpro to convert HTML to markdown when text is not available
+                try {
+                    const markdown = tp.htmlToMarkdown(fragment.content);
+                    textContent = markdown.trim();
+                } catch (error) {
+                    console.warn("Failed to convert HTML to markdown:", error);
+                    // Fallback to basic text extraction
+                    textContent = fragment.content
+                        .replace(/<[^>]*>/g, "")
+                        .trim();
+                }
+            }
+
+            return {
+                url: `${url}#iframe-${fragment.frameId || index}`, // Include frame context in URL
+                title: `${title} (Frame ${fragment.frameId || index})`,
+                htmlFragments: [fragment], // Keep individual fragment context
+                textContent: textContent,
+                source: source,
+                ...(timestamp && { timestamp }), // Only include timestamp if it exists
+                metadata: {
+                    frameId: fragment.frameId,
+                    isIframe: fragment.frameId !== 0, // Main frame is typically 0
+                },
+            };
+        })
+        .filter((input) => input.textContent && input.textContent.length > 50); // Filter out empty/tiny content after processing
 }
 
 // Helper function to aggregate extraction results from multiple fragments
@@ -892,7 +914,10 @@ export async function performKnowledgeExtraction(
         // Get page contents
         let title = "Unknown Page";
         const htmlFragments =
-            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments();
+            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments(
+                false,
+                "knowledgeExtraction",
+            );
         if (!htmlFragments) {
             return null;
         }
