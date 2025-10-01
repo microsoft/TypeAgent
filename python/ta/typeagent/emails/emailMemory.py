@@ -53,6 +53,11 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
     received_on: Datetime | None = None
     importance: str | None = None
 
+    def get_knowledge(self) -> kplib.KnowledgeResponse:
+        # Example implementation, should be replaced with actual knowledge extraction logic
+        return kplib.KnowledgeResponse(
+            entities=[], actions=[], inverse_actions=[], topics=[]
+        )
 
 @pydantic_dataclass
 class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
@@ -76,8 +81,7 @@ class EmailMessage(IMessage):
     timestamp: str | None = None  # Use metadata.sent_on for the actual sent time
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
-        return self.metadata.get_knowledge() if hasattr(self.metadata, "get_knowledge") else kplib.KnowledgeResponse(
-            entities=[], actions=[], inverse_actions=[], topics=[])
+        return self.metadata.get_knowledge()
 
     def add_timestamp(self, timestamp: str) -> None:
         self.timestamp = timestamp
