@@ -72,6 +72,9 @@ export const webapi: ClientAPI = {
         // not supported on mobile
         throw new Error("Not implemented");
     },
+    continuousSpeechProcessing: async (_) => {
+        throw new Error("Not implemented");
+    },
 };
 
 const dispatcherChannel = createGenericChannel((message: any) =>

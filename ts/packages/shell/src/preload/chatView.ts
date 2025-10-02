@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import { contextBridge, ipcRenderer } from "electron";
-import { Client, ClientAPI, ShellUserSettings } from "./electronTypes.js"; // Custom APIs for renderer
+import {
+    Client,
+    ClientAPI,
+    ShellUserSettings,
+    UserExpression,
+} from "./electronTypes.js"; // Custom APIs for renderer
 import { Dispatcher } from "agent-dispatcher";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
@@ -31,6 +36,9 @@ function registerClient(client: Client) {
 
     ipcRenderer.on("listen-event", (_, token, useLocalWhisper) => {
         client.listen(token, useLocalWhisper);
+    });
+    ipcRenderer.on("listen-always", (_event) => {
+        client.toggleAlwaysListen();
     });
     ipcRenderer.on("setting-summary-changed", (_, updatedAgents) => {
         client.updateRegisterAgents(updatedAgents);
@@ -83,6 +91,13 @@ function registerClient(client: Client) {
 
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
+
+    ipcRenderer.on(
+        "continuous-speech-processed",
+        (_event, userExpressions: UserExpression[]) => {
+            client.continuousSpeechProcessed(userExpressions);
+        },
+    );
 }
 
 const api: ClientAPI = {
@@ -123,6 +138,9 @@ const api: ClientAPI = {
     },
     searchMenuClose: (id: number) => {
         ipcRenderer.send("search-menu-close", id);
+    },
+    continuousSpeechProcessing: (text: string) => {
+        return ipcRenderer.invoke("continuous-speech-processing", text);
     },
 };
 
