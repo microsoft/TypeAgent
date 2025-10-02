@@ -1,15 +1,31 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import asyncio
 import sys
 from colorama import Fore
+
+from typeagent.aitools import utils
 from typeagent.emails.email_import import import_email_from_file
 from typeagent.emails.email_memory import EmailMemory, EmailMessage
 
-# Just simple test code
-def main():
+from typeagent.knowpro.convsettings import ConversationSettings
+from typeagent.storage.utils import create_storage_provider
 
-    # TODO : Once stable, move creation etc to utool.py
+# Just simple test code
+# TODO : Once stable, move creation etc to utool.py
+async def main():
+
+    utils.load_dotenv()
+
+    settings = ConversationSettings()  # Has no storage provider yet
+    settings.storage_provider = await create_storage_provider(
+        settings.message_text_index_settings,
+        settings.related_term_index_settings,
+        "emails",
+        EmailMessage,
+    )
+
     # conversation: EmailMemory  = EmailMemory.create()
     while True:
         cmd = input("✉>>").strip()
@@ -26,6 +42,7 @@ def main():
         except Exception as e:
             print(f"Error importing email from {file_path}: {e}")
 
+
 def print_email(email: EmailMessage):
     print("From:", email.metadata.sender)
     print("To:", ", ".join(email.metadata.recipients))
@@ -39,8 +56,12 @@ def print_email(email: EmailMessage):
     
     print("Body:")
     for chunk in email.text_chunks:
-        print(Fore.CYAN + chunk)
+        print(Fore.CYAN +       chunk)
     
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, BrokenPipeError):
+        print()
+        sys.exit(1)
