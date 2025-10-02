@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os
 import asyncio
 import sys
 import traceback
@@ -24,6 +25,8 @@ async def main():
     utils.load_dotenv()
 
     dbPath: str = "/data/testChat/knowpro/email/pyEmails.db"
+    delete_sqlite_db(dbPath)
+
     settings = ConversationSettings()  # Has no storage provider yet
     settings.storage_provider = await create_storage_provider(
         settings.message_text_index_settings,
@@ -49,6 +52,12 @@ async def main():
             print()
             knowledge = email.metadata.get_knowledge()
             print_knowledge(knowledge)
+
+            print("Adding email...")
+            await conversation.add_message(email)
+            count = await conversation.messages.size()
+            print(Fore.GREEN + f"Added email to conversation. Total messages: {count}")
+
         except Exception as e:
             print()
             print(Fore.RED, f"Error importing email from {file_path}: {e}")
@@ -56,6 +65,17 @@ async def main():
 
         print(Fore.RESET)
 
+
+def delete_sqlite_db(db_path: str):
+    if os.path.exists(db_path):
+        os.remove(db_path)  # Delete existing database for clean test
+        # Also delete -shm and -wal files if they exist
+        shm_path = db_path + "-shm"
+        wal_path = db_path + "-wal"
+        if os.path.exists(shm_path):
+            os.remove(shm_path)
+        if os.path.exists(wal_path):
+            os.remove(wal_path)
 
 def print_email(email: EmailMessage):
     print("From:", email.metadata.sender)

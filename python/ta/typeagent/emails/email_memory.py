@@ -53,6 +53,9 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             ),
         )
 
+    async def add_message(self, message: EmailMessage) -> None:        
+        await self.messages.append(message)
+            
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[EmailMessage]:
         """Get secondary indexes, asserting they are initialized."""
         assert (
