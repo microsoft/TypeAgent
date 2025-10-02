@@ -18,11 +18,12 @@ async def main():
 
     utils.load_dotenv()
 
+    dbPath: str = "/data/testChat/knowpro/email/pyEmails.db"
     settings = ConversationSettings()  # Has no storage provider yet
     settings.storage_provider = await create_storage_provider(
         settings.message_text_index_settings,
         settings.related_term_index_settings,
-        "emails",
+        dbPath,
         EmailMessage,
     )
 
