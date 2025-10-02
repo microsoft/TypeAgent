@@ -51,7 +51,7 @@ export async function createWebSocket(): Promise<WebSocket | undefined> {
         settings = await getSettings();
     }
 
-    let socketEndpoint = settings.websocketHost ?? "ws://localhost:8080/";
+    let socketEndpoint = settings.websocketHost ?? "ws://localhost:8081/";
 
     socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
@@ -271,7 +271,8 @@ export async function sendActionToAgent(
     return new Promise<any | undefined>((resolve, reject) => {
         if (webSocket) {
             try {
-                const callId = new Date().getTime().toString();
+                const callId =
+                    new Date().getTime().toString() + "_" + action.actionName;
 
                 webSocket.send(
                     JSON.stringify({

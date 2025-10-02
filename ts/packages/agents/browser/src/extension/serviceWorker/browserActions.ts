@@ -8,11 +8,7 @@ import {
     awaitPageLoad,
     awaitPageIncrementalUpdates,
 } from "./tabManager";
-import {
-    getTabAnnotatedScreenshot,
-    getTabHTMLFragments,
-    getFilteredHTMLFragments,
-} from "./capture";
+import { getTabHTMLFragments, CompressionMode } from "./capture";
 
 /**
  * Executes a browser action
@@ -119,33 +115,21 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             break;
         }
 
-        case "captureAnnotatedScreenshot": {
-            responseObject = await getTabAnnotatedScreenshot(
-                action.parameters?.downloadAsFile,
-            );
-            break;
-        }
         case "getHTML": {
             const targetTab = await getActiveTab();
 
+            // Convert legacy fullHTML parameter to CompressionMode
+            const compressionMode = action.parameters?.fullHTML
+                ? CompressionMode.None
+                : CompressionMode.Automation;
             responseObject = await getTabHTMLFragments(
                 targetTab!,
-                action.parameters?.fullHTML,
+                compressionMode,
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
                 action.parameters?.useTimestampIds,
                 action.parameters?.filterToReadingView,
                 action.parameters?.keepMetaTags,
-            );
-            break;
-        }
-        case "getFilteredHTMLFragments": {
-            const targetTab = await getActiveTab();
-
-            responseObject = await getFilteredHTMLFragments(
-                targetTab!,
-                action.parameters.fragments,
-                action.parameters.cssSelectorsToKeep,
             );
             break;
         }

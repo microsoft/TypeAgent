@@ -5,7 +5,6 @@ export type ExtractionMode = "basic" | "summary" | "content" | "full";
 
 export interface BrowserSettings {
     autoIndexing: boolean;
-    indexingDelay: number;
     extractionMode: ExtractionMode;
 }
 
@@ -51,14 +50,28 @@ export type BrowserControlInvokeFunctions = {
     switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean>;
 
     // REVIEW: external browser only
-    readPage(): Promise<void>;
-    stopReadPage(): Promise<void>;
+    readPageContent(): Promise<void>;
+    stopReadPageContent(): Promise<void>;
     captureScreenshot(): Promise<string>;
     getPageTextContent(): Promise<string>;
 
     // Settings access methods
     getAutoIndexSetting(): Promise<boolean>;
     getBrowserSettings(): Promise<BrowserSettings>;
+
+    getHtmlFragments(
+        useTimestampIds?: boolean,
+        compressionMode?: string,
+    ): Promise<any[]>;
+    clickOn(cssSelector: string): Promise<any>;
+    setDropdown(cssSelector: string, optionLabel: string): Promise<any>;
+    enterTextIn(
+        textValue: string,
+        cssSelector?: string,
+        submitForm?: boolean,
+    ): Promise<any>;
+    awaitPageLoad(timeout?: number): Promise<string>;
+    awaitPageInteraction(timeout?: number): Promise<void>;
 };
 
 export type BrowserControlCallFunctions = {

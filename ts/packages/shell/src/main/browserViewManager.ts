@@ -7,6 +7,18 @@ import registerDebug from "debug";
 import { ShellWindow } from "./shellWindow.js";
 import { loadLocalWebContents } from "./utils.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
+import {
+    detectNavigationType,
+    getTabState,
+    createTabState,
+    updateTabState,
+    markUserRefresh,
+    clearPendingTimer,
+    setPendingTimer,
+    cleanupTabState,
+    shouldProcessRefresh,
+    isAnalyticsUrl,
+} from "./navigationUtils.js";
 
 const debug = registerDebug("typeagent:shell:browserViewManager");
 
@@ -22,7 +34,7 @@ export interface BrowserViewContext {
 
 export interface TabCreationOptions {
     url: string;
-    background?: boolean;
+    background?: boolean; // default to false
     parentTabId?: string;
     waitForPageLoad?: boolean;
 }
@@ -34,7 +46,6 @@ export class BrowserViewManager {
     private onTabUpdateCallback?: () => void;
     private onNavigationUpdateCallback?: () => void;
     private onPageLoadCompleteCallback?: (tabId: string) => void;
-    private onTabClosedCallback?: (tabId: string) => void;
     private viewBounds: Electron.Rectangle | null = null;
     constructor(private readonly shellWindow: ShellWindow) {
         debug("BrowserViewManager initialized");
@@ -59,14 +70,6 @@ export class BrowserViewManager {
      */
     setPageLoadCompleteCallback(callback: (tabId: string) => void): void {
         this.onPageLoadCompleteCallback = callback;
-    }
-
-    /**
-     * Set callback for tab closed
-     * @param callback - The tab closed callback
-     */
-    setTabClosedCallback(callback: (tabId: string) => void): void {
-        this.onTabClosedCallback = callback;
     }
 
     /**
@@ -105,14 +108,18 @@ export class BrowserViewManager {
         // wire up loaded event handlers for the webContents so we can show errors
         webContentsView.webContents.on(
             "did-fail-load",
-            (_, errorCode, errorDesc) => {
+            (_, errorCode, errorDesc, validatedURL) => {
                 debug(
                     `Tab ${tabId} failed to load URL ${options.url}: [${errorCode}] ${errorDesc}`,
                 );
 
-                webContentsView.webContents
-                    .executeJavaScript(`document.body.innerHTML = "There was an error loading '${options.url}'.<br />
-                Error Details: <br />${errorCode} - ${errorDesc}"`);
+                // only show the error if it's for the page the user was asking
+                // it's possible some other resource failed to load (image, script, etc.)
+                if (validatedURL === options.url) {
+                    webContentsView.webContents.executeJavaScript(
+                        `document.body.innerHTML = "There was an error loading '${options.url}'.<br />Error Details: <br />${errorCode} - ${errorDesc}"`,
+                    );
+                }
             },
         );
 
@@ -133,6 +140,7 @@ export class BrowserViewManager {
                             `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
                             err,
                         );
+
                         webContentsView.webContents.executeJavaScript(
                             `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
                         );
@@ -192,17 +200,10 @@ export class BrowserViewManager {
             }
         });
 
-        // Handle navigation events
+        // Handle navigation events with unified handler
         webContents.on("did-finish-load", async () => {
             const url = webContents.getURL();
-            const title = webContents.getTitle();
-
-            // Send navigation message to browser agent
-            await this.sendNavigationToBrowserAgent(url, title, tabId);
-
-            this.updateTabUrl(tabId, url);
-            this.notifyNavigationUpdate();
-            this.notifyTabUpdate();
+            await this.handleNavigation(webContents, url, tabId, false);
             this.notifyPageLoadComplete(tabId);
         });
 
@@ -217,15 +218,25 @@ export class BrowserViewManager {
         });
 
         webContents.on("did-navigate-in-page", async (_, url) => {
-            const title = webContents.getTitle();
-
-            // Send navigation message for in-page navigations too
-            await this.sendNavigationToBrowserAgent(url, title, tabId);
-
-            this.updateTabUrl(tabId, url);
-            this.notifyTabUpdate();
-            this.notifyNavigationUpdate();
+            await this.handleNavigation(webContents, url, tabId, false);
         });
+
+        // Detect user-initiated refreshes
+        webContents.on("before-input-event", (_, input) => {
+            if (
+                input.key === "F5" ||
+                (input.key === "r" && (input.control || input.meta))
+            ) {
+                markUserRefresh(tabId);
+            }
+        });
+
+        // Override reload to detect user refreshes
+        const originalReload = webContents.reload.bind(webContents);
+        webContents.reload = function () {
+            markUserRefresh(tabId);
+            return originalReload();
+        };
 
         // Handle new window requests (convert to new tabs)
         webContents.setWindowOpenHandler((details) => {
@@ -295,6 +306,9 @@ export class BrowserViewManager {
 
         debug(`Closing browser tab: ${tabId}`);
 
+        // Clean up navigation state
+        cleanupTabState(tabId);
+
         // Remove from main window
         this.shellWindow.mainWindow.contentView.removeChildView(
             browserView.webContentsView,
@@ -319,9 +333,6 @@ export class BrowserViewManager {
                 this.setActiveBrowserView(remainingTabs[0].id);
             }
         }
-
-        // remove the tab from the browser header
-        this.onTabClosedCallback?.(tabId);
 
         debug(`Browser tab closed: ${tabId}`);
         return true;
@@ -405,7 +416,6 @@ export class BrowserViewManager {
         const headerHeight = 40; // Height of the tab/navigation header
         const browserViewBounds = { ...this.viewBounds };
         browserViewBounds.y = headerHeight;
-        browserViewBounds.height -= headerHeight;
 
         activeView.webContentsView.setBounds(browserViewBounds);
         debug(`Updated active browser view bounds:`, browserViewBounds);
@@ -494,7 +504,7 @@ export class BrowserViewManager {
     /**
      * Clean up all browser tabs
      */
-    closeAllTabs(): void {
+    cleanup(): void {
         debug("Closing all browser tabs");
 
         for (const [tabId] of this.browserViews) {
@@ -532,6 +542,118 @@ export class BrowserViewManager {
     }
 
     /**
+     * Handle navigation events with deduplication and refresh detection
+     */
+    private async handleNavigation(
+        webContents: Electron.WebContents,
+        url: string,
+        tabId: string,
+        isUserInitiated: boolean = false,
+    ): Promise<void> {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            return;
+        }
+
+        const title = webContents.getTitle();
+        const navigationType = detectNavigationType(
+            tabId,
+            url,
+            title,
+            isUserInitiated,
+        );
+
+        let tabState = getTabState(tabId);
+        if (!tabState) {
+            tabState = createTabState(tabId);
+        }
+
+        clearPendingTimer(tabId);
+
+        switch (navigationType) {
+            case "duplicate":
+                debug(`Skipping duplicate navigation for tab ${tabId}: ${url}`);
+                return;
+
+            case "tracking":
+                debug(
+                    `Skipping tracking parameter navigation for tab ${tabId}: ${url}`,
+                );
+                return;
+
+            case "refresh":
+                const decision = shouldProcessRefresh(tabState);
+                if (!decision.process) {
+                    debug(
+                        `Skipping refresh for tab ${tabId}: ${decision.reason}`,
+                    );
+                    return;
+                }
+                debug(
+                    `Processing refresh for tab ${tabId}: ${decision.reason}`,
+                );
+                break;
+
+            case "new":
+                debug(`New navigation for tab ${tabId}: ${url}`);
+                break;
+        }
+
+        if (isAnalyticsUrl(url)) {
+            debug(`Skipping analytics URL for tab ${tabId}: ${url}`);
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            const contentReady = await this.waitForContentReady(webContents);
+
+            if (contentReady) {
+                await this.sendNavigationToBrowserAgent(url, title, tabId);
+
+                updateTabState(tabId, url, title, true, isUserInitiated);
+
+                this.updateTabUrl(tabId, url);
+                this.notifyNavigationUpdate();
+                this.notifyTabUpdate();
+            }
+        }, 300);
+
+        setPendingTimer(tabId, timer);
+    }
+
+    /**
+     * Wait for content to be ready using content script detection
+     */
+    private async waitForContentReady(
+        webContents: Electron.WebContents,
+    ): Promise<boolean> {
+        try {
+            if (webContents.isLoading()) {
+                return false;
+            }
+
+            const result = await webContents.executeJavaScript(`
+                (async () => {
+                    if (typeof awaitPageIncrementalLoad === 'function') {
+                        return await awaitPageIncrementalLoad();
+                    }
+
+                    // Fallback: basic document ready check
+                    if (document.readyState === 'complete') {
+                        return true;
+                    }
+
+                    return true; // Default fallback
+                })()
+            `);
+
+            return result === true;
+        } catch (error) {
+            debug("Content ready detection failed:", error);
+            return true; // Always fallback to proceeding
+        }
+    }
+
+    /**
      * Send navigation event to browser agent via WebSocket
      */
     private async sendNavigationToBrowserAgent(
@@ -540,11 +662,6 @@ export class BrowserViewManager {
         tabId: string,
     ): Promise<void> {
         try {
-            // Skip about:blank and other non-http URLs
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                return;
-            }
-
             // Get WebSocket connection to browser agent
             const browserIpc = BrowserAgentIpc.getinstance();
             if (!browserIpc.isConnected()) {

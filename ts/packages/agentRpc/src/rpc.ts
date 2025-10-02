@@ -47,7 +47,10 @@ export function createRpc<
         }
     >();
 
-    const out = (message: RpcMessage, cbErr?: (err: Error | null) => void) => {
+    const out = (
+        message: RpcMessage,
+        cbErr: (err: Error | null) => void = (e) => {},
+    ) => {
         debugOut(message);
         channel.send(message, cbErr);
     };
@@ -147,12 +150,19 @@ export function createRpc<
             });
         },
         send: (name: keyof CallTargetFunctions, ...args: any[]) => {
-            out({
-                type: "call",
-                callId: nextCallId++,
-                name: name as string,
-                args,
-            });
+            out(
+                {
+                    type: "call",
+                    callId: nextCallId++,
+                    name: name as string,
+                    args,
+                },
+                (err) => {
+                    if (err !== null) {
+                        throw err;
+                    }
+                },
+            );
         },
     } as RpcReturn<InvokeTargetFunctions, CallTargetFunctions>;
     return rpc;

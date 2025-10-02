@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    <RootNamespace>KnowProConsole</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\common\common.csproj" />
+    <ProjectReference Include="..\..\src\conversationMemory\conversationMemory.csproj" />
+    <ProjectReference Include="..\..\src\knowproStorage\knowproStorage.csproj" />
+    <ProjectReference Include="..\..\src\knowproTest\knowproTest.csproj" />
+    <ProjectReference Include="..\..\src\knowpro\knowpro.csproj" />
+    <ProjectReference Include="..\examplesLib\examplesLib.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -36,7 +36,6 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
         persistSession: true,
         persistDir: instanceDir,
-        enableServiceHost: true,
         metrics: true,
         dblogging: true,
         clientId: getClientId(),

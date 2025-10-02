@@ -6,21 +6,19 @@ import {
     AppAgent,
     ActionResult,
     ActionResultSuccess,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { createTypeChat } from "typeagent";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { randomInt } from "node:crypto";
 import {
-    CommandHandlerNoParams,
+    CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { PromptSection, Result } from "typechat";
-import {
-    displayError,
-    displayStatus,
-} from "@typeagent/agent-sdk/helpers/display";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 import {
     GreetingAction,
     PersonalizedGreetingAction,
@@ -118,19 +116,41 @@ export interface GenericGreeting {
 /**
  * Implements the @greeting command.
  */
-export class GreetingCommandHandler implements CommandHandlerNoParams {
+export class GreetingCommandHandler implements CommandHandler {
     public readonly description =
         "Have the agent generate a personalized greeting.";
-    private instructions = `You are a breezy greeting generator. You also help the user remember unfished work like projects.`;
+    public readonly parameters = {
+        flags: {
+            mock: {
+                description: "Use mock greetings instead of generating.",
+                default: false,
+            },
+        },
+    } as const;
+    private instructions = `You are a breezy greeting generator. You also help the user remember unfinished work like projects.`;
 
     /**
      * Handle the @greeting command
      *
      * @param context The command context.
      */
-    public async run(context: ActionContext<GreetingAgentContext>) {
+    public async run(
+        context: ActionContext<GreetingAgentContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        if (params.flags.mock) {
+            context.actionIO.appendDisplay("Hello.  How can I help you today?");
+            return;
+        }
         // Initial output to let the user know the agent is thinking...
-        displayStatus("...", context);
+        context.actionIO.appendDisplay(
+            {
+                type: "html",
+                content: `<div><style>.wait-dot{display: inline-block;animation: bounce 1.2s infinite;} .wait-dot.one{animation-delay: 0s;} .wait-dot.two{animation-delay: 0.2s;} .wait-dot.three {animation-delay: 0.4s;} @keyframes bounce {0%, 80%, 100% {transform: translateY(0);}40% {transform: translateY(-6px);}}</style><span class="wait-dot one">.</span><span class="wait-dot two">.</span><span class="wait-dot three">.</span></div>`,
+                kind: "status",
+            },
+            "temporary",
+        );
 
         // wait until we have the user's name
         if (context.sessionContext.agentContext.userPromise) {

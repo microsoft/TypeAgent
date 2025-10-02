@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
     const app: ElectronApplication = await electron.launch({
-        args: getLaunchArgs(),
+        args: getLaunchArgs(true),
     });
     const mainWindow: Page = await app.firstWindow();
     await mainWindow.bringToFront();
@@ -28,14 +28,17 @@ test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
 });
 
 test("startShell", { tag: "@smoke" }, async ({}) => {
-    await startShell();
+    const mainWindow = await startShell(true);
+
+    // close the application
+    await exitApplication(mainWindow);
 });
 
 test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
-    console.log(`Running test '${testInfo.title}`);
+    console.log(`Running test '${testInfo.title}'`);
 
     // launch the app
-    const mainWindow: Page = await startShell();
+    const mainWindow: Page = await startShell(true);
 
     const msg = await sendUserRequestAndWaitForCompletion(
         `why is the sky blue?`,

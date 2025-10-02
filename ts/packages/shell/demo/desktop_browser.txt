@@ -1,6 +1,5 @@
 # ====== Init =======
 @config bot on
-@config serviceHost on
 @config action -* desktop browser
 @config schema -* desktop browser
 

@@ -17,6 +17,11 @@ export type CompletionSettings = {
     //https://cookbook.openai.com/examples/reproducible_outputs_with_the_seed_parameter
     seed?: number;
     top_p?: number;
+
+    // GPT-5 specific settings
+    max_completion_tokens?: number;
+    reasoning_effort?: "minimal" | "low" | "medium" | "high";
+    verbosity?: "low" | "medium" | "high";
 };
 
 export type StructuredOutputJsonSchema = {

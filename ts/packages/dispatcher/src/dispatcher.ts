@@ -23,11 +23,8 @@ import { FullAction } from "agent-cache";
 import { openai as ai } from "aiclient";
 
 export type CommandResult = {
-    // true if there are any error message
-    hasError?: boolean;
-    // Exceptions while processing the command.
-    // Does not capture exception from the execution of the commands as they are treated as errors.
-    exception?: string;
+    // last error message
+    lastError?: string;
 
     // Actions that were executed as part of the command.
     actions?: FullAction[];

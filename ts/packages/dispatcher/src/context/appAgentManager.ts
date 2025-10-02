@@ -549,13 +549,13 @@ export class AppAgentManager implements ActionConfigProvider {
         for (const record of this.agents.values()) {
             closeP.push(
                 (async () => {
+                    await this.closeSessionContext(record);
                     record.actions.clear();
                     record.commands = false;
-                    await this.closeSessionContext(record);
                     if (record.appAgent !== undefined) {
                         await record.provider?.unloadAppAgent(record.name);
+                        record.appAgent = undefined;
                     }
-                    record.appAgent = undefined;
                 })(),
             );
         }
@@ -674,7 +674,19 @@ export class AppAgentManager implements ActionConfigProvider {
             record.sessionContext = undefined;
             record.sessionContextP = undefined;
             try {
-                await record.appAgent!.closeAgentContext?.(sessionContext);
+                // Since we have a session context, appAgent must be defined as well.
+                const appAgent = record.appAgent!;
+                if (appAgent.updateAgentContext !== undefined) {
+                    // Disable all actions first.
+                    for (const action of record.actions) {
+                        await appAgent.updateAgentContext(
+                            false,
+                            sessionContext,
+                            action,
+                        );
+                    }
+                }
+                await appAgent.closeAgentContext?.(sessionContext);
                 // TODO: unload agent as well?
                 debug(`Session context closed for ${record.name}`);
             } catch (e) {

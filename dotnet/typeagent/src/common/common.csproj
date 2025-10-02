@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>annotations</ImplicitUsings>
+    <Nullable>annotations</Nullable>
+    <AssemblyName>TypeAgent.Common</AssemblyName>
+    <RootNamespace>TypeAgent.Common</RootNamespace>
+  </PropertyGroup>
+
+</Project>

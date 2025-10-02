@@ -18,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { InstanceConfigProvider } from "../src/utils/config.js";
-import { setObjectProperty } from "common-utils";
+import { getObjectProperty, setObjectProperty } from "common-utils";
 import chalk from "chalk";
 import { normalizeAction } from "./constructionCacheTestCommon.js";
 
@@ -188,7 +188,7 @@ export async function defineTranslateTest(
                         validateCommandResult(step, result);
                     });
                 },
-                6000 * repeat,
+                30000 * Math.round(repeat / concurrency),
             );
         });
         afterAll(async () => {
@@ -200,15 +200,19 @@ export async function defineTranslateTest(
     });
 }
 
+function checkResultError(result: CommandResult | undefined, message: string) {
+    if (result?.lastError !== undefined) {
+        throw new Error(`${message}: ${result.lastError}`);
+    }
+}
+
 async function setupOneStep(
     steps: TranslateTestStep[],
     curr: TranslateTestStep,
     dispatcher: Dispatcher,
 ) {
     const result = await dispatcher.processCommand("@history clear");
-    if (result?.hasError === true) {
-        throw new Error(`Failed to clear history: ${result.exception}`);
-    }
+    checkResultError(result, "Failed to clear history");
     for (const step of steps) {
         if (step === curr) {
             return;
@@ -219,11 +223,7 @@ async function setupOneStep(
             const insertResult = await dispatcher.processCommand(
                 `@history insert ${JSON.stringify({ user: request, assistant: history })}`,
             );
-            if (insertResult?.hasError === true) {
-                throw new Error(
-                    `Failed to insert history: ${insertResult.exception}`,
-                );
-            }
+            checkResultError(insertResult, "Failed to insert history");
         }
     }
 
@@ -240,9 +240,7 @@ function validateCommandResult(
     result?: CommandResult,
 ) {
     const { request, expected } = step;
-    if (result?.hasError) {
-        throw new Error(`Request '${request}' failed: ${result.exception}`);
-    }
+    checkResultError(result, `Failed to process request '${request}'`);
 
     if (expected !== undefined) {
         const actionMatches = normalizeActionMatches(expected);
@@ -267,6 +265,31 @@ type PossibleMatch = {
     partial: boolean;
 };
 
+// This function validates the test data, to make sure the alternatives are valid.
+function validateAlternatives(
+    action: FullAction,
+    name: string,
+    values: ParamValueType[],
+) {
+    const expectedType = typeof getObjectProperty(action.parameters, name);
+    const valueType = typeof values[0];
+    // Allow alternates to fill in optional fields.
+    if (expectedType !== "undefined" && expectedType !== valueType) {
+        // Error checking the testing alternates.  Make sure it is replacing existing properties
+        throw new Error(
+            `Invalid alternatives: type mismatch with action for parameter '${name}'. Expected type '${expectedType}' but got '${valueType}'`,
+        );
+    }
+
+    for (const v of values) {
+        if (typeof v !== valueType) {
+            throw new Error(
+                `Invalid alternatives: inconsistent types for parameter '${name}'. Expected type '${valueType}' but got '${typeof v}'`,
+            );
+        }
+    }
+}
+
 function expandAlternates(
     expectedMatch: ActionMatchWithAlternates,
 ): { action: FullAction; partial: boolean }[] {
@@ -280,6 +303,9 @@ function expandAlternates(
     if (expectedMatch.alternates !== undefined) {
         for (const [name, v] of Object.entries(expectedMatch.alternates)) {
             const values = Array.isArray(v) ? v : [v];
+
+            validateAlternatives(expectedMatch.action, name, values);
+
             expandedActions.push(
                 ...values.flatMap((v) =>
                     expandedActions.map((a) => {
@@ -362,6 +388,9 @@ function validateExpectedAction(
             ,
             chalk.green(`Expected: ${JSON.stringify(possibleMatches)}`),
             chalk.red(`Received: ${JSON.stringify(normalizedAction, null, 2)}`),
+
+            chalk.yellow("Errors from each alternatives:"),
+            ...errors,
         ].join("\n"),
     );
 }

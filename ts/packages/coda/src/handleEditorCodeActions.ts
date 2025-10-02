@@ -20,6 +20,9 @@ import {
     triggerCopilotThenRemovePromptComment,
     placeCursorAfterCurrentFunction,
     ensureSingleBlankLineAtCursor,
+    pickProblemForFile,
+    WorkspaceDiagnostic,
+    requestCopilotFix,
 } from "./helpers";
 import {
     ensureFunctionDeclarationClosure,
@@ -739,6 +742,202 @@ export async function handleCreateCodeBlockAction(
     }
 }
 
+export async function handleFixCodeProblemAction(
+    action: any,
+): Promise<ActionResult> {
+    const { target, file } = action.parameters;
+
+    try {
+        // Resolve document
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const activeFileUri = doc.uri;
+
+        // Collect diagnostics for this file
+        const allDiagnostics: WorkspaceDiagnostic[] = vscode.languages
+            .getDiagnostics(doc.uri)
+            .map((d) => ({ uri: doc.uri, diagnostic: d }));
+
+        if (allDiagnostics.length === 0) {
+            return {
+                handled: false,
+                message: "✅ No problems found in this file.",
+            };
+        }
+
+        // Pick the problem based on the target
+        const problemToFix = pickProblemForFile(
+            editor,
+            allDiagnostics,
+            target,
+            activeFileUri,
+        ) as WorkspaceDiagnostic | undefined;
+
+        if (!problemToFix) {
+            return {
+                handled: false,
+                message: `❌ No matching problem found for target "${JSON.stringify(target)}".`,
+            };
+        }
+
+        // Apply Copilot fix
+        const { diagnostic } = problemToFix;
+        const accepted = await requestCopilotFix(editor, diagnostic);
+
+        if (!accepted) {
+            return {
+                handled: false,
+                message: "❌ Copilot did not provide a fix.",
+            };
+        }
+
+        return {
+            handled: true,
+            message: `🔧 Fixed problem at ${activeFileUri.fsPath}:${diagnostic.range.start.line + 1}`,
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Error handling fixProblem: ${err.message}`,
+        };
+    }
+}
+
+export async function handleMoveCursorInFileAction(
+    action: any,
+): Promise<ActionResult> {
+    const { target, file, hint } = action.parameters;
+
+    try {
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const pos = resolvePosition(editor, target);
+        if (!pos) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve cursor position.",
+            };
+        }
+
+        // move the cursor & reveal it ---
+        const newSel = new vscode.Selection(pos, pos);
+        editor.selection = newSel;
+        editor.revealRange(new vscode.Range(pos, pos));
+
+        return {
+            handled: true,
+            message: `✅ Cursor moved to ${pos.line + 1}:${pos.character + 1}${
+                hint ? ` (hint: ${hint})` : ""
+            }.`,
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Error handling moveCursorInFile: ${err.message}`,
+        };
+    }
+}
+
+export async function handleUpsertLinesAction(
+    action: any,
+): Promise<ActionResult> {
+    const {
+        operation,
+        count = 1,
+        position = { type: "atCursor" },
+        file,
+        force = true,
+    } = action.parameters;
+
+    try {
+        const doc = await resolveOrFallbackToFile(file);
+        if (!doc) {
+            return {
+                handled: false,
+                message: "❌ Could not resolve target file.",
+            };
+        }
+
+        const editor = await showDocumentInEditor(doc);
+        if (!editor) {
+            return {
+                handled: false,
+                message: "❌ Could not open document in editor.",
+            };
+        }
+
+        const pos = resolvePosition(editor, position);
+        let targetLine = pos.line;
+
+        await editor.edit((editBuilder) => {
+            if (operation === "insert") {
+                // Insert N empty lines
+                const emptyLines = Array(count).fill("").join("\n") + "\n";
+                editBuilder.insert(
+                    new vscode.Position(targetLine, 0),
+                    emptyLines,
+                );
+            } else if (operation === "delete") {
+                // Delete N lines starting from target line
+                const startLine = targetLine;
+                const endLine = Math.min(startLine + count, doc.lineCount);
+
+                for (let i = startLine; i < endLine; i++) {
+                    if (i < doc.lineCount) {
+                        const line = doc.lineAt(i);
+                        if (force || line.isEmptyOrWhitespace) {
+                            editBuilder.delete(line.rangeIncludingLineBreak);
+                        }
+                    }
+                }
+            }
+        });
+
+        return {
+            handled: true,
+            message:
+                operation === "insert"
+                    ? `➕ Inserted ${count} empty line(s).`
+                    : force
+                      ? `🗑️ Deleted ${count} line(s) (force).`
+                      : `➖ Deleted up to ${count} empty line(s).`,
+        };
+    } catch (err: any) {
+        return {
+            handled: false,
+            message: `❌ Error modifying empty lines: ${err.message}`,
+        };
+    }
+}
+
 export async function handleEditorCodeActions(
     action: any,
 ): Promise<ActionResult> {
@@ -769,6 +968,18 @@ export async function handleEditorCodeActions(
 
         case "createCodeBlock":
             actionResult = await handleCreateCodeBlockAction(action);
+            break;
+
+        case "fixCodeProblem":
+            actionResult = await handleFixCodeProblemAction(action);
+            break;
+
+        case "moveCursorInFile":
+            actionResult = await handleMoveCursorInFileAction(action);
+            break;
+
+        case "insertOrDeleteLines":
+            actionResult = await handleUpsertLinesAction(action);
             break;
 
         default:

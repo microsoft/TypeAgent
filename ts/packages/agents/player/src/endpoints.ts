@@ -479,6 +479,16 @@ export async function next(service: SpotifyService, deviceId: string) {
     );
 }
 
+export async function followPlaylist(
+    service: SpotifyService,
+    playlistId: string,
+) {
+    const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(
+        playlistId,
+    )}/followers`;
+    return fetchPutEmptyResult(service, url);
+}
+
 export async function getPlaylists(service: SpotifyService) {
     return fetchGet<SpotifyApi.ListOfCurrentUsersPlaylistsResponse>(
         service,
@@ -552,6 +562,61 @@ export async function getTracksFromIds(
         }
     }
     return trackResponses;
+}
+
+// get recommendations based on seed tracks, artists or genres
+export async function getRecommendations(
+    service: SpotifyService,
+    params: SpotifyApi.RecommendationsOptionsObject,
+) {
+    return fetchGet<SpotifyApi.RecommendationsFromSeedsResponse>(
+        service,
+        "https://api.spotify.com/v1/recommendations",
+        params,
+    );
+}
+
+export async function getRecommendationsFromTracks(
+    service: SpotifyService,
+    trackIds: string[],
+    limit = 20,
+) {
+    const seedTracks = trackIds.slice(0, 5);
+    return getRecommendations(service, { seed_tracks: seedTracks, limit });
+}
+
+export async function getRecommendationsFromTrackCollection(
+    service: SpotifyService,
+    trackCollection: { getTracks(): SpotifyApi.TrackObjectFull[] },
+    startIndex = 0,
+    limit = 20,
+) {
+    const seedTracks = trackCollection
+        .getTracks()
+        .slice(startIndex, startIndex + 5)
+        .map((track) => track.id);
+    return getRecommendations(service, { seed_tracks: seedTracks, limit });
+}
+
+export async function getRecommendationsFromArtists(
+    service: SpotifyService,
+    artistIds: string[],
+    limit = 20,
+) {
+    const seedArtists = artistIds.slice(0, 5);
+    return getRecommendations(service, { seed_artists: seedArtists, limit });
+}
+
+export async function addTracksToPlaylist(
+    service: SpotifyService,
+    playlistId: string,
+    trackUris: string[],
+) {
+    return fetchPost<SpotifyApi.AddTracksToPlaylistResponse>(
+        service,
+        `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`,
+        { uris: trackUris },
+    );
 }
 
 export async function getPlaylistTracks(

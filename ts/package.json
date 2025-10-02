@@ -38,6 +38,7 @@
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run start",
     "shell:dev": "pnpm -C packages/shell run dev",
+    "shell:nosandbox": "pnpm -C packages/shell run start:nosandbox",
     "shell:package": "pnpm -C packages/shell run package",
     "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
@@ -52,7 +53,7 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706",
+  "packageManager": "pnpm@10.17.1+sha512.17c560fca4867ae9473a3899ad84a88334914f379be46d455cbf92e5cf4b39d34985d452d2583baf19967fa76cb5c17bc9e245529d0b98745721aa7200ecaf7a",
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"

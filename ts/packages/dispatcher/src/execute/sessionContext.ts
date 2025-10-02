@@ -6,11 +6,18 @@ import {
     AppAgent,
     AppAgentManifest,
     SessionContext,
+    DisplayContent,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getStorage } from "./storageImpl.js";
 import { IndexData } from "image-memory";
 import { IndexManager } from "../context/indexManager.js";
+import registerDebug from "debug";
+
+const debugLog = registerDebug("typeagent:dispatcher:notify");
+
+// Only browser and dispatcher agents can send rich notifications
+const ALLOWED_RICH_NOTIFY_AGENTS = new Set(["browser", "dispatcher"]);
 
 export function createSessionContext<T = unknown>(
     name: string,
@@ -69,8 +76,35 @@ export function createSessionContext<T = unknown>(
         get instanceStorage() {
             return instanceStorage;
         },
-        notify(event: AppAgentEvent, message: string) {
-            context.clientIO.notify(event, undefined, message, name);
+        notify(
+            event: AppAgentEvent,
+            message: string | DisplayContent,
+            eventSetId?: string,
+        ) {
+            // Check if agent can send rich notifications (DisplayContent objects)
+            if (
+                typeof message === "object" &&
+                !ALLOWED_RICH_NOTIFY_AGENTS.has(name)
+            ) {
+                debugLog(
+                    `Agent ${name} not allowed to send rich notifications`,
+                );
+                return;
+            }
+
+            // Use eventSetId if provided, otherwise use context.requestId
+            // If no eventSetId and no context.requestId, generate a unique ID for standalone notifications
+            let requestId: string;
+            if (eventSetId) {
+                requestId = `agent-eventset-${eventSetId}`;
+            } else if (context.requestId) {
+                requestId = context.requestId;
+            } else {
+                // Fallback for notifications without a request context (e.g., background events)
+                requestId = `agent-${name}-${Date.now()}`;
+            }
+
+            context.clientIO.notify(event, requestId, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {

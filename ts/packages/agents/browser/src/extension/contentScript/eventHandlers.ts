@@ -5,8 +5,8 @@ import { matchLinks, matchLinksByPosition } from "./domUtils";
 import { getReadablePageContent } from "./pageContent";
 import {
     getPageHTML,
-    getPageHTMLSubFragments,
     getPageHTMLFragments,
+    CompressionMode,
 } from "./htmlUtils";
 import { getPageText } from "./pageContent";
 import {
@@ -155,6 +155,39 @@ function setupMessageListeners(): void {
         runPaleoBioDbAction: async (action: any) => {
             sendPaleoDbRequest(action);
         },
+
+        clickOn: async (cssSelector: string) => {
+            return await sendUIEventsRequest({
+                actionName: "clickOnElement",
+                parameters: { cssSelector },
+            });
+        },
+        setDropdown: async (cssSelector: string, optionLabel: string) => {
+            return await sendUIEventsRequest({
+                actionName: "setDropdownValue",
+                parameters: { cssSelector, optionLabel },
+            });
+        },
+        enterTextIn: async (
+            textValue: string,
+            cssSelector?: string,
+            submitForm?: boolean,
+        ) => {
+            const actionName = cssSelector
+                ? "enterTextInElement"
+                : "enterTextOnPage";
+            return await sendUIEventsRequest({
+                actionName,
+                parameters: { value: textValue, cssSelector, submitForm },
+            });
+        },
+        awaitPageLoad: async (timeout?: number) => {
+            return await awaitPageIncrementalUpdates();
+        },
+        awaitPageInteraction: async (timeout?: number) => {
+            const delay = timeout || 400;
+            return new Promise((resolve) => setTimeout(resolve, delay));
+        },
     };
 
     createRpc(
@@ -207,12 +240,28 @@ export async function handleMessage(
             }
 
             case "get_reduced_html": {
+                // Determine compression mode from new parameter or legacy fullSize
+                let compressionMode: CompressionMode;
+                let shouldFilterToReadingView = message.filterToReadingView;
+
+                if (message.compressionMode) {
+                    // CompressionMode parameter takes precedence
+                    compressionMode =
+                        message.compressionMode as CompressionMode;
+                    // Enforce readable view when compressionMode is explicitly passed
+                    shouldFilterToReadingView = true;
+                } else {
+                    compressionMode = message.fullSize
+                        ? CompressionMode.None
+                        : CompressionMode.Automation;
+                }
+
                 const html = getPageHTML(
-                    message.fullSize,
+                    compressionMode,
                     message.inputHtml,
                     message.frameId,
                     message.useTimestampIds,
-                    message.filterToReadingView,
+                    shouldFilterToReadingView,
                     message.keepMetaTags,
                 );
                 sendResponse(html);
@@ -222,16 +271,6 @@ export async function handleMessage(
             case "get_page_text": {
                 const text = getPageText(message.inputHtml, message.frameId);
                 sendResponse(text);
-                break;
-            }
-
-            case "get_filtered_html_fragments": {
-                const htmlFragments = getPageHTMLSubFragments(
-                    message.inputHtml,
-                    message.cssSelectors,
-                    message.frameId,
-                );
-                sendResponse(htmlFragments);
                 break;
             }
 

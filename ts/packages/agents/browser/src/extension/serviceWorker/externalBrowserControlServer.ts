@@ -16,6 +16,7 @@ import {
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
+import { getTabHTMLFragments, CompressionMode } from "./capture";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "aiclient";
 
@@ -312,7 +313,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             // todo return search provider URL
             return new URL(`/?q=${query}`);
         },
-        readPage: async () => {
+        readPageContent: async () => {
             const targetTab = await getActiveTab();
             const article = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "read_page_content",
@@ -336,7 +337,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 });
             }
         },
-        stopReadPage: async () => {
+        stopReadPageContent: async () => {
             chrome.tts.stop();
         },
         captureScreenshot: async () => {
@@ -374,24 +375,81 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             try {
                 const result = await chrome.storage.sync.get([
                     "autoIndexing",
-                    "indexingDelay",
                     "extractionMode",
                 ]);
 
                 return {
                     autoIndexing: result.autoIndexing === true,
-                    indexingDelay: result.indexingDelay || 3000,
                     extractionMode: result.extractionMode || "content",
                 };
             } catch (error) {
                 console.error("Failed to get browser settings:", error);
                 return {
                     autoIndexing: false,
-                    indexingDelay: 3000,
                     extractionMode: "content",
                 };
             }
         },
+
+        getHtmlFragments: async (
+            useTimestampIds?: boolean,
+            compressionMode?: string,
+        ) => {
+            const targetTab = await ensureActiveTab();
+
+            // Convert string compressionMode to CompressionMode enum, default to Automation
+            const mode =
+                compressionMode === "None"
+                    ? CompressionMode.None
+                    : compressionMode === "knowledgeExtraction"
+                      ? CompressionMode.KnowledgeExtraction
+                      : CompressionMode.Automation;
+
+            // For knowledge extraction, disable text extraction since textpro will handle HTML-to-markdown conversion
+            const shouldExtractText = compressionMode !== "knowledgeExtraction";
+
+            return getTabHTMLFragments(
+                targetTab!,
+                mode,
+                false,
+                shouldExtractText,
+                useTimestampIds,
+            );
+        },
+        clickOn: async (cssSelector: string) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.clickOn(cssSelector);
+        },
+        setDropdown: async (cssSelector: string, optionLabel: string) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.setDropdown(cssSelector, optionLabel);
+        },
+        enterTextIn: async (
+            textValue: string,
+            cssSelector?: string,
+            submitForm?: boolean,
+        ) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.enterTextIn(
+                textValue,
+                cssSelector,
+                submitForm,
+            );
+        },
+        awaitPageLoad: async (timeout?: number) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.awaitPageLoad(timeout);
+        },
+        awaitPageInteraction: async (timeout?: number) => {
+            const targetTab = await ensureActiveTab();
+            const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
+            return contentScriptRpc.awaitPageInteraction(timeout);
+        },
+        //};
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

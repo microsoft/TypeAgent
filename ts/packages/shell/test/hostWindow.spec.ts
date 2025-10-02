@@ -1,24 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import test, {
-    _electron,
-    _electron as electron,
-    expect,
-    Page,
-} from "@playwright/test";
+import test, { expect, Page } from "@playwright/test";
 import {
     exitApplication,
-    getAppPath,
-    getLastAgentMessage,
-    sendUserRequest,
+    getInputElementHandle,
     sendUserRequestAndWaitForCompletion,
     sendUserRequestAndWaitForResponse,
-    sendUserRequestFast,
     startShell,
-    waitForAgentMessage,
 } from "./testHelper";
-import { exit } from "process";
 
 // Annotate entire file as serial.
 test.describe.configure({ mode: "serial" });
@@ -28,12 +18,10 @@ test.describe("Shell interface tests", () => {
      * Test to ensure that the shell recall startup layout (position, size)
      */
     // robgruen - 09.11.2025 - temporarily skipping while we redo UI layout to support different modes
-    test.skip("remember window position", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+    test("remember window position", async ({}, testInfo) => {
+        console.log(`Running test '${testInfo.title}'`);
 
-        let agentMessageCount = 0;
-
-        const firstWindow = await startShell(true); // have to wait, commands don't run till this is done
+        const firstWindow = await startShell();
 
         // verify shell title
         const title = await firstWindow.title();
@@ -77,12 +65,8 @@ test.describe("Shell interface tests", () => {
             newWidth,
             `Window width mismatch! Expected ${width} got ${newWidth}`,
         ).toBe(newWidth);
-        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(
-            x + 8,
-        );
-        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(
-            y + 31,
-        );
+        expect(newX, `X position mismatch! Expected ${x} got ${newX}`).toBe(x);
+        expect(newY, `Y position mismatch!Expected ${y} got ${newY}`).toBe(y);
 
         // close the application
         await exitApplication(newWindow);
@@ -92,10 +76,10 @@ test.describe("Shell interface tests", () => {
      * Ensures zoom level is working
      */
     test("zoom level", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         // start the app
-        const mainWindow = await startShell(true);
+        const mainWindow = await startShell();
 
         // test 80% zoom
         await testZoomLevel(80, mainWindow);
@@ -144,7 +128,7 @@ test.describe("Shell interface tests", () => {
      * Ensure send button is behaving
      */
     test("send button state", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         // start the app
         const mainWindow = await startShell();
@@ -157,7 +141,7 @@ test.describe("Shell interface tests", () => {
         ).toBeDisabled();
 
         // put some text in the text box
-        const element = await mainWindow.waitForSelector("#phraseDiv");
+        const element = await getInputElementHandle(mainWindow);
         await element.fill("This is a test...");
         await element.press("Space");
 
@@ -171,10 +155,10 @@ test.describe("Shell interface tests", () => {
     });
 
     test("command backstack", async ({}, testInfo) => {
-        console.log(`Running test '${testInfo.title}`);
+        console.log(`Running test '${testInfo.title}'`);
 
         // start the app
-        const mainWindow = await startShell(true);
+        const mainWindow = await startShell();
 
         // issue some commands
         const commands: string[] = ["@history", "@help", "@config agent"];
@@ -183,7 +167,7 @@ test.describe("Shell interface tests", () => {
         }
 
         // get the input box
-        const element = await mainWindow.waitForSelector("#phraseDiv");
+        const element = await getInputElementHandle(mainWindow);
 
         // go through the command back stack to the end and make sure we get the expected
         // results. (command and cursor location)

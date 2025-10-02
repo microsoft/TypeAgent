@@ -30,6 +30,15 @@
             <i class="bi bi-chevron-right breadcrumb-separator"></i>
             <span class="breadcrumb-current">Entity Graph</span>
             <span id="entityNameBreadcrumb" class="breadcrumb-entity"></span>
+            <button
+              id="backToGlobalBtn"
+              class="back-to-global-btn"
+              style="display: none"
+              title="Back to Global View"
+            >
+              <i class="bi bi-arrow-left"></i>
+              Global
+            </button>
           </div>
 
           <div class="entity-search">
@@ -59,13 +68,9 @@
         <!-- Entity Sidebar -->
         <aside class="entity-sidebar" id="entitySidebar">
           <div class="entity-header">
-            <div class="entity-icon" id="entityIcon">
-              <i class="bi bi-tags"></i>
-            </div>
             <div class="entity-info">
               <h1 class="entity-name" id="entityName">Select an Entity</h1>
               <div class="entity-type-badge" id="entityType"></div>
-              <div class="entity-confidence" id="entityConfidence"></div>
             </div>
           </div>
 
@@ -79,10 +84,6 @@
                 <span class="metric-label">Relationships</span>
                 <span class="metric-value" id="entityRelationships">-</span>
               </div>
-              <div class="metric-item">
-                <span class="metric-label">Centrality</span>
-                <span class="metric-value" id="entityCentrality">-</span>
-              </div>
             </div>
 
             <div class="entity-details">
@@ -90,10 +91,6 @@
               <div id="entityFacets" class="detail-section">
                 <strong>Facets:</strong>
                 <div class="facets-list"></div>
-              </div>
-              <div id="entityDomains" class="detail-section">
-                <strong>Domains:</strong>
-                <div class="domains-list"></div>
               </div>
               <div id="entityTopics" class="detail-section">
                 <strong>Topics:</strong>
@@ -131,8 +128,19 @@
               <button id="fitBtn" class="control-btn" title="Fit to View">
                 <i class="bi bi-arrows-angle-contract"></i>
               </button>
-              <button id="centerBtn" class="control-btn" title="Center Graph">
-                <i class="bi bi-bullseye"></i>
+              <button
+                id="reLayoutBtn"
+                class="control-btn"
+                title="Re-run Layout"
+              >
+                <i class="bi bi-arrow-repeat"></i>
+              </button>
+              <button
+                id="debugViewportBtn"
+                class="control-btn"
+                title="Debug: Log Viewport Nodes"
+              >
+                <i class="bi bi-bug"></i>
               </button>
             </div>
 

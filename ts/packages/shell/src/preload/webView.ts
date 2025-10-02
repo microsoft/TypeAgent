@@ -125,15 +125,48 @@ export async function awaitPageLoad() {
     /*
     return new Promise<string | undefined>((resolve, reject) => {
         // use window API to await pageload
-        
+
     });
     */
 }
 
+export async function awaitPageIncrementalLoad(): Promise<boolean> {
+    try {
+        const result = await sendScriptAction(
+            {
+                type: "await_page_incremental_load",
+            },
+            5000,
+        );
+        return result === "true";
+    } catch (error) {
+        console.error("Content script page load detection failed:", error);
+        return true; // fallback - assume page is ready
+    }
+}
+
+// Compression mode enum (matching browser extension implementation)
+enum CompressionMode {
+    None = "None",
+    Automation = "automation",
+    KnowledgeExtraction = "knowledgeExtraction",
+}
+
 export async function getTabHTMLFragments(
-    fullSize: boolean,
+    compressionModeOrFullSize: CompressionMode | boolean,
     extractText: boolean,
 ) {
+    // Convert legacy boolean or new CompressionMode to boolean for backward compatibility
+    const fullSize =
+        typeof compressionModeOrFullSize === "boolean"
+            ? compressionModeOrFullSize
+            : compressionModeOrFullSize === CompressionMode.None;
+
+    // For knowledge extraction, disable text extraction since textpro will handle HTML-to-markdown conversion
+    const shouldExtractText =
+        extractText &&
+        (typeof compressionModeOrFullSize !== "object" ||
+            compressionModeOrFullSize !== CompressionMode.KnowledgeExtraction);
     let htmlFragments: any[] = [];
     let htmlPromises: Promise<any>[] = [];
 
@@ -141,10 +174,14 @@ export async function getTabHTMLFragments(
         sendScriptAction(
             {
                 type: "get_reduced_html",
-                fullSize: fullSize,
+                compressionMode:
+                    typeof compressionModeOrFullSize === "object"
+                        ? compressionModeOrFullSize
+                        : undefined,
+                fullSize: fullSize, // Keep for backward compatibility
                 frameId: 0,
             },
-            50000,
+            5000,
             window.top,
             "0",
         ),
@@ -167,10 +204,14 @@ export async function getTabHTMLFragments(
             sendScriptAction(
                 {
                     type: "get_reduced_html",
-                    fullSize: fullSize,
+                    compressionMode:
+                        typeof compressionModeOrFullSize === "object"
+                            ? compressionModeOrFullSize
+                            : undefined,
+                    fullSize: fullSize, // Keep for backward compatibility
                     frameId: index,
                 },
-                50000,
+                5000,
                 frameElement.contentWindow,
                 index.toString(),
             ),
@@ -182,16 +223,32 @@ export async function getTabHTMLFragments(
         const frameHTML = htmlResults[i];
         if (frameHTML) {
             let frameText = "";
-            if (extractText) {
-                frameText = await sendScriptAction(
-                    {
-                        type: "get_page_text",
-                        inputHtml: frameHTML,
-                        frameId: i,
-                    },
-                    1000,
-                    frames[i],
-                );
+            if (shouldExtractText) {
+                if (i == 0) {
+                    frameText = await sendScriptAction(
+                        {
+                            type: "get_page_text",
+                            inputHtml: frameHTML,
+                            frameId: 0,
+                        },
+                        1000,
+                        window.top,
+                        "0",
+                    );
+                } else {
+                    const index = i - 1;
+                    const frameElement = iframeElements[index];
+                    frameText = await sendScriptAction(
+                        {
+                            type: "get_page_text",
+                            inputHtml: frameHTML,
+                            frameId: index,
+                        },
+                        1000,
+                        frameElement.contentWindow,
+                        index.toString(),
+                    );
+                }
             }
 
             htmlFragments.push({
@@ -225,8 +282,12 @@ async function runBrowserAction(action: any) {
         action.actionName ?? action.fullActionName.split(".").at(-1);
     switch (actionName) {
         case "getHTML": {
+            // Convert legacy fullHTML parameter to CompressionMode
+            const compressionMode = action.parameters?.fullHTML
+                ? CompressionMode.None
+                : CompressionMode.Automation;
             responseObject = await getTabHTMLFragments(
-                action.parameters.fullHTML,
+                compressionMode,
                 action.parameters?.extractText,
             );
 
@@ -296,6 +357,9 @@ contextBridge.exposeInMainWorld("browserConnect", {
             });
         }
     },
+    // Expose HTML fragment extraction functions for inline browser control
+    runBrowserAction: runBrowserAction,
+    getTabHTMLFragments: getTabHTMLFragments,
 });
 
 // Add extension service adapter API for view pages

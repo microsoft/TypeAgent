@@ -41,6 +41,7 @@
     "shell:smoke": "npx playwright test simple.spec.ts",
     "shell:test": "npx playwright test",
     "start": "npm run prepare-vite && electron-vite preview -- --env ../../.env",
+    "start:nosandbox": "npm run prepare-vite && electron-vite preview --noSandbox -- --env ../../.env",
     "start:package": "run-script-os",
     "start:package:linux": "./dist/linux-unpacked/typeagentshell",
     "start:package:macos": "open ./dist/mac-arm64/TypeAgent\\ Shell.app",

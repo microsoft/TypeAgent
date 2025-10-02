@@ -5,6 +5,7 @@ import { QueueObject, queue } from "async";
 import {
     getTranslationNamesForActions,
     normalizeParamString,
+    ParamFieldType,
     RequestAction,
 } from "../explanation/requestAction.js";
 import { ExplainerFactory } from "./factory.js";
@@ -13,52 +14,74 @@ import {
     ConstructionCreationConfig,
     GenericExplanationResult,
 } from "../explanation/genericExplainer.js";
+import {
+    getParamSpec,
+    SchemaInfoProvider,
+} from "../explanation/schemaInfoProvider.js";
 
 const langTool = getLanguageTools("en");
 
 function checkExplainableValues(
     requestAction: RequestAction,
+    schemaInfoProvider: SchemaInfoProvider | undefined,
     valueInRequest: boolean,
     noReferences: boolean,
 ) {
     // Do a cheap parameter check first.
     const normalizedRequest = normalizeParamString(requestAction.request);
-    const pending: unknown[] = [];
 
     for (const { action } of requestAction.actions) {
-        pending.push(action.parameters);
-    }
-
-    while (pending.length > 0) {
-        const value = pending.pop();
-        if (!value) {
+        if (action.parameters === undefined) {
             continue;
         }
+        const pending: [string, ParamFieldType][] = [["", action.parameters]];
 
-        // TODO: check number too.
-        if (typeof value === "string") {
-            if (noReferences && langTool?.possibleReferentialPhrase(value)) {
-                throw new Error(
-                    "Request contains a possible referential phrase used for property values.",
+        do {
+            const [parameterName, value] = pending.pop()!;
+
+            // TODO: check number too.
+            if (typeof value === "string") {
+                if (
+                    noReferences &&
+                    langTool?.possibleReferentialPhrase(value)
+                ) {
+                    throw new Error(
+                        "Request contains a possible referential phrase used for property values.",
+                    );
+                }
+
+                if (
+                    valueInRequest &&
+                    !normalizedRequest.includes(normalizeParamString(value))
+                ) {
+                    const paramSpec = getParamSpec(
+                        action,
+                        parameterName,
+                        schemaInfoProvider,
+                    );
+
+                    if (paramSpec === "literal") {
+                        // It's ok if the parameter type are all literals.
+                        continue;
+                    }
+
+                    throw new Error(
+                        `Action parameter value '${value}' not found in the request`,
+                    );
+                }
+                continue;
+            }
+            if (typeof value === "object") {
+                pending.push(
+                    ...Object.entries(value).map<[string, ParamFieldType]>(
+                        ([k, v]) => [
+                            parameterName ? `${parameterName}.${k}` : k,
+                            v,
+                        ],
+                    ),
                 );
             }
-            if (
-                valueInRequest &&
-                !normalizedRequest.includes(normalizeParamString(value))
-            ) {
-                throw new Error(
-                    `Action parameter value '${value}' not found in the request`,
-                );
-            }
-            continue;
-        }
-        if (typeof value === "object") {
-            if (Array.isArray(value)) {
-                pending.push(...value);
-            } else {
-                pending.push(...Object.values(value));
-            }
-        }
+        } while (pending.length > 0);
     }
 }
 
@@ -103,11 +126,18 @@ export class ExplainWorkQueue {
         model?: string,
     ): Promise<ProcessExplanationResult> {
         const concurrent = options?.concurrent ?? false;
+        const schemaInfoProvider =
+            constructionCreationConfig?.schemaInfoProvider;
         const valueInRequest = options?.valueInRequest ?? true;
         const noReferences = options?.noReferences ?? true;
         const checkExplainable = options?.checkExplainable;
 
-        checkExplainableValues(requestAction, valueInRequest, noReferences);
+        checkExplainableValues(
+            requestAction,
+            schemaInfoProvider,
+            valueInRequest,
+            noReferences,
+        );
 
         const task = async () => {
             const startTime = performance.now();

@@ -24,6 +24,8 @@ function registerClient(c: Client) {
     // Establish the clientIO RPC
     client = c;
     createClientIORpcServer(client.clientIO, clientIOChannel.channel);
+
+    c.dispatcherInitialized(webDispatcher);
 }
 
 export const webapi: ClientAPI = {
@@ -70,6 +72,9 @@ export const webapi: ClientAPI = {
         // not supported on mobile
         throw new Error("Not implemented");
     },
+    continuousSpeechProcessing: async (_) => {
+        throw new Error("Not implemented");
+    },
 };
 
 const dispatcherChannel = createGenericChannel((message: any) =>
@@ -81,9 +86,7 @@ const dispatcherChannel = createGenericChannel((message: any) =>
     ),
 );
 
-export const webdispatcher = createDispatcherRpcClient(
-    dispatcherChannel.channel,
-);
+const webDispatcher = createDispatcherRpcClient(dispatcherChannel.channel);
 
 export async function createWebSocket(autoReconnect: boolean = true) {
     let url = window.location;

@@ -389,6 +389,109 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async getKnowledgeGraphStatus(): Promise<any> {
+        return this.sendMessage({
+            type: "getKnowledgeGraphStatus",
+        });
+    }
+
+    async buildKnowledgeGraph(options?: {
+        minimalMode?: boolean;
+        urlLimit?: number;
+    }): Promise<any> {
+        return this.sendMessage({
+            type: "buildKnowledgeGraph",
+            parameters: options || {},
+        });
+    }
+
+    async rebuildKnowledgeGraph(): Promise<any> {
+        return this.sendMessage({
+            type: "rebuildKnowledgeGraph",
+        });
+    }
+
+    async getAllRelationships(): Promise<any[]> {
+        const result = await this.sendMessage<{ relationships?: any[] }>({
+            type: "getAllRelationships",
+        });
+        return result?.relationships || [];
+    }
+
+    async getAllCommunities(): Promise<any[]> {
+        const result = await this.sendMessage<{ communities?: any[] }>({
+            type: "getAllCommunities",
+        });
+        return result?.communities || [];
+    }
+
+    async getAllEntitiesWithMetrics(): Promise<any[]> {
+        const result = await this.sendMessage<{ entities?: any[] }>({
+            type: "getAllEntitiesWithMetrics",
+        });
+        return result?.entities || [];
+    }
+
+    async getEntityNeighborhood(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getEntityNeighborhood",
+            entityId: entityId,
+            depth: depth,
+            maxNodes: maxNodes,
+        });
+    }
+
+    async getGlobalImportanceLayer(
+        maxNodes: number = 5000,
+        includeConnectivity: boolean = true,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getGlobalImportanceLayer",
+            maxNodes,
+            includeConnectivity,
+        });
+    }
+
+    async getViewportBasedNeighborhood(
+        centerEntity: string,
+        viewportNodeNames: string[],
+        maxNodes: number = 5000,
+        options: {
+            importanceWeighting?: boolean;
+            includeGlobalContext?: boolean;
+            exploreFromAllViewportNodes?: boolean;
+            minDepthFromViewport?: number;
+        } = {},
+    ): Promise<any> {
+        const {
+            importanceWeighting = true,
+            includeGlobalContext = true,
+            exploreFromAllViewportNodes = true,
+            minDepthFromViewport = 1,
+        } = options;
+
+        return this.sendMessage({
+            type: "getViewportBasedNeighborhood",
+            centerEntity,
+            viewportNodeNames,
+            maxNodes,
+            importanceWeighting,
+            includeGlobalContext,
+            exploreFromAllViewportNodes,
+            minDepthFromViewport,
+        });
+    }
+
+    async getImportanceStatistics(): Promise<any> {
+        return this.sendMessage({
+            type: "getImportanceStatistics",
+        });
+    }
+
     async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
         await this.sendMessage({
             type: "notifyAutoIndexSettingChanged",

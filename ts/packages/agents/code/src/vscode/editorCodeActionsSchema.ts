@@ -4,9 +4,11 @@
 export type EditorCodeActions =
     | EditorActionCreateFunction
     | EditorActionCreateCodeBlock
+    | EditorActionFixProblem
+    | EditorActionMoveCursor
+    | EditorActionUpsertLines
     | EditorActionInsertComment
     | EditorActionGenerateWithCopilot
-    | EditorActionRepairWithCopilot
     | EditorActionCreateFile
     | EditorActionSaveCurrentFile
     | EditorActionSaveAllFiles;
@@ -41,6 +43,7 @@ export type ArgumentDefinition = {
 export type CursorTarget =
     | { type: "atCursor" }
     | { type: "insideFunction"; name: string }
+    | { type: "onLine"; line: number }
     | { type: "afterLine"; line: number }
     | { type: "beforeLine"; line: number }
     | { type: "inSelection" }
@@ -57,6 +60,7 @@ export type CodeTarget =
     | { type: "line"; lineNumber: number }
     | { type: "range"; start: number; end: number };
 
+// Do not fill the fileName unless the user explicitly specified it.
 export type FileTarget = {
     // Name of the file to create or open or edit (e.g., "utils.ts")
     fileName?: string;
@@ -134,15 +138,64 @@ export type EditorActionCreateCodeBlock = {
     };
 };
 
+export type ProblemTarget =
+    | { type: "first" }
+    | { type: "next" }
+    | { type: "cursor"; position: CursorTarget }
+    | { type: "indexInFile"; index: number; file?: FileTarget };
+
+// schema to fix a problem (diagnostic) in the code.
+// The target can be the first problem, the next one, all, or a specific location/index in the file.
+// Optional hints from the user (e.g. "fix the second error") or file scoping may guide the choice.
+// Used when the user requests: "fix this problem", "fix the second error", "fix all issues in this file".
 export type EditorActionFixProblem = {
-    actionName: "fixProblem";
+    actionName: "fixCodeProblem";
     parameters: {
-        // "first", "next", "all" – or specific location
-        target: "first" | "next" | "all" | CursorTarget;
+        // Which problem to fix (e.g., "first", "next", "atCursor", or "second problem in file")
+        target: ProblemTarget;
         // Optional context hint from the agent (parsed from user request)
         hint?: string;
         // File scope (defaults to active editor)
         file?: FileTarget;
+    };
+};
+
+// Action to move the cursor in a file to a specified position.
+export type EditorActionMoveCursor = {
+    actionName: "moveCursorInFile";
+    parameters: {
+        //Target position for the cursor. Supports symbolic locations, line-based positions, or file-relative positions.
+        target: CursorTarget;
+        // Optional file where the cursor should be moved. Defaults to the active editor if not provided.
+        file?: FileTarget;
+        // Optional user or agent hint to clarify ambiguous positioning.
+        // Example: "after function declaration", "before import statements".
+        hint?: string;
+    };
+};
+
+// Action for inserting or deleting lines in a file.
+export type EditorActionUpsertLines = {
+    actionName: "insertOrDeleteLines";
+    parameters: {
+        // Operation to perform:
+        // "insert": add new empty lines at the target position
+        // "delete": remove lines starting from the target position
+        operation: "insert" | "delete";
+        // Number of lines to insert or delete (default: 1).
+        count?: number;
+        // Position where the operation should happen.
+        // Examples:
+        //   { type: "atCursor" }
+        //   { type: "afterLine", line: 10 }
+        //   { type: "atEndOfFile" }
+        position?: CursorTarget;
+        // Optional target file (defaults to the active editor).
+        file?: FileTarget;
+        // When deleting:
+        //   - true: allow deleting non-empty lines (default)
+        //   - false: only delete if lines are empty/whitespace
+        force?: boolean;
     };
 };
 

@@ -67,6 +67,18 @@ export function openAIApiSettingsFromEnv(
             EnvVars.OPENAI_MAX_CONCURRENCY,
             endpointName,
         ),
+        timeout: getIntFromEnv(
+            env,
+            EnvVars.OPENAI_MAX_TIMEOUT,
+            endpointName,
+            60_000,
+        ),
+        maxRetryAttempts: getIntFromEnv(
+            env,
+            EnvVars.OPENAI_MAX_RETRYATTEMPTS,
+            endpointName,
+            3,
+        ),
         enableModelRequestLogging:
             getEnvSetting(
                 env,

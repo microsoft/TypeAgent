@@ -13,20 +13,72 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
+// These need to be in sync with the UI
+const chatViewUrlSuffix = "/chatView.html";
+const inputDivId = "phraseDiv";
+
 const runningApplications: Map<string, ElectronApplication> = new Map<
     string,
     ElectronApplication
 >();
 
+async function waitForPromiseWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error("Operation timed out"));
+        }, timeoutMs);
+
+        promise
+            .then((result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            })
+            .catch((err) => {
+                clearTimeout(timeout);
+                reject(err);
+            });
+    });
+}
+
+async function closeInstance(instanceName: string, force: boolean = false) {
+    const existing = runningApplications.get(instanceName);
+    if (existing) {
+        if (force) {
+            console.log(`Force closing instance ${instanceName}`);
+        }
+        try {
+            await waitForPromiseWithTimeout(existing.close(), 10000);
+        } catch (e: any) {
+            const errMsg = `Failed to close instance ${instanceName}: ${e.message}.\nKilling instance ${instanceName} PID: ${existing.process().pid}`;
+
+            existing.process().kill();
+            if (force) {
+                console.log(errMsg);
+            } else {
+                throw new Error(errMsg);
+            }
+        } finally {
+            runningApplications.delete(instanceName);
+        }
+        if (force) {
+            console.log(`Force closed instance ${instanceName}`);
+        }
+    }
+}
+
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
 export async function startShell(
-    waitForAgentGreeting: boolean = true,
+    testGreetings: boolean = false,
 ): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
-    process.env["INSTANCE_NAME"] =
-        `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
+    const instanceName = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
+
+    process.env["INSTANCE_NAME"] = instanceName;
 
     // other related multi-instance variables that need to be modified to ensure we can run multiple shell instances
     // Use 3001 as test port and assuming less then 50 port is needed per worker instance
@@ -43,43 +95,33 @@ export async function startShell(
 
     do {
         try {
-            if (runningApplications.has(process.env["INSTANCE_NAME"]!)) {
+            if (runningApplications.has(instanceName)) {
                 throw new Error(
                     "Application instance already running. Did you shutdown cleanly?",
                 );
             }
 
-            console.log(
-                `Starting electron instance '${process.env["INSTANCE_NAME"]}'`,
-            );
+            console.log(`Starting electron instance '${instanceName}'`);
             const app: ElectronApplication = await electron.launch({
-                args: getLaunchArgs(),
+                args: getLaunchArgs(testGreetings),
             });
-            runningApplications.set(process.env["INSTANCE_NAME"]!, app);
+            runningApplications.set(instanceName, app);
 
             // get the main window
-            const mainWindow: Page = await getMainWindow(app);
+            const mainWindow: Page = await getChatViewWindow(app);
 
             // wait for agent greeting
-            if (waitForAgentGreeting) {
-                await waitForAgentMessage(mainWindow, 30000, 1, true, ["..."]);
-            }
+
+            await waitForAgentMessage(mainWindow, 30000, 1, false, ["..."]);
 
             return mainWindow;
         } catch (e) {
             console.warn(
-                `Unable to start electrom application (${process.env["INSTANCE_NAME"]}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
+                `Unable to start electron application (${instanceName}). Attempt ${retryAttempt} of ${maxRetries}. Error: ${e}`,
             );
             retryAttempt++;
 
-            if (runningApplications.get(process.env["INSTANCE_NAME"])) {
-                console.log(`Closing instance ${process.env["INSTANCE_NAME"]}`);
-                await runningApplications
-                    .get(process.env["INSTANCE_NAME"]!)!
-                    .close();
-            }
-
-            runningApplications.delete(process.env["INSTANCE_NAME"]!);
+            await closeInstance(instanceName, true);
         }
     } while (retryAttempt <= maxRetries);
 
@@ -88,40 +130,29 @@ export async function startShell(
     );
 }
 
-async function getMainWindow(app: ElectronApplication): Promise<Page> {
+async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
     let attempts = 0;
     do {
-        let windows: Page[] = await app.windows();
-
-        // if we change the # of windows beyond 2 we'll have to update this function to correctly disambiguate which window is the correct one
-        if (windows.length > 2) {
-            console.log(`Found ${app.windows.length} windows.  Expected 2`);
-            throw "Please update this logic to select the correct main window. (testHelper.ts->getMainWindow())";
-        }
-
+        const windows: Page[] = app.windows();
         // wait for each window to load and return the one we are interested in
-        for (let i = 0; i < windows.length; i++) {
+        for (const window of windows) {
             try {
-                if (windows[i] !== undefined) {
-                    await windows[i].waitForLoadState("domcontentloaded");
+                await window.waitForLoadState("domcontentloaded");
 
-                    // is this the correct window?
-                    const title = await windows[i].title();
-                    if (title.length > 0) {
-                        console.log(`Found window ${title}`);
-                        return windows[i];
-                    }
+                // is this the correct window?
+                const url = window.url();
+                if (url.endsWith(chatViewUrlSuffix)) {
+                    return window;
                 }
             } catch (e) {
                 console.log(e);
             }
         }
 
-        console.log("waiting...");
         await new Promise((resolve) => setTimeout(resolve, 1000));
     } while (++attempts < 30);
 
-    throw "Unable to find window...timeout";
+    throw new Error("Unable to find chat view...timeout");
 }
 
 /**
@@ -130,10 +161,7 @@ async function getMainWindow(app: ElectronApplication): Promise<Page> {
  */
 export async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
-
-    await runningApplications.get(process.env["INSTANCE_NAME"]!)!.close();
-
-    runningApplications.delete(process.env["INSTANCE_NAME"]!);
+    await closeInstance(process.env["INSTANCE_NAME"]!);
 }
 
 /**
@@ -153,7 +181,7 @@ export function getAppPath(): string {
  * Get electron launch arguments
  * @returns The arguments to pass to the electron application
  */
-export function getLaunchArgs(): string[] {
+export function getLaunchArgs(testGreetings: boolean): string[] {
     const appPath = getAppPath();
     const args = [
         appPath,
@@ -165,8 +193,15 @@ export function getLaunchArgs(): string[] {
         // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
         args.push("--no-sandbox");
     }
+    if (!testGreetings) {
+        args.push("--mock-greetings");
+    }
 
     return args;
+}
+
+export async function getInputElementHandle(page: Page) {
+    return page.waitForSelector(`#${inputDivId}`);
 }
 
 /**
@@ -175,7 +210,7 @@ export function getLaunchArgs(): string[] {
  * @param page The main page from the electron host application.
  */
 export async function sendUserRequest(prompt: string, page: Page) {
-    const locator: Locator = page.locator("#phraseDiv");
+    const locator: Locator = page.locator(`#${inputDivId}`);
     await locator.waitFor({ timeout: 30000, state: "visible" });
     await locator.focus({ timeout: 30000 });
     await locator.fill(prompt, { timeout: 30000 });
@@ -188,7 +223,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
  * @param page The main page from the electron host application.
  */
 export async function sendUserRequestFast(prompt: string, page: Page) {
-    const locator: Locator = page.locator("#phraseDiv");
+    const locator: Locator = page.locator(`#${inputDivId}`);
     await locator.waitFor({ timeout: 5000, state: "visible" });
     await locator.fill(prompt, { timeout: 5000 });
     page.keyboard.down("Enter");
@@ -216,10 +251,7 @@ export async function sendUserRequestAndWaitForResponse(
     await sendUserRequest(prompt, page);
 
     // wait for agent response
-    await waitForAgentMessage(page, 30000, locators.length + 1);
-
-    // return the response
-    return await getLastAgentMessageText(page);
+    return waitForAgentMessage(page, 30000, locators.length + 1);
 }
 
 /**
@@ -242,34 +274,7 @@ export async function sendUserRequestAndWaitForCompletion(
     await sendUserRequest(prompt, page);
 
     // wait for agent response
-    await waitForAgentMessage(page, 30000, locators.length + 1, true);
-
-    // return the response
-    return await getLastAgentMessageText(page);
-}
-
-/**
- * Gets the last agent message from the chat view
- * @param page The main page from the electron host application.
- */
-export async function getLastAgentMessageText(page: Page): Promise<string> {
-    const locators: Locator[] = await page
-        .locator(".chat-message-agent .chat-message-content")
-        .all();
-
-    return await locators[0].innerText();
-}
-
-/**
- * Gets the last agent message from the chat view
- * @param page The maing page from the electron host application.
- */
-export async function getLastAgentMessage(page: Page): Promise<Locator> {
-    const locators: Locator[] = await page
-        .locator(".chat-message-container-agent")
-        .all();
-
-    return locators[0];
+    return waitForAgentMessage(page, 30000, locators.length + 1, true);
 }
 
 /**
@@ -277,7 +282,7 @@ export async function getLastAgentMessage(page: Page): Promise<Locator> {
  *
  * @param msg The agent message to check for completion
  */
-export async function isMessageCompleted(msg: Locator): Promise<boolean> {
+async function isMessageCompleted(msg: Locator): Promise<boolean> {
     // Agent message is complete once the metrics have been reported
     try {
         const details: Locator = await msg.locator(".metrics-details", {
@@ -294,59 +299,80 @@ export async function isMessageCompleted(msg: Locator): Promise<boolean> {
     return false;
 }
 
+async function getAgentMessageFromContainer(locator: Locator): Promise<string> {
+    const locators = await locator
+        .locator(".chat-message-agent .chat-message-content")
+        .all();
+    return locators[0].innerText();
+}
+
 /**
  *
  * @param page The page where the chatview is hosted
  * @param timeout The maximum amount of time to wait for the agent message
  * @param expectedMessageCount The expected # of agent messages at this time.
  * @param waitForMessageCompletion A flag indicating if we should block util the message is completed.
- * @param ignore A list of messges that this method will consider noise and will reject as false positivies
+ * @param ignore A list of messages that this method will consider noise and will reject as false positives
  *          i.e. [".."] and this method will ignore agent messages that are "..." and will continue waiting.
  *          This is useful when an agent sends status messages.
  *
- * @returns When the expected # of messages is reached or the timeout is reached.  Whichever occurrs first.
+ * @returns the agent message.
  */
-export async function waitForAgentMessage(
+async function waitForAgentMessage(
     page: Page,
     timeout: number,
     expectedMessageCount: number,
     waitForMessageCompletion: boolean = false,
     ignore: string[] = [],
-): Promise<void> {
+): Promise<string> {
     let timeWaited = 0;
-    let locators: Locator[] = await page
-        .locator(".chat-message-container-agent")
-        .all();
-    let originalAgentMessageCount = locators.length;
-    let messageCount = originalAgentMessageCount;
 
-    do {
-        if (
-            expectedMessageCount == messageCount &&
-            (!waitForMessageCompletion ||
-                (await isMessageCompleted(await getLastAgentMessage(page))))
-        ) {
-            return;
-        }
-
-        await page.waitForTimeout(1000);
-        timeWaited += 1000;
-
-        locators = await page.locator(".chat-message-container-agent").all();
-        messageCount = locators.length;
-
-        // is this message ignorable?
-        if (locators.length > 0) {
-            const lastMessage = await getLastAgentMessageText(page);
-            if (ignore.indexOf(lastMessage) > -1) {
-                console.log(`Ignore agent message '${lastMessage}'`);
-                messageCount = originalAgentMessageCount;
+    while (true) {
+        const locators = await page
+            .locator(".chat-message-container-agent")
+            .all();
+        const messageCount = locators.length;
+        if (messageCount >= expectedMessageCount) {
+            // Chat view message are in reverse order, so the last one is in index 0
+            const lastLocator = locators[0];
+            const classNames = await lastLocator.getAttribute("class");
+            if (!classNames?.includes("history")) {
+                if (
+                    !waitForMessageCompletion ||
+                    (await isMessageCompleted(lastLocator))
+                ) {
+                    // If we are waiting for completion, check that first before getting the message content.
+                    const lastMessage =
+                        await getAgentMessageFromContainer(lastLocator);
+                    if (ignore.indexOf(lastMessage) === -1) {
+                        return lastMessage;
+                    }
+                }
             }
         }
-    } while (
-        timeWaited <= timeout &&
-        messageCount == originalAgentMessageCount
-    );
+
+        if (timeWaited > timeout) {
+            throw new Error("Timeout waiting for agent message");
+        }
+        await page.waitForTimeout(1000);
+        timeWaited += 1000;
+    }
+}
+
+export async function clearMessages(page: Page): Promise<void> {
+    sendUserRequestFast("@clear", page);
+    let attempts = 0;
+    do {
+        attempts++;
+        const locators = await page
+            .locator(".chat-message-container-agent")
+            .all();
+        if (locators.length === 0) {
+            return;
+        }
+        await page.waitForTimeout(1000);
+    } while (attempts < 30);
+    throw new Error("Timeout waiting for clear to complete");
 }
 
 /**

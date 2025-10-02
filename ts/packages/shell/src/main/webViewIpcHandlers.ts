@@ -2,12 +2,12 @@
 // Licensed under the MIT License.
 
 import { ipcMain, session } from "electron";
-import { ShellWindow } from "./shellWindow.js";
 import { debugShellError } from "./debug.js";
 import { ExtensionStorageManager } from "./extensionStorage.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessageV2 } from "common-utils";
 import path from "path";
+import { getShellWindow, getShellWindowForIpcEvent } from "./instance.js";
 
 export function initializeExternalStorageIpcHandlers(instanceDir: string) {
     const extensionStorage = new ExtensionStorageManager(instanceDir);
@@ -47,8 +47,8 @@ export function initializeExternalStorageIpcHandlers(instanceDir: string) {
 
 export function initializePDFViewerIpcHandlers() {
     // PDF viewer IPC handlers
-    ipcMain.handle("check-typeagent-connection", async () => {
-        const shellWindow = ShellWindow.getInstance();
+    ipcMain.handle("check-typeagent-connection", async (event) => {
+        const shellWindow = getShellWindowForIpcEvent(event);
         if (shellWindow) {
             const connected = await shellWindow.checkTypeAgentConnection();
             return { connected };
@@ -56,8 +56,8 @@ export function initializePDFViewerIpcHandlers() {
         return { connected: false };
     });
 
-    ipcMain.handle("open-pdf-viewer", async (_, pdfUrl: string) => {
-        const shellWindow = ShellWindow.getInstance();
+    ipcMain.handle("open-pdf-viewer", async (event, pdfUrl: string) => {
+        const shellWindow = getShellWindowForIpcEvent(event);
         if (shellWindow) {
             try {
                 await shellWindow.openPDFViewer(pdfUrl);
@@ -108,7 +108,7 @@ export async function initializeBrowserExtension(appPath: string) {
         BrowserAgentIpc.getinstance().onMessageReceived = (
             message: WebSocketMessageV2,
         ) => {
-            const shellWindow = ShellWindow.getInstance();
+            const shellWindow = getShellWindow();
             shellWindow?.sendMessageToInlineWebContent(message);
         };
     });
@@ -176,11 +176,9 @@ export async function initializeBrowserExtension(appPath: string) {
                         messageId,
                         hasParams: !!(message.params || message.parameters),
                     });
-                    reject(
-                        new Error(
-                            `Inline-browser message timeout - ${messageInfo}`,
-                        ),
-                    );
+                    resolve({
+                        error: `Inline-browser message timeout - ${messageInfo}`,
+                    });
                 }, timeout);
             });
         } catch (error) {

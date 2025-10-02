@@ -102,29 +102,35 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         return existing;
     }
 
-    const webSocket = context.agentContext.webSocket;
-    if (webSocket === undefined) {
+    const agentServer = context.agentContext.agentWebSocketServer;
+    if (agentServer === undefined) {
         return undefined;
     }
 
     const channelProvider = createGenericChannelProvider((message) => {
-        webSocket.send(
-            JSON.stringify({
-                source: "dispatcher",
-                method: "webAgent/message",
-                params: message,
-            }),
-        );
+        const client = agentServer.getActiveClient();
+        if (client) {
+            client.socket.send(
+                JSON.stringify({
+                    source: "dispatcher",
+                    method: "webAgent/message",
+                    params: message,
+                }),
+            );
+        }
     });
 
     const registerChannel = createGenericChannel((message) => {
-        webSocket.send(
-            JSON.stringify({
-                source: "dispatcher",
-                method: "webAgent/register",
-                params: message,
-            }),
-        );
+        const client = agentServer.getActiveClient();
+        if (client) {
+            client.socket.send(
+                JSON.stringify({
+                    source: "dispatcher",
+                    method: "webAgent/register",
+                    params: message,
+                }),
+            );
+        }
     });
 
     createRpc("webagent", registerChannel.channel, {

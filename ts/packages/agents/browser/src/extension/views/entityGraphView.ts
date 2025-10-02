@@ -4,24 +4,39 @@
 // Entity Graph View - Main entry point for entity visualization
 import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
+import { createExtensionService } from "./knowledgeUtilities";
 import {
-    EntityGraphServices,
-    EntityCacheServices,
-    DefaultEntityGraphServices,
-    DefaultEntityCacheServices,
-    ChromeExtensionService,
-    createExtensionService,
-} from "./knowledgeUtilities";
+    GraphDataProvider,
+    GraphDataProviderImpl,
+} from "./graphDataProvider.js";
 
 /**
  * Main class for the Entity Graph View page
  */
+interface ViewMode {
+    type: "global" | "entity-specific";
+    centerEntity?: string;
+    centerTopic?: string;
+}
+
+interface NavigationState {
+    type: "global" | "detail";
+    entityName?: string;
+    timestamp: number;
+    cacheKey?: string;
+}
+
 class EntityGraphView {
     private visualizer: EntityGraphVisualizer;
     private sidebar: EntitySidebar;
     private currentEntity: string | null = null;
-    private entityGraphService: EntityGraphServices;
-    private entityCacheService: EntityCacheServices;
+    private currentViewMode: ViewMode = { type: "global" };
+    private graphDataProvider: GraphDataProvider;
+
+    // Navigation history management
+    private navigationHistory: NavigationState[] = [];
+    private currentHistoryIndex: number = -1;
+    private isHandlingPopstate: boolean = false;
 
     constructor() {
         try {
@@ -29,10 +44,11 @@ class EntityGraphView {
 
             // Initialize services with appropriate extension service based on environment
             const extensionService = createExtensionService();
-            this.entityGraphService = new DefaultEntityGraphServices(
+
+            // Initialize Graph data provider for direct storage access
+            this.graphDataProvider = new GraphDataProviderImpl(
                 extensionService,
             );
-            this.entityCacheService = new DefaultEntityCacheServices();
             console.log(
                 "Services initialized with Chrome extension connection",
             );
@@ -55,8 +71,21 @@ class EntityGraphView {
                 throw new Error("Sidebar container 'entitySidebar' not found");
             }
 
+            // Hide sidebar by default
+            sidebarContainer.style.display = "none";
+
             console.log("Creating visualizer...");
             this.visualizer = new EntityGraphVisualizer(graphContainer);
+
+            // Set up hierarchical loading
+            this.visualizer.setGraphDataProvider(this.graphDataProvider);
+
+            // Set up UI callbacks
+            this.visualizer.setInstanceChangeCallback(() => {
+                // Update window title when visualizer switches views
+                this.updateWindowTitle();
+            });
+
             console.log("Creating sidebar...");
             this.sidebar = new EntitySidebar(sidebarContainer);
 
@@ -82,9 +111,7 @@ class EntityGraphView {
     private async initialize(): Promise<void> {
         try {
             // Initialize visualizer
-            console.log("Initializing visualizer...");
             await this.visualizer.initialize();
-            console.log("Visualizer initialized successfully");
 
             // Ensure container is visible and has size
             const container = document.getElementById("cytoscape-container");
@@ -107,21 +134,37 @@ class EntityGraphView {
             this.setupSearchHandlers();
             this.setupInteractiveHandlers();
 
-            // Load entity from URL - entity parameter is required
-            console.log(
-                `Current entity after URL parsing: ${this.currentEntity}`,
-            );
-            if (this.currentEntity) {
+            // Setup browser navigation AFTER basic initialization
+            this.setupBrowserNavigation();
+
+            // Load based on view mode
+            console.log(`Current view mode: ${this.currentViewMode.type}`);
+
+            if (
+                this.currentViewMode.type === "entity-specific" &&
+                this.currentEntity
+            ) {
+                console.log(`Loading specific entity: ${this.currentEntity}`);
+                // Don't show sidebar until detail view is loaded
+                this.updateSidebarVisibility(false);
+                // Store entity name before clearing current entity to force initial load
+                const entityToLoad = this.currentEntity;
+                this.currentEntity = null; // Clear to ensure navigation doesn't skip
+                // Don't update history during initial load - already handled by setupBrowserNavigation
+                await this.navigateToEntity(entityToLoad, false);
+            } else if (this.currentViewMode.type === "global") {
                 console.log(
-                    `Loading specific entity from URL: ${this.currentEntity}`,
+                    "Loading global knowledge graph with importance layer",
                 );
-                await this.navigateToEntity(this.currentEntity);
+                this.updateSidebarVisibility(false);
+                await this.loadGlobalViewWithImportanceLayer();
             } else {
-                console.log(
-                    "No entity parameter provided in URL - showing error",
-                );
+                console.log("Invalid state - showing error");
                 this.showEntityParameterError();
             }
+
+            // Update window title after initial load
+            this.updateWindowTitle();
         } catch (error) {
             console.error("Failed to initialize entity graph view:", error);
             this.showGraphError("Failed to initialize entity graph");
@@ -148,13 +191,15 @@ class EntityGraphView {
         const zoomInBtn = document.getElementById("zoomInBtn");
         const zoomOutBtn = document.getElementById("zoomOutBtn");
         const fitBtn = document.getElementById("fitBtn");
-        const centerBtn = document.getElementById("centerBtn");
+        const reLayoutBtn = document.getElementById("reLayoutBtn");
+        const debugViewportBtn = document.getElementById("debugViewportBtn");
 
         console.log("Control button elements:", {
             zoomInBtn: !!zoomInBtn,
             zoomOutBtn: !!zoomOutBtn,
             fitBtn: !!fitBtn,
-            centerBtn: !!centerBtn,
+            reLayoutBtn: !!reLayoutBtn,
+            debugViewportBtn: !!debugViewportBtn,
         });
 
         if (zoomInBtn) {
@@ -178,10 +223,17 @@ class EntityGraphView {
             });
         }
 
-        if (centerBtn) {
-            centerBtn.addEventListener("click", () => {
-                console.log("Center graph button clicked");
-                this.visualizer.centerGraph();
+        if (reLayoutBtn) {
+            reLayoutBtn.addEventListener("click", () => {
+                console.log("Re-run layout button clicked");
+                this.visualizer.reRunLayout();
+            });
+        }
+
+        if (debugViewportBtn) {
+            debugViewportBtn.addEventListener("click", () => {
+                console.log("Debug viewport button clicked");
+                this.visualizer.debugLogViewportNodes();
             });
         }
 
@@ -222,6 +274,27 @@ class EntityGraphView {
         if (refreshButton) {
             refreshButton.addEventListener("click", () => this.refreshGraph());
         }
+
+        // Back to previous view button (was "back to global" but now smarter)
+        const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+        if (backToGlobalBtn) {
+            backToGlobalBtn.addEventListener("click", async () => {
+                console.log("Back button clicked");
+
+                // Try to restore hidden view first (much simpler approach)
+                const restored = this.visualizer.restoreHiddenView();
+                if (!restored) {
+                    // Fallback to global view if no hidden view available
+                    console.log(
+                        "No hidden view available, falling back to global view",
+                    );
+                    this.navigateToGlobalView();
+                }
+
+                // Update button text after navigation
+                this.updateBackButtonText();
+            });
+        }
     }
 
     /**
@@ -248,11 +321,6 @@ class EntityGraphView {
                     this.searchEntity(query);
                     // Clear the input after successful search initiation
                     searchInput.value = "";
-                } else {
-                    this.showMessage(
-                        "Please enter an entity name to search",
-                        "warning",
-                    );
                 }
             };
 
@@ -284,49 +352,94 @@ class EntityGraphView {
         const urlParams = new URLSearchParams(window.location.search);
         const entityParam = urlParams.get("entity");
         const topicParam = urlParams.get("topic");
+        const modeParam = urlParams.get("mode");
 
         console.log("Handling URL parameters:", {
             fullUrl: window.location.href,
             search: window.location.search,
             entityParam: entityParam,
             topicParam: topicParam,
+            modeParam: modeParam,
         });
 
-        if (entityParam) {
-            this.currentEntity = entityParam;
-            console.log(`Entity from URL: ${entityParam}`);
-            // Update breadcrumb to show entity name
-            const entityBreadcrumb = document.getElementById(
-                "entityNameBreadcrumb",
-            );
-            if (entityBreadcrumb) {
-                entityBreadcrumb.textContent = ` > ${entityParam}`;
-            }
-        } else if (topicParam) {
-            this.currentEntity = topicParam;
-            console.log(`Topic from URL: ${topicParam}`);
-            // Update breadcrumb to show topic name
-            const entityBreadcrumb = document.getElementById(
-                "entityNameBreadcrumb",
-            );
-            if (entityBreadcrumb) {
-                entityBreadcrumb.textContent = ` > ${topicParam}`;
+        this.currentViewMode = this.determineViewMode();
+
+        if (this.currentViewMode.type === "entity-specific") {
+            this.currentEntity =
+                this.currentViewMode.centerEntity ||
+                this.currentViewMode.centerTopic ||
+                null;
+
+            if (this.currentEntity) {
+                console.log(
+                    `${entityParam ? "Entity" : "Topic"} from URL: ${this.currentEntity}`,
+                );
+                const entityBreadcrumb = document.getElementById(
+                    "entityNameBreadcrumb",
+                );
+                if (entityBreadcrumb) {
+                    entityBreadcrumb.textContent = ` > ${this.currentEntity}`;
+                }
             }
         } else {
             console.log(
-                "No entity or topic parameter found in URL, will use default fallback",
+                "Global mode detected - will show full knowledge graph",
             );
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
+            if (entityBreadcrumb) {
+                entityBreadcrumb.textContent = " > Global View";
+            }
         }
+    }
+
+    private determineViewMode(): ViewMode {
+        const urlParams = new URLSearchParams(window.location.search);
+        const entityParam = urlParams.get("entity");
+        const topicParam = urlParams.get("topic");
+        const modeParam = urlParams.get("mode");
+
+        if (modeParam === "global" || (!entityParam && !topicParam)) {
+            return { type: "global" };
+        }
+
+        return {
+            type: "entity-specific",
+            centerEntity: entityParam || undefined,
+            centerTopic: topicParam || undefined,
+        };
     }
 
     /**
      * Navigate to a specific entity
      */
-    async navigateToEntity(entityName: string): Promise<void> {
+    async navigateToEntity(
+        entityName: string,
+        updateHistory: boolean = true,
+    ): Promise<void> {
         try {
-            this.currentEntity = entityName;
+            // Check if this is the same entity (prevent unnecessary navigation)
+            if (
+                this.currentEntity === entityName &&
+                this.currentViewMode.type === "entity-specific"
+            ) {
+                return;
+            }
 
-            // Update breadcrumb to show entity name
+            // Set transitioning state if coming from global view
+            if (this.currentViewMode.type === "global") {
+                this.visualizer.setViewMode("transitioning");
+            }
+
+            // Update internal state
+            this.currentEntity = entityName;
+            this.currentViewMode = {
+                type: "entity-specific",
+                centerEntity: entityName,
+            };
+
+            // Update UI elements
             const entityBreadcrumb = document.getElementById(
                 "entityNameBreadcrumb",
             );
@@ -334,15 +447,81 @@ class EntityGraphView {
                 entityBreadcrumb.textContent = ` > ${entityName}`;
             }
 
-            // Update URL
-            const url = new URL(window.location.href);
-            url.searchParams.set("entity", entityName);
-            window.history.pushState({}, "", url.toString());
+            const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+            if (backToGlobalBtn) {
+                backToGlobalBtn.style.display = "flex";
+            }
 
-            // Load real entity data
+            // Update back button text to reflect what view we'll return to
+            this.updateBackButtonText();
+
+            // Update URL and history - only if not handling popstate and updateHistory is true
+            if (updateHistory && !this.isHandlingPopstate) {
+                this.updateUrlForEntity(entityName);
+
+                const newState: NavigationState = {
+                    type: "detail",
+                    entityName: entityName,
+                    timestamp: Date.now(),
+                    cacheKey: `detail_${entityName}`,
+                };
+
+                this.addToNavigationHistory(newState);
+            }
+
+            // Don't show sidebar yet - wait for data to load
             await this.loadRealEntityData(entityName);
+            // Show sidebar after detail view is loaded
+            this.updateSidebarVisibility(true);
+
+            // Update window title after navigation completes
+            this.updateWindowTitle();
         } catch (error) {
             console.error("Failed to navigate to entity:", error);
+            // Show user-friendly error message
+            this.showNavigationError(`Failed to load entity: ${entityName}`);
+        }
+    }
+
+    async navigateToGlobalView(): Promise<void> {
+        try {
+            // Update internal state
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+
+            // Update UI elements
+            const entityBreadcrumb = document.getElementById(
+                "entityNameBreadcrumb",
+            );
+            if (entityBreadcrumb) {
+                entityBreadcrumb.textContent = " > Global View";
+            }
+
+            const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+            if (backToGlobalBtn) {
+                backToGlobalBtn.style.display = "none";
+            }
+
+            // Update URL and history - only if not handling popstate
+            if (!this.isHandlingPopstate) {
+                this.updateUrlForGlobal();
+
+                const newState: NavigationState = {
+                    type: "global",
+                    timestamp: Date.now(),
+                };
+
+                this.addToNavigationHistory(newState);
+            }
+
+            this.updateSidebarVisibility(false);
+            await this.loadGlobalViewWithImportanceLayer();
+
+            // Update window title for global view
+            this.updateWindowTitle();
+        } catch (error) {
+            console.error("Failed to navigate to global view:", error);
+            this.showNavigationError("Failed to load global view");
         }
     }
 
@@ -367,18 +546,10 @@ class EntityGraphView {
         try {
             // Navigate directly to the entity (same as URL parameter logic)
             console.log(`Searching for entity: ${query}`);
-            this.showMessage(`Loading entity "${query}"...`, "info");
 
             await this.navigateToEntity(query.trim());
-
-            // Show success message
-            this.showMessage(`Loaded entity: "${query}"`, "success");
         } catch (error) {
             console.error("Failed to search entity:", error);
-            this.showMessage(
-                `Failed to load entity "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
-                "error",
-            );
         }
     }
 
@@ -387,24 +558,12 @@ class EntityGraphView {
      */
     exportGraph(): void {
         try {
-            console.log("Exporting graph data...");
             const graphData = this.visualizer.exportGraph();
 
             if (!graphData) {
                 console.warn("No graph data to export");
-                this.showMessage(
-                    "No graph data available to export",
-                    "warning",
-                );
                 return;
             }
-
-            console.log("Graph data to export:", {
-                nodeCount: graphData.nodes?.length || 0,
-                edgeCount: graphData.edges?.length || 0,
-                layout: graphData.layout,
-                zoom: graphData.zoom,
-            });
 
             const dataStr = JSON.stringify(graphData, null, 2);
             const dataBlob = new Blob([dataStr], { type: "application/json" });
@@ -413,16 +572,8 @@ class EntityGraphView {
             link.href = URL.createObjectURL(dataBlob);
             link.download = `entity-graph-${this.currentEntity || "export"}-${new Date().toISOString().split("T")[0]}.json`;
             link.click();
-
-            console.log("Graph exported successfully");
-            this.showMessage("Graph exported successfully", "success");
         } catch (error) {
             console.error("Failed to export graph:", error);
-            this.showMessage(
-                "Failed to export graph: " +
-                    (error instanceof Error ? error.message : "Unknown error"),
-                "error",
-            );
         }
     }
 
@@ -452,6 +603,221 @@ class EntityGraphView {
         if (this.currentEntity) {
             await this.loadRealEntityData(this.currentEntity);
         }
+    }
+
+    private updateSidebarVisibility(visible: boolean): void {
+        const sidebar = document.getElementById("entitySidebar");
+        const graphContainer = document.getElementById("cytoscape-container");
+
+        if (sidebar && graphContainer) {
+            if (visible) {
+                sidebar.style.display = "block";
+                graphContainer.style.width = "100%";
+            } else {
+                sidebar.style.display = "none";
+                graphContainer.style.width = "100%";
+            }
+
+            if (this.visualizer) {
+                setTimeout(() => this.visualizer.resize(), 100);
+            }
+        }
+    }
+
+    private async loadGlobalView(): Promise<void> {
+        try {
+            this.showGraphLoading();
+
+            // Try dual-instance fast navigation first - skip data fetch if possible
+            console.log(
+                `[Navigation] Current view mode: ${this.currentViewMode.type}, Fast nav available: ${this.visualizer.canUseFastNavigation()}`,
+            );
+
+            if (this.visualizer.canUseFastNavigation()) {
+                console.log(
+                    "[Navigation] Using dual-instance fast switch to global view - no data fetch needed",
+                );
+                this.visualizer.fastSwitchToGlobal();
+                this.hideGraphLoading();
+                console.log(
+                    "[FastNav] Global view restored from dual-instance cache",
+                );
+                return;
+            }
+
+            // Fallback: fetch data and build graph normally
+            console.log(
+                "[Navigation] Dual-instance not available - fetching data and building graph",
+            );
+            const globalData = await this.loadGlobalGraphData();
+
+            if (globalData.statistics.totalEntities === 0) {
+                this.hideGraphLoading();
+                this.showGraphEmpty();
+                return;
+            }
+
+            await this.visualizer.loadGlobalGraph(globalData);
+
+            this.hideGraphLoading();
+
+            console.log(
+                `Loaded global graph: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`,
+            );
+        } catch (error) {
+            console.error("Failed to load global view:", error);
+            this.hideGraphLoading();
+            this.showGraphError("Failed to load global knowledge graph");
+        }
+    }
+
+    private async loadGlobalGraphData(): Promise<any> {
+        // Use Graph data provider for direct storage access
+        const globalGraphResult =
+            await this.graphDataProvider.getGlobalGraphData();
+
+        // Process communities for color assignment
+        const processedCommunities = globalGraphResult.communities.map(
+            (c: any) => ({
+                ...c,
+                entities:
+                    typeof c.entities === "string"
+                        ? JSON.parse(c.entities || "[]")
+                        : c.entities || [],
+                topics:
+                    typeof c.topics === "string"
+                        ? JSON.parse(c.topics || "[]")
+                        : c.topics || [],
+            }),
+        );
+
+        // Assign community colors to entities
+        const entitiesWithColors = this.assignCommunityColors(
+            globalGraphResult.entities,
+            processedCommunities,
+        );
+
+        // Return data in format expected by existing UI components
+        return {
+            communities: processedCommunities,
+            entities: entitiesWithColors,
+            relationships: globalGraphResult.relationships,
+            topics: [],
+            statistics: {
+                totalEntities: globalGraphResult.statistics.totalEntities,
+                totalRelationships:
+                    globalGraphResult.statistics.totalRelationships,
+                totalCommunities: globalGraphResult.statistics.communities,
+            },
+        };
+    }
+
+    /**
+     * Enhance entities with LoD properties for importance-based visualization
+     */
+    private enhanceEntitiesForLoD(entities: any[]): any[] {
+        // Calculate importance statistics for proper scaling
+        const importanceValues = entities
+            .map((e) => e.importance || 0)
+            .filter((i) => i > 0);
+        const minImportance = Math.min(...importanceValues);
+        const maxImportance = Math.max(...importanceValues);
+        const importanceRange = maxImportance - minImportance;
+
+        return entities.map((entity: any) => {
+            const importance = entity.importance || 0;
+            const normalizedImportance =
+                importanceRange > 0
+                    ? (importance - minImportance) / importanceRange
+                    : 0.5;
+
+            // Calculate size based on importance (10-50px range)
+            const baseSize = 10;
+            const maxSize = 50;
+            const size = baseSize + normalizedImportance * (maxSize - baseSize);
+
+            // Calculate color based on importance (blue gradient)
+            const colorIntensity = Math.max(0.3, normalizedImportance); // Minimum 30% intensity
+            const blue = Math.floor(255 * colorIntensity);
+            const color = `rgb(${Math.floor(blue * 0.3)}, ${Math.floor(blue * 0.6)}, ${blue})`;
+            const borderColor = `rgb(${Math.floor(blue * 0.2)}, ${Math.floor(blue * 0.4)}, ${Math.floor(blue * 0.8)})`;
+
+            // Enhanced entity with LoD properties
+            return {
+                ...entity,
+                size: Math.round(size),
+                color: color,
+                borderColor: borderColor,
+                // LoD properties for visibility thresholds
+                computedImportance: importance,
+                visualPriority: normalizedImportance,
+                degreeCount:
+                    entity.degree ||
+                    entity.degreeCount ||
+                    Math.max(1, importance * 10),
+                centralityScore:
+                    entity.centrality || entity.centralityScore || importance,
+                // Labels based on importance
+                showLabel: normalizedImportance > 0.3, // Only show labels for top 70% important nodes
+                labelSize: Math.max(8, 8 + normalizedImportance * 8), // 8-16px label size
+            };
+        });
+    }
+
+    private assignCommunityColors(entities: any[], communities: any[]): any[] {
+        const communityColors = [
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+            "#bcbd22",
+            "#17becf",
+            "#aec7e8",
+            "#ffbb78",
+            "#98df8a",
+            "#ff9896",
+            "#c5b0d5",
+            "#c49c94",
+            "#f7b6d3",
+            "#c7c7c7",
+            "#dbdb8d",
+            "#9edae5",
+        ];
+
+        const communityColorMap = new Map<string, string>();
+        communities.forEach((community, index) => {
+            const colorIndex = index % communityColors.length;
+            communityColorMap.set(
+                community.id || `community_${index}`,
+                communityColors[colorIndex],
+            );
+        });
+
+        return entities.map((entity) => ({
+            ...entity,
+            color: communityColorMap.get(entity.communityId) || "#999999",
+            borderColor: this.getBorderColor(
+                communityColorMap.get(entity.communityId) || "#999999",
+            ),
+        }));
+    }
+
+    private getBorderColor(color: string): string {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return "#333333";
+
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, 1, 1);
+        const imageData = ctx.getImageData(0, 0, 1, 1);
+        const [r, g, b] = imageData.data;
+
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        return brightness > 128 ? "#333333" : "#ffffff";
     }
 
     // UI Helper Methods
@@ -514,6 +880,35 @@ class EntityGraphView {
         }
     }
 
+    private showNavigationError(message: string): void {
+        console.error(`[Navigation] ${message}`);
+        // Show temporary error notification without disrupting the current view
+        const notification = document.createElement("div");
+        notification.className = "navigation-error-notification";
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="error-icon">⚠️</span>
+                <span class="error-text">${this.escapeHtml(message)}</span>
+                <button onclick="this.parentElement.parentElement.remove()" class="close-btn">×</button>
+            </div>
+        `;
+        notification.style.cssText = `
+            position: fixed; top: 20px; right: 20px; z-index: 10000;
+            background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+            border-radius: 4px; padding: 12px; max-width: 300px;
+            font-family: Arial, sans-serif; font-size: 14px;
+            animation: slideIn 0.3s ease-out;
+        `;
+        document.body.appendChild(notification);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+
     private showEntityParameterError(): void {
         this.hideGraphLoading();
         const container = document.getElementById("cytoscape-container");
@@ -553,21 +948,91 @@ class EntityGraphView {
     private async loadRealEntityData(entityName: string): Promise<void> {
         try {
             this.showGraphLoading();
-            console.log(`Getting entity graph for: ${entityName} depth: 2`);
 
-            // Load entity graph using enhanced search
-            const graphData = await this.entityGraphService.getEntityGraph(
-                entityName,
-                2,
-            );
+            // Load entity graph using HybridGraph data provider
+            let graphData;
+            try {
+                const neighborhoodResult =
+                    await this.graphDataProvider.getEntityNeighborhood(
+                        entityName,
+                        2,
+                        50,
+                    );
 
-            console.log(
-                `Found ${graphData.entities?.length || 0} websites for center entity`,
-            );
+                // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
+                let searchData: any = null;
 
+                try {
+                    const extensionService = createExtensionService();
+                    searchData = await (
+                        extensionService as any
+                    ).searchByEntities([entityName], "", 10);
+                } catch (searchError) {
+                    console.warn(
+                        `[HybridGraph Migration] Could not fetch search enrichment data:`,
+                        searchError,
+                    );
+                }
+
+                // Transform HybridGraph result to expected format with enrichment
+                graphData = {
+                    centerEntity: neighborhoodResult.centerEntity.name,
+                    entities: [
+                        neighborhoodResult.centerEntity,
+                        ...neighborhoodResult.neighbors,
+                    ],
+                    relationships: neighborhoodResult.relationships,
+                    relatedEntities: neighborhoodResult.neighbors,
+                    topTopics: searchData?.topTopics || [],
+                    summary: searchData?.summary || null,
+                    metadata: {
+                        ...neighborhoodResult.metadata,
+                        ...(searchData?.metadata || {}),
+                    },
+                    answerSources: searchData?.answerSources || [],
+                };
+
+                // Enrich center entity with search data if available
+                if (
+                    searchData?.websites?.length > 0 &&
+                    graphData.entities.length > 0
+                ) {
+                    const firstWebsite = searchData.websites[0];
+                    // Add enrichment data as properties to avoid TypeScript errors
+                    const enrichedEntity: any = {
+                        ...graphData.entities[0],
+                        properties: {
+                            ...(graphData.entities[0].properties || {}),
+                            facets: firstWebsite.facets || [],
+                            aliases: firstWebsite.aliases || [],
+                            description: firstWebsite.description,
+                            url: firstWebsite.url,
+                        },
+                    };
+                    graphData.entities[0] = enrichedEntity;
+                }
+            } catch (error) {
+                console.error(
+                    `[HybridGraph Migration] Failed to load entity neighborhood for "%s":`,
+                    entityName,
+                    error,
+                );
+                // Return empty graph data on error
+                graphData = {
+                    centerEntity: entityName,
+                    entities: [],
+                    relationships: [],
+                    relatedEntities: [],
+                    topTopics: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
             if (graphData.entities && graphData.entities.length > 0) {
-                console.log("Expanding graph with related entities...");
-
                 // Process and validate the relationships data
                 const validRelationships =
                     graphData.relationships?.filter((r: any) => {
@@ -607,10 +1072,6 @@ class EntityGraphView {
                         return hasValidFrom && hasValidTo && hasValidType;
                     }) || [];
 
-                console.log(
-                    `Generated entity graph: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
-                );
-
                 // Create entity list with center entity, website entities, related entities, and topics
                 const allEntities = [
                     // Website-based entities - mark as documents
@@ -623,33 +1084,29 @@ class EntityGraphView {
                         url: e.url,
                     })),
                     // Related entities from search results
-                    ...(graphData.relatedEntities || []).map(
-                        (entity: any, index: number) => ({
-                            name:
-                                typeof entity === "string"
-                                    ? entity
-                                    : entity.name || entity,
-                            type: "related_entity",
-                            confidence:
-                                typeof entity === "object"
-                                    ? entity.confidence || 0.7
-                                    : 0.7,
-                        }),
-                    ),
+                    ...(graphData.relatedEntities || []).map((entity: any) => ({
+                        name:
+                            typeof entity === "string"
+                                ? entity
+                                : entity.name || entity,
+                        type: "related_entity",
+                        confidence:
+                            typeof entity === "object"
+                                ? entity.confidence || 0.7
+                                : 0.7,
+                    })),
                     // Top topics as entities
-                    ...(graphData.topTopics || []).map(
-                        (topic: any, index: number) => ({
-                            name:
-                                typeof topic === "string"
-                                    ? topic
-                                    : topic.name || topic,
-                            type: "topic",
-                            confidence:
-                                typeof topic === "object"
-                                    ? topic.confidence || 0.6
-                                    : 0.6,
-                        }),
-                    ),
+                    ...(graphData.topTopics || []).map((topic: any) => ({
+                        name:
+                            typeof topic === "string"
+                                ? topic
+                                : topic.name || topic,
+                        type: "topic",
+                        confidence:
+                            typeof topic === "object"
+                                ? topic.confidence || 0.6
+                                : 0.6,
+                    })),
                 ];
 
                 // Create entity name set for validation
@@ -660,34 +1117,20 @@ class EntityGraphView {
                 const relationshipSet = new Set();
 
                 for (const r of validRelationships) {
-                    const from = r.from || r.relatedEntity || "Unknown";
+                    const from =
+                        r.from || (r as any).relatedEntity || "Unknown";
                     const to = r.to || graphData.centerEntity || "Unknown";
-                    const type = r.relationshipType || r.type || "related";
+                    const type =
+                        r.type || (r as any).relationshipType || "related";
 
                     // Check if both entities exist in the graph
-                    if (!entityNames.has(from)) {
-                        console.warn(
-                            `Dropping relationship - 'from' entity not found in graph:`,
-                            from,
-                        );
-                        continue;
-                    }
-                    if (!entityNames.has(to)) {
-                        console.warn(
-                            `Dropping relationship - 'to' entity not found in graph:`,
-                            to,
-                        );
+                    if (!entityNames.has(from) || !entityNames.has(to)) {
                         continue;
                     }
 
                     // Create unique key for deduplication
                     const relationshipKey = `${from}:${to}:${type}`;
                     if (relationshipSet.has(relationshipKey)) {
-                        console.warn(`Dropping duplicate relationship:`, {
-                            from,
-                            to,
-                            type,
-                        });
                         continue;
                     }
 
@@ -734,19 +1177,15 @@ class EntityGraphView {
                     }
                 }
 
-                console.log(
-                    `Entity graph: ${allEntities.length} entities, ${validatedRelationships.length} relationships`,
-                );
-                console.log(
-                    `Entity types: websites=${graphData.entities.length}, related=${graphData.relatedEntities?.length || 0}, topics=${graphData.topTopics?.length || 0}`,
-                );
-
                 // Load the graph into the visualizer
-                await this.visualizer.loadEntityGraph({
-                    centerEntity: graphData.centerEntity,
-                    entities: allEntities,
-                    relationships: validatedRelationships,
-                });
+                await this.visualizer.loadEntityGraph(
+                    {
+                        centerEntity: graphData.centerEntity,
+                        entities: allEntities,
+                        relationships: validatedRelationships,
+                    },
+                    graphData.centerEntity,
+                );
 
                 // Find the center entity from allEntities (should be first)
                 const centerEntityFromGraph =
@@ -768,8 +1207,11 @@ class EntityGraphView {
                         ) ||
                         0.8,
                     source: "graph",
-                    // Include facets from the enhanced entity if available
-                    facets: centerEntityFromGraph?.facets || [],
+                    // Include facets from the entity properties if available
+                    facets:
+                        centerEntityFromGraph?.properties?.facets ||
+                        (centerEntityFromGraph as any)?.facets ||
+                        [],
                     topicAffinity: graphData.topTopics || [],
                     summary: graphData.summary,
                     metadata: graphData.metadata,
@@ -779,7 +1221,6 @@ class EntityGraphView {
                         graphData.entities,
                     ),
                     relationships: validRelationships || [],
-                    dominantDomains: this.extractDomains(graphData.entities),
                     firstSeen: this.getEarliestDate(
                         // TODO: limit this to "contains" relationships
                         graphData.entities,
@@ -791,12 +1232,13 @@ class EntityGraphView {
                     ),
                     visitCount: this.calculateTotalVisits(graphData.entities),
                 };
+
                 await this.sidebar.loadEntity(centerEntityData);
 
+                // Show sidebar after successfully loading data
+                this.updateSidebarVisibility(true);
+
                 this.hideGraphLoading();
-                console.log(
-                    `Loaded real entity graph for ${entityName}: ${graphData.entities.length} entities, ${validRelationships.length} relationships`,
-                );
             } else {
                 this.hideGraphLoading();
                 this.showGraphError(`No data found for entity: ${entityName}`);
@@ -810,54 +1252,6 @@ class EntityGraphView {
         }
     }
 
-    private async searchRealEntity(query: string): Promise<void> {
-        try {
-            console.log(`Searching for real entity: ${query}`);
-            this.showMessage(`Searching for "${query}"...`, "info");
-
-            const searchResults = await this.entityGraphService.searchByEntity(
-                query,
-                {
-                    maxResults: 10,
-                    includeRelationships: true,
-                    sortBy: "relevance",
-                },
-            );
-
-            if (searchResults.entities && searchResults.entities.length > 0) {
-                console.log(
-                    `Found ${searchResults.entities.length} entities for search: ${query}`,
-                );
-
-                // Navigate to the most relevant result
-                const topResult = searchResults.entities[0];
-                await this.navigateToEntity(topResult.name);
-
-                // Show search results summary
-                this.showMessage(
-                    `Found ${searchResults.entities.length} results for "${query}". Showing: ${topResult.name}`,
-                    "success",
-                );
-
-                console.log(
-                    `Real entity search for "${query}" completed successfully`,
-                );
-            } else {
-                console.log(`No results found for search: ${query}`);
-                this.showMessage(
-                    `No entities found for search: "${query}". Try different keywords or import more website data.`,
-                    "warning",
-                );
-            }
-        } catch (error) {
-            console.error("Real entity search failed:", error);
-            this.showMessage(
-                `Search failed for "${query}". ${error instanceof Error ? error.message : "Please try again."}`,
-                "error",
-            );
-        }
-    }
-
     /**
      * Refresh entity data from source
      */
@@ -865,54 +1259,22 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Refresh data using enhanced search
+            // Refresh data by re-fetching entity neighborhood
             const refreshedEntity =
-                await this.entityGraphService.refreshEntityData(entityName);
-
-            if (refreshedEntity) {
-                await this.loadRealEntityData(entityName);
-                this.showMessage(`Refreshed data for ${entityName}`, "success");
-            } else {
-                this.showMessage(
-                    `No updated data available for ${entityName}`,
-                    "info",
+                await this.graphDataProvider.getEntityNeighborhood(
+                    entityName,
+                    2,
+                    50,
                 );
+
+            if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
+                await this.loadRealEntityData(entityName);
             }
         } catch (error) {
             console.error("Failed to refresh entity data:", error);
-            this.showMessage("Failed to refresh entity data", "error");
         } finally {
             this.hideGraphLoading();
         }
-    }
-
-    /**
-     * Get cache statistics
-     */
-    getCacheStats(): any {
-        return this.entityCacheService.getCacheStats();
-    }
-
-    /**
-     * Clear all cached data
-     */
-    async clearCache(): Promise<void> {
-        await this.entityCacheService.clearAll();
-        this.showMessage("Cache cleared successfully", "success");
-    }
-
-    /**
-     * Show message to user
-     */
-    private showMessage(
-        message: string,
-        type: "success" | "info" | "warning" | "error",
-    ): void {
-        // This would show a toast or notification
-        console.log(`${type.toUpperCase()}: ${message}`);
-
-        // You could implement a toast notification here
-        // For now, just log to console
     }
 
     /**
@@ -944,27 +1306,6 @@ class EntityGraphView {
                     1)
             );
         }, 0);
-    }
-
-    private extractDomains(entities: any[]): string[] {
-        if (!entities || entities.length === 0) return [];
-
-        const domains = new Set<string>();
-        entities.forEach((entity) => {
-            if (entity.url) {
-                try {
-                    const domain = new URL(entity.url).hostname.replace(
-                        "www.",
-                        "",
-                    );
-                    domains.add(domain);
-                } catch (e) {
-                    // Skip invalid URLs
-                }
-            }
-        });
-
-        return Array.from(domains).slice(0, 5);
     }
 
     private getEarliestDate(entities: any[], relationships: any[]): string {
@@ -1021,6 +1362,324 @@ class EntityGraphView {
         return entities.reduce((total, entity) => {
             return total + (entity.visitCount || 0);
         }, 0);
+    }
+
+    // ===================================================================
+    // HIERARCHICAL LOADING METHODS
+    // ===================================================================
+
+    private async loadGlobalViewWithImportanceLayer(): Promise<void> {
+        try {
+            this.showGraphLoading();
+
+            // Get importance layer data (top 500 most important nodes - TESTING)
+            const importanceData =
+                await this.graphDataProvider.getGlobalImportanceLayer(500);
+
+            if (importanceData.entities.length === 0) {
+                this.hideGraphLoading();
+                this.showGraphEmpty();
+                return;
+            }
+
+            // Transform data to expected format for visualizer with proper LoD properties
+            const transformedData = {
+                entities: this.enhanceEntitiesForLoD(importanceData.entities),
+                relationships: importanceData.relationships,
+                communities: [],
+                topics: [],
+                statistics: {
+                    totalEntities: importanceData.entities.length,
+                    totalRelationships: importanceData.relationships.length,
+                    totalCommunities: 0,
+                },
+            };
+            await this.visualizer.loadGlobalGraph(transformedData);
+            this.hideGraphLoading();
+        } catch (error) {
+            console.error(
+                "[HierarchicalLoading] Failed to load importance layer:",
+                error,
+            );
+            this.hideGraphLoading();
+            this.showGraphError("Failed to load importance layer");
+        }
+    }
+
+    // ============================================================================
+    // Browser Navigation Integration
+    // ============================================================================
+
+    /**
+     * Setup browser navigation event handlers
+     */
+    private setupBrowserNavigation(): void {
+        // Handle browser back/forward buttons
+        window.addEventListener("popstate", async () => {
+            if (this.isHandlingPopstate) return;
+
+            this.isHandlingPopstate = true;
+
+            try {
+                // Parse current URL to determine target state
+                const targetState = this.parseCurrentUrl();
+                await this.navigateToStateFromUrl(targetState);
+            } catch (error) {
+                console.error("[Navigation] Popstate handling failed:", error);
+            } finally {
+                this.isHandlingPopstate = false;
+            }
+        });
+
+        // Handle initial page load
+        const initialState = this.parseCurrentUrl();
+        this.addToNavigationHistory(initialState);
+    }
+
+    /**
+     * Parse current URL to determine navigation state
+     */
+    private parseCurrentUrl(): NavigationState {
+        const urlParams = new URLSearchParams(window.location.search);
+        const entityParam = urlParams.get("entity");
+        const topicParam = urlParams.get("topic");
+        const modeParam = urlParams.get("mode");
+
+        if (modeParam === "global" || (!entityParam && !topicParam)) {
+            return {
+                type: "global",
+                timestamp: Date.now(),
+            };
+        } else {
+            const entityName = entityParam || topicParam;
+            return {
+                type: "detail",
+                entityName: entityName || undefined,
+                timestamp: Date.now(),
+                cacheKey: entityName ? `detail_${entityName}` : undefined,
+            };
+        }
+    }
+
+    /**
+     * Navigate to state based on URL
+     */
+    private async navigateToStateFromUrl(
+        targetState: NavigationState,
+    ): Promise<void> {
+        if (targetState.type === "global") {
+            await this.executeGlobalViewTransition();
+        } else if (targetState.type === "detail" && targetState.entityName) {
+            await this.executeDetailViewTransition(targetState.entityName);
+        }
+
+        // Update internal state to match URL
+        this.syncInternalStateWithUrl(targetState);
+    }
+
+    /**
+     * Execute global view transition
+     */
+    private async executeGlobalViewTransition(): Promise<void> {
+        // Try to use hide/show logic first (same as back button)
+        const restored = this.visualizer.restoreHiddenView();
+        if (restored) {
+            // Update internal state to match the restored view
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+            // Hide sidebar when navigating to global view
+            this.updateSidebarVisibility(false);
+            this.updateBackButtonText();
+        } else {
+            // Fallback to original logic if no hidden view available
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+            // Hide sidebar when navigating to global view
+            this.updateSidebarVisibility(false);
+            await this.loadGlobalView();
+        }
+    }
+
+    /**
+     * Execute detail view transition
+     */
+    private async executeDetailViewTransition(
+        entityName: string,
+    ): Promise<void> {
+        // Use existing navigateToEntity logic but prevent URL update loop
+        const wasHandlingPopstate = this.isHandlingPopstate;
+        this.isHandlingPopstate = true;
+
+        try {
+            await this.navigateToEntity(entityName);
+        } finally {
+            this.isHandlingPopstate = wasHandlingPopstate;
+        }
+    }
+
+    /**
+     * Sync internal state with URL
+     */
+    private syncInternalStateWithUrl(state: NavigationState): void {
+        if (state.type === "global") {
+            this.currentEntity = null;
+            this.currentViewMode = { type: "global" };
+        } else if (state.entityName) {
+            this.currentEntity = state.entityName;
+            this.currentViewMode = {
+                type: "entity-specific",
+                centerEntity: state.entityName,
+            };
+        }
+
+        // Update breadcrumb and UI elements
+        this.updateBreadcrumbForCurrentState();
+        // Don't automatically show sidebar for detail state - let loadRealEntityData handle it
+        if (state.type === "global") {
+            this.updateSidebarVisibility(false);
+        }
+
+        // Update window title for restored state
+        this.updateWindowTitle();
+    }
+
+    /**
+     * Update breadcrumb for current state
+     */
+    private updateBreadcrumbForCurrentState(): void {
+        const entityBreadcrumb = document.getElementById(
+            "entityNameBreadcrumb",
+        );
+        if (entityBreadcrumb) {
+            if (this.currentEntity) {
+                entityBreadcrumb.textContent = ` > ${this.currentEntity}`;
+            } else {
+                entityBreadcrumb.textContent = " > Global View";
+            }
+        }
+
+        const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+        if (backToGlobalBtn) {
+            backToGlobalBtn.style.display = this.currentEntity
+                ? "flex"
+                : "none";
+        }
+    }
+
+    /**
+     * Update back button text based on hidden view stack
+     */
+    private updateBackButtonText(): void {
+        const backToGlobalBtn = document.getElementById("backToGlobalBtn");
+        if (!backToGlobalBtn) return;
+
+        // Check if visualizer has a hidden view available
+        if (this.visualizer && this.visualizer.hasHiddenView()) {
+            const hiddenViewType = this.visualizer.getHiddenViewType();
+            if (hiddenViewType === "global") {
+                backToGlobalBtn.innerHTML =
+                    '<i class="bi bi-arrow-left"></i> Global';
+                backToGlobalBtn.title = "Back to Global View";
+            } else if (hiddenViewType === "neighborhood") {
+                backToGlobalBtn.innerHTML =
+                    '<i class="bi bi-arrow-left"></i> Neighborhood';
+                backToGlobalBtn.title = "Back to Neighborhood View";
+            } else {
+                backToGlobalBtn.innerHTML =
+                    '<i class="bi bi-arrow-left"></i> Back';
+                backToGlobalBtn.title = "Back to Previous View";
+            }
+        } else {
+            // No hidden view, will go to global view
+            backToGlobalBtn.innerHTML =
+                '<i class="bi bi-arrow-left"></i> Global';
+            backToGlobalBtn.title = "Back to Global View";
+        }
+    }
+
+    /**
+     * Add state to navigation history
+     */
+    private addToNavigationHistory(state: NavigationState): void {
+        // Remove any future history if we're navigating from a middle point
+        if (this.currentHistoryIndex < this.navigationHistory.length - 1) {
+            this.navigationHistory = this.navigationHistory.slice(
+                0,
+                this.currentHistoryIndex + 1,
+            );
+        }
+
+        // Add new state
+        this.navigationHistory.push(state);
+        this.currentHistoryIndex = this.navigationHistory.length - 1;
+
+        // Limit history size
+        if (this.navigationHistory.length > 50) {
+            this.navigationHistory = this.navigationHistory.slice(-40);
+            this.currentHistoryIndex = this.navigationHistory.length - 1;
+        }
+    }
+
+    /**
+     * Update URL for entity navigation
+     */
+    private updateUrlForEntity(entityName: string): void {
+        const url = new URL(window.location.href);
+        url.searchParams.set("entity", entityName);
+        url.searchParams.delete("mode");
+        url.searchParams.delete("topic");
+
+        // Use replaceState if handling popstate to avoid adding duplicate history entries
+        if (this.isHandlingPopstate) {
+            window.history.replaceState({}, "", url.toString());
+        } else {
+            window.history.pushState({}, "", url.toString());
+        }
+    }
+
+    /**
+     * Update URL for global view
+     */
+    private updateUrlForGlobal(): void {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("entity");
+        url.searchParams.delete("topic");
+        url.searchParams.set("mode", "global");
+
+        if (this.isHandlingPopstate) {
+            window.history.replaceState({}, "", url.toString());
+        } else {
+            window.history.pushState({}, "", url.toString());
+        }
+    }
+
+    /**
+     * Update window title based on current view mode and entity
+     */
+    private updateWindowTitle(): void {
+        let title = "Entity Graph";
+
+        if (
+            this.currentEntity &&
+            this.currentViewMode.type === "entity-specific"
+        ) {
+            // Check if we're in neighborhood view via the visualizer
+            const activeView = this.visualizer.getCurrentActiveView();
+            if (activeView === "neighborhood") {
+                title = `${this.currentEntity} Neighborhood`;
+            } else if (activeView === "detail") {
+                title = `${this.currentEntity} Details`;
+            } else {
+                // Fallback for entity-specific view
+                title = `${this.currentEntity} Details`;
+            }
+        } else {
+            // Global view
+            title = "Entity Graph";
+        }
+
+        document.title = title;
+        console.log(`[Title] Updated window title to: ${title}`);
     }
 }
 

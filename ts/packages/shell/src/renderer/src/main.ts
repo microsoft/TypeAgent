@@ -10,21 +10,23 @@ import {
     ShellUserSettings,
     Client,
     SearchMenuItem,
+    UserExpression,
 } from "../../preload/electronTypes";
-import { ChatView } from "./chatView";
+import { ChatView } from "./chat/chatView";
 import { TabView } from "./tabView";
 import { getSpeechToken, setSpeechToken } from "./speechToken";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
-import { MetricsView } from "./metricsView";
+import { MetricsView } from "./chat/metricsView";
 import { CameraView } from "./cameraView";
-import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
+import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher } from "agent-dispatcher";
+import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
+import { ClientIO, Dispatcher, IAgentMessage } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
+import { ChatInput } from "./chat/chatInput";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -42,14 +44,7 @@ export function getAndroidAPI() {
     return globalThis.Android;
 }
 
-async function getDispatcher(): Promise<Dispatcher> {
-    if (globalThis.dispatcher !== undefined) {
-        return globalThis.dispatcher;
-    }
-    return getWebDispatcher();
-}
-
-export function getWebSocketAPI(): ClientAPI {
+function getWebSocketAPI(): ClientAPI {
     if (globalThis.webApi === undefined) {
         globalThis.webApi = webapi;
 
@@ -57,14 +52,6 @@ export function getWebSocketAPI(): ClientAPI {
     }
 
     return globalThis.webApi;
-}
-
-export function getWebDispatcher(): Dispatcher {
-    if (globalThis.webDispatcher === undefined) {
-        globalThis.webDispatcher = webdispatcher;
-    }
-
-    return globalThis.webDispatcher;
 }
 
 async function initializeChatHistory(chatView: ChatView) {
@@ -242,6 +229,22 @@ function registerClient(
                         requestId,
                     });
                     break;
+
+                // Display-focused events - for now show toast notification inline
+                // TODO: Design for toast notifications in shell
+                case AppAgentEvent.Inline:
+                case AppAgentEvent.Toast:
+                    handleInlineNotification(data, source, requestId, chatView);
+                    // Also add to notifications list for @notify show
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
+                    break;
+
                 default:
                 // ignore
             }
@@ -295,6 +298,9 @@ function registerClient(
 
     const client: Client = {
         clientIO,
+        dispatcherInitialized(dispatcher: Dispatcher): void {
+            chatView.initializeDispatcher(dispatcher);
+        },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();
             for (const [key, value] of updatedAgents) {
@@ -315,20 +321,48 @@ function registerClient(
             settingsView.shellSettings = settings;
         },
         fileSelected(fileName: string, fileContent: string): void {
-            chatView.chatInput.loadImageContent(fileName, fileContent);
+            chatView.chatInput?.loadImageContent(fileName, fileContent);
         },
         listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void {
             if (token !== undefined) {
                 setSpeechToken(token);
             }
 
-            chatView.chatInput.recognizeOnce(token, useLocalWhisper);
+            chatView.chatInput?.recognizeOnce(token, useLocalWhisper);
+        },
+        toggleAlwaysListen(): void {
+            chatView.chatInput?.toggleContinuous();
         },
         focusInput(): void {
-            chatView.chatInput.focus();
+            chatView.chatInput?.focus();
         },
         searchMenuCompletion(id: number, item: SearchMenuItem) {
             remoteSearchMenuUIOnCompletion(id, item);
+        },
+        titleUpdated(title: string): void {
+            // update document title
+            document.title = title;
+
+            // update chatview title
+            chatView.setTitle(title);
+        },
+        continuousSpeechProcessed(expressions: UserExpression[]): void {
+            // TODO: process messages and only add questions/requests.
+
+            console.log(
+                `Continuous speech processed: ${JSON.stringify(expressions)}`,
+            );
+
+            for (const expression of expressions) {
+                if (expression.complete_statement) {
+                    if (
+                        expression.type === "question" ||
+                        expression.type === "command"
+                    ) {
+                        chatView.addUserMessage(JSON.stringify(expression));
+                    }
+                }
+            }
         },
     };
 
@@ -432,6 +466,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
+    const chatInput = new ChatInput({}, "phraseDiv");
+
+    chatView.setChatInput(chatInput);
+
     initializeChatHistory(chatView);
 
     const cameraView = new CameraView((image: HTMLImageElement) => {
@@ -440,9 +478,9 @@ document.addEventListener("DOMContentLoaded", async function () {
         newImage.src = image.src;
 
         newImage.classList.add("chat-input-dropImage");
-        chatView.chatInput.textarea.getTextEntry().append(newImage);
+        chatView.chatInput?.textarea.getTextEntry().append(newImage);
 
-        if (chatView.chatInput.sendButton !== undefined) {
+        if (chatView.chatInput?.sendButton !== undefined) {
             chatView.chatInput.sendButton.disabled =
                 chatView.chatInput.textarea.getTextEntry().innerHTML.length ==
                 0;
@@ -452,11 +490,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
 
-    chatView.chatInput.camButton.onclick = () => {
+    chatView.chatInput!.camButton.onclick = () => {
         cameraView.toggleVisibility();
     };
 
-    chatView.chatInput.attachButton.onclick = () => {
+    chatView.chatInput!.attachButton.onclick = () => {
         getClientAPI().openImageFile();
     };
 
@@ -494,10 +532,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     watchForDOMChanges(chatView.getScrollContainer());
-
-    getDispatcher().then((dispatcher) => {
-        chatView.initializeDispatcher(dispatcher);
-    });
 });
 
 function watchForDOMChanges(element: HTMLDivElement) {
@@ -513,7 +547,7 @@ function watchForDOMChanges(element: HTMLDivElement) {
         setTimeout(() => {
             hasTimeout = false;
             const idleTime = Date.now() - lastModifiedTime;
-            if (idleTime >= 3000) {
+            if (idleTime >= 250) {
                 // been idle for 3 seconds, save the chat history
                 getClientAPI().saveChatHistory(element.innerHTML);
             } else {
@@ -571,4 +605,35 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     } else {
         return date1.toLocaleDateString("en-US", { weekday: "long" });
     }
+}
+
+function handleInlineNotification(
+    data: string | DisplayContent,
+    source: string,
+    requestId: string | undefined,
+    chatView: ChatView,
+): void {
+    // Check if this request uses eventSetId pattern for notification replacement
+    const isEventSetNotification = requestId?.startsWith("agent-eventset-");
+
+    // Use the provided requestId if it follows eventSetId pattern, otherwise generate new one
+    const agentRequestId =
+        requestId && requestId.startsWith("agent-")
+            ? requestId
+            : `agent-${source}-${Date.now()}`;
+
+    const agentMessage: IAgentMessage = {
+        message: data,
+        requestId: agentRequestId,
+        source: source,
+        actionIndex: 0,
+    };
+
+    // Add to chat view with notification flag
+    // Use dynamicUpdate for eventSet notifications to replace previous messages
+    chatView.addAgentMessage(agentMessage, {
+        appendMode: "temporary",
+        notification: true,
+        dynamicUpdate: isEventSetNotification,
+    });
 }

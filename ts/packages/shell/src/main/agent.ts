@@ -4,6 +4,7 @@
 import {
     ActionContext,
     AppAgent,
+    AppAgentInitSettings,
     AppAgentManifest,
     CompletionGroup,
     ParsedCommandParams,
@@ -25,7 +26,7 @@ import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js"
 import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { installAndRestart, updateHandlerTable } from "./commands/update.js";
-import { isProd } from "./index.js";
+import { isProd, reloadInstance } from "./index.js";
 import { ShellWindowState } from "./shellSettings.js";
 
 export type ShellContext = {
@@ -35,6 +36,7 @@ export type ShellContext = {
 const config: AppAgentManifest = {
     emojiChar: "🐚",
     description: "Shell",
+    localView: true,
 };
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
@@ -320,12 +322,22 @@ const handlers: CommandHandlerTable = {
         },
         setWindowState: new ShellSetWindowSizeCommandHandler(),
         setWindowZoomLevel: new ShellSetZoomLevelCommandHandler(),
+        reload: {
+            description: "Reload the shell",
+            run: async () => {
+                reloadInstance();
+                // displaySuccess("Reloading shell...", context);
+            },
+        },
     },
 };
 
 export function createShellAgentProvider(shellWindow: ShellWindow) {
     const agent: AppAgent = {
-        async initializeAgentContext(): Promise<ShellContext> {
+        async initializeAgentContext(
+            settings: AppAgentInitSettings,
+        ): Promise<ShellContext> {
+            shellWindow.startChatServer(settings.localHostPort ?? -1);
             return {
                 shellWindow,
             };

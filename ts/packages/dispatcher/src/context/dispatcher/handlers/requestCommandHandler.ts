@@ -364,6 +364,11 @@ export class RequestCommandHandler implements CommandHandler {
                     `Error translating request '${request}': ${e.message}`,
                     DispatcherName,
                 );
+                systemContext?.logger?.logEvent("request:exception", {
+                    request,
+                    message: e.message,
+                    stack: e.stack,
+                });
                 throw e;
             }
 

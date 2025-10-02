@@ -28,11 +28,30 @@ async function ensureWebsocketConnected() {
         return;
     }
 
-    webSocket.binaryType = "arraybuffer";
+    webSocket.binaryType = "nodebuffer";
     keepWebSocketAlive(webSocket);
 
     webSocket.onmessage = async (event: any) => {
-        const data: WebSocketMessageV2 = arrayBufferToJson(event.data);
+        if (!event.data) {
+            return;
+        }
+
+        let data: WebSocketMessageV2;
+        try {
+            // Handle both string and ArrayBuffer data
+            if (typeof event.data === "string") {
+                data = JSON.parse(event.data);
+            } else {
+                data = arrayBufferToJson(event.data);
+            }
+        } catch (error) {
+            console.error("Error parsing websocket message:", error);
+            return;
+        }
+
+        if (!data) {
+            return;
+        }
 
         if (data.error) {
             console.error(data.error);
