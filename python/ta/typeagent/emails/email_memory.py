@@ -91,6 +91,7 @@ class EmailMessage(IMessage):
     def deserialize(message_data: dict) -> "EmailMessage":
         return EmailMessage.__pydantic_validator__.validate_python(message_data)  # type: ignore
     
+@dataclass
 class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
     settings: ConversationSettings
     name_tag: str
@@ -132,4 +133,3 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             self.secondary_indexes is not None
         ), "Use await Podcast.create() to create an initialized instance"
         return self.secondary_indexes
-

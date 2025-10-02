@@ -26,7 +26,8 @@ async def main():
         dbPath,
         EmailMessage,
     )
-
+    conversation:EmailMemory = await EmailMemory.create(settings)
+    print(await conversation.messages.size())
     # conversation: EmailMemory  = EmailMemory.create()
     while True:
         cmd = input("✉>>").strip()
@@ -59,7 +60,6 @@ def print_email(email: EmailMessage):
     for chunk in email.text_chunks:
         print(Fore.CYAN +       chunk)
     
-
 if __name__ == "__main__":
     try:
         asyncio.run(main())
