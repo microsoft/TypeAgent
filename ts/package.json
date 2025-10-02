@@ -38,6 +38,7 @@
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run start",
     "shell:dev": "pnpm -C packages/shell run dev",
+    "shell:nosandbox": "pnpm -C packages/shell run start:nosandbox",
     "shell:package": "pnpm -C packages/shell run package",
     "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
