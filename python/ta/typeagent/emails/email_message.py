@@ -30,8 +30,8 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         return kplib.KnowledgeResponse(
             entities=self.to_entities(), 
-            actions=[], 
-            inverse_actions=[], 
+            actions=self.to_actions(), 
+            inverse_actions=self.to_actions(), 
             topics=self.to_topics()
         )
     
@@ -66,6 +66,14 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
         if self.subject:
             topics.append(self.subject)
         return topics
+
+    def to_actions(self) -> list[kplib.Action]:
+        actions: list[kplib.Action] = []
+        if self.sender and self.recipients:
+            for recipient in self.recipients:
+                actions.extend(self._createActions("sent", self.sender, recipient))
+                actions.extend(self._createActions("received", recipient, self.sender))
+        return actions
     
     # Returns the knowledge entities for a given email address string
     def _email_address_to_entities(self, email_address: str) -> list[kplib.ConcreteEntity]:
@@ -99,8 +107,9 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
             actions.append(self._createAction(verb, sender, display_name))
 
         if address:
-            actions.append(self.createAction(verb, sender, recipient.address))
-
+            actions.append(self._createAction(verb, sender, address))
+        return actions
+    
     def _createAction(self, verb:str, sender: str, recipient: str, useIndirect:bool = True) -> kplib.Action:
         if useIndirect: 
             return kplib.Action(

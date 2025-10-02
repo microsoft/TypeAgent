@@ -26,10 +26,10 @@ def import_email_string(email_string: str) -> EmailMessage:
 def import_email_message(msg: Message) -> EmailMessage:
     # Extract metadata from
     email_meta = EmailMessageMeta(
-        sender=msg.get("From"),
-        recipients=msg.get_all("To", []),
-        cc=msg.get_all("Cc", []),
-        bcc=msg.get_all("Bcc", []),
+        sender = msg.get("From"),
+        recipients = _import_address_headers(msg.get_all("To", [])),
+        cc = _import_address_headers(msg.get_all("Cc", [])),
+        bcc = _import_address_headers(msg.get_all("Bcc", [])),
         subject=msg.get("Subject"))
     timestamp: str = msg.get("Date")
 
@@ -47,19 +47,13 @@ def import_email_message(msg: Message) -> EmailMessage:
     )
     return email
 
+    
 # Return all sub-parts of a forwarded email MIME texts
 def get_forwarded_email_parts(mime_text: str) -> list[str]:
     # Forwarded emails often start with "From:" lines, so we can split on those
     split_delimiter = re.compile(r'(?=From:)', re.IGNORECASE)
-    raw_parts: list[str] = split_delimiter.split(mime_text)
-
-    parts: list[str] = []
-    for part in raw_parts:
-        part = part.strip()
-        if len(part) > 0:
-            parts.append(part)
-
-    return parts
+    parts: list[str] = split_delimiter.split(mime_text)
+    return  _remove_empty(parts)
 
 # Extracts the plain text body from an email.message.Message object.
 def _extract_email_body(msg: Message) -> str:
@@ -83,3 +77,20 @@ def _decode_email_payload(part: Message) -> str | None:
     
     body: str = payload.decode(part.get_content_charset() or "utf-8")
     return body
+
+def _import_address_headers(headers: list[str]) -> list[str]:
+    if len(headers) == 0:
+        return headers
+    addresses: list[str] = []
+    for header in headers:
+        if header:
+            addresses.extend(_remove_empty(header.split(",")))
+    return addresses
+
+def _remove_empty(strings: list[str]) -> list[str]:
+    non_empty: list[str] = []
+    for s in strings:
+        s = s.strip()
+        if len(s) > 0:
+            non_empty.append(s)
+    return non_empty

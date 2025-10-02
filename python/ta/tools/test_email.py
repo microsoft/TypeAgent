@@ -3,6 +3,7 @@
 
 import asyncio
 import sys
+import traceback
 from colorama import Fore
 
 from typeagent.aitools import utils
@@ -48,6 +49,7 @@ async def main():
         except Exception as e:
             print()
             print(Fore.RED, f"Error importing email from {file_path}: {e}")
+            traceback.print_exc()
 
         print(Fore.RESET)
 
