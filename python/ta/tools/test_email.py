@@ -57,8 +57,8 @@ async def main():
             await conversation.add_message(email)
             count = await conversation.messages.size()
             print(Fore.GREEN + f"Added email to conversation. Total messages: {count}")
-            # await conversation.build_index()
-            # print(Fore.GREEN + "Built index.")
+            await conversation.build_index()
+            print(Fore.GREEN + "Built index.")
 
         except Exception as e:
             print()
