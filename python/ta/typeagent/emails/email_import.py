@@ -8,10 +8,11 @@ from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import Datetime
 from ..storage.utils import create_storage_provider
 
-from email import message_from_file
+from email import message_from_file, message_from_string
 from .email_memory import EmailMessage, EmailMessageMeta
 from email.message import Message
 
+# Imports an email file (.eml) and returns an EmailMessage object
 def import_email_file(email_filePath: str) -> EmailMessage:
     msg: Message
        
@@ -21,6 +22,13 @@ def import_email_file(email_filePath: str) -> EmailMessage:
     email: EmailMessage = import_email_message(msg)
     return email
 
+# Imports an email MIME string and returns an EmailMessage object
+def import_email_mime(mime_text: str) -> EmailMessage:
+    msg: Message = message_from_string(mime_text)
+    email: EmailMessage = import_email_message(msg)
+    return email
+
+# Imports an email.message.Message object and returns an EmailMessage object
 def import_email_message(msg: Message) -> EmailMessage:
     # Extract metadata from
     email_meta = EmailMessageMeta(
@@ -45,6 +53,7 @@ def import_email_message(msg: Message) -> EmailMessage:
     )
     return email
 
+# Extracts the plain text body from an email.message.Message object.
 def extract_email_body(msg: Message) -> str:
     """Extracts the plain text body from an email.message.Message object."""
     if msg.is_multipart():
