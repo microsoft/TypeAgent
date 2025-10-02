@@ -7,7 +7,8 @@ from colorama import Fore
 
 from typeagent.aitools import utils
 from typeagent.emails.email_import import import_email_from_file
-from typeagent.emails.email_memory import EmailMemory, EmailMessage
+from typeagent.emails.email_memory import EmailMemory
+from typeagent.emails.email_message import EmailMessage
 
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.storage.utils import create_storage_provider
@@ -41,8 +42,14 @@ async def main():
             print("================================")
             email: EmailMessage = import_email_from_file(file_path)
             print_email(email)
+            print()
+            knowledge = email.metadata.get_knowledge()
+            print(Fore.GREEN, "Knowledge:", knowledge)
         except Exception as e:
-            print(f"Error importing email from {file_path}: {e}")
+            print()
+            print(Fore.RED, f"Error importing email from {file_path}: {e}")
+
+        print(Fore.RESET)
 
 
 def print_email(email: EmailMessage):
@@ -59,7 +66,7 @@ def print_email(email: EmailMessage):
     print("Body:")
     for chunk in email.text_chunks:
         print(Fore.CYAN +       chunk)
-    
+
 if __name__ == "__main__":
     try:
         asyncio.run(main())

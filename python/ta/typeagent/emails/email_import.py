@@ -3,9 +3,10 @@
 
 import re
 
-from email import message_from_file, message_from_string
-from .email_memory import EmailMessage, EmailMessageMeta
+from email import message_from_string
 from email.message import Message
+
+from .email_message import EmailMessage, EmailMessageMeta
 
 # Imports an email file (.eml) as a list of EmailMessage objects
 def import_email_from_file(email_filePath: str) -> EmailMessage:
