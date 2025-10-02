@@ -1,30 +1,23 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import os
 import re
-
-from ..knowpro.convsettings import ConversationSettings
-from ..knowpro.interfaces import Datetime
-from ..storage.utils import create_storage_provider
 
 from email import message_from_file, message_from_string
 from .email_memory import EmailMessage, EmailMessageMeta
 from email.message import Message
 
-# Imports an email file (.eml) and returns an EmailMessage object
-def import_email_file(email_filePath: str) -> EmailMessage:
-    msg: Message
-       
+# Imports an email file (.eml) as a list of EmailMessage objects
+def import_email_from_file(email_filePath: str) -> EmailMessage:
+    email_string: str = ""
     with open(email_filePath, "r") as f:
-        msg = message_from_file(f)
+        email_string = f.read()
 
-    email: EmailMessage = import_email_message(msg)
-    return email
+    return import_email_string(email_string)
 
-# Imports an email MIME string and returns an EmailMessage object
-def import_email_mime(mime_text: str) -> EmailMessage:
-    msg: Message = message_from_string(mime_text)
+# Imports a single email MIME string and returns an EmailMessage object
+def import_email_string(email_string: str) -> EmailMessage:
+    msg: Message = message_from_string(email_string)
     email: EmailMessage = import_email_message(msg)
     return email
 
@@ -40,7 +33,7 @@ def import_email_message(msg: Message) -> EmailMessage:
     timestamp: str = msg.get("Date")
 
     # Get email body
-    body = extract_email_body(msg)
+    body = _extract_email_body(msg)
     if body is None:
         body = "" 
     if email_meta.subject is not None:
@@ -53,8 +46,22 @@ def import_email_message(msg: Message) -> EmailMessage:
     )
     return email
 
+# Return all sub-parts of a forwarded email MIME texts
+def get_forwarded_email_parts(mime_text: str) -> list[str]:
+    # Forwarded emails often start with "From:" lines, so we can split on those
+    split_delimiter = re.compile(r'(?=From:)', re.IGNORECASE)
+    raw_parts: list[str] = split_delimiter.split(mime_text)
+
+    parts: list[str] = []
+    for part in raw_parts:
+        part = part.strip()
+        if len(part) > 0:
+            parts.append(part)
+
+    return parts
+
 # Extracts the plain text body from an email.message.Message object.
-def extract_email_body(msg: Message) -> str:
+def _extract_email_body(msg: Message) -> str:
     """Extracts the plain text body from an email.message.Message object."""
     if msg.is_multipart():
         parts: list[str] = []
