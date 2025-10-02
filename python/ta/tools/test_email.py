@@ -4,9 +4,12 @@
 import asyncio
 import sys
 import traceback
+from typing import Any, Iterable
 from colorama import Fore
 
 from typeagent.aitools import utils
+
+from typeagent.knowpro import kplib
 from typeagent.emails.email_import import import_email_from_file
 from typeagent.emails.email_memory import EmailMemory
 from typeagent.emails.email_message import EmailMessage
@@ -45,7 +48,7 @@ async def main():
             print_email(email)
             print()
             knowledge = email.metadata.get_knowledge()
-            print(Fore.GREEN, "Knowledge:", knowledge)
+            print_knowledge(knowledge)
         except Exception as e:
             print()
             print(Fore.RED, f"Error importing email from {file_path}: {e}")
@@ -67,7 +70,25 @@ def print_email(email: EmailMessage):
     
     print("Body:")
     for chunk in email.text_chunks:
-        print(Fore.CYAN +       chunk)
+        print(Fore.CYAN + chunk)
+
+    print(Fore.RESET)
+
+def print_knowledge(knowledge: kplib.KnowledgeResponse):
+    print_list(Fore.GREEN, knowledge.topics, "Topics")
+    print()
+    print_list(Fore.GREEN, knowledge.entities, "Entities")
+    print()
+    print_list(Fore.GREEN, knowledge.actions, "Actions")
+    print()
+    print(Fore.RESET)
+
+def print_list(color, list: Iterable[Any], title: str):
+    if title:
+        print(color + f"# {title}")
+        print()
+    for item in list:
+        print(color + " -", item)
 
 if __name__ == "__main__":
     try:
