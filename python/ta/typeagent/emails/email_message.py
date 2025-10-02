@@ -31,7 +31,7 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
         return kplib.KnowledgeResponse(
             entities=self.to_entities(), 
             actions=self.to_actions(), 
-            inverse_actions=self.to_actions(), 
+            inverse_actions=[], 
             topics=self.to_topics()
         )
     
@@ -85,10 +85,12 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
                 type=["person"],
             )
             if address:
-                entity.facets=[{
-                    "name": "email_address",
-                    "value": address,
-                }] 
+                entity.facets = [
+                    kplib.Facet(
+                        name="email_address",
+                        value=address,
+                    )
+                ]
             entities.append(entity)
         
         if address:
@@ -114,7 +116,7 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
         if useIndirect: 
             return kplib.Action(
                 verbs=[verb],
-                verbTense = "past",
+                verb_tense = "past",
                 subject_entity_name= sender,
                 object_entity_name= "email",
                 indirect_object_entity_name= recipient,
@@ -122,7 +124,7 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
         else:
             return kplib.Action(
                 verbs=[verb],
-                verbTense = "past",
+                verb_tense = "past",
                 subject_entity_name= sender,
                 object_entity_name= recipient,
                 indirect_object_entity_name= "email",

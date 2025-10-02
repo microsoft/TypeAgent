@@ -14,7 +14,8 @@ from ..knowpro.interfaces import (
     ISemanticRefCollection,
     ITermToSemanticRefIndex,
 )
-    
+from ..storage.memory import semrefindex
+        
 from .email_message import EmailMessage
 
 @dataclass
@@ -55,7 +56,16 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
 
     async def add_message(self, message: EmailMessage) -> None:        
         await self.messages.append(message)
-            
+
+    async def build_index(
+        self,
+    ) -> None:
+        await semrefindex.add_metadata_to_index(
+            self.messages,
+            self.semantic_refs,
+            self.semantic_ref_index,
+        )
+       
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[EmailMessage]:
         """Get secondary indexes, asserting they are initialized."""
         assert (

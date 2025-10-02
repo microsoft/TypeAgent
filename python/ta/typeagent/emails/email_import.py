@@ -26,12 +26,12 @@ def import_email_string(email_string: str) -> EmailMessage:
 def import_email_message(msg: Message) -> EmailMessage:
     # Extract metadata from
     email_meta = EmailMessageMeta(
-        sender = msg.get("From"),
+        sender = msg.get("From", ""),
         recipients = _import_address_headers(msg.get_all("To", [])),
         cc = _import_address_headers(msg.get_all("Cc", [])),
         bcc = _import_address_headers(msg.get_all("Bcc", [])),
         subject=msg.get("Subject"))
-    timestamp: str = msg.get("Date")
+    timestamp = msg.get("Date", None)
 
     # Get email body
     body = _extract_email_body(msg)
@@ -69,14 +69,20 @@ def _extract_email_body(msg: Message) -> str:
     else:
         return _decode_email_payload(msg)
     
-def _decode_email_payload(part: Message) -> str | None:
+def _decode_email_payload(part: Message) -> str:
     """Decodes the payload of an email part to a string using its charset."""
     payload = part.get_payload(decode=True)
     if payload is None:
-        return None
-    
-    body: str = payload.decode(part.get_content_charset() or "utf-8")
-    return body
+        # Try non-decoded payload (may be str)
+        payload = part.get_payload(decode=False)
+        if isinstance(payload, str):
+            return payload
+        return ""
+    if isinstance(payload, bytes):
+        return payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+    if isinstance(payload, str):
+        return payload
+    return ""
 
 def _import_address_headers(headers: list[str]) -> list[str]:
     if len(headers) == 0:
