@@ -50,8 +50,8 @@ export type BrowserControlInvokeFunctions = {
     switchTabs(tabDescription: string, tabIndex?: number): Promise<boolean>;
 
     // REVIEW: external browser only
-    readPage(): Promise<void>;
-    stopReadPage(): Promise<void>;
+    readPageContent(): Promise<void>;
+    stopReadPageContent(): Promise<void>;
     captureScreenshot(): Promise<string>;
     getPageTextContent(): Promise<string>;
 
@@ -59,7 +59,10 @@ export type BrowserControlInvokeFunctions = {
     getAutoIndexSetting(): Promise<boolean>;
     getBrowserSettings(): Promise<BrowserSettings>;
 
-    getHtmlFragments(useTimestampIds?: boolean): Promise<any[]>;
+    getHtmlFragments(
+        useTimestampIds?: boolean,
+        compressionMode?: string,
+    ): Promise<any[]>;
     clickOn(cssSelector: string): Promise<any>;
     setDropdown(cssSelector: string, optionLabel: string): Promise<any>;
     enterTextIn(

@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>, IDisposable
@@ -17,6 +16,10 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
 
     public SqliteStorageProvider(string dbPath, bool createNew = false)
     {
+        if (!createNew)
+        {
+            FileExtensions.VerifyExists(dbPath);
+        }
         _db = new SqliteDatabase(dbPath, createNew);
         ConfigureDatabase();
         if (createNew)
@@ -35,7 +38,7 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
 
     public IMessageCollection<TMessage> TypedMessages { get; private set; }
 
-    public IReadOnlyAsyncCollection<IMessage> Messages { get; private set; }
+    public IMessageCollection Messages { get; private set; }
 
     public ISemanticRefCollection SemanticRefs { get; private set; }
 

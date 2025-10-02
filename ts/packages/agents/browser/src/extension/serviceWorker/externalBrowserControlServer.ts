@@ -16,7 +16,7 @@ import {
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
-import { getTabHTMLFragments } from "./capture";
+import { getTabHTMLFragments, CompressionMode } from "./capture";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "aiclient";
 
@@ -313,7 +313,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             // todo return search provider URL
             return new URL(`/?q=${query}`);
         },
-        readPage: async () => {
+        readPageContent: async () => {
             const targetTab = await getActiveTab();
             const article = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "read_page_content",
@@ -337,7 +337,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 });
             }
         },
-        stopReadPage: async () => {
+        stopReadPageContent: async () => {
             chrome.tts.stop();
         },
         captureScreenshot: async () => {
@@ -391,14 +391,28 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
         },
 
-        getHtmlFragments: async (useTimestampIds?: boolean) => {
+        getHtmlFragments: async (
+            useTimestampIds?: boolean,
+            compressionMode?: string,
+        ) => {
             const targetTab = await ensureActiveTab();
+
+            // Convert string compressionMode to CompressionMode enum, default to Automation
+            const mode =
+                compressionMode === "None"
+                    ? CompressionMode.None
+                    : compressionMode === "knowledgeExtraction"
+                      ? CompressionMode.KnowledgeExtraction
+                      : CompressionMode.Automation;
+
+            // For knowledge extraction, disable text extraction since textpro will handle HTML-to-markdown conversion
+            const shouldExtractText = compressionMode !== "knowledgeExtraction";
 
             return getTabHTMLFragments(
                 targetTab!,
+                mode,
                 false,
-                false,
-                true,
+                shouldExtractText,
                 useTimestampIds,
             );
         },

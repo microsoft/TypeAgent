@@ -31,6 +31,11 @@ public class Term
         return term.Text;
     }
 
+    public static implicit operator Term(string term)
+    {
+        return new Term(term);
+    }
+
     public static string PrepareTermText(string termText)
     {
         termText = termText.Trim();

@@ -8,7 +8,7 @@ import {
     awaitPageLoad,
     awaitPageIncrementalUpdates,
 } from "./tabManager";
-import { getTabHTMLFragments } from "./capture";
+import { getTabHTMLFragments, CompressionMode } from "./capture";
 
 /**
  * Executes a browser action
@@ -118,9 +118,13 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
         case "getHTML": {
             const targetTab = await getActiveTab();
 
+            // Convert legacy fullHTML parameter to CompressionMode
+            const compressionMode = action.parameters?.fullHTML
+                ? CompressionMode.None
+                : CompressionMode.Automation;
             responseObject = await getTabHTMLFragments(
                 targetTab!,
-                action.parameters?.fullHTML,
+                compressionMode,
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
                 action.parameters?.useTimestampIds,

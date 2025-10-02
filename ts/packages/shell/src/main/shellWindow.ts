@@ -1019,23 +1019,6 @@ export class ShellWindow {
         }
     }
 
-    private dispatcherReadyPromiseResolvers:
-        | PromiseWithResolvers<void>
-        | undefined = Promise.withResolvers<void>();
-    public dispatcherInitialized() {
-        if (this.dispatcherReadyPromiseResolvers === undefined) {
-            throw new Error("Dispatcher already initialized");
-        }
-        this.dispatcherReadyPromiseResolvers.resolve();
-        this.dispatcherReadyPromiseResolvers = undefined;
-
-        // Notify the renderer process that the dispatcher is initialized
-        this.chatView.webContents.send("dispatcher-initialized");
-
-        // Give focus to the chat view once initialization is done.
-        this.chatView.webContents.focus();
-    }
-
     // ================================================================
     // Zoom Handler
     // ================================================================

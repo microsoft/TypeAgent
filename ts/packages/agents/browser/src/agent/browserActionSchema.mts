@@ -31,8 +31,7 @@ export type BrowserEntities = WebPageMoniker | WebSearchResult;
 // A web site name OR search terms for a specific web page.
 // Do NOT convert search terms into a URL.
 // If the user supplies a protocol with any URL (https://, ftp://, typeagent-browser://, etc.), use it as is.
-// When the user provides a top level domain (i.e. .com, .org, .net, .edu, .gov, .io, .ai, etc.), consider that a URL.
-// Fully qualified domain names provided by the user are assumed to have HTTP as the protocol.  Add it if necessary.
+// Fully qualified domain names provided by the user are assumed to have HTTP as the protocol.
 export type WebPageMoniker = string;
 
 // show/open/display web page in the current view.
@@ -59,12 +58,12 @@ export type OpenWebPage = {
     };
 };
 
-// Make another tab the activbe tab
+// Make another tab the active tab
 export type ChangeTabs = {
     actionName: "changeTab";
     parameters: {
         tabDescription: string;
-        // The numerical index referred to by the descripton if applicable.  (i.e. first = 1, second = 2, etc.)
+        // The numerical index referred to by the description if applicable.  (i.e. first = 1, second = 2, etc.)
         tabIndex?: number;
     };
 };
@@ -132,12 +131,13 @@ export type ZoomReset = {
     actionName: "zoomReset";
 };
 
+// Read the web page contents aloud
 export type ReadPageContent = {
-    actionName: "readPage";
+    actionName: "readPageContent";
 };
 
 export type StopReadPageContent = {
-    actionName: "stopReadPage";
+    actionName: "stopReadPageContent";
 };
 
 export type CaptureScreenshot = {

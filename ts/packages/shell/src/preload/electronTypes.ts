@@ -81,6 +81,7 @@ export interface ClientAPI {
 // Functions that are called from the main process to the renderer process.
 export interface Client {
     clientIO: ClientIO;
+    dispatcherInitialized(dispatcher: Dispatcher): void;
     updateRegisterAgents(agents: [string, string][]): void;
     showInputText(message: string): Promise<void>;
     showDialog(key: string): void;
@@ -97,7 +98,6 @@ export interface Client {
 
 export interface ElectronWindowFields {
     api: ClientAPI;
-    dispatcher: Promise<Dispatcher>;
 }
 
 export type ElectronWindow = typeof globalThis & ElectronWindowFields;

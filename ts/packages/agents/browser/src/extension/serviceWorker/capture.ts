@@ -4,10 +4,16 @@
 import { BoundingBox, HTMLFragment } from "./types";
 import { downloadStringAsFile } from "./tabManager";
 
+export enum CompressionMode {
+    None = "None",
+    Automation = "automation",
+    KnowledgeExtraction = "knowledgeExtraction",
+}
+
 /**
  * Gets HTML fragments from a tab
  * @param targetTab The tab to get fragments from
- * @param fullSize Whether to get the full HTML
+ * @param compressionModeOrFullSize Either CompressionMode enum or legacy boolean fullSize
  * @param downloadAsFile Whether to download the HTML as a file
  * @param extractText Whether to extract text from the HTML
  * @param useTimestampIds Whether to use timestamp IDs
@@ -17,7 +23,7 @@ import { downloadStringAsFile } from "./tabManager";
  */
 export async function getTabHTMLFragments(
     targetTab: chrome.tabs.Tab,
-    fullSize?: boolean,
+    compressionModeOrFullSize?: CompressionMode | boolean,
     downloadAsFile?: boolean,
     extractText?: boolean,
     useTimestampIds?: boolean,
@@ -34,11 +40,28 @@ export async function getTabHTMLFragments(
                 continue;
             }
             try {
+                // Convert legacy boolean or new CompressionMode to boolean for backward compatibility
+                const fullSize =
+                    typeof compressionModeOrFullSize === "boolean"
+                        ? compressionModeOrFullSize
+                        : compressionModeOrFullSize === CompressionMode.None;
+
+                // For knowledge extraction, disable text extraction since textpro will handle HTML-to-markdown conversion
+                const shouldExtractText =
+                    extractText &&
+                    (typeof compressionModeOrFullSize !== "object" ||
+                        compressionModeOrFullSize !==
+                            CompressionMode.KnowledgeExtraction);
+
                 const frameHTML = await chrome.tabs.sendMessage(
                     targetTab.id!,
                     {
                         type: "get_reduced_html",
-                        fullSize: fullSize,
+                        compressionMode:
+                            typeof compressionModeOrFullSize === "object"
+                                ? compressionModeOrFullSize
+                                : undefined,
+                        fullSize: fullSize, // Keep for backward compatibility
                         frameId: frames[i].frameId,
                         useTimestampIds: useTimestampIds,
                         filterToReadingView: filterToReadingView,
@@ -49,7 +72,7 @@ export async function getTabHTMLFragments(
 
                 if (frameHTML) {
                     let frameText = "";
-                    if (extractText) {
+                    if (shouldExtractText) {
                         frameText = await chrome.tabs.sendMessage(
                             targetTab.id!,
                             {
