@@ -28,31 +28,30 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
     subject: str | None = None
 
     def get_knowledge(self) -> kplib.KnowledgeResponse:
-        entities = self.to_entities()
         return kplib.KnowledgeResponse(
-            entities=entities, 
+            entities=self.to_entities(), 
             actions=[], 
             inverse_actions=[], 
-            topics=[]
+            topics=self.to_topics()
         )
     
     def to_entities(self) -> list[kplib.ConcreteEntity]:
         entities: list[kplib.ConcreteEntity] = []
         
         if self.sender:
-            entities.extend(_email_address_to_entities(self.sender))
+            entities.extend(self._email_address_to_entities(self.sender))
         
         if self.recipients:
             for recipient in self.recipients:
-                entities.extend(_email_address_to_entities(recipient))
+                entities.extend(self._email_address_to_entities(recipient))
         
         if self.cc:
             for cc in self.cc:
-                entities.extend(_email_address_to_entities(cc))
+                entities.extend(self._email_address_to_entities(cc))
         
         if self.bcc:
             for bcc in self.bcc:
-                entities.extend(_email_address_to_entities(bcc))
+                entities.extend(self._email_address_to_entities(bcc))
 
         entities.append(
             kplib.ConcreteEntity(
@@ -61,6 +60,64 @@ class EmailMessageMeta(IKnowledgeSource, IMessageMetadata):
             )
         )
         return entities
+    
+    def to_topics(self) -> list[str]:
+        topics: list[str] = []
+        if self.subject:
+            topics.append(self.subject)
+        return topics
+    
+    # Returns the knowledge entities for a given email address string
+    def _email_address_to_entities(self, email_address: str) -> list[kplib.ConcreteEntity]:
+        entities: list[kplib.ConcreteEntity] = []
+        display_name, address = parseaddr(email_address)
+        if display_name:
+            entity = kplib.ConcreteEntity(
+                name=display_name,
+                type=["person"],
+            )
+            if address:
+                entity.facets=[{
+                    "name": "email_address",
+                    "value": address,
+                }] 
+            entities.append(entity)
+        
+        if address:
+            entities.append(
+                kplib.ConcreteEntity(
+                    name=address,
+                    type=["email_address", "alias"],
+                )
+            )
+        return entities
+
+    def _createActions(self, verb: str, sender: str, recipient: str) -> list[kplib.Action]:
+        display_name, address = parseaddr(recipient)
+        actions: list[kplib.Action] = []
+        if display_name:
+            actions.append(self._createAction(verb, sender, display_name))
+
+        if address:
+            actions.append(self.createAction(verb, sender, recipient.address))
+
+    def _createAction(self, verb:str, sender: str, recipient: str, useIndirect:bool = True) -> kplib.Action:
+        if useIndirect: 
+            return kplib.Action(
+                verbs=[verb],
+                verbTense = "past",
+                subject_entity_name= sender,
+                object_entity_name= "email",
+                indirect_object_entity_name= recipient,
+            )
+        else:
+            return kplib.Action(
+                verbs=[verb],
+                verbTense = "past",
+                subject_entity_name= sender,
+                object_entity_name= recipient,
+                indirect_object_entity_name= "email",
+            )
 
 @pydantic_dataclass
 class EmailMessage(IMessage):
@@ -94,29 +151,3 @@ class EmailMessage(IMessage):
     @staticmethod
     def deserialize(message_data: dict) -> "EmailMessage":
         return EmailMessage.__pydantic_validator__.validate_python(message_data)  # type: ignore
-
-
-# Returns the knowledge entities for a given email address string
-def _email_address_to_entities(email_address: str) -> list[kplib.ConcreteEntity]:
-    entities: list[kplib.ConcreteEntity] = []
-    display_name, address = parseaddr(email_address)
-    if display_name:
-        entity = kplib.ConcreteEntity(
-            name=display_name,
-            type=["person"],
-        )
-        if address:
-            entity.facets=[{
-                "name": "email_address",
-                "value": address,
-            }] 
-        entities.append(entity)
-    
-    if address:
-        entities.append(
-            kplib.ConcreteEntity(
-                name=address,
-                type=["email_address", "alias"],
-            )
-        )
-    return entities
