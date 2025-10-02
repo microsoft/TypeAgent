@@ -7,11 +7,12 @@ import sys
 import traceback
 from typing import Any, Iterable
 from colorama import Fore
+from pathlib import Path
 
 from typeagent.aitools import utils
 
 from typeagent.knowpro import kplib
-from typeagent.emails.email_import import import_email_from_file
+from typeagent.emails.email_import import import_email_from_file, import_emails_from_dir
 from typeagent.emails.email_memory import EmailMemory
 from typeagent.emails.email_message import EmailMessage
 
@@ -25,6 +26,7 @@ async def main():
     utils.load_dotenv()
 
     dbPath: str = "/data/testChat/knowpro/email/pyEmails.db"
+    print(f"Deleting {dbPath}")
     delete_sqlite_db(dbPath)
 
     settings = ConversationSettings()  # Has no storage provider yet
@@ -44,25 +46,36 @@ async def main():
         elif cmd == "exit":
             break
         
-        file_path: str = cmd
+        src_path = Path(cmd)
         try:
-            print("================================")
-            email: EmailMessage = import_email_from_file(file_path)
-            print_email(email)
-            print()
-            knowledge = email.metadata.get_knowledge()
-            print_knowledge(knowledge)
+            emails: list[EmailMessage]
+            if src_path.is_file():
+                emails = [import_email_from_file(str(src_path))]
+            else:
+                emails = import_emails_from_dir(str(src_path))
 
-            print("Adding email...")
-            await conversation.add_message(email)
+            print(Fore.CYAN, f"Importing {len(emails)} emails".capitalize())
+            print();
+
+            for email in emails:
+                print_email(email)
+                print()
+                knowledge = email.metadata.get_knowledge()
+                print_knowledge(knowledge)
+
+                print("Adding email...")
+                await conversation.add_message(email)
+            
             count = await conversation.messages.size()
             print(Fore.GREEN + f"Added email to conversation. Total messages: {count}")
+            
+            print(Fore.GREEN, "Building index")
             await conversation.build_index()
             print(Fore.GREEN + "Built index.")
 
         except Exception as e:
             print()
-            print(Fore.RED, f"Error importing email from {file_path}: {e}")
+            print(Fore.RED, f"Error importing email from {src_path}: {e}")
             traceback.print_exc()
 
         print(Fore.RESET)

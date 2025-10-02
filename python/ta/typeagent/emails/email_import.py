@@ -2,16 +2,23 @@
 # Licensed under the MIT License.
 
 import re
+from pathlib import Path
 
 from email import message_from_string
 from email.message import Message
 
 from .email_message import EmailMessage, EmailMessageMeta
 
+def import_emails_from_dir(dir_path: str) -> list[EmailMessage]:
+    messages: list[EmailMessage] = []
+    for file_path in Path(dir_path).iterdir():
+        messages.append(import_email_from_file(str(file_path.resolve())));
+    return messages
+
 # Imports an email file (.eml) as a list of EmailMessage objects
-def import_email_from_file(email_filePath: str) -> EmailMessage:
+def import_email_from_file(file_path: str) -> EmailMessage:
     email_string: str = ""
-    with open(email_filePath, "r") as f:
+    with open(file_path, "r") as f:
         email_string = f.read()
 
     return import_email_string(email_string)
