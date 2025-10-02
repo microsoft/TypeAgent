@@ -194,12 +194,13 @@ export class ContinousSpeechRecognizer {
     private onError: (error: string) => void;
     private started: boolean = false;
 
-    constructor(useWhisper: boolean = false, 
+    constructor(
+        useWhisper: boolean = false,
         token: SpeechToken | undefined = undefined,
         onRecognizing: (text: string) => void,
         onRecognized: (text: string) => void,
-        onError: (error: string) => void) {                   
-
+        onError: (error: string) => void,
+    ) {
         this.onRecognizing = onRecognizing;
         this.onRecognized = onRecognized;
         this.onError = onError;
@@ -222,14 +223,17 @@ export class ContinousSpeechRecognizer {
 
             this.whisperRecognizer.initialize().then(() => {
                 this.whisperRecognizer?.startRecording();
-            }); 
+            });
         } else if (getAndroidAPI()?.isSpeechRecognitionSupported() === true) {
-            throw new Error("Continuous recognition not supported on Android"); 
+            throw new Error("Continuous recognition not supported on Android");
         } else {
             this.token = token;
             this.audioConfig = getAudioConfig();
             this.speechConfig = getSpeechConfig(this.token);
-            this.reco = new speechSDK.SpeechRecognizer(this.speechConfig!, this.audioConfig!);
+            this.reco = new speechSDK.SpeechRecognizer(
+                this.speechConfig!,
+                this.audioConfig!,
+            );
             // The 'recognizing' event signals that an intermediate recognition result is received.
             // Intermediate results arrive while audio is being processed and represent the current "best guess" about
             // what's been spoken so far.
@@ -247,24 +251,26 @@ export class ContinousSpeechRecognizer {
                     this.onError(`[ERROR: ${err}]`);
                 },
             );
-        }  
+        }
     }
 
-    public start()  {
-
+    public start() {
         // don't do anything if already started
         if (this.started) return;
-        
+
         this.started = true;
 
         if (this.whisperRecognizer) {
             this.whisperRecognizer.startRecording();
         } else {
-            this.reco!.startContinuousRecognitionAsync(() => {
-                console.log("continuous recognition started");    
-            }, (error) => {
-                console.log(error);
-            })
+            this.reco!.startContinuousRecognitionAsync(
+                () => {
+                    console.log("continuous recognition started");
+                },
+                (error) => {
+                    console.log(error);
+                },
+            );
         }
     }
 

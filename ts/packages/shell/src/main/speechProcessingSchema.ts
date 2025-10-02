@@ -10,8 +10,8 @@ export type SpeechProcessingAction = {
         inputText: string;
         // An XML string containing the processed text
         processedText: UserExpression[];
-    }
-}
+    };
+};
 
 export type UserExpression = {
     type: "statement" | "question" | "command" | "other";
@@ -19,4 +19,4 @@ export type UserExpression = {
     confidence: "low" | "medium" | "high";
     complete_statement: boolean;
     text: string;
-}
+};

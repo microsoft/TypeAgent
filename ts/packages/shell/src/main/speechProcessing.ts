@@ -4,10 +4,12 @@
 import { ChatModelWithStreaming, openai } from "aiclient";
 import registerDebug from "debug";
 import { createTypeChat } from "typeagent";
-import { SpeechProcessingAction, UserExpression } from "./speechProcessingSchema.js";
+import {
+    SpeechProcessingAction,
+    UserExpression,
+} from "./speechProcessingSchema.js";
 
 const debug = registerDebug("typeagent:shell:speechProcessing");
-
 
 export class SpeechProcessing {
     // Singleton
@@ -27,28 +29,27 @@ Your goal is to annotate the speech recognition results and to classify the inco
 Only classify statements as questions or requests if they are complete statements and actionable.
 `;
 
-
     constructor() {
         this.model = openai.createChatModel(
             openai.azureApiSettingsFromEnv(
                 openai.ModelType.Chat,
                 undefined,
                 "GPT_5_NANO",
-            ), 
+            ),
             {
                 temperature: 1.0,
                 max_completion_tokens: 8196,
-                response_format: { type: "json_object"},
+                response_format: { type: "json_object" },
                 reasoning_effort: "low",
             },
             undefined,
-            ["continuous-speech-processing"]
+            ["continuous-speech-processing"],
         );
-
     }
 
-    public async processSpeech(speechText: string): Promise<UserExpression[] | undefined> {
-
+    public async processSpeech(
+        speechText: string,
+    ): Promise<UserExpression[] | undefined> {
         debug("Processing speech: " + speechText);
 
         try {
@@ -80,7 +81,7 @@ export type UserExpression = {
                 this.instructions,
                 [],
                 8196,
-                30
+                30,
             );
 
             const response = await azoai.translate(speechText);
@@ -94,5 +95,5 @@ export type UserExpression = {
             debug("Error processing speech: " + error);
             return undefined;
         }
-    };
+    }
 }

@@ -107,26 +107,32 @@ export function initializeSpeech() {
         return isLocalWhisperEnabled();
     });
 
-    ipcMain.handle("continuous-speech-processing", async (event, text: string) => {
-        // Make sure the request comes from the chat view
-        if (getShellWindowForChatViewIpcEvent(event) === undefined) {
-            return undefined;
-        }
+    ipcMain.handle(
+        "continuous-speech-processing",
+        async (event, text: string) => {
+            // Make sure the request comes from the chat view
+            if (getShellWindowForChatViewIpcEvent(event) === undefined) {
+                return undefined;
+            }
 
-        // TODO: Process the text and return the result
-        console.log("Continuous speech processing: " + text);
+            // TODO: Process the text and return the result
+            console.log("Continuous speech processing: " + text);
 
-
-        const shellWindow = getShellWindow();
-        if (shellWindow === undefined) {
-            return;
-        }
-        const chatView = shellWindow.chatView;
-        SpeechProcessing.getInstance().processSpeech(text).then((expression) => {
-            chatView.webContents.send("continuous-speech-processed", expression);
-        });
-        
-    });
+            const shellWindow = getShellWindow();
+            if (shellWindow === undefined) {
+                return;
+            }
+            const chatView = shellWindow.chatView;
+            SpeechProcessing.getInstance()
+                .processSpeech(text)
+                .then((expression) => {
+                    chatView.webContents.send(
+                        "continuous-speech-processed",
+                        expression,
+                    );
+                });
+        },
+    );
 
     const ret = globalShortcut.register("Alt+M", triggerRecognitionOnce);
     if (ret) {
@@ -138,7 +144,10 @@ export function initializeSpeech() {
         debugShellError("Global shortcut registration failed");
     }
 
-    const ret2 = globalShortcut.register("Alt+Shift+M", toggleContinuousRecognition);
+    const ret2 = globalShortcut.register(
+        "Alt+Shift+M",
+        toggleContinuousRecognition,
+    );
     if (ret2) {
         // Double check whether a shortcut is registered.
         debugShell(

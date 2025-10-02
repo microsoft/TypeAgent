@@ -108,4 +108,4 @@ export type UserExpression = {
     confidence: "low" | "medium" | "high";
     complete_statement: boolean;
     text: string;
-}
+};
