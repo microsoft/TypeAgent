@@ -94,11 +94,14 @@ def _decode_email_payload(part: Message) -> str:
 def _import_address_headers(headers: list[str]) -> list[str]:
     if len(headers) == 0:
         return headers
-    addresses: list[str] = []
+    unique_addresses: set[str] = set()
     for header in headers:
         if header:
-            addresses.extend(_remove_empty(header.split(",")))
-    return addresses
+            addresses = _remove_empty(header.split(","))
+            for address in addresses:
+                unique_addresses.add(address)
+
+    return list(unique_addresses)
 
 def _remove_empty(strings: list[str]) -> list[str]:
     non_empty: list[str] = []
