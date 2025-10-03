@@ -100,6 +100,7 @@ export async function initializeBrowserExtension(appPath: string) {
         "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
         "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
         "/entityGraphView.html": `chrome-extension://${extension.id}/views/entityGraphView.html`,
+        "/topicGraphView.html": `chrome-extension://${extension.id}/views/topicGraphView.html`,
     };
 
     ipcMain.handle("init-browser-ipc", async () => {

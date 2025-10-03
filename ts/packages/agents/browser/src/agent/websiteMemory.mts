@@ -25,6 +25,11 @@ import {
     importProgressEvents,
     ImportProgressEvent,
 } from "./import/importProgressEvents.mjs";
+import {
+    ImportStateManager,
+    ImportState,
+} from "./import/importStateManager.mjs";
+import * as path from "path";
 
 function logStructuredProgress(
     current: number,
@@ -52,6 +57,20 @@ function logStructuredProgress(
         filename?: string;
         currentAction?: string;
     },
+    additionalData?: {
+        graphBuildingPhase?:
+            | "entities"
+            | "relationships"
+            | "topics"
+            | "communities";
+        entitiesProcessed?: number;
+        relationshipsBuilt?: number;
+        topicsHierarchized?: number;
+        lastSavePoint?: number;
+        nextSavePoint?: number;
+        dataPersistedToDisk?: boolean;
+        graphPersistedToDb?: boolean;
+    },
 ) {
     if (importContext) {
         const progressEvent: ImportProgressEvent = {
@@ -70,6 +89,16 @@ function logStructuredProgress(
             }),
             ...(summary && { summary }),
             ...(itemDetails && { itemDetails }),
+            ...(additionalData && {
+                graphBuildingPhase: additionalData.graphBuildingPhase,
+                entitiesProcessed: additionalData.entitiesProcessed,
+                relationshipsBuilt: additionalData.relationshipsBuilt,
+                topicsHierarchized: additionalData.topicsHierarchized,
+                lastSavePoint: additionalData.lastSavePoint,
+                nextSavePoint: additionalData.nextSavePoint,
+                dataPersistedToDisk: additionalData.dataPersistedToDisk,
+                graphPersistedToDb: additionalData.graphPersistedToDb,
+            }),
         };
         importProgressEvents.emitProgress(progressEvent);
     }
@@ -469,21 +498,136 @@ export async function importWebsiteDataFromSession(
                 new website.WebsiteCollection();
         }
 
-        context.agentContext.websiteCollection.addWebsites(websites);
+        //Set up periodic persistence
+        const importId = importContext.importId;
+        const chunkSize = Math.min(50, Math.ceil(websites.length * 0.2));
+        const savePoints = ImportStateManager.calculateSavePoints(
+            websites.length,
+        );
+        let currentSavePointIndex = 0;
 
-        try {
-            await context.agentContext.websiteCollection.addToIndex();
-        } catch (error) {
-            debug(
-                `Incremental indexing failed, falling back to full rebuild: ${error}`,
+        // Initialize import state
+        const importState: ImportState = {
+            importId,
+            totalWebsites: websites.length,
+            processedWebsites: 0,
+            lastSavePoint: 0,
+            failedUrls: [],
+            startTime: Date.now(),
+            lastProgressTime: Date.now(),
+            extractionMode,
+            source,
+            type,
+            filePath,
+        };
+        await ImportStateManager.saveImportState(importState);
+
+        for (let i = 0; i < websites.length; i += chunkSize) {
+            const chunk = websites.slice(i, i + chunkSize);
+            const chunkIndex = Math.floor(i / chunkSize) + 1;
+            const totalChunks = Math.ceil(websites.length / chunkSize);
+            const processedCount = i + chunk.length;
+
+            logStructuredProgress(
+                processedCount,
+                websites.length,
+                `Building knowledge graph (chunk ${chunkIndex}/${totalChunks})`,
+                "graph-building",
+                importContext,
+                undefined, // summary
+                undefined, // itemDetails
+                {
+                    graphBuildingPhase: "entities",
+                    nextSavePoint: savePoints[currentSavePointIndex],
+                    lastSavePoint: importState.lastSavePoint,
+                },
             );
-            await context.agentContext.websiteCollection.buildIndex();
+
+            context.agentContext.websiteCollection.addWebsites(chunk);
+
+            try {
+                await context.agentContext.websiteCollection.addToIndex();
+            } catch (error) {
+                debug(
+                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                );
+                await context.agentContext.websiteCollection.buildIndex();
+            }
+
+            await context.agentContext.websiteCollection.updateGraphIncremental(
+                chunk,
+            );
+
+            // Check if we should save progress
+            if (
+                currentSavePointIndex < savePoints.length &&
+                processedCount >= savePoints[currentSavePointIndex]
+            ) {
+                logStructuredProgress(
+                    processedCount,
+                    websites.length,
+                    `Saving progress (${processedCount}/${websites.length} websites)`,
+                    "persisting",
+                    importContext,
+                    undefined, // summary
+                    undefined, // itemDetails
+                    {
+                        dataPersistedToDisk: false,
+                        graphPersistedToDb: false,
+                    },
+                );
+
+                try {
+                    // Save WebsiteCollection to backup location
+                    if (context.agentContext.index?.path) {
+                        const backupPath =
+                            ImportStateManager.getCollectionBackupPath(
+                                importId,
+                                processedCount,
+                            );
+                        await context.agentContext.websiteCollection.writeToFile(
+                            path.dirname(backupPath),
+                            path.basename(backupPath, ".json"),
+                        );
+                        debug(
+                            `Saved website collection backup to ${backupPath}`,
+                        );
+                    }
+
+                    // Update import state
+                    importState.processedWebsites = processedCount;
+                    importState.lastSavePoint = processedCount;
+                    importState.lastProgressTime = Date.now();
+                    await ImportStateManager.saveImportState(importState);
+
+                    logStructuredProgress(
+                        processedCount,
+                        websites.length,
+                        `Progress saved (${processedCount}/${websites.length} websites)`,
+                        "persisting",
+                        importContext,
+                        undefined, // summary
+                        undefined, // itemDetails
+                        {
+                            dataPersistedToDisk: true,
+                            graphPersistedToDb: true,
+                            lastSavePoint: processedCount,
+                        },
+                    );
+
+                    currentSavePointIndex++;
+                } catch (error) {
+                    debug(
+                        `Failed to save progress at ${processedCount}: ${error}`,
+                    );
+                }
+            }
         }
 
         // Entity processing is now handled by the website-memory package integration
         debug(`Website import completed for ${websites.length} websites`);
 
-        // Persist the website collection to disk
+        // Final save and cleanup
         try {
             if (context.agentContext.index?.path) {
                 await context.agentContext.websiteCollection.writeToFile(
@@ -496,8 +640,13 @@ export async function importWebsiteDataFromSession(
             } else {
                 debug("No index path available, website data not persisted");
             }
+
+            // Clean up import state and backups
+            await ImportStateManager.deleteImportState(importId);
+            await ImportStateManager.cleanupOldBackups(importId);
+            debug(`Cleaned up import state and backups for ${importId}`);
         } catch (error) {
-            debug(`Failed to save website collection: ${error}`);
+            debug(`Failed to save website collection or cleanup: ${error}`);
         }
 
         // Calculate knowledge statistics for the completion event
@@ -845,15 +994,36 @@ export async function importHtmlFolderFromSession(
             const websites = websiteDataResults.map((data) =>
                 convertWebsiteDataToWebsite(data),
             );
-            context.agentContext.websiteCollection.addWebsites(websites);
 
-            try {
-                await context.agentContext.websiteCollection.addToIndex();
-            } catch (error) {
-                debug(
-                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+            const chunkSize = Math.min(50, Math.ceil(websites.length * 0.2));
+
+            for (let i = 0; i < websites.length; i += chunkSize) {
+                const chunk = websites.slice(i, i + chunkSize);
+                const chunkIndex = Math.floor(i / chunkSize) + 1;
+                const totalChunks = Math.ceil(websites.length / chunkSize);
+
+                logStructuredProgress(
+                    i + chunk.length,
+                    websites.length,
+                    `Building knowledge graph (chunk ${chunkIndex}/${totalChunks})`,
+                    "graph-building",
+                    importContext,
                 );
-                await context.agentContext.websiteCollection.buildIndex();
+
+                context.agentContext.websiteCollection.addWebsites(chunk);
+
+                try {
+                    await context.agentContext.websiteCollection.addToIndex();
+                } catch (error) {
+                    debug(
+                        `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                    );
+                    await context.agentContext.websiteCollection.buildIndex();
+                }
+
+                await context.agentContext.websiteCollection.updateGraphIncremental(
+                    chunk,
+                );
             }
 
             // Entity processing is now handled by the website-memory package integration

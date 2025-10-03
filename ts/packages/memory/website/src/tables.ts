@@ -411,3 +411,139 @@ export class CommunityTable extends ms.sqlite.SqliteDataFrame {
         stmt.run();
     }
 }
+
+// Hierarchical topics table
+export interface HierarchicalTopicRecord {
+    url: string;
+    domain: string;
+    topicId: string;
+    topicName: string;
+    level: number;
+    parentTopicId?: string;
+    confidence: number;
+    keywords?: string; // JSON array stored as string
+    extractionDate: string;
+}
+
+export class HierarchicalTopicTable extends ms.sqlite.SqliteDataFrame {
+    constructor(public db: sqlite.Database) {
+        super(db, "hierarchicalTopics", [
+            ["url", { type: "string" }],
+            ["domain", { type: "string" }],
+            ["topicId", { type: "string" }],
+            ["topicName", { type: "string" }],
+            ["level", { type: "number" }],
+            ["parentTopicId", { type: "string", optional: true }],
+            ["confidence", { type: "number" }],
+            ["keywords", { type: "string", optional: true }],
+            ["extractionDate", { type: "string" }],
+        ]);
+    }
+
+    public getTopicsByLevel(level: number): HierarchicalTopicRecord[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM hierarchicalTopics
+            WHERE level = ?
+            ORDER BY confidence DESC
+        `);
+        const results = stmt.all(level);
+        return results as HierarchicalTopicRecord[];
+    }
+
+    public getChildTopics(parentTopicId: string): HierarchicalTopicRecord[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM hierarchicalTopics
+            WHERE parentTopicId = ?
+            ORDER BY topicName
+        `);
+        const results = stmt.all(parentTopicId);
+        return results as HierarchicalTopicRecord[];
+    }
+
+    public getTopicHierarchy(domain?: string): HierarchicalTopicRecord[] {
+        const query = domain
+            ? `SELECT * FROM hierarchicalTopics WHERE domain = ? ORDER BY level, topicName`
+            : `SELECT * FROM hierarchicalTopics ORDER BY level, topicName`;
+        const stmt = this.db.prepare(query);
+        const results = domain ? stmt.all(domain) : stmt.all();
+        return results as HierarchicalTopicRecord[];
+    }
+
+    public getRootTopics(domain?: string): HierarchicalTopicRecord[] {
+        const query = domain
+            ? `SELECT * FROM hierarchicalTopics WHERE level = 0 AND domain = ? ORDER BY confidence DESC`
+            : `SELECT * FROM hierarchicalTopics WHERE level = 0 ORDER BY confidence DESC`;
+        const stmt = this.db.prepare(query);
+        const results = domain ? stmt.all(domain) : stmt.all();
+        return results as HierarchicalTopicRecord[];
+    }
+
+    public getTopicById(topicId: string): HierarchicalTopicRecord | undefined {
+        const stmt = this.db.prepare(`
+            SELECT * FROM hierarchicalTopics
+            WHERE topicId = ?
+        `);
+        return stmt.get(topicId) as HierarchicalTopicRecord | undefined;
+    }
+
+    public deleteTopicsByUrl(url: string): void {
+        const stmt = this.db.prepare(
+            `DELETE FROM hierarchicalTopics WHERE url = ?`,
+        );
+        stmt.run(url);
+    }
+}
+
+// Topic-to-entity relationships table
+export interface TopicEntityRelation {
+    topicId: string;
+    entityName: string;
+    relevance: number;
+    domain: string;
+    [key: string]: any;
+}
+
+export class TopicEntityRelationTable extends ms.sqlite.SqliteDataFrame {
+    constructor(public db: sqlite.Database) {
+        super(db, "topicEntityRelations", [
+            ["topicId", { type: "string" }],
+            ["entityName", { type: "string" }],
+            ["relevance", { type: "number" }],
+            ["domain", { type: "string" }],
+        ]);
+    }
+
+    public getEntitiesForTopic(topicId: string): TopicEntityRelation[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicEntityRelations
+            WHERE topicId = ?
+            ORDER BY relevance DESC
+        `);
+        return stmt.all(topicId) as TopicEntityRelation[];
+    }
+
+    public getTopicsForEntity(entityName: string): TopicEntityRelation[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicEntityRelations
+            WHERE entityName = ?
+            ORDER BY relevance DESC
+        `);
+        return stmt.all(entityName) as TopicEntityRelation[];
+    }
+
+    public addRelation(relation: TopicEntityRelation): void {
+        this.addRows({
+            sourceRef: {
+                range: { start: { messageOrdinal: 0, chunkOrdinal: 0 } },
+            },
+            record: relation,
+        });
+    }
+
+    public deleteRelationsByTopic(topicId: string): void {
+        const stmt = this.db.prepare(
+            `DELETE FROM topicEntityRelations WHERE topicId = ?`,
+        );
+        stmt.run(topicId);
+    }
+}
