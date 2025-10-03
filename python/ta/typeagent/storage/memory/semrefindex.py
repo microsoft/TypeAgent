@@ -29,7 +29,10 @@ from ...knowpro.interfaces import (
     TextRange,
     Topic,
 )
-from ...knowpro.utils import text_range_from_message_chunk
+from ...knowpro.messageutils import (
+    get_message_chunk_batch,
+    text_range_from_message_chunk,
+)
 from ...knowpro.knowledge import extract_knowledge_from_text_batch
 
 
@@ -487,8 +490,23 @@ async def add_metadata_to_index[TMessage: IMessage](
     semantic_ref_index: ITermToSemanticRefIndex,
     knowledge_validator: KnowledgeValidator | None = None,
 ) -> None:
+    # Find the highest message ordinal already processed
+    # by checking existing semantic refs
+    start_from_ordinal = 0
+    existing_ref_count = await semantic_refs.size()
+    if existing_ref_count > 0:
+        # Get the last semantic ref to find the highest processed message ordinal
+        last_ref = await semantic_refs.get_item(existing_ref_count - 1)
+        if last_ref.range and last_ref.range.start:
+            start_from_ordinal = last_ref.range.start.message_ordinal + 1
+
     i = 0
     async for msg in messages:
+        # Skip messages that were already processed
+        if i < start_from_ordinal:
+            i += 1
+            continue
+
         knowledge_response = msg.get_knowledge()
         for entity in knowledge_response.entities:
             if knowledge_validator is None or knowledge_validator("entity", entity):
@@ -608,6 +626,9 @@ async def build_semantic_ref_index[TM: IMessage](
     conversation: IConversation[TM, ITermToSemanticRefIndex],
     settings: SemanticRefIndexSettings,
 ) -> None:
+    # For LLM-based knowledge extraction, we need to track separately from metadata extraction
+    # For now, always start from 0 to process all messages
+    # TODO: Implement proper tracking of which messages have had LLM extraction
     await add_to_semantic_ref_index(conversation, settings, 0)
 
 
@@ -628,18 +649,19 @@ async def add_to_semantic_ref_index[
             settings.knowledge_extractor or convknowledge.KnowledgeExtractor()
         )
 
-    # TODO: get_message_chunk_batch
-    # for text_location_batch in get_message_chunk_batch(
-    #     conversation.messages,
-    #     message_ordinal_start_at,
-    #     settings.batch_size,
-    # ):
-    #     await add_batch_to_semantic_ref_index(
-    #         conversation,
-    #         text_location_batch,
-    #         knowledge_extractor,
-    #         terms_added,
-    #     )
+        # Process messages in batches for LLM knowledge extraction
+        batches = await get_message_chunk_batch(
+            conversation.messages,
+            message_ordinal_start_at,
+            settings.batch_size,
+        )
+        for text_location_batch in batches:
+            await add_batch_to_semantic_ref_index(
+                conversation,
+                text_location_batch,
+                knowledge_extractor,
+                terms_added,
+            )
 
 
 def verify_has_semantic_ref_index(conversation: IConversation) -> None:
