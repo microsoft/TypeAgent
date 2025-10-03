@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import os
+import shlex
 import asyncio
 import sys
 import traceback
@@ -18,6 +19,7 @@ from typeagent.emails.email_message import EmailMessage
 
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.storage.utils import create_storage_provider
+
 
 # Just simple test code
 # TODO : Once stable, move creation etc to utool.py
@@ -37,49 +39,64 @@ async def main():
         EmailMessage,
     )
     conversation:EmailMemory = await EmailMemory.create(settings)
-    print(await conversation.messages.size())
-    # conversation: EmailMemory  = EmailMemory.create()
+
+    handlers = {
+        "@add": add_messages,
+        "@build": build_index
+    }
     while True:
-        cmd = input("✉>>").strip()
-        if len(cmd) == 0:
+        line = input("✉>>").strip()
+        if len(line) == 0:
             continue
-        elif cmd == "exit":
-            break
-        
-        src_path = Path(cmd)
+        elif line == "exit":
+            break        
+        args = shlex.split(line)
+        if len(args) < 1:
+            continue
         try:
-            emails: list[EmailMessage]
-            if src_path.is_file():
-                emails = [import_email_from_file(str(src_path))]
+            cmd = args[0].lower()
+            if cmd == "@help":
+                print(handlers.keys())
             else:
-                emails = import_emails_from_dir(str(src_path))
-
-            print(Fore.CYAN, f"Importing {len(emails)} emails".capitalize())
-            print();
-
-            for email in emails:
-                print_email(email)
-                print()
-                knowledge = email.metadata.get_knowledge()
-                print_knowledge(knowledge)
-
-                print("Adding email...")
-                await conversation.add_message(email)
-            
-            count = await conversation.messages.size()
-            print(Fore.GREEN + f"Added email to conversation. Total messages: {count}")
-            
-            print(Fore.GREEN, "Building index")
-            await conversation.build_index()
-            print(Fore.GREEN + "Built index.")
-
+                handler = handlers.get(cmd)
+                if handler:
+                    args.pop(0)
+                    await handler(conversation, args)            
         except Exception as e:
             print()
-            print(Fore.RED, f"Error importing email from {src_path}: {e}")
+            print(Fore.RED, f"Error\n: {e}")
             traceback.print_exc()
 
         print(Fore.RESET)
 
+async def add_messages(conversation: EmailMemory, args: list[str]):
+    if len(args) < 1:
+        print_error("No path provided")
+        return
+    
+    src_path = Path(args[0])
+    emails: list[EmailMessage]
+    if src_path.is_file():
+        emails = [import_email_from_file(str(src_path))]
+    else:
+        emails = import_emails_from_dir(str(src_path))
+
+    print(Fore.CYAN, f"Importing {len(emails)} emails".capitalize())
+    print()
+
+    for email in emails:
+        print_email(email)
+        print()
+        knowledge = email.metadata.get_knowledge()
+        print_knowledge(knowledge)
+
+        print("Adding email...")
+        await conversation.add_message(email)
+
+async def build_index(conversation: EmailMemory, args: list[str]):
+    print(Fore.GREEN, "Building index")
+    await conversation.build_index()
+    print(Fore.GREEN + "Built index.")
 
 def delete_sqlite_db(db_path: str):
     if os.path.exists(db_path):
@@ -124,6 +141,10 @@ def print_list(color, list: Iterable[Any], title: str):
         print()
     for item in list:
         print(color + " -", item)
+
+def print_error(msg: str):
+    print(Fore.RED + msg)
+    print(Fore.RESET)
 
 if __name__ == "__main__":
     try:
