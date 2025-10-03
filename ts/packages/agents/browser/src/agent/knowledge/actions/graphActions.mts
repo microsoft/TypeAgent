@@ -1599,3 +1599,135 @@ function calculateDistributionPercentiles(
         return importanceScores[index] || 0;
     });
 }
+
+// ============================================================================
+// Hierarchical Topics Functions
+// ============================================================================
+
+/**
+ * Get hierarchical topics from the website collection
+ */
+export async function getHierarchicalTopics(
+    parameters: {
+        centerTopic?: string;
+        includeRelationships?: boolean;
+        maxDepth?: number;
+        domain?: string;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    topics: any[];
+    relationships: any[];
+    maxDepth: number;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            debug("website collection not found");
+            return {
+                success: false,
+                topics: [],
+                relationships: [],
+                maxDepth: 0,
+                error: "Website collection not available",
+            };
+        }
+
+        // Check if hierarchical topics table exists
+        if (!websiteCollection.hierarchicalTopics) {
+            debug("hierarchical topics table not found");
+            return {
+                success: false,
+                topics: [],
+                relationships: [],
+                maxDepth: 0,
+                error: "Hierarchical topics not available",
+            };
+        }
+
+        let topics: any[] = [];
+
+        try {
+            // Get hierarchical topics from the database
+            if (parameters.domain) {
+                topics = websiteCollection.hierarchicalTopics.getTopicHierarchy(
+                    parameters.domain,
+                );
+            } else {
+                topics =
+                    websiteCollection.hierarchicalTopics.getTopicHierarchy();
+            }
+
+            debug(`Found ${topics.length} hierarchical topics`);
+        } catch (error) {
+            console.warn("Failed to get hierarchical topics:", error);
+            return {
+                success: false,
+                topics: [],
+                relationships: [],
+                maxDepth: 0,
+                error: "Failed to retrieve hierarchical topics",
+            };
+        }
+
+        // Filter by max depth if specified
+        if (parameters.maxDepth !== undefined) {
+            topics = topics.filter(
+                (topic) => topic.level <= parameters.maxDepth!,
+            );
+        }
+
+        // Build relationships from parent-child structure
+        let relationships: any[] = [];
+        if (parameters.includeRelationships !== false) {
+            relationships = buildTopicRelationships(topics);
+        }
+
+        // Calculate max depth
+        const maxDepth =
+            topics.length > 0 ? Math.max(...topics.map((t) => t.level)) : 0;
+
+        debug(
+            `Returning ${topics.length} topics with ${relationships.length} relationships, max depth: ${maxDepth}`,
+        );
+
+        return {
+            success: true,
+            topics,
+            relationships,
+            maxDepth,
+        };
+    } catch (error) {
+        console.error("Error getting hierarchical topics:", error);
+        return {
+            success: false,
+            topics: [],
+            relationships: [],
+            maxDepth: 0,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+/**
+ * Build relationships from hierarchical topic parent-child structure
+ */
+function buildTopicRelationships(topics: any[]): any[] {
+    const relationships: any[] = [];
+
+    for (const topic of topics) {
+        if (topic.parentTopicId) {
+            relationships.push({
+                from: topic.parentTopicId,
+                to: topic.topicId,
+                type: "parent-child",
+                strength: topic.confidence || 0.8,
+            });
+        }
+    }
+
+    return relationships;
+}

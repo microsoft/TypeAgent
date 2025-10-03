@@ -826,8 +826,16 @@ export class KnowledgeSearchPanel {
             const topicTagsHtml = topics
                 .map(
                     (topic) => `
-                    <div class="topic-tag clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Click to search for topic: ${this.escapeHtml(topic)}">
+                    <div class="topic-tag clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Left-click to search, right-click to view topic hierarchy">
                         <span>${this.escapeHtml(topic)}</span>
+                        <div class="topic-actions">
+                            <button class="btn btn-sm topic-search-btn" title="Search for topic">
+                                <i class="bi bi-search"></i>
+                            </button>
+                            <button class="btn btn-sm topic-graph-btn" title="View topic hierarchy">
+                                <i class="bi bi-diagram-3"></i>
+                            </button>
+                        </div>
                     </div>
                 `,
                 )
@@ -841,13 +849,50 @@ export class KnowledgeSearchPanel {
 
             // Add click event listeners to topic tags
             topicsContent
+                .querySelectorAll(".topic-search-btn")
+                .forEach((searchBtn) => {
+                    searchBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        const topicElement = (e.target as HTMLElement).closest(
+                            ".clickable-topic",
+                        ) as HTMLElement;
+                        const topicName = topicElement?.dataset.topic;
+                        if (topicName) {
+                            this.performSearchWithQuery(topicName);
+                        }
+                    });
+                });
+
+            topicsContent
+                .querySelectorAll(".topic-graph-btn")
+                .forEach((graphBtn) => {
+                    graphBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        const topicElement = (e.target as HTMLElement).closest(
+                            ".clickable-topic",
+                        ) as HTMLElement;
+                        const topicName = topicElement?.dataset.topic;
+                        if (topicName) {
+                            // Navigate to topic graph view for hierarchical topic exploration
+                            window.location.href = `topicGraphView.html?topic=${encodeURIComponent(topicName)}`;
+                        }
+                    });
+                });
+
+            // Default click behavior (search)
+            topicsContent
                 .querySelectorAll(".clickable-topic")
                 .forEach((topicElement) => {
                     topicElement.addEventListener("click", (e) => {
-                        const topicName = (e.currentTarget as HTMLElement)
-                            .dataset.topic;
-                        if (topicName) {
-                            this.performSearchWithQuery(topicName);
+                        // Only handle if not clicking on buttons
+                        if (
+                            !(e.target as HTMLElement).closest(".topic-actions")
+                        ) {
+                            const topicName = (e.currentTarget as HTMLElement)
+                                .dataset.topic;
+                            if (topicName) {
+                                this.performSearchWithQuery(topicName);
+                            }
                         }
                     });
                 });

@@ -25,7 +25,10 @@ export class ImportWebSocketHandler {
 
     private forwardProgressToWebSocket(progress: ImportProgressEvent) {
         try {
-            const client = this.context.agentContext.currentClient;
+            // Get client from agentWebSocketServer instead of currentClient
+            const agentServer = this.context.agentContext.agentWebSocketServer;
+            const client = agentServer?.getActiveClient();
+
             if (client && client.socket.readyState === WebSocket.OPEN) {
                 const websocketProgress = {
                     type: "importProgress",
