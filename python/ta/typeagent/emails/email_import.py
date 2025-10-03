@@ -29,6 +29,10 @@ def import_email_string(email_string: str) -> EmailMessage:
     email: EmailMessage = import_email_message(msg)
     return email
 
+def import_forwarded_email_string(email_string: str) -> list[EmailMessage]:
+    msg_parts = get_forwarded_email_parts(email_string)
+    return [import_email_string(part) for part in msg_parts if len(part) > 0]
+
 # Imports an email.message.Message object and returns an EmailMessage object
 # If the message is a reply, returns only the latest response. 
 def import_email_message(msg: Message) -> EmailMessage:
@@ -41,11 +45,12 @@ def import_email_message(msg: Message) -> EmailMessage:
         subject=msg.get("Subject"))
     timestamp = msg.get("Date", None)
 
-    # Get email body
+    # Get email body. 
+    # If the email was a reply, then ensure we only pick up the latest response
     body = _extract_email_body(msg)
     if body is None:
         body = "" 
-    elif _is_reply(msg):
+    elif is_reply(msg):
         body = get_last_response_in_thread(body)
         
     if email_meta.subject is not None:
@@ -58,7 +63,13 @@ def import_email_message(msg: Message) -> EmailMessage:
     )
     return email
 
-    
+def is_reply(msg: Message) -> bool:
+    return msg.get("In-Reply-To") is not None or msg.get("References") is not None
+
+def is_forwarded(msg: Message) -> bool:
+    subject = msg.get("Subject", "").upper()
+    return subject.startswith("FW:") or subject.startswith("FWD:")
+
 # Return all sub-parts of a forwarded email text in MIME format
 def get_forwarded_email_parts(email_text: str) -> list[str]:
     # Forwarded emails often start with "From:" lines, so we can split on those
@@ -135,9 +146,6 @@ def _import_address_headers(headers: list[str]) -> list[str]:
                 unique_addresses.add(address)
 
     return list(unique_addresses)
-
-def _is_reply(msg: Message) -> bool:
-    return msg.get("In-Reply-To") is not None or msg.get("References") is not None
 
 def _remove_empty(strings: list[str]) -> list[str]:
     non_empty: list[str] = []
