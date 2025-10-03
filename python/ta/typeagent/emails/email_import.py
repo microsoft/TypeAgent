@@ -30,6 +30,7 @@ def import_email_string(email_string: str) -> EmailMessage:
     return email
 
 # Imports an email.message.Message object and returns an EmailMessage object
+# If the message is a reply, returns only the latest response. 
 def import_email_message(msg: Message) -> EmailMessage:
     # Extract metadata from
     email_meta = EmailMessageMeta(
@@ -44,6 +45,9 @@ def import_email_message(msg: Message) -> EmailMessage:
     body = _extract_email_body(msg)
     if body is None:
         body = "" 
+    elif _is_reply(msg):
+        body = get_last_response_in_thread(body)
+        
     if email_meta.subject is not None:
         body = email_meta.subject + "\n\n" + body
 
@@ -55,12 +59,41 @@ def import_email_message(msg: Message) -> EmailMessage:
     return email
 
     
-# Return all sub-parts of a forwarded email MIME texts
-def get_forwarded_email_parts(mime_text: str) -> list[str]:
+# Return all sub-parts of a forwarded email text in MIME format
+def get_forwarded_email_parts(email_text: str) -> list[str]:
     # Forwarded emails often start with "From:" lines, so we can split on those
     split_delimiter = re.compile(r'(?=From:)', re.IGNORECASE)
-    parts: list[str] = split_delimiter.split(mime_text)
+    parts: list[str] = split_delimiter.split(email_text)
     return  _remove_empty(parts)
+
+# Simple way to get the last response on an email thread in MIME format
+def get_last_response_in_thread(email_text: str) -> str:
+    if not email_text:
+        return ""
+    
+    delimiters = [
+        "From:",
+        "Sent:",
+        "To:",
+        "Subject:",
+        "-----Original Message-----",
+        "----- Forwarded by",
+        "________________________________________",
+    ]
+
+    first_delimiter_at = -1
+    for delimiter in delimiters:
+        index = email_text.find(delimiter)
+        if index != -1 and (first_delimiter_at == -1 or index < first_delimiter_at):
+            first_delimiter_at = index
+
+    if first_delimiter_at > 0:
+        email_text = email_text[:first_delimiter_at]
+
+    email_text = email_text.strip()
+    # Remove trailing line delimiters
+    email_text = re.sub(r'[\r\n]_+\s*$', '', email_text)
+    return email_text
 
 # Extracts the plain text body from an email.message.Message object.
 def _extract_email_body(msg: Message) -> str:
@@ -102,6 +135,9 @@ def _import_address_headers(headers: list[str]) -> list[str]:
                 unique_addresses.add(address)
 
     return list(unique_addresses)
+
+def _is_reply(msg: Message) -> bool:
+    return msg.get("In-Reply-To") is not None or msg.get("References") is not None
 
 def _remove_empty(strings: list[str]) -> list[str]:
     non_empty: list[str] = []
