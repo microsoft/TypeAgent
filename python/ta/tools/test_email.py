@@ -19,8 +19,7 @@ from typeagent.emails.email_message import EmailMessage
 
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.storage.utils import create_storage_provider
-
-
+    
 # Just simple test code
 # TODO : Once stable, move creation etc to utool.py
 async def main():
