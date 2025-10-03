@@ -3,7 +3,8 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import { debug } from "debug";
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:browser:import");
 
 export interface ImportState {
     importId: string;
