@@ -1,7 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os
 from dataclasses import dataclass
+import json
 
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
@@ -13,6 +15,7 @@ from ..knowpro.interfaces import (
     IMessageCollection,
     ISemanticRefCollection,
     ITermToSemanticRefIndex,
+    Term,
 )
 from ..storage.memory import semrefindex
         
@@ -54,7 +57,7 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             ),
         )
 
-    async def add_message(self, message: EmailMessage) -> None:        
+    async def add_message(self, message: EmailMessage) -> None:    
         await self.messages.append(message)
 
     async def build_index(
@@ -65,6 +68,13 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             self.semantic_refs,
             self.semantic_ref_index,
         )
+        assert (
+            self.settings is not None
+        ), "Settings must be initialized before building index"
+
+        await add_synonyms_file_as_aliases(self, "emailVerbs.json")  
+        await semrefindex.build_semantic_ref(self, self.settings)
+        await secindex.build_transient_secondary_indexes(self, self.settings)
        
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[EmailMessage]:
         """Get secondary indexes, asserting they are initialized."""
@@ -72,3 +82,22 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             self.secondary_indexes is not None
         ), "Use await f.create() to create an initialized instance"
         return self.secondary_indexes
+
+
+async def add_synonyms_file_as_aliases(conversation: IConversation, file_name: str) -> None:
+    secondary_indexes = conversation.secondary_indexes
+    assert secondary_indexes is not None
+    assert secondary_indexes.term_to_related_terms_index is not None
+
+    aliases = secondary_indexes.term_to_related_terms_index.aliases
+    synonym_file = os.path.join(os.path.dirname(__file__), file_name)
+    with open(synonym_file) as f:
+        data: list[dict] = json.load(f)
+    if data:
+        for obj in data:
+            text = obj.get("term")
+            synonyms = obj.get("relatedTerms")
+            if text and synonyms:
+                related_term = Term(text=text.lower())
+                for synonym in synonyms:
+                    await aliases.add_related_term(synonym.lower(), related_term)
