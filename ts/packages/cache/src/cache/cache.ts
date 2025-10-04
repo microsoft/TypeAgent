@@ -165,29 +165,32 @@ export class AgentCache {
                 }
             }
 
-            const store = this._constructionStore;
             const namespaceKeys = this.getNamespaceKeys(
                 getTranslationNamesForActions(executableActions),
                 options?.namespaceSuffix,
             );
-            // Make sure that we don't already have a construction that will match (but reject because of options)
-            const matchResult = store.match(requestAction.request, {
-                rejectReferences: false,
-                history: requestAction.history,
-                namespaceKeys,
-            });
 
-            const actions = executableActions.map((e) => e.action);
-            for (const match of matchResult) {
-                if (
-                    equalNormalizedObject(
-                        match.match.actions.map((e) => e.action),
-                        actions,
-                    )
-                ) {
-                    return getFailedResult(
-                        `Existing construction matches the request but rejected.`,
-                    );
+            const store = this._constructionStore;
+            if (store.isEnabled()) {
+                // Make sure that we don't already have a construction that will match (but reject because of options)
+                const matchResult = store.match(requestAction.request, {
+                    rejectReferences: false,
+                    history: requestAction.history,
+                    namespaceKeys,
+                });
+
+                const actions = executableActions.map((e) => e.action);
+                for (const match of matchResult) {
+                    if (
+                        equalNormalizedObject(
+                            match.match.actions.map((e) => e.action),
+                            actions,
+                        )
+                    ) {
+                        return getFailedResult(
+                            `Existing construction matches the request but rejected.`,
+                        );
+                    }
                 }
             }
 
