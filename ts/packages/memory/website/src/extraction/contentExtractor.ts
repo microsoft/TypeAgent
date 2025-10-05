@@ -5,9 +5,6 @@ import {
     conversation as kpLib,
     splitLargeTextIntoChunks,
 } from "knowledge-processor";
-import * as cheerio from "cheerio";
-import DOMPurify from "dompurify";
-import { JSDOM } from "jsdom";
 import { HtmlFetcher } from "../htmlFetcher.js";
 import {
     ExtractionMode,
@@ -22,15 +19,10 @@ import {
     ChunkProgressInfo,
     EntityFacet,
     TopicCorrelation,
-    TemporalContext,
 } from "./types.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:indexing");
 
-/**
- * Enhanced ContentExtractor with extraction mode capabilities
- * Provides unified content extraction with automatic AI usage and knowledge extraction
- */
 export class ContentExtractor {
     private knowledgeExtractor?: kpLib.KnowledgeExtractor;
     private extractionConfig?: ExtractionConfig;
@@ -129,88 +121,42 @@ export class ContentExtractor {
                 throw new AIModelRequiredError(mode);
             }
 
-            // Extract content based on mode
-            const extractedContent = await this.extractContentByMode(
-                content,
-                mode,
-            );
-
             const knowledge = await this.extractKnowledgeByMode(
                 content,
-                extractedContent,
                 mode,
                 chunkProgressCallback,
             );
 
-            // Calculate quality metrics
-            const qualityMetrics = this.calculateQualityMetrics(
-                knowledge,
-                extractedContent,
-                modeConfig,
-                Date.now() - startTime,
-            );
-
             const processingTime = Date.now() - startTime;
 
-            // Create action summary from detected actions
-            let actionSummary;
-            if (
-                extractedContent.detectedActions &&
-                extractedContent.detectedActions.length > 0
-            ) {
-                const actionTypes = [
-                    ...new Set(
-                        extractedContent.detectedActions.map(
-                            (a: any) => a.actionType,
-                        ),
-                    ),
-                ];
-                const highConfidenceActions =
-                    extractedContent.detectedActions.filter(
-                        (a: any) => a.confidence > 0.8,
-                    ).length;
-                const actionDistribution =
-                    extractedContent.detectedActions.reduce(
-                        (acc: any, action: any) => {
-                            acc[action.actionType] =
-                                (acc[action.actionType] || 0) + 1;
-                            return acc;
-                        },
-                        {},
-                    );
+            const qualityMetrics = this.calculateQualityMetrics(
+                knowledge,
+                modeConfig,
+                processingTime,
+            );
 
-                actionSummary = {
-                    totalActions: extractedContent.detectedActions.length,
-                    actionTypes,
-                    highConfidenceActions,
-                    actionDistribution,
-                };
-            }
-
-            // Generate rich metadata for all extractions
             const extractionTimestamp = new Date();
-            const entityFacets = await this.generateEntityFacets(
-                knowledge,
-                extractedContent,
-            );
-            const topicCorrelations = await this.generateTopicCorrelations(
-                knowledge,
-                extractedContent,
-            );
-            const temporalContext = await this.generateTemporalContext(
-                extractedContent,
-                extractionTimestamp,
-            );
+            const entityFacets = await this.generateEntityFacets(knowledge);
+            const topicCorrelations = await this.generateTopicCorrelations(knowledge);
+
+            const wordCount = content.textContent?.split(/\s+/).length || 0;
 
             return {
-                ...extractedContent,
+                pageContent: {
+                    title: content.title || "",
+                    mainContent: content.textContent || "",
+                    headings: [],
+                    wordCount,
+                    readingTime: Math.ceil(wordCount / 200),
+                },
                 knowledge,
                 qualityMetrics,
-                // Rich metadata fields (always included)
                 entityFacets,
                 topicCorrelations,
-                temporalContext,
-                // Processing metadata
+                temporalContext: {
+                    extractionDate: extractionTimestamp,
+                    timeReferences: [],
+                },
                 extractionMode: mode,
                 aiProcessingUsed: modeConfig.usesAI,
                 processingMode,
@@ -218,7 +164,6 @@ export class ContentExtractor {
                 source: content.source,
                 timestamp: new Date().toISOString(),
                 processingTime,
-                actionSummary,
             };
         } catch (error) {
             if (
@@ -236,70 +181,10 @@ export class ContentExtractor {
     }
 
     /**
-     * Extract content based on the specified mode
-     */
-    private async extractContentByMode(
-        content: ExtractionInput,
-        mode: ExtractionMode,
-    ): Promise<any> {
-        const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
-
-        if (mode === "basic") {
-            // Basic mode: minimal extraction
-            return {
-                pageContent: {
-                    title: content.title,
-                    mainContent: "",
-                    headings: [],
-                    wordCount: 0,
-                    readingTime: 0,
-                },
-            };
-        }
-
-        // For content/actions/full modes, extract from HTML content
-        const htmlContent = this.prepareHtmlContent(content);
-
-        if (!htmlContent) {
-            return {
-                pageContent: {
-                    title: content.title,
-                    mainContent: content.textContent || "",
-                    headings: [],
-                    wordCount: (content.textContent || "").split(/\s+/).length,
-                    readingTime: Math.ceil(
-                        (content.textContent || "").split(/\s+/).length / 200,
-                    ),
-                },
-            };
-        }
-
-        // Basic HTML content extraction - implement essential features here
-        const pageContent = this.extractBasicPageContent(
-            htmlContent,
-            content.title,
-            content.textContent,
-        );
-
-        // Add detected actions if this mode supports them
-        let detectedActions = undefined;
-        if (modeConfig.extractsActions) {
-            // TODO: Implement action detection using ActionExtractor
-            detectedActions = [];
-        }
-
-        return {
-            pageContent,
-            detectedActions,
-        };
-    }
-
-    /**
      * Extract knowledge using the appropriate strategy for the given mode
      */
     private async extractKnowledgeByMode(
         content: ExtractionInput,
-        extractedContent: any,
         mode: ExtractionMode,
         chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
     ): Promise<kpLib.KnowledgeResponse> {
@@ -316,21 +201,30 @@ export class ContentExtractor {
                     totalChunksGlobal: 1,
                 });
             }
-            return this.extractBasicKnowledge(content, extractedContent);
+            return this.extractBasicKnowledge(content);
         }
 
         if (!this.knowledgeExtractor) {
-            return this.extractBasicKnowledge(content, extractedContent);
+            return this.extractBasicKnowledge(content);
         }
 
-        const textContent = this.prepareTextForKnowledge(
-            content,
-            extractedContent,
-        );
+        const textContent = content.textContent || content.title || "";
+        if (!textContent) {
+            return {
+                topics: [],
+                entities: [],
+                actions: [],
+                inverseActions: [],
+            };
+        }
+
+        const textWithTitle = content.title
+            ? `Title: ${content.title}\n\n${textContent}`
+            : textContent;
 
         try {
             const result = await this.extractChunkedAIKnowledge(
-                textContent,
+                textWithTitle,
                 modeConfig.defaultChunkSize,
                 chunkProgressCallback,
                 modeConfig.defaultConcurrentExtractions,
@@ -347,7 +241,6 @@ export class ContentExtractor {
      */
     private extractBasicKnowledge(
         content: ExtractionInput,
-        extractedContent: any,
     ): kpLib.KnowledgeResponse {
         const knowledge: kpLib.KnowledgeResponse = {
             topics: [],
@@ -356,18 +249,13 @@ export class ContentExtractor {
             inverseActions: [],
         };
 
-        const title =
-            content.title || extractedContent.pageContent?.title || "";
-        const headings = extractedContent.pageContent?.headings || [];
-        const textContent =
-            extractedContent.pageContent?.mainContent ||
-            content.textContent ||
-            "";
+        const title = content.title || "";
+        const textContent = content.textContent || "";
 
-        // Create entities from title and headings
         if (title) {
+            const cleanTitle = this.stripMarkdownSyntax(title);
             knowledge.entities.push({
-                name: title,
+                name: cleanTitle,
                 type: ["title"],
                 facets: [
                     { name: "source", value: "title_extraction" },
@@ -376,60 +264,44 @@ export class ContentExtractor {
             });
         }
 
-        headings.forEach((heading: any) => {
-            if (heading.text && heading.text.length > 3) {
-                knowledge.entities.push({
-                    name: heading.text,
-                    type: ["heading"],
-                    facets: [
-                        { name: "source", value: "heading_extraction" },
-                        { name: "confidence", value: 0.7 },
-                        { name: "level", value: heading.level || 1 },
-                    ],
-                });
-            }
-        });
-
-        // Extract topics from text patterns
         if (textContent) {
-            const lines = textContent
-                .split("\n")
-                .map((line: string) => line.trim())
-                .filter((line: string) => line.length > 0);
+            const markdownHeadings = this.extractMarkdownHeadings(textContent);
+            markdownHeadings.forEach((heading) => {
+                const cleanHeading = this.stripMarkdownSyntax(heading.text);
+                if (cleanHeading.length > 3) {
+                    knowledge.topics.push(cleanHeading);
+                    knowledge.entities.push({
+                        name: cleanHeading,
+                        type: ["heading"],
+                        facets: [
+                            { name: "source", value: "markdown_heading" },
+                            { name: "confidence", value: 0.7 },
+                            { name: "level", value: heading.level },
+                        ],
+                    });
+                }
+            });
 
-            const potentialTitles = lines.filter(
-                (line: string) =>
-                    line.length > 5 &&
-                    line.length < 100 &&
-                    !line.includes(".") &&
-                    line.charAt(0) === line.charAt(0).toUpperCase(),
-            );
+            const listItems = this.extractMarkdownListItems(textContent);
+            listItems.forEach((item) => {
+                const cleanItem = this.stripMarkdownSyntax(item);
+                if (cleanItem.length >= 5 && cleanItem.length <= 100) {
+                    knowledge.topics.push(cleanItem);
+                }
+            });
 
-            knowledge.topics.push(...potentialTitles.slice(0, 10));
-
-            // Extract entities from capitalized words
-            const words = textContent.split(/\s+/);
-            const capitalizedWords = words.filter(
-                (word: string) =>
-                    word.length > 2 &&
-                    word.charAt(0) === word.charAt(0).toUpperCase() &&
-                    /^[A-Za-z]+$/.test(word),
-            );
-
-            const uniqueCapitalizedWords = [...new Set(capitalizedWords)].slice(
-                0,
-                5,
-            ) as string[];
-            for (const word of uniqueCapitalizedWords) {
+            const namedEntities = this.extractNamedEntities(textContent);
+            namedEntities.forEach((entity) => {
+                const cleanEntity = this.stripMarkdownSyntax(entity.text);
                 knowledge.entities.push({
-                    name: word,
-                    type: ["concept"],
+                    name: cleanEntity,
+                    type: [entity.type],
                     facets: [
-                        { name: "source", value: "text_analysis" },
-                        { name: "confidence", value: 0.3 },
+                        { name: "source", value: entity.source },
+                        { name: "confidence", value: entity.confidence },
                     ],
                 });
-            }
+            });
         }
 
         // Add domain-based topics
@@ -445,78 +317,171 @@ export class ContentExtractor {
             }
         }
 
-        // Limit entities to prevent overwhelming the response
-        knowledge.entities = knowledge.entities.slice(0, 15);
+        knowledge.topics = [...new Set(knowledge.topics)].slice(0, 15);
+        knowledge.entities = knowledge.entities.slice(0, 20);
 
         return knowledge;
     }
 
-    /**
-     * Prepare text content for knowledge extraction
-     */
-    private prepareTextForKnowledge(
-        content: ExtractionInput,
-        extractedContent: any,
-    ): string {
-        const parts: string[] = [];
-
-        // Add title
-        if (content.title) {
-            parts.push(`Title: ${content.title}`);
-        }
-
-        // Add main content
-        if (extractedContent.pageContent?.mainContent) {
-            parts.push(extractedContent.pageContent.mainContent);
-        } else if (content.textContent) {
-            parts.push(content.textContent);
-        }
-
-        // Add headings
-        if (extractedContent.pageContent?.headings) {
-            const headingText = extractedContent.pageContent.headings
-                .map((h: any) => h.text)
-                .filter((text: string) => text && text.length > 0)
-                .join(". ");
-            if (headingText) {
-                parts.push(`Headings: ${headingText}`);
-            }
-        }
-
-        return parts.join("\n\n");
+    private stripMarkdownSyntax(text: string): string {
+        return text
+            .replace(/(\*\*|__)(.*?)\1/g, "$2")
+            .replace(/(\*|_)(.*?)\1/g, "$2")
+            .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
+            .replace(/`([^`]+)`/g, "$1")
+            .replace(/^#{1,6}\s+/gm, "")
+            .replace(/~~(.+?)~~/g, "$1")
+            .replace(/!\[([^\]]*)\]\([^\)]+\)/g, "$1")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
     }
 
-    /**
-     * Prepare HTML content for extraction
-     */
-    private prepareHtmlContent(content: ExtractionInput): string | null {
-        if (content.htmlContent) {
-            return content.htmlContent;
-        }
+    private extractMarkdownHeadings(text: string): Array<{
+        text: string;
+        level: number;
+    }> {
+        const headings: Array<{ text: string; level: number }> = [];
+        const lines = text.split("\n");
 
-        if (content.htmlFragments && content.htmlFragments.length > 0) {
-            // Handle iframe fragments properly - each should maintain its context
-            if (content.htmlFragments.length === 1) {
-                // Single fragment (ideal case for iframe isolation)
-                const frag = content.htmlFragments[0];
-                return typeof frag === "string" ? frag : frag.content || "";
-            } else {
-                // Multiple fragments - preserve iframe boundaries with context markers
-                return content.htmlFragments
-                    .map((frag, index) => {
-                        const fragmentContent =
-                            typeof frag === "string"
-                                ? frag
-                                : frag.content || "";
-                        const frameId = frag.frameId || index;
-                        // Add iframe context markers to preserve boundaries
-                        return `<!-- IFRAME_START:${frameId} -->\n${fragmentContent}\n<!-- IFRAME_END:${frameId} -->`;
-                    })
-                    .join("\n\n");
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+
+            const atxMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
+            if (atxMatch) {
+                headings.push({
+                    text: atxMatch[2].trim(),
+                    level: atxMatch[1].length,
+                });
+                continue;
+            }
+
+            const setextMatch = lines.indexOf(line);
+            if (setextMatch < lines.length - 1) {
+                const nextLine = lines[setextMatch + 1];
+                if (/^=+\s*$/.test(nextLine)) {
+                    headings.push({ text: trimmedLine, level: 1 });
+                } else if (/^-+\s*$/.test(nextLine)) {
+                    headings.push({ text: trimmedLine, level: 2 });
+                }
             }
         }
 
-        return null;
+        return headings;
+    }
+
+    private extractMarkdownListItems(text: string): string[] {
+        const listItems: string[] = [];
+        const lines = text.split("\n");
+
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+
+            const unorderedMatch = trimmedLine.match(/^[-*+]\s+(.+)$/);
+            if (unorderedMatch) {
+                const item = unorderedMatch[1].trim();
+                if (item.length >= 5 && item.length <= 100) {
+                    listItems.push(item);
+                }
+                continue;
+            }
+
+            const orderedMatch = trimmedLine.match(/^\d+\.\s+(.+)$/);
+            if (orderedMatch) {
+                const item = orderedMatch[1].trim();
+                if (item.length >= 5 && item.length <= 100) {
+                    listItems.push(item);
+                }
+            }
+        }
+
+        return [...new Set(listItems)].slice(0, 10);
+    }
+
+    private extractNamedEntities(text: string): Array<{
+        text: string;
+        type: string;
+        source: string;
+        confidence: number;
+    }> {
+        const entities: Array<{
+            text: string;
+            type: string;
+            source: string;
+            confidence: number;
+        }> = [];
+
+        const plainText = this.stripMarkdownSyntax(text);
+
+        const titleCasePattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,4})\b/g;
+        let match;
+        const titleCaseMatches = new Set<string>();
+        while ((match = titleCasePattern.exec(plainText)) !== null) {
+            const phrase = match[1];
+            if (phrase.length > 3 && phrase.split(/\s+/).length >= 2) {
+                titleCaseMatches.add(phrase);
+            }
+        }
+
+        Array.from(titleCaseMatches)
+            .slice(0, 8)
+            .forEach((phrase) => {
+                entities.push({
+                    text: phrase,
+                    type: "named_entity",
+                    source: "title_case_pattern",
+                    confidence: 0.6,
+                });
+            });
+
+        const acronymPattern = /\b[A-Z]{2,6}\b/g;
+        const acronyms = new Set<string>();
+        while ((match = acronymPattern.exec(plainText)) !== null) {
+            const acronym = match[0];
+            if (acronym.length >= 2 && acronym.length <= 6) {
+                acronyms.add(acronym);
+            }
+        }
+
+        Array.from(acronyms)
+            .slice(0, 5)
+            .forEach((acronym) => {
+                entities.push({
+                    text: acronym,
+                    type: "acronym",
+                    source: "acronym_pattern",
+                    confidence: 0.5,
+                });
+            });
+
+        const links = this.extractMarkdownLinks(text);
+        links.slice(0, 5).forEach((linkText) => {
+            if (linkText.length > 3) {
+                entities.push({
+                    text: linkText,
+                    type: "reference",
+                    source: "markdown_link",
+                    confidence: 0.7,
+                });
+            }
+        });
+
+        return entities;
+    }
+
+    private extractMarkdownLinks(text: string): string[] {
+        const links: string[] = [];
+        const linkPattern = /\[([^\]]+)\]\([^\)]+\)/g;
+        let match;
+
+        while ((match = linkPattern.exec(text)) !== null) {
+            const linkText = match[1].trim();
+            if (linkText.length > 0) {
+                links.push(linkText);
+            }
+        }
+
+        return [...new Set(links)];
     }
 
     /**
@@ -524,7 +489,6 @@ export class ContentExtractor {
      */
     private calculateQualityMetrics(
         knowledge: kpLib.KnowledgeResponse,
-        extractedContent: any,
         modeConfig: any,
         aiProcessingTime: number,
     ): ExtractionQualityMetrics {
@@ -580,83 +544,6 @@ export class ContentExtractor {
     }
 
     /**
-     * Basic HTML content extraction using proper HTML parsing
-     */
-    private extractBasicPageContent(
-        html: string,
-        title: string,
-        content: string | undefined,
-    ): any {
-        try {
-            // Use cheerio for proper HTML parsing
-            const $ = cheerio.load(html);
-
-            // Remove script and style elements
-            $("script, style, noscript").remove();
-
-            // Extract title if not provided
-            const extractedTitle =
-                title ||
-                $("title").text().trim() ||
-                $("h1").first().text().trim();
-
-            let mainContent = content;
-
-            if (!mainContent) {
-                // Extract main content from body or fall back to entire document
-                const bodyText = $("body").text() || $.text();
-                mainContent = bodyText.replace(/\s+/g, " ").trim();
-            }
-
-            // Extract headings
-            const headings: string[] = [];
-            $("h1, h2, h3, h4, h5, h6").each((_, element) => {
-                const heading = $(element).text().trim();
-                if (heading) {
-                    headings.push(heading);
-                }
-            });
-
-            // Basic word count and reading time calculation
-            const words = mainContent.split(/\s+/).length;
-            const readingTime = Math.max(1, Math.round(words / 200)); // ~200 words per minute
-
-            return {
-                title: extractedTitle,
-                mainContent,
-                headings,
-                wordCount: words,
-                readingTime,
-                images: [], // Basic extraction doesn't include images
-                links: [], // Basic extraction doesn't include links
-            };
-        } catch (error) {
-            debug(
-                "Cheerio parsing failed, falling back to simple extraction:",
-                error,
-            );
-
-            // Fallback to simple string manipulation if cheerio fails
-            const window = new JSDOM("").window;
-            const purify = DOMPurify(window);
-            const sanitizedContent = purify.sanitize(html);
-            const textContent = sanitizedContent.replace(/\s+/g, " ").trim();
-
-            const words = textContent.split(/\s+/).length;
-
-            return {
-                title: title || "Untitled",
-                mainContent: textContent,
-                headings: [],
-                wordCount: words,
-                readingTime: Math.max(1, Math.round(words / 200)),
-                images: [],
-                links: [],
-            };
-        }
-    }
-
-    /**
      * Extract knowledge from content using AI with intelligent chunking
      */
     private async extractChunkedAIKnowledge(
@@ -692,9 +579,26 @@ export class ContentExtractor {
 
         const chunks = this.intelligentChunking(content, maxChunkSize);
         const chunkResults: kpLib.KnowledgeResponse[] = [];
+        const chunkTexts: string[] = [];
+
+        // Create short URL identifier for log prefixing (handle concurrent processing)
+        const urlParts = (itemUrl || "unknown").split("/");
+        const urlId = urlParts[urlParts.length - 1] || urlParts[urlParts.length - 2] || "unknown";
+        const shortId = urlId.substring(0, 30);
+        const logPrefix = `[${shortId}]`;
+
+        console.log(`\n${"=".repeat(80)}`);
+        console.log(`${logPrefix} CHUNKED EXTRACTION`);
+        console.log(`${logPrefix} URL: ${itemUrl || "unknown"}`);
+        console.log(`${logPrefix} Total chunks: ${chunks.length}, Processing in batches of ${maxConcurrent}`);
+        console.log("=".repeat(80));
 
         for (let i = 0; i < chunks.length; i += maxConcurrent) {
             const batch = chunks.slice(i, i + maxConcurrent);
+            const batchNumber = Math.floor(i / maxConcurrent) + 1;
+            const totalBatches = Math.ceil(chunks.length / maxConcurrent);
+
+            console.log(`\n${logPrefix} BATCH ${batchNumber}/${totalBatches} (chunks ${i + 1}-${Math.min(i + maxConcurrent, chunks.length)})`);
 
             const batchPromises = batch.map((chunk, batchIndex) => {
                 const chunkIndex = i + batchIndex;
@@ -710,7 +614,48 @@ export class ContentExtractor {
 
                         if (result) {
                             chunkResults.push(result);
+                            chunkTexts.push(chunk);
                         }
+
+                        // Log chunk details (only first 5 batches to avoid spam)
+                        if (batchNumber <= 5) {
+                            console.log(`\n${logPrefix}   📄 CHUNK ${outcome.chunkIndex + 1}/${chunks.length}:`);
+                            console.log(`${logPrefix}   Text: ${outcome.chunk.substring(0, 300).replace(/\n/g, " ")}...`);
+
+                            if (outcome.result) {
+                                console.log(`${logPrefix}   📚 Topics (${outcome.result.topics?.length || 0}):`);
+                                outcome.result.topics?.slice(0, 8).forEach((topic, idx) => {
+                                    console.log(`${logPrefix}     ${idx + 1}. ${topic}`);
+                                });
+                                if ((outcome.result.topics?.length || 0) > 8) {
+                                    console.log(`${logPrefix}     ... and ${outcome.result.topics.length - 8} more`);
+                                }
+
+                                console.log(`${logPrefix}   🏷️  Entities (${outcome.result.entities?.length || 0}):`);
+                                outcome.result.entities?.slice(0, 5).forEach((entity, idx) => {
+                                    console.log(`${logPrefix}     ${idx + 1}. ${entity.name} [${entity.type?.join(", ")}]`);
+                                    if (entity.facets && entity.facets.length > 0) {
+                                        const facetStr = entity.facets.slice(0, 3).map(f => `${f.name}:${f.value}`).join(", ");
+                                        console.log(`${logPrefix}        ${facetStr}`);
+                                    }
+                                });
+                                if ((outcome.result.entities?.length || 0) > 5) {
+                                    console.log(`${logPrefix}     ... and ${outcome.result.entities.length - 5} more`);
+                                }
+
+                                console.log(`${logPrefix}   ⚡ Actions (${outcome.result.actions?.length || 0}):`);
+                                outcome.result.actions?.slice(0, 3).forEach((action, idx) => {
+                                    const verbs = action.verbs?.join("/") || "?";
+                                    console.log(`${logPrefix}     ${idx + 1}. ${action.subjectEntityName} → ${verbs} → ${action.objectEntityName}`);
+                                });
+                                if ((outcome.result.actions?.length || 0) > 3) {
+                                    console.log(`${logPrefix}     ... and ${outcome.result.actions.length - 3} more`);
+                                }
+                            } else {
+                                console.log(`${logPrefix}   ❌ No knowledge extracted from this chunk`);
+                            }
+                        }
+
                         if (chunkProgressCallback) {
                             await chunkProgressCallback({
                                 itemUrl,
@@ -754,14 +699,30 @@ export class ContentExtractor {
                     });
             });
 
-            await Promise.allSettled(batchPromises);
+            const batchResults = await Promise.allSettled(batchPromises);
+
+            if (batchNumber <= 5) {
+                const successCount = batchResults.filter(r => r.status === 'fulfilled').length;
+                console.log(`\n${logPrefix} ✅ Batch ${batchNumber} completed: ${successCount}/${batch.length} chunks successful`);
+            }
 
             if (i + maxConcurrent < chunks.length) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
             }
         }
 
-        return this.aggregateChunkResults(chunkResults);
+        const aggregated = await this.aggregateChunkResults(chunkResults, chunkTexts, itemUrl);
+
+        console.log(`\n${"=".repeat(80)}`);
+        console.log(`${logPrefix} AGGREGATED RESULTS`);
+        console.log(`${logPrefix} Processed ${chunks.length} chunks`);
+        console.log(`${logPrefix} 📊 Final counts:`);
+        console.log(`${logPrefix}   Topics: ${aggregated.topics?.length || 0}`);
+        console.log(`${logPrefix}   Entities: ${aggregated.entities?.length || 0}`);
+        console.log(`${logPrefix}   Actions: ${aggregated.actions?.length || 0}`);
+        console.log("=".repeat(80) + "\n");
+
+        return aggregated;
     }
 
     /**
@@ -780,9 +741,11 @@ export class ContentExtractor {
     /**
      * Aggregate knowledge results from multiple chunks
      */
-    private aggregateChunkResults(
+    private async aggregateChunkResults(
         chunkResults: kpLib.KnowledgeResponse[],
-    ): kpLib.KnowledgeResponse {
+        chunkTexts: string[],
+        itemUrl?: string,
+    ): Promise<kpLib.KnowledgeResponse> {
         const aggregated: kpLib.KnowledgeResponse = {
             topics: [],
             entities: [],
@@ -790,7 +753,6 @@ export class ContentExtractor {
             inverseActions: [],
         };
 
-        const topicCounts = new Map<string, number>();
         const entityMap = new Map<
             string,
             { entity: kpLib.ConcreteEntity; count: number }
@@ -798,14 +760,6 @@ export class ContentExtractor {
         const allActions: kpLib.Action[] = [];
 
         chunkResults.forEach((result) => {
-            result.topics.forEach((topic) => {
-                const normalized = topic.toLowerCase();
-                topicCounts.set(
-                    normalized,
-                    (topicCounts.get(normalized) || 0) + 1,
-                );
-            });
-
             result.entities.forEach((entity) => {
                 const normalized = entity.name.toLowerCase();
                 const existing = entityMap.get(normalized);
@@ -819,10 +773,96 @@ export class ContentExtractor {
             allActions.push(...(result.actions || []));
         });
 
-        aggregated.topics = Array.from(topicCounts.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 20)
-            .map(([topic]) => topic);
+        const fragmentExtractions: kpLib.FragmentTopicExtraction[] = chunkResults.map(
+            (result, idx) => ({
+                fragmentId: `chunk_${idx}`,
+                topics: result.topics,
+                fragmentText: chunkTexts[idx]?.substring(0, 2000), // Limit text to 2000 chars per chunk
+                confidence: 0.8,
+                extractionDate: new Date().toISOString(),
+            })
+        );
+
+        if (fragmentExtractions.length > 0 && itemUrl) {
+            const model = this.knowledgeExtractor?.translator?.model;
+            if (model) {
+                const topicExtractor = kpLib.createTopicExtractor(model);
+                const hierarchyExtractor = kpLib.createHierarchicalTopicExtractor(
+                    model,
+                    topicExtractor
+                );
+
+                try {
+                    const domain = new URL(itemUrl).hostname;
+                    const hierarchyResponse = await hierarchyExtractor.extractHierarchicalTopics(
+                        fragmentExtractions,
+                        {
+                            url: itemUrl,
+                            domain: domain,
+                        }
+                    );
+
+                    if (hierarchyResponse.status === "Success") {
+                        aggregated.topics = hierarchyResponse.flatTopics.slice(0, 20);
+                        (aggregated as any).topicHierarchy = hierarchyResponse.hierarchy;
+                        debug(`[Hierarchical Topics] Generated hierarchy with ${hierarchyResponse.hierarchy.totalTopics} topics, max depth ${hierarchyResponse.hierarchy.maxDepth}`);
+                    } else {
+                        debug(`[Hierarchical Topics] Extraction status: ${hierarchyResponse.status}`);
+                    }
+                } catch (error) {
+                    debug(`[Hierarchical Topics] Error: ${error}`);
+                    // Fall back to frequency-based topic aggregation
+                    const topicCounts = new Map<string, number>();
+                    chunkResults.forEach((result) => {
+                        result.topics.forEach((topic) => {
+                            const normalized = topic.toLowerCase();
+                            topicCounts.set(
+                                normalized,
+                                (topicCounts.get(normalized) || 0) + 1,
+                            );
+                        });
+                    });
+                    aggregated.topics = Array.from(topicCounts.entries())
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 20)
+                        .map(([topic]) => topic);
+                }
+            } else {
+                debug(`[Hierarchical Topics] Skipped - model not available`);
+                // Fall back to frequency-based topic aggregation
+                const topicCounts = new Map<string, number>();
+                chunkResults.forEach((result) => {
+                    result.topics.forEach((topic) => {
+                        const normalized = topic.toLowerCase();
+                        topicCounts.set(
+                            normalized,
+                            (topicCounts.get(normalized) || 0) + 1,
+                        );
+                    });
+                });
+                aggregated.topics = Array.from(topicCounts.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 20)
+                    .map(([topic]) => topic);
+            }
+        } else {
+            debug(`[Hierarchical Topics] Skipped - no fragments (${fragmentExtractions.length}) or no URL (${itemUrl || 'empty'})`);
+            // Fall back to frequency-based topic aggregation
+            const topicCounts = new Map<string, number>();
+            chunkResults.forEach((result) => {
+                result.topics.forEach((topic) => {
+                    const normalized = topic.toLowerCase();
+                    topicCounts.set(
+                        normalized,
+                        (topicCounts.get(normalized) || 0) + 1,
+                    );
+                });
+            });
+            aggregated.topics = Array.from(topicCounts.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 20)
+                .map(([topic]) => topic);
+        }
 
         aggregated.entities = Array.from(entityMap.values())
             .sort((a, b) => b.count - a.count)
@@ -840,7 +880,6 @@ export class ContentExtractor {
      */
     private async generateEntityFacets(
         knowledge: kpLib.KnowledgeResponse,
-        extractedContent: any,
     ): Promise<Map<string, EntityFacet[]>> {
         const entityFacets = new Map<string, EntityFacet[]>();
 
@@ -873,11 +912,9 @@ export class ContentExtractor {
      */
     private async generateTopicCorrelations(
         knowledge: kpLib.KnowledgeResponse,
-        extractedContent: any,
     ): Promise<TopicCorrelation[]> {
         const correlations: TopicCorrelation[] = [];
 
-        // Process topics from knowledge response
         if (knowledge.topics && knowledge.topics.length > 0) {
             for (let i = 0; i < knowledge.topics.length; i++) {
                 const topic = knowledge.topics[i];
@@ -891,7 +928,7 @@ export class ContentExtractor {
                         typeof t === "string" ? t : String(t),
                     ),
                     strength: 0.7,
-                    context: extractedContent.pageContent?.title || "Unknown",
+                    context: "document",
                 });
             }
         }
@@ -899,29 +936,4 @@ export class ContentExtractor {
         return correlations;
     }
 
-    /**
-     * Generate temporal context for extraction
-     */
-    private async generateTemporalContext(
-        extractedContent: any,
-        extractionTimestamp: Date,
-    ): Promise<TemporalContext> {
-        const timeReferences: string[] = [];
-
-        // Extract potential time references from content
-        if (extractedContent.pageContent?.mainContent) {
-            const timeRegex =
-                /\b(\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|january|february|march|april|may|june|july|august|september|october|november|december)\b/gi;
-            const matches =
-                extractedContent.pageContent.mainContent.match(timeRegex);
-            if (matches) {
-                timeReferences.push(...matches.slice(0, 5));
-            }
-        }
-
-        return {
-            extractionDate: extractionTimestamp,
-            timeReferences,
-        };
-    }
 }

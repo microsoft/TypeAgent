@@ -16,7 +16,7 @@ import {
     TypeChatLanguageModel,
     createJsonTranslator,
 } from "typechat";
-import { AggregateTopicResponse } from "./aggregateTopicSchema.js";
+import { AggregateTopicResponse, HierarchicalTopicResponse } from "./aggregateTopicSchema.js";
 import { TextIndex, TextIndexSettings } from "../textIndex.js";
 import path from "path";
 import {
@@ -71,6 +71,10 @@ export interface TopicExtractor {
         topics: Topic[],
         pastTopics?: Topic[] | undefined,
     ): Promise<AggregateTopicResponse | undefined>;
+    buildHierarchy(
+        topics: Topic[],
+        existingRoots?: string[],
+    ): Promise<HierarchicalTopicResponse | undefined>;
 }
 
 export function createTopicExtractor(
@@ -89,9 +93,15 @@ export function createTopicExtractor(
         loadSchema(["aggregateTopicSchema.ts"], import.meta.url),
         "AggregateTopicResponse",
     );
+    const hierarchicalTranslator = createTranslator<HierarchicalTopicResponse>(
+        mergeModel,
+        loadSchema(["aggregateTopicSchema.ts"], import.meta.url),
+        "HierarchicalTopicResponse",
+    );
     return {
         nextTopic,
         mergeTopics,
+        buildHierarchy,
     };
 
     async function nextTopic(
@@ -144,6 +154,40 @@ export function createTopicExtractor(
         );
         request += "\n\n";
         const result = await aggregateTranslator.translate(request);
+        return result.success && result.data.status === "Success"
+            ? result.data
+            : undefined;
+    }
+
+    async function buildHierarchy(
+        topics: Topic[],
+        existingRoots?: string[],
+    ): Promise<HierarchicalTopicResponse | undefined> {
+        let instruction = `Analyze the topics in [TOPIC SECTION] and organize them into a hierarchical structure.
+
+RULES:
+1. Create 3-7 root topics that represent distinct semantic domains
+2. Root topics must be 1-3 words, concise and clear
+3. Group related sub-topics under appropriate roots
+4. Create intermediate levels (2-4 levels deep) when topics naturally nest
+5. NEVER combine unrelated domains under the same root
+6. Use only the provided information. Make no assumptions about the origin of the topics.
+`;
+
+        if (existingRoots && existingRoots.length > 0) {
+            instruction += `\nEXISTING ROOTS:\n${existingRoots.join("\n")}\n`;
+            instruction += `Reuse existing roots when topics fit semantically. Only create new roots when topics represent genuinely new domains.\n`;
+        }
+
+        let request = instruction + "\n\n";
+        request += makeSection(
+            "TOPIC SECTION",
+            topics.join("\n"),
+            "END SECTION",
+        );
+        request += "\n\n";
+
+        const result = await hierarchicalTranslator.translate(request);
         return result.success && result.data.status === "Success"
             ? result.data
             : undefined;

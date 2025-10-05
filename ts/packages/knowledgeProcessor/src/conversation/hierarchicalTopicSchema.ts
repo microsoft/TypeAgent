@@ -40,6 +40,7 @@ export interface TopicExtractionContext {
 export interface FragmentTopicExtraction {
     fragmentId: string;
     topics: string[];
+    fragmentText?: string; // The actual chunk text for LLM analysis
     suggestedParents?: string[]; // AI-suggested parent topics
     confidence: number;
     extractionDate: string;

@@ -2273,103 +2273,132 @@ export class WebsiteCollection
     /**
      * Update hierarchical topics when new websites are added
      */
-    private async updateHierarchicalTopics(
+    public async updateHierarchicalTopics(
         newWebsites: Website[],
     ): Promise<void> {
         debug(
             `[Knowledge Graph] Updating hierarchical topics with ${newWebsites.length} new websites`,
         );
 
-        // Extract topics from new websites
-        const newTopics: string[] = [];
+        let globalHierarchy: any | undefined;
+
+        console.log(`\n${"=".repeat(80)}`);
+        console.log(`TOPIC HIERARCHY UPDATE - ${newWebsites.length} websites`);
+        console.log(`${"=".repeat(80)}`);
+
         for (const website of newWebsites) {
-            if (website.knowledge?.topics) {
-                for (const topic of website.knowledge.topics) {
-                    const topicName =
-                        typeof topic === "string" ? topic : (topic as any).name;
-                    if (topicName && !newTopics.includes(topicName)) {
-                        newTopics.push(topicName);
-                    }
-                }
+            const docHierarchy = (website.knowledge as any)?.topicHierarchy as any | undefined;
+
+            if (!docHierarchy) {
+                continue;
+            }
+
+            console.log(`\n📄 Document: ${website.metadata.url}`);
+            console.log(`  Topics: ${docHierarchy.totalTopics}, Max depth: ${docHierarchy.maxDepth}`);
+            console.log(`  Root topics: ${docHierarchy.rootTopics.map((t: any) => t.name).join(", ")}`);
+
+            if (!globalHierarchy) {
+                globalHierarchy = docHierarchy;
+            } else {
+                globalHierarchy = this.mergeHierarchies(globalHierarchy, docHierarchy);
             }
         }
 
-        if (newTopics.length === 0) {
+        if (!globalHierarchy) {
+            console.log(`\n⚠️  No hierarchies found in new websites`);
+            console.log("=".repeat(80) + "\n");
             return;
         }
 
-        debug(
-            `[Knowledge Graph] Found ${newTopics.length} new topics to integrate`,
-        );
+        console.log(`\n📊 MERGED HIERARCHY:`);
+        console.log(`  Total topics: ${globalHierarchy.totalTopics}`);
+        console.log(`  Max depth: ${globalHierarchy.maxDepth}`);
+        console.log(`  Root topics: ${globalHierarchy.rootTopics.length}`);
 
-        // Try to integrate new topics into existing hierarchy
         try {
-            const kpLib = await import("knowledge-processor");
-            const ai = await import("aiclient");
-
-            const apiSettings = ai.openai.azureApiSettingsFromEnv(
-                ai.openai.ModelType.Chat,
-                undefined,
-                "GPT_4_O_MINI",
-            );
-            const languageModel = ai.openai.createChatModel(apiSettings);
-            const topicExtractor =
-                kpLib.conversation.createTopicExtractor(languageModel);
-
-            // Get existing root topics
-            const rootTopics = this.hierarchicalTopics.getRootTopics();
-            const existingTopicNames = rootTopics.map((t) => t.topicName);
-
-            // Merge new topics with existing
-            const mergeResult = await topicExtractor.mergeTopics(
-                newTopics,
-                existingTopicNames as any, // Past topics - facets parameter is optional
-            );
-
-            if (mergeResult && mergeResult.status === "Success") {
-                // Find or create appropriate parent
-                let parentId: string | undefined;
-                for (const rootTopic of rootTopics) {
-                    if (
-                        this.topicsRelated(
-                            rootTopic.topicName,
-                            mergeResult.topic,
-                        )
-                    ) {
-                        parentId = rootTopic.topicId;
-                        break;
-                    }
-                }
-
-                if (!parentId) {
-                    // Create new root if no suitable parent found
-                    parentId = this.generateTopicId(mergeResult.topic, 0);
-                    await this.storeHierarchicalTopic({
-                        topicId: parentId,
-                        topicName: mergeResult.topic,
-                        level: 0,
-                        confidence: 0.8,
-                        keywords: [mergeResult.topic],
-                    });
-                }
-
-                // Add new topics as children
-                for (const topic of newTopics) {
-                    const childId = this.generateTopicId(topic, 1);
-                    await this.storeHierarchicalTopic({
-                        topicId: childId,
-                        topicName: topic,
-                        level: 1,
-                        parentTopicId: parentId,
-                        confidence: 0.7,
-                        keywords: [topic],
-                    });
-                }
+            for (const rootTopic of globalHierarchy.rootTopics) {
+                await this.storeTopicHierarchyRecursive(rootTopic, globalHierarchy.topicMap);
             }
+
+            console.log(`\n✅ Hierarchy update completed successfully`);
+            console.log("=".repeat(80) + "\n");
         } catch (error) {
             debug(
                 `[Knowledge Graph] Error updating hierarchical topics: ${error}`,
             );
+        }
+    }
+
+    private mergeHierarchies(
+        existing: any,
+        newHierarchy: any,
+    ): any {
+        const mergedTopicMap = new Map(existing.topicMap);
+        const mergedRootTopics = [...existing.rootTopics];
+
+        for (const [topicId, topic] of newHierarchy.topicMap) {
+            if (!mergedTopicMap.has(topicId)) {
+                mergedTopicMap.set(topicId, topic);
+                if (topic.level === 0) {
+                    mergedRootTopics.push(topic);
+                }
+            } else {
+                const existingTopic: any = mergedTopicMap.get(topicId);
+                if (existingTopic) {
+                    existingTopic.sourceFragments = [
+                        ...new Set([
+                            ...existingTopic.sourceFragments,
+                            ...topic.sourceFragments,
+                        ]),
+                    ];
+                }
+            }
+        }
+
+        return {
+            rootTopics: mergedRootTopics,
+            topicMap: mergedTopicMap,
+            maxDepth: Math.max(existing.maxDepth, newHierarchy.maxDepth),
+            totalTopics: mergedTopicMap.size,
+        };
+    }
+
+    private async storeTopicHierarchyRecursive(
+        topic: any,
+        topicMap: Map<string, any>,
+    ): Promise<void> {
+        const existing = this.hierarchicalTopics.getTopicByName(
+            topic.name,
+            topic.level,
+        );
+
+        if (!existing) {
+            let parentTopicId: string | undefined = undefined;
+            if (topic.parentId) {
+                const parentTopic = topicMap.get(topic.parentId);
+                if (parentTopic) {
+                    parentTopicId = this.hierarchicalTopics.getTopicByName(
+                        parentTopic.name,
+                        topic.level - 1,
+                    )?.topicId;
+                }
+            }
+
+            await this.storeHierarchicalTopic({
+                topicId: topic.id,
+                topicName: topic.name,
+                level: topic.level,
+                ...(parentTopicId ? { parentTopicId } : {}),
+                confidence: topic.confidence,
+                keywords: topic.keywords,
+            });
+        }
+
+        for (const childId of topic.childIds) {
+            const childTopic = topicMap.get(childId);
+            if (childTopic) {
+                await this.storeTopicHierarchyRecursive(childTopic, topicMap);
+            }
         }
     }
 
@@ -2787,23 +2816,4 @@ export class WebsiteCollection
         return `topic_${cleanName}_${level}_${Date.now()}`;
     }
 
-    /**
-     * Check if two topics are related (simple heuristic)
-     */
-    private topicsRelated(topic1: string, topic2: string): boolean {
-        const t1Lower = topic1.toLowerCase();
-        const t2Lower = topic2.toLowerCase();
-
-        // Check if one contains the other
-        if (t1Lower.includes(t2Lower) || t2Lower.includes(t1Lower)) {
-            return true;
-        }
-
-        // Check for common significant words
-        const t1Words = t1Lower.split(/\s+/).filter((w) => w.length > 3);
-        const t2Words = t2Lower.split(/\s+/).filter((w) => w.length > 3);
-
-        const commonWords = t1Words.filter((w) => t2Words.includes(w));
-        return commonWords.length > 0;
-    }
 }

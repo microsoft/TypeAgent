@@ -308,6 +308,7 @@ export class Website implements kp.IMessage {
     public tags: string[];
     public timestamp: string | undefined;
     public knowledge: kpLib.KnowledgeResponse | undefined;
+    public topicHierarchy: kpLib.TopicHierarchy | undefined;
     public deletionInfo: kp.DeletionInfo | undefined;
 
     constructor(
@@ -315,11 +316,13 @@ export class Website implements kp.IMessage {
         pageContent: string | string[],
         tags: string[] = [],
         knowledge?: kpLib.KnowledgeResponse | undefined,
+        topicHierarchy?: kpLib.TopicHierarchy | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
         isNew: boolean = true,
     ) {
         this.tags = tags;
         this.knowledge = knowledge;
+        this.topicHierarchy = topicHierarchy;
         this.deletionInfo = deletionInfo;
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
@@ -335,6 +338,7 @@ export class Website implements kp.IMessage {
         processedContent: string,
         tags: string[] = [],
         knowledge?: kpLib.KnowledgeResponse | undefined,
+        topicHierarchy?: kpLib.TopicHierarchy | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
     ): Website {
         let content = "";
@@ -355,6 +359,7 @@ export class Website implements kp.IMessage {
             chunks,
             tags,
             knowledge,
+            topicHierarchy,
             deletionInfo,
             false,
         );
@@ -404,7 +409,7 @@ export function importWebsiteVisit(
         const chunks = Array.from(
             splitLargeTextIntoChunks(formattedContent, 2000, true),
         );
-        return new Website(meta, chunks, [], knowledge, undefined, false);
+        return new Website(meta, chunks, [], knowledge, undefined, undefined, false);
     }
 
     return new Website(meta, content, [], knowledge);

@@ -264,6 +264,26 @@ export async function indexWebPageContent(
                     error,
                 );
             }
+
+            try {
+                if (aggregatedResults.keyTopics?.length > 0 || aggregatedResults.topics?.length > 0) {
+                    await context.agentContext.websiteCollection.updateHierarchicalTopics([
+                        websiteObj,
+                    ]);
+                    debug(
+                        `Updated hierarchical topics with ${aggregatedResults.keyTopics?.length || aggregatedResults.topics?.length || 0} topics from ${parameters.url}`,
+                    );
+                } else {
+                    debug(
+                        `Skipped hierarchical topics update for ${parameters.url} - no topics extracted`,
+                    );
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to update hierarchical topics incrementally:",
+                    error,
+                );
+            }
         }
 
         const entityCount = aggregatedResults.entities?.length || 0;

@@ -37,15 +37,12 @@ export class TopicGraphVisualizer {
     protected currentLayout: string = "dagre";
     private topicClickCallback: ((topic: TopicData) => void) | null = null;
 
-    // View mode and data management
-    private viewMode: TopicViewMode = "tree";
     private currentTopic: string | null = null;
     private topicGraphData: TopicGraphData | null = null;
     private expandedNodes: Set<string> = new Set();
 
     // Level of detail management
     private visibleLevels: Set<number> = new Set([0, 1, 2]); // Show first 3 levels by default
-    private maxVisibleDepth: number = 3;
 
     // LOD (Level of Detail) system for hierarchical zoom
     private lodThresholds: Map<
@@ -57,9 +54,63 @@ export class TopicGraphVisualizer {
     private lodUpdateInterval: number = 16; // ~60fps
     private zoomHandlerSetup: boolean = false;
 
+
     constructor(container: HTMLElement) {
         this.container = container;
         this.initializeLODThresholds();
+    }
+
+    /**
+     * Detect WebGL support in the current browser
+     */
+    private detectWebGLSupport(): boolean {
+        try {
+            const canvas = document.createElement("canvas");
+            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            return !!gl;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get optimal WebGL renderer configuration based on graph size and device capabilities
+     */
+    private getOptimalRendererConfig(): any {
+        if (this.detectWebGLSupport()) {
+            const nodeCount = this.topicGraphData?.topics?.length || 0;
+
+            // Configure WebGL settings based on graph size
+            let webglConfig = {
+                name: "canvas",
+                webgl: true,
+                webglTexSize: 2048,
+                webglTexRows: 16,
+                webglBatchSize: 1024,
+                webglTexPerBatch: 8,
+            };
+
+            // Scale configuration for larger graphs
+            if (nodeCount > 1000) {
+                webglConfig.webglTexSize = 4096;
+                webglConfig.webglTexRows = 24;
+                webglConfig.webglBatchSize = 2048;
+                webglConfig.webglTexPerBatch = 16;
+            } else if (nodeCount > 500) {
+                webglConfig.webglBatchSize = 2048;
+                webglConfig.webglTexPerBatch = 16;
+            }
+
+            console.log(
+                `[Topic-WebGL] Enabled with texture size: ${webglConfig.webglTexSize}, batch size: ${webglConfig.webglBatchSize}`,
+            );
+            return webglConfig;
+        } else {
+            console.log(
+                `[Topic-WebGL] Not supported, falling back to Canvas renderer`,
+            );
+            return { name: "canvas" };
+        }
     }
 
     /**
@@ -122,35 +173,58 @@ export class TopicGraphVisualizer {
      * Initialize Cytoscape instance
      */
     private initializeCytoscape(): void {
+        // Get optimal renderer configuration (WebGL when available)
+        const rendererConfig = this.getOptimalRendererConfig();
+
         this.cy = cytoscape({
             container: this.container,
             style: this.getOptimizedTopicGraphStyles(),
             layout: this.getLayoutOptions(),
             elements: [],
+            renderer: rendererConfig,
             minZoom: 0.25,
             maxZoom: 4.0,
-            wheelSensitivity: 0.1,
             zoomingEnabled: true,
-            userZoomingEnabled: true,
+            userZoomingEnabled: false,  // Disable default zoom to use custom handler
             panningEnabled: true,
             userPanningEnabled: true,
             boxSelectionEnabled: false,
             selectionType: "single",
         });
 
-        // Set up zoom event handler for LOD
+        // Log initial zoom configuration
+        console.log("[TopicGraph-Zoom] Cytoscape initialized with zoom config:", {
+            minZoom: 0.25,
+            maxZoom: 4.0,
+            userZoomingEnabled: false,
+            initialZoom: this.cy.zoom()
+        });
+
+        // Set up zoom event handler for LOD and custom zoom control
         this.setupZoomHandler();
     }
 
     /**
-     * Setup zoom handler for Level of Detail updates
+     * Setup zoom handler for Level of Detail updates and custom zoom control
      */
     private setupZoomHandler(): void {
         if (this.zoomHandlerSetup || !this.cy) return;
 
-        this.cy.on("zoom", () => {
-            const zoom = this.cy.zoom();
-            this.currentZoom = zoom;
+        // Standard zoom handler for LOD updates only
+        this.cy.on("zoom", (event: any) => {
+            const previousZoom = this.currentZoom;
+            const currentZoom = this.cy.zoom();
+            const zoomDelta = currentZoom - previousZoom;
+
+            // Log zoom transitions for debugging
+            console.log(`[TopicGraph-Zoom] ${previousZoom.toFixed(3)} → ${currentZoom.toFixed(3)} (Δ${zoomDelta.toFixed(3)})`);
+
+            // Check for erratic zoom jumps
+            if (Math.abs(zoomDelta) > 1.0) {
+                console.warn(`[TopicGraph-Zoom] Large zoom jump detected: ${zoomDelta.toFixed(3)} - Event:`, event);
+            }
+
+            this.currentZoom = currentZoom;
 
             // Throttle LOD updates
             const now = Date.now();
@@ -158,11 +232,52 @@ export class TopicGraphVisualizer {
             this.lastLodUpdate = now;
 
             // Apply LOD based on zoom level
-            this.applyLevelOfDetail(zoom);
+            this.applyLevelOfDetail(currentZoom);
         });
+
+        // Custom smooth zoom wheel handler to prevent abrupt zoom changes
+        this.container.addEventListener(
+            "wheel",
+            (event) => {
+                if (!this.cy) return;
+
+                event.preventDefault(); // Prevent default Cytoscape zoom handling
+
+                const currentZoom = this.cy.zoom();
+                const deltaY = event.deltaY;
+
+                // Calculate smooth zoom step (10% per wheel event, max)
+                const zoomStep = currentZoom * 0.1; // 10% of current zoom
+                const maxStep = 0.1; // Maximum absolute step
+                const actualStep = Math.min(zoomStep, maxStep);
+
+                // Determine new zoom level
+                let newZoom;
+                if (deltaY > 0) {
+                    // Zoom out
+                    newZoom = currentZoom - actualStep;
+                } else {
+                    // Zoom in
+                    newZoom = currentZoom + actualStep;
+                }
+
+                // Clamp to our bounds
+                newZoom = Math.max(0.25, Math.min(4.0, newZoom));
+
+                console.log(`[TopicGraph-Zoom] Wheel: ${currentZoom.toFixed(3)} → ${newZoom.toFixed(3)} (step: ${actualStep.toFixed(3)})`);
+
+                // Apply smooth zoom to current instance
+                this.cy.zoom({
+                    level: newZoom,
+                    renderedPosition: { x: event.offsetX, y: event.offsetY },
+                });
+            },
+            { passive: false },
+        ); // Must be non-passive to preventDefault
 
         this.zoomHandlerSetup = true;
     }
+
 
     /**
      * Apply Level of Detail based on zoom level
@@ -248,25 +363,37 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Update element visibility based on importance and zoom
+     * Update element visibility based on importance, zoom, and viewport
      */
     private updateElementVisibility(zoom: number, lodSettings: any): void {
         if (!this.cy) return;
 
-        // Calculate visibility based on node importance (confidence * (1 / (level + 1)))
+        const viewport = this.getViewportBounds();
+        const nodesInViewport = this.getNodesInViewport(viewport);
+
+        // Update node visibility based on computed importance and viewport presence
         this.cy.nodes().forEach((node: any) => {
-            if (node.style("display") === "none") return; // Skip hidden nodes
+            if (node.style("display") === "none") return; // Skip already hidden nodes
 
-            const confidence = node.data("confidence") || 0.5;
-            const level = node.data("level") || 0;
-            const childCount = node.data("childCount") || 0;
+            const computedImportance = node.data("computedImportance") || 0.5;
+            const isInViewport = nodesInViewport.has(node.id());
 
-            // Calculate importance score
-            const importance =
-                confidence * (1 / (level + 1)) * (1 + childCount * 0.1);
+            // Calculate adaptive threshold based on viewport density
+            const adaptiveThreshold = this.calculateAdaptiveThreshold(
+                lodSettings.nodeThreshold,
+                nodesInViewport.size,
+                zoom
+            );
 
-            // Determine if node should be visible at this zoom
-            if (importance >= lodSettings.nodeThreshold) {
+            // Determine visibility based on importance and viewport presence
+            const shouldShow = this.shouldShowNodeAtZoom(
+                computedImportance,
+                adaptiveThreshold,
+                isInViewport,
+                zoom
+            );
+
+            if (shouldShow) {
                 node.addClass("visible-at-zoom");
                 node.removeClass("hidden-at-zoom");
             } else {
@@ -274,46 +401,157 @@ export class TopicGraphVisualizer {
                 node.removeClass("visible-at-zoom");
             }
         });
+
+        // Update edge visibility based on connected nodes
+        this.updateEdgeVisibility(zoom, lodSettings);
     }
 
     /**
-     * Update label visibility based on zoom
+     * Get viewport bounds for visibility calculations
+     */
+    private getViewportBounds(): any {
+        if (!this.cy) return null;
+        return this.cy.extent();
+    }
+
+    /**
+     * Get set of nodes currently in viewport
+     */
+    private getNodesInViewport(viewport: any): Set<string> {
+        const nodesInView = new Set<string>();
+
+        if (!this.cy || !viewport) return nodesInView;
+
+        this.cy.nodes().forEach((node: any) => {
+            const bb = node.boundingBox();
+            if (this.isNodeInViewport(bb, viewport)) {
+                nodesInView.add(node.id());
+            }
+        });
+
+        return nodesInView;
+    }
+
+    /**
+     * Check if a node's bounding box intersects with viewport
+     */
+    private isNodeInViewport(nodeBB: any, viewport: any): boolean {
+        return !(nodeBB.x2 < viewport.x1 ||
+                nodeBB.x1 > viewport.x2 ||
+                nodeBB.y2 < viewport.y1 ||
+                nodeBB.y1 > viewport.y2);
+    }
+
+    /**
+     * Calculate adaptive threshold based on viewport density
+     */
+    private calculateAdaptiveThreshold(
+        baseThreshold: number,
+        nodesInViewport: number,
+        zoom: number
+    ): number {
+        // Increase threshold when viewport is crowded to show only most important nodes
+        const densityFactor = Math.min(2.0, 1.0 + (nodesInViewport / 50));
+
+        // Decrease threshold at higher zoom to show more detail
+        const zoomFactor = Math.max(0.5, 1.0 - (zoom - 1.0) * 0.3);
+
+        return baseThreshold * densityFactor * zoomFactor;
+    }
+
+    /**
+     * Determine if a node should be visible at current zoom level
+     */
+    private shouldShowNodeAtZoom(
+        importance: number,
+        threshold: number,
+        isInViewport: boolean,
+        zoom: number
+    ): boolean {
+        // Always show high-importance nodes
+        if (importance > 0.8) return true;
+
+        // At high zoom, show more nodes regardless of viewport
+        if (zoom > 2.0) return importance > threshold * 0.7;
+
+        // In viewport, use normal threshold
+        if (isInViewport) return importance > threshold;
+
+        // Outside viewport, require higher importance
+        return importance > threshold * 1.5;
+    }
+
+    /**
+     * Update edge visibility based on connected nodes
+     */
+    private updateEdgeVisibility(zoom: number, lodSettings: any): void {
+        if (!this.cy) return;
+
+        this.cy.edges().forEach((edge: any) => {
+            const source = edge.source();
+            const target = edge.target();
+
+            const sourceVisible = source.hasClass("visible-at-zoom");
+            const targetVisible = target.hasClass("visible-at-zoom");
+
+            // Show edge only if both nodes are visible
+            if (sourceVisible && targetVisible) {
+                // Apply additional filtering based on edge importance
+                const edgeStrength = edge.data("strength") || 0.5;
+                if (edgeStrength >= lodSettings.edgeThreshold) {
+                    edge.addClass("visible-at-zoom");
+                    edge.removeClass("hidden-at-zoom");
+                } else {
+                    edge.addClass("hidden-at-zoom");
+                    edge.removeClass("visible-at-zoom");
+                }
+            } else {
+                edge.addClass("hidden-at-zoom");
+                edge.removeClass("visible-at-zoom");
+            }
+        });
+    }
+
+    /**
+     * Update label visibility based on zoom and importance
      */
     private updateLabelVisibility(zoom: number): void {
         if (!this.cy) return;
 
-        // Progressive label visibility
-        if (zoom < 0.5) {
-            // Hide all labels at very low zoom
-            this.cy.style().selector("node").style("text-opacity", 0).update();
-        } else if (zoom < 1.0) {
-            // Show only level 0 labels
-            this.cy
-                .style()
-                .selector("node")
-                .style("text-opacity", 0)
-                .selector(".level-0")
-                .style("text-opacity", 1)
-                .update();
-        } else if (zoom < 1.5) {
-            // Show level 0 and 1 labels
-            this.cy
-                .style()
-                .selector("node")
-                .style("text-opacity", 0)
-                .selector(".level-0, .level-1")
-                .style("text-opacity", 1)
-                .update();
-        } else {
-            // Show all visible node labels
-            this.cy
-                .style()
-                .selector("node.visible-at-zoom")
-                .style("text-opacity", 1)
-                .selector("node.hidden-at-zoom")
-                .style("text-opacity", 0)
-                .update();
-        }
+        // Calculate label opacity based on importance and zoom
+        this.cy.nodes().forEach((node: any) => {
+            const isVisible = node.hasClass("visible-at-zoom");
+            const computedImportance = node.data("computedImportance") || 0.5;
+            const level = node.data("level") || 0;
+
+            let textOpacity = 0;
+
+            if (isVisible) {
+                if (zoom < 0.5) {
+                    // Hide all labels at very low zoom
+                    textOpacity = 0;
+                } else if (zoom < 1.0) {
+                    // Show only high-importance nodes at low zoom
+                    textOpacity = computedImportance > 0.7 ? 1 : 0;
+                } else if (zoom < 1.5) {
+                    // Progressive visibility based on importance and level
+                    if (level === 0 || computedImportance > 0.6) {
+                        textOpacity = 1;
+                    } else if (computedImportance > 0.4) {
+                        textOpacity = 0.7;
+                    }
+                } else {
+                    // Show labels for all visible nodes with importance-based opacity
+                    textOpacity = Math.max(0.5, computedImportance);
+                }
+
+                // Apply additional zoom-based scaling
+                const zoomFactor = Math.min(1, zoom / 2.0);
+                textOpacity *= zoomFactor;
+            }
+
+            node.style("text-opacity", textOpacity);
+        });
     }
 
     /**
@@ -341,6 +579,28 @@ export class TopicGraphVisualizer {
     }
 
     /**
+     * Calculate multi-factor importance for a topic
+     */
+    private calculateTopicImportance(topic: TopicData): number {
+        const baseConfidence = topic.confidence || 0.5;
+        const levelWeight = 1 / (topic.level + 1);  // Higher levels are less important
+        const childrenWeight = Math.min(1, topic.childCount * 0.1);  // Topics with more children are more important
+        const entityRefWeight = Math.min(1, topic.entityReferences.length * 0.05);  // Topics with more entity references are more important
+
+        // Additional semantic importance based on keywords count
+        const keywordWeight = Math.min(1, topic.keywords.length * 0.03);
+
+        // Weighted combination of all factors
+        const computedImportance = (baseConfidence * 0.4) +
+                                 (levelWeight * 0.25) +
+                                 (childrenWeight * 0.15) +
+                                 (entityRefWeight * 0.15) +
+                                 (keywordWeight * 0.05);
+
+        return Math.min(1, Math.max(0.1, computedImportance));  // Clamp between 0.1 and 1.0
+    }
+
+    /**
      * Convert topic data to Cytoscape elements
      */
     private convertToTopicElements(data: TopicGraphData): any[] {
@@ -349,12 +609,15 @@ export class TopicGraphVisualizer {
         // Add topic nodes
         for (const topic of data.topics) {
             if (this.visibleLevels.has(topic.level)) {
+                const computedImportance = this.calculateTopicImportance(topic);
+
                 elements.push({
                     data: {
                         id: topic.id,
                         label: topic.name,
                         level: topic.level,
                         confidence: topic.confidence,
+                        computedImportance: computedImportance,  // Add computed importance
                         keywords: topic.keywords,
                         entityReferences: topic.entityReferences,
                         parentId: topic.parentId,
@@ -433,27 +696,32 @@ export class TopicGraphVisualizer {
                 },
             },
 
-            // Topic nodes
+            // Topic nodes with importance-based sizing
             {
                 selector: 'node[nodeType="topic"]',
                 style: {
                     "background-color": "#FF6B9D",
-                    width: "mapData(confidence, 0, 1, 30, 80)",
-                    height: "mapData(confidence, 0, 1, 30, 80)",
+                    // Use computed importance for more meaningful sizing (20-100px range)
+                    width: "mapData(computedImportance, 0, 1, 20, 100)",
+                    height: "mapData(computedImportance, 0, 1, 20, 100)",
                     label: "data(label)",
                     "text-valign": "bottom",
                     "text-margin-y": 5,
-                    "font-size": "12px",
+                    // Scale font size with importance
+                    "font-size": "mapData(computedImportance, 0, 1, 10, 16)",
                     "font-weight": "bold",
                     color: "#333",
                     "text-wrap": "wrap",
-                    "text-max-width": 80,
-                    "border-width": 2,
+                    "text-max-width": "mapData(computedImportance, 0, 1, 60, 120)",
+                    // Scale border width with importance
+                    "border-width": "mapData(computedImportance, 0, 1, 2, 4)",
                     "border-color": "#E5507A",
                     "min-zoomed-font-size": 8,
                     "text-opacity": 1,
                     "transition-property": "none",
                     "transition-duration": 0,
+                    // Add importance-based opacity
+                    opacity: "mapData(computedImportance, 0, 1, 0.6, 1.0)",
                 },
             },
 
@@ -656,36 +924,58 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Get layout options based on current view mode
+     * Get layout options - now always returns optimized CoSE
      */
     private getLayoutOptions(): any {
-        switch (this.viewMode) {
-            case "tree":
-                return {
-                    name: "dagre",
-                    rankDir: "TB",
-                    nodeSep: 80,
-                    rankSep: 120,
-                    spacingFactor: 1.2,
-                };
-            case "radial":
-                return {
-                    name: "breadthfirst",
-                    circle: true,
-                    spacingFactor: 2.0,
-                    avoidOverlap: true,
-                };
-            case "force":
-                return {
-                    name: "cose",
-                    idealEdgeLength: 150,
-                    nodeOverlap: 20,
-                    nodeRepulsion: 8000,
-                    edgeElasticity: 100,
-                };
-            default:
-                return { name: "grid" };
+        return this.getOptimalCoSEConfig();
+    }
+
+    /**
+     * Get optimized CoSE layout configuration based on graph size
+     */
+    private getOptimalCoSEConfig(): any {
+        const nodeCount = this.topicGraphData?.topics?.length || 0;
+
+        // Base CoSE configuration optimized for topic graphs
+        const baseConfig = {
+            name: "cose",
+            idealEdgeLength: 100,
+            nodeOverlap: 20,
+            refresh: 20,
+            fit: false,
+            animate: "end",
+            padding: 30,
+            randomize: false,
+            componentSpacing: 100,
+            nodeRepulsion: 400000,  // Much stronger repulsion for better separation
+            edgeElasticity: 100,
+            nestingFactor: 5,
+            gravity: 80,
+            numIter: 1000,
+            initialTemp: 200,
+            coolingFactor: 0.95,
+            minTemp: 1.0,
+        };
+
+        // Adapt parameters based on graph size
+        if (nodeCount > 500) {
+            // For larger graphs, reduce iterations and increase cooling for faster convergence
+            baseConfig.numIter = 800;
+            baseConfig.coolingFactor = 0.98;
+            baseConfig.gravity = 100;
+        } else if (nodeCount > 200) {
+            // Medium graphs get standard parameters
+            baseConfig.numIter = 1000;
+            baseConfig.gravity = 90;
+        } else {
+            // Small graphs can afford more iterations for better quality
+            baseConfig.numIter = 1200;
+            baseConfig.gravity = 70;
+            baseConfig.nodeRepulsion = 300000;  // Less repulsion for tighter clustering
         }
+
+        console.log(`[Topic-CoSE] Configured for ${nodeCount} nodes with ${baseConfig.numIter} iterations`);
+        return baseConfig;
     }
 
     /**
@@ -762,6 +1052,9 @@ export class TopicGraphVisualizer {
     public focusOnTopic(topicId: string): void {
         const node = this.cy.getElementById(topicId);
         if (node.length > 0) {
+            const beforeZoom = this.cy.zoom();
+            console.log(`[TopicGraph-Zoom] focusOnTopic(${topicId}) - Before: ${beforeZoom.toFixed(3)}`);
+
             this.cy.animate(
                 {
                     fit: {
@@ -771,6 +1064,10 @@ export class TopicGraphVisualizer {
                 },
                 {
                     duration: 500,
+                    complete: () => {
+                        const afterZoom = this.cy.zoom();
+                        console.log(`[TopicGraph-Zoom] focusOnTopic(${topicId}) - After: ${afterZoom.toFixed(3)} (Δ${(afterZoom - beforeZoom).toFixed(3)})`);
+                    }
                 },
             );
             this.selectTopic(topicId);
@@ -804,12 +1101,15 @@ export class TopicGraphVisualizer {
         const newElements = [];
         for (const topic of childTopics) {
             if (!this.cy.getElementById(topic.id).length) {
+                const computedImportance = this.calculateTopicImportance(topic);
+
                 newElements.push({
                     data: {
                         id: topic.id,
                         label: topic.name,
                         level: topic.level,
                         confidence: topic.confidence,
+                        computedImportance: computedImportance,  // Add computed importance for dynamic nodes
                         keywords: topic.keywords,
                         entityReferences: topic.entityReferences,
                         parentId: topic.parentId,
@@ -863,15 +1163,6 @@ export class TopicGraphVisualizer {
         }
     }
 
-    /**
-     * Change view mode
-     */
-    public setViewMode(mode: TopicViewMode): void {
-        if (mode !== this.viewMode) {
-            this.viewMode = mode;
-            this.applyLayout();
-        }
-    }
 
     /**
      * Set topic click callback
@@ -914,7 +1205,16 @@ export class TopicGraphVisualizer {
      */
     public fitToView(): void {
         if (this.cy) {
+            const beforeZoom = this.cy.zoom();
+            console.log(`[TopicGraph-Zoom] fitToView() - Before: ${beforeZoom.toFixed(3)}`);
+
             this.cy.fit();
+
+            // Use setTimeout to log after the fit operation completes
+            setTimeout(() => {
+                const afterZoom = this.cy.zoom();
+                console.log(`[TopicGraph-Zoom] fitToView() - After: ${afterZoom.toFixed(3)} (Δ${(afterZoom - beforeZoom).toFixed(3)})`);
+            }, 50);
         }
     }
 
@@ -923,7 +1223,16 @@ export class TopicGraphVisualizer {
      */
     public centerGraph(): void {
         if (this.cy) {
+            const beforeZoom = this.cy.zoom();
+            console.log(`[TopicGraph-Zoom] centerGraph() - Before: ${beforeZoom.toFixed(3)}`);
+
             this.cy.center();
+
+            // Center typically doesn't change zoom, but log for completeness
+            setTimeout(() => {
+                const afterZoom = this.cy.zoom();
+                console.log(`[TopicGraph-Zoom] centerGraph() - After: ${afterZoom.toFixed(3)} (Δ${(afterZoom - beforeZoom).toFixed(3)})`);
+            }, 50);
         }
     }
 
@@ -959,9 +1268,13 @@ export class TopicGraphVisualizer {
      * Cleanup and dispose
      */
     public dispose(): void {
+        // Destroy Cytoscape instance
         if (this.cy) {
             this.cy.destroy();
             this.cy = null;
         }
+
+        // Reset flags
+        this.zoomHandlerSetup = false;
     }
 }

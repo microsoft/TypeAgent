@@ -486,6 +486,24 @@ export class HierarchicalTopicTable extends ms.sqlite.SqliteDataFrame {
         return stmt.get(topicId) as HierarchicalTopicRecord | undefined;
     }
 
+    public getChildByName(topicName: string, parentTopicId: string): HierarchicalTopicRecord | undefined {
+        const stmt = this.db.prepare(`
+            SELECT * FROM hierarchicalTopics
+            WHERE topicName = ? AND parentTopicId = ?
+            LIMIT 1
+        `);
+        return stmt.get(topicName, parentTopicId) as HierarchicalTopicRecord | undefined;
+    }
+
+    public getTopicByName(topicName: string, level: number): HierarchicalTopicRecord | undefined {
+        const stmt = this.db.prepare(`
+            SELECT * FROM hierarchicalTopics
+            WHERE topicName = ? AND level = ?
+            LIMIT 1
+        `);
+        return stmt.get(topicName, level) as HierarchicalTopicRecord | undefined;
+    }
+
     public deleteTopicsByUrl(url: string): void {
         const stmt = this.db.prepare(
             `DELETE FROM hierarchicalTopics WHERE url = ?`,

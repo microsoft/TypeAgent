@@ -358,16 +358,21 @@ export class BatchProcessor extends EventEmitter {
     }
 
     private prepareTextContentForEstimation(item: ExtractionInput): string {
+        const parts: string[] = [];
+
+        if (item.title) {
+            parts.push(`Title: ${item.title}`);
+        }
+
         if (item.textContent) {
-            return item.textContent;
+            parts.push(item.textContent);
+        } else if (item.htmlFragments) {
+            parts.push(item.htmlFragments.map((f) => f.text || "").join("\n"));
+        } else if (item.htmlContent) {
+            parts.push(item.htmlContent.replace(/\s+/g, " ").trim());
         }
-        if (item.htmlFragments) {
-            return item.htmlFragments.map((f) => f.text || "").join("\n");
-        }
-        if (item.htmlContent) {
-            return item.htmlContent.replace(/\s+/g, " ").trim();
-        }
-        return item.title || "";
+
+        return parts.join("\n\n");
     }
 
     /**
