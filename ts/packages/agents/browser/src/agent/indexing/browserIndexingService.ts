@@ -315,22 +315,14 @@ export class BrowserIndexingService {
 
             // Update website with extracted knowledge
             if (result.knowledge) {
-                console.log(`\n📥 [TRACE] browserIndexingService: Assigning knowledge to website`);
-                console.log(`   URL: ${website.metadata.url}`);
-
                 website.knowledge = result.knowledge;
 
                 // Extract and assign topicHierarchy if present
                 const topicHierarchy = (result.knowledge as any)?.topicHierarchy;
                 if (topicHierarchy) {
                     (website as any).topicHierarchy = topicHierarchy;
-                    console.log(`   ✅ Extracted and assigned topic hierarchy with ${topicHierarchy.totalTopics} topics`);
                     debug(`Extracted topic hierarchy with ${topicHierarchy.totalTopics} topics for ${website.metadata.url}`);
-                } else {
-                    console.log(`   ⚠️ No topic hierarchy found in result.knowledge`);
                 }
-            } else {
-                console.log(`\n⚠️ [TRACE] browserIndexingService: No knowledge in extraction result for ${website.metadata.url}`);
             }
 
             // Add processing metadata

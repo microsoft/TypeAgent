@@ -553,18 +553,11 @@ export class ContentExtractor {
         maxConcurrent: number = 3,
         itemUrl: string = "",
     ): Promise<kpLib.KnowledgeResponse> {
-        console.log(`\n🔍 [TRACE] extractChunkedAIKnowledge called`);
-        console.log(`   URL: ${itemUrl}`);
-        console.log(`   Content length: ${content.length}`);
-        console.trace('Call stack:');
-
         if (!this.knowledgeExtractor) {
             throw new Error("Knowledge extractor not available");
         }
 
         if (content.length <= maxChunkSize) {
-            console.log(`   Content fits in single chunk (${content.length} <= ${maxChunkSize})`);
-            console.log(`   Extracting knowledge and generating hierarchy for single-chunk content`);
 
             if (chunkProgressCallback) {
                 await chunkProgressCallback({
@@ -757,12 +750,6 @@ export class ContentExtractor {
         chunkTexts: string[],
         itemUrl?: string,
     ): Promise<kpLib.KnowledgeResponse> {
-        console.log(`\n🔍 [TRACE] aggregateChunkResults called`);
-        console.log(`   URL: ${itemUrl || 'no URL'}`);
-        console.log(`   Chunk results count: ${chunkResults.length}`);
-        console.log(`   Chunk texts count: ${chunkTexts.length}`);
-        console.trace('Call stack:');
-
         const aggregated: kpLib.KnowledgeResponse = {
             topics: [],
             entities: [],
@@ -801,13 +788,8 @@ export class ContentExtractor {
         );
 
         if (fragmentExtractions.length > 0 && itemUrl) {
-            console.log(`\n🌲 [TRACE] Starting hierarchical topic extraction`);
-            console.log(`   Fragment extractions: ${fragmentExtractions.length}`);
-            console.log(`   URL: ${itemUrl}`);
-
             const model = this.knowledgeExtractor?.translator?.model;
             if (model) {
-                console.log(`   ✓ Model available for hierarchy extraction`);
                 const topicExtractor = kpLib.createTopicExtractor(model);
                 const hierarchyExtractor = kpLib.createHierarchicalTopicExtractor(
                     model,
@@ -816,8 +798,6 @@ export class ContentExtractor {
 
                 try {
                     const domain = new URL(itemUrl).hostname;
-                    console.log(`   Calling extractHierarchicalTopics for domain: ${domain}`);
-
                     const hierarchyResponse = await hierarchyExtractor.extractHierarchicalTopics(
                         fragmentExtractions,
                         {
@@ -826,23 +806,14 @@ export class ContentExtractor {
                         }
                     );
 
-                    console.log(`   Hierarchy extraction status: ${hierarchyResponse.status}`);
-
                     if (hierarchyResponse.status === "Success") {
                         aggregated.topics = hierarchyResponse.flatTopics.slice(0, 20);
                         (aggregated as any).topicHierarchy = hierarchyResponse.hierarchy;
-
-                        console.log(`   ✅ SUCCESS: Generated hierarchy with ${hierarchyResponse.hierarchy.totalTopics} topics, max depth ${hierarchyResponse.hierarchy.maxDepth}`);
-                        console.log(`   Root topics: ${hierarchyResponse.hierarchy.rootTopics.map(t => t.name).join(', ')}`);
-                        console.log(`   Flat topics (first 5): ${hierarchyResponse.flatTopics.slice(0, 5).join(', ')}`);
-
                         debug(`[Hierarchical Topics] Generated hierarchy with ${hierarchyResponse.hierarchy.totalTopics} topics, max depth ${hierarchyResponse.hierarchy.maxDepth}`);
                     } else {
-                        console.log(`   ⚠️ Extraction status not Success: ${hierarchyResponse.status}`);
                         debug(`[Hierarchical Topics] Extraction status: ${hierarchyResponse.status}`);
                     }
                 } catch (error) {
-                    console.error(`   ❌ Error during hierarchy extraction:`, error);
                     debug(`[Hierarchical Topics] Error: ${error}`);
                     // Fall back to frequency-based topic aggregation
                     const topicCounts = new Map<string, number>();
@@ -861,7 +832,6 @@ export class ContentExtractor {
                         .map(([topic]) => topic);
                 }
             } else {
-                console.log(`   ⚠️ Model NOT available for hierarchy extraction`);
                 debug(`[Hierarchical Topics] Skipped - model not available`);
                 // Fall back to frequency-based topic aggregation
                 const topicCounts = new Map<string, number>();
@@ -880,9 +850,6 @@ export class ContentExtractor {
                     .map(([topic]) => topic);
             }
         } else {
-            console.log(`\n⚠️ [TRACE] Skipping hierarchical extraction`);
-            console.log(`   Fragments: ${fragmentExtractions.length}`);
-            console.log(`   URL: ${itemUrl || 'NO URL PROVIDED'}`);
             debug(`[Hierarchical Topics] Skipped - no fragments (${fragmentExtractions.length}) or no URL (${itemUrl || 'empty'})`);
             // Fall back to frequency-based topic aggregation
             const topicCounts = new Map<string, number>();
@@ -908,13 +875,6 @@ export class ContentExtractor {
 
         aggregated.actions = allActions.slice(0, 15);
         aggregated.inverseActions = [];
-
-        const hasHierarchy = !!(aggregated as any).topicHierarchy;
-        console.log(`\n📊 [TRACE] aggregateChunkResults complete`);
-        console.log(`   Topic hierarchy attached: ${hasHierarchy ? 'YES' : 'NO'}`);
-        if (hasHierarchy) {
-            console.log(`   Hierarchy total topics: ${(aggregated as any).topicHierarchy.totalTopics}`);
-        }
 
         return aggregated;
     }
