@@ -94,7 +94,7 @@ async def load_or_create_email_memory(db_path: str, create_new: bool) -> EmailMe
         print(f"Deleting {db_path}")
         delete_sqlite_db(db_path)
 
-    settings = ConversationSettings()  # Has no storage provider yet
+    settings = EmailMemory.create_settings()
     settings.storage_provider = await create_storage_provider(
     settings.message_text_index_settings,
     settings.related_term_index_settings,

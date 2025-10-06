@@ -57,6 +57,12 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             ),
         )
 
+    @staticmethod
+    def create_settings() -> ConversationSettings:
+        settings = ConversationSettings()
+        settings.semantic_ref_index_settings.auto_extract_knowledge = True
+        return settings
+    
     async def add_message(self, message: EmailMessage) -> None:    
         await self.messages.append(message)
 
