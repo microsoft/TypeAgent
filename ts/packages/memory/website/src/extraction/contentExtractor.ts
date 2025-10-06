@@ -808,8 +808,16 @@ export class ContentExtractor {
 
                     if (hierarchyResponse.status === "Success") {
                         aggregated.topics = hierarchyResponse.flatTopics.slice(0, 20);
-                        (aggregated as any).topicHierarchy = hierarchyResponse.hierarchy;
-                        debug(`[Hierarchical Topics] Generated hierarchy with ${hierarchyResponse.hierarchy.totalTopics} topics, max depth ${hierarchyResponse.hierarchy.maxDepth}`);
+
+                        // Convert topicMap from Map to plain object for JSON serialization
+                        const hierarchy = hierarchyResponse.hierarchy;
+                        const serializableHierarchy = {
+                            ...hierarchy,
+                            topicMap: Object.fromEntries(hierarchy.topicMap),
+                        };
+
+                        (aggregated as any).topicHierarchy = serializableHierarchy;
+                        debug(`[Hierarchical Topics] Generated hierarchy with ${hierarchy.totalTopics} topics, max depth ${hierarchy.maxDepth}`);
                     } else {
                         debug(`[Hierarchical Topics] Extraction status: ${hierarchyResponse.status}`);
                     }

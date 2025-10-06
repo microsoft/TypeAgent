@@ -2197,7 +2197,6 @@ export class WebsiteCollection
                 if (this.hierarchicalTopics) {
                     const clearStmt = this.db!.prepare("DELETE FROM hierarchicalTopics");
                     clearStmt.run();
-                    debug(`[Knowledge Graph] Cleared existing hierarchical topics for rebuild`);
                 }
 
                 // Use existing rich hierarchies from websites
@@ -2330,7 +2329,22 @@ export class WebsiteCollection
             console.log(`  Root topics: ${docHierarchy.rootTopics.map((t: any) => t.name).join(", ")}`);
 
             if (!globalHierarchy) {
-                globalHierarchy = docHierarchy;
+                // First hierarchy - convert topicMap to Map if needed
+                let topicMap: Map<string, any>;
+
+                if (docHierarchy.topicMap instanceof Map) {
+                    topicMap = docHierarchy.topicMap;
+                } else if (typeof docHierarchy.topicMap === 'object' && docHierarchy.topicMap !== null) {
+                    // Plain object from JSON deserialization
+                    topicMap = new Map(Object.entries(docHierarchy.topicMap));
+                } else {
+                    topicMap = new Map();
+                }
+
+                globalHierarchy = {
+                    ...docHierarchy,
+                    topicMap: topicMap,
+                };
             } else {
                 globalHierarchy = this.mergeHierarchies(globalHierarchy, docHierarchy);
             }
@@ -2358,6 +2372,8 @@ export class WebsiteCollection
             debug(
                 `[Knowledge Graph] Error updating hierarchical topics: ${error}`,
             );
+            console.error(`\n❌ Error updating hierarchical topics: ${error}`);
+            console.log("=".repeat(80) + "\n");
         }
     }
 
@@ -2365,10 +2381,20 @@ export class WebsiteCollection
         existing: any,
         newHierarchy: any,
     ): any {
-        const mergedTopicMap = new Map(existing.topicMap);
+        // Convert existing topicMap to Map if it's a plain object (from deserialization)
+        const existingTopicMap = existing.topicMap instanceof Map
+            ? existing.topicMap
+            : new Map(Object.entries(existing.topicMap));
+
+        const mergedTopicMap = new Map(existingTopicMap);
         const mergedRootTopics = [...existing.rootTopics];
 
-        for (const [topicId, topic] of newHierarchy.topicMap) {
+        // Convert newHierarchy topicMap to entries array if it's a plain object
+        const newTopicEntries = newHierarchy.topicMap instanceof Map
+            ? newHierarchy.topicMap
+            : Object.entries(newHierarchy.topicMap);
+
+        for (const [topicId, topic] of newTopicEntries) {
             if (!mergedTopicMap.has(topicId)) {
                 mergedTopicMap.set(topicId, topic);
                 if (topic.level === 0) {
@@ -2549,7 +2575,7 @@ export class WebsiteCollection
 
         try {
             const checkStmt = this.db!.prepare(
-                "SELECT COUNT(*) as count FROM relationships WHERE sourceEntity = ? OR targetEntity = ? LIMIT 1",
+                "SELECT COUNT(*) as count FROM relationships WHERE fromEntity = ? OR toEntity = ? LIMIT 1",
             );
             const result = checkStmt.get(entityName, entityName) as {
                 count: number;
@@ -2584,11 +2610,13 @@ export class WebsiteCollection
             const relationshipRow = {
                 sourceRef,
                 record: {
-                    sourceEntity: entity1,
-                    targetEntity: entity2,
+                    fromEntity: entity1,
+                    toEntity: entity2,
                     relationshipType: "co-occurrence",
-                    strength: strength,
-                    extractionDate: new Date().toISOString(),
+                    confidence: strength,
+                    sources: JSON.stringify([]), // Empty sources array initially
+                    count: 1,
+                    updated: new Date().toISOString(),
                 },
             };
 
