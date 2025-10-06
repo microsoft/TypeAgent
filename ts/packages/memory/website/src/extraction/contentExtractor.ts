@@ -747,12 +747,8 @@ export class ContentExtractor {
                         };
 
                         (aggregated as any).topicHierarchy = serializableHierarchy;
-                        debug(`[Hierarchical Topics] Generated hierarchy with ${hierarchy.totalTopics} topics, max depth ${hierarchy.maxDepth}`);
-                    } else {
-                        debug(`[Hierarchical Topics] Extraction status: ${hierarchyResponse.status}`);
                     }
                 } catch (error) {
-                    debug(`[Hierarchical Topics] Error: ${error}`);
                     // Fall back to frequency-based topic aggregation
                     const topicCounts = new Map<string, number>();
                     chunkResults.forEach((result) => {
@@ -770,7 +766,6 @@ export class ContentExtractor {
                         .map(([topic]) => topic);
                 }
             } else {
-                debug(`[Hierarchical Topics] Skipped - model not available`);
                 // Fall back to frequency-based topic aggregation
                 const topicCounts = new Map<string, number>();
                 chunkResults.forEach((result) => {
@@ -788,7 +783,6 @@ export class ContentExtractor {
                     .map(([topic]) => topic);
             }
         } else {
-            debug(`[Hierarchical Topics] Skipped - no fragments (${fragmentExtractions.length}) or no URL (${itemUrl || 'empty'})`);
             // Fall back to frequency-based topic aggregation
             const topicCounts = new Map<string, number>();
             chunkResults.forEach((result) => {

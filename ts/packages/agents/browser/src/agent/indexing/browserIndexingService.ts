@@ -321,7 +321,6 @@ export class BrowserIndexingService {
                 const topicHierarchy = (result.knowledge as any)?.topicHierarchy;
                 if (topicHierarchy) {
                     (website as any).topicHierarchy = topicHierarchy;
-                    debug(`Extracted topic hierarchy with ${topicHierarchy.totalTopics} topics for ${website.metadata.url}`);
                 }
             }
 

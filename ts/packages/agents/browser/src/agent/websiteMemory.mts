@@ -506,79 +506,6 @@ export async function importWebsiteDataFromSession(
                         },
                     );
 
-                    // Log extracted entities and topics for each URL
-                    console.log("\n" + "=".repeat(80));
-                    console.log("EXTRACTION RESULTS - Entities and Topics by URL");
-                    console.log("=".repeat(80) + "\n");
-
-                    extractionResults.forEach((result, index) => {
-                        const site = metadataWebsites[index];
-                        const url = site?.metadata?.url || "unknown";
-                        const title = site?.metadata?.title || "untitled";
-
-                        console.log(`\n[${ index + 1}/${extractionResults.length}] ${title}`);
-                        console.log(`URL: ${url}`);
-                        console.log("-".repeat(80));
-
-                        if (!result?.knowledge) {
-                            console.log("❌ No knowledge extracted (extraction may have failed)");
-                            return;
-                        }
-
-                        const knowledge = result.knowledge;
-
-                        // Display Topics
-                        console.log(`\n📚 TOPICS (${knowledge.topics?.length || 0}):`);
-                        if (knowledge.topics && knowledge.topics.length > 0) {
-                            knowledge.topics.forEach((topic, i) => {
-                                console.log(`  ${i + 1}. ${topic}`);
-                            });
-                        } else {
-                            console.log("  (none)");
-                        }
-
-                        // Display Entities with hierarchy
-                        console.log(`\n🏷️  ENTITIES (${knowledge.entities?.length || 0}):`);
-                        if (knowledge.entities && knowledge.entities.length > 0) {
-                            knowledge.entities.forEach((entity, i) => {
-                                console.log(`\n  [${i + 1}] ${entity.name}`);
-                                console.log(`      Types: ${entity.type?.join(", ") || "(none)"}`);
-
-                                if (entity.facets && entity.facets.length > 0) {
-                                    console.log(`      Facets:`);
-                                    entity.facets.forEach((facet) => {
-                                        const value = typeof facet.value === 'object' && facet.value !== null
-                                            ? JSON.stringify(facet.value)
-                                            : facet.value;
-                                        console.log(`        • ${facet.name}: ${value}`);
-                                    });
-                                }
-                            });
-                        } else {
-                            console.log("  (none)");
-                        }
-
-                        // Display Actions summary
-                        if (knowledge.actions && knowledge.actions.length > 0) {
-                            console.log(`\n⚡ ACTIONS (${knowledge.actions.length}):`);
-                            knowledge.actions.slice(0, 5).forEach((action, i) => {
-                                const verbs = action.verbs?.join("/") || "action";
-                                const subject = action.subjectEntityName || "?";
-                                const object = action.objectEntityName || "?";
-                                console.log(`  ${i + 1}. ${subject} → ${verbs} → ${object}`);
-                            });
-                            if (knowledge.actions.length > 5) {
-                                console.log(`  ... and ${knowledge.actions.length - 5} more`);
-                            }
-                        }
-
-                        console.log("");
-                    });
-
-                    console.log("\n" + "=".repeat(80));
-                    console.log("END OF EXTRACTION RESULTS");
-                    console.log("=".repeat(80) + "\n");
-
                     // Build complete website objects from extraction results
                     websites = metadataWebsites.map((metaSite, index) => {
                         const result = extractionResults[index];
@@ -828,51 +755,6 @@ export async function importWebsiteDataFromSession(
             importContext,
             summaryStats,
         );
-
-        // Display final topic hierarchy
-        try {
-            if (!context.agentContext.websiteCollection) {
-                console.log(`\n⚠️  WebsiteCollection not available for hierarchy display\n`);
-            } else {
-                const rootTopics = context.agentContext.websiteCollection.hierarchicalTopics.getRootTopics();
-                const allTopics = context.agentContext.websiteCollection.hierarchicalTopics.getTopicHierarchy();
-
-                console.log(`\n${"=".repeat(80)}`);
-                console.log(`FINAL TOPIC HIERARCHY - ${rootTopics.length} root topics`);
-                console.log("=".repeat(80));
-
-                if (rootTopics.length === 0) {
-                    console.log(`\n  (No hierarchical topics built)`);
-                } else {
-                    rootTopics.forEach((root, idx: number) => {
-                        console.log(`\n🌳 [${idx + 1}] ${root.topicName} (level ${root.level}, confidence: ${root.confidence})`);
-
-                        // Get children of this root
-                        const children = allTopics.filter((t: any) => t.parentTopicId === root.topicId);
-
-                        if (children.length > 0) {
-                            children.forEach((child: any, childIdx: number) => {
-                                console.log(`   ├─ ${child.topicName} (level ${child.level}, confidence: ${child.confidence})`);
-
-                                // Get grandchildren
-                                const grandchildren = allTopics.filter((t: any) => t.parentTopicId === child.topicId);
-                                grandchildren.forEach((grandchild: any, gcIdx: number) => {
-                                    const isLast = gcIdx === grandchildren.length - 1;
-                                    const prefix = isLast ? "└─" : "├─";
-                                    console.log(`   │  ${prefix} ${grandchild.topicName} (level ${grandchild.level})`);
-                                });
-                            });
-                        }
-                    });
-                }
-
-                console.log(`\n${"=".repeat(80)}`);
-                console.log(`Total hierarchical topics: ${allTopics.length}`);
-                console.log("=".repeat(80) + "\n");
-            }
-        } catch (error) {
-            console.log(`\n⚠️  Could not display final hierarchy: ${error}\n`);
-        }
 
         return {
             success: true,

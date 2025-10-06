@@ -270,13 +270,6 @@ export async function indexWebPageContent(
                     await context.agentContext.websiteCollection.updateHierarchicalTopics([
                         websiteObj,
                     ]);
-                    debug(
-                        `Updated hierarchical topics with ${aggregatedResults.keyTopics?.length || aggregatedResults.topics?.length || 0} topics from ${parameters.url}`,
-                    );
-                } else {
-                    debug(
-                        `Skipped hierarchical topics update for ${parameters.url} - no topics extracted`,
-                    );
                 }
             } catch (error) {
                 console.warn(

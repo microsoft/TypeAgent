@@ -101,14 +101,8 @@ export class TopicGraphVisualizer {
                 webglConfig.webglTexPerBatch = 16;
             }
 
-            console.log(
-                `[Topic-WebGL] Enabled with texture size: ${webglConfig.webglTexSize}, batch size: ${webglConfig.webglBatchSize}`,
-            );
             return webglConfig;
         } else {
-            console.log(
-                `[Topic-WebGL] Not supported, falling back to Canvas renderer`,
-            );
             return { name: "canvas" };
         }
     }
@@ -192,14 +186,6 @@ export class TopicGraphVisualizer {
             selectionType: "single",
         });
 
-        // Log initial zoom configuration
-        console.log("[TopicGraph-Zoom] Cytoscape initialized with zoom config:", {
-            minZoom: 0.25,
-            maxZoom: 4.0,
-            userZoomingEnabled: false,
-            initialZoom: this.cy.zoom()
-        });
-
         // Set up zoom event handler for LOD and custom zoom control
         this.setupZoomHandler();
     }
@@ -214,15 +200,6 @@ export class TopicGraphVisualizer {
         this.cy.on("zoom", (event: any) => {
             const previousZoom = this.currentZoom;
             const currentZoom = this.cy.zoom();
-            const zoomDelta = currentZoom - previousZoom;
-
-            // Log zoom transitions for debugging
-            console.log(`[TopicGraph-Zoom] ${previousZoom.toFixed(3)} → ${currentZoom.toFixed(3)} (Δ${zoomDelta.toFixed(3)})`);
-
-            // Check for erratic zoom jumps
-            if (Math.abs(zoomDelta) > 1.0) {
-                console.warn(`[TopicGraph-Zoom] Large zoom jump detected: ${zoomDelta.toFixed(3)} - Event:`, event);
-            }
 
             this.currentZoom = currentZoom;
 
@@ -263,8 +240,6 @@ export class TopicGraphVisualizer {
 
                 // Clamp to our bounds
                 newZoom = Math.max(0.25, Math.min(4.0, newZoom));
-
-                console.log(`[TopicGraph-Zoom] Wheel: ${currentZoom.toFixed(3)} → ${newZoom.toFixed(3)} (step: ${actualStep.toFixed(3)})`);
 
                 // Apply smooth zoom to current instance
                 this.cy.zoom({
@@ -974,7 +949,6 @@ export class TopicGraphVisualizer {
             baseConfig.nodeRepulsion = 300000;  // Less repulsion for tighter clustering
         }
 
-        console.log(`[Topic-CoSE] Configured for ${nodeCount} nodes with ${baseConfig.numIter} iterations`);
         return baseConfig;
     }
 
@@ -1052,9 +1026,6 @@ export class TopicGraphVisualizer {
     public focusOnTopic(topicId: string): void {
         const node = this.cy.getElementById(topicId);
         if (node.length > 0) {
-            const beforeZoom = this.cy.zoom();
-            console.log(`[TopicGraph-Zoom] focusOnTopic(${topicId}) - Before: ${beforeZoom.toFixed(3)}`);
-
             this.cy.animate(
                 {
                     fit: {
@@ -1064,10 +1035,6 @@ export class TopicGraphVisualizer {
                 },
                 {
                     duration: 500,
-                    complete: () => {
-                        const afterZoom = this.cy.zoom();
-                        console.log(`[TopicGraph-Zoom] focusOnTopic(${topicId}) - After: ${afterZoom.toFixed(3)} (Δ${(afterZoom - beforeZoom).toFixed(3)})`);
-                    }
                 },
             );
             this.selectTopic(topicId);
@@ -1205,16 +1172,7 @@ export class TopicGraphVisualizer {
      */
     public fitToView(): void {
         if (this.cy) {
-            const beforeZoom = this.cy.zoom();
-            console.log(`[TopicGraph-Zoom] fitToView() - Before: ${beforeZoom.toFixed(3)}`);
-
             this.cy.fit();
-
-            // Use setTimeout to log after the fit operation completes
-            setTimeout(() => {
-                const afterZoom = this.cy.zoom();
-                console.log(`[TopicGraph-Zoom] fitToView() - After: ${afterZoom.toFixed(3)} (Δ${(afterZoom - beforeZoom).toFixed(3)})`);
-            }, 50);
         }
     }
 
@@ -1223,16 +1181,7 @@ export class TopicGraphVisualizer {
      */
     public centerGraph(): void {
         if (this.cy) {
-            const beforeZoom = this.cy.zoom();
-            console.log(`[TopicGraph-Zoom] centerGraph() - Before: ${beforeZoom.toFixed(3)}`);
-
             this.cy.center();
-
-            // Center typically doesn't change zoom, but log for completeness
-            setTimeout(() => {
-                const afterZoom = this.cy.zoom();
-                console.log(`[TopicGraph-Zoom] centerGraph() - After: ${afterZoom.toFixed(3)} (Δ${(afterZoom - beforeZoom).toFixed(3)})`);
-            }, 50);
         }
     }
 

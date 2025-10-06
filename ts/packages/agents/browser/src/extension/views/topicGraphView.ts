@@ -46,7 +46,6 @@ class TopicGraphView {
         if (topicGraphBreadcrumb) {
             topicGraphBreadcrumb.addEventListener("click", (e) => {
                 e.preventDefault();
-                console.log("Topic Graph breadcrumb clicked");
                 this.navigateToGlobalView();
             });
         }
@@ -126,7 +125,6 @@ class TopicGraphView {
 
             // Set up topic click callback
             this.visualizer.onTopicClick((topic) => {
-                console.log("Topic clicked:", topic);
                 this.showTopicDetails(topic);
                 this.updateBreadcrumb(topic);
             });
@@ -173,8 +171,6 @@ class TopicGraphView {
         centerTopic?: string | null,
     ): Promise<any> {
         try {
-            console.log("Fetching real hierarchical topic data...");
-
             // Fetch hierarchical topics from the extension service
             const result = await this.extensionService.sendMessage({
                 type: "getHierarchicalTopics",
@@ -195,7 +191,6 @@ class TopicGraphView {
 
             console.log("Fetched hierarchical topics:", result);
             const transformedData = this.transformHierarchicalTopicData(result, centerTopic);
-            this.analyzeTopicHierarchyAndImportance(transformedData);
             return transformedData;
         } catch (error) {
             console.error("Error fetching topic data:", error);

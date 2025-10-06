@@ -1604,13 +1604,10 @@ export class WebsiteCollection
         const websites = this.getWebsites();
         const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
 
-        debug(`[Knowledge Graph] Building topic relationships for ${websitesToProcess.length} websites`);
         for (const website of websitesToProcess) {
             await this.updateTopicCooccurrences(website);
             await this.storeTopicCorrelations(website);
         }
-
-        debug(`[Knowledge Graph] Calculating topic metrics`);
         const allTopics = this.hierarchicalTopics?.getTopicHierarchy();
         if (allTopics) {
             const uniqueTopics = new Set(allTopics.map(t => t.topicId));
@@ -2214,10 +2211,6 @@ export class WebsiteCollection
             );
 
             if (websitesWithHierarchies.length > 0) {
-                debug(
-                    `[Knowledge Graph] Found ${websitesWithHierarchies.length} websites with existing hierarchies, preserving them`
-                );
-
                 // Clear existing hierarchical topics before rebuilding
                 if (this.hierarchicalTopics) {
                     const clearStmt = this.db!.prepare("DELETE FROM hierarchicalTopics");
@@ -2226,24 +2219,13 @@ export class WebsiteCollection
 
                 // Use existing rich hierarchies from websites
                 await this.updateHierarchicalTopics(websitesWithHierarchies);
-
-                debug(
-                    `[Knowledge Graph] Hierarchical topics rebuilt from existing hierarchies in ${Date.now() - startTime}ms`
-                );
                 return;
             }
 
             // No existing hierarchies, fall back to building from flat topics
-            debug(`[Knowledge Graph] No existing hierarchies found, building from flat topics`);
-
-            // Extract all unique topics from websites
             const flatTopics = await this.extractFlatTopics(urlLimit);
-            debug(
-                `[Knowledge Graph] Extracted ${flatTopics.length} unique topics`,
-            );
 
             if (flatTopics.length === 0) {
-                debug(`[Knowledge Graph] No topics found to build hierarchy`);
                 return;
             }
 
