@@ -486,6 +486,34 @@ export class HierarchicalTopicTable extends ms.sqlite.SqliteDataFrame {
         return stmt.get(topicId) as HierarchicalTopicRecord | undefined;
     }
 
+    public getChildByName(
+        topicName: string,
+        parentTopicId: string,
+    ): HierarchicalTopicRecord | undefined {
+        const stmt = this.db.prepare(`
+            SELECT * FROM hierarchicalTopics
+            WHERE topicName = ? AND parentTopicId = ?
+            LIMIT 1
+        `);
+        return stmt.get(topicName, parentTopicId) as
+            | HierarchicalTopicRecord
+            | undefined;
+    }
+
+    public getTopicByName(
+        topicName: string,
+        level: number,
+    ): HierarchicalTopicRecord | undefined {
+        const stmt = this.db.prepare(`
+            SELECT * FROM hierarchicalTopics
+            WHERE topicName = ? AND level = ?
+            LIMIT 1
+        `);
+        return stmt.get(topicName, level) as
+            | HierarchicalTopicRecord
+            | undefined;
+    }
+
     public deleteTopicsByUrl(url: string): void {
         const stmt = this.db.prepare(
             `DELETE FROM hierarchicalTopics WHERE url = ?`,
@@ -543,6 +571,309 @@ export class TopicEntityRelationTable extends ms.sqlite.SqliteDataFrame {
     public deleteRelationsByTopic(topicId: string): void {
         const stmt = this.db.prepare(
             `DELETE FROM topicEntityRelations WHERE topicId = ?`,
+        );
+        stmt.run(topicId);
+    }
+}
+
+// Topic relationships table
+export interface TopicRelationship {
+    fromTopic: string;
+    toTopic: string;
+    relationshipType: string;
+    strength: number;
+    metadata?: string;
+    sourceUrls?: string;
+    cooccurrenceCount?: number;
+    firstSeen?: string;
+    lastSeen?: string;
+    updated: string;
+}
+
+export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
+    constructor(public db: sqlite.Database) {
+        TopicRelationshipTable.ensureTable(db);
+
+        super(
+            db,
+            "topicRelationships",
+            [
+                ["fromTopic", { type: "string" }],
+                ["toTopic", { type: "string" }],
+                ["relationshipType", { type: "string" }],
+                ["strength", { type: "number" }],
+                ["metadata", { type: "string", optional: true }],
+                ["sourceUrls", { type: "string", optional: true }],
+                ["cooccurrenceCount", { type: "number", optional: true }],
+                ["firstSeen", { type: "string", optional: true }],
+                ["lastSeen", { type: "string", optional: true }],
+                ["updated", { type: "string" }],
+            ],
+            false,
+        );
+    }
+
+    private static ensureTable(db: sqlite.Database): void {
+        try {
+            const tableInfo = db
+                .prepare(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='topicRelationships'",
+                )
+                .get() as { sql?: string } | undefined;
+
+            const needsRecreate =
+                !tableInfo ||
+                !tableInfo.sql?.includes(
+                    "UNIQUE (fromTopic, toTopic, relationshipType)",
+                );
+
+            if (needsRecreate) {
+                if (tableInfo) {
+                    db.exec(`DROP TABLE IF EXISTS topicRelationships`);
+                }
+
+                db.exec(`
+                    CREATE TABLE topicRelationships (
+                        rowId INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sourceRef TEXT NOT NULL,
+                        fromTopic TEXT NOT NULL,
+                        toTopic TEXT NOT NULL,
+                        relationshipType TEXT NOT NULL,
+                        strength REAL NOT NULL,
+                        metadata TEXT,
+                        sourceUrls TEXT,
+                        cooccurrenceCount INTEGER,
+                        firstSeen TEXT,
+                        lastSeen TEXT,
+                        updated TEXT NOT NULL,
+                        UNIQUE (fromTopic, toTopic, relationshipType)
+                    )
+                `);
+            }
+        } catch (error) {}
+    }
+
+    public getRelationshipsForTopic(topicId: string): TopicRelationship[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicRelationships
+            WHERE fromTopic = ? OR toTopic = ?
+            ORDER BY strength DESC
+        `);
+        return stmt.all(topicId, topicId) as TopicRelationship[];
+    }
+
+    public getStrongRelationships(
+        topicId: string,
+        minStrength: number = 0.7,
+    ): TopicRelationship[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicRelationships
+            WHERE (fromTopic = ? OR toTopic = ?) AND strength >= ?
+            ORDER BY strength DESC
+        `);
+        return stmt.all(topicId, topicId, minStrength) as TopicRelationship[];
+    }
+
+    public upsertRelationship(relationship: TopicRelationship): void {
+        const sourceRef = {
+            range: { start: { messageOrdinal: 0, chunkOrdinal: 0 } },
+        };
+
+        const stmt = this.db.prepare(`
+            INSERT INTO topicRelationships
+            (sourceRef, fromTopic, toTopic, relationshipType, strength, metadata, sourceUrls, cooccurrenceCount, firstSeen, lastSeen, updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(fromTopic, toTopic, relationshipType) DO UPDATE SET
+                strength = excluded.strength,
+                metadata = excluded.metadata,
+                sourceUrls = excluded.sourceUrls,
+                cooccurrenceCount = excluded.cooccurrenceCount,
+                lastSeen = excluded.lastSeen,
+                updated = excluded.updated
+        `);
+        stmt.run(
+            JSON.stringify(sourceRef),
+            relationship.fromTopic,
+            relationship.toTopic,
+            relationship.relationshipType,
+            relationship.strength,
+            relationship.metadata || null,
+            relationship.sourceUrls || null,
+            relationship.cooccurrenceCount || null,
+            relationship.firstSeen || null,
+            relationship.lastSeen || null,
+            relationship.updated,
+        );
+    }
+
+    public deleteRelationshipsByTopic(topicId: string): void {
+        const stmt = this.db.prepare(
+            `DELETE FROM topicRelationships WHERE fromTopic = ? OR toTopic = ?`,
+        );
+        stmt.run(topicId, topicId);
+    }
+}
+
+// Topic metrics table
+export interface TopicMetrics {
+    topicId: string;
+    topicName: string;
+    documentCount: number;
+    domainCount: number;
+    degreeCentrality: number;
+    betweennessCentrality: number;
+    firstSeen?: string;
+    lastSeen?: string;
+    activityPeriod: number;
+    avgConfidence: number;
+    maxConfidence: number;
+    totalRelationships: number;
+    strongRelationships: number;
+    entityCount: number;
+    topEntities?: string;
+    updated: string;
+}
+
+export class TopicMetricsTable extends ms.sqlite.SqliteDataFrame {
+    constructor(public db: sqlite.Database) {
+        TopicMetricsTable.ensureTable(db);
+
+        super(
+            db,
+            "topicMetrics",
+            [
+                ["topicId", { type: "string" }],
+                ["topicName", { type: "string" }],
+                ["documentCount", { type: "number" }],
+                ["domainCount", { type: "number" }],
+                ["degreeCentrality", { type: "number" }],
+                ["betweennessCentrality", { type: "number" }],
+                ["firstSeen", { type: "string", optional: true }],
+                ["lastSeen", { type: "string", optional: true }],
+                ["activityPeriod", { type: "number" }],
+                ["avgConfidence", { type: "number" }],
+                ["maxConfidence", { type: "number" }],
+                ["totalRelationships", { type: "number" }],
+                ["strongRelationships", { type: "number" }],
+                ["entityCount", { type: "number" }],
+                ["topEntities", { type: "string", optional: true }],
+                ["updated", { type: "string" }],
+            ],
+            false,
+        );
+    }
+
+    private static ensureTable(db: sqlite.Database): void {
+        try {
+            const tableInfo = db
+                .prepare(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='topicMetrics'",
+                )
+                .get() as { sql?: string } | undefined;
+
+            const needsRecreate =
+                !tableInfo || !tableInfo.sql?.includes("UNIQUE (topicId)");
+
+            if (needsRecreate) {
+                if (tableInfo) {
+                    db.exec(`DROP TABLE IF EXISTS topicMetrics`);
+                }
+
+                db.exec(`
+                    CREATE TABLE topicMetrics (
+                        rowId INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sourceRef TEXT NOT NULL,
+                        topicId TEXT NOT NULL,
+                        topicName TEXT NOT NULL,
+                        documentCount INTEGER DEFAULT 0,
+                        domainCount INTEGER DEFAULT 0,
+                        degreeCentrality INTEGER DEFAULT 0,
+                        betweennessCentrality REAL DEFAULT 0,
+                        firstSeen TEXT,
+                        lastSeen TEXT,
+                        activityPeriod INTEGER DEFAULT 0,
+                        avgConfidence REAL DEFAULT 0,
+                        maxConfidence REAL DEFAULT 0,
+                        totalRelationships INTEGER DEFAULT 0,
+                        strongRelationships INTEGER DEFAULT 0,
+                        entityCount INTEGER DEFAULT 0,
+                        topEntities TEXT,
+                        updated TEXT NOT NULL,
+                        UNIQUE (topicId)
+                    )
+                `);
+            }
+        } catch (error) {}
+    }
+
+    public getMetrics(topicId: string): TopicMetrics | undefined {
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicMetrics WHERE topicId = ?
+        `);
+        return stmt.get(topicId) as TopicMetrics | undefined;
+    }
+
+    public upsertMetrics(metrics: TopicMetrics): void {
+        const sourceRef = {
+            range: { start: { messageOrdinal: 0, chunkOrdinal: 0 } },
+        };
+
+        const stmt = this.db.prepare(`
+            INSERT INTO topicMetrics
+            (sourceRef, topicId, topicName, documentCount, domainCount, degreeCentrality, betweennessCentrality,
+             firstSeen, lastSeen, activityPeriod, avgConfidence, maxConfidence,
+             totalRelationships, strongRelationships, entityCount, topEntities, updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(topicId) DO UPDATE SET
+                topicName = excluded.topicName,
+                documentCount = excluded.documentCount,
+                domainCount = excluded.domainCount,
+                degreeCentrality = excluded.degreeCentrality,
+                betweennessCentrality = excluded.betweennessCentrality,
+                firstSeen = excluded.firstSeen,
+                lastSeen = excluded.lastSeen,
+                activityPeriod = excluded.activityPeriod,
+                avgConfidence = excluded.avgConfidence,
+                maxConfidence = excluded.maxConfidence,
+                totalRelationships = excluded.totalRelationships,
+                strongRelationships = excluded.strongRelationships,
+                entityCount = excluded.entityCount,
+                topEntities = excluded.topEntities,
+                updated = excluded.updated
+        `);
+        stmt.run(
+            JSON.stringify(sourceRef),
+            metrics.topicId,
+            metrics.topicName,
+            metrics.documentCount,
+            metrics.domainCount,
+            metrics.degreeCentrality,
+            metrics.betweennessCentrality,
+            metrics.firstSeen || null,
+            metrics.lastSeen || null,
+            metrics.activityPeriod,
+            metrics.avgConfidence,
+            metrics.maxConfidence,
+            metrics.totalRelationships,
+            metrics.strongRelationships,
+            metrics.entityCount,
+            metrics.topEntities || null,
+            metrics.updated,
+        );
+    }
+
+    public getTopTopicsByImportance(limit: number = 20): TopicMetrics[] {
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicMetrics
+            ORDER BY documentCount DESC, degreeCentrality DESC, betweennessCentrality DESC
+            LIMIT ?
+        `);
+        return stmt.all(limit) as TopicMetrics[];
+    }
+
+    public deleteMetrics(topicId: string): void {
+        const stmt = this.db.prepare(
+            `DELETE FROM topicMetrics WHERE topicId = ?`,
         );
         stmt.run(topicId);
     }

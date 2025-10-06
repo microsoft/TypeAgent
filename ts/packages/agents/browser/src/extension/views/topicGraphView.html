@@ -23,51 +23,35 @@
       <!-- Header -->
       <header class="topic-graph-header">
         <div class="header-left">
-          <button id="backButton" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left"></i> Back
-          </button>
-          <h1 class="header-title">Topic Graph</h1>
+          <div class="breadcrumbs">
+            <a href="knowledgeLibrary.html" class="breadcrumb-link">
+              <i class="bi bi-collection"></i>
+              Knowledge Library
+            </a>
+            <i class="bi bi-chevron-right breadcrumb-separator"></i>
+            <a href="#" id="topicGraphBreadcrumb" class="breadcrumb-link"
+              >Topic Graph</a
+            >
+            <span id="topicNameBreadcrumb" class="breadcrumb-entity"></span>
+          </div>
         </div>
         <div class="header-center">
-          <div class="search-container">
-            <input
-              type="text"
-              id="topicSearch"
-              class="form-control"
-              placeholder="Search topics..."
-            />
-            <button id="searchButton" class="btn btn-primary">
-              <i class="bi bi-search"></i>
-            </button>
+          <div class="topic-search">
+            <div class="search-input-group">
+              <input
+                type="text"
+                id="topicSearch"
+                class="topic-search-input"
+                placeholder="Search topics..."
+              />
+              <button id="searchButton" class="topic-search-btn">
+                <i class="bi bi-search"></i>
+              </button>
+            </div>
           </div>
         </div>
         <div class="header-right">
-          <div class="btn-group" role="group">
-            <button
-              id="treeViewBtn"
-              class="btn btn-outline-primary active"
-              data-mode="tree"
-            >
-              <i class="bi bi-diagram-3"></i> Tree
-            </button>
-            <button
-              id="radialViewBtn"
-              class="btn btn-outline-primary"
-              data-mode="radial"
-            >
-              <i class="bi bi-circle"></i> Radial
-            </button>
-            <button
-              id="forceViewBtn"
-              class="btn btn-outline-primary"
-              data-mode="force"
-            >
-              <i class="bi bi-arrows-move"></i> Force
-            </button>
-          </div>
-          <button id="settingsButton" class="btn btn-outline-secondary">
-            <i class="bi bi-gear"></i>
-          </button>
+          <!-- Layout buttons and settings removed - using optimized CoSE by default -->
         </div>
       </header>
 
@@ -77,65 +61,12 @@
         <div class="topic-sidebar" id="topicSidebar">
           <div class="sidebar-header">
             <h5>Topic Details</h5>
-            <button id="closeSidebar" class="btn btn-sm btn-outline-secondary">
-              <i class="bi bi-x"></i>
-            </button>
           </div>
 
           <div class="sidebar-content" id="sidebarContent">
             <div class="topic-placeholder">
               <i class="bi bi-bookmark"></i>
               <p>Select a topic to view details</p>
-            </div>
-          </div>
-
-          <!-- Level Filter -->
-          <div class="level-filter">
-            <h6>Visible Levels</h6>
-            <div class="level-checkboxes">
-              <div class="form-check">
-                <input
-                  class="form-check-input level-checkbox"
-                  type="checkbox"
-                  value="0"
-                  id="level0"
-                  checked
-                />
-                <label class="form-check-label" for="level0">Root Topics</label>
-              </div>
-              <div class="form-check">
-                <input
-                  class="form-check-input level-checkbox"
-                  type="checkbox"
-                  value="1"
-                  id="level1"
-                  checked
-                />
-                <label class="form-check-label" for="level1">Sub Topics</label>
-              </div>
-              <div class="form-check">
-                <input
-                  class="form-check-input level-checkbox"
-                  type="checkbox"
-                  value="2"
-                  id="level2"
-                  checked
-                />
-                <label class="form-check-label" for="level2"
-                  >Detail Topics</label
-                >
-              </div>
-              <div class="form-check">
-                <input
-                  class="form-check-input level-checkbox"
-                  type="checkbox"
-                  value="3"
-                  id="level3"
-                />
-                <label class="form-check-label" for="level3"
-                  >Micro Topics</label
-                >
-              </div>
             </div>
           </div>
 
@@ -225,111 +156,9 @@
           </div>
         </div>
       </div>
-
-      <!-- Breadcrumb Navigation -->
-      <div class="breadcrumb-container">
-        <nav aria-label="Topic navigation">
-          <ol class="breadcrumb" id="topicBreadcrumb">
-            <li class="breadcrumb-item">
-              <a href="#" data-topic="root">All Topics</a>
-            </li>
-          </ol>
-        </nav>
-      </div>
     </div>
 
-    <!-- Settings Modal -->
-    <div class="modal fade" id="settingsModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Graph Settings</h5>
-            <button
-              type="button"
-              class="btn-close"
-              data-bs-dismiss="modal"
-            ></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label for="nodeSize" class="form-label">Node Size</label>
-              <input
-                type="range"
-                class="form-range"
-                id="nodeSize"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value="1"
-              />
-            </div>
-            <div class="mb-3">
-              <label for="edgeWidth" class="form-label">Edge Width</label>
-              <input
-                type="range"
-                class="form-range"
-                id="edgeWidth"
-                min="0.5"
-                max="3"
-                step="0.1"
-                value="1"
-              />
-            </div>
-            <div class="mb-3">
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="showLabels"
-                  checked
-                />
-                <label class="form-check-label" for="showLabels"
-                  >Show Labels</label
-                >
-              </div>
-            </div>
-            <div class="mb-3">
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="showKeywords"
-                  checked
-                />
-                <label class="form-check-label" for="showKeywords"
-                  >Show Keywords</label
-                >
-              </div>
-            </div>
-            <div class="mb-3">
-              <div class="form-check">
-                <input
-                  class="form-check-input"
-                  type="checkbox"
-                  id="animateTransitions"
-                  checked
-                />
-                <label class="form-check-label" for="animateTransitions"
-                  >Animate Transitions</label
-                >
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
-            >
-              Close
-            </button>
-            <button type="button" class="btn btn-primary" id="applySettings">
-              Apply Settings
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Settings modal removed - using optimized defaults -->
 
     <!-- Toast Notifications -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">

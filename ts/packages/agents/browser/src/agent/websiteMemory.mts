@@ -21,6 +21,7 @@ import * as website from "website-memory";
 import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
+import * as tp from "textpro";
 import {
     importProgressEvents,
     ImportProgressEvent,
@@ -382,114 +383,179 @@ export async function importWebsiteDataFromSession(
             }
         }
 
-        // Import websites using basic import first to get metadata
-        let websites: any[] = await website.importWebsites(
-            source,
-            type,
-            filePath,
-            importOptions,
-            progressCallback,
-        );
+        let websites: any[] = [];
 
-        // Enhance with HTML content fetching and AI analysis for non-basic modes
-        if (extractionMode !== "basic" && websites.length > 0) {
-            logStructuredProgress(
-                0,
-                websites.length,
-                "Enhancing with content extraction",
-                "extracting",
-                importContext,
+        if (extractionMode === "basic") {
+            // Basic mode: import metadata only, no content fetching or AI extraction
+            websites = await website.importWebsites(
+                source,
+                type,
+                filePath,
+                importOptions,
+                progressCallback,
+            );
+        } else {
+            // LLM-based modes (content, full, etc.): fetch content and extract knowledge directly
+            // First get basic metadata to know what to process
+            const metadataWebsites = await website.importWebsites(
+                source,
+                type,
+                filePath,
+                { ...importOptions, mode: "basic" },
+                progressCallback,
             );
 
-            // Create inputs that will trigger HTML fetching in ContentExtractor
-            const contentInputs: ExtractionInput[] = websites.map((site) => ({
-                url: site.metadata.url,
-                title: site.metadata.title || site.metadata.url,
-                // NO textContent or htmlContent - let ContentExtractor fetch HTML
-                source: type === "bookmarks" ? "bookmark" : "history",
-                timestamp:
-                    site.metadata.visitDate || site.metadata.bookmarkDate,
-            }));
-
-            try {
-                // Create ContentExtractor with AI model
-                const extractor = createContentExtractor(
-                    {
-                        mode: extractionMode,
-                        knowledgeExtractor: importOptions.knowledgeExtractor,
-                        timeout: importOptions.contentTimeout || 10000,
-                        maxConcurrentExtractions:
-                            importOptions.maxConcurrent || 5,
-                    },
-                    context,
-                );
-
-                // Use BatchProcessor for efficient processing
-                const batchProcessor = new website.BatchProcessor(extractor);
-
-                const enhancedProgressCallback = (progress: BatchProgress) => {
-                    const phase =
-                        progress.processed <= progress.total * 0.6
-                            ? "fetching"
-                            : "extracting";
-                    const currentAction =
-                        progress.processed <= progress.total * 0.6
-                            ? "fetching content"
-                            : "analyzing";
-                    const description = `Processing items (${progress.percentage}%)`;
-
-                    logStructuredProgress(
-                        progress.processed,
-                        progress.total,
-                        description,
-                        phase,
-                        importContext,
-                        undefined,
-                        {
-                            currentAction,
-                        },
-                    );
-                };
-
-                const enhancedResults = await batchProcessor.processBatch(
-                    contentInputs,
-                    extractionMode,
-                    {
-                        processingMode: "batch", // Website memory uses batch mode
-                        progressCallback: enhancedProgressCallback,
-                    },
-                );
-
-                // Apply results back to websites
-                enhancedResults.forEach((result, index) => {
-                    if (websites[index] && result.knowledge) {
-                        websites[index].knowledge = result.knowledge;
-
-                        // Update textChunks with actual fetched content
-                        if (result.pageContent?.mainContent) {
-                            websites[index].textChunks = [
-                                result.pageContent.mainContent,
-                            ];
-                        }
-                    }
-                });
-
-                // This progress is for the enhancement phase, not the final completion
+            if (metadataWebsites.length > 0) {
                 logStructuredProgress(
-                    enhancedResults.length,
-                    enhancedResults.length,
-                    `Analyzing ${enhancedResults.length} items with ${extractionMode} mode extraction`,
+                    0,
+                    metadataWebsites.length,
+                    `Fetching and extracting with ${extractionMode} mode`,
                     "extracting",
                     importContext,
                 );
-            } catch (error) {
-                if (error instanceof AIModelRequiredError) {
-                    throw error;
-                }
-                console.warn(
-                    "Enhanced extraction failed, using basic import:",
-                    error,
+
+                logStructuredProgress(
+                    0,
+                    metadataWebsites.length,
+                    "Fetching content from URLs",
+                    "fetching",
+                    importContext,
                 );
+
+                const contentInputs: ExtractionInput[] = [];
+                const htmlFetcher = new website.HtmlFetcher();
+
+                for (let i = 0; i < metadataWebsites.length; i++) {
+                    const site = metadataWebsites[i];
+                    const input: ExtractionInput = {
+                        url: site.metadata.url,
+                        title: site.metadata.title || site.metadata.url,
+                        source: (type === "bookmarks"
+                            ? "bookmark"
+                            : "history") as "bookmark" | "history",
+                    };
+
+                    const timestamp =
+                        site.metadata.visitDate || site.metadata.bookmarkDate;
+                    if (timestamp) {
+                        input.timestamp = timestamp;
+                    }
+
+                    const fetchResult = await htmlFetcher.fetchHtml(
+                        site.metadata.url,
+                        importOptions.contentTimeout || 10000,
+                    );
+
+                    if (fetchResult.html) {
+                        try {
+                            const markdown = tp.htmlToMarkdown(
+                                fetchResult.html,
+                            );
+                            input.textContent = markdown.trim();
+                        } catch (error) {
+                            debug(
+                                `Failed to convert HTML to markdown for ${site.metadata.url}:`,
+                                error,
+                            );
+                        }
+                    } else {
+                        debug(
+                            `Failed to fetch content for ${site.metadata.url}: ${fetchResult.error}`,
+                        );
+                    }
+
+                    contentInputs.push(input);
+
+                    if (
+                        (i + 1) % 10 === 0 ||
+                        i === metadataWebsites.length - 1
+                    ) {
+                        logStructuredProgress(
+                            i + 1,
+                            metadataWebsites.length,
+                            `Fetched ${i + 1}/${metadataWebsites.length} pages`,
+                            "fetching",
+                            importContext,
+                        );
+                    }
+                }
+
+                try {
+                    // Create ContentExtractor with AI model
+                    const extractor = createContentExtractor(
+                        {
+                            mode: extractionMode,
+                            knowledgeExtractor:
+                                importOptions.knowledgeExtractor,
+                            timeout: importOptions.contentTimeout || 10000,
+                            maxConcurrentExtractions:
+                                importOptions.maxConcurrent || 5,
+                        },
+                        context,
+                    );
+
+                    // Use BatchProcessor for efficient processing
+                    const batchProcessor = new website.BatchProcessor(
+                        extractor,
+                    );
+
+                    const extractionProgressCallback = (
+                        progress: BatchProgress,
+                    ) => {
+                        logStructuredProgress(
+                            progress.processed,
+                            progress.total,
+                            `Extracting knowledge (${progress.percentage}%)`,
+                            "extracting",
+                            importContext,
+                            undefined,
+                            {
+                                currentAction: "analyzing",
+                            },
+                        );
+                    };
+
+                    const extractionResults = await batchProcessor.processBatch(
+                        contentInputs,
+                        extractionMode,
+                        {
+                            processingMode: "batch",
+                            progressCallback: extractionProgressCallback,
+                        },
+                    );
+
+                    // Build complete website objects from extraction results
+                    websites = metadataWebsites.map((metaSite, index) => {
+                        const result = extractionResults[index];
+                        return {
+                            ...metaSite,
+                            knowledge: result?.knowledge,
+                            textChunks: result?.pageContent?.mainContent
+                                ? [result.pageContent.mainContent]
+                                : metaSite.textChunks || [],
+                        };
+                    });
+
+                    logStructuredProgress(
+                        extractionResults.length,
+                        extractionResults.length,
+                        `Completed ${extractionMode} mode extraction for ${extractionResults.length} items`,
+                        "extracting",
+                        importContext,
+                    );
+                } catch (error) {
+                    if (error instanceof AIModelRequiredError) {
+                        throw error;
+                    }
+                    console.warn(
+                        `Extraction with ${extractionMode} mode failed:`,
+                        error,
+                    );
+                    // Don't fall back to basic - fail the import with clear error
+                    throw new Error(
+                        `Failed to import with ${extractionMode} mode: ${(error as Error).message}`,
+                    );
+                }
             }
         }
 
@@ -557,6 +623,25 @@ export async function importWebsiteDataFromSession(
             await context.agentContext.websiteCollection.updateGraphIncremental(
                 chunk,
             );
+
+            try {
+                const topicsCount = chunk.filter(
+                    (site) => site.knowledge?.topics?.length > 0,
+                ).length;
+                if (topicsCount > 0) {
+                    await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                        chunk,
+                    );
+                    debug(
+                        `Updated hierarchical topics for ${topicsCount} websites in chunk ${chunkIndex}/${totalChunks}`,
+                    );
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to update hierarchical topics during import:",
+                    error,
+                );
+            }
 
             // Check if we should save progress
             if (
@@ -1024,6 +1109,25 @@ export async function importHtmlFolderFromSession(
                 await context.agentContext.websiteCollection.updateGraphIncremental(
                     chunk,
                 );
+
+                try {
+                    const topicsCount = chunk.filter(
+                        (site) => site.knowledge?.topics?.length > 0,
+                    ).length;
+                    if (topicsCount > 0) {
+                        await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                            chunk,
+                        );
+                        debug(
+                            `Updated hierarchical topics for ${topicsCount} websites in chunk ${chunkIndex}/${totalChunks}`,
+                        );
+                    }
+                } catch (error) {
+                    console.warn(
+                        "Failed to update hierarchical topics during HTML folder import:",
+                        error,
+                    );
+                }
             }
 
             // Entity processing is now handled by the website-memory package integration
@@ -1210,6 +1314,7 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
         data.content,
         [], // tags
         data.extractionResult?.knowledge, // knowledge from extraction
+        undefined, // topicHierarchy
         undefined, // deletionInfo
         false, // isNew = false since content is already processed
     );

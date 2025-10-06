@@ -36,6 +36,7 @@ import {
     getViewportBasedNeighborhood,
     getImportanceStatistics,
     getHierarchicalTopics,
+    getTopicMetrics,
 } from "./graphActions.mjs";
 import {
     checkAIModelStatus,
@@ -102,6 +103,8 @@ export async function handleKnowledgeAction(
             return await getImportanceStatistics(parameters, context);
         case "getHierarchicalTopics":
             return await getHierarchicalTopics(parameters, context);
+        case "getTopicMetrics":
+            return await getTopicMetrics(parameters, context);
 
         // Query Actions
         case "getRecentKnowledgeItems":

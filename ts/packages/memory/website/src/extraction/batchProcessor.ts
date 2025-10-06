@@ -72,7 +72,7 @@ export class BatchProcessor extends EventEmitter {
         for (let i = 0; i < items.length; i += batchSize) {
             const batch = items.slice(i, i + batchSize);
 
-            const batchPromises = batch.map(async (item) => {
+            const batchPromises = batch.map(async (item, batchIndex) => {
                 try {
                     // IDENTICAL processing for all modes - unified logic
                     const extractionOptions: any = { processingMode };
@@ -90,33 +90,14 @@ export class BatchProcessor extends EventEmitter {
                         mode,
                         extractionOptions,
                     );
-                    this.results.push(result);
-                    processedItems++;
 
-                    // ONLY difference: how progress events are published
-                    if (processingMode === "realtime") {
-                        // Real-time: WebSocket streaming events already sent during extraction
-                        this.emit("itemComplete", result, processedItems - 1);
-                    } else {
-                        // Batch: Traditional batch progress events
-                        this.emit("itemComplete", result, processedItems - 1);
-                    }
-
-                    if (progressCallback) {
-                        progressCallback({
-                            total: totalItems,
-                            processed: processedItems,
-                            percentage: Math.round(
-                                (processedItems / totalItems) * 100,
-                            ),
-                            currentItem: item.url,
-                            errors: this.errors.length,
-                            mode,
-                            intermediateResults: [...this.results],
-                        });
-                    }
-
-                    return result;
+                    // Return result with index to preserve order
+                    return {
+                        success: true,
+                        result,
+                        batchIndex,
+                        globalIndex: i + batchIndex,
+                    };
                 } catch (error) {
                     const batchError: BatchError = {
                         item,
@@ -128,27 +109,79 @@ export class BatchProcessor extends EventEmitter {
                     };
 
                     this.errors.push(batchError);
-                    processedItems++;
 
-                    if (progressCallback) {
-                        progressCallback({
-                            total: totalItems,
-                            processed: processedItems,
-                            percentage: Math.round(
-                                (processedItems / totalItems) * 100,
-                            ),
-                            currentItem: item.url,
-                            errors: this.errors.length,
-                            mode,
-                            intermediateResults: [...this.results],
-                        });
-                    }
-
-                    return null;
+                    return {
+                        success: false,
+                        error: batchError,
+                        batchIndex,
+                        globalIndex: i + batchIndex,
+                    };
                 }
             });
 
-            await Promise.allSettled(batchPromises);
+            const batchResults = await Promise.allSettled(batchPromises);
+
+            // Process results in order
+            batchResults.forEach((settledResult) => {
+                if (settledResult.status === "fulfilled") {
+                    const outcome = settledResult.value;
+                    if (outcome.success && "result" in outcome) {
+                        this.results[outcome.globalIndex] = outcome.result;
+                        processedItems++;
+
+                        // ONLY difference: how progress events are published
+                        if (processingMode === "realtime") {
+                            // Real-time: WebSocket streaming events already sent during extraction
+                            this.emit(
+                                "itemComplete",
+                                outcome.result,
+                                outcome.globalIndex,
+                            );
+                        } else {
+                            // Batch: Traditional batch progress events
+                            this.emit(
+                                "itemComplete",
+                                outcome.result,
+                                outcome.globalIndex,
+                            );
+                        }
+
+                        if (progressCallback) {
+                            progressCallback({
+                                total: totalItems,
+                                processed: processedItems,
+                                percentage: Math.round(
+                                    (processedItems / totalItems) * 100,
+                                ),
+                                currentItem: items[outcome.globalIndex].url,
+                                errors: this.errors.length,
+                                mode,
+                                intermediateResults: [...this.results].filter(
+                                    (r) => r !== undefined,
+                                ),
+                            });
+                        }
+                    } else if (!outcome.success) {
+                        processedItems++;
+
+                        if (progressCallback) {
+                            progressCallback({
+                                total: totalItems,
+                                processed: processedItems,
+                                percentage: Math.round(
+                                    (processedItems / totalItems) * 100,
+                                ),
+                                currentItem: items[outcome.globalIndex].url,
+                                errors: this.errors.length,
+                                mode,
+                                intermediateResults: [...this.results].filter(
+                                    (r) => r !== undefined,
+                                ),
+                            });
+                        }
+                    }
+                }
+            });
 
             // Add delay between batches for AI modes to be respectful to AI services
             if (i + batchSize < items.length && modeConfig.usesAI) {
@@ -358,16 +391,21 @@ export class BatchProcessor extends EventEmitter {
     }
 
     private prepareTextContentForEstimation(item: ExtractionInput): string {
+        const parts: string[] = [];
+
+        if (item.title) {
+            parts.push(`Title: ${item.title}`);
+        }
+
         if (item.textContent) {
-            return item.textContent;
+            parts.push(item.textContent);
+        } else if (item.htmlFragments) {
+            parts.push(item.htmlFragments.map((f) => f.text || "").join("\n"));
+        } else if (item.htmlContent) {
+            parts.push(item.htmlContent.replace(/\s+/g, " ").trim());
         }
-        if (item.htmlFragments) {
-            return item.htmlFragments.map((f) => f.text || "").join("\n");
-        }
-        if (item.htmlContent) {
-            return item.htmlContent.replace(/\s+/g, " ").trim();
-        }
-        return item.title || "";
+
+        return parts.join("\n\n");
     }
 
     /**

@@ -71,6 +71,7 @@ export function createHierarchicalTopicExtractor(
             const hierarchy = await categorizeTopicsIntoHierarchy(
                 allTopics,
                 aggregatedTopics,
+                fragmentExtractions,
                 context,
                 model,
             );
@@ -182,62 +183,160 @@ function collectAllTopics(
 async function categorizeTopicsIntoHierarchy(
     topics: string[],
     aggregatedTopics: string[],
+    fragmentExtractions: FragmentTopicExtraction[],
     context: TopicExtractionContext,
     model: TypeChatLanguageModel,
 ): Promise<TopicHierarchy> {
-    // Create a simple hierarchy where aggregated topics are parents
     const topicMap = new Map<string, HierarchicalTopic>();
     const rootTopics: HierarchicalTopic[] = [];
     let maxDepth = 0;
 
-    // Create root topics from aggregated topics
-    for (let i = 0; i < aggregatedTopics.length; i++) {
-        const aggregatedTopic = aggregatedTopics[i];
+    // Build context from fragment texts for LLM analysis
+    const fragmentContext = fragmentExtractions
+        .filter((f) => f.fragmentText)
+        .map(
+            (f) =>
+                `Topics: ${f.topics.join(", ")}\nContext: ${f.fragmentText?.substring(0, 500)}`,
+        )
+        .join("\n\n");
+
+    // Use LLM to categorize topics into hierarchy
+    const prompt = `Analyze these topics extracted from a document and organize them into a hierarchical structure.
+
+Document context:
+${fragmentContext}
+
+All extracted topics:
+${topics.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+${aggregatedTopics.length > 0 ? `High-level theme: ${aggregatedTopics[0]}\n` : ""}
+
+Create a topic hierarchy with:
+1. 2-4 root topics that represent the main themes
+2. Group related topics under each root as children (level 1)
+3. If topics are very specific, create sub-children (level 2)
+
+Output a JSON array where each item has:
+- rootTopic: string (the root category name)
+- children: array of child topic names
+- grandchildren: object mapping child names to arrays of grandchild names (optional)
+
+Example:
+[
+  {
+    "rootTopic": "Machine Learning",
+    "children": ["Deep Learning", "Neural Networks"],
+    "grandchildren": {
+      "Deep Learning": ["CNNs", "RNNs", "Transformers"]
+    }
+  }
+]`;
+
+    try {
+        const response = await model.complete(prompt);
+
+        if (!response.success) {
+            throw new Error(response.message || "LLM request failed");
+        }
+
+        const jsonMatch = response.data.match(/\[[\s\S]*\]/);
+
+        if (jsonMatch) {
+            const hierarchyData = JSON.parse(jsonMatch[0]);
+
+            // Build hierarchy from LLM response
+            for (const rootData of hierarchyData) {
+                const rootTopic: HierarchicalTopic = {
+                    id: generateTopicId(rootData.rootTopic, 0),
+                    name: rootData.rootTopic,
+                    level: 0,
+                    childIds: [],
+                    sourceFragments: [],
+                    confidence: 0.8,
+                    keywords: [rootData.rootTopic],
+                    entityReferences: [],
+                    timestamp: new Date().toISOString(),
+                    domain: context.domain || undefined,
+                };
+
+                topicMap.set(rootTopic.id, rootTopic);
+                rootTopics.push(rootTopic);
+
+                // Add children
+                for (const childName of rootData.children || []) {
+                    const childTopic: HierarchicalTopic = {
+                        id: generateTopicId(childName, 1),
+                        name: childName,
+                        level: 1,
+                        parentId: rootTopic.id,
+                        childIds: [],
+                        sourceFragments: [],
+                        confidence: 0.7,
+                        keywords: [childName],
+                        entityReferences: [],
+                        timestamp: new Date().toISOString(),
+                        domain: context.domain || undefined,
+                    };
+
+                    topicMap.set(childTopic.id, childTopic);
+                    rootTopic.childIds.push(childTopic.id);
+                    maxDepth = Math.max(maxDepth, 1);
+
+                    // Add grandchildren if present
+                    const grandchildrenForThisChild =
+                        rootData.grandchildren?.[childName] || [];
+                    for (const grandchildName of grandchildrenForThisChild) {
+                        const grandchildTopic: HierarchicalTopic = {
+                            id: generateTopicId(grandchildName, 2),
+                            name: grandchildName,
+                            level: 2,
+                            parentId: childTopic.id,
+                            childIds: [],
+                            sourceFragments: [],
+                            confidence: 0.6,
+                            keywords: [grandchildName],
+                            entityReferences: [],
+                            timestamp: new Date().toISOString(),
+                            domain: context.domain || undefined,
+                        };
+
+                        topicMap.set(grandchildTopic.id, grandchildTopic);
+                        childTopic.childIds.push(grandchildTopic.id);
+                        maxDepth = Math.max(maxDepth, 2);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Error in LLM-based categorization:", error);
+    }
+
+    // Fallback: If LLM failed or produced no results, use simple rule-based approach
+    if (rootTopics.length === 0 && aggregatedTopics.length > 0) {
         const rootTopic: HierarchicalTopic = {
-            id: generateTopicId(aggregatedTopic, 0),
-            name: aggregatedTopic,
+            id: generateTopicId(aggregatedTopics[0], 0),
+            name: aggregatedTopics[0],
             level: 0,
             childIds: [],
             sourceFragments: [],
             confidence: 0.8,
-            keywords: [aggregatedTopic],
+            keywords: [aggregatedTopics[0]],
             entityReferences: [],
             timestamp: new Date().toISOString(),
             domain: context.domain || undefined,
         };
-
-        topicMap.set(rootTopic.id, rootTopic);
-        rootTopics.push(rootTopic);
-    }
-
-    // If no aggregated topics, create root topics from most common topics
-    if (aggregatedTopics.length === 0 && topics.length > 0) {
-        const rootTopicName = topics[0]; // Use first topic as root
-        const rootTopic: HierarchicalTopic = {
-            id: generateTopicId(rootTopicName, 0),
-            name: rootTopicName,
-            level: 0,
-            childIds: [],
-            sourceFragments: context.fragmentId ? [context.fragmentId] : [],
-            confidence: 0.7,
-            keywords: [rootTopicName],
-            entityReferences: [],
-            timestamp: new Date().toISOString(),
-            domain: context.domain || undefined,
-        };
-
         topicMap.set(rootTopic.id, rootTopic);
         rootTopics.push(rootTopic);
 
-        // Add remaining topics as children
-        for (let i = 1; i < Math.min(topics.length, 10); i++) {
+        // Add topics as children
+        for (let i = 0; i < Math.min(topics.length, 15); i++) {
             const childTopic: HierarchicalTopic = {
                 id: generateTopicId(topics[i], 1),
                 name: topics[i],
                 level: 1,
                 parentId: rootTopic.id,
                 childIds: [],
-                sourceFragments: context.fragmentId ? [context.fragmentId] : [],
+                sourceFragments: [],
                 confidence: 0.6,
                 keywords: [topics[i]],
                 entityReferences: [],
@@ -324,7 +423,7 @@ function createEmptyHierarchy(): TopicHierarchy {
 
 function generateTopicId(topicName: string, level: number): string {
     const cleanName = topicName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-    return `topic_${cleanName}_${level}_${Date.now()}`;
+    return `topic_${cleanName}_${level}`;
 }
 
 function calculateKeywordOverlap(
