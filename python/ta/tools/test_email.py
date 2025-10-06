@@ -27,19 +27,8 @@ async def main():
 
     utils.load_dotenv()
 
-    dbPath: str = "/data/testChat/knowpro/email/pyEmails.db"
-    
-    # print(f"Deleting {dbPath}")
-    # delete_sqlite_db(dbPath)
-
-    settings = ConversationSettings()  # Has no storage provider yet
-    settings.storage_provider = await create_storage_provider(
-        settings.message_text_index_settings,
-        settings.related_term_index_settings,
-        dbPath,
-        EmailMessage,
-    )
-    conversation:EmailMemory = await EmailMemory.create(settings)
+    db_path: str = "/data/testChat/knowpro/email/pyEmails.db"
+    conversation:EmailMemory = await load_or_create_email_memory(db_path, create_new=False)
 
     handlers = {
         "@add": add_messages,
@@ -99,6 +88,21 @@ async def build_index(conversation: EmailMemory, args: list[str]):
     await conversation.build_index()
     print(Fore.GREEN + "Built index.")
 
+
+async def load_or_create_email_memory(db_path: str, create_new: bool) -> EmailMemory:
+    if create_new:
+        print(f"Deleting {db_path}")
+        delete_sqlite_db(db_path)
+
+    settings = ConversationSettings()  # Has no storage provider yet
+    settings.storage_provider = await create_storage_provider(
+    settings.message_text_index_settings,
+    settings.related_term_index_settings,
+    db_path,
+    EmailMessage
+    )
+    return await EmailMemory.create(settings)
+
 def delete_sqlite_db(db_path: str):
     if os.path.exists(db_path):
         os.remove(db_path)  # Delete existing database for clean test
@@ -109,6 +113,11 @@ def delete_sqlite_db(db_path: str):
             os.remove(shm_path)
         if os.path.exists(wal_path):
             os.remove(wal_path)
+
+
+#
+# Printing
+#
 
 def print_email(email: EmailMessage):
     print("From:", email.metadata.sender)
