@@ -13,7 +13,15 @@ from pathlib import Path
 from typeagent.aitools import utils
 
 from typeagent.knowpro import kplib
-from typeagent.emails.email_import import import_email_from_file, import_emails_from_dir
+from typeagent.knowpro.interfaces import (
+    SearchTermGroup,
+    SearchTerm,
+    Term
+)
+from typeagent.emails.email_import import (
+    import_email_from_file, 
+    import_emails_from_dir
+)
 from typeagent.emails.email_memory import EmailMemory
 from typeagent.emails.email_message import EmailMessage
 
@@ -128,6 +136,12 @@ async def load_or_create_email_memory(db_path: str, create_new: bool) -> EmailMe
     EmailMessage
     )
     return await EmailMemory.create(settings)
+
+async def search_terms(context:EmailContext, args: list[str]):
+    search_group = SearchTermGroup("or")
+    search_group.terms.append(SearchTerm(
+        term=Term("")
+    ))
 
 def delete_sqlite_db(db_path: str):
     if os.path.exists(db_path):
