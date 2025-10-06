@@ -20,6 +20,28 @@ export interface EnhancedKnowledgeExtractionResult
         readingTime: number;
         wordCount: number;
     };
+    topicHierarchy?: TopicHierarchy;
+}
+
+export interface HierarchicalTopic {
+    id: string;
+    name: string;
+    level: number;
+    parentId?: string;
+    childIds: string[];
+    sourceFragments: string[];
+    confidence: number;
+    keywords: string[];
+    entityReferences: string[];
+    timestamp: string;
+    domain?: string | undefined;
+}
+
+export interface TopicHierarchy {
+    rootTopics: HierarchicalTopic[];
+    topicMap: Map<string, HierarchicalTopic>;
+    maxDepth: number;
+    totalTopics: number;
 }
 
 export interface DetectedAction {

@@ -16,6 +16,8 @@ export * from "./messages.js";
 export * from "./entities.js";
 export * from "./topics.js";
 export * from "./topicSchema.js";
+export * from "./hierarchicalTopics.js";
+export * from "./hierarchicalTopicSchema.js";
 export * from "./transcript.js";
 export * from "./actions.js";
 export * from "./threads.js";

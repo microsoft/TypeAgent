@@ -194,35 +194,44 @@ export class OffscreenContentProcessor {
     }
 
     /**
-     * Process URL by loading it in offscreen document
+     * Process URL by using fetch + DOM parsing (cross-origin compatible)
      */
     async processUrl(url: string, options: DownloadOptions): Promise<any> {
         const loadStartTime = Date.now();
         this.log("info", `Starting URL processing: ${url}`);
 
         try {
-            // Update current URL display
             this.currentUrlElement.textContent = url;
 
-            // Navigate to URL
-            this.log("info", "Navigating to URL...");
-            window.location.href = url;
+            this.log("info", `Fetching content from ${url}...`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(
+                () => controller.abort(),
+                options.timeout || this.maxLoadTime,
+            );
 
-            // Wait for page load with timeout
-            this.log("info", "Waiting for page load...");
-            await this.waitForPageLoad(options.timeout || this.maxLoadTime);
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: {
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                },
+            });
 
-            // Wait for dynamic content if requested
-            if (options.waitForDynamic) {
-                this.log("info", "Waiting for dynamic content...");
-                await this.waitForDynamicContent(
-                    options.scrollBehavior || "capture-initial",
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(
+                    `HTTP ${response.status}: ${response.statusText}`,
                 );
             }
 
-            // Extract and process HTML
-            this.log("info", "Extracting HTML fragments...");
-            const processed = await this.extractHTMLFragments(
+            const htmlContent = await response.text();
+            this.log("info", `Fetched ${htmlContent.length} bytes`);
+
+            this.log("info", "Processing HTML with DOM...");
+            const processed = await this.processHtmlContent(
+                htmlContent,
                 options.processing || {
                     filterToReadingView: true,
                     keepMetaTags: true,
@@ -231,14 +240,14 @@ export class OffscreenContentProcessor {
             );
 
             const result = {
-                processedHtml: processed.html,
-                textContent: processed.text,
+                processedHtml: processed.processedHtml || "",
+                textContent: processed.textContent || "",
                 metadata: {
-                    finalUrl: window.location.href,
-                    title: document.title,
+                    finalUrl: response.url,
+                    title: this.extractTitleFromHtml(htmlContent),
                     loadTime: Date.now() - loadStartTime,
                     processingMethod: "offscreen" as const,
-                    contentLength: processed.html.length,
+                    contentLength: processed.processedHtml?.length || 0,
                 } as ContentMetadata,
             };
 
@@ -256,6 +265,14 @@ export class OffscreenContentProcessor {
                 `URL processing failed: ${error?.message || "Unknown error"}`,
             );
         }
+    }
+
+    /**
+     * Extract title from raw HTML
+     */
+    private extractTitleFromHtml(html: string): string {
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        return titleMatch ? titleMatch[1].trim() : "";
     }
 
     /**
@@ -319,98 +336,6 @@ export class OffscreenContentProcessor {
                 error: `HTML processing failed: ${error?.message || "Unknown error"}`,
             };
         }
-    }
-
-    /**
-     * Wait for page to load completely
-     */
-    private async waitForPageLoad(timeout: number): Promise<void> {
-        const startTime = Date.now();
-
-        return new Promise((resolve, reject) => {
-            const checkComplete = () => {
-                const elapsed = Date.now() - startTime;
-
-                if (document.readyState === "complete") {
-                    this.log("info", `Page loaded in ${elapsed}ms`);
-                    resolve();
-                } else if (elapsed > timeout) {
-                    this.log("error", `Page load timeout after ${timeout}ms`);
-                    reject(new Error(`Page load timeout after ${timeout}ms`));
-                } else {
-                    setTimeout(checkComplete, 100);
-                }
-            };
-
-            // Start checking immediately
-            checkComplete();
-
-            // Also listen for load event
-            window.addEventListener(
-                "load",
-                () => {
-                    this.log("info", "Load event fired");
-                    resolve();
-                },
-                { once: true },
-            );
-        });
-    }
-
-    /**
-     * Wait for dynamic content to load
-     */
-    private async waitForDynamicContent(scrollBehavior: string): Promise<void> {
-        this.log("info", `Waiting for dynamic content (${scrollBehavior})`);
-
-        // Wait for initial JavaScript execution
-        await this.delay(2000);
-
-        if (scrollBehavior === "scroll-to-bottom") {
-            // Scroll to bottom to trigger lazy loading
-            await this.scrollToBottom();
-        } else if (scrollBehavior === "capture-initial") {
-            // Just wait a bit more for initial dynamic content
-            await this.delay(3000);
-        }
-    }
-
-    /**
-     * Scroll to bottom of page to trigger dynamic content
-     */
-    private async scrollToBottom(): Promise<void> {
-        let previousHeight = 0;
-        let currentHeight = document.body.scrollHeight;
-        let stableCount = 0;
-
-        this.log("info", "Starting scroll to bottom for dynamic content");
-
-        while (stableCount < 3) {
-            // Consider stable after 3 consistent measurements
-            window.scrollTo(0, currentHeight);
-            await this.delay(1000); // Wait for content to load
-
-            previousHeight = currentHeight;
-            currentHeight = document.body.scrollHeight;
-
-            if (currentHeight === previousHeight) {
-                stableCount++;
-            } else {
-                stableCount = 0;
-                this.log("info", `Page height changed: ${currentHeight}px`);
-            }
-
-            // Prevent infinite scrolling
-            if (currentHeight > 50000) {
-                // 50,000px limit
-                this.log("warn", "Scroll limit reached (50,000px)");
-                break;
-            }
-        }
-
-        // Scroll back to top
-        window.scrollTo(0, 0);
-        this.log("info", "Scroll to bottom completed");
     }
 
     /**
@@ -531,42 +456,6 @@ export class OffscreenContentProcessor {
             `Limited elements: removed ${removed}, kept ${maxElements}`,
         );
         return doc;
-    }
-
-    /**
-     * Extract HTML fragments in consistent format
-     */
-    private async extractHTMLFragments(
-        options: ProcessingOptions,
-    ): Promise<{ html: string; text: string }> {
-        const currentHtml = document.documentElement.outerHTML;
-
-        // Use unified HTML processor for consistent processing
-        const result = await UnifiedHtmlProcessor.processHtmlContent(
-            currentHtml,
-            {
-                filterToReadingView: options.filterToReadingView ?? false,
-                keepMetaTags: options.keepMetaTags ?? false,
-                extractText: options.extractText ?? false,
-                useTimestampIds: options.useTimestampIds ?? false,
-                preserveStructure: options.preserveStructure ?? true,
-                maxElements: options.maxElements ?? undefined,
-            },
-        );
-
-        // Record processing metrics
-        HtmlProcessingMonitor.recordMetric(
-            result.metadata.processingMethod,
-            result.metadata.originalSize,
-            result.metadata.processedSize,
-            result.metadata.processingTime,
-            "offscreen-live",
-        );
-
-        return {
-            html: result.html,
-            text: result.text,
-        };
     }
 
     /**

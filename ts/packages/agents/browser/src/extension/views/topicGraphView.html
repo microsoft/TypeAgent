@@ -1,0 +1,186 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Topic Graph - TypeAgent</title>
+
+    <link rel="stylesheet" href="../vendor/bootstrap/bootstrap.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+    />
+    <script src="../vendor/cytoscape/cytoscape.min.js"></script>
+    <script src="../vendor/dagre/dagre.min.js"></script>
+    <script src="../vendor/cytoscape-dagre/cytoscape-dagre.min.js"></script>
+    <link rel="stylesheet" href="topicGraphView.css" />
+  </head>
+  <body>
+    <div class="topic-graph-container">
+      <!-- Header -->
+      <header class="topic-graph-header">
+        <div class="header-left">
+          <div class="breadcrumbs">
+            <a href="knowledgeLibrary.html" class="breadcrumb-link">
+              <i class="bi bi-collection"></i>
+              Knowledge Library
+            </a>
+            <i class="bi bi-chevron-right breadcrumb-separator"></i>
+            <a href="#" id="topicGraphBreadcrumb" class="breadcrumb-link"
+              >Topic Graph</a
+            >
+            <span id="topicNameBreadcrumb" class="breadcrumb-entity"></span>
+          </div>
+        </div>
+        <div class="header-center">
+          <div class="topic-search">
+            <div class="search-input-group">
+              <input
+                type="text"
+                id="topicSearch"
+                class="topic-search-input"
+                placeholder="Search topics..."
+              />
+              <button id="searchButton" class="topic-search-btn">
+                <i class="bi bi-search"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="header-right">
+          <!-- Layout buttons and settings removed - using optimized CoSE by default -->
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <div class="topic-graph-main">
+        <!-- Sidebar -->
+        <div class="topic-sidebar" id="topicSidebar">
+          <div class="sidebar-header">
+            <h5>Topic Details</h5>
+          </div>
+
+          <div class="sidebar-content" id="sidebarContent">
+            <div class="topic-placeholder">
+              <i class="bi bi-bookmark"></i>
+              <p>Select a topic to view details</p>
+            </div>
+          </div>
+
+          <!-- Graph Statistics -->
+          <div class="graph-stats">
+            <h6>Graph Statistics</h6>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <span class="stat-label">Total Topics:</span>
+                <span class="stat-value" id="totalTopics">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Visible Topics:</span>
+                <span class="stat-value" id="visibleTopics">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Max Depth:</span>
+                <span class="stat-value" id="maxDepth">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Expanded:</span>
+                <span class="stat-value" id="expandedCount">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Graph Container -->
+        <div class="graph-container">
+          <div id="topicGraphContainer" class="cytoscape-container"></div>
+
+          <!-- Loading Overlay -->
+          <div id="loadingOverlay" class="loading-overlay">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>Loading topic graph...</p>
+          </div>
+
+          <!-- Error Overlay -->
+          <div id="errorOverlay" class="error-overlay" style="display: none">
+            <div class="error-content">
+              <i class="bi bi-exclamation-triangle"></i>
+              <h5>Error Loading Topic Graph</h5>
+              <p id="errorMessage">Failed to load topic data.</p>
+              <button id="retryButton" class="btn btn-primary">Retry</button>
+            </div>
+          </div>
+
+          <!-- Graph Controls -->
+          <div class="graph-controls">
+            <button
+              id="fitButton"
+              class="btn btn-outline-primary btn-sm"
+              title="Fit to view"
+            >
+              <i class="bi bi-arrows-fullscreen"></i>
+            </button>
+            <button
+              id="centerButton"
+              class="btn btn-outline-primary btn-sm"
+              title="Center graph"
+            >
+              <i class="bi bi-bullseye"></i>
+            </button>
+            <button
+              id="expandAllButton"
+              class="btn btn-outline-secondary btn-sm"
+              title="Expand all"
+            >
+              <i class="bi bi-plus-square"></i>
+            </button>
+            <button
+              id="collapseAllButton"
+              class="btn btn-outline-secondary btn-sm"
+              title="Collapse all"
+            >
+              <i class="bi bi-dash-square"></i>
+            </button>
+            <button
+              id="exportButton"
+              class="btn btn-outline-info btn-sm"
+              title="Export as image"
+            >
+              <i class="bi bi-download"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings modal removed - using optimized defaults -->
+
+    <!-- Toast Notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+      <div id="notification" class="toast" role="alert">
+        <div class="toast-header">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong class="me-auto">Topic Graph</strong>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="toast"
+          ></button>
+        </div>
+        <div class="toast-body" id="notificationBody">
+          <!-- Notification content -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="../vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <!-- Topic Graph View JS -->
+    <script src="topicGraphView.js"></script>
+  </body>
+</html>

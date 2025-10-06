@@ -316,6 +316,13 @@ export class BrowserIndexingService {
             // Update website with extracted knowledge
             if (result.knowledge) {
                 website.knowledge = result.knowledge;
+
+                // Extract and assign topicHierarchy if present
+                const topicHierarchy = (result.knowledge as any)
+                    ?.topicHierarchy;
+                if (topicHierarchy) {
+                    (website as any).topicHierarchy = topicHierarchy;
+                }
             }
 
             // Add processing metadata

@@ -629,7 +629,7 @@ export class KnowledgeAnalyticsPanel {
             .slice(0, 10)
             .map(
                 (topic) => `
-            <div class="topic-pill clickable" data-topic-name="${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}" title="Click to view in Entity Graph">
+            <div class="topic-pill clickable" data-topic-name="${this.escapeHtml(topic.name || topic.topic || "Unknown Topic")}" title="Click to view in Topic Graph">
                 <div class="pill-icon">
                     <i class="bi bi-bookmark"></i>
                 </div>
@@ -651,8 +651,8 @@ export class KnowledgeAnalyticsPanel {
                     "data-topic-name",
                 );
                 if (topicName) {
-                    // Navigate to entity graph view with the selected topic
-                    window.location.href = `entityGraphView.html?topic=${encodeURIComponent(topicName)}`;
+                    // Navigate to topic graph view for hierarchical topic exploration
+                    window.location.href = `topicGraphView.html?topic=${encodeURIComponent(topicName)}`;
                 }
             });
         });

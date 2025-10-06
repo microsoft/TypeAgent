@@ -96,6 +96,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
                 "/macrosLibrary.html": "views/macrosLibrary.html",
                 "/entityGraphView.html": "views/entityGraphView.html",
+                "/topicGraphView.html": "views/topicGraphView.html",
             };
 
             const extensionPath = libraryMapping[customPath];

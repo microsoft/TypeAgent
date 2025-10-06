@@ -295,6 +295,18 @@ class EntityGraphView {
                 this.updateBackButtonText();
             });
         }
+
+        // Entity Graph breadcrumb link - navigate to global view
+        const entityGraphBreadcrumb = document.getElementById(
+            "entityGraphBreadcrumb",
+        );
+        if (entityGraphBreadcrumb) {
+            entityGraphBreadcrumb.addEventListener("click", (e) => {
+                e.preventDefault();
+                console.log("Entity Graph breadcrumb clicked");
+                this.navigateToGlobalView();
+            });
+        }
     }
 
     /**

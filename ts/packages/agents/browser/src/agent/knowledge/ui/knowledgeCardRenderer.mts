@@ -120,7 +120,7 @@ export function generateDetailedKnowledgeCards(
                     .slice(0, 8)
                     .map((topic: any) => {
                         const name = topic.name || topic;
-                        const topicUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(name)}`;
+                        const topicUrl = `typeagent-browser://views/topicGraphView.html?topic=${encodeURIComponent(name)}`;
                         return `<a
                             href="${topicUrl}"
                             style="background: #fff3cd; color: #856404; padding: 2px 8px;
@@ -237,7 +237,7 @@ export function generateLiveKnowledgePreview(
                           .slice(0, 12)
                           .map((topic) => {
                               const name = topic.name || topic;
-                              const topicUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(name)}`;
+                              const topicUrl = `typeagent-browser://views/topicGraphView.html?topic=${encodeURIComponent(name)}`;
                               return `<a href="${topicUrl}"
                                            style="display: inline-block; background: #fff3cd; color: #856404;
                                                   border: 1px solid #ffeaa7; padding: 4px 8px; border-radius: 12px;

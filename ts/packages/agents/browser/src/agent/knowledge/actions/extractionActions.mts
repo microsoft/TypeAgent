@@ -1090,12 +1090,15 @@ export async function performKnowledgeExtractionWithNotifications(
 
             const { progressState, aggregatedKnowledge } = activeExtraction;
             const entitiesCount = aggregatedKnowledge.entities?.length || 0;
-            const topicsCount = aggregatedKnowledge.topics?.length || 0;
+            const topicsCount =
+                aggregatedKnowledge.topics?.length ||
+                (aggregatedKnowledge as any).keyTopics?.length ||
+                0;
             const relationshipsCount =
                 aggregatedKnowledge.relationships?.length || 0;
 
             // Only send notification if knowledge has changed
-            const currentState = `${entitiesCount}-${topicsCount}-${relationshipsCount}-${progressState.phase}`;
+            const currentState = `${entitiesCount}-${topicsCount}-${relationshipsCount}-${progressState.phase}-${progressState.percentage}`;
             if (
                 currentState !== lastNotificationState &&
                 (entitiesCount > 0 || topicsCount > 0 || relationshipsCount > 0)
@@ -1166,7 +1169,10 @@ export async function performKnowledgeExtractionWithNotifications(
                     updateExtractionTimestamp(url);
 
                     const entitiesCount = knowledge.entities?.length || 0;
-                    const topicsCount = knowledge.topics?.length || 0;
+                    const topicsCount =
+                        knowledge.topics?.length ||
+                        knowledge.keyTopics?.length ||
+                        0;
                     const relationshipsCount =
                         knowledge.relationships?.length || 0;
 
@@ -1202,7 +1208,10 @@ export async function performKnowledgeExtractionWithNotifications(
                         indexError,
                     );
                     const entitiesCount = knowledge.entities?.length || 0;
-                    const topicsCount = knowledge.topics?.length || 0;
+                    const topicsCount =
+                        knowledge.topics?.length ||
+                        knowledge.keyTopics?.length ||
+                        0;
                     const relationshipsCount =
                         knowledge.relationships?.length || 0;
 
