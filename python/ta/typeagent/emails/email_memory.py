@@ -5,7 +5,14 @@ import os
 from dataclasses import dataclass
 import json
 from pydantic.dataclasses import dataclass as pydantic_dataclass
-from ..knowpro import secindex
+import typechat
+from ..aitools import utils
+from ..knowpro import (
+    secindex,
+    convknowledge,
+    search_query_schema,
+    searchlang
+)
 from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
     IConversation,
@@ -20,9 +27,20 @@ from typeagent.storage.sqlite.provider import SqliteStorageProvider
         
 from .email_message import EmailMessage
 
+class EmailMemorySettings:
+    def __init__(self, conversation_settings: ConversationSettings) -> None:
+        self.language_model = convknowledge.create_typechat_model()
+        self.query_translator = utils.create_translator(
+            self.language_model, 
+            search_query_schema.SearchQuery
+        )
+        self.conversation_settings = conversation_settings
+        self.conversation_settings.semantic_ref_index_settings.auto_extract_knowledge = True
+
+
 @dataclass
 class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
-    settings: ConversationSettings
+    settings: EmailMemorySettings
     name_tag: str
     messages: IMessageCollection[EmailMessage]
     semantic_refs: ISemanticRefCollection
@@ -44,7 +62,7 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
 
         storage_provider = await settings.get_storage_provider()
         return cls(
-            settings,
+            EmailMemorySettings(settings),
             name_tag or "",
             messages or await storage_provider.get_message_collection(),
             semantic_refs or await storage_provider.get_semantic_ref_collection(),
@@ -56,17 +74,28 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             ),
         )
 
-    @staticmethod
-    def create_settings() -> ConversationSettings:
-        settings = ConversationSettings()
-        settings.semantic_ref_index_settings.auto_extract_knowledge = True
-        
-        return settings
+    async def search_with_language(
+            self,
+            search_text: str,
+            options: searchlang.LanguageSearchOptions | None = None,
+            lang_search_filter: searchlang.LanguageSearchFilter | None = None,
+            debug_context: searchlang.LanguageSearchDebugContext | None = None
+        ) -> typechat.Result[list[searchlang.ConversationSearchResult]]:
+        return await searchlang.search_conversation_with_language(
+            self, 
+            self.settings.query_translator,
+            search_text,
+            options,
+            lang_search_filter,
+            debug_context
+        )
     
+    # Add an email message to the memory.     
     async def add_message(self, message: EmailMessage) -> None:    
         await self.messages.append(message)
         self._commit()
 
+    # Build an index using ALL messages in the memory
     async def build_index(
         self,
     ) -> None:
@@ -79,11 +108,11 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             self.settings is not None
         ), "Settings must be initialized before building index"
 
-        await add_synonyms_file_as_aliases(self, "emailVerbs.json")  
+        await _add_synonyms_file_as_aliases(self, "emailVerbs.json")  
         self._commit()
-        await semrefindex.build_semantic_ref(self, self.settings)
+        await semrefindex.build_semantic_ref(self, self.settings.conversation_settings)
         self._commit()
-        await secindex.build_transient_secondary_indexes(self, self.settings)
+        await secindex.build_transient_secondary_indexes(self, self.settings.conversation_settings)
         self._commit()
        
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[EmailMessage]:
@@ -94,11 +123,12 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
         return self.secondary_indexes
     
     def _commit(self):
-        provider = self.settings.storage_provider
+        provider = self.settings.conversation_settings.storage_provider
         if isinstance(provider, SqliteStorageProvider):
             provider.db.commit()
 
-async def add_synonyms_file_as_aliases(conversation: IConversation, file_name: str) -> None:
+# TODO: Migrate this to a shared API
+async def _add_synonyms_file_as_aliases(conversation: IConversation, file_name: str) -> None:
     secondary_indexes = conversation.secondary_indexes
     assert secondary_indexes is not None
     assert secondary_indexes.term_to_related_terms_index is not None

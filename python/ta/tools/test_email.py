@@ -13,13 +13,9 @@ from pathlib import Path
 import typechat
 
 from typeagent.aitools import utils
-
 from typeagent.knowpro import ( 
     kplib, 
     searchlang, 
-    search, 
-    search_query_schema,
-    convknowledge
 )
 from typeagent.knowpro.interfaces import (
     IConversation
@@ -33,17 +29,16 @@ from typeagent.emails.email_message import EmailMessage
 
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.storage.utils import create_storage_provider
-from typeagent.storage.sqlite.provider import SqliteStorageProvider
-            
+
+from utool import print_result
+
 class EmailContext:
     def __init__(self, db_path: str, conversation: EmailMemory) -> None:
         self.db_path = db_path
         self.conversation = conversation
-        self.model = convknowledge.create_typechat_model()
-        self.query_translator = utils.create_translator(self.model, search_query_schema.SearchQuery)
 
     async def reset(self):
-        await self.conversation.settings.storage_provider.close()
+        await self.conversation.settings.conversation_settings.storage_provider.close()
         self.conversation = await load_or_create_email_index(self.db_path, create_new=True) 
 
 # Just simple test code
@@ -53,17 +48,21 @@ async def main():
     utils.load_dotenv()
 
     db_path = "/data/testChat/knowpro/email/pyEmails.db"
+    conversation = await load_or_create_email_index(db_path, create_new=False)
+    print(f"Email memory at: {db_path}")
+    await print_conversation_stats(conversation)
+
     context = EmailContext(
         db_path,
-        conversation = await load_or_create_email_index(db_path, create_new=False)
+        conversation
     )
-    await print_stats(context.conversation)
 
+    # Command handlers
     handlers = {
         "@add_index": add_messages,
         "@build_index": build_index,
         "@reset_index": reset_index,
-        "@search_index": search_index
+        "@search_index": search_index   # Search index 
     }
     while True:
         line = input("✉>>").strip()
@@ -77,12 +76,14 @@ async def main():
         try:
             cmd = args[0].lower()
             if cmd == "@help":
-                print_list(Fore.GREEN, sorted(handlers.keys()), "Commands")
+                print_commands(handlers.keys())
             else:
                 handler = handlers.get(cmd)
                 if handler:
                     args.pop(0)
-                    await handler(context, args)            
+                    await handler(context, args)
+                else:
+                    print_commands(handlers.keys())      
         except Exception as e:
             print()
             print(Fore.RED, f"Error\n: {e}")
@@ -118,70 +119,58 @@ async def add_messages(context: EmailContext, args: list[str]):
         print("Adding email...")
         await conversation.add_message(email)
 
-    await print_stats(conversation)
+    await print_conversation_stats(conversation)
 
 async def build_index(context: EmailContext, args: list[str]):
     conversation = context.conversation
-
-    # Turn this off .. currently throws
-    auto_extract = conversation.settings.semantic_ref_index_settings.auto_extract_knowledge 
-    # conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = False
-    try:
-        auto_extract = conversation.settings.semantic_ref_index_settings.auto_extract_knowledge 
-        print(Fore.GREEN, f"Building index, Auto-Extract={auto_extract}")
-        await conversation.build_index()
-        print(Fore.GREEN + "Built index.")
-    finally:
-        conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = auto_extract
-
-async def reset_index(context: EmailContext, args: list[str]):
-    print(f"Deleting {context.db_path}")
-    await context.reset()
-    await print_stats(context.conversation)
+    print(Fore.GREEN, "Building index")
+    await print_conversation_stats(conversation)
+    await conversation.build_index()
+    print(Fore.GREEN + "Built index.")
 
 async def search_index(context:EmailContext, args: list[str]):
     if len(args) == 0:
         return
-    
+
+    search_text = args[0]
+    print(Fore.CYAN, f"Searching for:\n{search_text} ")
+
     debug_context = searchlang.LanguageSearchDebugContext()
-    try:
-        results = await searchlang.search_conversation_with_language(
-            context.conversation, 
-            context.query_translator,
-            args[0],
-            None,
-            None,
-            debug_context
-        )
-    finally:
-        print(Fore.CYAN)
-        if debug_context.search_query:
-            utils.pretty_print(debug_context.search_query)
-        if debug_context.search_query_expr:
-            utils.pretty_print(debug_context.search_query)
-        print(Fore.RESET)
+    results = await context.conversation.search_with_language(args[0])
+    
+    # print(Fore.CYAN)    
+    # utils.pretty_print(debug_context.search_query)
+    # utils.pretty_print(debug_context.search_query_expr)
+    # print(Fore.RESET)
 
     if isinstance(results, typechat.Failure):
         print_error(results.message)
     else:
         search_results = results.value
-        utils.pretty_print(search_results)
+        for search_result in search_results:
+            print(Fore.GREEN, search_result.raw_query_text)
+            await print_result(search_result, context.conversation)
+            print(Fore.RESET)
+
+async def reset_index(context: EmailContext, args: list[str]):
+    print(f"Deleting {context.db_path}")
+    await context.reset()
+    await print_conversation_stats(context.conversation)
+
 #
 # Utilities
 #
-
 async def load_or_create_email_index(db_path: str, create_new: bool) -> EmailMemory:
     if create_new:
         print(f"Deleting {db_path}")
         delete_sqlite_db(db_path)
 
-    settings = EmailMemory.create_settings()
-    
+    settings = ConversationSettings()
     settings.storage_provider = await create_storage_provider(
-    settings.message_text_index_settings,
-    settings.related_term_index_settings,
-    db_path,
-    EmailMessage
+        settings.message_text_index_settings,
+        settings.related_term_index_settings,
+        db_path,
+        EmailMessage
     )
     return await EmailMemory.create(settings)
 
@@ -227,6 +216,9 @@ def print_knowledge(knowledge: kplib.KnowledgeResponse):
     print()
     print(Fore.RESET)
 
+def print_commands(names: Iterable[str]):
+    print_list(Fore.GREEN, sorted(names), "Commands")
+
 def print_list(color, list: Iterable[Any], title: str):
     if title:
         print(color + f"# {title}")
@@ -238,7 +230,7 @@ def print_error(msg: str):
     print(Fore.RED + msg)
     print(Fore.RESET)
 
-async def print_stats(conversation: IConversation):
+async def print_conversation_stats(conversation: IConversation):
     print(f"Conversation index stats".upper())
     print(f"Message count: {await conversation.messages.size()}")
     print(f"Semantic Ref count: {await conversation.semantic_refs.size()}")
