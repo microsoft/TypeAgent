@@ -42,7 +42,9 @@ class TopicGraphView {
 
     private initializeEventHandlers(): void {
         // Topic Graph breadcrumb link - navigate to global view
-        const topicGraphBreadcrumb = document.getElementById("topicGraphBreadcrumb");
+        const topicGraphBreadcrumb = document.getElementById(
+            "topicGraphBreadcrumb",
+        );
         if (topicGraphBreadcrumb) {
             topicGraphBreadcrumb.addEventListener("click", (e) => {
                 e.preventDefault();
@@ -66,8 +68,6 @@ class TopicGraphView {
         });
 
         // View mode buttons removed - using optimized CoSE by default
-
-
 
         // Graph controls
         document.getElementById("fitButton")?.addEventListener("click", () => {
@@ -190,7 +190,10 @@ class TopicGraphView {
             }
 
             console.log("Fetched hierarchical topics:", result);
-            const transformedData = this.transformHierarchicalTopicData(result, centerTopic);
+            const transformedData = this.transformHierarchicalTopicData(
+                result,
+                centerTopic,
+            );
             return transformedData;
         } catch (error) {
             console.error("Error fetching topic data:", error);
@@ -318,10 +321,14 @@ class TopicGraphView {
         });
 
         // Log hierarchy distribution
-        console.log(`\n📊 HIERARCHY LEVELS (${data.topics.length} total topics):`);
-        const sortedLevels = Array.from(levelCounts.keys()).sort((a, b) => a - b);
+        console.log(
+            `\n📊 HIERARCHY LEVELS (${data.topics.length} total topics):`,
+        );
+        const sortedLevels = Array.from(levelCounts.keys()).sort(
+            (a, b) => a - b,
+        );
 
-        sortedLevels.forEach(level => {
+        sortedLevels.forEach((level) => {
             const count = levelCounts.get(level)!;
             const percentage = ((count / data.topics.length) * 100).toFixed(1);
             console.log(`   Level ${level}: ${count} topics (${percentage}%)`);
@@ -337,11 +344,11 @@ class TopicGraphView {
             { min: 0.2, max: 0.4, label: "Low (0.2-0.4)" },
             { min: 0.4, max: 0.6, label: "Medium (0.4-0.6)" },
             { min: 0.6, max: 0.8, label: "High (0.6-0.8)" },
-            { min: 0.8, max: 1.0, label: "Very High (0.8-1.0)" }
+            { min: 0.8, max: 1.0, label: "Very High (0.8-1.0)" },
         ];
 
         // Initialize buckets
-        bucketRanges.forEach(bucket => {
+        bucketRanges.forEach((bucket) => {
             importanceBuckets.set(bucket.label, 0);
         });
 
@@ -351,20 +358,33 @@ class TopicGraphView {
             const baseConfidence = topic.confidence || 0.5;
             const levelWeight = 1 / (topic.level + 1);
             const childrenWeight = Math.min(1, topic.childCount * 0.1);
-            const entityRefWeight = Math.min(1, topic.entityReferences.length * 0.05);
+            const entityRefWeight = Math.min(
+                1,
+                topic.entityReferences.length * 0.05,
+            );
             const keywordWeight = Math.min(1, topic.keywords.length * 0.03);
 
-            const importance = Math.min(1, Math.max(0.1,
-                (baseConfidence * 0.4) + (levelWeight * 0.25) + (childrenWeight * 0.15) +
-                (entityRefWeight * 0.15) + (keywordWeight * 0.05)
-            ));
+            const importance = Math.min(
+                1,
+                Math.max(
+                    0.1,
+                    baseConfidence * 0.4 +
+                        levelWeight * 0.25 +
+                        childrenWeight * 0.15 +
+                        entityRefWeight * 0.15 +
+                        keywordWeight * 0.05,
+                ),
+            );
 
             importanceScores.push(importance);
 
             // Categorize into buckets
             for (const bucket of bucketRanges) {
                 if (importance >= bucket.min && importance <= bucket.max) {
-                    importanceBuckets.set(bucket.label, importanceBuckets.get(bucket.label)! + 1);
+                    importanceBuckets.set(
+                        bucket.label,
+                        importanceBuckets.get(bucket.label)! + 1,
+                    );
                     break;
                 }
             }
@@ -372,38 +392,55 @@ class TopicGraphView {
 
         // Log importance distribution
         console.log(`\n🎯 IMPORTANCE DISTRIBUTION:`);
-        bucketRanges.forEach(bucket => {
+        bucketRanges.forEach((bucket) => {
             const count = importanceBuckets.get(bucket.label)!;
             const percentage = ((count / data.topics.length) * 100).toFixed(1);
             console.log(`   ${bucket.label}: ${count} topics (${percentage}%)`);
         });
 
         // Log importance statistics
-        const avgImportance = importanceScores.reduce((a, b) => a + b, 0) / importanceScores.length;
+        const avgImportance =
+            importanceScores.reduce((a, b) => a + b, 0) /
+            importanceScores.length;
         const minImportance = Math.min(...importanceScores);
         const maxImportance = Math.max(...importanceScores);
 
         console.log(`\n📈 IMPORTANCE STATISTICS:`);
         console.log(`   Average: ${avgImportance.toFixed(3)}`);
-        console.log(`   Range: ${minImportance.toFixed(3)} - ${maxImportance.toFixed(3)}`);
+        console.log(
+            `   Range: ${minImportance.toFixed(3)} - ${maxImportance.toFixed(3)}`,
+        );
 
         // Show sample topics from each level for debugging
         console.log(`\n🔍 SAMPLE TOPICS BY LEVEL:`);
-        sortedLevels.slice(0, 3).forEach(level => { // Show first 3 levels
+        sortedLevels.slice(0, 3).forEach((level) => {
+            // Show first 3 levels
             const topics = levelTopics.get(level)!;
             console.log(`   Level ${level} (${topics.length} topics):`);
-            topics.slice(0, 3).forEach(topic => { // Show first 3 topics in each level
-                console.log(`     - "${topic.name}" (confidence: ${topic.confidence?.toFixed(2) || 'N/A'}, children: ${topic.childCount})`);
+            topics.slice(0, 3).forEach((topic) => {
+                // Show first 3 topics in each level
+                console.log(
+                    `     - "${topic.name}" (confidence: ${topic.confidence?.toFixed(2) || "N/A"}, children: ${topic.childCount})`,
+                );
             });
         });
 
         // LoD recommendations based on analysis
         console.log(`\n💡 LEVEL OF DETAIL RECOMMENDATIONS:`);
-        const highImportanceCount = importanceBuckets.get("High (0.6-0.8)")! + importanceBuckets.get("Very High (0.8-1.0)")!;
-        const lowZoomThreshold = Math.min(0.8, highImportanceCount / data.topics.length);
+        const highImportanceCount =
+            importanceBuckets.get("High (0.6-0.8)")! +
+            importanceBuckets.get("Very High (0.8-1.0)")!;
+        const lowZoomThreshold = Math.min(
+            0.8,
+            highImportanceCount / data.topics.length,
+        );
 
-        console.log(`   - At low zoom, show ~${highImportanceCount} high-importance topics (threshold: ${lowZoomThreshold.toFixed(2)})`);
-        console.log(`   - Level 0 topics (${levelCounts.get(0) || 0}) should be prioritized for visibility`);
+        console.log(
+            `   - At low zoom, show ~${highImportanceCount} high-importance topics (threshold: ${lowZoomThreshold.toFixed(2)})`,
+        );
+        console.log(
+            `   - Level 0 topics (${levelCounts.get(0) || 0}) should be prioritized for visibility`,
+        );
         console.log(`   - Current max depth: ${data.maxDepth} levels`);
 
         console.log("=== END TOPIC ANALYSIS ===\n");
@@ -425,15 +462,21 @@ class TopicGraphView {
 
         // Find root nodes (level 0)
         const rootNodes = data.topics.filter((t: any) => t.level === 0);
-        console.log(`\n🌳 ROOT NODES ANALYSIS (${rootNodes.length} root nodes):`);
+        console.log(
+            `\n🌳 ROOT NODES ANALYSIS (${rootNodes.length} root nodes):`,
+        );
 
         // Analyze each root node's hierarchy
         rootNodes.forEach((root: any, index: number) => {
             console.log(`\n📂 Root Node ${index + 1}: "${root.name}"`);
             console.log(`   ├─ ID: ${root.id}`);
-            console.log(`   ├─ Confidence: ${root.confidence?.toFixed(2) || 'N/A'}`);
+            console.log(
+                `   ├─ Confidence: ${root.confidence?.toFixed(2) || "N/A"}`,
+            );
             console.log(`   ├─ Direct Children: ${root.childCount}`);
-            console.log(`   ├─ Keywords: ${root.keywords.length} (${root.keywords.slice(0, 3).join(', ')}${root.keywords.length > 3 ? '...' : ''})`);
+            console.log(
+                `   ├─ Keywords: ${root.keywords.length} (${root.keywords.slice(0, 3).join(", ")}${root.keywords.length > 3 ? "..." : ""})`,
+            );
 
             // Get all descendants of this root
             const descendants = this.getAllDescendants(root.id, data.topics);
@@ -442,20 +485,35 @@ class TopicGraphView {
             if (descendants.length > 0) {
                 // Show hierarchy tree for first few children
                 console.log(`\n   🌿 Children Structure (showing first 10):`);
-                const directChildren = data.topics.filter((t: any) => t.parentId === root.id);
-                directChildren.slice(0, 10).forEach((child: any, childIndex: number) => {
-                    const isLast = childIndex === Math.min(9, directChildren.length - 1);
-                    const prefix = isLast ? "   └─" : "   ├─";
-                    console.log(`${prefix} "${this.truncateText(child.name, 60)}" (conf: ${child.confidence?.toFixed(2) || 'N/A'})`);
-                });
+                const directChildren = data.topics.filter(
+                    (t: any) => t.parentId === root.id,
+                );
+                directChildren
+                    .slice(0, 10)
+                    .forEach((child: any, childIndex: number) => {
+                        const isLast =
+                            childIndex ===
+                            Math.min(9, directChildren.length - 1);
+                        const prefix = isLast ? "   └─" : "   ├─";
+                        console.log(
+                            `${prefix} "${this.truncateText(child.name, 60)}" (conf: ${child.confidence?.toFixed(2) || "N/A"})`,
+                        );
+                    });
 
                 if (directChildren.length > 10) {
-                    console.log(`   └─ ... and ${directChildren.length - 10} more children`);
+                    console.log(
+                        `   └─ ... and ${directChildren.length - 10} more children`,
+                    );
                 }
 
                 // Analyze depth distribution under this root
-                const depthDistribution = this.analyzeDepthDistribution(root.id, data.topics);
-                console.log(`\n   📊 Depth Distribution under "${this.truncateText(root.name, 40)}":`);
+                const depthDistribution = this.analyzeDepthDistribution(
+                    root.id,
+                    data.topics,
+                );
+                console.log(
+                    `\n   📊 Depth Distribution under "${this.truncateText(root.name, 40)}":`,
+                );
                 Object.entries(depthDistribution).forEach(([depth, count]) => {
                     console.log(`      Level ${depth}: ${count} topics`);
                 });
@@ -466,18 +524,28 @@ class TopicGraphView {
         console.log(`\n📈 HIERARCHY STATISTICS:`);
         console.log(`   ├─ Total Nodes: ${data.topics.length}`);
         console.log(`   ├─ Root Nodes: ${rootNodes.length}`);
-        console.log(`   ├─ Leaf Nodes: ${data.topics.filter((t: any) => t.childCount === 0).length}`);
-        console.log(`   ├─ Average Fan-out: ${this.calculateAverageFanout(data.topics).toFixed(1)}`);
+        console.log(
+            `   ├─ Leaf Nodes: ${data.topics.filter((t: any) => t.childCount === 0).length}`,
+        );
+        console.log(
+            `   ├─ Average Fan-out: ${this.calculateAverageFanout(data.topics).toFixed(1)}`,
+        );
         console.log(`   ├─ Max Depth: ${data.maxDepth}`);
-        console.log(`   └─ Hierarchy Effectiveness: ${this.assessHierarchyEffectiveness(data.topics)}`);
+        console.log(
+            `   └─ Hierarchy Effectiveness: ${this.assessHierarchyEffectiveness(data.topics)}`,
+        );
 
         // Parent-child relationship validation
-        const orphanedNodes = data.topics.filter((t: any) =>
-            t.level > 0 && !data.topics.some((p: any) => p.id === t.parentId)
+        const orphanedNodes = data.topics.filter(
+            (t: any) =>
+                t.level > 0 &&
+                !data.topics.some((p: any) => p.id === t.parentId),
         );
         if (orphanedNodes.length > 0) {
             console.log(`\n⚠️  HIERARCHY ISSUES:`);
-            console.log(`   └─ Orphaned nodes: ${orphanedNodes.length} (nodes with missing parents)`);
+            console.log(
+                `   └─ Orphaned nodes: ${orphanedNodes.length} (nodes with missing parents)`,
+            );
         }
 
         // LoD improvement recommendations based on investigation
@@ -492,12 +560,15 @@ class TopicGraphView {
      */
     private getAllDescendants(topicId: string, allTopics: any[]): any[] {
         const descendants: any[] = [];
-        const directChildren = allTopics.filter(t => t.parentId === topicId);
+        const directChildren = allTopics.filter((t) => t.parentId === topicId);
 
-        directChildren.forEach(child => {
+        directChildren.forEach((child) => {
             descendants.push(child);
             // Recursively get descendants of this child
-            const childDescendants = this.getAllDescendants(child.id, allTopics);
+            const childDescendants = this.getAllDescendants(
+                child.id,
+                allTopics,
+            );
             descendants.push(...childDescendants);
         });
 
@@ -507,11 +578,14 @@ class TopicGraphView {
     /**
      * Analyze depth distribution under a specific root
      */
-    private analyzeDepthDistribution(rootId: string, allTopics: any[]): Record<number, number> {
+    private analyzeDepthDistribution(
+        rootId: string,
+        allTopics: any[],
+    ): Record<number, number> {
         const distribution: Record<number, number> = {};
         const descendants = this.getAllDescendants(rootId, allTopics);
 
-        descendants.forEach(topic => {
+        descendants.forEach((topic) => {
             const level = topic.level;
             distribution[level] = (distribution[level] || 0) + 1;
         });
@@ -523,10 +597,13 @@ class TopicGraphView {
      * Calculate average fan-out (children per non-leaf node)
      */
     private calculateAverageFanout(allTopics: any[]): number {
-        const nonLeafNodes = allTopics.filter(t => t.childCount > 0);
+        const nonLeafNodes = allTopics.filter((t) => t.childCount > 0);
         if (nonLeafNodes.length === 0) return 0;
 
-        const totalChildren = nonLeafNodes.reduce((sum, node) => sum + node.childCount, 0);
+        const totalChildren = nonLeafNodes.reduce(
+            (sum, node) => sum + node.childCount,
+            0,
+        );
         return totalChildren / nonLeafNodes.length;
     }
 
@@ -534,9 +611,12 @@ class TopicGraphView {
      * Assess hierarchy effectiveness for LoD purposes
      */
     private assessHierarchyEffectiveness(allTopics: any[]): string {
-        const levels = [...new Set(allTopics.map(t => t.level))].length;
+        const levels = [...new Set(allTopics.map((t) => t.level))].length;
         const avgFanout = this.calculateAverageFanout(allTopics);
-        const leafPercentage = (allTopics.filter(t => t.childCount === 0).length / allTopics.length) * 100;
+        const leafPercentage =
+            (allTopics.filter((t) => t.childCount === 0).length /
+                allTopics.length) *
+            100;
 
         if (levels <= 2 && avgFanout > 50) {
             return "Poor (Too flat, high fan-out)";
@@ -568,8 +648,12 @@ class TopicGraphView {
         const leafNodes = data.topics.filter((t: any) => t.childCount === 0);
 
         console.log(`\n   🔧 CURRENT PROBLEMS:`);
-        console.log(`      ├─ Flat hierarchy (only ${data.maxDepth + 1} levels)`);
-        console.log(`      ├─ High fan-out (avg: ${avgFanout.toFixed(1)} children per parent)`);
+        console.log(
+            `      ├─ Flat hierarchy (only ${data.maxDepth + 1} levels)`,
+        );
+        console.log(
+            `      ├─ High fan-out (avg: ${avgFanout.toFixed(1)} children per parent)`,
+        );
         console.log(`      ├─ Uniform importance (99% in same bucket)`);
         console.log(`      └─ Poor LoD effectiveness`);
 
@@ -577,38 +661,66 @@ class TopicGraphView {
 
         // Strategy 1: Child count-based importance
         console.log(`      1. CHILD COUNT-BASED IMPORTANCE:`);
-        const childCountDistribution = this.analyzeChildCountDistribution(data.topics);
+        const childCountDistribution = this.analyzeChildCountDistribution(
+            data.topics,
+        );
         console.log(`         ├─ Use childCount as primary importance factor`);
-        console.log(`         ├─ Topics with >100 children: ${childCountDistribution.high} (high priority)`);
-        console.log(`         ├─ Topics with 10-100 children: ${childCountDistribution.medium} (medium priority)`);
-        console.log(`         └─ Topics with <10 children: ${childCountDistribution.low} (low priority)`);
+        console.log(
+            `         ├─ Topics with >100 children: ${childCountDistribution.high} (high priority)`,
+        );
+        console.log(
+            `         ├─ Topics with 10-100 children: ${childCountDistribution.medium} (medium priority)`,
+        );
+        console.log(
+            `         └─ Topics with <10 children: ${childCountDistribution.low} (low priority)`,
+        );
 
         // Strategy 2: Keyword density-based importance
         console.log(`\n      2. KEYWORD DENSITY-BASED IMPORTANCE:`);
         const keywordStats = this.analyzeKeywordDistribution(data.topics);
-        console.log(`         ├─ Use keyword count as semantic importance indicator`);
-        console.log(`         ├─ Rich topics (>5 keywords): ${keywordStats.rich} topics`);
-        console.log(`         ├─ Medium topics (2-5 keywords): ${keywordStats.medium} topics`);
-        console.log(`         └─ Sparse topics (<2 keywords): ${keywordStats.sparse} topics`);
+        console.log(
+            `         ├─ Use keyword count as semantic importance indicator`,
+        );
+        console.log(
+            `         ├─ Rich topics (>5 keywords): ${keywordStats.rich} topics`,
+        );
+        console.log(
+            `         ├─ Medium topics (2-5 keywords): ${keywordStats.medium} topics`,
+        );
+        console.log(
+            `         └─ Sparse topics (<2 keywords): ${keywordStats.sparse} topics`,
+        );
 
         // Strategy 3: Root-distance based LoD
         console.log(`\n      3. ROOT-DISTANCE BASED LOD:`);
         console.log(`         ├─ Always show: ${rootNodes.length} root topics`);
-        console.log(`         ├─ Show at medium zoom: Direct children of large roots`);
+        console.log(
+            `         ├─ Show at medium zoom: Direct children of large roots`,
+        );
         console.log(`         ├─ Show at high zoom: All remaining topics`);
         console.log(`         └─ Advantage: Guarantees hierarchical structure`);
 
         // Strategy 4: Confidence-based clustering
         console.log(`\n      4. CONFIDENCE-BASED CLUSTERING:`);
         const confidenceStats = this.analyzeConfidenceDistribution(data.topics);
-        console.log(`         ├─ High confidence (>0.8): ${confidenceStats.high} topics`);
-        console.log(`         ├─ Medium confidence (0.6-0.8): ${confidenceStats.medium} topics`);
-        console.log(`         ├─ Low confidence (<0.6): ${confidenceStats.low} topics`);
-        console.log(`         └─ Use confidence * childCount as hybrid importance`);
+        console.log(
+            `         ├─ High confidence (>0.8): ${confidenceStats.high} topics`,
+        );
+        console.log(
+            `         ├─ Medium confidence (0.6-0.8): ${confidenceStats.medium} topics`,
+        );
+        console.log(
+            `         ├─ Low confidence (<0.6): ${confidenceStats.low} topics`,
+        );
+        console.log(
+            `         └─ Use confidence * childCount as hybrid importance`,
+        );
 
         console.log(`\n   🏆 RECOMMENDED APPROACH:`);
         console.log(`      ├─ Primary: Root-distance based LoD for structure`);
-        console.log(`      ├─ Secondary: Child count for within-level importance`);
+        console.log(
+            `      ├─ Secondary: Child count for within-level importance`,
+        );
         console.log(`      ├─ Tertiary: Keyword density for semantic richness`);
         console.log(`      └─ Result: Meaningful progressive disclosure`);
     }
@@ -616,31 +728,49 @@ class TopicGraphView {
     /**
      * Analyze child count distribution for importance assessment
      */
-    private analyzeChildCountDistribution(topics: any[]): {high: number, medium: number, low: number} {
-        const high = topics.filter(t => t.childCount > 100).length;
-        const medium = topics.filter(t => t.childCount >= 10 && t.childCount <= 100).length;
-        const low = topics.filter(t => t.childCount < 10).length;
-        return {high, medium, low};
+    private analyzeChildCountDistribution(topics: any[]): {
+        high: number;
+        medium: number;
+        low: number;
+    } {
+        const high = topics.filter((t) => t.childCount > 100).length;
+        const medium = topics.filter(
+            (t) => t.childCount >= 10 && t.childCount <= 100,
+        ).length;
+        const low = topics.filter((t) => t.childCount < 10).length;
+        return { high, medium, low };
     }
 
     /**
      * Analyze keyword distribution for semantic importance
      */
-    private analyzeKeywordDistribution(topics: any[]): {rich: number, medium: number, sparse: number} {
-        const rich = topics.filter(t => t.keywords.length > 5).length;
-        const medium = topics.filter(t => t.keywords.length >= 2 && t.keywords.length <= 5).length;
-        const sparse = topics.filter(t => t.keywords.length < 2).length;
-        return {rich, medium, sparse};
+    private analyzeKeywordDistribution(topics: any[]): {
+        rich: number;
+        medium: number;
+        sparse: number;
+    } {
+        const rich = topics.filter((t) => t.keywords.length > 5).length;
+        const medium = topics.filter(
+            (t) => t.keywords.length >= 2 && t.keywords.length <= 5,
+        ).length;
+        const sparse = topics.filter((t) => t.keywords.length < 2).length;
+        return { rich, medium, sparse };
     }
 
     /**
      * Analyze confidence distribution for clustering
      */
-    private analyzeConfidenceDistribution(topics: any[]): {high: number, medium: number, low: number} {
-        const high = topics.filter(t => (t.confidence || 0) > 0.8).length;
-        const medium = topics.filter(t => (t.confidence || 0) >= 0.6 && (t.confidence || 0) <= 0.8).length;
-        const low = topics.filter(t => (t.confidence || 0) < 0.6).length;
-        return {high, medium, low};
+    private analyzeConfidenceDistribution(topics: any[]): {
+        high: number;
+        medium: number;
+        low: number;
+    } {
+        const high = topics.filter((t) => (t.confidence || 0) > 0.8).length;
+        const medium = topics.filter(
+            (t) => (t.confidence || 0) >= 0.6 && (t.confidence || 0) <= 0.8,
+        ).length;
+        const low = topics.filter((t) => (t.confidence || 0) < 0.6).length;
+        return { high, medium, low };
     }
 
     private showTopicDetails(topic: any): void {
@@ -778,8 +908,6 @@ class TopicGraphView {
         );
     }
 
-
-
     private updateGraphStats(): void {
         const stats = this.visualizer?.getGraphStats();
         if (!stats) return;
@@ -795,7 +923,9 @@ class TopicGraphView {
     }
 
     private updateBreadcrumb(topic: any): void {
-        const topicNameBreadcrumb = document.getElementById("topicNameBreadcrumb");
+        const topicNameBreadcrumb = document.getElementById(
+            "topicNameBreadcrumb",
+        );
         if (topicNameBreadcrumb) {
             if (topic && topic.name && topic.name !== "All Topics") {
                 topicNameBreadcrumb.textContent = ` > ${topic.name}`;
@@ -833,7 +963,6 @@ class TopicGraphView {
         this.state.sidebarOpen = !this.state.sidebarOpen;
         this.sidebar.classList.toggle("visible", this.state.sidebarOpen);
     }
-
 
     private navigateToEntityGraph(entityName: string): void {
         window.location.href = `entityGraphView.html?entity=${encodeURIComponent(entityName)}`;

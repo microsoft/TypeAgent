@@ -54,7 +54,6 @@ export class TopicGraphVisualizer {
     private lodUpdateInterval: number = 16; // ~60fps
     private zoomHandlerSetup: boolean = false;
 
-
     constructor(container: HTMLElement) {
         this.container = container;
         this.initializeLODThresholds();
@@ -66,7 +65,9 @@ export class TopicGraphVisualizer {
     private detectWebGLSupport(): boolean {
         try {
             const canvas = document.createElement("canvas");
-            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            const gl =
+                canvas.getContext("webgl") ||
+                canvas.getContext("experimental-webgl");
             return !!gl;
         } catch (e) {
             return false;
@@ -179,7 +180,7 @@ export class TopicGraphVisualizer {
             minZoom: 0.25,
             maxZoom: 4.0,
             zoomingEnabled: true,
-            userZoomingEnabled: false,  // Disable default zoom to use custom handler
+            userZoomingEnabled: false, // Disable default zoom to use custom handler
             panningEnabled: true,
             userPanningEnabled: true,
             boxSelectionEnabled: false,
@@ -252,7 +253,6 @@ export class TopicGraphVisualizer {
 
         this.zoomHandlerSetup = true;
     }
-
 
     /**
      * Apply Level of Detail based on zoom level
@@ -357,7 +357,7 @@ export class TopicGraphVisualizer {
             const adaptiveThreshold = this.calculateAdaptiveThreshold(
                 lodSettings.nodeThreshold,
                 nodesInViewport.size,
-                zoom
+                zoom,
             );
 
             // Determine visibility based on importance and viewport presence
@@ -365,7 +365,7 @@ export class TopicGraphVisualizer {
                 computedImportance,
                 adaptiveThreshold,
                 isInViewport,
-                zoom
+                zoom,
             );
 
             if (shouldShow) {
@@ -411,10 +411,12 @@ export class TopicGraphVisualizer {
      * Check if a node's bounding box intersects with viewport
      */
     private isNodeInViewport(nodeBB: any, viewport: any): boolean {
-        return !(nodeBB.x2 < viewport.x1 ||
-                nodeBB.x1 > viewport.x2 ||
-                nodeBB.y2 < viewport.y1 ||
-                nodeBB.y1 > viewport.y2);
+        return !(
+            nodeBB.x2 < viewport.x1 ||
+            nodeBB.x1 > viewport.x2 ||
+            nodeBB.y2 < viewport.y1 ||
+            nodeBB.y1 > viewport.y2
+        );
     }
 
     /**
@@ -423,10 +425,10 @@ export class TopicGraphVisualizer {
     private calculateAdaptiveThreshold(
         baseThreshold: number,
         nodesInViewport: number,
-        zoom: number
+        zoom: number,
     ): number {
         // Increase threshold when viewport is crowded to show only most important nodes
-        const densityFactor = Math.min(2.0, 1.0 + (nodesInViewport / 50));
+        const densityFactor = Math.min(2.0, 1.0 + nodesInViewport / 50);
 
         // Decrease threshold at higher zoom to show more detail
         const zoomFactor = Math.max(0.5, 1.0 - (zoom - 1.0) * 0.3);
@@ -441,7 +443,7 @@ export class TopicGraphVisualizer {
         importance: number,
         threshold: number,
         isInViewport: boolean,
-        zoom: number
+        zoom: number,
     ): boolean {
         // Always show high-importance nodes
         if (importance > 0.8) return true;
@@ -558,21 +560,25 @@ export class TopicGraphVisualizer {
      */
     private calculateTopicImportance(topic: TopicData): number {
         const baseConfidence = topic.confidence || 0.5;
-        const levelWeight = 1 / (topic.level + 1);  // Higher levels are less important
-        const childrenWeight = Math.min(1, topic.childCount * 0.1);  // Topics with more children are more important
-        const entityRefWeight = Math.min(1, topic.entityReferences.length * 0.05);  // Topics with more entity references are more important
+        const levelWeight = 1 / (topic.level + 1); // Higher levels are less important
+        const childrenWeight = Math.min(1, topic.childCount * 0.1); // Topics with more children are more important
+        const entityRefWeight = Math.min(
+            1,
+            topic.entityReferences.length * 0.05,
+        ); // Topics with more entity references are more important
 
         // Additional semantic importance based on keywords count
         const keywordWeight = Math.min(1, topic.keywords.length * 0.03);
 
         // Weighted combination of all factors
-        const computedImportance = (baseConfidence * 0.4) +
-                                 (levelWeight * 0.25) +
-                                 (childrenWeight * 0.15) +
-                                 (entityRefWeight * 0.15) +
-                                 (keywordWeight * 0.05);
+        const computedImportance =
+            baseConfidence * 0.4 +
+            levelWeight * 0.25 +
+            childrenWeight * 0.15 +
+            entityRefWeight * 0.15 +
+            keywordWeight * 0.05;
 
-        return Math.min(1, Math.max(0.1, computedImportance));  // Clamp between 0.1 and 1.0
+        return Math.min(1, Math.max(0.1, computedImportance)); // Clamp between 0.1 and 1.0
     }
 
     /**
@@ -592,7 +598,7 @@ export class TopicGraphVisualizer {
                         label: topic.name,
                         level: topic.level,
                         confidence: topic.confidence,
-                        computedImportance: computedImportance,  // Add computed importance
+                        computedImportance: computedImportance, // Add computed importance
                         keywords: topic.keywords,
                         entityReferences: topic.entityReferences,
                         parentId: topic.parentId,
@@ -687,7 +693,8 @@ export class TopicGraphVisualizer {
                     "font-weight": "bold",
                     color: "#333",
                     "text-wrap": "wrap",
-                    "text-max-width": "mapData(computedImportance, 0, 1, 60, 120)",
+                    "text-max-width":
+                        "mapData(computedImportance, 0, 1, 60, 120)",
                     // Scale border width with importance
                     "border-width": "mapData(computedImportance, 0, 1, 2, 4)",
                     "border-color": "#E5507A",
@@ -922,7 +929,7 @@ export class TopicGraphVisualizer {
             padding: 30,
             randomize: false,
             componentSpacing: 100,
-            nodeRepulsion: 400000,  // Much stronger repulsion for better separation
+            nodeRepulsion: 400000, // Much stronger repulsion for better separation
             edgeElasticity: 100,
             nestingFactor: 5,
             gravity: 80,
@@ -946,7 +953,7 @@ export class TopicGraphVisualizer {
             // Small graphs can afford more iterations for better quality
             baseConfig.numIter = 1200;
             baseConfig.gravity = 70;
-            baseConfig.nodeRepulsion = 300000;  // Less repulsion for tighter clustering
+            baseConfig.nodeRepulsion = 300000; // Less repulsion for tighter clustering
         }
 
         return baseConfig;
@@ -1076,7 +1083,7 @@ export class TopicGraphVisualizer {
                         label: topic.name,
                         level: topic.level,
                         confidence: topic.confidence,
-                        computedImportance: computedImportance,  // Add computed importance for dynamic nodes
+                        computedImportance: computedImportance, // Add computed importance for dynamic nodes
                         keywords: topic.keywords,
                         entityReferences: topic.entityReferences,
                         parentId: topic.parentId,
@@ -1129,7 +1136,6 @@ export class TopicGraphVisualizer {
             this.loadData(this.topicGraphData);
         }
     }
-
 
     /**
      * Set topic click callback

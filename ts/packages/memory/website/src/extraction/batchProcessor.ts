@@ -123,19 +123,27 @@ export class BatchProcessor extends EventEmitter {
 
             // Process results in order
             batchResults.forEach((settledResult) => {
-                if (settledResult.status === 'fulfilled') {
+                if (settledResult.status === "fulfilled") {
                     const outcome = settledResult.value;
-                    if (outcome.success && 'result' in outcome) {
+                    if (outcome.success && "result" in outcome) {
                         this.results[outcome.globalIndex] = outcome.result;
                         processedItems++;
 
                         // ONLY difference: how progress events are published
                         if (processingMode === "realtime") {
                             // Real-time: WebSocket streaming events already sent during extraction
-                            this.emit("itemComplete", outcome.result, outcome.globalIndex);
+                            this.emit(
+                                "itemComplete",
+                                outcome.result,
+                                outcome.globalIndex,
+                            );
                         } else {
                             // Batch: Traditional batch progress events
-                            this.emit("itemComplete", outcome.result, outcome.globalIndex);
+                            this.emit(
+                                "itemComplete",
+                                outcome.result,
+                                outcome.globalIndex,
+                            );
                         }
 
                         if (progressCallback) {
@@ -148,7 +156,9 @@ export class BatchProcessor extends EventEmitter {
                                 currentItem: items[outcome.globalIndex].url,
                                 errors: this.errors.length,
                                 mode,
-                                intermediateResults: [...this.results].filter(r => r !== undefined),
+                                intermediateResults: [...this.results].filter(
+                                    (r) => r !== undefined,
+                                ),
                             });
                         }
                     } else if (!outcome.success) {
@@ -164,7 +174,9 @@ export class BatchProcessor extends EventEmitter {
                                 currentItem: items[outcome.globalIndex].url,
                                 errors: this.errors.length,
                                 mode,
-                                intermediateResults: [...this.results].filter(r => r !== undefined),
+                                intermediateResults: [...this.results].filter(
+                                    (r) => r !== undefined,
+                                ),
                             });
                         }
                     }

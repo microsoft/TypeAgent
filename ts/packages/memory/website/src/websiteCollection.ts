@@ -1602,7 +1602,9 @@ export class WebsiteCollection
 
         // Build topic relationships and metrics
         const websites = this.getWebsites();
-        const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
+        const websitesToProcess = urlLimit
+            ? websites.slice(0, urlLimit)
+            : websites;
 
         for (const website of websitesToProcess) {
             await this.updateTopicCooccurrences(website);
@@ -1610,7 +1612,7 @@ export class WebsiteCollection
         }
         const allTopics = this.hierarchicalTopics?.getTopicHierarchy();
         if (allTopics) {
-            const uniqueTopics = new Set(allTopics.map(t => t.topicId));
+            const uniqueTopics = new Set(allTopics.map((t) => t.topicId));
             for (const topicId of uniqueTopics) {
                 await this.updateTopicMetrics(topicId);
             }
@@ -2204,16 +2206,20 @@ export class WebsiteCollection
         try {
             // First, check if websites already have rich hierarchies from extraction
             const websites = this.getWebsites();
-            const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
+            const websitesToProcess = urlLimit
+                ? websites.slice(0, urlLimit)
+                : websites;
 
             const websitesWithHierarchies = websitesToProcess.filter(
-                w => (w.knowledge as any)?.topicHierarchy
+                (w) => (w.knowledge as any)?.topicHierarchy,
             );
 
             if (websitesWithHierarchies.length > 0) {
                 // Clear existing hierarchical topics before rebuilding
                 if (this.hierarchicalTopics) {
-                    const clearStmt = this.db!.prepare("DELETE FROM hierarchicalTopics");
+                    const clearStmt = this.db!.prepare(
+                        "DELETE FROM hierarchicalTopics",
+                    );
                     clearStmt.run();
                 }
 
@@ -2321,7 +2327,9 @@ export class WebsiteCollection
         let globalHierarchy: any | undefined;
 
         for (const website of newWebsites) {
-            const docHierarchy = (website.knowledge as any)?.topicHierarchy as any | undefined;
+            const docHierarchy = (website.knowledge as any)?.topicHierarchy as
+                | any
+                | undefined;
 
             if (!docHierarchy) {
                 continue;
@@ -2332,7 +2340,10 @@ export class WebsiteCollection
 
                 if (docHierarchy.topicMap instanceof Map) {
                     topicMap = docHierarchy.topicMap;
-                } else if (typeof docHierarchy.topicMap === 'object' && docHierarchy.topicMap !== null) {
+                } else if (
+                    typeof docHierarchy.topicMap === "object" &&
+                    docHierarchy.topicMap !== null
+                ) {
                     topicMap = new Map(Object.entries(docHierarchy.topicMap));
                 } else {
                     topicMap = new Map();
@@ -2343,7 +2354,10 @@ export class WebsiteCollection
                     topicMap: topicMap,
                 };
             } else {
-                globalHierarchy = this.mergeHierarchies(globalHierarchy, docHierarchy);
+                globalHierarchy = this.mergeHierarchies(
+                    globalHierarchy,
+                    docHierarchy,
+                );
             }
         }
 
@@ -2353,7 +2367,10 @@ export class WebsiteCollection
 
         try {
             for (const rootTopic of globalHierarchy.rootTopics) {
-                await this.storeTopicHierarchyRecursive(rootTopic, globalHierarchy.topicMap);
+                await this.storeTopicHierarchyRecursive(
+                    rootTopic,
+                    globalHierarchy.topicMap,
+                );
             }
         } catch (error) {
             debug(
@@ -2362,22 +2379,21 @@ export class WebsiteCollection
         }
     }
 
-    private mergeHierarchies(
-        existing: any,
-        newHierarchy: any,
-    ): any {
+    private mergeHierarchies(existing: any, newHierarchy: any): any {
         // Convert existing topicMap to Map if it's a plain object (from deserialization)
-        const existingTopicMap = existing.topicMap instanceof Map
-            ? existing.topicMap
-            : new Map(Object.entries(existing.topicMap));
+        const existingTopicMap =
+            existing.topicMap instanceof Map
+                ? existing.topicMap
+                : new Map(Object.entries(existing.topicMap));
 
         const mergedTopicMap = new Map(existingTopicMap);
         const mergedRootTopics = [...existing.rootTopics];
 
         // Convert newHierarchy topicMap to entries array if it's a plain object
-        const newTopicEntries = newHierarchy.topicMap instanceof Map
-            ? newHierarchy.topicMap
-            : Object.entries(newHierarchy.topicMap);
+        const newTopicEntries =
+            newHierarchy.topicMap instanceof Map
+                ? newHierarchy.topicMap
+                : Object.entries(newHierarchy.topicMap);
 
         for (const [topicId, topic] of newTopicEntries) {
             if (!mergedTopicMap.has(topicId)) {
@@ -2861,11 +2877,14 @@ export class WebsiteCollection
         return `topic_${cleanName}_${level}_${Date.now()}`;
     }
 
-    private flattenTopicHierarchy(hierarchy: any): {id: string, name: string}[] {
-        const topics: {id: string, name: string}[] = [];
-        const topicMap = hierarchy.topicMap instanceof Map
-            ? hierarchy.topicMap
-            : new Map(Object.entries(hierarchy.topicMap));
+    private flattenTopicHierarchy(
+        hierarchy: any,
+    ): { id: string; name: string }[] {
+        const topics: { id: string; name: string }[] = [];
+        const topicMap =
+            hierarchy.topicMap instanceof Map
+                ? hierarchy.topicMap
+                : new Map(Object.entries(hierarchy.topicMap));
 
         for (const [id, topic] of topicMap) {
             topics.push({ id, name: topic.name });
@@ -2882,19 +2901,28 @@ export class WebsiteCollection
 
         for (let i = 0; i < topics.length; i++) {
             for (let j = i + 1; j < topics.length; j++) {
-                const existing = this.topicRelationships?.getRelationshipsForTopic(topics[i].id)
-                    .find(r => (r.fromTopic === topics[j].id || r.toTopic === topics[j].id) && r.relationshipType === 'co_occurs');
+                const existing = this.topicRelationships
+                    ?.getRelationshipsForTopic(topics[i].id)
+                    .find(
+                        (r) =>
+                            (r.fromTopic === topics[j].id ||
+                                r.toTopic === topics[j].id) &&
+                            r.relationshipType === "co_occurs",
+                    );
 
-                const sourceUrls = existing?.sourceUrls ? JSON.parse(existing.sourceUrls) : [];
+                const sourceUrls = existing?.sourceUrls
+                    ? JSON.parse(existing.sourceUrls)
+                    : [];
                 sourceUrls.push(newWebsite.metadata.url);
 
-                const cooccurrenceCount = (existing?.cooccurrenceCount || 0) + 1;
+                const cooccurrenceCount =
+                    (existing?.cooccurrenceCount || 0) + 1;
                 const strength = Math.min(cooccurrenceCount / 10, 1.0);
 
                 this.topicRelationships?.upsertRelationship({
                     fromTopic: topics[i].id,
                     toTopic: topics[j].id,
-                    relationshipType: 'co_occurs',
+                    relationshipType: "co_occurs",
                     strength,
                     sourceUrls: JSON.stringify(sourceUrls),
                     cooccurrenceCount,
@@ -2916,18 +2944,26 @@ export class WebsiteCollection
         const now = new Date().toISOString();
 
         for (const correlation of correlations) {
-            const fromTopicId = this.findTopicIdByName(hierarchy, correlation.topic);
+            const fromTopicId = this.findTopicIdByName(
+                hierarchy,
+                correlation.topic,
+            );
 
             for (const relatedTopic of correlation.relatedTopics) {
-                const toTopicId = this.findTopicIdByName(hierarchy, relatedTopic);
+                const toTopicId = this.findTopicIdByName(
+                    hierarchy,
+                    relatedTopic,
+                );
 
                 if (fromTopicId && toTopicId) {
                     this.topicRelationships?.upsertRelationship({
                         fromTopic: fromTopicId,
                         toTopic: toTopicId,
-                        relationshipType: 'correlated',
+                        relationshipType: "correlated",
                         strength: correlation.strength || 0.7,
-                        metadata: JSON.stringify({ context: correlation.context }),
+                        metadata: JSON.stringify({
+                            context: correlation.context,
+                        }),
                         sourceUrls: JSON.stringify([website.metadata.url]),
                         firstSeen: now,
                         lastSeen: now,
@@ -2938,10 +2974,14 @@ export class WebsiteCollection
         }
     }
 
-    private findTopicIdByName(hierarchy: any, topicName: string): string | null {
-        const topicMap = hierarchy.topicMap instanceof Map
-            ? hierarchy.topicMap
-            : new Map(Object.entries(hierarchy.topicMap));
+    private findTopicIdByName(
+        hierarchy: any,
+        topicName: string,
+    ): string | null {
+        const topicMap =
+            hierarchy.topicMap instanceof Map
+                ? hierarchy.topicMap
+                : new Map(Object.entries(hierarchy.topicMap));
 
         for (const [id, topic] of topicMap) {
             if (topic.name === topicName) {
@@ -2956,30 +2996,47 @@ export class WebsiteCollection
         if (!topic) return;
 
         const websites = this.getWebsites();
-        const documentsWithTopic = websites.filter(w => {
+        const documentsWithTopic = websites.filter((w) => {
             const hierarchy = (w.knowledge as any)?.topicHierarchy;
             if (!hierarchy) return false;
             const topics = this.flattenTopicHierarchy(hierarchy);
-            return topics.some(t => t.id === topicId);
+            return topics.some((t) => t.id === topicId);
         });
 
-        const domains = new Set(documentsWithTopic.map(w => w.metadata.domain)).size;
-        const relationships = this.topicRelationships?.getRelationshipsForTopic(topicId) || [];
-        const strongRelationships = relationships.filter(r => r.strength > 0.7).length;
+        const domains = new Set(
+            documentsWithTopic.map((w) => w.metadata.domain),
+        ).size;
+        const relationships =
+            this.topicRelationships?.getRelationshipsForTopic(topicId) || [];
+        const strongRelationships = relationships.filter(
+            (r) => r.strength > 0.7,
+        ).length;
 
-        const entityRelations = this.topicEntityRelations?.getEntitiesForTopic(topicId) || [];
+        const entityRelations =
+            this.topicEntityRelations?.getEntitiesForTopic(topicId) || [];
         const topEntities = entityRelations
             .sort((a, b) => b.relevance - a.relevance)
             .slice(0, 10)
-            .map(r => r.entityName);
+            .map((r) => r.entityName);
 
         const dates = documentsWithTopic
-            .map(d => new Date(d.metadata.visitDate || d.metadata.bookmarkDate || new Date()))
+            .map(
+                (d) =>
+                    new Date(
+                        d.metadata.visitDate ||
+                            d.metadata.bookmarkDate ||
+                            new Date(),
+                    ),
+            )
             .sort();
 
-        const activityPeriod = dates.length > 1
-            ? Math.floor((dates[dates.length - 1].getTime() - dates[0].getTime()) / (1000 * 60 * 60 * 24))
-            : 0;
+        const activityPeriod =
+            dates.length > 1
+                ? Math.floor(
+                      (dates[dates.length - 1].getTime() - dates[0].getTime()) /
+                          (1000 * 60 * 60 * 24),
+                  )
+                : 0;
 
         const metricsData: any = {
             topicId,
@@ -3005,5 +3062,4 @@ export class WebsiteCollection
 
         this.topicMetrics?.upsertMetrics(metricsData);
     }
-
 }

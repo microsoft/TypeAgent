@@ -297,7 +297,9 @@ class EntityGraphView {
         }
 
         // Entity Graph breadcrumb link - navigate to global view
-        const entityGraphBreadcrumb = document.getElementById("entityGraphBreadcrumb");
+        const entityGraphBreadcrumb = document.getElementById(
+            "entityGraphBreadcrumb",
+        );
         if (entityGraphBreadcrumb) {
             entityGraphBreadcrumb.addEventListener("click", (e) => {
                 e.preventDefault();

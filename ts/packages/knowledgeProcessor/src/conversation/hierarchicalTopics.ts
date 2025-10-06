@@ -193,8 +193,11 @@ async function categorizeTopicsIntoHierarchy(
 
     // Build context from fragment texts for LLM analysis
     const fragmentContext = fragmentExtractions
-        .filter(f => f.fragmentText)
-        .map(f => `Topics: ${f.topics.join(", ")}\nContext: ${f.fragmentText?.substring(0, 500)}`)
+        .filter((f) => f.fragmentText)
+        .map(
+            (f) =>
+                `Topics: ${f.topics.join(", ")}\nContext: ${f.fragmentText?.substring(0, 500)}`,
+        )
         .join("\n\n");
 
     // Use LLM to categorize topics into hierarchy
@@ -280,7 +283,8 @@ Example:
                     maxDepth = Math.max(maxDepth, 1);
 
                     // Add grandchildren if present
-                    const grandchildrenForThisChild = rootData.grandchildren?.[childName] || [];
+                    const grandchildrenForThisChild =
+                        rootData.grandchildren?.[childName] || [];
                     for (const grandchildName of grandchildrenForThisChild) {
                         const grandchildTopic: HierarchicalTopic = {
                             id: generateTopicId(grandchildName, 2),

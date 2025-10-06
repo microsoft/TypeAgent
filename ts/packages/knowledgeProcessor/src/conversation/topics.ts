@@ -16,7 +16,10 @@ import {
     TypeChatLanguageModel,
     createJsonTranslator,
 } from "typechat";
-import { AggregateTopicResponse, HierarchicalTopicResponse } from "./aggregateTopicSchema.js";
+import {
+    AggregateTopicResponse,
+    HierarchicalTopicResponse,
+} from "./aggregateTopicSchema.js";
 import { TextIndex, TextIndexSettings } from "../textIndex.js";
 import path from "path";
 import {

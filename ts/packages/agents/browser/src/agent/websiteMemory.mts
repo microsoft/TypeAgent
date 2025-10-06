@@ -430,10 +430,13 @@ export async function importWebsiteDataFromSession(
                     const input: ExtractionInput = {
                         url: site.metadata.url,
                         title: site.metadata.title || site.metadata.url,
-                        source: (type === "bookmarks" ? "bookmark" : "history") as "bookmark" | "history",
+                        source: (type === "bookmarks"
+                            ? "bookmark"
+                            : "history") as "bookmark" | "history",
                     };
 
-                    const timestamp = site.metadata.visitDate || site.metadata.bookmarkDate;
+                    const timestamp =
+                        site.metadata.visitDate || site.metadata.bookmarkDate;
                     if (timestamp) {
                         input.timestamp = timestamp;
                     }
@@ -445,18 +448,28 @@ export async function importWebsiteDataFromSession(
 
                     if (fetchResult.html) {
                         try {
-                            const markdown = tp.htmlToMarkdown(fetchResult.html);
+                            const markdown = tp.htmlToMarkdown(
+                                fetchResult.html,
+                            );
                             input.textContent = markdown.trim();
                         } catch (error) {
-                            debug(`Failed to convert HTML to markdown for ${site.metadata.url}:`, error);
+                            debug(
+                                `Failed to convert HTML to markdown for ${site.metadata.url}:`,
+                                error,
+                            );
                         }
                     } else {
-                        debug(`Failed to fetch content for ${site.metadata.url}: ${fetchResult.error}`);
+                        debug(
+                            `Failed to fetch content for ${site.metadata.url}: ${fetchResult.error}`,
+                        );
                     }
 
                     contentInputs.push(input);
 
-                    if ((i + 1) % 10 === 0 || i === metadataWebsites.length - 1) {
+                    if (
+                        (i + 1) % 10 === 0 ||
+                        i === metadataWebsites.length - 1
+                    ) {
                         logStructuredProgress(
                             i + 1,
                             metadataWebsites.length,
@@ -472,7 +485,8 @@ export async function importWebsiteDataFromSession(
                     const extractor = createContentExtractor(
                         {
                             mode: extractionMode,
-                            knowledgeExtractor: importOptions.knowledgeExtractor,
+                            knowledgeExtractor:
+                                importOptions.knowledgeExtractor,
                             timeout: importOptions.contentTimeout || 10000,
                             maxConcurrentExtractions:
                                 importOptions.maxConcurrent || 5,
@@ -481,9 +495,13 @@ export async function importWebsiteDataFromSession(
                     );
 
                     // Use BatchProcessor for efficient processing
-                    const batchProcessor = new website.BatchProcessor(extractor);
+                    const batchProcessor = new website.BatchProcessor(
+                        extractor,
+                    );
 
-                    const extractionProgressCallback = (progress: BatchProgress) => {
+                    const extractionProgressCallback = (
+                        progress: BatchProgress,
+                    ) => {
                         logStructuredProgress(
                             progress.processed,
                             progress.total,
@@ -607,9 +625,13 @@ export async function importWebsiteDataFromSession(
             );
 
             try {
-                const topicsCount = chunk.filter(site => site.knowledge?.topics?.length > 0).length;
+                const topicsCount = chunk.filter(
+                    (site) => site.knowledge?.topics?.length > 0,
+                ).length;
                 if (topicsCount > 0) {
-                    await context.agentContext.websiteCollection.updateHierarchicalTopics(chunk);
+                    await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                        chunk,
+                    );
                     debug(
                         `Updated hierarchical topics for ${topicsCount} websites in chunk ${chunkIndex}/${totalChunks}`,
                     );
@@ -1089,9 +1111,13 @@ export async function importHtmlFolderFromSession(
                 );
 
                 try {
-                    const topicsCount = chunk.filter(site => site.knowledge?.topics?.length > 0).length;
+                    const topicsCount = chunk.filter(
+                        (site) => site.knowledge?.topics?.length > 0,
+                    ).length;
                     if (topicsCount > 0) {
-                        await context.agentContext.websiteCollection.updateHierarchicalTopics(chunk);
+                        await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                            chunk,
+                        );
                         debug(
                             `Updated hierarchical topics for ${topicsCount} websites in chunk ${chunkIndex}/${totalChunks}`,
                         );

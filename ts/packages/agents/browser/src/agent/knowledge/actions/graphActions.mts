@@ -1708,14 +1708,20 @@ export async function getHierarchicalTopics(
             // Add lateral relationships from topic relationships table
             if (websiteCollection.topicRelationships) {
                 try {
-                    const topicIds = new Set(topics.map(t => t.topicId));
+                    const topicIds = new Set(topics.map((t) => t.topicId));
                     const lateralRels: any[] = [];
 
                     for (const topicId of topicIds) {
-                        const rels = websiteCollection.topicRelationships.getRelationshipsForTopic(topicId);
+                        const rels =
+                            websiteCollection.topicRelationships.getRelationshipsForTopic(
+                                topicId,
+                            );
                         for (const rel of rels) {
                             // Only include if both topics are in our filtered set
-                            if (topicIds.has(rel.fromTopic) && topicIds.has(rel.toTopic)) {
+                            if (
+                                topicIds.has(rel.fromTopic) &&
+                                topicIds.has(rel.toTopic)
+                            ) {
                                 lateralRels.push({
                                     from: rel.fromTopic,
                                     to: rel.toTopic,
@@ -1736,7 +1742,10 @@ export async function getHierarchicalTopics(
                         }
                     }
                 } catch (error) {
-                    console.warn("Failed to load lateral topic relationships:", error);
+                    console.warn(
+                        "Failed to load lateral topic relationships:",
+                        error,
+                    );
                 }
             }
         }
@@ -1817,7 +1826,9 @@ export async function getTopicMetrics(
             };
         }
 
-        const metrics = websiteCollection.topicMetrics.getMetrics(parameters.topicId);
+        const metrics = websiteCollection.topicMetrics.getMetrics(
+            parameters.topicId,
+        );
 
         if (!metrics) {
             return {

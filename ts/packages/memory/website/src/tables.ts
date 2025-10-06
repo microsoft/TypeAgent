@@ -486,22 +486,32 @@ export class HierarchicalTopicTable extends ms.sqlite.SqliteDataFrame {
         return stmt.get(topicId) as HierarchicalTopicRecord | undefined;
     }
 
-    public getChildByName(topicName: string, parentTopicId: string): HierarchicalTopicRecord | undefined {
+    public getChildByName(
+        topicName: string,
+        parentTopicId: string,
+    ): HierarchicalTopicRecord | undefined {
         const stmt = this.db.prepare(`
             SELECT * FROM hierarchicalTopics
             WHERE topicName = ? AND parentTopicId = ?
             LIMIT 1
         `);
-        return stmt.get(topicName, parentTopicId) as HierarchicalTopicRecord | undefined;
+        return stmt.get(topicName, parentTopicId) as
+            | HierarchicalTopicRecord
+            | undefined;
     }
 
-    public getTopicByName(topicName: string, level: number): HierarchicalTopicRecord | undefined {
+    public getTopicByName(
+        topicName: string,
+        level: number,
+    ): HierarchicalTopicRecord | undefined {
         const stmt = this.db.prepare(`
             SELECT * FROM hierarchicalTopics
             WHERE topicName = ? AND level = ?
             LIMIT 1
         `);
-        return stmt.get(topicName, level) as HierarchicalTopicRecord | undefined;
+        return stmt.get(topicName, level) as
+            | HierarchicalTopicRecord
+            | undefined;
     }
 
     public deleteTopicsByUrl(url: string): void {
@@ -584,25 +594,38 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
         TopicRelationshipTable.ensureTable(db);
 
-        super(db, "topicRelationships", [
-            ["fromTopic", { type: "string" }],
-            ["toTopic", { type: "string" }],
-            ["relationshipType", { type: "string" }],
-            ["strength", { type: "number" }],
-            ["metadata", { type: "string", optional: true }],
-            ["sourceUrls", { type: "string", optional: true }],
-            ["cooccurrenceCount", { type: "number", optional: true }],
-            ["firstSeen", { type: "string", optional: true }],
-            ["lastSeen", { type: "string", optional: true }],
-            ["updated", { type: "string" }],
-        ], false);
+        super(
+            db,
+            "topicRelationships",
+            [
+                ["fromTopic", { type: "string" }],
+                ["toTopic", { type: "string" }],
+                ["relationshipType", { type: "string" }],
+                ["strength", { type: "number" }],
+                ["metadata", { type: "string", optional: true }],
+                ["sourceUrls", { type: "string", optional: true }],
+                ["cooccurrenceCount", { type: "number", optional: true }],
+                ["firstSeen", { type: "string", optional: true }],
+                ["lastSeen", { type: "string", optional: true }],
+                ["updated", { type: "string" }],
+            ],
+            false,
+        );
     }
 
     private static ensureTable(db: sqlite.Database): void {
         try {
-            const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='topicRelationships'").get() as { sql?: string } | undefined;
+            const tableInfo = db
+                .prepare(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='topicRelationships'",
+                )
+                .get() as { sql?: string } | undefined;
 
-            const needsRecreate = !tableInfo || !tableInfo.sql?.includes('UNIQUE (fromTopic, toTopic, relationshipType)');
+            const needsRecreate =
+                !tableInfo ||
+                !tableInfo.sql?.includes(
+                    "UNIQUE (fromTopic, toTopic, relationshipType)",
+                );
 
             if (needsRecreate) {
                 if (tableInfo) {
@@ -627,8 +650,7 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
                     )
                 `);
             }
-        } catch (error) {
-        }
+        } catch (error) {}
     }
 
     public getRelationshipsForTopic(topicId: string): TopicRelationship[] {
@@ -640,7 +662,10 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
         return stmt.all(topicId, topicId) as TopicRelationship[];
     }
 
-    public getStrongRelationships(topicId: string, minStrength: number = 0.7): TopicRelationship[] {
+    public getStrongRelationships(
+        topicId: string,
+        minStrength: number = 0.7,
+    ): TopicRelationship[] {
         const stmt = this.db.prepare(`
             SELECT * FROM topicRelationships
             WHERE (fromTopic = ? OR toTopic = ?) AND strength >= ?
@@ -713,31 +738,41 @@ export class TopicMetricsTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
         TopicMetricsTable.ensureTable(db);
 
-        super(db, "topicMetrics", [
-            ["topicId", { type: "string" }],
-            ["topicName", { type: "string" }],
-            ["documentCount", { type: "number" }],
-            ["domainCount", { type: "number" }],
-            ["degreeCentrality", { type: "number" }],
-            ["betweennessCentrality", { type: "number" }],
-            ["firstSeen", { type: "string", optional: true }],
-            ["lastSeen", { type: "string", optional: true }],
-            ["activityPeriod", { type: "number" }],
-            ["avgConfidence", { type: "number" }],
-            ["maxConfidence", { type: "number" }],
-            ["totalRelationships", { type: "number" }],
-            ["strongRelationships", { type: "number" }],
-            ["entityCount", { type: "number" }],
-            ["topEntities", { type: "string", optional: true }],
-            ["updated", { type: "string" }],
-        ], false);
+        super(
+            db,
+            "topicMetrics",
+            [
+                ["topicId", { type: "string" }],
+                ["topicName", { type: "string" }],
+                ["documentCount", { type: "number" }],
+                ["domainCount", { type: "number" }],
+                ["degreeCentrality", { type: "number" }],
+                ["betweennessCentrality", { type: "number" }],
+                ["firstSeen", { type: "string", optional: true }],
+                ["lastSeen", { type: "string", optional: true }],
+                ["activityPeriod", { type: "number" }],
+                ["avgConfidence", { type: "number" }],
+                ["maxConfidence", { type: "number" }],
+                ["totalRelationships", { type: "number" }],
+                ["strongRelationships", { type: "number" }],
+                ["entityCount", { type: "number" }],
+                ["topEntities", { type: "string", optional: true }],
+                ["updated", { type: "string" }],
+            ],
+            false,
+        );
     }
 
     private static ensureTable(db: sqlite.Database): void {
         try {
-            const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='topicMetrics'").get() as { sql?: string } | undefined;
+            const tableInfo = db
+                .prepare(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='topicMetrics'",
+                )
+                .get() as { sql?: string } | undefined;
 
-            const needsRecreate = !tableInfo || !tableInfo.sql?.includes('UNIQUE (topicId)');
+            const needsRecreate =
+                !tableInfo || !tableInfo.sql?.includes("UNIQUE (topicId)");
 
             if (needsRecreate) {
                 if (tableInfo) {
@@ -768,8 +803,7 @@ export class TopicMetricsTable extends ms.sqlite.SqliteDataFrame {
                     )
                 `);
             }
-        } catch (error) {
-        }
+        } catch (error) {}
     }
 
     public getMetrics(topicId: string): TopicMetrics | undefined {
@@ -838,7 +872,9 @@ export class TopicMetricsTable extends ms.sqlite.SqliteDataFrame {
     }
 
     public deleteMetrics(topicId: string): void {
-        const stmt = this.db.prepare(`DELETE FROM topicMetrics WHERE topicId = ?`);
+        const stmt = this.db.prepare(
+            `DELETE FROM topicMetrics WHERE topicId = ?`,
+        );
         stmt.run(topicId);
     }
 }

@@ -213,14 +213,17 @@ export class OffscreenContentProcessor {
             const response = await fetch(url, {
                 signal: controller.signal,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 },
             });
 
             clearTimeout(timeoutId);
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                throw new Error(
+                    `HTTP ${response.status}: ${response.statusText}`,
+                );
             }
 
             const htmlContent = await response.text();
@@ -334,8 +337,6 @@ export class OffscreenContentProcessor {
             };
         }
     }
-
-
 
     /**
      * Apply readability filter to extract main content
@@ -456,7 +457,6 @@ export class OffscreenContentProcessor {
         );
         return doc;
     }
-
 
     /**
      * Update UI status

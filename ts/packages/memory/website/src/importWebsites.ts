@@ -647,7 +647,10 @@ function createWebsiteWithKnowledge(
         enhancedVisitInfo.actionSummary = extractionResult.actionSummary;
 
     // Store rich metadata from unified processing
-    if (extractionResult.entityFacets && extractionResult.entityFacets.size > 0) {
+    if (
+        extractionResult.entityFacets &&
+        extractionResult.entityFacets.size > 0
+    ) {
         const facetsObj: Record<string, any[]> = {};
         for (const [entityName, facets] of extractionResult.entityFacets) {
             facetsObj[entityName] = facets;
@@ -655,8 +658,12 @@ function createWebsiteWithKnowledge(
         enhancedVisitInfo.entityFacets = facetsObj;
     }
 
-    if (extractionResult.topicCorrelations && extractionResult.topicCorrelations.length > 0) {
-        enhancedVisitInfo.topicCorrelations = extractionResult.topicCorrelations;
+    if (
+        extractionResult.topicCorrelations &&
+        extractionResult.topicCorrelations.length > 0
+    ) {
+        enhancedVisitInfo.topicCorrelations =
+            extractionResult.topicCorrelations;
     }
 
     if (extractionResult.temporalContext) {

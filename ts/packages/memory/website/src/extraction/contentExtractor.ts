@@ -137,7 +137,8 @@ export class ContentExtractor {
 
             const extractionTimestamp = new Date();
             const entityFacets = await this.generateEntityFacets(knowledge);
-            const topicCorrelations = await this.generateTopicCorrelations(knowledge);
+            const topicCorrelations =
+                await this.generateTopicCorrelations(knowledge);
 
             const wordCount = content.textContent?.split(/\s+/).length || 0;
 
@@ -558,7 +559,6 @@ export class ContentExtractor {
         }
 
         if (content.length <= maxChunkSize) {
-
             if (chunkProgressCallback) {
                 await chunkProgressCallback({
                     itemUrl,
@@ -577,7 +577,11 @@ export class ContentExtractor {
             }
 
             // For single-chunk content, still generate hierarchical topics
-            const aggregated = await this.aggregateChunkResults([result], [content], itemUrl);
+            const aggregated = await this.aggregateChunkResults(
+                [result],
+                [content],
+                itemUrl,
+            );
             return aggregated;
         }
 
@@ -654,7 +658,11 @@ export class ContentExtractor {
             }
         }
 
-        const aggregated = await this.aggregateChunkResults(chunkResults, chunkTexts, itemUrl);
+        const aggregated = await this.aggregateChunkResults(
+            chunkResults,
+            chunkTexts,
+            itemUrl,
+        );
 
         return aggregated;
     }
@@ -707,37 +715,41 @@ export class ContentExtractor {
             allActions.push(...(result.actions || []));
         });
 
-        const fragmentExtractions: kpLib.FragmentTopicExtraction[] = chunkResults.map(
-            (result, idx) => ({
+        const fragmentExtractions: kpLib.FragmentTopicExtraction[] =
+            chunkResults.map((result, idx) => ({
                 fragmentId: `chunk_${idx}`,
                 topics: result.topics,
                 fragmentText: chunkTexts[idx]?.substring(0, 2000), // Limit text to 2000 chars per chunk
                 confidence: 0.8,
                 extractionDate: new Date().toISOString(),
-            })
-        );
+            }));
 
         if (fragmentExtractions.length > 0 && itemUrl) {
             const model = this.knowledgeExtractor?.translator?.model;
             if (model) {
                 const topicExtractor = kpLib.createTopicExtractor(model);
-                const hierarchyExtractor = kpLib.createHierarchicalTopicExtractor(
-                    model,
-                    topicExtractor
-                );
+                const hierarchyExtractor =
+                    kpLib.createHierarchicalTopicExtractor(
+                        model,
+                        topicExtractor,
+                    );
 
                 try {
                     const domain = new URL(itemUrl).hostname;
-                    const hierarchyResponse = await hierarchyExtractor.extractHierarchicalTopics(
-                        fragmentExtractions,
-                        {
-                            url: itemUrl,
-                            domain: domain,
-                        }
-                    );
+                    const hierarchyResponse =
+                        await hierarchyExtractor.extractHierarchicalTopics(
+                            fragmentExtractions,
+                            {
+                                url: itemUrl,
+                                domain: domain,
+                            },
+                        );
 
                     if (hierarchyResponse.status === "Success") {
-                        aggregated.topics = hierarchyResponse.flatTopics.slice(0, 20);
+                        aggregated.topics = hierarchyResponse.flatTopics.slice(
+                            0,
+                            20,
+                        );
 
                         // Convert topicMap from Map to plain object for JSON serialization
                         const hierarchy = hierarchyResponse.hierarchy;
@@ -746,7 +758,8 @@ export class ContentExtractor {
                             topicMap: Object.fromEntries(hierarchy.topicMap),
                         };
 
-                        (aggregated as any).topicHierarchy = serializableHierarchy;
+                        (aggregated as any).topicHierarchy =
+                            serializableHierarchy;
                     }
                 } catch (error) {
                     // Fall back to frequency-based topic aggregation
@@ -871,5 +884,4 @@ export class ContentExtractor {
 
         return correlations;
     }
-
 }

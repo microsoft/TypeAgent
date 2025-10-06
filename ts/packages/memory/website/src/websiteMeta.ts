@@ -421,7 +421,15 @@ export function importWebsiteVisit(
         const chunks = Array.from(
             splitLargeTextIntoChunks(formattedContent, 2000, true),
         );
-        return new Website(meta, chunks, [], knowledge, undefined, undefined, false);
+        return new Website(
+            meta,
+            chunks,
+            [],
+            knowledge,
+            undefined,
+            undefined,
+            false,
+        );
     }
 
     return new Website(meta, content, [], knowledge);

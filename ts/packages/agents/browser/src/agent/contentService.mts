@@ -82,7 +82,11 @@ export class ContentService {
                     metadata: response.data.metadata || {},
                 };
             } else {
-                throw new Error(response?.data?.error || response?.error || "Browser download failed");
+                throw new Error(
+                    response?.data?.error ||
+                        response?.error ||
+                        "Browser download failed",
+                );
             }
         } catch (error: any) {
             debug(`Download error for ${url}:`, error);

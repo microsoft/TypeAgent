@@ -266,10 +266,13 @@ export async function indexWebPageContent(
             }
 
             try {
-                if (aggregatedResults.keyTopics?.length > 0 || aggregatedResults.topics?.length > 0) {
-                    await context.agentContext.websiteCollection.updateHierarchicalTopics([
-                        websiteObj,
-                    ]);
+                if (
+                    aggregatedResults.keyTopics?.length > 0 ||
+                    aggregatedResults.topics?.length > 0
+                ) {
+                    await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                        [websiteObj],
+                    );
                 }
             } catch (error) {
                 console.warn(
