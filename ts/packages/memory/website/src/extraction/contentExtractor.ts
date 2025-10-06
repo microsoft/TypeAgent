@@ -585,24 +585,8 @@ export class ContentExtractor {
         const chunkResults: kpLib.KnowledgeResponse[] = [];
         const chunkTexts: string[] = [];
 
-        // Create short URL identifier for log prefixing (handle concurrent processing)
-        const urlParts = (itemUrl || "unknown").split("/");
-        const urlId = urlParts[urlParts.length - 1] || urlParts[urlParts.length - 2] || "unknown";
-        const shortId = urlId.substring(0, 30);
-        const logPrefix = `[${shortId}]`;
-
-        console.log(`\n${"=".repeat(80)}`);
-        console.log(`${logPrefix} CHUNKED EXTRACTION`);
-        console.log(`${logPrefix} URL: ${itemUrl || "unknown"}`);
-        console.log(`${logPrefix} Total chunks: ${chunks.length}, Processing in batches of ${maxConcurrent}`);
-        console.log("=".repeat(80));
-
         for (let i = 0; i < chunks.length; i += maxConcurrent) {
             const batch = chunks.slice(i, i + maxConcurrent);
-            const batchNumber = Math.floor(i / maxConcurrent) + 1;
-            const totalBatches = Math.ceil(chunks.length / maxConcurrent);
-
-            console.log(`\n${logPrefix} BATCH ${batchNumber}/${totalBatches} (chunks ${i + 1}-${Math.min(i + maxConcurrent, chunks.length)})`);
 
             const batchPromises = batch.map((chunk, batchIndex) => {
                 const chunkIndex = i + batchIndex;
@@ -619,45 +603,6 @@ export class ContentExtractor {
                         if (result) {
                             chunkResults.push(result);
                             chunkTexts.push(chunk);
-                        }
-
-                        // Log chunk details (only first 5 batches to avoid spam)
-                        if (batchNumber <= 5) {
-                            console.log(`\n${logPrefix}   📄 CHUNK ${outcome.chunkIndex + 1}/${chunks.length}:`);
-                            console.log(`${logPrefix}   Text: ${outcome.chunk.substring(0, 300).replace(/\n/g, " ")}...`);
-
-                            if (outcome.result) {
-                                console.log(`${logPrefix}   📚 Topics (${outcome.result.topics?.length || 0}):`);
-                                outcome.result.topics?.slice(0, 8).forEach((topic, idx) => {
-                                    console.log(`${logPrefix}     ${idx + 1}. ${topic}`);
-                                });
-                                if ((outcome.result.topics?.length || 0) > 8) {
-                                    console.log(`${logPrefix}     ... and ${outcome.result.topics.length - 8} more`);
-                                }
-
-                                console.log(`${logPrefix}   🏷️  Entities (${outcome.result.entities?.length || 0}):`);
-                                outcome.result.entities?.slice(0, 5).forEach((entity, idx) => {
-                                    console.log(`${logPrefix}     ${idx + 1}. ${entity.name} [${entity.type?.join(", ")}]`);
-                                    if (entity.facets && entity.facets.length > 0) {
-                                        const facetStr = entity.facets.slice(0, 3).map(f => `${f.name}:${f.value}`).join(", ");
-                                        console.log(`${logPrefix}        ${facetStr}`);
-                                    }
-                                });
-                                if ((outcome.result.entities?.length || 0) > 5) {
-                                    console.log(`${logPrefix}     ... and ${outcome.result.entities.length - 5} more`);
-                                }
-
-                                console.log(`${logPrefix}   ⚡ Actions (${outcome.result.actions?.length || 0}):`);
-                                outcome.result.actions?.slice(0, 3).forEach((action, idx) => {
-                                    const verbs = action.verbs?.join("/") || "?";
-                                    console.log(`${logPrefix}     ${idx + 1}. ${action.subjectEntityName} → ${verbs} → ${action.objectEntityName}`);
-                                });
-                                if ((outcome.result.actions?.length || 0) > 3) {
-                                    console.log(`${logPrefix}     ... and ${outcome.result.actions.length - 3} more`);
-                                }
-                            } else {
-                                console.log(`${logPrefix}   ❌ No knowledge extracted from this chunk`);
-                            }
                         }
 
                         if (chunkProgressCallback) {
@@ -683,9 +628,8 @@ export class ContentExtractor {
                             chunkIndex,
                         };
 
-                        console.warn(
-                            `Chunk ${outcome.chunkIndex} extraction failed:`,
-                            error,
+                        debug(
+                            `Chunk ${outcome.chunkIndex} extraction failed: ${error}`,
                         );
                         if (chunkProgressCallback) {
                             await chunkProgressCallback({
@@ -703,12 +647,7 @@ export class ContentExtractor {
                     });
             });
 
-            const batchResults = await Promise.allSettled(batchPromises);
-
-            if (batchNumber <= 5) {
-                const successCount = batchResults.filter(r => r.status === 'fulfilled').length;
-                console.log(`\n${logPrefix} ✅ Batch ${batchNumber} completed: ${successCount}/${batch.length} chunks successful`);
-            }
+            await Promise.allSettled(batchPromises);
 
             if (i + maxConcurrent < chunks.length) {
                 await new Promise((resolve) => setTimeout(resolve, 100));
@@ -716,15 +655,6 @@ export class ContentExtractor {
         }
 
         const aggregated = await this.aggregateChunkResults(chunkResults, chunkTexts, itemUrl);
-
-        console.log(`\n${"=".repeat(80)}`);
-        console.log(`${logPrefix} AGGREGATED RESULTS`);
-        console.log(`${logPrefix} Processed ${chunks.length} chunks`);
-        console.log(`${logPrefix} 📊 Final counts:`);
-        console.log(`${logPrefix}   Topics: ${aggregated.topics?.length || 0}`);
-        console.log(`${logPrefix}   Entities: ${aggregated.entities?.length || 0}`);
-        console.log(`${logPrefix}   Actions: ${aggregated.actions?.length || 0}`);
-        console.log("=".repeat(80) + "\n");
 
         return aggregated;
     }

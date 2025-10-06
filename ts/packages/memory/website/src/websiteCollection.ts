@@ -2313,10 +2313,6 @@ export class WebsiteCollection
 
         let globalHierarchy: any | undefined;
 
-        console.log(`\n${"=".repeat(80)}`);
-        console.log(`TOPIC HIERARCHY UPDATE - ${newWebsites.length} websites`);
-        console.log(`${"=".repeat(80)}`);
-
         for (const website of newWebsites) {
             const docHierarchy = (website.knowledge as any)?.topicHierarchy as any | undefined;
 
@@ -2324,18 +2320,12 @@ export class WebsiteCollection
                 continue;
             }
 
-            console.log(`\n📄 Document: ${website.metadata.url}`);
-            console.log(`  Topics: ${docHierarchy.totalTopics}, Max depth: ${docHierarchy.maxDepth}`);
-            console.log(`  Root topics: ${docHierarchy.rootTopics.map((t: any) => t.name).join(", ")}`);
-
             if (!globalHierarchy) {
-                // First hierarchy - convert topicMap to Map if needed
                 let topicMap: Map<string, any>;
 
                 if (docHierarchy.topicMap instanceof Map) {
                     topicMap = docHierarchy.topicMap;
                 } else if (typeof docHierarchy.topicMap === 'object' && docHierarchy.topicMap !== null) {
-                    // Plain object from JSON deserialization
                     topicMap = new Map(Object.entries(docHierarchy.topicMap));
                 } else {
                     topicMap = new Map();
@@ -2351,29 +2341,17 @@ export class WebsiteCollection
         }
 
         if (!globalHierarchy) {
-            console.log(`\n⚠️  No hierarchies found in new websites`);
-            console.log("=".repeat(80) + "\n");
             return;
         }
-
-        console.log(`\n📊 MERGED HIERARCHY:`);
-        console.log(`  Total topics: ${globalHierarchy.totalTopics}`);
-        console.log(`  Max depth: ${globalHierarchy.maxDepth}`);
-        console.log(`  Root topics: ${globalHierarchy.rootTopics.length}`);
 
         try {
             for (const rootTopic of globalHierarchy.rootTopics) {
                 await this.storeTopicHierarchyRecursive(rootTopic, globalHierarchy.topicMap);
             }
-
-            console.log(`\n✅ Hierarchy update completed successfully`);
-            console.log("=".repeat(80) + "\n");
         } catch (error) {
             debug(
                 `[Knowledge Graph] Error updating hierarchical topics: ${error}`,
             );
-            console.error(`\n❌ Error updating hierarchical topics: ${error}`);
-            console.log("=".repeat(80) + "\n");
         }
     }
 
