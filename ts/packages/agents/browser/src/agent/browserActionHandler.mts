@@ -636,6 +636,7 @@ async function processBrowserAgentMessage(
         case "getGlobalImportanceLayer":
         case "getImportanceStatistics":
         case "getHierarchicalTopics":
+        case "getTopicMetrics":
         case "getViewportBasedNeighborhood": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,

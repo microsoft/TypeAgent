@@ -154,6 +154,16 @@ export async function buildKnowledgeGraph(
 
         debug("[Knowledge Graph] Build completed:", stats);
 
+        // Invalidate cache after graph build
+        setGraphCache(websiteCollection, {
+            entities: [],
+            relationships: [],
+            communities: [],
+            entityMetrics: [],
+            lastUpdated: 0,
+            isValid: false,
+        });
+
         return {
             success: true,
             message: `Knowledge graph build completed in ${timeElapsed}ms`,
@@ -202,6 +212,16 @@ export async function rebuildKnowledgeGraph(
 
         // Rebuild the knowledge graph
         await websiteCollection.buildGraph();
+
+        // Invalidate cache after graph rebuild
+        setGraphCache(websiteCollection, {
+            entities: [],
+            relationships: [],
+            communities: [],
+            entityMetrics: [],
+            lastUpdated: 0,
+            isValid: false,
+        });
 
         return {
             success: true,
@@ -1680,10 +1700,45 @@ export async function getHierarchicalTopics(
             );
         }
 
-        // Build relationships from parent-child structure
+        // Build relationships from parent-child structure and lateral relationships
         let relationships: any[] = [];
         if (parameters.includeRelationships !== false) {
             relationships = buildTopicRelationships(topics);
+
+            // Add lateral relationships from topic relationships table
+            if (websiteCollection.topicRelationships) {
+                try {
+                    const topicIds = new Set(topics.map(t => t.topicId));
+                    const lateralRels: any[] = [];
+
+                    for (const topicId of topicIds) {
+                        const rels = websiteCollection.topicRelationships.getRelationshipsForTopic(topicId);
+                        for (const rel of rels) {
+                            // Only include if both topics are in our filtered set
+                            if (topicIds.has(rel.fromTopic) && topicIds.has(rel.toTopic)) {
+                                lateralRels.push({
+                                    from: rel.fromTopic,
+                                    to: rel.toTopic,
+                                    type: rel.relationshipType,
+                                    strength: rel.strength,
+                                });
+                            }
+                        }
+                    }
+
+                    // Deduplicate lateral relationships
+                    const relKeys = new Set<string>();
+                    for (const rel of lateralRels) {
+                        const key = `${rel.from}|${rel.to}|${rel.type}`;
+                        if (!relKeys.has(key)) {
+                            relKeys.add(key);
+                            relationships.push(rel);
+                        }
+                    }
+                } catch (error) {
+                    console.warn("Failed to load lateral topic relationships:", error);
+                }
+            }
         }
 
         // Calculate max depth
@@ -1730,4 +1785,56 @@ function buildTopicRelationships(topics: any[]): any[] {
     }
 
     return relationships;
+}
+
+/**
+ * Get topic metrics for a specific topic
+ */
+export async function getTopicMetrics(
+    parameters: {
+        topicId: string;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    metrics?: any;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        if (!websiteCollection.topicMetrics) {
+            return {
+                success: false,
+                error: "Topic metrics not available",
+            };
+        }
+
+        const metrics = websiteCollection.topicMetrics.getMetrics(parameters.topicId);
+
+        if (!metrics) {
+            return {
+                success: false,
+                error: "Topic metrics not found for this topic",
+            };
+        }
+
+        return {
+            success: true,
+            metrics,
+        };
+    } catch (error) {
+        console.error("Error getting topic metrics:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
 }

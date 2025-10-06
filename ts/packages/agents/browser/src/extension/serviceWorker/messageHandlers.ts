@@ -474,6 +474,10 @@ export async function handleMessage(
             return await handleGetHierarchicalTopics(message);
         }
 
+        case "getTopicMetrics": {
+            return await handleGetTopicMetrics(message);
+        }
+
         case "hybridSearch": {
             return await handleHybridSearch(message);
         }
@@ -2190,6 +2194,43 @@ async function handleGetHierarchicalTopics(message: any): Promise<any> {
                 queryTime: 0,
                 source: "hierarchical_storage",
             },
+        };
+    }
+}
+
+/**
+ * Handle requests for topic metrics data
+ */
+async function handleGetTopicMetrics(message: any): Promise<any> {
+    try {
+        console.log("Fetching topic metrics from agent...");
+
+        const result = await sendActionToAgent({
+            actionName: "getTopicMetrics",
+            parameters: {
+                topicId: message.parameters?.topicId,
+            },
+        });
+
+        if (result && result.success !== false) {
+            return {
+                success: true,
+                metrics: result.metrics || {},
+            };
+        } else {
+            return {
+                success: false,
+                error: result?.error || "No topic metrics available",
+            };
+        }
+    } catch (error) {
+        console.error("Error fetching topic metrics:", error);
+        return {
+            success: false,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to fetch topic metrics",
         };
     }
 }

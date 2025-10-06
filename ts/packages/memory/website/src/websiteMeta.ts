@@ -34,6 +34,9 @@ export interface WebsiteVisitInfo {
     contentSummary?: string;
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
+    entityFacets?: Record<string, any[]>;
+    topicCorrelations?: any[];
+    temporalContext?: any;
 }
 
 export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
@@ -58,6 +61,9 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     public contentSummary?: string;
     public detectedActions?: DetectedAction[];
     public actionSummary?: ActionSummary;
+    public entityFacets?: Record<string, any[]>;
+    public topicCorrelations?: any[];
+    public temporalContext?: any;
 
     constructor(visitInfo: WebsiteVisitInfo) {
         this.url = visitInfo.url;
@@ -94,11 +100,17 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (visitInfo.contentSummary !== undefined)
             this.contentSummary = visitInfo.contentSummary;
 
-        // Action detection properties
         if (visitInfo.detectedActions !== undefined)
             this.detectedActions = visitInfo.detectedActions;
         if (visitInfo.actionSummary !== undefined)
             this.actionSummary = visitInfo.actionSummary;
+
+        if (visitInfo.entityFacets !== undefined)
+            this.entityFacets = visitInfo.entityFacets;
+        if (visitInfo.topicCorrelations !== undefined)
+            this.topicCorrelations = visitInfo.topicCorrelations;
+        if (visitInfo.temporalContext !== undefined)
+            this.temporalContext = visitInfo.temporalContext;
     }
 
     public get source() {

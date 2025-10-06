@@ -227,16 +227,20 @@ class TopicGraphView {
             childCount: this.countChildren(topic.topicId, data.topics),
         }));
 
-        // Build relationships from parent-child structure
-        const relationships = [];
-        for (const topic of data.topics) {
-            if (topic.parentTopicId) {
-                relationships.push({
-                    from: topic.parentTopicId,
-                    to: topic.topicId,
-                    type: "parent-child" as const,
-                    strength: topic.confidence || 0.8,
-                });
+        // Use relationships from backend if available, otherwise build from parent-child structure
+        let relationships = [];
+        if (data.relationships && data.relationships.length > 0) {
+            relationships = data.relationships;
+        } else {
+            for (const topic of data.topics) {
+                if (topic.parentTopicId) {
+                    relationships.push({
+                        from: topic.parentTopicId,
+                        to: topic.topicId,
+                        type: "parent-child" as const,
+                        strength: topic.confidence || 0.8,
+                    });
+                }
             }
         }
 
@@ -656,6 +660,20 @@ class TopicGraphView {
                     <span class="topic-confidence">${Math.round(topic.confidence * 100)}% confidence</span>
                 </div>
 
+                <div class="topic-timeline">
+                    <h6>Timeline</h6>
+                    <div class="timeline-info">
+                        <div class="timeline-item">
+                            <span class="timeline-label">First Seen:</span>
+                            <span id="topicFirstSeen" class="timeline-value">Loading...</span>
+                        </div>
+                        <div class="timeline-item">
+                            <span class="timeline-label">Last Seen:</span>
+                            <span id="topicLastSeen" class="timeline-value">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="topic-keywords">
                     <h6>Keywords</h6>
                     <div class="keyword-tags">
@@ -691,8 +709,61 @@ class TopicGraphView {
             </div>
         `;
 
-        // Show the sidebar when a topic is selected
         this.state.sidebarOpen = true;
+
+        this.loadTopicMetrics(topic.id);
+    }
+
+    private async loadTopicMetrics(topicId: string): Promise<void> {
+        try {
+            const result = await this.extensionService.sendMessage({
+                type: "getTopicMetrics",
+                parameters: { topicId },
+            });
+
+            if (result && result.success) {
+                const metrics = result.metrics;
+                const firstSeenEl = document.getElementById("topicFirstSeen");
+                const lastSeenEl = document.getElementById("topicLastSeen");
+
+                if (firstSeenEl) {
+                    firstSeenEl.textContent = metrics.firstSeen
+                        ? this.formatDate(metrics.firstSeen)
+                        : "-";
+                }
+
+                if (lastSeenEl) {
+                    lastSeenEl.textContent = metrics.lastSeen
+                        ? this.formatDate(metrics.lastSeen)
+                        : "-";
+                }
+            }
+        } catch (error) {
+            console.error("Error loading topic metrics:", error);
+            const firstSeenEl = document.getElementById("topicFirstSeen");
+            const lastSeenEl = document.getElementById("topicLastSeen");
+            if (firstSeenEl) firstSeenEl.textContent = "-";
+            if (lastSeenEl) lastSeenEl.textContent = "-";
+        }
+    }
+
+    private formatDate(dateString: string | undefined | null): string {
+        if (!dateString) {
+            return "-";
+        }
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                return "-";
+            }
+            return date.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+            });
+        } catch {
+            return "-";
+        }
     }
 
     private handleSearch(): void {
