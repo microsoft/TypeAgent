@@ -100,14 +100,15 @@ async def build_index(context: EmailContext, args: list[str]):
     conversation = context.conversation
 
     # Turn this off .. currently throws
-    conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = False
+    auto_extract = conversation.settings.semantic_ref_index_settings.auto_extract_knowledge 
+    # conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = False
     try:
         auto_extract = conversation.settings.semantic_ref_index_settings.auto_extract_knowledge 
         print(Fore.GREEN, f"Building index, Auto-Extract={auto_extract}")
         await conversation.build_index()
         print(Fore.GREEN + "Built index.")
     finally:
-        conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = True
+        conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = auto_extract
 
 async def reset_index(context: EmailContext, args: list[str]):
     print(f"Deleting {context.db_path}")
