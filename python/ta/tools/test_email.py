@@ -19,7 +19,8 @@ from typeagent.emails.email_message import EmailMessage
 
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.storage.utils import create_storage_provider
-    
+            
+
 # Just simple test code
 # TODO : Once stable, move creation etc to utool.py
 async def main():
@@ -27,8 +28,9 @@ async def main():
     utils.load_dotenv()
 
     dbPath: str = "/data/testChat/knowpro/email/pyEmails.db"
-    print(f"Deleting {dbPath}")
-    delete_sqlite_db(dbPath)
+    
+    # print(f"Deleting {dbPath}")
+    # delete_sqlite_db(dbPath)
 
     settings = ConversationSettings()  # Has no storage provider yet
     settings.storage_provider = await create_storage_provider(
@@ -55,7 +57,7 @@ async def main():
         try:
             cmd = args[0].lower()
             if cmd == "@help":
-                print(handlers.keys())
+                print_list(Fore.GREEN, handlers.keys(), "Commands")
             else:
                 handler = handlers.get(cmd)
                 if handler:
