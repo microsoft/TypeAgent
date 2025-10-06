@@ -3,8 +3,10 @@
 
 import re
 from pathlib import Path
+from datetime import datetime
 
 from email import message_from_string
+from email.utils import parsedate_to_datetime
 from email.message import Message
 
 from .email_message import EmailMessage, EmailMessageMeta
@@ -43,7 +45,10 @@ def import_email_message(msg: Message) -> EmailMessage:
         cc = _import_address_headers(msg.get_all("Cc", [])),
         bcc = _import_address_headers(msg.get_all("Bcc", [])),
         subject=msg.get("Subject"))
-    timestamp = msg.get("Date", None)
+    timestamp: str | None = None
+    timestamp_date = msg.get("Date", None)
+    if timestamp_date is not None:
+        timestamp = parsedate_to_datetime(timestamp_date).isoformat()
 
     # Get email body. 
     # If the email was a reply, then ensure we only pick up the latest response

@@ -4,9 +4,7 @@
 import os
 from dataclasses import dataclass
 import json
-
 from pydantic.dataclasses import dataclass as pydantic_dataclass
-
 from ..knowpro import secindex
 from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
@@ -18,6 +16,7 @@ from ..knowpro.interfaces import (
     Term,
 )
 from ..storage.memory import semrefindex
+from typeagent.storage.sqlite.provider import SqliteStorageProvider
         
 from .email_message import EmailMessage
 
@@ -61,10 +60,12 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
     def create_settings() -> ConversationSettings:
         settings = ConversationSettings()
         settings.semantic_ref_index_settings.auto_extract_knowledge = True
+        
         return settings
     
     async def add_message(self, message: EmailMessage) -> None:    
         await self.messages.append(message)
+        self._commit()
 
     async def build_index(
         self,
@@ -79,8 +80,11 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
         ), "Settings must be initialized before building index"
 
         await add_synonyms_file_as_aliases(self, "emailVerbs.json")  
+        self._commit()
         await semrefindex.build_semantic_ref(self, self.settings)
+        self._commit()
         await secindex.build_transient_secondary_indexes(self, self.settings)
+        self._commit()
        
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[EmailMessage]:
         """Get secondary indexes, asserting they are initialized."""
@@ -88,7 +92,11 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             self.secondary_indexes is not None
         ), "Use await f.create() to create an initialized instance"
         return self.secondary_indexes
-
+    
+    def _commit(self):
+        provider = self.settings.storage_provider
+        if isinstance(provider, SqliteStorageProvider):
+            provider.db.commit()
 
 async def add_synonyms_file_as_aliases(conversation: IConversation, file_name: str) -> None:
     secondary_indexes = conversation.secondary_indexes
