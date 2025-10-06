@@ -20,6 +20,14 @@ from typeagent.emails.email_message import EmailMessage
 from typeagent.knowpro.convsettings import ConversationSettings
 from typeagent.storage.utils import create_storage_provider
             
+class EmailContext:
+    def __init__(self, db_path: str, conversation: EmailMemory) -> None:
+        self.db_path = db_path
+        self.conversation = conversation
+    
+    async def reset(self):
+        await self.conversation.settings.storage_provider.close()
+        self.conversation = await load_or_create_email_memory(self.db_path, create_new=False) 
 
 # Just simple test code
 # TODO : Once stable, move creation etc to utool.py
@@ -27,12 +35,16 @@ async def main():
 
     utils.load_dotenv()
 
-    db_path: str = "/data/testChat/knowpro/email/pyEmails.db"
-    conversation:EmailMemory = await load_or_create_email_memory(db_path, create_new=False)
+    db_path = "/data/testChat/knowpro/email/pyEmails.db"
+    context = EmailContext(
+        db_path,
+        conversation = await load_or_create_email_memory(db_path, create_new=False)
+    )
 
     handlers = {
         "@add": add_messages,
-        "@build": build_index
+        "@build_index": build_index,
+        "@reset_index": reset_index
     }
     while True:
         line = input("✉>>").strip()
@@ -51,7 +63,7 @@ async def main():
                 handler = handlers.get(cmd)
                 if handler:
                     args.pop(0)
-                    await handler(conversation, args)            
+                    await handler(context, args)            
         except Exception as e:
             print()
             print(Fore.RED, f"Error\n: {e}")
@@ -59,11 +71,12 @@ async def main():
 
         print(Fore.RESET)
 
-async def add_messages(conversation: EmailMemory, args: list[str]):
+async def add_messages(context: EmailContext, args: list[str]):
     if len(args) < 1:
         print_error("No path provided")
         return
     
+    conversation = context.conversation
     src_path = Path(args[0])
     emails: list[EmailMessage]
     if src_path.is_file():
@@ -83,11 +96,22 @@ async def add_messages(conversation: EmailMemory, args: list[str]):
         print("Adding email...")
         await conversation.add_message(email)
 
-async def build_index(conversation: EmailMemory, args: list[str]):
-    print(Fore.GREEN, "Building index")
-    await conversation.build_index()
-    print(Fore.GREEN + "Built index.")
+async def build_index(context: EmailContext, args: list[str]):
+    conversation = context.conversation
 
+    # Turn this off .. currently throws
+    conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = False
+    try:
+        auto_extract = conversation.settings.semantic_ref_index_settings.auto_extract_knowledge 
+        print(Fore.GREEN, f"Building index, Auto-Extract={auto_extract}")
+        await conversation.build_index()
+        print(Fore.GREEN + "Built index.")
+    finally:
+        conversation.settings.semantic_ref_index_settings.auto_extract_knowledge = True
+
+async def reset_index(context: EmailContext, args: list[str]):
+    print(f"Deleting {context.db_path}")
+    await context.reset()
 
 async def load_or_create_email_memory(db_path: str, create_new: bool) -> EmailMemory:
     if create_new:
@@ -95,6 +119,7 @@ async def load_or_create_email_memory(db_path: str, create_new: bool) -> EmailMe
         delete_sqlite_db(db_path)
 
     settings = EmailMemory.create_settings()
+    
     settings.storage_provider = await create_storage_provider(
     settings.message_text_index_settings,
     settings.related_term_index_settings,
