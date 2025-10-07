@@ -45,10 +45,10 @@ class EmailContext:
         self.db_path = base_path.joinpath(db_name)
         self.conversation = conversation
 
-    async def load_conversation(self, db_name: str):
+    async def load_conversation(self, db_name: str, create_new:bool = False):
         await self.conversation.settings.conversation_settings.storage_provider.close()
         self.db_path = self.base_path.joinpath(db_name)
-        self.conversation = await load_or_create_email_index(str(self.db_path), create_new=False) 
+        self.conversation = await load_or_create_email_index(str(self.db_path), create_new) 
 
     # Delete the current conversation and re-create it
     async def restart_conversation(self):
@@ -225,6 +225,7 @@ def _load_index_def() -> argparse.ArgumentParser:
         description="Load index at given db path"
     )
     cmdDef.add_argument("--name", type=str, default="", help="Name of the index to load")
+    cmdDef.add_argument("--new", type=bool, default=False)
     return cmdDef
 
 @command(_load_index_def())
@@ -238,7 +239,7 @@ async def load_index(context: EmailContext, args: list[str]):
     if not db_name.endswith(".db"):
         db_name += ".db"
     print(db_name)
-    await context.load_conversation(db_name)
+    await context.load_conversation(db_name, named_args.new)
 
 def _parse_messages_def() -> argparse.ArgumentParser:
     cmdDef = argparse.ArgumentParser(
