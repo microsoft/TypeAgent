@@ -88,19 +88,4 @@ export class BrowserContentExtractor extends website.ContentExtractor {
             !!this.contentService && this.contentService.isBrowserAvailable()
         );
     }
-
-    /**
-     * Get status of browser capabilities
-     */
-    getBrowserStatus(): any {
-        if (!this.contentService) {
-            return {
-                available: false,
-                webSocketConnected: false,
-                capabilities: [],
-            };
-        }
-
-        return this.contentService.getStatus();
-    }
 }

@@ -179,8 +179,11 @@ export interface ExtractionInput {
     htmlContent?: string;
     htmlFragments?: any[];
     textContent?: string;
+    docParts?: any[];
     source: "direct" | "index" | "bookmark" | "history" | "import";
     timestamp?: string;
+    metadata?: any;
+    isUnavailable?: boolean;
 }
 
 /**

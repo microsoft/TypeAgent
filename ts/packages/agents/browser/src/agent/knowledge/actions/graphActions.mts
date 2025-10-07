@@ -4,10 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
 import { searchByEntities } from "../../searchWebMemories.mjs";
-import {
-    GraphCache,
-    TopicGraphCache,
-} from "../types/knowledgeTypes.mjs";
+import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:knowledge:graph");
@@ -1169,9 +1166,7 @@ function setGraphCache(websiteCollection: any, cache: GraphCache): void {
 }
 
 // Topic graph cache storage attached to websiteCollection
-function getTopicGraphCache(
-    websiteCollection: any,
-): TopicGraphCache | null {
+function getTopicGraphCache(websiteCollection: any): TopicGraphCache | null {
     return (websiteCollection as any).__topicGraphCache || null;
 }
 
@@ -1193,9 +1188,7 @@ export function invalidateTopicCache(websiteCollection: any): void {
 }
 
 // Ensure topic graph data is cached for fast access
-async function ensureTopicGraphCache(
-    websiteCollection: any,
-): Promise<void> {
+async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
     const cache = getTopicGraphCache(websiteCollection);
 
     // Cache never expires - only invalidated on graph rebuild or knowledge import
@@ -1207,6 +1200,21 @@ async function ensureTopicGraphCache(
         // Fetch all topics from database
         const topics =
             websiteCollection.hierarchicalTopics?.getTopicHierarchy() || [];
+
+        // Enrich topics with entity references if available
+        if (websiteCollection.topicEntityRelations) {
+            for (const topic of topics) {
+                const entityRelations =
+                    websiteCollection.topicEntityRelations.getEntitiesForTopic(
+                        topic.topicId,
+                    );
+                // Add top entities (limit to 10 for performance)
+                topic.entityReferences = entityRelations
+                    .sort((a: any, b: any) => b.relevance - a.relevance)
+                    .slice(0, 10)
+                    .map((rel: any) => rel.entityName);
+            }
+        }
 
         // Build relationships from parent-child structure
         let relationships = buildTopicRelationships(topics);
@@ -1222,7 +1230,10 @@ async function ensureTopicGraphCache(
                         topicId,
                     );
                 for (const rel of rels) {
-                    if (topicIds.has(rel.fromTopic) && topicIds.has(rel.toTopic)) {
+                    if (
+                        topicIds.has(rel.fromTopic) &&
+                        topicIds.has(rel.toTopic)
+                    ) {
                         lateralRels.push({
                             from: rel.fromTopic,
                             to: rel.toTopic,
@@ -1254,7 +1265,6 @@ async function ensureTopicGraphCache(
 
         setTopicGraphCache(websiteCollection, newCache);
     } catch (error) {
-
         // Mark cache as invalid
         const existingCache = getTopicGraphCache(websiteCollection);
         if (existingCache) {
@@ -1805,8 +1815,7 @@ export async function getHierarchicalTopics(
 
             // Filter cached relationships to only include ones for visible topics
             relationships = cache.relationships.filter(
-                (rel: any) =>
-                    topicIds.has(rel.from) && topicIds.has(rel.to),
+                (rel: any) => topicIds.has(rel.from) && topicIds.has(rel.to),
             );
         }
 
@@ -1900,10 +1909,7 @@ function filterRelationshipsForClient(
         const fromCount = nodeCoOccursCount.get(rel.from) || 0;
         const toCount = nodeCoOccursCount.get(rel.to) || 0;
 
-        if (
-            fromCount >= maxCoOccursPerNode ||
-            toCount >= maxCoOccursPerNode
-        ) {
+        if (fromCount >= maxCoOccursPerNode || toCount >= maxCoOccursPerNode) {
             continue;
         }
 

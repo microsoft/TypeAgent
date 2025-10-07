@@ -382,6 +382,12 @@ async function updateBrowserContext(
                     debug(
                         `Extension client connected: ${client.id}, recreating externalBrowserControl`,
                     );
+
+                    // Dispose old RPC instance to prevent handler chaining
+                    if (context.agentContext.externalBrowserControl) {
+                        context.agentContext.externalBrowserControl.dispose();
+                    }
+
                     context.agentContext.externalBrowserControl =
                         createExternalBrowserClient(
                             context.agentContext.agentWebSocketServer!,
@@ -420,7 +426,7 @@ async function updateBrowserContext(
                 if (data.method) {
                     const browserControls = context.agentContext
                         .useExternalBrowserControl
-                        ? context.agentContext.externalBrowserControl
+                        ? context.agentContext.externalBrowserControl?.control
                         : context.agentContext.clientBrowserControl;
 
                     if (
@@ -460,7 +466,7 @@ async function updateBrowserContext(
         if (!context.agentContext.browserConnector) {
             const browserControls = context.agentContext
                 .useExternalBrowserControl
-                ? context.agentContext.externalBrowserControl
+                ? context.agentContext.externalBrowserControl?.control
                 : context.agentContext.clientBrowserControl;
 
             if (browserControls && context.agentContext.agentWebSocketServer) {

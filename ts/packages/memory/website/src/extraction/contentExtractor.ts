@@ -101,7 +101,8 @@ export class ContentExtractor {
                 mode !== "basic" &&
                 !content.htmlContent &&
                 !content.htmlFragments &&
-                content.url
+                content.url &&
+                !content.isUnavailable
             ) {
                 const fetchResult = await this.htmlFetcher.fetchHtml(
                     content.url,
@@ -114,6 +115,8 @@ export class ContentExtractor {
                         `Failed to fetch ${content.url}: ${fetchResult.error}`,
                     );
                 }
+            } else if (content.isUnavailable) {
+                debug(`Skipping fetch for unavailable URL: ${content.url}`);
             }
 
             // Validate AI availability for AI-powered modes
@@ -208,6 +211,23 @@ export class ContentExtractor {
         if (!this.knowledgeExtractor) {
             return this.extractBasicKnowledge(content);
         }
+
+        // Use pre-chunked docParts with Markdown structure if available
+        if (content.docParts && content.docParts.length > 0) {
+            debug(
+                `Using pre-chunked docParts: ${content.docParts.length} parts for ${content.url}`,
+            );
+            return this.extractFromDocParts(
+                content.docParts,
+                mode,
+                chunkProgressCallback,
+                content.url,
+            );
+        }
+
+        debug(
+            `No docParts available, falling back to text chunking for ${content.url}`,
+        );
 
         const textContent = content.textContent || content.title || "";
         if (!textContent) {
@@ -678,6 +698,85 @@ export class ContentExtractor {
         return Array.from(
             splitLargeTextIntoChunks(content, maxChunkSize, preserveStructure),
         );
+    }
+
+    /**
+     * Extract knowledge from pre-chunked DocParts with Markdown structure
+     */
+    private async extractFromDocParts(
+        docParts: any[],
+        mode: ExtractionMode,
+        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
+        itemUrl: string = "",
+    ): Promise<kpLib.KnowledgeResponse> {
+        if (!this.knowledgeExtractor) {
+            throw new Error("Knowledge extractor not available");
+        }
+
+        debug(
+            `[extractFromDocParts] Processing ${docParts.length} docParts for ${itemUrl}`,
+        );
+
+        const modeConfig = EXTRACTION_MODE_CONFIGS[mode];
+        const chunkResults: kpLib.KnowledgeResponse[] = [];
+        const chunkTexts: string[] = [];
+
+        const maxConcurrent = modeConfig.defaultConcurrentExtractions;
+
+        for (let i = 0; i < docParts.length; i += maxConcurrent) {
+            const batch = docParts.slice(i, i + maxConcurrent);
+
+            const batchPromises = batch.map((part, batchIndex) => {
+                const chunkIndex = i + batchIndex;
+                const chunkText =
+                    typeof part.textChunks === "string"
+                        ? part.textChunks
+                        : part.textChunks.join("\n\n");
+
+                return this.knowledgeExtractor!.extract(chunkText)
+                    .then(async (result) => {
+                        if (result) {
+                            chunkResults.push(result);
+                            chunkTexts.push(chunkText);
+
+                            // Merge pre-extracted knowledge from DocPart
+                            if (part.knowledge) {
+                                result.entities = [
+                                    ...(result.entities || []),
+                                    ...(part.knowledge.entities || []),
+                                ];
+                                result.topics = [
+                                    ...(result.topics || []),
+                                    ...(part.knowledge.topics || []),
+                                ];
+                            }
+                        }
+
+                        if (chunkProgressCallback) {
+                            await chunkProgressCallback({
+                                itemUrl,
+                                itemIndex: 0,
+                                chunkIndex,
+                                totalChunksInItem: docParts.length,
+                                globalChunkIndex: 0,
+                                totalChunksGlobal: 1,
+                                chunkContent: chunkText.substring(0, 100),
+                                chunkResult: result,
+                            });
+                        }
+
+                        return { success: true, result, chunkIndex };
+                    })
+                    .catch((error) => {
+                        debug(`Chunk ${chunkIndex} extraction failed:`, error);
+                        return { success: false, error, chunkIndex };
+                    });
+            });
+
+            await Promise.all(batchPromises);
+        }
+
+        return this.aggregateChunkResults(chunkResults, chunkTexts, itemUrl);
     }
 
     /**
