@@ -107,13 +107,31 @@ class TopicGraphView {
                 this.loadInitialData();
             });
 
-        // Entity clicks (navigate to entity graph)
+        // Entity clicks (navigate to entity graph) and topic action buttons
         document.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
+
+            // Handle entity item clicks
             if (target.classList.contains("entity-item")) {
                 const entityName = target.textContent?.trim();
                 if (entityName) {
                     this.navigateToEntityGraph(entityName);
+                }
+                return;
+            }
+
+            // Handle topic action buttons (expand/focus)
+            const button = target.closest("[data-action]") as HTMLElement;
+            if (button) {
+                const action = button.getAttribute("data-action");
+                const topicId = button.getAttribute("data-topic-id");
+
+                if (topicId) {
+                    if (action === "expand") {
+                        this.expandTopic(topicId);
+                    } else if (action === "focus") {
+                        this.focusOnTopic(topicId);
+                    }
                 }
             }
         });
@@ -138,11 +156,9 @@ class TopicGraphView {
         this.showLoading();
 
         try {
-            // Get topic parameter from URL
             const urlParams = new URLSearchParams(window.location.search);
             const topicParam = urlParams.get("topic");
 
-            // Load topic data from extension
             const topicData = await this.fetchTopicGraphData(topicParam);
 
             if (!topicData || topicData.topics.length === 0) {
@@ -150,14 +166,11 @@ class TopicGraphView {
                 return;
             }
 
-            // Initialize visualizer with data
             await this.visualizer?.init(topicData);
 
-            // Update UI
             this.updateGraphStats();
             this.hideLoading();
 
-            // Focus on specified topic if provided
             if (topicParam && topicData.centerTopic) {
                 this.visualizer?.focusOnTopic(topicData.centerTopic);
             }
@@ -221,7 +234,7 @@ class TopicGraphView {
             parentId: topic.parentTopicId,
             confidence: topic.confidence || 0.7,
             keywords: this.parseKeywords(topic.keywords),
-            entityReferences: [], // Could be populated from topic-entity relations
+            entityReferences: topic.entityReferences || [],
             childCount: this.countChildren(topic.topicId, data.topics),
         }));
 
@@ -824,10 +837,10 @@ class TopicGraphView {
                 </div>
 
                 <div class="topic-actions">
-                    <button class="btn btn-sm btn-primary" onclick="topicGraphView.expandTopic('${topic.id}')">
+                    <button class="btn btn-sm btn-primary" data-action="expand" data-topic-id="${topic.id}">
                         <i class="bi bi-plus-square"></i> Expand
                     </button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="topicGraphView.focusOnTopic('${topic.id}')">
+                    <button class="btn btn-sm btn-outline-primary" data-action="focus" data-topic-id="${topic.id}">
                         <i class="bi bi-bullseye"></i> Focus
                     </button>
                 </div>

@@ -21,7 +21,7 @@ import * as website from "website-memory";
 import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
-import * as tp from "textpro";
+import { docPartsFromHtml } from "conversation-memory";
 import {
     importProgressEvents,
     ImportProgressEvent,
@@ -121,11 +121,7 @@ import {
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./knowledge/browserKnowledgeExtractor.mjs";
 
-import {
-    createContentExtractor,
-    logProcessingStatus,
-    processHtmlFolder,
-} from "./websiteImport.mjs";
+import { createContentExtractor, processHtmlFolder } from "./websiteImport.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
 
@@ -311,9 +307,6 @@ export async function importWebsiteDataFromSession(
 
         const extractionMode = mode || "basic";
 
-        // Log processing status for debugging
-        logProcessingStatus(context);
-
         // Build options object with only defined values
         const importOptions: any = {};
         if (limit !== undefined) importOptions.limit = limit;
@@ -448,13 +441,24 @@ export async function importWebsiteDataFromSession(
 
                     if (fetchResult.html) {
                         try {
-                            const markdown = tp.htmlToMarkdown(
+                            const parts = docPartsFromHtml(
                                 fetchResult.html,
+                                false,
+                                importOptions.maxCharsPerChunk || 4000,
+                                site.metadata.url,
                             );
-                            input.textContent = markdown.trim();
+
+                            input.htmlContent = fetchResult.html;
+                            input.docParts = parts;
+
+                            if (parts.length > 0) {
+                                input.textContent = parts
+                                    .map((p: any) => p.textChunks)
+                                    .join("\n\n");
+                            }
                         } catch (error) {
                             debug(
-                                `Failed to convert HTML to markdown for ${site.metadata.url}:`,
+                                `Failed to process HTML for ${site.metadata.url}:`,
                                 error,
                             );
                         }
@@ -462,6 +466,14 @@ export async function importWebsiteDataFromSession(
                         debug(
                             `Failed to fetch content for ${site.metadata.url}: ${fetchResult.error}`,
                         );
+
+                        if (
+                            fetchResult.error?.includes("404") ||
+                            fetchResult.error?.includes("403") ||
+                            fetchResult.error?.includes("410")
+                        ) {
+                            input.isUnavailable = true;
+                        }
                     }
 
                     contentInputs.push(input);

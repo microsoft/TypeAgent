@@ -26,7 +26,7 @@ export class ContentService {
         ) {
             this.browserConnector = new BrowserConnector(
                 agentContext.agentWebSocketServer,
-                agentContext.externalBrowserControl,
+                agentContext.externalBrowserControl.control,
             );
             debug("Initialized with browser download capabilities");
         } else {
@@ -153,32 +153,6 @@ export class ContentService {
             !!this.browserConnector &&
             !!this.sessionContext?.agentContext.agentWebSocketServer
         );
-    }
-
-    /**
-     * Get status of browser capabilities
-     */
-    getStatus(): {
-        browserAvailable: boolean;
-        agentWebSocketServerConnected: boolean;
-        capabilities: string[];
-    } {
-        const agentWebSocketServerConnected =
-            !!this.sessionContext?.agentContext.agentWebSocketServer;
-        const browserAvailable = this.isBrowserAvailable();
-
-        return {
-            browserAvailable,
-            agentWebSocketServerConnected,
-            capabilities: browserAvailable
-                ? [
-                      "content-download",
-                      "html-processing",
-                      "authentication",
-                      "dynamic-content",
-                  ]
-                : [],
-        };
     }
 }
 

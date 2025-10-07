@@ -1601,21 +1601,58 @@ export class WebsiteCollection
         );
 
         // Build topic relationships and metrics
+        const topicRelationshipsStart = Date.now();
         const websites = this.getWebsites();
         const websitesToProcess = urlLimit
             ? websites.slice(0, urlLimit)
             : websites;
 
+        debug(
+            `[Knowledge Graph] Processing topic co-occurrences for ${websitesToProcess.length} websites`,
+        );
         for (const website of websitesToProcess) {
             await this.updateTopicCooccurrences(website);
             await this.storeTopicCorrelations(website);
         }
+        debug(
+            `[Knowledge Graph] Completed topic co-occurrences in ${Date.now() - topicRelationshipsStart}ms`,
+        );
+
+        const topicMetricsStart = Date.now();
         const allTopics = this.hierarchicalTopics?.getTopicHierarchy();
         if (allTopics) {
             const uniqueTopics = new Set(allTopics.map((t) => t.topicId));
-            for (const topicId of uniqueTopics) {
-                await this.updateTopicMetrics(topicId);
+            debug(
+                `[Knowledge Graph] Updating metrics for ${uniqueTopics.size} unique topics`,
+            );
+
+            // Build topic-to-websites index once for all topics (major optimization)
+            const topicToWebsites = new Map<string, Website[]>();
+            for (const website of websitesToProcess) {
+                const hierarchy = (website.knowledge as any)?.topicHierarchy;
+                if (hierarchy) {
+                    const topics = this.flattenTopicHierarchy(hierarchy);
+                    for (const topic of topics) {
+                        if (!topicToWebsites.has(topic.id)) {
+                            topicToWebsites.set(topic.id, []);
+                        }
+                        topicToWebsites.get(topic.id)!.push(website);
+                    }
+                }
             }
+            debug(
+                `[Knowledge Graph] Built topic-to-website index with ${topicToWebsites.size} topics`,
+            );
+
+            for (const topicId of uniqueTopics) {
+                await this.updateTopicMetrics(
+                    topicId,
+                    topicToWebsites.get(topicId) || [],
+                );
+            }
+            debug(
+                `[Knowledge Graph] Completed topic metrics in ${Date.now() - topicMetricsStart}ms`,
+            );
         }
 
         const totalTime = Date.now() - startTime;
@@ -2991,17 +3028,12 @@ export class WebsiteCollection
         return null;
     }
 
-    private async updateTopicMetrics(topicId: string): Promise<void> {
+    private async updateTopicMetrics(
+        topicId: string,
+        documentsWithTopic: Website[],
+    ): Promise<void> {
         const topic = this.hierarchicalTopics?.getTopicById(topicId);
         if (!topic) return;
-
-        const websites = this.getWebsites();
-        const documentsWithTopic = websites.filter((w) => {
-            const hierarchy = (w.knowledge as any)?.topicHierarchy;
-            if (!hierarchy) return false;
-            const topics = this.flattenTopicHierarchy(hierarchy);
-            return topics.some((t) => t.id === topicId);
-        });
 
         const domains = new Set(
             documentsWithTopic.map((w) => w.metadata.domain),
