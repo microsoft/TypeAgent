@@ -43,3 +43,5 @@ export {
     TemporalContext,
     ExtractionOptions,
 } from "./extraction/index.js";
+
+export { HtmlFetcher, FetchResult } from "./htmlFetcher.js";

@@ -34,6 +34,9 @@ export interface WebsiteVisitInfo {
     contentSummary?: string;
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
+    entityFacets?: Record<string, any[]>;
+    topicCorrelations?: any[];
+    temporalContext?: any;
 }
 
 export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
@@ -58,6 +61,9 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     public contentSummary?: string;
     public detectedActions?: DetectedAction[];
     public actionSummary?: ActionSummary;
+    public entityFacets?: Record<string, any[]>;
+    public topicCorrelations?: any[];
+    public temporalContext?: any;
 
     constructor(visitInfo: WebsiteVisitInfo) {
         this.url = visitInfo.url;
@@ -94,11 +100,17 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (visitInfo.contentSummary !== undefined)
             this.contentSummary = visitInfo.contentSummary;
 
-        // Action detection properties
         if (visitInfo.detectedActions !== undefined)
             this.detectedActions = visitInfo.detectedActions;
         if (visitInfo.actionSummary !== undefined)
             this.actionSummary = visitInfo.actionSummary;
+
+        if (visitInfo.entityFacets !== undefined)
+            this.entityFacets = visitInfo.entityFacets;
+        if (visitInfo.topicCorrelations !== undefined)
+            this.topicCorrelations = visitInfo.topicCorrelations;
+        if (visitInfo.temporalContext !== undefined)
+            this.temporalContext = visitInfo.temporalContext;
     }
 
     public get source() {
@@ -308,6 +320,7 @@ export class Website implements kp.IMessage {
     public tags: string[];
     public timestamp: string | undefined;
     public knowledge: kpLib.KnowledgeResponse | undefined;
+    public topicHierarchy: kpLib.TopicHierarchy | undefined;
     public deletionInfo: kp.DeletionInfo | undefined;
 
     constructor(
@@ -315,11 +328,13 @@ export class Website implements kp.IMessage {
         pageContent: string | string[],
         tags: string[] = [],
         knowledge?: kpLib.KnowledgeResponse | undefined,
+        topicHierarchy?: kpLib.TopicHierarchy | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
         isNew: boolean = true,
     ) {
         this.tags = tags;
         this.knowledge = knowledge;
+        this.topicHierarchy = topicHierarchy;
         this.deletionInfo = deletionInfo;
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
@@ -335,6 +350,7 @@ export class Website implements kp.IMessage {
         processedContent: string,
         tags: string[] = [],
         knowledge?: kpLib.KnowledgeResponse | undefined,
+        topicHierarchy?: kpLib.TopicHierarchy | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
     ): Website {
         let content = "";
@@ -355,6 +371,7 @@ export class Website implements kp.IMessage {
             chunks,
             tags,
             knowledge,
+            topicHierarchy,
             deletionInfo,
             false,
         );
@@ -404,7 +421,15 @@ export function importWebsiteVisit(
         const chunks = Array.from(
             splitLargeTextIntoChunks(formattedContent, 2000, true),
         );
-        return new Website(meta, chunks, [], knowledge, undefined, false);
+        return new Website(
+            meta,
+            chunks,
+            [],
+            knowledge,
+            undefined,
+            undefined,
+            false,
+        );
     }
 
     return new Website(meta, content, [], knowledge);

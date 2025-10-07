@@ -470,6 +470,14 @@ export async function handleMessage(
             return await handleSearchByTopics(message);
         }
 
+        case "getHierarchicalTopics": {
+            return await handleGetHierarchicalTopics(message);
+        }
+
+        case "getTopicMetrics": {
+            return await handleGetTopicMetrics(message);
+        }
+
         case "hybridSearch": {
             return await handleHybridSearch(message);
         }
@@ -2111,6 +2119,118 @@ async function handleHybridSearch(message: any): Promise<any> {
                 error instanceof Error ? error.message : "Hybrid search failed",
             searchMethod: "hybrid-direct",
             query: message.query || "",
+        };
+    }
+}
+
+/**
+ * Handle requests for hierarchical topic data
+ */
+async function handleGetHierarchicalTopics(message: any): Promise<any> {
+    try {
+        console.log("Fetching hierarchical topics from agent...");
+        const startTime = Date.now();
+
+        // Send action to agent to get hierarchical topics
+        const result = await sendActionToAgent({
+            actionName: "getHierarchicalTopics",
+            parameters: {
+                centerTopic: message.parameters?.centerTopic,
+                includeRelationships:
+                    message.parameters?.includeRelationships ?? true,
+                maxDepth: message.parameters?.maxDepth ?? 5,
+                domain: message.parameters?.domain, // Optional domain filter
+            },
+        });
+
+        console.log("Received hierarchical topics result:", result);
+
+        if (result && result.success !== false) {
+            return {
+                success: true,
+                topics: result.topics || [],
+                relationships: result.relationships || [],
+                centerTopic: message.parameters?.centerTopic || null,
+                maxDepth: result.maxDepth || 0,
+                metadata: {
+                    totalTopics: (result.topics || []).length,
+                    queryTime: Date.now() - startTime,
+                    source: "hierarchical_storage",
+                },
+            };
+        } else {
+            console.warn(
+                "No hierarchical topics found or agent returned error:",
+                result?.error,
+            );
+            return {
+                success: false,
+                topics: [],
+                relationships: [],
+                centerTopic: null,
+                maxDepth: 0,
+                error: result?.error || "No hierarchical topics available",
+                metadata: {
+                    totalTopics: 0,
+                    queryTime: Date.now() - startTime,
+                    source: "hierarchical_storage",
+                },
+            };
+        }
+    } catch (error) {
+        console.error("Error fetching hierarchical topics:", error);
+        return {
+            success: false,
+            topics: [],
+            relationships: [],
+            centerTopic: null,
+            maxDepth: 0,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to fetch hierarchical topics",
+            metadata: {
+                totalTopics: 0,
+                queryTime: 0,
+                source: "hierarchical_storage",
+            },
+        };
+    }
+}
+
+/**
+ * Handle requests for topic metrics data
+ */
+async function handleGetTopicMetrics(message: any): Promise<any> {
+    try {
+        console.log("Fetching topic metrics from agent...");
+
+        const result = await sendActionToAgent({
+            actionName: "getTopicMetrics",
+            parameters: {
+                topicId: message.parameters?.topicId,
+            },
+        });
+
+        if (result && result.success !== false) {
+            return {
+                success: true,
+                metrics: result.metrics || {},
+            };
+        } else {
+            return {
+                success: false,
+                error: result?.error || "No topic metrics available",
+            };
+        }
+    } catch (error) {
+        console.error("Error fetching topic metrics:", error);
+        return {
+            success: false,
+            error:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to fetch topic metrics",
         };
     }
 }

@@ -45,25 +45,28 @@ class EmailContext:
 # TODO : Once stable, move creation etc to utool.py
 async def main():
 
+    base_path = Path("/data/testChat/knowpro/email/") 
+    base_path.mkdir(parents=True, exist_ok=True)
     utils.load_dotenv()
 
-    db_path = "/data/testChat/knowpro/email/pyEmails.db"
-    conversation = await load_or_create_email_index(db_path, create_new=False)
-    print(f"Email memory at: {db_path}")
-    await print_conversation_stats(conversation)
-
+    print("Email Memory Demo")
+    print("Type @help for a list of commands")
+        
+    db_path = str(base_path.joinpath("pyEmails.db"))
     context = EmailContext(
-        db_path,
-        conversation
+        db_path=db_path,
+        conversation=await load_or_create_email_index(db_path, create_new=False)
     )
+    print(f"Using email memory at: {db_path}")
+    await print_conversation_stats(context.conversation)
 
     # Command handlers
-    handlers = {
-        "@add_index": add_messages,  # Add messages
+    cmd_handlers = {
+        "@add_messages": add_messages,  # Add messages
         "@build_index": build_index, # Build index
         "@reset_index": reset_index, # Delete  index and start over
-        "@search_index": search_index,   # Search index 
-        "@generate_answer": generate_answer # Question answer
+        "@search": search_index,   # Search index 
+        "@answer": generate_answer # Question answer
     }
     while True:
         line = input("✉>>").strip()
@@ -77,14 +80,14 @@ async def main():
         try:
             cmd = args[0].lower()
             if cmd == "@help":
-                print_commands(handlers.keys())
+                print_commands(cmd_handlers.keys())
             else:
-                handler = handlers.get(cmd)
-                if handler:
+                cmd_handler = cmd_handlers.get(cmd)
+                if cmd_handler:
                     args.pop(0)
-                    await handler(context, args)
+                    await cmd_handler(context, args)
                 else:
-                    print_commands(handlers.keys())      
+                    print_commands(cmd_handlers.keys())      
         except Exception as e:
             print()
             print(Fore.RED, f"Error\n: {e}")

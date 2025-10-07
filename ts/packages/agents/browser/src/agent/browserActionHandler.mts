@@ -635,6 +635,8 @@ async function processBrowserAgentMessage(
         case "getEntityNeighborhood":
         case "getGlobalImportanceLayer":
         case "getImportanceStatistics":
+        case "getHierarchicalTopics":
+        case "getTopicMetrics":
         case "getViewportBasedNeighborhood": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,
@@ -944,6 +946,7 @@ async function resolveWebPage(
         entityGraph: "typeagent-browser://views/entityGraphView.html",
         knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
         macroslibrary: "typeagent-browser://views/macrosLibrary.html",
+        topicGraph: "typeagent-browser://views/topicGraphView.html",
     };
 
     const libraryUrl = libraryPages[site.toLowerCase()];
