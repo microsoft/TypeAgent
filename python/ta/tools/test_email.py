@@ -8,6 +8,7 @@ import sys
 import traceback
 from typing import (
     Any, 
+    Literal,
     Iterable, 
     Callable, 
     Awaitable
@@ -107,7 +108,7 @@ async def main():
                 if cmd_handler:
                     await cmd_handler(context, args)
                 else:
-                    print_commands(cmd_handlers.keys())
+                    print_commands(cmd_handlers)
         except Exception as e:
             print()
             print(Fore.RED, f"Error\n: {e}")
@@ -215,7 +216,7 @@ def _parse_messages_def() -> argparse.ArgumentParser:
         description="Parse messages in the given path"
     )
     cmdDef.add_argument("--path", type=str, default="")
-    cmdDef.add_argument("--show", type=bool, default=False)
+    cmdDef.add_argument("--verbose", type=bool, default=False)
     return cmdDef
 
 @command(_parse_messages_def())
@@ -226,16 +227,21 @@ async def parse_messages(context: EmailContext, args: list[str]):
     if src_path.is_file():
         file_paths = [str(src_path)]
     else:
-        file_paths = [str(file_path) for file_path in Path(src_path).iterdir()]
+        file_paths = [str(file_path) for file_path in Path(src_path).iterdir() if file_path.is_file()]
 
     print(f"Parsing {len(file_paths)} messages")
     for file_path in file_paths:
-        print(file_path)
         try:
             msg = import_email_from_file(file_path)
-            if named_args.show:
+            print(file_path)
+            if named_args.verbose:
+                print("####################")
                 print_email(msg)
+                print_knowledge(msg.get_knowledge())
+                print("####################")
+
         except Exception as e:
+            print_error(file_path)
             print_error(str(e))
 
 async def exit_app(context: EmailContext, args: list[str]):
@@ -288,7 +294,11 @@ def print_help(handler: CommandHandler):
         parser = argparse.ArgumentParser = handler.parser # type: ignore
         print(parser.format_help())
         print()
-        
+
+def print_commands(commands: dict[str, CommandHandler]):
+    names = sorted(commands.keys())
+    print_list(Fore.GREEN, names, "COMMANDS", "ul")
+       
 def print_email(email: EmailMessage):
     print("From:", email.metadata.sender)
     print("To:", ", ".join(email.metadata.recipients))
@@ -315,15 +325,20 @@ def print_knowledge(knowledge: kplib.KnowledgeResponse):
     print()
     print(Fore.RESET)
 
-def print_commands(names: Iterable[str]):
-    print_list(Fore.GREEN, sorted(names), "Commands")
-
-def print_list(color, list: Iterable[Any], title: str):
+def print_list(color, list: Iterable[Any], title: str, type: Literal["plain", "ol", "ul"] = "plain"):
+    print(color)
     if title:
-        print(color + f"# {title}")
-        print()
-    for item in list:
-        print(color + " -", item)
+        print(f"# {title}\n")
+    if type == "plain":
+        for item in list:
+            print(item)
+    elif type == "ul":
+        for item in list:
+            print(f"- {item}")
+    elif type == "ol":
+        for i, item in enumerate(list):
+            print(f"{i + 1}. {item}")
+    print(Fore.RESET)
 
 def print_error(msg: str):
     print(Fore.RED + msg)

@@ -14,7 +14,8 @@ from .email_message import EmailMessage, EmailMessageMeta
 def import_emails_from_dir(dir_path: str) -> list[EmailMessage]:
     messages: list[EmailMessage] = []
     for file_path in Path(dir_path).iterdir():
-        messages.append(import_email_from_file(str(file_path.resolve())));
+        if file_path.is_file():
+            messages.append(import_email_from_file(str(file_path.resolve())))
     return messages
 
 # Imports an email file (.eml) as a list of EmailMessage objects
