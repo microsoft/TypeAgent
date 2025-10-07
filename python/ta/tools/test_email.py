@@ -105,6 +105,7 @@ async def add_messages(context: EmailContext, args: list[str]):
         print_error("No path provided")
         return
     
+    # Get the path to the email file or directory of emails to ingest 
     src_path = Path(args[0])
     emails: list[EmailMessage]
     if src_path.is_file():
