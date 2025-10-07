@@ -134,23 +134,13 @@ async def search_index(context:EmailContext, args: list[str]):
 
     search_text = args[0]
     print(Fore.CYAN, f"Searching for:\n{search_text} ")
-
-    debug_context = searchlang.LanguageSearchDebugContext()
-    results = await context.conversation.search_with_language(args[0])
     
-    # print(Fore.CYAN)    
-    # utils.pretty_print(debug_context.search_query)
-    # utils.pretty_print(debug_context.search_query_expr)
-    # print(Fore.RESET)
-
-    if isinstance(results, typechat.Failure):
-        print_error(results.message)
-    else:
-        search_results = results.value
-        for search_result in search_results:
-            print(Fore.GREEN, search_result.raw_query_text)
-            await print_result(search_result, context.conversation)
-            print(Fore.RESET)
+    debug_context = searchlang.LanguageSearchDebugContext()
+    results = await context.conversation.search_with_language(
+        search_text=search_text,
+        debug_context=debug_context
+    )
+    await print_search_results(context.conversation, debug_context, results)
 
 async def reset_index(context: EmailContext, args: list[str]):
     print(f"Deleting {context.db_path}")
@@ -234,6 +224,25 @@ async def print_conversation_stats(conversation: IConversation):
     print(f"Conversation index stats".upper())
     print(f"Message count: {await conversation.messages.size()}")
     print(f"Semantic Ref count: {await conversation.semantic_refs.size()}")
+
+async def print_search_results(
+        conversation: IConversation,
+        debug_context: searchlang.LanguageSearchDebugContext,
+        results: typechat.Result[list[searchlang.ConversationSearchResult]]
+):
+    print(Fore.CYAN)    
+    utils.pretty_print(debug_context.search_query)
+    utils.pretty_print(debug_context.search_query_expr)
+    if isinstance(results, typechat.Failure):
+        print_error(results.message)
+    else:
+        print(Fore.GREEN, "### SEARCH RESULTS")
+        print()
+        search_results = results.value
+        for search_result in search_results:
+            print(Fore.GREEN, search_result.raw_query_text)
+            await print_result(search_result, conversation)
+    print(Fore.RESET)
 
 if __name__ == "__main__":
     try:

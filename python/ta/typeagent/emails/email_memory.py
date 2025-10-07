@@ -74,22 +74,6 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             ),
         )
 
-    async def search_with_language(
-            self,
-            search_text: str,
-            options: searchlang.LanguageSearchOptions | None = None,
-            lang_search_filter: searchlang.LanguageSearchFilter | None = None,
-            debug_context: searchlang.LanguageSearchDebugContext | None = None
-        ) -> typechat.Result[list[searchlang.ConversationSearchResult]]:
-        return await searchlang.search_conversation_with_language(
-            self, 
-            self.settings.query_translator,
-            search_text,
-            options,
-            lang_search_filter,
-            debug_context
-        )
-    
     # Add an email message to the memory.     
     async def add_message(self, message: EmailMessage) -> None:    
         await self.messages.append(message)
@@ -114,7 +98,38 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
         self._commit()
         await secindex.build_transient_secondary_indexes(self, self.settings.conversation_settings)
         self._commit()
-       
+
+    # Search email memory using language
+    async def search_with_language(
+            self,
+            search_text: str,
+            options: searchlang.LanguageSearchOptions | None = None,
+            lang_search_filter: searchlang.LanguageSearchFilter | None = None,
+            debug_context: searchlang.LanguageSearchDebugContext | None = None
+        ) -> typechat.Result[list[searchlang.ConversationSearchResult]]:
+        return await searchlang.search_conversation_with_language(
+            self, 
+            self.settings.query_translator,
+            search_text,
+            self._adjust_search_options(options),
+            lang_search_filter,
+            debug_context
+        )
+    
+    @staticmethod
+    def create_lang_search_options() -> searchlang.LanguageSearchOptions :
+        return searchlang.LanguageSearchOptions(
+            compile_options = searchlang.LanguageQueryCompileOptions(
+                apply_scope=True,
+                exact_scope=False, 
+                verb_scope=True, 
+                term_filter=None 
+            ),
+            exact_match=False,
+            max_knowledge_matches=50,
+            max_message_matches=25,
+        )
+
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[EmailMessage]:
         """Get secondary indexes, asserting they are initialized."""
         assert (
@@ -127,6 +142,12 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
         if isinstance(provider, SqliteStorageProvider):
             provider.db.commit()
 
+    def _adjust_search_options(self, options: searchlang.LanguageSearchOptions | None):
+        # TODO Handle noise terms here
+        if options is None:
+            options = EmailMemory.create_lang_search_options()
+        return options
+    
 # TODO: Migrate this to a shared API
 async def _add_synonyms_file_as_aliases(conversation: IConversation, file_name: str) -> None:
     secondary_indexes = conversation.secondary_indexes
