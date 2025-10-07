@@ -11,7 +11,9 @@ from ..knowpro import (
     secindex,
     convknowledge,
     search_query_schema,
-    searchlang
+    searchlang,
+    answer_response_schema,
+    answers
 )
 from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
@@ -33,6 +35,10 @@ class EmailMemorySettings:
         self.query_translator = utils.create_translator(
             self.language_model, 
             search_query_schema.SearchQuery
+        )
+        self.answer_translator = utils.create_translator(
+            self.language_model, 
+            answer_response_schema.AnswerResponse
         )
         self.conversation_settings = conversation_settings
         self.conversation_settings.semantic_ref_index_settings.auto_extract_knowledge = True
@@ -101,12 +107,12 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
 
     # Search email memory using language
     async def search_with_language(
-            self,
-            search_text: str,
-            options: searchlang.LanguageSearchOptions | None = None,
-            lang_search_filter: searchlang.LanguageSearchFilter | None = None,
-            debug_context: searchlang.LanguageSearchDebugContext | None = None
-        ) -> typechat.Result[list[searchlang.ConversationSearchResult]]:
+        self,
+        search_text: str,
+        options: searchlang.LanguageSearchOptions | None = None,
+        lang_search_filter: searchlang.LanguageSearchFilter | None = None,
+        debug_context: searchlang.LanguageSearchDebugContext | None = None
+    ) -> typechat.Result[list[searchlang.ConversationSearchResult]]:
         return await searchlang.search_conversation_with_language(
             self, 
             self.settings.query_translator,
@@ -116,6 +122,33 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             debug_context
         )
     
+    async def get_answer_with_language(
+        self,
+        question: str,
+        search_options: searchlang.LanguageSearchOptions | None = None,
+        lang_search_filter: searchlang.LanguageSearchFilter |  None = None,
+        answer_context_options: answers.AnswerContextOptions | None = None,
+    ) -> typechat.Result[tuple[list[answers.AnswerResponse], answers.AnswerResponse]]:
+        search_results = await self.search_with_language(
+            question,
+            search_options,
+            lang_search_filter,
+            None)        
+        if isinstance(search_results, typechat.Failure):
+            return search_results
+
+        if answer_context_options is None:
+            answer_context_options = EmailMemory.create_answer_context_options()
+            
+        answer = await answers.generate_answers(
+                self.settings.answer_translator,
+                search_results.value,
+                self,
+                question,
+                answer_context_options,
+            )
+        return typechat.Success(answer)
+        
     @staticmethod
     def create_lang_search_options() -> searchlang.LanguageSearchOptions :
         return searchlang.LanguageSearchOptions(
@@ -128,6 +161,15 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             exact_match=False,
             max_knowledge_matches=50,
             max_message_matches=25,
+        )
+
+    @staticmethod
+    def create_answer_context_options() -> answers.AnswerContextOptions:
+        return answers.AnswerContextOptions(
+            entities_top_k=50, 
+            topics_top_k=50, 
+            messages_top_k=None, 
+            chunking=None
         )
 
     def _get_secondary_indexes(self) -> IConversationSecondaryIndexes[EmailMessage]:

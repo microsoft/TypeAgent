@@ -59,10 +59,11 @@ async def main():
 
     # Command handlers
     handlers = {
-        "@add_index": add_messages,
-        "@build_index": build_index,
-        "@reset_index": reset_index,
-        "@search_index": search_index   # Search index 
+        "@add_index": add_messages,  # Add messages
+        "@build_index": build_index, # Build index
+        "@reset_index": reset_index, # Delete  index and start over
+        "@search_index": search_index,   # Search index 
+        "@generate_answer": generate_answer # Question answer
     }
     while True:
         line = input("✉>>").strip()
@@ -94,12 +95,13 @@ async def main():
 # ==
 # COMMANDS 
 # ==
+
+# Adds messages. Takes a path either to a file or to a directory
 async def add_messages(context: EmailContext, args: list[str]):
     if len(args) < 1:
         print_error("No path provided")
         return
     
-    conversation = context.conversation
     src_path = Path(args[0])
     emails: list[EmailMessage]
     if src_path.is_file():
@@ -110,6 +112,7 @@ async def add_messages(context: EmailContext, args: list[str]):
     print(Fore.CYAN, f"Importing {len(emails)} emails".capitalize())
     print()
 
+    conversation = context.conversation
     for email in emails:
         print_email(email)
         print()
@@ -131,8 +134,11 @@ async def build_index(context: EmailContext, args: list[str]):
 async def search_index(context:EmailContext, args: list[str]):
     if len(args) == 0:
         return
-
-    search_text = args[0]
+    search_text = args[0].strip()
+    if len(search_text) == 0:
+        print_error("No search text")
+        return
+    
     print(Fore.CYAN, f"Searching for:\n{search_text} ")
     
     debug_context = searchlang.LanguageSearchDebugContext()
@@ -142,11 +148,29 @@ async def search_index(context:EmailContext, args: list[str]):
     )
     await print_search_results(context.conversation, debug_context, results)
 
+async def generate_answer(context: EmailContext, args:list[str]):
+    if len(args) == 0:
+        return
+    question = args[0].strip()
+    if len(question) == 0:
+        print_error("No question")
+        return
+    
+    print(Fore.CYAN, f"Getting answer for:\n{question} ")
+    result = await context.conversation.get_answer_with_language(
+        question=question
+    ) 
+    if isinstance(result, typechat.Failure):
+        print_error(result.message)
+        return
+
+    all_answers, _ = result.value
+    utils.pretty_print(all_answers)
+
 async def reset_index(context: EmailContext, args: list[str]):
     print(f"Deleting {context.db_path}")
     await context.reset()
     await print_conversation_stats(context.conversation)
-
 #
 # Utilities
 #
