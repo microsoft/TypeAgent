@@ -4,7 +4,10 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
 import { searchByEntities } from "../../searchWebMemories.mjs";
-import { GraphCache } from "../types/knowledgeTypes.mjs";
+import {
+    GraphCache,
+    TopicGraphCache,
+} from "../types/knowledgeTypes.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:knowledge:graph");
@@ -154,7 +157,7 @@ export async function buildKnowledgeGraph(
 
         debug("[Knowledge Graph] Build completed:", stats);
 
-        // Invalidate cache after graph build
+        // Invalidate caches after graph build
         setGraphCache(websiteCollection, {
             entities: [],
             relationships: [],
@@ -163,6 +166,7 @@ export async function buildKnowledgeGraph(
             lastUpdated: 0,
             isValid: false,
         });
+        invalidateTopicCache(websiteCollection);
 
         return {
             success: true,
@@ -213,7 +217,7 @@ export async function rebuildKnowledgeGraph(
         // Rebuild the knowledge graph
         await websiteCollection.buildGraph();
 
-        // Invalidate cache after graph rebuild
+        // Invalidate caches after graph rebuild
         setGraphCache(websiteCollection, {
             entities: [],
             relationships: [],
@@ -222,6 +226,7 @@ export async function rebuildKnowledgeGraph(
             lastUpdated: 0,
             isValid: false,
         });
+        invalidateTopicCache(websiteCollection);
 
         return {
             success: true,
@@ -1154,13 +1159,108 @@ export async function getImportanceStatistics(
 // Cache Management Functions
 // ============================================================================
 
-// Cache storage attached to websiteCollection
+// Entity graph cache storage attached to websiteCollection
 function getGraphCache(websiteCollection: any): GraphCache | null {
     return (websiteCollection as any).__graphCache || null;
 }
 
 function setGraphCache(websiteCollection: any, cache: GraphCache): void {
     (websiteCollection as any).__graphCache = cache;
+}
+
+// Topic graph cache storage attached to websiteCollection
+function getTopicGraphCache(
+    websiteCollection: any,
+): TopicGraphCache | null {
+    return (websiteCollection as any).__topicGraphCache || null;
+}
+
+function setTopicGraphCache(
+    websiteCollection: any,
+    cache: TopicGraphCache,
+): void {
+    (websiteCollection as any).__topicGraphCache = cache;
+}
+
+// Invalidate topic cache (called on graph rebuild or knowledge import)
+export function invalidateTopicCache(websiteCollection: any): void {
+    setTopicGraphCache(websiteCollection, {
+        topics: [],
+        relationships: [],
+        lastUpdated: 0,
+        isValid: false,
+    });
+}
+
+// Ensure topic graph data is cached for fast access
+async function ensureTopicGraphCache(
+    websiteCollection: any,
+): Promise<void> {
+    const cache = getTopicGraphCache(websiteCollection);
+
+    // Cache never expires - only invalidated on graph rebuild or knowledge import
+    if (cache && cache.isValid) {
+        return;
+    }
+
+    try {
+        // Fetch all topics from database
+        const topics =
+            websiteCollection.hierarchicalTopics?.getTopicHierarchy() || [];
+
+        // Build relationships from parent-child structure
+        let relationships = buildTopicRelationships(topics);
+
+        // Add lateral relationships from topic relationships table
+        if (websiteCollection.topicRelationships) {
+            const topicIds = new Set(topics.map((t: any) => t.topicId));
+            const lateralRels: any[] = [];
+
+            for (const topicId of topicIds) {
+                const rels =
+                    websiteCollection.topicRelationships.getRelationshipsForTopic(
+                        topicId,
+                    );
+                for (const rel of rels) {
+                    if (topicIds.has(rel.fromTopic) && topicIds.has(rel.toTopic)) {
+                        lateralRels.push({
+                            from: rel.fromTopic,
+                            to: rel.toTopic,
+                            type: rel.relationshipType,
+                            strength: rel.strength,
+                        });
+                    }
+                }
+            }
+
+            // Deduplicate lateral relationships
+            const relKeys = new Set<string>();
+            for (const rel of lateralRels) {
+                const key = `${rel.from}|${rel.to}|${rel.type}`;
+                if (!relKeys.has(key)) {
+                    relKeys.add(key);
+                    relationships.push(rel);
+                }
+            }
+        }
+
+        // Store in cache
+        const newCache: TopicGraphCache = {
+            topics: topics,
+            relationships: relationships,
+            lastUpdated: Date.now(),
+            isValid: true,
+        };
+
+        setTopicGraphCache(websiteCollection, newCache);
+    } catch (error) {
+
+        // Mark cache as invalid
+        const existingCache = getTopicGraphCache(websiteCollection);
+        if (existingCache) {
+            existingCache.isValid = false;
+        }
+    }
 }
 
 // Ensure graph data is cached for fast access
@@ -1668,100 +1768,60 @@ export async function getHierarchicalTopics(
             };
         }
 
-        let topics: any[] = [];
+        // Ensure cache is populated
+        await ensureTopicGraphCache(websiteCollection);
 
-        try {
-            // Get hierarchical topics from the database
-            if (parameters.domain) {
-                topics = websiteCollection.hierarchicalTopics.getTopicHierarchy(
-                    parameters.domain,
-                );
-            } else {
-                topics =
-                    websiteCollection.hierarchicalTopics.getTopicHierarchy();
-            }
-
-            debug(`Found ${topics.length} hierarchical topics`);
-        } catch (error) {
-            console.warn("Failed to get hierarchical topics:", error);
+        // Get cached data
+        const cache = getTopicGraphCache(websiteCollection);
+        if (!cache || !cache.isValid) {
             return {
                 success: false,
                 topics: [],
                 relationships: [],
                 maxDepth: 0,
-                error: "Failed to retrieve hierarchical topics",
+                error: "Topic cache not available",
             };
+        }
+
+        // Filter topics from cache
+        let topics = cache.topics;
+
+        // Apply domain filter if specified
+        if (parameters.domain) {
+            topics = topics.filter((t: any) => t.domain === parameters.domain);
         }
 
         // Filter by max depth if specified
         if (parameters.maxDepth !== undefined) {
             topics = topics.filter(
-                (topic) => topic.level <= parameters.maxDepth!,
+                (topic: any) => topic.level <= parameters.maxDepth!,
             );
         }
 
-        // Build relationships from parent-child structure and lateral relationships
+        // Filter relationships from cache
         let relationships: any[] = [];
         if (parameters.includeRelationships !== false) {
-            relationships = buildTopicRelationships(topics);
+            const topicIds = new Set(topics.map((t: any) => t.topicId));
 
-            // Add lateral relationships from topic relationships table
-            if (websiteCollection.topicRelationships) {
-                try {
-                    const topicIds = new Set(topics.map((t) => t.topicId));
-                    const lateralRels: any[] = [];
-
-                    for (const topicId of topicIds) {
-                        const rels =
-                            websiteCollection.topicRelationships.getRelationshipsForTopic(
-                                topicId,
-                            );
-                        for (const rel of rels) {
-                            // Only include if both topics are in our filtered set
-                            if (
-                                topicIds.has(rel.fromTopic) &&
-                                topicIds.has(rel.toTopic)
-                            ) {
-                                lateralRels.push({
-                                    from: rel.fromTopic,
-                                    to: rel.toTopic,
-                                    type: rel.relationshipType,
-                                    strength: rel.strength,
-                                });
-                            }
-                        }
-                    }
-
-                    // Deduplicate lateral relationships
-                    const relKeys = new Set<string>();
-                    for (const rel of lateralRels) {
-                        const key = `${rel.from}|${rel.to}|${rel.type}`;
-                        if (!relKeys.has(key)) {
-                            relKeys.add(key);
-                            relationships.push(rel);
-                        }
-                    }
-                } catch (error) {
-                    console.warn(
-                        "Failed to load lateral topic relationships:",
-                        error,
-                    );
-                }
-            }
+            // Filter cached relationships to only include ones for visible topics
+            relationships = cache.relationships.filter(
+                (rel: any) =>
+                    topicIds.has(rel.from) && topicIds.has(rel.to),
+            );
         }
 
-        // Calculate max depth
         const maxDepth =
             topics.length > 0 ? Math.max(...topics.map((t) => t.level)) : 0;
 
-        debug(
-            `Returning ${topics.length} topics with ${relationships.length} relationships, max depth: ${maxDepth}`,
+        const filteredRelationships = filterRelationshipsForClient(
+            relationships,
+            topics,
         );
 
         return {
             success: true,
-            topics,
-            relationships,
+            topics: topics,
+            relationships: filteredRelationships,
             maxDepth,
         };
     } catch (error) {
@@ -1794,6 +1854,65 @@ function buildTopicRelationships(topics: any[]): any[] {
     }
 
     return relationships;
+}
+
+/**
+ * Filter relationships for client: remove siblings and limit co_occurs per node
+ */
+function filterRelationshipsForClient(
+    relationships: any[],
+    topics: any[],
+): any[] {
+    const maxCoOccursPerNode = 3;
+    const topicMap = new Map(topics.map((t) => [t.topicId, t]));
+
+    const coOccursEdges: any[] = [];
+    const structuralEdges: any[] = [];
+
+    for (const rel of relationships) {
+        if (rel.type === "co_occurs") {
+            coOccursEdges.push(rel);
+        } else {
+            structuralEdges.push(rel);
+        }
+    }
+
+    coOccursEdges.sort((a, b) => (b.strength || 0) - (a.strength || 0));
+
+    const nodeCoOccursCount = new Map<string, number>();
+    const filteredCoOccurs: any[] = [];
+
+    for (const rel of coOccursEdges) {
+        const fromTopic = topicMap.get(rel.from);
+        const toTopic = topicMap.get(rel.to);
+
+        if (!fromTopic || !toTopic) continue;
+
+        if (
+            fromTopic.parentTopicId &&
+            toTopic.parentTopicId &&
+            fromTopic.parentTopicId === toTopic.parentTopicId &&
+            fromTopic.level === toTopic.level
+        ) {
+            continue;
+        }
+
+        const fromCount = nodeCoOccursCount.get(rel.from) || 0;
+        const toCount = nodeCoOccursCount.get(rel.to) || 0;
+
+        if (
+            fromCount >= maxCoOccursPerNode ||
+            toCount >= maxCoOccursPerNode
+        ) {
+            continue;
+        }
+
+        filteredCoOccurs.push(rel);
+        nodeCoOccursCount.set(rel.from, fromCount + 1);
+        nodeCoOccursCount.set(rel.to, toCount + 1);
+    }
+
+    return [...structuralEdges, ...filteredCoOccurs];
 }
 
 /**

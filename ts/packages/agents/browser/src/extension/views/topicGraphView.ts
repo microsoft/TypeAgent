@@ -138,11 +138,9 @@ class TopicGraphView {
         this.showLoading();
 
         try {
-            // Get topic parameter from URL
             const urlParams = new URLSearchParams(window.location.search);
             const topicParam = urlParams.get("topic");
 
-            // Load topic data from extension
             const topicData = await this.fetchTopicGraphData(topicParam);
 
             if (!topicData || topicData.topics.length === 0) {
@@ -150,14 +148,11 @@ class TopicGraphView {
                 return;
             }
 
-            // Initialize visualizer with data
             await this.visualizer?.init(topicData);
 
-            // Update UI
             this.updateGraphStats();
             this.hideLoading();
 
-            // Focus on specified topic if provided
             if (topicParam && topicData.centerTopic) {
                 this.visualizer?.focusOnTopic(topicData.centerTopic);
             }
