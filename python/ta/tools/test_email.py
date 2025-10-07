@@ -40,13 +40,21 @@ from typeagent.storage.utils import create_storage_provider
 from utool import print_result
 
 class EmailContext:
-    def __init__(self, db_path: str, conversation: EmailMemory) -> None:
-        self.db_path = db_path
+    def __init__(self, base_path: Path, db_name: str, conversation: EmailMemory) -> None:
+        self.base_path = base_path
+        self.db_path = base_path.joinpath(db_name)
         self.conversation = conversation
 
-    async def reset(self):
+    async def load_conversation(self, db_name: str):
         await self.conversation.settings.conversation_settings.storage_provider.close()
-        self.conversation = await load_or_create_email_index(self.db_path, create_new=True) 
+        self.db_path = self.base_path.joinpath(db_name)
+        self.conversation = await load_or_create_email_index(str(self.db_path), create_new=False) 
+
+    # Delete the current conversation and re-create it
+    async def restart_conversation(self):
+        await self.conversation.settings.conversation_settings.storage_provider.close()
+        self.conversation = await load_or_create_email_index(str(self.db_path), create_new=True) 
+
 
 CommandHandler = Callable[[EmailContext, list[str]], Awaitable[None]]
 
@@ -70,7 +78,8 @@ async def main():
         
     db_path = str(base_path.joinpath("pyEmails.db"))
     context = EmailContext(
-        db_path=db_path,
+        base_path,
+        "pyEmails.db",
         conversation=await load_or_create_email_index(db_path, create_new=False)
     )
     print(f"Using email memory at: {db_path}")
@@ -121,13 +130,26 @@ async def main():
 # ==
 
 # Adds messages. Takes a path either to a file or to a directory
+def _add_messages_def() -> argparse.ArgumentParser:
+    cmd = argparse.ArgumentParser(
+        description="Add messages to index"
+    )
+    cmd.add_argument(
+        "--path", 
+        default="", 
+        help="Path to an .eml file or to a directory with .eml files"
+    )
+    return cmd
+
+@command(_add_messages_def())
 async def add_messages(context: EmailContext, args: list[str]):
-    if len(args) < 1:
-        print_error("No path provided")
+    named_args = _add_messages_def().parse_args(args) 
+    if named_args.path is None:
+        print("No path provided")
         return
-    
+     
     # Get the path to the email file or directory of emails to ingest 
-    src_path = Path(args[0])
+    src_path = Path(named_args.path)
     emails: list[EmailMessage]
     if src_path.is_file():
         emails = [import_email_from_file(str(src_path))]
@@ -194,22 +216,29 @@ async def generate_answer(context: EmailContext, args:list[str]):
 
 async def reset_index(context: EmailContext, args: list[str]):
     print(f"Deleting {context.db_path}")
-    await context.reset()
+    await context.restart_conversation()
     await print_conversation_stats(context.conversation)
 
 
-def _load_def() -> argparse.ArgumentParser:
+def _load_index_def() -> argparse.ArgumentParser:
     cmdDef = argparse.ArgumentParser(
         description="Load index at given db path"
     )
-    cmdDef.add_argument("--db_path", type=str, default="")
+    cmdDef.add_argument("--name", type=str, default="", help="Name of the index to load")
     return cmdDef
 
-@command(_load_def())
+@command(_load_index_def())
 async def load_index(context: EmailContext, args: list[str]):
-    named_args = _load_def().parse_args(args)
-    print(named_args.db_path)
-
+    named_args = _load_index_def().parse_args(args)
+    
+    db_name: str = named_args.name
+    if (len(db_name) == 0):
+        return
+    
+    if not db_name.endswith(".db"):
+        db_name += ".db"
+    print(db_name)
+    await context.load_conversation(db_name)
 
 def _parse_messages_def() -> argparse.ArgumentParser:
     cmdDef = argparse.ArgumentParser(
@@ -221,7 +250,7 @@ def _parse_messages_def() -> argparse.ArgumentParser:
 
 @command(_parse_messages_def())
 async def parse_messages(context: EmailContext, args: list[str]):
-    named_args = _parse_messages_def().parse_args(args);
+    named_args = _parse_messages_def().parse_args(args)
     src_path = Path(named_args.path)
     file_paths: list[str]
     if src_path.is_file():
@@ -257,6 +286,8 @@ def help(handlers: dict[str, CommandHandler], args: list[str]):
         
     print_commands(handlers)
     print("@help <commandName> for details")
+
+
 #
 # Utilities
 #
@@ -285,9 +316,11 @@ def delete_sqlite_db(db_path: str):
         if os.path.exists(wal_path):
             os.remove(wal_path)
 
+#=========================
 #
 # Printing
 #
+#=========================
 
 def print_help(handler: CommandHandler):
     if hasattr(handler, "parser"):
