@@ -18,7 +18,7 @@ interface TopicData {
 interface TopicRelationshipData {
     from: string;
     to: string;
-    type: "parent-child" | "related-to" | "derived-from";
+    type: "parent-child" | "related-to" | "derived-from" | "co_occurs";
     strength: number;
 }
 
@@ -560,25 +560,26 @@ export class TopicGraphVisualizer {
      */
     private calculateTopicImportance(topic: TopicData): number {
         const baseConfidence = topic.confidence || 0.5;
-        const levelWeight = 1 / (topic.level + 1); // Higher levels are less important
-        const childrenWeight = Math.min(1, topic.childCount * 0.1); // Topics with more children are more important
+        const levelWeight = 1 / (topic.level + 1);
+        const childrenWeight = Math.min(1, topic.childCount * 0.1);
         const entityRefWeight = Math.min(
             1,
             topic.entityReferences.length * 0.05,
-        ); // Topics with more entity references are more important
-
-        // Additional semantic importance based on keywords count
+        );
         const keywordWeight = Math.min(1, topic.keywords.length * 0.03);
 
-        // Weighted combination of all factors
-        const computedImportance =
+        const rawImportance =
             baseConfidence * 0.4 +
             levelWeight * 0.25 +
             childrenWeight * 0.15 +
             entityRefWeight * 0.15 +
             keywordWeight * 0.05;
 
-        return Math.min(1, Math.max(0.1, computedImportance)); // Clamp between 0.1 and 1.0
+        // Apply exponential scaling to increase variance
+        // This spreads out the importance values more dramatically
+        const scaled = Math.pow(rawImportance, 1.5);
+
+        return Math.min(1, Math.max(0.1, scaled));
     }
 
     /**
@@ -588,17 +589,18 @@ export class TopicGraphVisualizer {
         const elements: any[] = [];
 
         // Add topic nodes
+        const nodeMap = new Map<string, any>();
         for (const topic of data.topics) {
             if (this.visibleLevels.has(topic.level)) {
                 const computedImportance = this.calculateTopicImportance(topic);
 
-                elements.push({
+                const nodeElement = {
                     data: {
                         id: topic.id,
                         label: topic.name,
                         level: topic.level,
                         confidence: topic.confidence,
-                        computedImportance: computedImportance, // Add computed importance
+                        computedImportance: computedImportance,
                         keywords: topic.keywords,
                         entityReferences: topic.entityReferences,
                         parentId: topic.parentId,
@@ -606,7 +608,9 @@ export class TopicGraphVisualizer {
                         nodeType: "topic",
                     },
                     classes: this.getTopicClasses(topic),
-                });
+                };
+                elements.push(nodeElement);
+                nodeMap.set(topic.id, topic);
             }
         }
 
@@ -702,8 +706,7 @@ export class TopicGraphVisualizer {
                     "text-opacity": 1,
                     "transition-property": "none",
                     "transition-duration": 0,
-                    // Add importance-based opacity
-                    opacity: "mapData(computedImportance, 0, 1, 0.6, 1.0)",
+                    opacity: 1.0,
                 },
             },
 
@@ -775,7 +778,6 @@ export class TopicGraphVisualizer {
                 selector: ".high-confidence",
                 style: {
                     "border-width": 4,
-                    opacity: 1.0,
                     "overlay-padding": 3,
                     "overlay-opacity": 0.1,
                     "overlay-color": "#000",
@@ -785,14 +787,12 @@ export class TopicGraphVisualizer {
                 selector: ".medium-confidence",
                 style: {
                     "border-width": 3,
-                    opacity: 0.85,
                 },
             },
             {
                 selector: ".low-confidence",
                 style: {
                     "border-width": 2,
-                    opacity: 0.7,
                 },
             },
 
@@ -822,57 +822,77 @@ export class TopicGraphVisualizer {
             {
                 selector: ".expanded",
                 style: {
-                    "background-opacity": 0.9,
+                    "background-opacity": 1.0,
                 },
             },
 
-            // Edge base styles optimized for performance
+            // Edge base styles with lighter colors and increased transparency
             {
                 selector: "edge",
                 style: {
                     width: "mapData(strength, 0, 1, 1, 4)",
-                    "line-color": "#999",
-                    "target-arrow-color": "#999",
+                    "line-color": "#ddd",
+                    "target-arrow-color": "#ddd",
                     "target-arrow-shape": "triangle",
                     "curve-style": "haystack",
                     "haystack-radius": 0.5,
-                    opacity: 0.7,
-                    "transition-property": "none",
-                    "transition-duration": 0,
+                    opacity: 0.25,
+                    "transition-property": "opacity, width",
+                    "transition-duration": "0.2s",
                 },
             },
 
-            // Edge types with entity graph consistency
+            // Edge types with lighter colors and increased transparency
             {
                 selector: ".edge-parent-child",
                 style: {
-                    "line-color": "#4A90E2",
-                    "target-arrow-color": "#4A90E2",
+                    "line-color": "#A4C8F0",
+                    "target-arrow-color": "#A4C8F0",
                     "line-style": "solid",
                     width: 3,
-                    opacity: 0.9,
+                    opacity: 0.4,
+                },
+            },
+            {
+                selector: ".edge-co_occurs",
+                style: {
+                    "line-color": "#C8F0A0",
+                    "target-arrow-color": "#C8F0A0",
+                    "line-style": "solid",
+                    width: 2,
+                    opacity: 0.25,
                 },
             },
             {
                 selector: ".edge-related-to",
                 style: {
-                    "line-color": "#7ED321",
-                    "target-arrow-color": "#7ED321",
+                    "line-color": "#C8F0A0",
+                    "target-arrow-color": "#C8F0A0",
                     "line-style": "dashed",
                     "line-dash-pattern": [6, 3],
                     width: 2,
-                    opacity: 0.7,
+                    opacity: 0.25,
                 },
             },
             {
                 selector: ".edge-derived-from",
                 style: {
-                    "line-color": "#F5A623",
-                    "target-arrow-color": "#F5A623",
+                    "line-color": "#FBD89C",
+                    "target-arrow-color": "#FBD89C",
                     "line-style": "dotted",
                     "line-dash-pattern": [2, 2],
                     width: 2,
-                    opacity: 0.6,
+                    opacity: 0.25,
+                },
+            },
+
+            // Edge hover highlight
+            {
+                selector: "edge:hover",
+                style: {
+                    opacity: 0.9,
+                    width: 4,
+                    "z-index": 999,
                 },
             },
 
@@ -917,43 +937,57 @@ export class TopicGraphVisualizer {
      */
     private getOptimalCoSEConfig(): any {
         const nodeCount = this.topicGraphData?.topics?.length || 0;
+        const edgeCount = this.topicGraphData?.relationships?.length || 0;
 
-        // Base CoSE configuration optimized for topic graphs
+        const avgDegree = nodeCount > 0 ? (edgeCount * 2) / nodeCount : 0;
+
+        // Significantly increase edge length to accommodate large nodes (20-100px)
+        // With 100px max node size, edges need to be 200-300px to prevent overlap
+        const idealEdgeLength = 250;
+
         const baseConfig = {
             name: "cose",
-            idealEdgeLength: 100,
-            nodeOverlap: 20,
+            idealEdgeLength: idealEdgeLength,
+            nodeOverlap: 50,
             refresh: 20,
             fit: false,
             animate: "end",
-            padding: 30,
+            padding: 40,
             randomize: false,
-            componentSpacing: 100,
-            nodeRepulsion: 400000, // Much stronger repulsion for better separation
-            edgeElasticity: 100,
+            componentSpacing: 150,
+            nodeRepulsion: (node: any) => {
+                const importance = node.data("computedImportance") || 0.5;
+                // Much higher repulsion to counter the massive edge count
+                return 2000000 * (importance + 0.1);
+            },
+            edgeElasticity: (edge: any) => {
+                const strength = edge.data("strength") || 0.5;
+                const type = edge.data("relationship");
+                // Co_occurs edges should be more elastic (stretch easier)
+                if (type === "co_occurs") {
+                    return 30 * strength;
+                }
+                // Parent-child edges should be less elastic (maintain structure)
+                return 50 * strength;
+            },
             nestingFactor: 5,
-            gravity: 80,
-            numIter: 1000,
-            initialTemp: 200,
+            gravity: 40,
+            numIter: 2000,
+            initialTemp: 300,
             coolingFactor: 0.95,
             minTemp: 1.0,
         };
 
-        // Adapt parameters based on graph size
         if (nodeCount > 500) {
-            // For larger graphs, reduce iterations and increase cooling for faster convergence
-            baseConfig.numIter = 800;
-            baseConfig.coolingFactor = 0.98;
-            baseConfig.gravity = 100;
-        } else if (nodeCount > 200) {
-            // Medium graphs get standard parameters
-            baseConfig.numIter = 1000;
-            baseConfig.gravity = 90;
-        } else {
-            // Small graphs can afford more iterations for better quality
             baseConfig.numIter = 1200;
-            baseConfig.gravity = 70;
-            baseConfig.nodeRepulsion = 300000; // Less repulsion for tighter clustering
+            baseConfig.coolingFactor = 0.98;
+            baseConfig.gravity = 90;
+        } else if (nodeCount > 200) {
+            baseConfig.numIter = 1500;
+            baseConfig.gravity = 80;
+        } else {
+            baseConfig.numIter = 2000;
+            baseConfig.gravity = 60;
         }
 
         return baseConfig;

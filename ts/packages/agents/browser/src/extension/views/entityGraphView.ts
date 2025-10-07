@@ -901,7 +901,7 @@ class EntityGraphView {
             <div class="notification-content">
                 <span class="error-icon">⚠️</span>
                 <span class="error-text">${this.escapeHtml(message)}</span>
-                <button onclick="this.parentElement.parentElement.remove()" class="close-btn">×</button>
+                <button class="close-btn" data-action="close-notification">×</button>
             </div>
         `;
         notification.style.cssText = `
@@ -911,6 +911,17 @@ class EntityGraphView {
             font-family: Arial, sans-serif; font-size: 14px;
             animation: slideIn 0.3s ease-out;
         `;
+
+        // Add event listener for close button
+        const closeBtn = notification.querySelector(
+            '[data-action="close-notification"]',
+        );
+        if (closeBtn) {
+            closeBtn.addEventListener("click", () => {
+                notification.remove();
+            });
+        }
+
         document.body.appendChild(notification);
 
         // Auto-remove after 5 seconds
@@ -932,12 +943,23 @@ class EntityGraphView {
                     <p>Please navigate to this page with a URL like:</p>
                     <code>entityGraphView.html?entity=YourEntityName</code>
                     <p style="margin-top: 20px;">
-                        <a href="#" onclick="history.back()" style="color: #007acc; text-decoration: underline;">
+                        <a href="#" data-action="go-back" style="color: #007acc; text-decoration: underline;">
                             ← Go Back
                         </a>
                     </p>
                 </div>
             `;
+
+            // Add event listener for go back link
+            const goBackLink = container.querySelector(
+                '[data-action="go-back"]',
+            );
+            if (goBackLink) {
+                goBackLink.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    history.back();
+                });
+            }
         }
 
         // Also show in the empty state area if it exists
