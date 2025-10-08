@@ -19,12 +19,15 @@ from ..knowpro.convsettings import ConversationSettings
 from ..knowpro.interfaces import (
     IConversation,
     IConversationSecondaryIndexes,
+    IMessage,
     IMessageCollection,
     ISemanticRefCollection,
     ITermToSemanticRefIndex,
     Term,
 )
-from ..storage.memory import semrefindex
+from ..storage.memory import (
+    semrefindex,
+)
 from typeagent.storage.sqlite.provider import SqliteStorageProvider
         
 from .email_message import EmailMessage
@@ -54,6 +57,8 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
     semantic_ref_index: ITermToSemanticRefIndex
     secondary_indexes: IConversationSecondaryIndexes[EmailMessage] | None
 
+    noise_terms: set[str]
+
     @classmethod
     async def create(
         cls,
@@ -66,8 +71,9 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
         secondary_indexes: IConversationSecondaryIndexes[EmailMessage] | None = None,
     ) -> "EmailMemory":
 
+        noise_terms = set()
         storage_provider = await settings.get_storage_provider()
-        return cls(
+        email_memory = cls(
             EmailMemorySettings(settings),
             name_tag or "",
             messages or await storage_provider.get_message_collection(),
@@ -78,7 +84,16 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             or await secindex.ConversationSecondaryIndexes.create(
                 storage_provider, settings.related_term_index_settings
             ),
+            noise_terms
         )
+
+        # Add static synonyms and noise words
+        await _add_synonyms_file_as_aliases(email_memory, "emailVerbs.json")  
+        _add_noise_words_from_file(email_memory.noise_terms, "noiseTerms.txt")
+        email_memory.noise_terms.add("email")
+        email_memory.noise_terms.add("message")
+        
+        return email_memory
 
     # Add an email message to the memory.     
     async def add_message(self, message: EmailMessage) -> None:    
@@ -98,7 +113,6 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             self.settings is not None
         ), "Settings must be initialized before building index"
 
-        await _add_synonyms_file_as_aliases(self, "emailVerbs.json")  
         self._commit()
         await semrefindex.build_semantic_ref(self, self.settings.conversation_settings)
         self._commit()
@@ -190,7 +204,11 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             options = EmailMemory.create_lang_search_options()
         return options
     
-# TODO: Migrate this to a shared API
+#  
+# TODO: Migrate some variation of these into a shared API
+#
+
+# Load synonyms from a file and add them as aliases 
 async def _add_synonyms_file_as_aliases(conversation: IConversation, file_name: str) -> None:
     secondary_indexes = conversation.secondary_indexes
     assert secondary_indexes is not None
@@ -208,3 +226,15 @@ async def _add_synonyms_file_as_aliases(conversation: IConversation, file_name: 
                 related_term = Term(text=text.lower())
                 for synonym in synonyms:
                     await aliases.add_related_term(synonym.lower(), related_term)
+
+def _add_noise_words_from_file(
+    noise: set[str],
+    file_name: str,
+) -> None:
+    noise_file = os.path.join(os.path.dirname(__file__), file_name)
+    with open(noise_file) as f:
+        words = f.readlines()
+    for word in words:
+        word = word.strip()
+        if (len(word) > 0):
+            noise.add(word) 
