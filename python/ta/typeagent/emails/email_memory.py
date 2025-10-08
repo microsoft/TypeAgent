@@ -87,12 +87,13 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             noise_terms
         )
 
-        # Add static synonyms and noise words
+        # Add aliases for all the ways in which people can say 'send' and 'received'
         await _add_synonyms_file_as_aliases(email_memory, "emailVerbs.json")  
+        # Remove common terms used in email search that can make retrieval noisy
         _add_noise_words_from_file(email_memory.noise_terms, "noiseTerms.txt")
         email_memory.noise_terms.add("email")
         email_memory.noise_terms.add("message")
-        
+
         return email_memory
 
     # Add an email message to the memory.     
@@ -166,17 +167,21 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
     @staticmethod
     def create_lang_search_options() -> searchlang.LanguageSearchOptions :
         return searchlang.LanguageSearchOptions(
-            compile_options = searchlang.LanguageQueryCompileOptions(
-                apply_scope=True,
-                exact_scope=False, 
-                verb_scope=True, 
-                term_filter=None 
-            ),
+            compile_options = EmailMemory.create_lang_search_compile_options(),
             exact_match=False,
             max_knowledge_matches=50,
             max_message_matches=25,
         )
 
+    @staticmethod
+    def create_lang_search_compile_options() -> searchlang.LanguageQueryCompileOptions :
+        return searchlang.LanguageQueryCompileOptions(
+                apply_scope=True,
+                exact_scope=False, 
+                verb_scope=True, 
+                term_filter=None 
+            )
+    
     @staticmethod
     def create_answer_context_options() -> answers.AnswerContextOptions:
         return answers.AnswerContextOptions(
@@ -199,10 +204,18 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
             provider.db.commit()
 
     def _adjust_search_options(self, options: searchlang.LanguageSearchOptions | None):
-        # TODO Handle noise terms here
         if options is None:
             options = EmailMemory.create_lang_search_options()
+
+        if options.compile_options is None:
+            options.compile_options = EmailMemory.create_lang_search_compile_options()
+
+        options.compile_options.term_filter = lambda term: self._is_noise_term(term)
         return options
+        
+    def _is_noise_term(self, term: str) -> bool:
+        is_noise = term in self.noise_terms
+        return is_noise
     
 #  
 # TODO: Migrate some variation of these into a shared API
