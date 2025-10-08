@@ -43,6 +43,7 @@ export interface SearchWebMemoriesRequest {
     fastStop?: boolean | undefined;
     combineAnswers?: boolean | undefined;
     choices?: string | undefined; // Multiple choice (semicolon separated)
+    maxCharsInBudget?: number | undefined; // Character budget for context windows
     debug?: boolean | undefined;
 
     // Internal metadata for query enhancement
@@ -107,6 +108,42 @@ export interface SearchWebMemoriesResponse {
     debugContext?: SearchDebugContext | undefined;
 }
 
+interface PropertyFilter {
+    domain?: string;
+    pageType?: string;
+    source?: string;
+}
+
+interface ParsedQuery {
+    searchText: string;
+    propertyFilters: PropertyFilter;
+}
+
+function parsePropertySearch(query: string): ParsedQuery {
+    const propertyFilters: PropertyFilter = {};
+    let searchText = query;
+
+    const domainMatch = query.match(/\bdomain:(\S+)/);
+    if (domainMatch) {
+        propertyFilters.domain = domainMatch[1];
+        searchText = searchText.replace(domainMatch[0], '').trim();
+    }
+
+    const pageTypeMatch = query.match(/\bpageType:(\S+)/);
+    if (pageTypeMatch) {
+        propertyFilters.pageType = pageTypeMatch[1];
+        searchText = searchText.replace(pageTypeMatch[0], '').trim();
+    }
+
+    const sourceMatch = query.match(/\bsource:(\S+)/);
+    if (sourceMatch) {
+        propertyFilters.source = sourceMatch[1];
+        searchText = searchText.replace(sourceMatch[0], '').trim();
+    }
+
+    return { searchText, propertyFilters };
+}
+
 /**
  * Unified website search function that replaces both queryWebKnowledge and searchWebsites
  * while incorporating advanced search capabilities
@@ -149,6 +186,14 @@ export async function searchWebMemories(
         }
 
         debug(`Starting unified search for query: "${request.query}"`);
+
+        // Parse property filters from query
+        const { searchText, propertyFilters } = parsePropertySearch(request.query);
+        if (searchText !== request.query) {
+            debug(`Property filters detected:`, propertyFilters);
+            debug(`Search text after filter extraction: "${searchText}"`);
+            request = { ...request, query: searchText };
+        }
 
         // Query Enhancement Phase
         const enhancementStart = Date.now();
@@ -198,6 +243,24 @@ export async function searchWebMemories(
         // PHASE 3: Processing phase
         const processingStart = Date.now();
         let filteredResults = searchResults;
+
+        // Apply property filters if specified
+        if (Object.keys(propertyFilters).length > 0) {
+            debug(`Applying property filters:`, propertyFilters);
+            filteredResults = filteredResults.filter((website) => {
+                if (propertyFilters.domain && website.metadata.domain !== propertyFilters.domain) {
+                    return false;
+                }
+                if (propertyFilters.pageType && website.metadata.pageType !== propertyFilters.pageType) {
+                    return false;
+                }
+                if (propertyFilters.source && website.metadata.websiteSource !== propertyFilters.source) {
+                    return false;
+                }
+                return true;
+            });
+            debug(`After property filtering: ${filteredResults.length} results`);
+        }
 
         // Apply comprehensive LLM-informed ranking
         if (detectedIntent && filteredResults.length > 0) {
@@ -600,6 +663,8 @@ async function performBasicSemanticSearch(
             // options
             {
                 exactMatch: request.exactMatch || false,
+                thresholdScore: request.minScore,
+                maxCharsInBudget: request.maxCharsInBudget,
             },
         );
 
@@ -711,6 +776,8 @@ async function performAdvancedSearch(
             {
                 exactMatch: request.exactMatch || false,
                 maxKnowledgeMatches: request.limit || 50,
+                thresholdScore: request.minScore,
+                maxCharsInBudget: request.maxCharsInBudget,
             },
         ),
     );
@@ -732,6 +799,8 @@ async function performAdvancedSearch(
             {
                 exactMatch: request.exactMatch || false,
                 maxKnowledgeMatches: request.limit || 50,
+                thresholdScore: request.minScore,
+                maxCharsInBudget: request.maxCharsInBudget,
             },
         ),
     );
@@ -753,6 +822,8 @@ async function performAdvancedSearch(
                 {
                     exactMatch: request.exactMatch || false,
                     maxKnowledgeMatches: request.limit || 50,
+                    thresholdScore: request.minScore,
+                    maxCharsInBudget: request.maxCharsInBudget,
                 },
             ),
         );
@@ -769,6 +840,8 @@ async function performAdvancedSearch(
                 {
                     exactMatch: request.exactMatch || false,
                     maxKnowledgeMatches: request.limit || 50,
+                    thresholdScore: request.minScore,
+                    maxCharsInBudget: request.maxCharsInBudget,
                 },
             ),
         );

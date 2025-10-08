@@ -244,6 +244,19 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
                 }
             }
 
+            if (this.pageType) {
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("pageType")) {
+                    domainEntity.facets.push({
+                        name: "pageType",
+                        value: this.pageType,
+                    });
+                }
+            }
+
             // Folder context for bookmarks
             if (this.folder && this.websiteSource === "bookmark") {
                 const existingFacetNames = new Set(
