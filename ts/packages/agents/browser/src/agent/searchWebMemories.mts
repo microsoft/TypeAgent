@@ -122,19 +122,19 @@ function parsePropertySearch(query: string): ParsedQuery {
     const domainMatch = query.match(/\bdomain:(\S+)/);
     if (domainMatch) {
         propertyFilters.domain = domainMatch[1];
-        searchText = searchText.replace(domainMatch[0], '').trim();
+        searchText = searchText.replace(domainMatch[0], "").trim();
     }
 
     const pageTypeMatch = query.match(/\bpageType:(\S+)/);
     if (pageTypeMatch) {
         propertyFilters.pageType = pageTypeMatch[1];
-        searchText = searchText.replace(pageTypeMatch[0], '').trim();
+        searchText = searchText.replace(pageTypeMatch[0], "").trim();
     }
 
     const sourceMatch = query.match(/\bsource:(\S+)/);
     if (sourceMatch) {
         propertyFilters.source = sourceMatch[1];
-        searchText = searchText.replace(sourceMatch[0], '').trim();
+        searchText = searchText.replace(sourceMatch[0], "").trim();
     }
 
     return { searchText, propertyFilters };
@@ -205,7 +205,9 @@ export async function searchWebMemories(
         debug(`Starting unified search for query: "${request.query}"`);
 
         // Parse property filters from query (website-specific)
-        const { searchText, propertyFilters } = parsePropertySearch(request.query);
+        const { searchText, propertyFilters } = parsePropertySearch(
+            request.query,
+        );
         if (searchText !== request.query) {
             debug(`Property filters detected:`, propertyFilters);
             debug(`Search text after filter extraction: "${searchText}"`);
@@ -220,7 +222,8 @@ export async function searchWebMemories(
         const queryTranslator = kp.createSearchQueryTranslator(model);
 
         const langOptions = kp.createLanguageSearchOptions();
-        langOptions.modelInstructions = getWebsiteSearchPromptPreamble(websiteCollection);
+        langOptions.modelInstructions =
+            getWebsiteSearchPromptPreamble(websiteCollection);
         if (request.limit) {
             langOptions.maxKnowledgeMatches = request.limit;
             langOptions.maxMessageMatches = request.limit;
@@ -263,28 +266,44 @@ export async function searchWebMemories(
         debug(`Found ${langResult.data.length} conversation results`);
 
         if (langDebugContext.usedSimilarityFallback) {
-            const usedFallback = langDebugContext.usedSimilarityFallback.some(v => v === true);
+            const usedFallback = langDebugContext.usedSimilarityFallback.some(
+                (v) => v === true,
+            );
             if (usedFallback) {
-                debug(`Embedding similarity fallback was used for some queries`);
+                debug(
+                    `Embedding similarity fallback was used for some queries`,
+                );
                 debugContext.searchStrategies.push("embedding-fallback");
             }
         }
 
         // Convert ConversationSearchResult to Website[]
         const processingStart = Date.now();
-        let websites = convertSearchResultsToWebsites(langResult.data, websiteCollection);
+        let websites = convertSearchResultsToWebsites(
+            langResult.data,
+            websiteCollection,
+        );
 
         // Apply property filters (website-specific post-processing)
         if (Object.keys(propertyFilters).length > 0) {
             debug(`Applying property filters:`, propertyFilters);
             websites = websites.filter((website) => {
-                if (propertyFilters.domain && website.metadata.domain !== propertyFilters.domain) {
+                if (
+                    propertyFilters.domain &&
+                    website.metadata.domain !== propertyFilters.domain
+                ) {
                     return false;
                 }
-                if (propertyFilters.pageType && website.metadata.pageType !== propertyFilters.pageType) {
+                if (
+                    propertyFilters.pageType &&
+                    website.metadata.pageType !== propertyFilters.pageType
+                ) {
                     return false;
                 }
-                if (propertyFilters.source && website.metadata.websiteSource !== propertyFilters.source) {
+                if (
+                    propertyFilters.source &&
+                    website.metadata.websiteSource !== propertyFilters.source
+                ) {
                     return false;
                 }
                 return true;
@@ -324,7 +343,7 @@ export async function searchWebMemories(
 
             try {
                 const answerGenerator = new kp.AnswerGenerator(
-                    kp.createAnswerGeneratorSettings()
+                    kp.createAnswerGeneratorSettings(),
                 );
 
                 const contextOptions: kp.AnswerContextOptions = {
@@ -351,17 +370,25 @@ export async function searchWebMemories(
                         answerType = "synthesized";
                         confidence = 0.8;
 
-                        answerSources = limitedWebsites.slice(0, 5).map((site, index) => ({
-                            url: site.metadata.url,
-                            title: site.metadata.title || "",
-                            relevanceScore: 1.0 - (index * 0.1),
-                            lastIndexed: site.metadata.lastVisitTime || new Date().toISOString(),
-                        }));
+                        answerSources = limitedWebsites
+                            .slice(0, 5)
+                            .map((site, index) => ({
+                                url: site.metadata.url,
+                                title: site.metadata.title || "",
+                                relevanceScore: 1.0 - index * 0.1,
+                                lastIndexed:
+                                    site.metadata.lastVisitTime ||
+                                    new Date().toISOString(),
+                            }));
 
-                        debug(`Generated answer (${answer!.length} chars) in ${Date.now() - answerStart}ms`);
+                        debug(
+                            `Generated answer (${answer!.length} chars) in ${Date.now() - answerStart}ms`,
+                        );
                     } else {
                         answerType = "noAnswer";
-                        debug(`No answer generated: ${answerResponse.whyNoAnswer}`);
+                        debug(
+                            `No answer generated: ${answerResponse.whyNoAnswer}`,
+                        );
                     }
                 } else {
                     debug(`Answer generation failed: ${answerResult.message}`);
@@ -851,9 +878,7 @@ export async function searchByTopics(
     context: SessionContext<BrowserActionContext>,
 ): Promise<SearchWebMemoriesResponse> {
     const startTime = Date.now();
-    debug(
-        `Starting topic search for topics: ${request.topics.join(", ")}`,
-    );
+    debug(`Starting topic search for topics: ${request.topics.join(", ")}`);
 
     try {
         const websiteCollection = context.agentContext.websiteCollection;

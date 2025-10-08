@@ -11,17 +11,21 @@ import DOMPurify from "dompurify";
  * @param inline Whether to render inline (no block elements)
  * @returns Safe HTML string
  */
-export function renderMarkdown(markdown: string, inline: boolean = false): string {
+export function renderMarkdown(
+    markdown: string,
+    inline: boolean = false,
+): string {
     // Create markdown-it instance
     const md = new MarkdownIt({
-        html: false,        // Disable raw HTML in markdown
-        breaks: true,       // Convert \n to <br>
-        linkify: true,      // Auto-convert URLs to links
-        typographer: true,  // Enable smart quotes and other typographic replacements
+        html: false, // Disable raw HTML in markdown
+        breaks: true, // Convert \n to <br>
+        linkify: true, // Auto-convert URLs to links
+        typographer: true, // Enable smart quotes and other typographic replacements
     });
 
     // Customize link rendering to open in new tabs (following shell pattern)
-    const defaultRender = md.renderer.rules.link_open ||
+    const defaultRender =
+        md.renderer.rules.link_open ||
         function (tokens, idx, options, _env, self) {
             return self.renderToken(tokens, idx, options);
         };
@@ -38,13 +42,28 @@ export function renderMarkdown(markdown: string, inline: boolean = false): strin
     // Sanitize HTML with DOMPurify (following shell pattern)
     const cleanHtml = DOMPurify.sanitize(rawHtml, {
         ALLOWED_TAGS: [
-            'p', 'br', 'strong', 'em', 'u', 'code', 'pre',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li',
-            'blockquote',
-            'a', 'span', 'div'
+            "p",
+            "br",
+            "strong",
+            "em",
+            "u",
+            "code",
+            "pre",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "ul",
+            "ol",
+            "li",
+            "blockquote",
+            "a",
+            "span",
+            "div",
         ],
-        ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'class'],
+        ALLOWED_ATTR: ["href", "title", "target", "rel", "class"],
         ALLOW_DATA_ATTR: false,
     });
 
