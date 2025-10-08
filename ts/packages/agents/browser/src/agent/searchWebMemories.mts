@@ -10,10 +10,9 @@ import {
     Entity,
     WebPageReference,
 } from "./knowledge/schema/knowledgeExtraction.mjs";
-import { QueryEnhancementAdapter } from "./search/queryEnhancementAdapter.mjs";
-import { AnswerEnhancementAdapter } from "./search/answerEnhancementAdapter.mjs";
-import type { AnswerEnhancement } from "./search/schema/answerEnhancement.mjs";
-import * as cm from "conversation-memory";
+import { getWebsiteSearchPromptPreamble } from "./search/websiteSearchPrompts.mjs";
+import { openai as ai } from "aiclient";
+import type { TypeChatLanguageModel } from "typechat";
 
 const debug = registerDebug("typeagent:browser:unified-search");
 
@@ -101,9 +100,6 @@ export interface SearchWebMemoriesResponse {
     searchTerms?: string[] | undefined;
     suggestedFollowups?: string[] | undefined;
 
-    // Answer Enhancement - dynamic summaries and smart follow-ups
-    answerEnhancement?: AnswerEnhancement | undefined;
-
     // Debug info - when debug=true
     debugContext?: SearchDebugContext | undefined;
 }
@@ -144,6 +140,29 @@ function parsePropertySearch(query: string): ParsedQuery {
     return { searchText, propertyFilters };
 }
 
+function convertSearchResultsToWebsites(
+    results: kp.ConversationSearchResult[],
+    websiteCollection: website.WebsiteCollection,
+): website.Website[] {
+    const websites: website.Website[] = [];
+    const seenUrls = new Set<string>();
+
+    for (const result of results) {
+        for (const msgMatch of result.messageMatches) {
+            const msg = websiteCollection.messages.get(msgMatch.messageOrdinal);
+            if (msg && msg.metadata) {
+                const url = (msg.metadata as any).url;
+                if (url && !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    websites.push(msg as unknown as website.Website);
+                }
+            }
+        }
+    }
+
+    return websites;
+}
+
 /**
  * Unified website search function that replaces both queryWebKnowledge and searchWebsites
  * while incorporating advanced search capabilities
@@ -168,8 +187,6 @@ export async function searchWebMemories(
         intermediateFallbacks: [],
     };
 
-    let enhancedRequest = request;
-
     try {
         // Validate inputs
         if (!request.query || request.query.trim().length === 0) {
@@ -187,67 +204,65 @@ export async function searchWebMemories(
 
         debug(`Starting unified search for query: "${request.query}"`);
 
-        // Parse property filters from query
+        // Parse property filters from query (website-specific)
         const { searchText, propertyFilters } = parsePropertySearch(request.query);
         if (searchText !== request.query) {
             debug(`Property filters detected:`, propertyFilters);
             debug(`Search text after filter extraction: "${searchText}"`);
-            request = { ...request, query: searchText };
         }
 
-        // Query Enhancement Phase
-        const enhancementStart = Date.now();
-        const queryAdapter = new QueryEnhancementAdapter();
-
-        debug(
-            `Performing comprehensive LLM analysis for query: "${request.query}"`,
-        );
-        enhancedRequest = await queryAdapter.enhanceSearchRequest(request, {
-            websiteCollection,
-            userContext: context,
-        });
-        const detectedIntent = (enhancedRequest as any).metadata?.analysis;
-
-        const enhancementTime = Date.now() - enhancementStart;
-        debug(`Query enhancement completed in ${enhancementTime}ms`);
-
-        // PHASE 1: Term parsing - use original query for term extraction
+        // PHASE 1: Use knowpro's natural language search
         const parseStart = Date.now();
-        const termParser = new cm.SearchTermParser();
-        // const searchTerms = termParser.getTerms(request.query); // Use original query, not enhanced
-        const searchTerms = termParser.getTerms(enhancedRequest.query); // Use original query, not enhanced
-        timing.parsing = Date.now() - parseStart + enhancementTime;
-        debugContext.searchTerms = searchTerms;
 
-        debug(
-            `Extracted ${searchTerms.length} search terms from original query: ${searchTerms.join(", ")}`,
-        );
+        const model = ai.createChatModel(
+            ai.azureApiSettingsFromEnv(ai.ModelType.Chat),
+        ) as TypeChatLanguageModel;
+        const queryTranslator = kp.createSearchQueryTranslator(model);
 
-        // PHASE 2: Core search execution
+        const langOptions = kp.createLanguageSearchOptions();
+        langOptions.modelInstructions = getWebsiteSearchPromptPreamble(websiteCollection);
+        if (request.limit) {
+            langOptions.maxKnowledgeMatches = request.limit;
+            langOptions.maxMessageMatches = request.limit;
+        }
+        if (request.minScore) {
+            langOptions.thresholdScore = request.minScore;
+        }
+        if (request.maxCharsInBudget) {
+            langOptions.maxCharsInBudget = request.maxCharsInBudget;
+        }
+
+        timing.parsing = Date.now() - parseStart;
+
         const searchStart = Date.now();
-        let searchResults: website.Website[] = [];
-
-        debugContext.searchStrategies.push("comprehensive-unified");
-        searchResults = await performComprehensiveSearch(
-            enhancedRequest,
-            searchTerms,
-            detectedIntent,
-            context,
+        const langResult = await kp.searchConversationWithLanguage(
+            websiteCollection,
+            searchText,
+            queryTranslator,
+            langOptions,
+            undefined,
+            debugContext ? {} : undefined,
         );
+
+        if (!langResult.success) {
+            return createErrorResponse(
+                `Search query translation failed: ${langResult.message}`,
+                startTime,
+                request.debug ? debugContext : undefined,
+            );
+        }
 
         timing.search = Date.now() - searchStart;
-        debug(
-            `Found ${searchResults.length} results from comprehensive search`,
-        );
+        debug(`Found ${langResult.data.length} conversation results`);
 
-        // PHASE 3: Processing phase
+        // PHASE 2: Convert ConversationSearchResult to Website[]
         const processingStart = Date.now();
-        let filteredResults = searchResults;
+        let websites = convertSearchResultsToWebsites(langResult.data, websiteCollection);
 
-        // Apply property filters if specified
+        // PHASE 3: Apply property filters (website-specific post-processing)
         if (Object.keys(propertyFilters).length > 0) {
             debug(`Applying property filters:`, propertyFilters);
-            filteredResults = filteredResults.filter((website) => {
+            websites = websites.filter((website) => {
                 if (propertyFilters.domain && website.metadata.domain !== propertyFilters.domain) {
                     return false;
                 }
@@ -259,40 +274,25 @@ export async function searchWebMemories(
                 }
                 return true;
             });
-            debug(`After property filtering: ${filteredResults.length} results`);
-        }
-
-        // Apply comprehensive LLM-informed ranking
-        if (detectedIntent && filteredResults.length > 0) {
-            debug(
-                `Applying comprehensive LLM-informed ranking for intent: ${detectedIntent.intent.type}`,
-            );
-            filteredResults = await queryAdapter.enhanceSearchResults(
-                filteredResults,
-                enhancedRequest,
-                detectedIntent,
-            );
+            debug(`After property filtering: ${websites.length} results`);
         }
 
         // Apply limit
-        const limitedResults = filteredResults.slice(
-            0,
-            enhancedRequest.limit || 20,
-        );
+        const limitedWebsites = websites.slice(0, request.limit || 20);
 
         // Convert to website results format
-        const websites = convertToWebsiteResults(limitedResults);
+        const websiteResults = convertToWebsiteResults(limitedWebsites);
 
         // PHASE 4: Extract knowledge if requested
         let relatedEntities: Entity[] | undefined;
         let topTopics: string[] | undefined;
 
         if (
-            enhancedRequest.includeRelatedEntities !== false &&
-            limitedResults.length > 0
+            request.includeRelatedEntities !== false &&
+            limitedWebsites.length > 0
         ) {
             const knowledgeResult =
-                await extractKnowledgeFromResults(limitedResults);
+                await extractKnowledgeFromResults(limitedWebsites);
             relatedEntities = knowledgeResult.entities;
             topTopics = knowledgeResult.topics;
         }
@@ -300,255 +300,62 @@ export async function searchWebMemories(
         timing.processing = Date.now() - processingStart;
         timing.total = Date.now() - startTime;
 
-        // PHASE 5: Answer Enhancement - Generate dynamic summary and smart follow-ups
-        // TODO: re-enable answer generation after perf investigation
-        enhancedRequest.generateAnswer = false;
-        let answerEnhancement;
-        if (
-            enhancedRequest.generateAnswer !== false &&
-            limitedResults.length > 0
-        ) {
-            try {
-                const answerAdapter = new AnswerEnhancementAdapter();
-                answerEnhancement = await answerAdapter.enhanceSearchResults(
-                    request.query,
-                    detectedIntent,
-                    limitedResults,
-                );
-                if (answerEnhancement) {
-                    debug(
-                        `Answer enhancement generated with confidence: ${answerEnhancement.confidence}`,
-                    );
-                }
-            } catch (error) {
-                debug(`Answer enhancement failed: ${error}`);
-                answerEnhancement = undefined;
-            }
-        }
-
         // Update debug context
-        debugContext.knowledgeMatchCount = limitedResults.length;
+        debugContext.knowledgeMatchCount = limitedWebsites.length;
         debugContext.timing = timing;
+        debugContext.searchStrategies.push("knowpro-language-search");
 
-        // Build enhanced response
+        // Build response
         const response: SearchWebMemoriesResponse = {
-            websites,
+            websites: websiteResults,
             summary: {
-                totalFound: filteredResults.length,
+                totalFound: websites.length,
                 searchTime: timing.total,
-                strategies: detectedIntent
-                    ? ["llm-enhanced", ...debugContext.searchStrategies]
-                    : debugContext.searchStrategies,
-                confidence:
-                    detectedIntent?.confidence ||
-                    answerEnhancement?.confidence ||
-                    0.7,
+                strategies: debugContext.searchStrategies,
+                confidence: 0.8,
             },
-            queryIntent: detectedIntent?.intent.type,
-            searchTerms,
-            // Use enhanced followups if available, otherwise provide empty array
-            suggestedFollowups:
-                answerEnhancement?.followups.map((f) => f.query) || [],
+            queryIntent: "discovery",
+            searchTerms: [searchText],
+            suggestedFollowups: [],
         };
-
-        // Add optional components
-        if (answerEnhancement && enhancedRequest.generateAnswer !== false) {
-            response.answer = answerEnhancement.summary.text;
-            response.answerType = "synthesized";
-            response.answerSources = websites.slice(0, 5).map((site) => ({
-                url: site.url,
-                title: site.title,
-                relevanceScore: site.relevanceScore,
-                lastIndexed: site.lastVisited || new Date().toISOString(),
-            }));
-            response.confidence = answerEnhancement.confidence;
-        }
 
         if (relatedEntities !== undefined) {
             response.relatedEntities = relatedEntities || undefined;
             response.topTopics = topTopics || undefined;
         }
 
-        if (answerEnhancement !== undefined) {
-            response.answerEnhancement = answerEnhancement;
-        }
-
-        if (enhancedRequest.debug) {
+        if (request.debug) {
             response.debugContext = debugContext;
         }
 
         debug(
-            `Enhanced search completed in ${timing.total}ms with ${websites.length} results`,
+            `Search completed in ${timing.total}ms with ${websiteResults.length} results`,
         );
         return response;
     } catch (error) {
         timing.total = Date.now() - startTime;
-        debug(`Unified search failed: ${error}`);
+        debug(`Search failed: ${error}`);
 
         return createErrorResponse(
             error instanceof Error ? error.message : "Unknown search error",
             startTime,
-            enhancedRequest?.debug ? debugContext : undefined,
+            request.debug ? debugContext : undefined,
         );
     }
 }
 
-// Comprehensive Search Strategy Functions
+// OLD SEARCH FUNCTIONS - REMOVED (replaced by knowpro searchConversationWithLanguage)
+// - performComprehensiveSearch
+// - performAdvancedSearch
+// - performHybridSearch
+// - performBasicSemanticSearch
+// - isSingleTermQuery
+// - hasCapitalizedTerms
+// - buildEnhancedWhenFilter
 
-/**
- * Perform comprehensive search using all available strategies
- * Replaces both performAdvancedSearch and findRequestedWebsites
- */
-async function performComprehensiveSearch(
-    request: SearchWebMemoriesRequest,
-    searchTerms: string[],
-    detectedIntent: any,
-    context: SessionContext<BrowserActionContext>,
-): Promise<website.Website[]> {
-    const websiteCollection = context.agentContext.websiteCollection;
-    if (!websiteCollection || websiteCollection.messages.length === 0) {
-        return [];
-    }
+// RESTORED: Direct entity/topic search helpers for entity graph view
+// These call knowpro APIs directly for fast, deterministic lookups
 
-    debug(`Starting comprehensive search for query: "${request.query}"`);
-
-    // Strategy 1: Try advanced search first for all queries
-    try {
-        debug(
-            "Attempting comprehensive search with multi-knowledge type support",
-        );
-
-        const advancedResults = await performAdvancedSearch(
-            request,
-            searchTerms,
-            detectedIntent,
-            websiteCollection,
-            context,
-        );
-
-        if (advancedResults.length > 0) {
-            debug(
-                `Comprehensive search succeeded with ${advancedResults.length} results`,
-            );
-            return advancedResults;
-        } else {
-            debug(
-                "No results found with comprehensive search, falling back to back-up strategies",
-            );
-        }
-    } catch (error) {
-        debug(
-            `Comprehensive search failed: ${error}, falling back to back-up strategies`,
-        );
-    }
-
-    // Strategy 2: Hybrid search for single term queries
-    if (isSingleTermQuery(request.query) && !request.exactMatch) {
-        const hybridResults = await performHybridSearch(
-            request,
-            websiteCollection,
-        );
-        if (hybridResults.length > 0) {
-            debug(
-                `Comprehensive search succeeded with hybrid strategy: ${hybridResults.length} results`,
-            );
-            return hybridResults;
-        }
-    }
-
-    // Strategy 3: Entity search for proper nouns and capitalized terms
-    if (hasCapitalizedTerms(request.query)) {
-        const entityResults = await performEntitySearch(
-            request,
-            websiteCollection,
-        );
-        if (entityResults.length > 0) {
-            debug(
-                `Comprehensive search succeeded with entity strategy: ${entityResults.length} results`,
-            );
-            return entityResults;
-        }
-    }
-
-    // Strategy 4: Topic search for conceptual terms
-    const topicResults = await performTopicSearch(request, websiteCollection);
-    if (topicResults.length > 0) {
-        debug(
-            `Comprehensive search succeeded with topic strategy: ${topicResults.length} results`,
-        );
-        return topicResults;
-    }
-
-    // Strategy 5: Basic semantic search (final fallback)
-    debug(`Falling back to semantic search for query: "${request.query}"`);
-    return await performBasicSemanticSearch(request, websiteCollection);
-}
-
-/**
- * Check if query is a single term (no spaces)
- */
-function isSingleTermQuery(query: string): boolean {
-    return query.trim().split(/\s+/).length === 1;
-}
-
-/**
- * Check if query contains capitalized terms (potential proper nouns)
- */
-function hasCapitalizedTerms(query: string): boolean {
-    return /\b[A-Z][a-z]+\b/.test(query);
-}
-
-/**
- * Perform hybrid search for single term queries
- */
-async function performHybridSearch(
-    request: SearchWebMemoriesRequest,
-    websiteCollection: website.WebsiteCollection,
-): Promise<website.Website[]> {
-    try {
-        debug(`Attempting hybrid search for: "${request.query}"`);
-
-        // Use combined search for both entities and topics
-        const results = await websiteCollection.searchCombined({
-            entities: [request.query],
-            topics: [request.query],
-            entityType: request.metadata?.entityType,
-            facetName: request.metadata?.facetName,
-            facetValue: request.metadata?.facetValue,
-            when:
-                request.dateFrom || request.dateTo
-                    ? {
-                          dateRange: {
-                              start: request.dateFrom
-                                  ? new Date(request.dateFrom)
-                                  : new Date(0),
-                              end: request.dateTo
-                                  ? new Date(request.dateTo)
-                                  : new Date(),
-                          },
-                      }
-                    : undefined,
-        });
-
-        debug(`Found ${results.length} results using hybrid search`);
-
-        const websites = results.map((result) => result.toWebsite());
-        const deduplicatedWebsites = deduplicateByUrl(websites);
-
-        debug(
-            `Hybrid search: ${websites.length} results (${deduplicatedWebsites.length} after deduplication)`,
-        );
-
-        return deduplicatedWebsites.slice(0, request.limit || 20);
-    } catch (error) {
-        debug(`Hybrid search failed: ${error}`);
-        return [];
-    }
-}
-
-/**
- * Perform entity search for proper nouns and specific terms
- */
 async function performEntitySearch(
     request: SearchWebMemoriesRequest,
     websiteCollection: website.WebsiteCollection,
@@ -556,12 +363,10 @@ async function performEntitySearch(
     try {
         debug(`Attempting entity search for: "${request.query}"`);
 
-        // Extract filters from request metadata (set by QueryEnhancementAdapter)
         const entityType = request.metadata?.entityType;
         const facetName = request.metadata?.facetName;
         const facetValue = request.metadata?.facetValue;
 
-        // Use the enhanced searchByEntities with optional filters
         const entityResults = await websiteCollection.searchByEntities(
             [request.query],
             entityType,
@@ -585,9 +390,6 @@ async function performEntitySearch(
     }
 }
 
-/**
- * Perform topic search for conceptual terms
- */
 async function performTopicSearch(
     request: SearchWebMemoriesRequest,
     websiteCollection: website.WebsiteCollection,
@@ -595,7 +397,6 @@ async function performTopicSearch(
     try {
         debug(`Attempting topic search for: "${request.query}"`);
 
-        // Build temporal filter if dates provided
         const whenFilter =
             request.dateFrom || request.dateTo
                 ? {
@@ -615,7 +416,6 @@ async function performTopicSearch(
             exactMatch: request.exactMatch || false,
         };
 
-        // Use the enhanced searchByTopics with filters
         const topicResults = await websiteCollection.searchByTopics(
             [request.query],
             whenFilter,
@@ -638,297 +438,6 @@ async function performTopicSearch(
     }
 }
 
-/**
- * Perform basic semantic search using knowpro (final fallback)
- * This replaces the semantic search logic from findRequestedWebsites
- */
-async function performBasicSemanticSearch(
-    request: SearchWebMemoriesRequest,
-    websiteCollection: website.WebsiteCollection,
-): Promise<website.Website[]> {
-    try {
-        debug(`Performing semantic search fallback for: "${request.query}"`);
-
-        const matches = await kp.searchConversationKnowledge(
-            websiteCollection,
-            // search group
-            {
-                booleanOp: "or", // Use OR to match the query
-                terms: [{ term: { text: request.query } }],
-            },
-            // when filter
-            {
-                // No specific knowledge type filter - search across all types
-            },
-            // options
-            {
-                exactMatch: request.exactMatch || false,
-                thresholdScore: request.minScore,
-                maxCharsInBudget: request.maxCharsInBudget,
-            },
-        );
-
-        if (!matches || matches.size === 0) {
-            debug(`No semantic matches found for query: "${request.query}"`);
-            return [];
-        }
-
-        debug(`Found ${matches.size} semantic matches for: "${request.query}"`);
-
-        const results: { website: website.Website; score: number }[] = [];
-        const processedMessages = new Set<number>();
-
-        matches.forEach((match: kp.SemanticRefSearchResult) => {
-            match.semanticRefMatches.forEach(
-                (refMatch: kp.ScoredSemanticRefOrdinal) => {
-                    if (refMatch.score >= (request.minScore || 0.3)) {
-                        const semanticRef: kp.SemanticRef | undefined =
-                            websiteCollection.semanticRefs.get(
-                                refMatch.semanticRefOrdinal,
-                            );
-                        if (semanticRef) {
-                            const messageOrdinal =
-                                semanticRef.range.start.messageOrdinal;
-                            if (
-                                messageOrdinal !== undefined &&
-                                !processedMessages.has(messageOrdinal)
-                            ) {
-                                processedMessages.add(messageOrdinal);
-
-                                const websiteData =
-                                    websiteCollection.messages.get(
-                                        messageOrdinal,
-                                    ) as any;
-                                if (websiteData) {
-                                    // Use the semantic search score as the primary score
-                                    const totalScore = refMatch.score;
-
-                                    results.push({
-                                        website: websiteData,
-                                        score: totalScore,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                },
-            );
-        });
-
-        // Sort by score (highest first) and remove duplicates
-        const uniqueResults = new Map<
-            string,
-            { website: website.Website; score: number }
-        >();
-        results.forEach((result) => {
-            const url = result.website.metadata.url;
-            const existing = uniqueResults.get(url);
-            if (!existing || result.score > existing.score) {
-                uniqueResults.set(url, result);
-            }
-        });
-
-        const sortedResults = Array.from(uniqueResults.values()).sort(
-            (a, b) => b.score - a.score,
-        );
-
-        debug(
-            `Filtered to ${sortedResults.length} unique websites after semantic search scoring`,
-        );
-
-        return sortedResults
-            .map((r) => r.website)
-            .slice(0, request.limit || 20);
-    } catch (error) {
-        debug(`Error in semantic search: ${error}`);
-        return [];
-    }
-}
-
-// Helper functions
-
-async function performAdvancedSearch(
-    request: SearchWebMemoriesRequest,
-    searchTerms: string[],
-    detectedIntent: any,
-    websiteCollection: website.WebsiteCollection,
-    context: SessionContext<BrowserActionContext>,
-): Promise<website.Website[]> {
-    // Enhanced WhenFilter with KnowPro native filtering
-    const baseWhenFilter = buildEnhancedWhenFilter(request, detectedIntent);
-
-    // Multi-knowledge type search like executeIntegratedSemanticSearch
-    const searchPromises: Promise<
-        Map<kp.KnowledgeType, kp.SemanticRefSearchResult> | undefined
-    >[] = [];
-
-    // Strategy 1: Try property-based topic search (like successful searchByTopics)
-    debug(`Trying topic search for full query: "${request.query}"`);
-    const topicSearchTermGroup = kp.createTopicSearchTermGroup(
-        request.query,
-        request.exactMatch || false,
-    );
-    searchPromises.push(
-        kp.searchConversationKnowledge(
-            websiteCollection,
-            topicSearchTermGroup,
-            { ...baseWhenFilter, knowledgeType: "topic" as const },
-            {
-                exactMatch: request.exactMatch || false,
-                maxKnowledgeMatches: request.limit || 50,
-                thresholdScore: request.minScore,
-                maxCharsInBudget: request.maxCharsInBudget,
-            },
-        ),
-    );
-
-    // Strategy 1b: Also try entity search for the full query
-    debug(`Trying entity search for full query: "${request.query}"`);
-    const entitySearchTermGroup = kp.createEntitySearchTermGroup(
-        request.query,
-        request.metadata?.entityType,
-        request.metadata?.facetName,
-        request.metadata?.facetValue,
-        request.exactMatch || false,
-    );
-    searchPromises.push(
-        kp.searchConversationKnowledge(
-            websiteCollection,
-            entitySearchTermGroup,
-            { ...baseWhenFilter, knowledgeType: "entity" as const },
-            {
-                exactMatch: request.exactMatch || false,
-                maxKnowledgeMatches: request.limit || 50,
-                thresholdScore: request.minScore,
-                maxCharsInBudget: request.maxCharsInBudget,
-            },
-        ),
-    );
-
-    // Strategy 2: Try parsed terms as topic search (for multi-term queries)
-    if (searchTerms.length > 1) {
-        debug(`Also trying parsed terms as topics: ${searchTerms.join(", ")}`);
-
-        // Create topic search for parsed terms
-        const parsedTopicSearchGroup = kp.createTopicSearchTermGroup(
-            searchTerms,
-            request.exactMatch || false,
-        );
-        searchPromises.push(
-            kp.searchConversationKnowledge(
-                websiteCollection,
-                parsedTopicSearchGroup,
-                { ...baseWhenFilter, knowledgeType: "topic" as const },
-                {
-                    exactMatch: request.exactMatch || false,
-                    maxKnowledgeMatches: request.limit || 50,
-                    thresholdScore: request.minScore,
-                    maxCharsInBudget: request.maxCharsInBudget,
-                },
-            ),
-        );
-
-        // Also try action search
-        const actionSearchGroup = kp.createOrTermGroup(
-            ...searchTerms.map((term) => kp.createSearchTerm(term)),
-        );
-        searchPromises.push(
-            kp.searchConversationKnowledge(
-                websiteCollection,
-                actionSearchGroup,
-                { ...baseWhenFilter, knowledgeType: "action" as const },
-                {
-                    exactMatch: request.exactMatch || false,
-                    maxKnowledgeMatches: request.limit || 50,
-                    thresholdScore: request.minScore,
-                    maxCharsInBudget: request.maxCharsInBudget,
-                },
-            ),
-        );
-    }
-
-    // Execute all searches in parallel
-    const searchResults = await Promise.all(searchPromises);
-
-    // Advanced result processing WITHOUT score filtering (aligned with entity search behavior)
-    const results: website.Website[] = [];
-    const processedMessages = new Set<number>();
-
-    searchResults.forEach((searchResultMap) => {
-        if (searchResultMap) {
-            searchResultMap.forEach(
-                (semanticRefResult: kp.SemanticRefSearchResult) => {
-                    if (semanticRefResult.semanticRefMatches) {
-                        semanticRefResult.semanticRefMatches.forEach(
-                            (refMatch: kp.ScoredSemanticRefOrdinal) => {
-                                const semanticRef =
-                                    websiteCollection.semanticRefs.get(
-                                        refMatch.semanticRefOrdinal,
-                                    );
-                                if (semanticRef) {
-                                    const messageOrdinal =
-                                        semanticRef.range.start.messageOrdinal;
-                                    if (
-                                        messageOrdinal !== undefined &&
-                                        !processedMessages.has(messageOrdinal)
-                                    ) {
-                                        processedMessages.add(messageOrdinal);
-                                        const docPart =
-                                            websiteCollection.messages.get(
-                                                messageOrdinal,
-                                            );
-                                        if (docPart) {
-                                            results.push(docPart as any);
-                                        }
-                                    }
-                                }
-                            },
-                        );
-                    }
-                },
-            );
-        }
-    });
-
-    // Consolidate results by URL to eliminate duplicates
-    const deduplicatedResults = deduplicateByUrl(results);
-
-    debug(
-        `Advanced search found ${results.length} results (${deduplicatedResults.length} after deduplication)`,
-    );
-    return deduplicatedResults;
-}
-
-function buildEnhancedWhenFilter(
-    request: SearchWebMemoriesRequest,
-    detectedIntent: any,
-): kp.WhenFilter {
-    const whenFilter: any = {};
-
-    // Date filtering from request
-    if (request.dateFrom || request.dateTo) {
-        whenFilter.dateRange = {
-            start: request.dateFrom ? new Date(request.dateFrom) : new Date(0),
-            end: request.dateTo ? new Date(request.dateTo) : new Date(),
-        };
-    }
-
-    /* TODO: Revisit domain filter - this is currently filtering out too many results
-    if (request.metadata?.domainFilter) {
-        whenFilter.scopeDefiningTerms = kp.createOrTermGroup(
-            kp.createSearchTerm(request.metadata.domainFilter, 1.0),
-        );
-    }
-    */
-
-    // Additional whenFilter from query enhancement
-    if (request.metadata?.whenFilter) {
-        Object.assign(whenFilter, request.metadata.whenFilter);
-    }
-
-    return whenFilter;
-}
-
 function deduplicateByUrl(websites: website.Website[]): website.Website[] {
     const seenUrls = new Set<string>();
     const deduplicated: website.Website[] = [];
@@ -941,13 +450,14 @@ function deduplicateByUrl(websites: website.Website[]): website.Website[] {
             seenUrls.add(url);
             deduplicated.push(site);
         } else if (!url) {
-            // Keep sites without URL metadata (shouldn't happen but be safe)
             deduplicated.push(site);
         }
     }
 
     return deduplicated;
 }
+
+// Helper functions
 
 function convertToWebsiteResults(websites: website.Website[]): WebsiteResult[] {
     return websites.map((site) => {
@@ -1159,7 +669,7 @@ function createErrorResponse(
     };
 }
 
-// Entity-based search function - Uses performEntitySearch directly
+// Entity-based search function - Uses direct entity search for fast, deterministic lookups
 export async function searchByEntities(
     request: {
         entities: string[];
@@ -1172,7 +682,7 @@ export async function searchByEntities(
 ): Promise<SearchWebMemoriesResponse> {
     const startTime = Date.now();
     debug(
-        `Starting performEntitySearch for entities: ${request.entities.join(", ")}`,
+        `Starting entity search for entities: ${request.entities.join(", ")}`,
     );
 
     try {
@@ -1185,18 +695,17 @@ export async function searchByEntities(
             );
         }
 
-        // Use performEntitySearch directly - faster and more predictable
         const searchRequest: SearchWebMemoriesRequest = {
             query: request.entities.join(" OR "),
             searchScope: request.searchScope || "all_indexed",
             limit: request.maxResults || 10,
             generateAnswer: false,
             includeRelatedEntities: true,
-            enableAdvancedSearch: false,
             exactMatch: false,
             minScore: 0.3,
         };
 
+        // Use direct entity search (calls knowpro searchByEntities)
         const websites = await performEntitySearch(
             searchRequest,
             websiteCollection,
@@ -1213,10 +722,9 @@ export async function searchByEntities(
         }
 
         debug(
-            `performEntitySearch found ${websites.length} results for entities: ${request.entities.join(", ")}`,
+            `Entity search found ${websites.length} results for entities: ${request.entities.join(", ")}`,
         );
 
-        // Convert to expected response format
         const websiteResults = convertToWebsiteResults(websites);
         const { entities, topics } =
             await extractKnowledgeFromResults(websites);
@@ -1241,7 +749,7 @@ export async function searchByEntities(
             topTopics: topics,
         };
     } catch (error) {
-        console.error("Error in performEntitySearch:", error);
+        console.error("Error in entity search:", error);
         return createErrorResponse(
             error instanceof Error ? error.message : "Entity search failed",
             startTime,
@@ -1249,7 +757,7 @@ export async function searchByEntities(
     }
 }
 
-// Topic-based search function - Uses performTopicSearch directly
+// Topic-based search function - Uses direct topic search for fast, deterministic lookups
 export async function searchByTopics(
     request: {
         topics: string[];
@@ -1262,7 +770,7 @@ export async function searchByTopics(
 ): Promise<SearchWebMemoriesResponse> {
     const startTime = Date.now();
     debug(
-        `Starting performTopicSearch for topics: ${request.topics.join(", ")}`,
+        `Starting topic search for topics: ${request.topics.join(", ")}`,
     );
 
     try {
@@ -1275,18 +783,17 @@ export async function searchByTopics(
             );
         }
 
-        // Use performTopicSearch directly - faster and more predictable
         const searchRequest: SearchWebMemoriesRequest = {
             query: request.topics.join(" OR "),
             searchScope: request.searchScope || "all_indexed",
             limit: request.maxResults || 10,
             generateAnswer: false,
             includeRelatedEntities: true,
-            enableAdvancedSearch: false,
             exactMatch: false,
-            minScore: 0.25, // Lower threshold for topic matching
+            minScore: 0.25,
         };
 
+        // Use direct topic search (calls knowpro searchByTopics)
         const websites = await performTopicSearch(
             searchRequest,
             websiteCollection,
@@ -1301,10 +808,9 @@ export async function searchByTopics(
         }
 
         debug(
-            `performTopicSearch found ${websites.length} results for topics: ${request.topics.join(", ")}`,
+            `Topic search found ${websites.length} results for topics: ${request.topics.join(", ")}`,
         );
 
-        // Convert to expected response format
         const websiteResults = convertToWebsiteResults(websites);
         const { entities, topics } =
             await extractKnowledgeFromResults(websites);
@@ -1329,7 +835,7 @@ export async function searchByTopics(
             topTopics: topics,
         };
     } catch (error) {
-        console.error("Error in performTopicSearch:", error);
+        console.error("Error in topic search:", error);
         return createErrorResponse(
             error instanceof Error ? error.message : "Topic search failed",
             startTime,
