@@ -210,12 +210,12 @@ class EmailMemory(IConversation[EmailMessage, ITermToSemanticRefIndex]):
         if options.compile_options is None:
             options.compile_options = EmailMemory.create_lang_search_compile_options()
 
-        options.compile_options.term_filter = lambda term: self._is_noise_term(term)
+        options.compile_options.term_filter = lambda term: self._is_searchable_term(term)
         return options
         
-    def _is_noise_term(self, term: str) -> bool:
-        is_noise = term in self.noise_terms
-        return is_noise
+    def _is_searchable_term(self, term: str) -> bool:
+        is_searchable = term not in self.noise_terms
+        return is_searchable
     
 #  
 # TODO: Migrate some variation of these into a shared API
