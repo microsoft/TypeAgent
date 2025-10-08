@@ -102,10 +102,10 @@ async def main():
         line = input("✉>>").strip()
         if len(line) == 0:
             continue
-        args = shlex.split(line)
-        if len(args) < 1:
-            continue
         try:
+            args = shlex.split(line)
+            if len(args) < 1:
+                continue
             cmd = args[0].lower()
             args.pop(0)
             if cmd == "@help":
