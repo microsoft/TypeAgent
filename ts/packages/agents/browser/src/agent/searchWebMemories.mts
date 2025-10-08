@@ -232,16 +232,23 @@ export async function searchWebMemories(
             langOptions.maxCharsInBudget = request.maxCharsInBudget;
         }
 
+        langOptions.fallbackRagOptions = {
+            maxMessageMatches: request.limit || 10,
+            maxCharsInBudget: request.maxCharsInBudget || 10000,
+            thresholdScore: request.minScore || 0.7,
+        };
+
         timing.parsing = Date.now() - parseStart;
 
         const searchStart = Date.now();
+        const langDebugContext: kp.LanguageSearchDebugContext = {};
         const langResult = await kp.searchConversationWithLanguage(
             websiteCollection,
             searchText,
             queryTranslator,
             langOptions,
             undefined,
-            debugContext ? {} : undefined,
+            request.debug ? langDebugContext : undefined,
         );
 
         if (!langResult.success) {
@@ -254,6 +261,14 @@ export async function searchWebMemories(
 
         timing.search = Date.now() - searchStart;
         debug(`Found ${langResult.data.length} conversation results`);
+
+        if (langDebugContext.usedSimilarityFallback) {
+            const usedFallback = langDebugContext.usedSimilarityFallback.some(v => v === true);
+            if (usedFallback) {
+                debug(`Embedding similarity fallback was used for some queries`);
+                debugContext.searchStrategies.push("embedding-fallback");
+            }
+        }
 
         // PHASE 2: Convert ConversationSearchResult to Website[]
         const processingStart = Date.now();
