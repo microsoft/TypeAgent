@@ -444,7 +444,7 @@ export async function importWebsiteDataFromSession(
                             const parts = docPartsFromHtml(
                                 fetchResult.html,
                                 false,
-                                importOptions.maxCharsPerChunk || 4000,
+                                importOptions.maxCharsPerChunk || 8000,
                                 site.metadata.url,
                             );
 

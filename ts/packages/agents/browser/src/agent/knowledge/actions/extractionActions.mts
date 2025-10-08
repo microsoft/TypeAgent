@@ -76,7 +76,7 @@ export function createExtractionInputsFromFragments(
                     docParts = docPartsFromHtml(
                         fragment.content,
                         false,
-                        4000,
+                        8000,
                         `${url}#iframe-${fragment.frameId || index}`,
                     );
 

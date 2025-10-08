@@ -9,7 +9,6 @@ import {
     StructuredDataCollection,
     ActionInfo,
 } from "./extraction/types.js";
-import { splitLargeTextIntoChunks } from "knowledge-processor";
 import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export interface WebsiteVisitInfo {
@@ -345,38 +344,6 @@ export class Website implements kp.IMessage {
         }
     }
 
-    static createWithProcessedContent(
-        metadata: WebsiteMeta,
-        processedContent: string,
-        tags: string[] = [],
-        knowledge?: kpLib.KnowledgeResponse | undefined,
-        topicHierarchy?: kpLib.TopicHierarchy | undefined,
-        deletionInfo?: kp.DeletionInfo | undefined,
-    ): Website {
-        let content = "";
-        if (metadata.title) {
-            content += `Title: ${metadata.title}\n`;
-        }
-        if (metadata.url) {
-            content += `URL: ${metadata.url}\n\n`;
-        }
-        content += processedContent;
-
-        const chunks = Array.from(
-            splitLargeTextIntoChunks(content, 2000, true),
-        );
-
-        return new Website(
-            metadata,
-            chunks,
-            tags,
-            knowledge,
-            topicHierarchy,
-            deletionInfo,
-            false,
-        );
-    }
-
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
         let metaKnowledge = this.metadata.getKnowledge();
         if (!metaKnowledge) {
@@ -403,12 +370,11 @@ export function importWebsiteVisit(
     pageContent?: string,
 ): Website {
     const meta = new WebsiteMeta(visitInfo);
-    const knowledge = meta.getKnowledge(); // Extract knowledge from metadata
+    const knowledge = meta.getKnowledge();
 
-    const content = pageContent || visitInfo.description || "";
+    let content = pageContent || visitInfo.description || "";
 
-    // For bookmarks and basic imports, add title/URL formatting like the old websiteToTextChunks behavior
-    if (!pageContent) {
+    if (!pageContent && (visitInfo.title || visitInfo.url)) {
         let formattedContent = "";
         if (visitInfo.title) {
             formattedContent += `Title: ${visitInfo.title}\n`;
@@ -417,20 +383,8 @@ export function importWebsiteVisit(
             formattedContent += `URL: ${visitInfo.url}\n\n`;
         }
         formattedContent += content;
-
-        const chunks = Array.from(
-            splitLargeTextIntoChunks(formattedContent, 2000, true),
-        );
-        return new Website(
-            meta,
-            chunks,
-            [],
-            knowledge,
-            undefined,
-            undefined,
-            false,
-        );
+        content = formattedContent;
     }
 
-    return new Website(meta, content, [], knowledge);
+    return new Website(meta, content, [], knowledge, undefined, undefined, false);
 }
