@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    conversation as kpLib,
-    splitLargeTextIntoChunks,
-} from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 import { HtmlFetcher } from "../htmlFetcher.js";
 import {
     ExtractionMode,
@@ -212,49 +209,22 @@ export class ContentExtractor {
             return this.extractBasicKnowledge(content);
         }
 
-        // Use pre-chunked docParts with Markdown structure if available
-        if (content.docParts && content.docParts.length > 0) {
-            debug(
-                `Using pre-chunked docParts: ${content.docParts.length} parts for ${content.url}`,
-            );
-            return this.extractFromDocParts(
-                content.docParts,
-                mode,
-                chunkProgressCallback,
-                content.url,
+        // All website indexing starts with HTML converted to docParts
+        if (!content.docParts || content.docParts.length === 0) {
+            throw new Error(
+                `No docParts available for ${content.url}. All website indexing must provide HTML content converted to docParts.`,
             );
         }
 
         debug(
-            `No docParts available, falling back to text chunking for ${content.url}`,
+            `Processing ${content.docParts.length} docParts for ${content.url}`,
         );
-
-        const textContent = content.textContent || content.title || "";
-        if (!textContent) {
-            return {
-                topics: [],
-                entities: [],
-                actions: [],
-                inverseActions: [],
-            };
-        }
-
-        const textWithTitle = content.title
-            ? `Title: ${content.title}\n\n${textContent}`
-            : textContent;
-
-        try {
-            const result = await this.extractChunkedAIKnowledge(
-                textWithTitle,
-                modeConfig.defaultChunkSize,
-                chunkProgressCallback,
-                modeConfig.defaultConcurrentExtractions,
-                content.url,
-            );
-            return result;
-        } catch (error) {
-            throw new AIExtractionFailedError(mode, error as Error);
-        }
+        return this.extractFromDocParts(
+            content.docParts,
+            mode,
+            chunkProgressCallback,
+            content.url,
+        );
     }
 
     /**
@@ -562,142 +532,6 @@ export class ContentExtractor {
             return !!this.knowledgeExtractor;
         }
         return true; // Basic mode always works
-    }
-
-    /**
-     * Extract knowledge from content using AI with intelligent chunking
-     */
-    private async extractChunkedAIKnowledge(
-        content: string,
-        maxChunkSize: number,
-        chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
-        maxConcurrent: number = 3,
-        itemUrl: string = "",
-    ): Promise<kpLib.KnowledgeResponse> {
-        if (!this.knowledgeExtractor) {
-            throw new Error("Knowledge extractor not available");
-        }
-
-        if (content.length <= maxChunkSize) {
-            if (chunkProgressCallback) {
-                await chunkProgressCallback({
-                    itemUrl,
-                    itemIndex: 0,
-                    chunkIndex: 0,
-                    totalChunksInItem: 1,
-                    globalChunkIndex: 0,
-                    totalChunksGlobal: 1,
-                    chunkContent: content.substring(0, 100),
-                });
-            }
-
-            const result = await this.knowledgeExtractor.extract(content);
-            if (!result) {
-                throw new Error("Knowledge extractor returned undefined");
-            }
-
-            // For single-chunk content, still generate hierarchical topics
-            const aggregated = await this.aggregateChunkResults(
-                [result],
-                [content],
-                itemUrl,
-            );
-            return aggregated;
-        }
-
-        const chunks = this.intelligentChunking(content, maxChunkSize);
-        const chunkResults: kpLib.KnowledgeResponse[] = [];
-        const chunkTexts: string[] = [];
-
-        for (let i = 0; i < chunks.length; i += maxConcurrent) {
-            const batch = chunks.slice(i, i + maxConcurrent);
-
-            const batchPromises = batch.map((chunk, batchIndex) => {
-                const chunkIndex = i + batchIndex;
-
-                return this.knowledgeExtractor!.extract(chunk)
-                    .then(async (result) => {
-                        const outcome = {
-                            success: true,
-                            result,
-                            chunk,
-                            chunkIndex,
-                        };
-
-                        if (result) {
-                            chunkResults.push(result);
-                            chunkTexts.push(chunk);
-                        }
-
-                        if (chunkProgressCallback) {
-                            await chunkProgressCallback({
-                                itemUrl,
-                                itemIndex: 0,
-                                chunkIndex: outcome.chunkIndex,
-                                totalChunksInItem: chunks.length,
-                                globalChunkIndex: 0,
-                                totalChunksGlobal: 1,
-                                chunkContent: outcome.chunk.substring(0, 100),
-                                chunkResult: outcome.result,
-                            });
-                        }
-
-                        return outcome;
-                    })
-                    .catch(async (error) => {
-                        const outcome = {
-                            success: false,
-                            error,
-                            chunk,
-                            chunkIndex,
-                        };
-
-                        debug(
-                            `Chunk ${outcome.chunkIndex} extraction failed: ${error}`,
-                        );
-                        if (chunkProgressCallback) {
-                            await chunkProgressCallback({
-                                itemUrl,
-                                itemIndex: 0,
-                                chunkIndex: outcome.chunkIndex,
-                                totalChunksInItem: chunks.length,
-                                globalChunkIndex: 0,
-                                totalChunksGlobal: 1,
-                                chunkContent: outcome.chunk.substring(0, 100),
-                            });
-                        }
-
-                        return outcome;
-                    });
-            });
-
-            await Promise.allSettled(batchPromises);
-
-            if (i + maxConcurrent < chunks.length) {
-                await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-        }
-
-        const aggregated = await this.aggregateChunkResults(
-            chunkResults,
-            chunkTexts,
-            itemUrl,
-        );
-
-        return aggregated;
-    }
-
-    /**
-     * Intelligently chunk content using knowledge-processor's semantic-aware chunking
-     */
-    private intelligentChunking(
-        content: string,
-        maxChunkSize: number,
-        preserveStructure: boolean = true,
-    ): string[] {
-        return Array.from(
-            splitLargeTextIntoChunks(content, maxChunkSize, preserveStructure),
-        );
     }
 
     /**

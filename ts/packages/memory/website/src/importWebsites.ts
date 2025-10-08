@@ -681,16 +681,17 @@ function createWebsiteWithKnowledge(
         finalKnowledge = meta.getKnowledge();
     }
 
-    // Create website with enhanced knowledge and proper chunking
-    const enhancedWebsite = Website.createWithProcessedContent(
+    const topicHierarchy = (finalKnowledge as any)?.topicHierarchy;
+
+    return new Website(
         meta,
         mainText,
         [],
         finalKnowledge,
+        topicHierarchy,
         undefined,
+        false,
     );
-
-    return enhancedWebsite;
 }
 
 /**

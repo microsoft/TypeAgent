@@ -12,6 +12,7 @@ import type {
     DynamicSummary,
     SmartFollowup,
 } from "../../agent/search/schema/answerEnhancement.mjs";
+import { renderMarkdown } from "./utils/markdownRenderer.js";
 
 export class KnowledgeSearchPanel {
     private container: HTMLElement;
@@ -731,7 +732,9 @@ export class KnowledgeSearchPanel {
         const summaryContent = document.getElementById("summaryContent");
 
         if (summarySection && summaryContent) {
-            summaryContent.textContent = summary;
+            // Render markdown to HTML for proper formatting
+            const htmlContent = renderMarkdown(summary);
+            summaryContent.innerHTML = htmlContent;
             summarySection.style.display = "block";
         }
     }
@@ -741,18 +744,18 @@ export class KnowledgeSearchPanel {
         const summaryContent = document.getElementById("summaryContent");
 
         if (summarySection && summaryContent) {
-            // Build enhanced summary with key findings
+            // Build enhanced summary with key findings using markdown formatting
             let enhancedText = summary.text;
 
             if (summary.keyFindings && summary.keyFindings.length > 0) {
-                enhancedText += "\n\nKey Findings:\n";
+                enhancedText += "\n\n**Key Findings:**\n";
                 summary.keyFindings.forEach((finding) => {
-                    enhancedText += `• ${finding}\n`;
+                    enhancedText += `- ${finding}\n`;
                 });
             }
 
             if (summary.statistics) {
-                enhancedText += `\n📊 Found ${summary.statistics.totalResults} results`;
+                enhancedText += `\n📊 Found **${summary.statistics.totalResults} results**`;
                 if (summary.statistics.timeSpan) {
                     enhancedText += ` from ${summary.statistics.timeSpan}`;
                 }
@@ -764,7 +767,9 @@ export class KnowledgeSearchPanel {
                 }
             }
 
-            summaryContent.textContent = enhancedText;
+            // Render markdown to HTML for proper formatting
+            const htmlContent = renderMarkdown(enhancedText);
+            summaryContent.innerHTML = htmlContent;
             summarySection.style.display = "block";
         }
     }
