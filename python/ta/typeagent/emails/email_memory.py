@@ -229,6 +229,9 @@ async def _add_synonyms_file_as_aliases(conversation: IConversation, file_name: 
 
     aliases = secondary_indexes.term_to_related_terms_index.aliases
     synonym_file = os.path.join(os.path.dirname(__file__), file_name)
+    if not os.path.exists(synonym_file):
+        return
+    
     with open(synonym_file) as f:
         data: list[dict] = json.load(f)
     if data:
@@ -245,6 +248,9 @@ def _add_noise_words_from_file(
     file_name: str,
 ) -> None:
     noise_file = os.path.join(os.path.dirname(__file__), file_name)
+    if not os.path.exists(noise_file):
+        return
+
     with open(noise_file) as f:
         words = f.readlines()
     for word in words:
