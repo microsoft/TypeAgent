@@ -4501,3 +4501,88 @@ body {
   border-radius: 0.5rem;
   transition: width 0.3s ease;
 }
+
+
+/* Markdown content styling in AI summary */
+#summaryContent {
+    line-height: 1.6;
+    color: var(--text-color);
+}
+
+#summaryContent h1,
+#summaryContent h2,
+#summaryContent h3 {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+}
+
+#summaryContent h1 { font-size: 1.5em; }
+#summaryContent h2 { font-size: 1.3em; }
+#summaryContent h3 { font-size: 1.1em; }
+
+#summaryContent ul,
+#summaryContent ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+}
+
+#summaryContent li {
+    margin: 0.25em 0;
+}
+
+#summaryContent code {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 0.9em;
+}
+
+#summaryContent pre {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 1em;
+    border-radius: 5px;
+    overflow-x: auto;
+}
+
+#summaryContent pre code {
+    background: none;
+    padding: 0;
+}
+
+#summaryContent blockquote {
+    border-left: 3px solid var(--primary-color);
+    padding-left: 1em;
+    margin: 0.5em 0;
+    color: var(--text-secondary);
+}
+
+#summaryContent a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+#summaryContent a:hover {
+    text-decoration: underline;
+}
+
+#summaryContent strong {
+    font-weight: 600;
+}
+
+#summaryContent em {
+    font-style: italic;
+}
+
+#summaryContent p {
+    margin: 0.5em 0;
+}
+
+#summaryContent p:first-child {
+    margin-top: 0;
+}
+
+#summaryContent p:last-child {
+    margin-bottom: 0;
+}
