@@ -270,11 +270,11 @@ export async function searchWebMemories(
             }
         }
 
-        // PHASE 2: Convert ConversationSearchResult to Website[]
+        // Convert ConversationSearchResult to Website[]
         const processingStart = Date.now();
         let websites = convertSearchResultsToWebsites(langResult.data, websiteCollection);
 
-        // PHASE 3: Apply property filters (website-specific post-processing)
+        // Apply property filters (website-specific post-processing)
         if (Object.keys(propertyFilters).length > 0) {
             debug(`Applying property filters:`, propertyFilters);
             websites = websites.filter((website) => {
@@ -298,7 +298,7 @@ export async function searchWebMemories(
         // Convert to website results format
         const websiteResults = convertToWebsiteResults(limitedWebsites);
 
-        // PHASE 4: Extract knowledge if requested
+        // Extract knowledge if requested
         let relatedEntities: Entity[] | undefined;
         let topTopics: string[] | undefined;
 
@@ -310,6 +310,65 @@ export async function searchWebMemories(
                 await extractKnowledgeFromResults(limitedWebsites);
             relatedEntities = knowledgeResult.entities;
             topTopics = knowledgeResult.topics;
+        }
+
+        // Generate answer if requested
+        let answer: string | undefined;
+        let answerType: "direct" | "synthesized" | "noAnswer" | undefined;
+        let answerSources: WebPageReference[] | undefined;
+        let confidence: number | undefined;
+
+        if (request.generateAnswer !== false && langResult.data.length > 0) {
+            const answerStart = Date.now();
+            debug(`Generating answer for query: "${searchText}"`);
+
+            try {
+                const answerGenerator = new kp.AnswerGenerator(
+                    kp.createAnswerGeneratorSettings()
+                );
+
+                const contextOptions: kp.AnswerContextOptions = {
+                    entitiesTopK: request.knowledgeTopK || 20,
+                    topicsTopK: request.knowledgeTopK || 20,
+                    messagesTopK: request.limit || 20,
+                    chunking: request.chunking ?? true,
+                };
+
+                const answerResult = await kp.generateAnswer(
+                    websiteCollection,
+                    answerGenerator,
+                    searchText,
+                    langResult.data,
+                    undefined,
+                    contextOptions,
+                );
+
+                if (answerResult.success) {
+                    const answerResponse = answerResult.data;
+
+                    if (answerResponse.type === "Answered") {
+                        answer = answerResponse.answer;
+                        answerType = "synthesized";
+                        confidence = 0.8;
+
+                        answerSources = limitedWebsites.slice(0, 5).map((site, index) => ({
+                            url: site.metadata.url,
+                            title: site.metadata.title || "",
+                            relevanceScore: 1.0 - (index * 0.1),
+                            lastIndexed: site.metadata.lastVisitTime || new Date().toISOString(),
+                        }));
+
+                        debug(`Generated answer (${answer!.length} chars) in ${Date.now() - answerStart}ms`);
+                    } else {
+                        answerType = "noAnswer";
+                        debug(`No answer generated: ${answerResponse.whyNoAnswer}`);
+                    }
+                } else {
+                    debug(`Answer generation failed: ${answerResult.message}`);
+                }
+            } catch (error) {
+                debug(`Answer generation error: ${error}`);
+            }
         }
 
         timing.processing = Date.now() - processingStart;
@@ -333,6 +392,14 @@ export async function searchWebMemories(
             searchTerms: [searchText],
             suggestedFollowups: [],
         };
+
+        // Add answer fields if generated
+        if (answer !== undefined) {
+            response.answer = answer;
+            response.answerType = answerType;
+            response.answerSources = answerSources;
+            response.confidence = confidence;
+        }
 
         if (relatedEntities !== undefined) {
             response.relatedEntities = relatedEntities || undefined;
