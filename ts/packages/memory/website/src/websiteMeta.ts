@@ -399,5 +399,13 @@ export function importWebsiteVisit(
         content = formattedContent;
     }
 
-    return new Website(meta, content, [], knowledge, undefined, undefined, false);
+    return new Website(
+        meta,
+        content,
+        [],
+        knowledge,
+        undefined,
+        undefined,
+        false,
+    );
 }

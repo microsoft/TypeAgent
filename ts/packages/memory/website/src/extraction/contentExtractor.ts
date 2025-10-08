@@ -534,7 +534,6 @@ export class ContentExtractor {
         return true; // Basic mode always works
     }
 
-
     /**
      * Extract knowledge from pre-chunked DocParts with Markdown structure
      */
