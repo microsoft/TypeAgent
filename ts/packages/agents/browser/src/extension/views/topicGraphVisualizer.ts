@@ -51,7 +51,7 @@ export class TopicGraphVisualizer {
     > = new Map();
     private currentZoom: number = 1.0;
     private lastLodUpdate: number = 0;
-    private lodUpdateInterval: number = 16; // ~60fps
+    private lodUpdateInterval: number = 33; // ~30fps (reduced from 16ms for better performance)
     private zoomHandlerSetup: boolean = false;
 
     // Triple-instance approach: separate instances for global, neighborhood, and expanded views
@@ -611,6 +611,9 @@ export class TopicGraphVisualizer {
 
             // Hide global instance, show neighborhood
             this.setInstanceVisibility("neighborhood");
+
+            // Setup event handlers for neighborhood instance
+            this.setupEventHandlers();
 
             console.log(
                 "[TopicGraphVisualizer] Neighborhood transition complete",
@@ -1225,6 +1228,12 @@ export class TopicGraphVisualizer {
             }
         }
 
+        // Calculate dynamic co-occurrence threshold for global view
+        let coOccursThreshold = 0;
+        if (this.currentActiveView === "global") {
+            coOccursThreshold = this.calculateCoOccursThreshold(data.relationships);
+        }
+
         // Add relationship edges
         for (const rel of data.relationships) {
             // Only add edges if both nodes are visible
@@ -1234,6 +1243,19 @@ export class TopicGraphVisualizer {
             const targetVisible = elements.some((el) => el.data.id === rel.to);
 
             if (sourceVisible && targetVisible) {
+                // Performance optimization: filter edges based on view mode
+                if (this.currentActiveView === "global") {
+                    // In global view, only show top 20% strongest co_occurs edges
+                    // This keeps strongly related topics connected while reducing edge density
+                    if (rel.type === "co_occurs" && (rel.strength || 0) < coOccursThreshold) {
+                        continue;
+                    }
+                    // Also skip low-strength edges for cleaner visualization
+                    if (rel.strength < 0.3) {
+                        continue;
+                    }
+                }
+
                 elements.push({
                     data: {
                         id: `${rel.from}-${rel.to}`,
@@ -1248,6 +1270,33 @@ export class TopicGraphVisualizer {
         }
 
         return elements;
+    }
+
+    /**
+     * Calculate dynamic threshold for co-occurrence edges based on strength distribution
+     * Returns the 80th percentile strength value (keeps top 20% of co_occurs edges)
+     */
+    private calculateCoOccursThreshold(relationships: TopicRelationshipData[]): number {
+        const coOccursStrengths = relationships
+            .filter((rel) => rel.type === "co_occurs")
+            .map((rel) => rel.strength || 0)
+            .sort((a, b) => a - b);
+
+        if (coOccursStrengths.length === 0) {
+            return 0;
+        }
+
+        const percentile = 0.8;
+        const index = Math.floor(coOccursStrengths.length * percentile);
+        const threshold = coOccursStrengths[index];
+
+        console.log(
+            `[TopicGraphVisualizer] Co-occurrence threshold: ${threshold.toFixed(3)} ` +
+            `(80th percentile of ${coOccursStrengths.length} co_occurs edges, ` +
+            `will keep ${coOccursStrengths.length - index} edges)`,
+        );
+
+        return threshold;
     }
 
     /**
