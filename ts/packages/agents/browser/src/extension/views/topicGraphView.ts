@@ -191,11 +191,10 @@ class TopicGraphView {
             console.log(
                 "[TopicGraphView] Fetching global importance layer (top 500 topics)...",
             );
-            const result = await this.extensionService.sendMessage({
-                type: "getTopicImportanceLayer",
-                maxNodes: 500,
-                minImportanceThreshold: 0.0,
-            });
+            const result = await this.extensionService.getTopicImportanceLayer(
+                500,
+                0.0,
+            );
 
             if (!result || !result.topics || result.topics.length === 0) {
                 console.warn(
@@ -265,12 +264,12 @@ class TopicGraphView {
                 `[TopicGraphView] Fetching neighborhood for ${centerTopic} with ${viewportTopicIds.length} viewport topics`,
             );
 
-            const result = await this.extensionService.sendMessage({
-                type: "getTopicViewportNeighborhood",
-                centerTopic: centerTopic,
-                viewportTopicIds: viewportTopicIds,
-                maxNodes: maxNodes,
-            });
+            const result =
+                await this.extensionService.getTopicViewportNeighborhood(
+                    centerTopic,
+                    viewportTopicIds,
+                    maxNodes,
+                );
 
             if (!result || !result.topics) {
                 console.warn("[TopicGraphView] No neighborhood data returned");
@@ -895,10 +894,7 @@ class TopicGraphView {
 
     private async loadTopicMetrics(topicId: string): Promise<void> {
         try {
-            const result = await this.extensionService.sendMessage({
-                type: "getTopicMetrics",
-                parameters: { topicId },
-            });
+            const result = await this.extensionService.getTopicMetrics(topicId);
 
             if (result && result.success) {
                 const metrics = result.metrics;

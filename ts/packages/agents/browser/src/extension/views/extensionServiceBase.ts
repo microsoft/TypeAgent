@@ -492,6 +492,37 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async getTopicImportanceLayer(
+        maxNodes: number = 500,
+        minImportanceThreshold: number = 0.0,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getTopicImportanceLayer",
+            maxNodes,
+            minImportanceThreshold,
+        });
+    }
+
+    async getTopicViewportNeighborhood(
+        centerTopic: string,
+        viewportTopicIds: string[],
+        maxNodes: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getTopicViewportNeighborhood",
+            centerTopic,
+            viewportTopicIds,
+            maxNodes,
+        });
+    }
+
+    async getTopicMetrics(topicId: string): Promise<any> {
+        return this.sendMessage({
+            type: "getTopicMetrics",
+            parameters: { topicId },
+        });
+    }
+
     async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
         await this.sendMessage({
             type: "notifyAutoIndexSettingChanged",
