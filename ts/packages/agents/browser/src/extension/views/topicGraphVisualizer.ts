@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Topic Graph Visualizer - Cytoscape.js integration for hierarchical topic visualization
+// Topic Graph Visualizer - Cytoscape.js integration for global importance and neighborhood topic visualization
 declare var cytoscape: any;
 
 interface TopicData {
@@ -51,8 +51,33 @@ export class TopicGraphVisualizer {
     > = new Map();
     private currentZoom: number = 1.0;
     private lastLodUpdate: number = 0;
-    private lodUpdateInterval: number = 16; // ~60fps
+    private lodUpdateInterval: number = 33; // ~30fps (reduced from 16ms for better performance)
     private zoomHandlerSetup: boolean = false;
+
+    // Dual-instance approach: separate instances for global and neighborhood views
+    private globalInstance: any = null;
+    private neighborhoodInstance: any = null;
+    private currentActiveView: "global" | "neighborhood" = "global";
+    private onInstanceChangeCallback?: () => void;
+    private globalGraphData: any = null;
+    private neighborhoodGraphData: any = null;
+
+    // Zoom thresholds for automatic view switching
+    private zoomThresholds = {
+        enterNeighborhoodMode: 2.5,
+        exitNeighborhoodMode: 0.8,
+    };
+
+    // Transition state management
+    private isLoadingNeighborhood: boolean = false;
+    private previousGlobalZoom: number = 1.0;
+    private storedGlobalViewport: {
+        zoom: number;
+        pan: { x: number; y: number };
+    } | null = null;
+
+    // Graph data provider for API calls
+    private graphDataProvider: any = null;
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -156,23 +181,43 @@ export class TopicGraphVisualizer {
     public async init(data: TopicGraphData): Promise<void> {
         this.topicGraphData = data;
 
-        if (!this.cy) {
-            this.initializeCytoscape();
+        // Create separate containers and instances if not already created
+        if (!this.globalInstance || !this.neighborhoodInstance) {
+            this.createDualInstances();
         }
 
-        await this.loadData(data);
-        this.setupEventHandlers();
+        await this.initializeGlobalView(data);
     }
 
     /**
-     * Initialize Cytoscape instance
+     * Create both Cytoscape instances with separate containers
      */
-    private initializeCytoscape(): void {
-        // Get optimal renderer configuration (WebGL when available)
+    private createDualInstances(): void {
         const rendererConfig = this.getOptimalRendererConfig();
 
-        this.cy = cytoscape({
-            container: this.container,
+        // Create global instance container
+        const globalContainer = document.createElement("div");
+        globalContainer.style.width = "100%";
+        globalContainer.style.height = "100%";
+        globalContainer.style.position = "absolute";
+        globalContainer.style.top = "0";
+        globalContainer.style.left = "0";
+        globalContainer.style.visibility = "visible";
+        this.container.appendChild(globalContainer);
+
+        // Create neighborhood instance container
+        const neighborhoodContainer = document.createElement("div");
+        neighborhoodContainer.style.width = "100%";
+        neighborhoodContainer.style.height = "100%";
+        neighborhoodContainer.style.position = "absolute";
+        neighborhoodContainer.style.top = "0";
+        neighborhoodContainer.style.left = "0";
+        neighborhoodContainer.style.visibility = "hidden";
+        this.container.appendChild(neighborhoodContainer);
+
+        // Initialize global instance
+        this.globalInstance = cytoscape({
+            container: globalContainer,
             style: this.getOptimizedTopicGraphStyles(),
             layout: this.getLayoutOptions(),
             elements: [],
@@ -180,28 +225,77 @@ export class TopicGraphVisualizer {
             minZoom: 0.25,
             maxZoom: 4.0,
             zoomingEnabled: true,
-            userZoomingEnabled: false, // Disable default zoom to use custom handler
+            userZoomingEnabled: false,
             panningEnabled: true,
             userPanningEnabled: true,
             boxSelectionEnabled: false,
-            selectionType: "single",
+            autoungrabify: false,
         });
 
-        // Set up zoom event handler for LOD and custom zoom control
-        this.setupZoomHandler();
+        // Initialize neighborhood instance
+        this.neighborhoodInstance = cytoscape({
+            container: neighborhoodContainer,
+            style: this.getOptimizedTopicGraphStyles(),
+            layout: this.getLayoutOptions(),
+            elements: [],
+            renderer: rendererConfig,
+            minZoom: 0.25,
+            maxZoom: 4.0,
+            zoomingEnabled: true,
+            userZoomingEnabled: false,
+            panningEnabled: true,
+            userPanningEnabled: true,
+            boxSelectionEnabled: false,
+            autoungrabify: false,
+        });
+
+        // Setup zoom handlers for both instances
+        this.setupZoomHandlerForInstance(this.globalInstance);
+        this.setupZoomHandlerForInstance(this.neighborhoodInstance);
+
+        console.log(
+            "[TopicGraphVisualizer] Dual instances created with separate containers",
+        );
     }
 
     /**
-     * Setup zoom handler for Level of Detail updates and custom zoom control
+     * Initialize global importance view with dual-instance architecture
      */
-    private setupZoomHandler(): void {
-        if (this.zoomHandlerSetup || !this.cy) return;
+    private async initializeGlobalView(data: TopicGraphData): Promise<void> {
+        console.log(
+            "[TopicGraphVisualizer] Initializing GLOBAL importance view",
+        );
+        console.log(
+            `[TopicGraphVisualizer] Global view data: ${data.topics.length} topics`,
+        );
 
-        // Standard zoom handler for LOD updates only
-        this.cy.on("zoom", (event: any) => {
-            const previousZoom = this.currentZoom;
-            const currentZoom = this.cy.zoom();
+        this.cy = this.globalInstance;
+        this.currentActiveView = "global";
+        this.globalGraphData = data;
 
+        // Show global, hide others
+        this.setInstanceVisibility("global");
+
+        await this.loadData(data);
+        this.setupEventHandlers();
+
+        // Set up wheel zoom handler on container (only once)
+        if (!this.zoomHandlerSetup) {
+            this.setupContainerWheelHandler();
+        }
+
+        if (this.onInstanceChangeCallback) {
+            this.onInstanceChangeCallback();
+        }
+    }
+
+    /**
+     * Setup zoom handler for a specific Cytoscape instance
+     */
+    private setupZoomHandlerForInstance(instance: any): void {
+        // Standard zoom handler for LOD updates
+        instance.on("zoom", async (event: any) => {
+            const currentZoom = instance.zoom();
             this.currentZoom = currentZoom;
 
             // Throttle LOD updates
@@ -209,9 +303,356 @@ export class TopicGraphVisualizer {
             if (now - this.lastLodUpdate < this.lodUpdateInterval) return;
             this.lastLodUpdate = now;
 
-            // Apply LOD based on zoom level
-            this.applyLevelOfDetail(currentZoom);
+            // Only apply LoD if this is the active instance
+            if (instance === this.cy) {
+                await this.applyLevelOfDetail(currentZoom);
+            }
         });
+    }
+
+    /**
+     * Switch to global importance view
+     */
+    public async switchToGlobalView(
+        globalData?: TopicGraphData,
+    ): Promise<void> {
+        console.log(
+            "[TopicGraphVisualizer] SWITCHING to global importance view",
+        );
+        const dataToUse = globalData || this.globalGraphData;
+
+        if (!dataToUse) {
+            console.warn(
+                "[TopicGraphVisualizer] No global graph data available",
+            );
+            return;
+        }
+
+        console.log(
+            `[TopicGraphVisualizer] Loading ${dataToUse.topics.length} topics in global view`,
+        );
+
+        this.cy = this.globalInstance;
+        this.currentActiveView = "global";
+        this.globalGraphData = dataToUse;
+
+        this.setInstanceVisibility("global");
+
+        await this.loadData(dataToUse);
+
+        if (this.onInstanceChangeCallback) {
+            this.onInstanceChangeCallback();
+        }
+
+        console.log("[TopicGraphVisualizer] Global view switch complete");
+    }
+
+    /**
+     * Get current active view mode
+     */
+    public getCurrentViewMode(): "global" | "neighborhood" {
+        return this.currentActiveView;
+    }
+
+    /**
+     * Register callback for instance change events
+     */
+    public onInstanceChange(callback: () => void): void {
+        this.onInstanceChangeCallback = callback;
+    }
+
+    /**
+     * Set graph data provider for API calls
+     */
+    public setGraphDataProvider(provider: any): void {
+        this.graphDataProvider = provider;
+    }
+
+    /**
+     * Transition to neighborhood mode (zoom > 2.5x)
+     */
+    private async transitionToNeighborhoodMode(): Promise<void> {
+        if (this.isLoadingNeighborhood) {
+            console.log(
+                "[TopicGraphVisualizer] Already loading neighborhood, skipping",
+            );
+            return;
+        }
+
+        if (!this.graphDataProvider) {
+            console.warn(
+                "[TopicGraphVisualizer] No graph data provider set, cannot load neighborhood",
+            );
+            return;
+        }
+
+        this.isLoadingNeighborhood = true;
+
+        try {
+            // Store current global viewport for restoration later
+            this.previousGlobalZoom = this.globalInstance.zoom();
+            this.storedGlobalViewport = {
+                zoom: this.globalInstance.zoom(),
+                pan: this.globalInstance.pan(),
+            };
+
+            console.log(
+                `[TopicGraphVisualizer] Stored global viewport - Zoom: ${this.storedGlobalViewport.zoom.toFixed(2)}, Pan: (${this.storedGlobalViewport.pan.x.toFixed(0)}, ${this.storedGlobalViewport.pan.y.toFixed(0)})`,
+            );
+
+            // Get topics in current viewport
+            const viewportTopics = this.getTopicsInViewport();
+            console.log(
+                `[TopicGraphVisualizer] Found ${viewportTopics.length} topics in viewport`,
+            );
+
+            if (viewportTopics.length === 0) {
+                console.warn(
+                    "[TopicGraphVisualizer] No topics in viewport, aborting neighborhood transition",
+                );
+                this.isLoadingNeighborhood = false;
+                return;
+            }
+
+            // Select top 4 topics by importance to use as anchor nodes
+            const sortedByImportance = viewportTopics.sort((a: any, b: any) => {
+                const importanceA =
+                    a.data("importance") || a.data("computedImportance") || 0;
+                const importanceB =
+                    b.data("importance") || b.data("computedImportance") || 0;
+                return importanceB - importanceA;
+            });
+
+            const anchorTopics = sortedByImportance.slice(0, 4);
+            const centerTopic = anchorTopics[0]; // Most important topic is the center
+
+            console.log(
+                `[TopicGraphVisualizer] Selected ${anchorTopics.length} anchor topics (center: ${centerTopic.data("label")})`,
+            );
+            anchorTopics.forEach((topic: any, idx: number) => {
+                const importance =
+                    topic.data("importance") ||
+                    topic.data("computedImportance") ||
+                    0;
+                console.log(
+                    `  ${idx + 1}. ${topic.data("label")} (importance: ${importance.toFixed(3)})`,
+                );
+            });
+
+            // Get anchor topic IDs (top 4 by importance)
+            const viewportTopicIds = anchorTopics.map((node: any) => node.id());
+
+            // Load neighborhood data around these anchor topics
+            const neighborhoodData =
+                await this.graphDataProvider.getTopicViewportNeighborhood(
+                    centerTopic.id(),
+                    viewportTopicIds,
+                    200, // maxNodes
+                );
+
+            console.log(
+                `[TopicGraphVisualizer] Loaded neighborhood: ${neighborhoodData.topics?.length || 0} topics`,
+            );
+
+            if (
+                !neighborhoodData.topics ||
+                neighborhoodData.topics.length === 0
+            ) {
+                console.warn(
+                    "[TopicGraphVisualizer] No neighborhood data returned",
+                );
+                this.isLoadingNeighborhood = false;
+                return;
+            }
+
+            // Store neighborhood data
+            this.neighborhoodGraphData = neighborhoodData;
+
+            // Get center topic position from global view BEFORE switching
+            const centerTopicNode = this.globalInstance.$(
+                `#${centerTopic.id()}`,
+            );
+            let centerPosition = null;
+            if (centerTopicNode.length > 0) {
+                centerPosition = centerTopicNode.position();
+                console.log(
+                    `[TopicGraphVisualizer] Center topic "${centerTopic.data("label")}" position in global: (${centerPosition.x.toFixed(0)}, ${centerPosition.y.toFixed(0)})`,
+                );
+            }
+
+            // Load data into neighborhood instance BEFORE switching
+            await this.loadDataIntoInstance(
+                this.neighborhoodInstance,
+                neighborhoodData,
+            );
+
+            // If we have the center topic position, center the neighborhood view on it
+            if (centerPosition) {
+                const centerTopicInNeighborhood = this.neighborhoodInstance.$(
+                    `#${centerTopic.id()}`,
+                );
+                if (centerTopicInNeighborhood.length > 0) {
+                    console.log(
+                        `[TopicGraphVisualizer] Centering neighborhood view on topic "${centerTopic.data("label")}"`,
+                    );
+                    this.neighborhoodInstance.center(centerTopicInNeighborhood);
+                    this.neighborhoodInstance.zoom(1.5);
+                }
+            }
+
+            // Now switch to neighborhood instance
+            this.cy = this.neighborhoodInstance;
+            this.currentActiveView = "neighborhood";
+
+            // Hide global instance, show neighborhood
+            this.setInstanceVisibility("neighborhood");
+
+            // Setup event handlers for neighborhood instance
+            this.setupEventHandlers();
+
+            console.log(
+                "[TopicGraphVisualizer] Neighborhood transition complete",
+            );
+
+            if (this.onInstanceChangeCallback) {
+                this.onInstanceChangeCallback();
+            }
+        } catch (error) {
+            console.error(
+                "[TopicGraphVisualizer] Error transitioning to neighborhood:",
+                error,
+            );
+        } finally {
+            this.isLoadingNeighborhood = false;
+        }
+    }
+
+    /**
+     * Return to global view (zoom < 0.8x)
+     */
+    private async returnToGlobalView(): Promise<void> {
+        console.log("[TopicGraphVisualizer] Returning to global view");
+
+        // Switch back to global instance FIRST
+        this.cy = this.globalInstance;
+        this.currentActiveView = "global";
+
+        // Show global instance, hide neighborhood BEFORE restoring zoom
+        this.setInstanceVisibility("global");
+
+        // Restore viewport if we stored it (with slight delay to let instance settle)
+        if (this.storedGlobalViewport) {
+            const { zoom, pan } = this.storedGlobalViewport;
+
+            // Ensure zoom stays below neighborhood threshold
+            const safeZoom = Math.min(
+                zoom,
+                this.zoomThresholds.enterNeighborhoodMode - 0.1,
+            );
+
+            // Restore viewport
+            setTimeout(() => {
+                this.globalInstance.zoom(safeZoom);
+                this.globalInstance.pan(pan);
+                console.log(
+                    `[TopicGraphVisualizer] Restored global viewport - Zoom: ${safeZoom.toFixed(2)}`,
+                );
+            }, 50);
+
+            this.storedGlobalViewport = null;
+        }
+
+        console.log("[TopicGraphVisualizer] Returned to global view");
+
+        if (this.onInstanceChangeCallback) {
+            this.onInstanceChangeCallback();
+        }
+    }
+
+    /**
+     * Get topics currently in viewport
+     */
+    private getTopicsInViewport(): any[] {
+        const activeInstance =
+            this.currentActiveView === "global" ? this.globalInstance : this.cy;
+        if (!activeInstance) return [];
+
+        const viewport = activeInstance.extent();
+        const topicsInViewport: any[] = [];
+
+        activeInstance.nodes().forEach((node: any) => {
+            const bb = node.boundingBox();
+            if (this.isNodeInViewport(bb, viewport)) {
+                topicsInViewport.push(node);
+            }
+        });
+
+        return topicsInViewport;
+    }
+
+    /**
+     * Select center topic from viewport topics (highest importance)
+     */
+    private selectCenterTopic(viewportTopics: any[]): any {
+        if (viewportTopics.length === 0) return null;
+
+        // Sort by importance (computedImportance data field)
+        const sorted = viewportTopics.sort((a: any, b: any) => {
+            const impA = a.data("computedImportance") || 0;
+            const impB = b.data("computedImportance") || 0;
+            return impB - impA;
+        });
+
+        return sorted[0];
+    }
+
+    /**
+     * Set which instance is visible (uses visibility to avoid destroying renderer)
+     */
+    private setInstanceVisibility(
+        visibleView: "global" | "neighborhood",
+    ): void {
+        const containers = {
+            global: this.globalInstance?.container(),
+            neighborhood: this.neighborhoodInstance?.container(),
+        };
+
+        // Hide all containers using visibility (preserves renderer state)
+        Object.values(containers).forEach((container) => {
+            if (container) container.style.visibility = "hidden";
+        });
+
+        // Show active container
+        if (containers[visibleView]) {
+            containers[visibleView].style.visibility = "visible";
+
+            // Resize the active instance to ensure proper rendering
+            if (visibleView === "global" && this.globalInstance) {
+                this.globalInstance.resize();
+            } else if (
+                visibleView === "neighborhood" &&
+                this.neighborhoodInstance
+            ) {
+                this.neighborhoodInstance.resize();
+            }
+        }
+    }
+
+    /**
+     * Setup zoom handler for Level of Detail updates and custom zoom control (legacy)
+     */
+    private setupZoomHandler(): void {
+        if (this.zoomHandlerSetup || !this.cy) return;
+
+        // Set up wheel handler on container
+        this.setupContainerWheelHandler();
+    }
+
+    /**
+     * Setup custom wheel zoom handler on container (called once)
+     */
+    private setupContainerWheelHandler(): void {
+        if (this.zoomHandlerSetup) return;
 
         // Custom smooth zoom wheel handler to prevent abrupt zoom changes
         this.container.addEventListener(
@@ -242,7 +683,7 @@ export class TopicGraphVisualizer {
                 // Clamp to our bounds
                 newZoom = Math.max(0.25, Math.min(4.0, newZoom));
 
-                // Apply smooth zoom to current instance
+                // Apply smooth zoom to current active instance
                 this.cy.zoom({
                     level: newZoom,
                     renderedPosition: { x: event.offsetX, y: event.offsetY },
@@ -252,16 +693,24 @@ export class TopicGraphVisualizer {
         ); // Must be non-passive to preventDefault
 
         this.zoomHandlerSetup = true;
+        console.log("[TopicGraphVisualizer] Container wheel handler set up");
     }
 
     /**
      * Apply Level of Detail based on zoom level
      */
-    private applyLevelOfDetail(zoom: number): void {
+    private async applyLevelOfDetail(zoom: number): Promise<void> {
         if (!this.cy) return;
+
+        // Check for view transitions based on zoom
+        await this.checkViewTransitions(zoom);
 
         // Get LOD settings for current zoom
         const lodSettings = this.getLODSettings(zoom);
+
+        console.log(
+            `[TopicGraphVisualizer] LoD Update - Zoom: ${zoom.toFixed(2)}x, Visible Levels: ${lodSettings.visibleLevels}, Node Threshold: ${lodSettings.nodeThreshold}, View Mode: ${this.currentActiveView}`,
+        );
 
         // Update visible hierarchy depth
         this.updateVisibleHierarchyDepth(lodSettings.visibleLevels);
@@ -271,6 +720,32 @@ export class TopicGraphVisualizer {
 
         // Update label visibility
         this.updateLabelVisibility(zoom);
+    }
+
+    /**
+     * Check if zoom level triggers view transitions
+     */
+    private async checkViewTransitions(zoom: number): Promise<void> {
+        // Transition to neighborhood mode when zooming in past threshold
+        if (
+            this.currentActiveView === "global" &&
+            zoom > this.zoomThresholds.enterNeighborhoodMode
+        ) {
+            console.log(
+                `[TopicGraphVisualizer] Zoom ${zoom.toFixed(2)}x > ${this.zoomThresholds.enterNeighborhoodMode} - Triggering neighborhood mode`,
+            );
+            await this.transitionToNeighborhoodMode();
+        }
+        // Return to global view when zooming out below threshold
+        else if (
+            this.currentActiveView === "neighborhood" &&
+            zoom < this.zoomThresholds.exitNeighborhoodMode
+        ) {
+            console.log(
+                `[TopicGraphVisualizer] Zoom ${zoom.toFixed(2)}x < ${this.zoomThresholds.exitNeighborhoodMode} - Returning to global view`,
+            );
+            await this.returnToGlobalView();
+        }
     }
 
     /**
@@ -397,12 +872,23 @@ export class TopicGraphVisualizer {
 
         if (!this.cy || !viewport) return nodesInView;
 
-        this.cy.nodes().forEach((node: any) => {
-            const bb = node.boundingBox();
-            if (this.isNodeInViewport(bb, viewport)) {
-                nodesInView.add(node.id());
-            }
-        });
+        try {
+            this.cy.nodes().forEach((node: any) => {
+                try {
+                    const bb = node.boundingBox();
+                    if (bb && this.isNodeInViewport(bb, viewport)) {
+                        nodesInView.add(node.id());
+                    }
+                } catch (nodeError) {
+                    // Skip nodes that can't get bounding box (e.g., from hidden instances)
+                }
+            });
+        } catch (error) {
+            console.warn(
+                "[TopicGraphVisualizer] Error getting viewport nodes:",
+                error,
+            );
+        }
 
         return nodesInView;
     }
@@ -535,24 +1021,40 @@ export class TopicGraphVisualizer {
      * Load topic data into the graph
      */
     private async loadData(data: TopicGraphData): Promise<void> {
+        await this.loadDataIntoInstance(this.cy, data);
+    }
+
+    /**
+     * Load data into a specific Cytoscape instance (avoids triggering zoom on inactive instances)
+     */
+    private async loadDataIntoInstance(
+        instance: any,
+        data: any,
+    ): Promise<void> {
         const elements = this.convertToTopicElements(data);
 
-        this.cy.elements().remove();
-        this.cy.add(elements);
+        instance.elements().remove();
+        instance.add(elements);
 
-        // Apply layout
-        await this.applyLayout();
+        // Apply layout on this specific instance
+        await this.applyLayoutToInstance(instance);
 
         // Focus on center topic if specified
         if (data.centerTopic) {
-            this.focusOnTopic(data.centerTopic);
+            const node = instance.$(`#${data.centerTopic}`);
+            if (node.length > 0) {
+                instance.center(node);
+                instance.zoom(1.5);
+            }
         } else {
-            this.cy.fit();
+            instance.fit();
         }
 
-        // Apply initial LOD based on current zoom
-        const initialZoom = this.cy.zoom();
-        this.applyLevelOfDetail(initialZoom);
+        // Apply initial LOD only if this is the active instance
+        if (instance === this.cy) {
+            const initialZoom = instance.zoom();
+            await this.applyLevelOfDetail(initialZoom);
+        }
     }
 
     /**
@@ -592,7 +1094,11 @@ export class TopicGraphVisualizer {
         const nodeMap = new Map<string, any>();
         for (const topic of data.topics) {
             if (this.visibleLevels.has(topic.level)) {
-                const computedImportance = this.calculateTopicImportance(topic);
+                // Use backend importance score if available, otherwise calculate locally
+                const computedImportance =
+                    (topic as any).importance !== undefined
+                        ? (topic as any).importance
+                        : this.calculateTopicImportance(topic);
 
                 const nodeElement = {
                     data: {
@@ -614,6 +1120,14 @@ export class TopicGraphVisualizer {
             }
         }
 
+        // Calculate dynamic co-occurrence threshold for global view
+        let coOccursThreshold = 0;
+        if (this.currentActiveView === "global") {
+            coOccursThreshold = this.calculateCoOccursThreshold(
+                data.relationships,
+            );
+        }
+
         // Add relationship edges
         for (const rel of data.relationships) {
             // Only add edges if both nodes are visible
@@ -623,6 +1137,22 @@ export class TopicGraphVisualizer {
             const targetVisible = elements.some((el) => el.data.id === rel.to);
 
             if (sourceVisible && targetVisible) {
+                // Performance optimization: filter edges based on view mode
+                if (this.currentActiveView === "global") {
+                    // In global view, only show top 20% strongest co_occurs edges
+                    // This keeps strongly related topics connected while reducing edge density
+                    if (
+                        rel.type === "co_occurs" &&
+                        (rel.strength || 0) < coOccursThreshold
+                    ) {
+                        continue;
+                    }
+                    // Also skip low-strength edges for cleaner visualization
+                    if (rel.strength < 0.3) {
+                        continue;
+                    }
+                }
+
                 elements.push({
                     data: {
                         id: `${rel.from}-${rel.to}`,
@@ -637,6 +1167,35 @@ export class TopicGraphVisualizer {
         }
 
         return elements;
+    }
+
+    /**
+     * Calculate dynamic threshold for co-occurrence edges based on strength distribution
+     * Returns the 80th percentile strength value (keeps top 20% of co_occurs edges)
+     */
+    private calculateCoOccursThreshold(
+        relationships: TopicRelationshipData[],
+    ): number {
+        const coOccursStrengths = relationships
+            .filter((rel) => rel.type === "co_occurs")
+            .map((rel) => rel.strength || 0)
+            .sort((a, b) => a - b);
+
+        if (coOccursStrengths.length === 0) {
+            return 0;
+        }
+
+        const percentile = 0.8;
+        const index = Math.floor(coOccursStrengths.length * percentile);
+        const threshold = coOccursStrengths[index];
+
+        console.log(
+            `[TopicGraphVisualizer] Co-occurrence threshold: ${threshold.toFixed(3)} ` +
+                `(80th percentile of ${coOccursStrengths.length} co_occurs edges, ` +
+                `will keep ${coOccursStrengths.length - index} edges)`,
+        );
+
+        return threshold;
     }
 
     /**
@@ -997,8 +1556,15 @@ export class TopicGraphVisualizer {
      * Apply current layout
      */
     private async applyLayout(): Promise<void> {
+        await this.applyLayoutToInstance(this.cy);
+    }
+
+    /**
+     * Apply layout to a specific instance
+     */
+    private async applyLayoutToInstance(instance: any): Promise<void> {
         return new Promise((resolve) => {
-            const layout = this.cy.layout(this.getLayoutOptions());
+            const layout = instance.layout(this.getLayoutOptions());
             layout.on("layoutstop", () => resolve());
             layout.run();
         });

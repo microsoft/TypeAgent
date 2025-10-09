@@ -18,7 +18,7 @@ class TopicGraphView {
         currentTopic: null,
         searchQuery: "",
         visibleLevels: [0, 1, 2, 3],
-        sidebarOpen: true,
+        sidebarOpen: false,
     };
 
     private loadingOverlay: HTMLElement;
@@ -81,24 +81,19 @@ class TopicGraphView {
             });
 
         document
-            .getElementById("expandAllButton")
-            ?.addEventListener("click", () => {
-                this.expandAllTopics();
-            });
-
-        document
-            .getElementById("collapseAllButton")
-            ?.addEventListener("click", () => {
-                this.collapseAllTopics();
-            });
-
-        document
             .getElementById("exportButton")
             ?.addEventListener("click", () => {
                 this.exportGraph();
             });
 
         // Settings modal removed - using optimized defaults
+
+        // Sidebar close button
+        document
+            .getElementById("closeSidebar")
+            ?.addEventListener("click", () => {
+                this.closeSidebar();
+            });
 
         // Retry button
         document
@@ -146,6 +141,21 @@ class TopicGraphView {
                 this.showTopicDetails(topic);
                 this.updateBreadcrumb(topic);
             });
+
+            // Set up graph data provider for neighborhood loading
+            this.visualizer.setGraphDataProvider({
+                getTopicViewportNeighborhood: async (
+                    centerTopic: string,
+                    viewportTopicIds: string[],
+                    maxNodes: number,
+                ) => {
+                    return await this.fetchTopicNeighborhood(
+                        centerTopic,
+                        viewportTopicIds,
+                        maxNodes,
+                    );
+                },
+            });
         } catch (error) {
             console.error("Failed to initialize topic visualizer:", error);
             this.showError("Failed to initialize topic graph visualization");
@@ -156,10 +166,7 @@ class TopicGraphView {
         this.showLoading();
 
         try {
-            const urlParams = new URLSearchParams(window.location.search);
-            const topicParam = urlParams.get("topic");
-
-            const topicData = await this.fetchTopicGraphData(topicParam);
+            const topicData = await this.fetchGlobalImportanceView();
 
             if (!topicData || topicData.topics.length === 0) {
                 this.showError("No topic data available");
@@ -170,63 +177,57 @@ class TopicGraphView {
 
             this.updateGraphStats();
             this.hideLoading();
-
-            if (topicParam && topicData.centerTopic) {
-                this.visualizer?.focusOnTopic(topicData.centerTopic);
-            }
         } catch (error) {
             console.error("Failed to load topic data:", error);
             this.showError("Failed to load topic data");
         }
     }
 
-    private async fetchTopicGraphData(
-        centerTopic?: string | null,
-    ): Promise<any> {
+    /**
+     * Fetch global importance view with top N most important topics
+     */
+    private async fetchGlobalImportanceView(): Promise<any> {
         try {
-            // Fetch hierarchical topics from the extension service
-            const result = await this.extensionService.sendMessage({
-                type: "getHierarchicalTopics",
-                parameters: {
-                    centerTopic: centerTopic,
-                    includeRelationships: true,
-                    maxDepth: 5,
-                },
-            });
+            console.log(
+                "[TopicGraphView] Fetching global importance layer (top 500 topics)...",
+            );
+            const result = await this.extensionService.getTopicImportanceLayer(
+                500,
+                0.0,
+            );
 
-            if (!result || !result.success) {
+            if (!result || !result.topics || result.topics.length === 0) {
                 console.warn(
-                    "No hierarchical topic data available:",
-                    result?.error,
+                    "[TopicGraphView] No importance layer data available",
                 );
                 return this.createEmptyTopicGraph();
             }
 
-            console.log("Fetched hierarchical topics:", result);
-            const transformedData = this.transformHierarchicalTopicData(
-                result,
-                centerTopic,
+            console.log(
+                `[TopicGraphView] Fetched global importance layer: ${result.topics.length} topics`,
             );
+            if (result.metadata) {
+                console.log(`[TopicGraphView] Metadata:`, result.metadata);
+            }
+            const transformedData = this.transformImportanceLayerData(result);
             return transformedData;
         } catch (error) {
-            console.error("Error fetching topic data:", error);
-            // Return empty graph instead of throwing to show a graceful error state
+            console.error(
+                "[TopicGraphView] Error fetching importance layer:",
+                error,
+            );
             return this.createEmptyTopicGraph();
         }
     }
 
     /**
-     * Transform hierarchical topic data from database to visualization format
+     * Transform importance layer data to visualization format
      */
-    private transformHierarchicalTopicData(
-        data: any,
-        centerTopic?: string | null,
-    ): any {
+    private transformImportanceLayerData(data: any): any {
         if (!data.topics || data.topics.length === 0) {
             return this.createEmptyTopicGraph();
         }
 
-        // Transform topics from database format
         const topics = data.topics.map((topic: any) => ({
             id: topic.topicId,
             name: topic.topicName,
@@ -236,40 +237,77 @@ class TopicGraphView {
             keywords: this.parseKeywords(topic.keywords),
             entityReferences: topic.entityReferences || [],
             childCount: this.countChildren(topic.topicId, data.topics),
+            importance: topic.importance || 0.5,
         }));
 
-        // Use relationships from backend if available, otherwise build from parent-child structure
-        let relationships = [];
-        if (data.relationships && data.relationships.length > 0) {
-            relationships = data.relationships;
-        } else {
-            for (const topic of data.topics) {
-                if (topic.parentTopicId) {
-                    relationships.push({
-                        from: topic.parentTopicId,
-                        to: topic.topicId,
-                        type: "parent-child" as const,
-                        strength: topic.confidence || 0.8,
-                    });
-                }
-            }
-        }
-
-        // Determine center topic
-        let actualCenterTopic = centerTopic;
-        if (!actualCenterTopic) {
-            // Find root topics (level 0) and use the first one
-            const rootTopics = data.topics.filter((t: any) => t.level === 0);
-            actualCenterTopic =
-                rootTopics.length > 0 ? rootTopics[0].topicId : topics[0]?.id;
-        }
+        const relationships = data.relationships || [];
 
         return {
-            centerTopic: actualCenterTopic,
+            centerTopic: null,
             topics,
             relationships,
             maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
+            metadata: data.metadata,
         };
+    }
+
+    /**
+     * Fetch topic neighborhood for viewport expansion
+     */
+    private async fetchTopicNeighborhood(
+        centerTopic: string,
+        viewportTopicIds: string[],
+        maxNodes: number,
+    ): Promise<any> {
+        try {
+            console.log(
+                `[TopicGraphView] Fetching neighborhood for ${centerTopic} with ${viewportTopicIds.length} viewport topics`,
+            );
+
+            const result =
+                await this.extensionService.getTopicViewportNeighborhood(
+                    centerTopic,
+                    viewportTopicIds,
+                    maxNodes,
+                );
+
+            if (!result || !result.topics) {
+                console.warn("[TopicGraphView] No neighborhood data returned");
+                return { topics: [], relationships: [], maxDepth: 0 };
+            }
+
+            console.log(
+                `[TopicGraphView] Received neighborhood: ${result.topics.length} topics`,
+            );
+
+            // Transform to visualization format
+            const topics = result.topics.map((topic: any) => ({
+                id: topic.topicId,
+                name: topic.topicName,
+                level: topic.level,
+                parentId: topic.parentTopicId,
+                confidence: topic.confidence || 0.7,
+                keywords: this.parseKeywords(topic.keywords),
+                entityReferences: topic.entityReferences || [],
+                childCount: this.countChildren(topic.topicId, result.topics),
+            }));
+
+            const relationships = result.relationships || [];
+
+            return {
+                centerTopic: centerTopic,
+                topics,
+                relationships,
+                maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
+                metadata: result.metadata,
+            };
+        } catch (error) {
+            console.error(
+                "[TopicGraphView] Error fetching neighborhood:",
+                error,
+            );
+            return { topics: [], relationships: [], maxDepth: 0 };
+        }
     }
 
     /**
@@ -789,6 +827,8 @@ class TopicGraphView {
     private showTopicDetails(topic: any): void {
         this.state.currentTopic = topic.id;
 
+        this.openSidebar();
+
         const sidebarContent = document.getElementById("sidebarContent")!;
         sidebarContent.innerHTML = `
             <div class="topic-details">
@@ -854,10 +894,7 @@ class TopicGraphView {
 
     private async loadTopicMetrics(topicId: string): Promise<void> {
         try {
-            const result = await this.extensionService.sendMessage({
-                type: "getTopicMetrics",
-                parameters: { topicId },
-            });
+            const result = await this.extensionService.getTopicMetrics(topicId);
 
             if (result && result.success) {
                 const metrics = result.metrics;
@@ -950,16 +987,6 @@ class TopicGraphView {
         }
     }
 
-    private expandAllTopics(): void {
-        // Implementation would expand all visible topics
-        this.showNotification("Expanded all topics");
-    }
-
-    private collapseAllTopics(): void {
-        // Implementation would collapse all topics
-        this.showNotification("Collapsed all topics");
-    }
-
     private exportGraph(): void {
         if (!this.visualizer) return;
 
@@ -1034,6 +1061,16 @@ class TopicGraphView {
 
         const bsToast = new (window as any).bootstrap.Toast(toast);
         bsToast.show();
+    }
+
+    private openSidebar(): void {
+        this.state.sidebarOpen = true;
+        this.sidebar.classList.remove("collapsed");
+    }
+
+    private closeSidebar(): void {
+        this.state.sidebarOpen = false;
+        this.sidebar.classList.add("collapsed");
     }
 
     private escapeHtml(text: string): string {

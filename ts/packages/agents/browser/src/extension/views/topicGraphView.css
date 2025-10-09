@@ -128,11 +128,22 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition:
+    transform 0.3s ease,
+    opacity 0.3s ease;
+}
+
+.topic-sidebar.collapsed {
+  transform: translateX(-100%);
+  opacity: 0;
+  width: 0;
+  border-right: none;
 }
 
 .sidebar-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid #dee2e6;
   background: #f8f9fa;
@@ -142,6 +153,15 @@ body {
   margin: 0;
   font-weight: 600;
   color: #495057;
+}
+
+.sidebar-header .btn-close {
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.sidebar-header .btn-close:hover {
+  opacity: 1;
 }
 
 .sidebar-content {
