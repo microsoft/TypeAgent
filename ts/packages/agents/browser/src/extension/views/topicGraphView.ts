@@ -98,6 +98,19 @@ class TopicGraphView {
                 this.exportGraph();
             });
 
+        // View mode switching buttons
+        document
+            .getElementById("globalViewButton")
+            ?.addEventListener("click", () => {
+                this.switchToGlobalView();
+            });
+
+        document
+            .getElementById("expandedViewButton")
+            ?.addEventListener("click", () => {
+                this.switchToExpandedView();
+            });
+
         // Settings modal removed - using optimized defaults
 
         // Retry button
@@ -146,6 +159,21 @@ class TopicGraphView {
                 this.showTopicDetails(topic);
                 this.updateBreadcrumb(topic);
             });
+
+            // Set up graph data provider for neighborhood loading
+            this.visualizer.setGraphDataProvider({
+                getTopicViewportNeighborhood: async (
+                    centerTopic: string,
+                    viewportTopicIds: string[],
+                    maxNodes: number,
+                ) => {
+                    return await this.fetchTopicNeighborhood(
+                        centerTopic,
+                        viewportTopicIds,
+                        maxNodes,
+                    );
+                },
+            });
         } catch (error) {
             console.error("Failed to initialize topic visualizer:", error);
             this.showError("Failed to initialize topic graph visualization");
@@ -159,21 +187,23 @@ class TopicGraphView {
             const urlParams = new URLSearchParams(window.location.search);
             const topicParam = urlParams.get("topic");
 
-            const topicData = await this.fetchTopicGraphData(topicParam);
+            // Always start with global importance view as default
+            const topicData = await this.fetchTopicGraphData(null, false);
 
             if (!topicData || topicData.topics.length === 0) {
                 this.showError("No topic data available");
                 return;
             }
 
-            await this.visualizer?.init(topicData);
+            // Always use global view as default
+            const viewMode = "global";
+            await this.visualizer?.init(topicData, viewMode);
 
             this.updateGraphStats();
+            this.highlightActiveViewButton(viewMode);
             this.hideLoading();
 
-            if (topicParam && topicData.centerTopic) {
-                this.visualizer?.focusOnTopic(topicData.centerTopic);
-            }
+            // Note: We ignore topicParam for now - user can navigate after loading
         } catch (error) {
             console.error("Failed to load topic data:", error);
             this.showError("Failed to load topic data");
@@ -182,9 +212,22 @@ class TopicGraphView {
 
     private async fetchTopicGraphData(
         centerTopic?: string | null,
+        forceHierarchical: boolean = false,
     ): Promise<any> {
         try {
-            // Fetch hierarchical topics from the extension service
+            // Default to global importance view unless specific topic requested or forced
+            if (!centerTopic && !forceHierarchical) {
+                console.log(
+                    "[TopicGraphView] Using global importance view (default)",
+                );
+                return await this.fetchGlobalImportanceView();
+            }
+
+            // Fetch hierarchical topics for specific center topic
+            console.log(
+                "[TopicGraphView] Using hierarchical view",
+                centerTopic ? `for topic: ${centerTopic}` : "(all topics)",
+            );
             const result = await this.extensionService.sendMessage({
                 type: "getHierarchicalTopics",
                 parameters: {
@@ -210,8 +253,135 @@ class TopicGraphView {
             return transformedData;
         } catch (error) {
             console.error("Error fetching topic data:", error);
-            // Return empty graph instead of throwing to show a graceful error state
             return this.createEmptyTopicGraph();
+        }
+    }
+
+    /**
+     * Fetch global importance view with top N most important topics
+     */
+    private async fetchGlobalImportanceView(): Promise<any> {
+        try {
+            console.log(
+                "[TopicGraphView] Fetching global importance layer (top 500 topics)...",
+            );
+            const result = await this.extensionService.sendMessage({
+                type: "getTopicImportanceLayer",
+                maxNodes: 500,
+                minImportanceThreshold: 0.0,
+            });
+
+            if (!result || !result.topics || result.topics.length === 0) {
+                console.warn(
+                    "[TopicGraphView] No importance layer data available",
+                );
+                return this.createEmptyTopicGraph();
+            }
+
+            console.log(
+                `[TopicGraphView] Fetched global importance layer: ${result.topics.length} topics`,
+            );
+            if (result.metadata) {
+                console.log(`[TopicGraphView] Metadata:`, result.metadata);
+            }
+            const transformedData = this.transformImportanceLayerData(result);
+            return transformedData;
+        } catch (error) {
+            console.error(
+                "[TopicGraphView] Error fetching importance layer:",
+                error,
+            );
+            return this.createEmptyTopicGraph();
+        }
+    }
+
+    /**
+     * Transform importance layer data to visualization format
+     */
+    private transformImportanceLayerData(data: any): any {
+        if (!data.topics || data.topics.length === 0) {
+            return this.createEmptyTopicGraph();
+        }
+
+        const topics = data.topics.map((topic: any) => ({
+            id: topic.topicId,
+            name: topic.topicName,
+            level: topic.level,
+            parentId: topic.parentTopicId,
+            confidence: topic.confidence || 0.7,
+            keywords: this.parseKeywords(topic.keywords),
+            entityReferences: topic.entityReferences || [],
+            childCount: this.countChildren(topic.topicId, data.topics),
+            importance: topic.importance || 0.5,
+        }));
+
+        const relationships = data.relationships || [];
+
+        return {
+            centerTopic: null,
+            topics,
+            relationships,
+            maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
+            metadata: data.metadata,
+        };
+    }
+
+    /**
+     * Fetch topic neighborhood for viewport expansion
+     */
+    private async fetchTopicNeighborhood(
+        centerTopic: string,
+        viewportTopicIds: string[],
+        maxNodes: number,
+    ): Promise<any> {
+        try {
+            console.log(
+                `[TopicGraphView] Fetching neighborhood for ${centerTopic} with ${viewportTopicIds.length} viewport topics`,
+            );
+
+            const result = await this.extensionService.sendMessage({
+                type: "getTopicViewportNeighborhood",
+                centerTopic: centerTopic,
+                viewportTopicIds: viewportTopicIds,
+                maxNodes: maxNodes,
+            });
+
+            if (!result || !result.topics) {
+                console.warn("[TopicGraphView] No neighborhood data returned");
+                return { topics: [], relationships: [], maxDepth: 0 };
+            }
+
+            console.log(
+                `[TopicGraphView] Received neighborhood: ${result.topics.length} topics`,
+            );
+
+            // Transform to visualization format
+            const topics = result.topics.map((topic: any) => ({
+                id: topic.topicId,
+                name: topic.topicName,
+                level: topic.level,
+                parentId: topic.parentTopicId,
+                confidence: topic.confidence || 0.7,
+                keywords: this.parseKeywords(topic.keywords),
+                entityReferences: topic.entityReferences || [],
+                childCount: this.countChildren(topic.topicId, result.topics),
+            }));
+
+            const relationships = result.relationships || [];
+
+            return {
+                centerTopic: centerTopic,
+                topics,
+                relationships,
+                maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
+                metadata: result.metadata,
+            };
+        } catch (error) {
+            console.error(
+                "[TopicGraphView] Error fetching neighborhood:",
+                error,
+            );
+            return { topics: [], relationships: [], maxDepth: 0 };
         }
     }
 
@@ -986,6 +1156,63 @@ class TopicGraphView {
         this.state.currentTopic = null;
         this.updateBreadcrumb({ name: "All Topics" });
         this.loadInitialData();
+    }
+
+    private async switchToGlobalView(): Promise<void> {
+        try {
+            this.showLoading();
+            const globalData = await this.fetchGlobalImportanceView();
+
+            if (!globalData || globalData.topics.length === 0) {
+                this.showError("No global importance data available");
+                return;
+            }
+
+            await this.visualizer?.switchToGlobalView(globalData);
+            this.updateGraphStats();
+            this.hideLoading();
+            this.showNotification(
+                "Switched to global importance view (top 500 topics)",
+            );
+            this.highlightActiveViewButton("global");
+        } catch (error) {
+            console.error("Error switching to global view:", error);
+            this.showError("Failed to switch to global view");
+        }
+    }
+
+    private async switchToExpandedView(): Promise<void> {
+        try {
+            this.showLoading();
+            const expandedData = await this.fetchTopicGraphData(null, true);
+
+            if (!expandedData || expandedData.topics.length === 0) {
+                this.showError("No hierarchical data available");
+                return;
+            }
+
+            await this.visualizer?.switchToExpandedView(expandedData);
+            this.updateGraphStats();
+            this.hideLoading();
+            this.showNotification("Switched to full hierarchical view");
+            this.highlightActiveViewButton("expanded");
+        } catch (error) {
+            console.error("Error switching to expanded view:", error);
+            this.showError("Failed to switch to expanded view");
+        }
+    }
+
+    private highlightActiveViewButton(view: "global" | "expanded"): void {
+        const globalBtn = document.getElementById("globalViewButton");
+        const expandedBtn = document.getElementById("expandedViewButton");
+
+        if (view === "global") {
+            globalBtn?.classList.add("active");
+            expandedBtn?.classList.remove("active");
+        } else {
+            globalBtn?.classList.remove("active");
+            expandedBtn?.classList.add("active");
+        }
     }
 
     private goBack(): void {

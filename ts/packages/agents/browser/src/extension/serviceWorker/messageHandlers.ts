@@ -474,6 +474,61 @@ export async function handleMessage(
             return await handleGetHierarchicalTopics(message);
         }
 
+        case "getTopicImportanceLayer": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getTopicImportanceLayer",
+                    parameters: {
+                        maxNodes: message.maxNodes,
+                        minImportanceThreshold: message.minImportanceThreshold,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting topic importance layer:", error);
+                return {
+                    topics: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        }
+
+        case "getTopicViewportNeighborhood": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getTopicViewportNeighborhood",
+                    parameters: {
+                        centerTopic: message.centerTopic,
+                        viewportTopicIds: message.viewportTopicIds,
+                        maxNodes: message.maxNodes,
+                        maxDepth: message.maxDepth,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error(
+                    "Error getting topic viewport neighborhood:",
+                    error,
+                );
+                return {
+                    topics: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        }
+
         case "getTopicMetrics": {
             return await handleGetTopicMetrics(message);
         }

@@ -110,6 +110,7 @@ export interface GraphCache {
 export interface TopicGraphCache {
     topics: any[];
     relationships: any[];
+    topicMetrics: any[];
     lastUpdated: number;
     isValid: boolean;
 }
