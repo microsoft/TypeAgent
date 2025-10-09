@@ -18,7 +18,7 @@ class TopicGraphView {
         currentTopic: null,
         searchQuery: "",
         visibleLevels: [0, 1, 2, 3],
-        sidebarOpen: true,
+        sidebarOpen: false,
     };
 
     private loadingOverlay: HTMLElement;
@@ -81,37 +81,19 @@ class TopicGraphView {
             });
 
         document
-            .getElementById("expandAllButton")
-            ?.addEventListener("click", () => {
-                this.expandAllTopics();
-            });
-
-        document
-            .getElementById("collapseAllButton")
-            ?.addEventListener("click", () => {
-                this.collapseAllTopics();
-            });
-
-        document
             .getElementById("exportButton")
             ?.addEventListener("click", () => {
                 this.exportGraph();
             });
 
-        // View mode switching buttons
-        document
-            .getElementById("globalViewButton")
-            ?.addEventListener("click", () => {
-                this.switchToGlobalView();
-            });
-
-        document
-            .getElementById("expandedViewButton")
-            ?.addEventListener("click", () => {
-                this.switchToExpandedView();
-            });
-
         // Settings modal removed - using optimized defaults
+
+        // Sidebar close button
+        document
+            .getElementById("closeSidebar")
+            ?.addEventListener("click", () => {
+                this.closeSidebar();
+            });
 
         // Retry button
         document
@@ -184,76 +166,20 @@ class TopicGraphView {
         this.showLoading();
 
         try {
-            const urlParams = new URLSearchParams(window.location.search);
-            const topicParam = urlParams.get("topic");
-
-            // Always start with global importance view as default
-            const topicData = await this.fetchTopicGraphData(null, false);
+            const topicData = await this.fetchGlobalImportanceView();
 
             if (!topicData || topicData.topics.length === 0) {
                 this.showError("No topic data available");
                 return;
             }
 
-            // Always use global view as default
-            const viewMode = "global";
-            await this.visualizer?.init(topicData, viewMode);
+            await this.visualizer?.init(topicData);
 
             this.updateGraphStats();
-            this.highlightActiveViewButton(viewMode);
             this.hideLoading();
-
-            // Note: We ignore topicParam for now - user can navigate after loading
         } catch (error) {
             console.error("Failed to load topic data:", error);
             this.showError("Failed to load topic data");
-        }
-    }
-
-    private async fetchTopicGraphData(
-        centerTopic?: string | null,
-        forceHierarchical: boolean = false,
-    ): Promise<any> {
-        try {
-            // Default to global importance view unless specific topic requested or forced
-            if (!centerTopic && !forceHierarchical) {
-                console.log(
-                    "[TopicGraphView] Using global importance view (default)",
-                );
-                return await this.fetchGlobalImportanceView();
-            }
-
-            // Fetch hierarchical topics for specific center topic
-            console.log(
-                "[TopicGraphView] Using hierarchical view",
-                centerTopic ? `for topic: ${centerTopic}` : "(all topics)",
-            );
-            const result = await this.extensionService.sendMessage({
-                type: "getHierarchicalTopics",
-                parameters: {
-                    centerTopic: centerTopic,
-                    includeRelationships: true,
-                    maxDepth: 5,
-                },
-            });
-
-            if (!result || !result.success) {
-                console.warn(
-                    "No hierarchical topic data available:",
-                    result?.error,
-                );
-                return this.createEmptyTopicGraph();
-            }
-
-            console.log("Fetched hierarchical topics:", result);
-            const transformedData = this.transformHierarchicalTopicData(
-                result,
-                centerTopic,
-            );
-            return transformedData;
-        } catch (error) {
-            console.error("Error fetching topic data:", error);
-            return this.createEmptyTopicGraph();
         }
     }
 
@@ -383,63 +309,6 @@ class TopicGraphView {
             );
             return { topics: [], relationships: [], maxDepth: 0 };
         }
-    }
-
-    /**
-     * Transform hierarchical topic data from database to visualization format
-     */
-    private transformHierarchicalTopicData(
-        data: any,
-        centerTopic?: string | null,
-    ): any {
-        if (!data.topics || data.topics.length === 0) {
-            return this.createEmptyTopicGraph();
-        }
-
-        // Transform topics from database format
-        const topics = data.topics.map((topic: any) => ({
-            id: topic.topicId,
-            name: topic.topicName,
-            level: topic.level,
-            parentId: topic.parentTopicId,
-            confidence: topic.confidence || 0.7,
-            keywords: this.parseKeywords(topic.keywords),
-            entityReferences: topic.entityReferences || [],
-            childCount: this.countChildren(topic.topicId, data.topics),
-        }));
-
-        // Use relationships from backend if available, otherwise build from parent-child structure
-        let relationships = [];
-        if (data.relationships && data.relationships.length > 0) {
-            relationships = data.relationships;
-        } else {
-            for (const topic of data.topics) {
-                if (topic.parentTopicId) {
-                    relationships.push({
-                        from: topic.parentTopicId,
-                        to: topic.topicId,
-                        type: "parent-child" as const,
-                        strength: topic.confidence || 0.8,
-                    });
-                }
-            }
-        }
-
-        // Determine center topic
-        let actualCenterTopic = centerTopic;
-        if (!actualCenterTopic) {
-            // Find root topics (level 0) and use the first one
-            const rootTopics = data.topics.filter((t: any) => t.level === 0);
-            actualCenterTopic =
-                rootTopics.length > 0 ? rootTopics[0].topicId : topics[0]?.id;
-        }
-
-        return {
-            centerTopic: actualCenterTopic,
-            topics,
-            relationships,
-            maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
-        };
     }
 
     /**
@@ -959,6 +828,8 @@ class TopicGraphView {
     private showTopicDetails(topic: any): void {
         this.state.currentTopic = topic.id;
 
+        this.openSidebar();
+
         const sidebarContent = document.getElementById("sidebarContent")!;
         sidebarContent.innerHTML = `
             <div class="topic-details">
@@ -1120,16 +991,6 @@ class TopicGraphView {
         }
     }
 
-    private expandAllTopics(): void {
-        // Implementation would expand all visible topics
-        this.showNotification("Expanded all topics");
-    }
-
-    private collapseAllTopics(): void {
-        // Implementation would collapse all topics
-        this.showNotification("Collapsed all topics");
-    }
-
     private exportGraph(): void {
         if (!this.visualizer) return;
 
@@ -1156,63 +1017,6 @@ class TopicGraphView {
         this.state.currentTopic = null;
         this.updateBreadcrumb({ name: "All Topics" });
         this.loadInitialData();
-    }
-
-    private async switchToGlobalView(): Promise<void> {
-        try {
-            this.showLoading();
-            const globalData = await this.fetchGlobalImportanceView();
-
-            if (!globalData || globalData.topics.length === 0) {
-                this.showError("No global importance data available");
-                return;
-            }
-
-            await this.visualizer?.switchToGlobalView(globalData);
-            this.updateGraphStats();
-            this.hideLoading();
-            this.showNotification(
-                "Switched to global importance view (top 500 topics)",
-            );
-            this.highlightActiveViewButton("global");
-        } catch (error) {
-            console.error("Error switching to global view:", error);
-            this.showError("Failed to switch to global view");
-        }
-    }
-
-    private async switchToExpandedView(): Promise<void> {
-        try {
-            this.showLoading();
-            const expandedData = await this.fetchTopicGraphData(null, true);
-
-            if (!expandedData || expandedData.topics.length === 0) {
-                this.showError("No hierarchical data available");
-                return;
-            }
-
-            await this.visualizer?.switchToExpandedView(expandedData);
-            this.updateGraphStats();
-            this.hideLoading();
-            this.showNotification("Switched to full hierarchical view");
-            this.highlightActiveViewButton("expanded");
-        } catch (error) {
-            console.error("Error switching to expanded view:", error);
-            this.showError("Failed to switch to expanded view");
-        }
-    }
-
-    private highlightActiveViewButton(view: "global" | "expanded"): void {
-        const globalBtn = document.getElementById("globalViewButton");
-        const expandedBtn = document.getElementById("expandedViewButton");
-
-        if (view === "global") {
-            globalBtn?.classList.add("active");
-            expandedBtn?.classList.remove("active");
-        } else {
-            globalBtn?.classList.remove("active");
-            expandedBtn?.classList.add("active");
-        }
     }
 
     private goBack(): void {
@@ -1261,6 +1065,16 @@ class TopicGraphView {
 
         const bsToast = new (window as any).bootstrap.Toast(toast);
         bsToast.show();
+    }
+
+    private openSidebar(): void {
+        this.state.sidebarOpen = true;
+        this.sidebar.classList.remove("collapsed");
+    }
+
+    private closeSidebar(): void {
+        this.state.sidebarOpen = false;
+        this.sidebar.classList.add("collapsed");
     }
 
     private escapeHtml(text: string): string {

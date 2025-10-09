@@ -35,7 +35,6 @@ import {
     getGlobalImportanceLayer,
     getViewportBasedNeighborhood,
     getImportanceStatistics,
-    getHierarchicalTopics,
     getTopicImportanceLayer,
     getTopicViewportNeighborhood,
     getTopicMetrics,
@@ -103,8 +102,6 @@ export async function handleKnowledgeAction(
             return await getViewportBasedNeighborhood(parameters, context);
         case "getImportanceStatistics":
             return await getImportanceStatistics(parameters, context);
-        case "getHierarchicalTopics":
-            return await getHierarchicalTopics(parameters, context);
         case "getTopicImportanceLayer":
             return await getTopicImportanceLayer(parameters, context);
         case "getTopicViewportNeighborhood":

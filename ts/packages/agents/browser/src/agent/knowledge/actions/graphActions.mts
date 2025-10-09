@@ -1752,114 +1752,6 @@ function calculateDistributionPercentiles(
 /**
  * Get hierarchical topics from the website collection
  */
-export async function getHierarchicalTopics(
-    parameters: {
-        centerTopic?: string;
-        includeRelationships?: boolean;
-        maxDepth?: number;
-        domain?: string;
-    },
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    topics: any[];
-    relationships: any[];
-    maxDepth: number;
-    error?: string;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            debug("website collection not found");
-            return {
-                success: false,
-                topics: [],
-                relationships: [],
-                maxDepth: 0,
-                error: "Website collection not available",
-            };
-        }
-
-        // Check if hierarchical topics table exists
-        if (!websiteCollection.hierarchicalTopics) {
-            debug("hierarchical topics table not found");
-            return {
-                success: false,
-                topics: [],
-                relationships: [],
-                maxDepth: 0,
-                error: "Hierarchical topics not available",
-            };
-        }
-
-        // Ensure cache is populated
-        await ensureTopicGraphCache(websiteCollection);
-
-        // Get cached data
-        const cache = getTopicGraphCache(websiteCollection);
-        if (!cache || !cache.isValid) {
-            return {
-                success: false,
-                topics: [],
-                relationships: [],
-                maxDepth: 0,
-                error: "Topic cache not available",
-            };
-        }
-
-        // Filter topics from cache
-        let topics = cache.topics;
-
-        // Apply domain filter if specified
-        if (parameters.domain) {
-            topics = topics.filter((t: any) => t.domain === parameters.domain);
-        }
-
-        // Filter by max depth if specified
-        if (parameters.maxDepth !== undefined) {
-            topics = topics.filter(
-                (topic: any) => topic.level <= parameters.maxDepth!,
-            );
-        }
-
-        // Filter relationships from cache
-        let relationships: any[] = [];
-        if (parameters.includeRelationships !== false) {
-            const topicIds = new Set(topics.map((t: any) => t.topicId));
-
-            // Filter cached relationships to only include ones for visible topics
-            relationships = cache.relationships.filter(
-                (rel: any) => topicIds.has(rel.from) && topicIds.has(rel.to),
-            );
-        }
-
-        const maxDepth =
-            topics.length > 0 ? Math.max(...topics.map((t) => t.level)) : 0;
-
-        const filteredRelationships = filterRelationshipsForClient(
-            relationships,
-            topics,
-        );
-
-        return {
-            success: true,
-            topics: topics,
-            relationships: filteredRelationships,
-            maxDepth,
-        };
-    } catch (error) {
-        console.error("Error getting hierarchical topics:", error);
-        return {
-            success: false,
-            topics: [],
-            relationships: [],
-            maxDepth: 0,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
 export async function getTopicImportanceLayer(
     parameters: {
         maxNodes?: number;
@@ -1984,7 +1876,10 @@ export async function getTopicImportanceLayer(
             const children = childrenMap.get(root.topicId) || [];
             if (children.length > 0) {
                 const sortedChildren = children
-                    .map(id => ({ id, importance: metricsMap.get(id)?.importance || 0 }))
+                    .map((id) => ({
+                        id,
+                        importance: metricsMap.get(id)?.importance || 0,
+                    }))
                     .sort((a, b) => b.importance - a.importance);
 
                 // Add at least one child for this root
@@ -2004,7 +1899,10 @@ export async function getTopicImportanceLayer(
 
             // Sort children by importance
             const sortedChildren = children
-                .map(id => ({ id, importance: metricsMap.get(id)?.importance || 0 }))
+                .map((id) => ({
+                    id,
+                    importance: metricsMap.get(id)?.importance || 0,
+                }))
                 .sort((a, b) => b.importance - a.importance);
 
             for (const { id } of sortedChildren) {
@@ -2025,7 +1923,11 @@ export async function getTopicImportanceLayer(
 
             const remaining = maxNodes - selectedTopicIds.size;
 
-            for (let i = 0; i < Math.min(remaining, sortedMetrics.length); i++) {
+            for (
+                let i = 0;
+                i < Math.min(remaining, sortedMetrics.length);
+                i++
+            ) {
                 const topicId = sortedMetrics[i].topicId;
 
                 // Check if this topic has any neighbors in the selected set
@@ -2036,7 +1938,9 @@ export async function getTopicImportanceLayer(
 
                     // Check if any children are in set
                     const children = childrenMap.get(topicId) || [];
-                    return children.some(childId => selectedTopicIds.has(childId));
+                    return children.some((childId) =>
+                        selectedTopicIds.has(childId),
+                    );
                 })();
 
                 if (!hasNeighbors) {
@@ -2044,7 +1948,11 @@ export async function getTopicImportanceLayer(
                     const pathToRoot: string[] = [];
                     let currentId = topicId;
 
-                    while (currentId && !selectedTopicIds.has(currentId) && pathToRoot.length < 10) {
+                    while (
+                        currentId &&
+                        !selectedTopicIds.has(currentId) &&
+                        pathToRoot.length < 10
+                    ) {
                         pathToRoot.push(currentId);
                         const parent = parentMap.get(currentId);
                         if (!parent) break; // Reached root
@@ -2054,7 +1962,11 @@ export async function getTopicImportanceLayer(
                     // If we found a connection, add the path
                     if (selectedTopicIds.has(currentId)) {
                         // Add nodes in reverse order (from existing node down to new node)
-                        for (let j = pathToRoot.length - 1; j >= 0 && selectedTopicIds.size < maxNodes; j--) {
+                        for (
+                            let j = pathToRoot.length - 1;
+                            j >= 0 && selectedTopicIds.size < maxNodes;
+                            j--
+                        ) {
                             selectedTopicIds.add(pathToRoot[j]);
                         }
                     } else {
@@ -2362,62 +2274,6 @@ function buildTopicRelationships(topics: any[]): any[] {
     }
 
     return relationships;
-}
-
-/**
- * Filter relationships for client: remove siblings and limit co_occurs per node
- */
-function filterRelationshipsForClient(
-    relationships: any[],
-    topics: any[],
-): any[] {
-    const maxCoOccursPerNode = 3;
-    const topicMap = new Map(topics.map((t) => [t.topicId, t]));
-
-    const coOccursEdges: any[] = [];
-    const structuralEdges: any[] = [];
-
-    for (const rel of relationships) {
-        if (rel.type === "co_occurs") {
-            coOccursEdges.push(rel);
-        } else {
-            structuralEdges.push(rel);
-        }
-    }
-
-    coOccursEdges.sort((a, b) => (b.strength || 0) - (a.strength || 0));
-
-    const nodeCoOccursCount = new Map<string, number>();
-    const filteredCoOccurs: any[] = [];
-
-    for (const rel of coOccursEdges) {
-        const fromTopic = topicMap.get(rel.from);
-        const toTopic = topicMap.get(rel.to);
-
-        if (!fromTopic || !toTopic) continue;
-
-        if (
-            fromTopic.parentTopicId &&
-            toTopic.parentTopicId &&
-            fromTopic.parentTopicId === toTopic.parentTopicId &&
-            fromTopic.level === toTopic.level
-        ) {
-            continue;
-        }
-
-        const fromCount = nodeCoOccursCount.get(rel.from) || 0;
-        const toCount = nodeCoOccursCount.get(rel.to) || 0;
-
-        if (fromCount >= maxCoOccursPerNode || toCount >= maxCoOccursPerNode) {
-            continue;
-        }
-
-        filteredCoOccurs.push(rel);
-        nodeCoOccursCount.set(rel.from, fromCount + 1);
-        nodeCoOccursCount.set(rel.to, toCount + 1);
-    }
-
-    return [...structuralEdges, ...filteredCoOccurs];
 }
 
 /**

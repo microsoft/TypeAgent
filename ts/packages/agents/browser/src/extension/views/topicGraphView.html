@@ -58,9 +58,14 @@
       <!-- Main Content -->
       <div class="topic-graph-main">
         <!-- Sidebar -->
-        <div class="topic-sidebar" id="topicSidebar">
+        <div class="topic-sidebar collapsed" id="topicSidebar">
           <div class="sidebar-header">
             <h5>Topic Details</h5>
+            <button
+              id="closeSidebar"
+              class="btn-close"
+              aria-label="Close"
+            ></button>
           </div>
 
           <div class="sidebar-content" id="sidebarContent">
@@ -118,22 +123,6 @@
 
           <!-- Graph Controls -->
           <div class="graph-controls">
-            <div class="view-mode-controls">
-              <button
-                id="globalViewButton"
-                class="btn btn-outline-primary btn-sm"
-                title="Global importance view (top 500)"
-              >
-                <i class="bi bi-globe"></i>
-              </button>
-              <button
-                id="expandedViewButton"
-                class="btn btn-outline-primary btn-sm"
-                title="Full hierarchical view"
-              >
-                <i class="bi bi-diagram-3"></i>
-              </button>
-            </div>
             <div class="graph-action-controls">
               <button
                 id="fitButton"
@@ -148,20 +137,6 @@
                 title="Center graph"
               >
                 <i class="bi bi-bullseye"></i>
-              </button>
-              <button
-                id="expandAllButton"
-                class="btn btn-outline-secondary btn-sm"
-                title="Expand all"
-              >
-                <i class="bi bi-plus-square"></i>
-              </button>
-              <button
-                id="collapseAllButton"
-                class="btn btn-outline-secondary btn-sm"
-                title="Collapse all"
-              >
-                <i class="bi bi-dash-square"></i>
               </button>
               <button
                 id="exportButton"

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Topic Graph Visualizer - Cytoscape.js integration for hierarchical topic visualization
+// Topic Graph Visualizer - Cytoscape.js integration for global importance and neighborhood topic visualization
 declare var cytoscape: any;
 
 interface TopicData {
@@ -54,16 +54,13 @@ export class TopicGraphVisualizer {
     private lodUpdateInterval: number = 33; // ~30fps (reduced from 16ms for better performance)
     private zoomHandlerSetup: boolean = false;
 
-    // Triple-instance approach: separate instances for global, neighborhood, and expanded views
+    // Dual-instance approach: separate instances for global and neighborhood views
     private globalInstance: any = null;
     private neighborhoodInstance: any = null;
-    private expandedInstance: any = null;
-    private currentActiveView: "global" | "neighborhood" | "expanded" =
-        "global";
+    private currentActiveView: "global" | "neighborhood" = "global";
     private onInstanceChangeCallback?: () => void;
     private globalGraphData: any = null;
     private neighborhoodGraphData: any = null;
-    private expandedGraphData: any = null;
 
     // Zoom thresholds for automatic view switching
     private zoomThresholds = {
@@ -181,32 +178,21 @@ export class TopicGraphVisualizer {
     /**
      * Initialize the topic graph with data
      */
-    public async init(
-        data: TopicGraphData,
-        viewMode: "global" | "expanded" = "expanded",
-    ): Promise<void> {
+    public async init(data: TopicGraphData): Promise<void> {
         this.topicGraphData = data;
 
         // Create separate containers and instances if not already created
-        if (
-            !this.globalInstance ||
-            !this.neighborhoodInstance ||
-            !this.expandedInstance
-        ) {
-            this.createTripleInstances();
+        if (!this.globalInstance || !this.neighborhoodInstance) {
+            this.createDualInstances();
         }
 
-        if (viewMode === "global") {
-            await this.initializeGlobalView(data);
-        } else {
-            await this.initializeExpandedView(data);
-        }
+        await this.initializeGlobalView(data);
     }
 
     /**
-     * Create all three Cytoscape instances with separate containers
+     * Create both Cytoscape instances with separate containers
      */
-    private createTripleInstances(): void {
+    private createDualInstances(): void {
         const rendererConfig = this.getOptimalRendererConfig();
 
         // Create global instance container
@@ -228,16 +214,6 @@ export class TopicGraphVisualizer {
         neighborhoodContainer.style.left = "0";
         neighborhoodContainer.style.visibility = "hidden";
         this.container.appendChild(neighborhoodContainer);
-
-        // Create expanded instance container
-        const expandedContainer = document.createElement("div");
-        expandedContainer.style.width = "100%";
-        expandedContainer.style.height = "100%";
-        expandedContainer.style.position = "absolute";
-        expandedContainer.style.top = "0";
-        expandedContainer.style.left = "0";
-        expandedContainer.style.visibility = "hidden";
-        this.container.appendChild(expandedContainer);
 
         // Initialize global instance
         this.globalInstance = cytoscape({
@@ -273,30 +249,12 @@ export class TopicGraphVisualizer {
             autoungrabify: false,
         });
 
-        // Initialize expanded instance
-        this.expandedInstance = cytoscape({
-            container: expandedContainer,
-            style: this.getOptimizedTopicGraphStyles(),
-            layout: this.getLayoutOptions(),
-            elements: [],
-            renderer: rendererConfig,
-            minZoom: 0.25,
-            maxZoom: 4.0,
-            zoomingEnabled: true,
-            userZoomingEnabled: false,
-            panningEnabled: true,
-            userPanningEnabled: true,
-            boxSelectionEnabled: false,
-            autoungrabify: false,
-        });
-
-        // Setup zoom handlers for all instances
+        // Setup zoom handlers for both instances
         this.setupZoomHandlerForInstance(this.globalInstance);
         this.setupZoomHandlerForInstance(this.neighborhoodInstance);
-        this.setupZoomHandlerForInstance(this.expandedInstance);
 
         console.log(
-            "[TopicGraphVisualizer] Triple instances created with separate containers",
+            "[TopicGraphVisualizer] Dual instances created with separate containers",
         );
     }
 
@@ -325,32 +283,6 @@ export class TopicGraphVisualizer {
         if (!this.zoomHandlerSetup) {
             this.setupContainerWheelHandler();
         }
-
-        if (this.onInstanceChangeCallback) {
-            this.onInstanceChangeCallback();
-        }
-    }
-
-    /**
-     * Initialize expanded hierarchical view
-     */
-    private async initializeExpandedView(data: TopicGraphData): Promise<void> {
-        console.log(
-            "[TopicGraphVisualizer] Initializing EXPANDED hierarchical view",
-        );
-        console.log(
-            `[TopicGraphVisualizer] Expanded view data: ${data.topics.length} topics`,
-        );
-
-        this.cy = this.expandedInstance;
-        this.currentActiveView = "expanded";
-        this.expandedGraphData = data;
-
-        // Show expanded, hide others
-        this.setInstanceVisibility("expanded");
-
-        await this.loadData(data);
-        this.setupEventHandlers();
 
         if (this.onInstanceChangeCallback) {
             this.onInstanceChangeCallback();
@@ -416,46 +348,9 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Switch to expanded hierarchical view
-     */
-    public async switchToExpandedView(
-        expandedData?: TopicGraphData,
-    ): Promise<void> {
-        console.log(
-            "[TopicGraphVisualizer] SWITCHING to expanded hierarchical view",
-        );
-        const dataToUse = expandedData || this.expandedGraphData;
-
-        if (!dataToUse) {
-            console.warn(
-                "[TopicGraphVisualizer] No expanded graph data available",
-            );
-            return;
-        }
-
-        console.log(
-            `[TopicGraphVisualizer] Loading ${dataToUse.topics.length} topics in expanded view`,
-        );
-
-        this.cy = this.expandedInstance;
-        this.currentActiveView = "expanded";
-        this.expandedGraphData = dataToUse;
-
-        this.setInstanceVisibility("expanded");
-
-        await this.loadData(dataToUse);
-
-        if (this.onInstanceChangeCallback) {
-            this.onInstanceChangeCallback();
-        }
-
-        console.log("[TopicGraphVisualizer] Expanded view switch complete");
-    }
-
-    /**
      * Get current active view mode
      */
-    public getCurrentViewMode(): "global" | "neighborhood" | "expanded" {
+    public getCurrentViewMode(): "global" | "neighborhood" {
         return this.currentActiveView;
     }
 
@@ -712,15 +607,14 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Set which instance is visible (uses z-index and opacity to avoid destroying renderer)
+     * Set which instance is visible (uses visibility to avoid destroying renderer)
      */
     private setInstanceVisibility(
-        visibleView: "global" | "neighborhood" | "expanded",
+        visibleView: "global" | "neighborhood",
     ): void {
         const containers = {
             global: this.globalInstance?.container(),
             neighborhood: this.neighborhoodInstance?.container(),
-            expanded: this.expandedInstance?.container(),
         };
 
         // Hide all containers using visibility (preserves renderer state)
@@ -740,8 +634,6 @@ export class TopicGraphVisualizer {
                 this.neighborhoodInstance
             ) {
                 this.neighborhoodInstance.resize();
-            } else if (visibleView === "expanded" && this.expandedInstance) {
-                this.expandedInstance.resize();
             }
         }
     }
@@ -1231,7 +1123,9 @@ export class TopicGraphVisualizer {
         // Calculate dynamic co-occurrence threshold for global view
         let coOccursThreshold = 0;
         if (this.currentActiveView === "global") {
-            coOccursThreshold = this.calculateCoOccursThreshold(data.relationships);
+            coOccursThreshold = this.calculateCoOccursThreshold(
+                data.relationships,
+            );
         }
 
         // Add relationship edges
@@ -1247,7 +1141,10 @@ export class TopicGraphVisualizer {
                 if (this.currentActiveView === "global") {
                     // In global view, only show top 20% strongest co_occurs edges
                     // This keeps strongly related topics connected while reducing edge density
-                    if (rel.type === "co_occurs" && (rel.strength || 0) < coOccursThreshold) {
+                    if (
+                        rel.type === "co_occurs" &&
+                        (rel.strength || 0) < coOccursThreshold
+                    ) {
                         continue;
                     }
                     // Also skip low-strength edges for cleaner visualization
@@ -1276,7 +1173,9 @@ export class TopicGraphVisualizer {
      * Calculate dynamic threshold for co-occurrence edges based on strength distribution
      * Returns the 80th percentile strength value (keeps top 20% of co_occurs edges)
      */
-    private calculateCoOccursThreshold(relationships: TopicRelationshipData[]): number {
+    private calculateCoOccursThreshold(
+        relationships: TopicRelationshipData[],
+    ): number {
         const coOccursStrengths = relationships
             .filter((rel) => rel.type === "co_occurs")
             .map((rel) => rel.strength || 0)
@@ -1292,8 +1191,8 @@ export class TopicGraphVisualizer {
 
         console.log(
             `[TopicGraphVisualizer] Co-occurrence threshold: ${threshold.toFixed(3)} ` +
-            `(80th percentile of ${coOccursStrengths.length} co_occurs edges, ` +
-            `will keep ${coOccursStrengths.length - index} edges)`,
+                `(80th percentile of ${coOccursStrengths.length} co_occurs edges, ` +
+                `will keep ${coOccursStrengths.length - index} edges)`,
         );
 
         return threshold;
