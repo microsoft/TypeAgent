@@ -1932,13 +1932,144 @@ export async function getTopicImportanceLayer(
         }
 
         const maxNodes = parameters.maxNodes || 500;
-        const sortedMetrics = topicMetrics.sort(
-            (a, b) => (b.importance || 0) - (a.importance || 0),
-        );
 
-        const selectedMetrics = sortedMetrics.slice(0, maxNodes);
-        const selectedTopicIds = new Set(
-            selectedMetrics.map((m: any) => m.topicId),
+        // Build adjacency maps for BFS
+        const childrenMap = new Map<string, string[]>();
+        const parentMap = new Map<string, string>();
+        const topicMap = new Map<string, any>();
+        const metricsMap = new Map<string, any>();
+
+        allTopics.forEach((topic: any) => {
+            topicMap.set(topic.topicId, topic);
+            if (!childrenMap.has(topic.topicId)) {
+                childrenMap.set(topic.topicId, []);
+            }
+            if (topic.parentTopicId) {
+                parentMap.set(topic.topicId, topic.parentTopicId);
+                if (!childrenMap.has(topic.parentTopicId)) {
+                    childrenMap.set(topic.parentTopicId, []);
+                }
+                childrenMap.get(topic.parentTopicId)!.push(topic.topicId);
+            }
+        });
+
+        topicMetrics.forEach((metric: any) => {
+            metricsMap.set(metric.topicId, metric);
+        });
+
+        // BFS-based balanced selection
+        const selectedTopicIds = new Set<string>();
+        const rootTopics = allTopics.filter((t: any) => !t.parentTopicId);
+
+        // Sort root topics by importance
+        const sortedRoots = rootTopics.sort((a: any, b: any) => {
+            const importanceA = metricsMap.get(a.topicId)?.importance || 0;
+            const importanceB = metricsMap.get(b.topicId)?.importance || 0;
+            return importanceB - importanceA;
+        });
+
+        // Start with all roots
+        const queue: Array<{ id: string; depth: number }> = [];
+        sortedRoots.forEach((root: any) => {
+            if (selectedTopicIds.size < maxNodes) {
+                selectedTopicIds.add(root.topicId);
+                queue.push({ id: root.topicId, depth: 0 });
+            }
+        });
+
+        // First pass: ensure each root gets at least one child
+        const rootsWithChildren = new Set<string>();
+        sortedRoots.forEach((root: any) => {
+            if (selectedTopicIds.size >= maxNodes) return;
+            const children = childrenMap.get(root.topicId) || [];
+            if (children.length > 0) {
+                const sortedChildren = children
+                    .map(id => ({ id, importance: metricsMap.get(id)?.importance || 0 }))
+                    .sort((a, b) => b.importance - a.importance);
+
+                // Add at least one child for this root
+                const firstChild = sortedChildren[0];
+                if (firstChild && !selectedTopicIds.has(firstChild.id)) {
+                    selectedTopicIds.add(firstChild.id);
+                    queue.push({ id: firstChild.id, depth: 1 });
+                }
+                rootsWithChildren.add(root.topicId);
+            }
+        });
+
+        // BFS to expand around roots, level by level
+        while (queue.length > 0 && selectedTopicIds.size < maxNodes) {
+            const { id: currentId, depth } = queue.shift()!;
+            const children = childrenMap.get(currentId) || [];
+
+            // Sort children by importance
+            const sortedChildren = children
+                .map(id => ({ id, importance: metricsMap.get(id)?.importance || 0 }))
+                .sort((a, b) => b.importance - a.importance);
+
+            for (const { id } of sortedChildren) {
+                if (selectedTopicIds.size >= maxNodes) break;
+                if (!selectedTopicIds.has(id)) {
+                    selectedTopicIds.add(id);
+                    queue.push({ id, depth: depth + 1 });
+                }
+            }
+        }
+
+        // If still under maxNodes, add remaining high-importance topics
+        // and connect orphaned nodes to the graph
+        if (selectedTopicIds.size < maxNodes) {
+            const sortedMetrics = topicMetrics
+                .filter((m: any) => !selectedTopicIds.has(m.topicId))
+                .sort((a, b) => (b.importance || 0) - (a.importance || 0));
+
+            const remaining = maxNodes - selectedTopicIds.size;
+
+            for (let i = 0; i < Math.min(remaining, sortedMetrics.length); i++) {
+                const topicId = sortedMetrics[i].topicId;
+
+                // Check if this topic has any neighbors in the selected set
+                const hasNeighbors = (() => {
+                    // Check if parent is in set
+                    const parent = parentMap.get(topicId);
+                    if (parent && selectedTopicIds.has(parent)) return true;
+
+                    // Check if any children are in set
+                    const children = childrenMap.get(topicId) || [];
+                    return children.some(childId => selectedTopicIds.has(childId));
+                })();
+
+                if (!hasNeighbors) {
+                    // Find path to existing node by traversing up to root
+                    const pathToRoot: string[] = [];
+                    let currentId = topicId;
+
+                    while (currentId && !selectedTopicIds.has(currentId) && pathToRoot.length < 10) {
+                        pathToRoot.push(currentId);
+                        const parent = parentMap.get(currentId);
+                        if (!parent) break; // Reached root
+                        currentId = parent;
+                    }
+
+                    // If we found a connection, add the path
+                    if (selectedTopicIds.has(currentId)) {
+                        // Add nodes in reverse order (from existing node down to new node)
+                        for (let j = pathToRoot.length - 1; j >= 0 && selectedTopicIds.size < maxNodes; j--) {
+                            selectedTopicIds.add(pathToRoot[j]);
+                        }
+                    } else {
+                        // Just add the node even if orphaned
+                        selectedTopicIds.add(topicId);
+                    }
+                } else {
+                    // Already connected, just add it
+                    selectedTopicIds.add(topicId);
+                }
+            }
+        }
+
+        const selectedMetrics = topicMetrics.filter((m: any) =>
+            selectedTopicIds.has(m.topicId),
         );
 
         const selectedTopics = allTopics.filter((t: any) =>
