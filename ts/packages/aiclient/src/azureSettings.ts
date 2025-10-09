@@ -35,12 +35,23 @@ export function azureApiSettingsFromEnv(
     endpointName?: string,
 ): AzureApiSettings {
     env ??= process.env;
-    const settings =
-        modelType == ModelType.Chat
-            ? azureChatApiSettingsFromEnv(env, endpointName)
-            : modelType == ModelType.Image
-              ? azureImageApiSettingsFromEnv(env, endpointName)
-              : azureEmbeddingApiSettingsFromEnv(env, endpointName);
+
+    let settings: AzureApiSettings | undefined; 
+
+    switch (modelType) {
+        case ModelType.Chat:
+            settings = azureChatApiSettingsFromEnv(env, endpointName);
+            break;
+        case ModelType.Image:
+            settings = azureImageApiSettingsFromEnv(env, endpointName);
+            break;
+        case ModelType.Video:
+            settings = azureVideoApiSettingsFromEnv(env, endpointName);
+            break;
+        default:
+            settings = azureEmbeddingApiSettingsFromEnv(env, endpointName);
+            break;
+    }
 
     if (settings.apiKey.toLowerCase() === IdentityApiKey) {
         settings.tokenProvider = azureTokenProvider;
@@ -158,6 +169,32 @@ function azureImageApiSettingsFromEnv(
         endpoint: getEnvSetting(
             env,
             EnvVars.AZURE_OPENAI_ENDPOINT_DALLE,
+            endpointName,
+        ),
+    };
+}
+
+/**
+ * Load settings for the Azure OpenAI Video service from env
+ * @param env
+ * @returns
+ */
+function azureVideoApiSettingsFromEnv(
+    env: Record<string, string | undefined>,
+    endpointName?: string,
+): AzureApiSettings {
+    return {
+        provider: "azure",
+        modelType: ModelType.Image,
+        apiKey: getEnvSetting(
+            env,
+            EnvVars.AZURE_OPENAI_API_KEY_SORA,
+            endpointName,
+            "identity",
+        ),
+        endpoint: getEnvSetting(
+            env,
+            EnvVars.AZURE_OPENAI_ENDPOINT_SORA,
             endpointName,
         ),
     };

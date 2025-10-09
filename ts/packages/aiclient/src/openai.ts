@@ -10,6 +10,8 @@ import {
     ImageGeneration,
     CompletionJsonSchema,
     CompleteUsageStatsCallback,
+    VideoModel,
+    VideoGeneration,
 } from "./models.js";
 import { callApi, callJsonApi, FetchThrottler } from "./restClient.js";
 import { getEnvSetting } from "./common.js";
@@ -46,6 +48,7 @@ export enum ModelType {
     Chat = "chat",
     Embedding = "embedding",
     Image = "image",
+    Video = "video",
 }
 
 export type ModelInfo<T> = {
@@ -105,6 +108,8 @@ export enum EnvVars {
 
     AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
     AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
+    AZURE_OPENAI_API_KEY_SORA = "AZURE_OPENAI_API_KEY_SORA",
+    AZURE_OPENAI_ENDPOINT_SORA = "AZURE_OPENAI_ENDPOINT_SORA",
 
     OLLAMA_ENDPOINT = "OLLAMA_ENDPOINT",
 
@@ -354,6 +359,11 @@ type ImageData = {
     prompt_filter_results: FilterResult | FilterError;
     revised_prompt: string;
     url: string;
+};
+
+type VideoCompletion = {
+    created: number;
+    data: ImageData[];
 };
 
 // Statistics returned by the OAI api
@@ -997,4 +1007,79 @@ function getPromptLength(prompt: string | PromptSection[]) {
         length += section.content.length;
     }
     return length;
+}
+
+/**
+ * Create a client for the OpenAI sora model
+ * @param apiSettings: settings to use to create the client
+ */
+export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
+    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Video);
+    const defaultParams =
+        settings.provider === "azure"
+            ? {}
+            : {
+                  model: settings.modelName,
+              };
+    const model: VideoModel = {
+        generateVideo,
+    };
+    return model;
+
+    async function generateVideo(
+        prompt: string,
+        numVariants: number = 1,
+        durationInSeconds: number = 5,
+        width: number = 1920,
+        height: number = 1080,
+    ): Promise<Result<VideoGeneration>> {
+        const headerResult = await createApiHeaders(settings);
+        if (!headerResult.success) {
+            return headerResult;
+        }
+        if (numVariants < 0 || numVariants > 2) {
+            throw Error("n MUST equal 1"); // as of 10.09.2025 API will only accept n<2
+        }
+        const params = {
+            ...defaultParams,
+            prompt,
+            n_variants: numVariants,
+            n_seconds: durationInSeconds,
+            height: 1080,
+            width: 1920,
+            model: "sora"
+        };
+
+        const result = await callJsonApi(
+            headerResult.data,
+            settings.endpoint,
+            params,
+            settings.maxRetryAttempts,
+            settings.retryPauseMs,
+    );
+
+        if (!result.success) {
+            return result;
+        }
+
+        const data = result.data as VideoCompletion;
+        const retValue: VideoGeneration = { videos: [] };
+
+        data.data.map((i) => {
+            verifyContentSafety(i);
+            retValue.videos.push({
+                revised_prompt: i.revised_prompt,
+                video_url: i.url,
+            });
+        });
+
+        return success(retValue);
+    }
+
+    function verifyContentSafety(data: ImageData): boolean {
+        verifyFilterResults(data.content_filter_results as FilterResult);
+        verifyFilterResults(data.prompt_filter_results as FilterResult);
+
+        return true;
+    }
 }

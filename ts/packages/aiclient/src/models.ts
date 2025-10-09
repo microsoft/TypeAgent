@@ -143,3 +143,23 @@ export function modelMetadata_ada002(): EmbeddingModelMetadata {
         embeddingSize: 1536,
     };
 }
+
+export interface VideoModel {
+    generateVideo(
+        prompt: string,
+        numVariants: number,
+        durationInSeconds: number,
+        width: number,
+        height: number,
+    ): Promise<Result<VideoGeneration>>;
+}
+
+export type VideoGeneration = {
+    videos: GeneratedVideo[];
+};
+
+export type GeneratedVideo = {
+    revised_prompt: string;
+    video_url: string;
+};
+
