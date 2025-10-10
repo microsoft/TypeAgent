@@ -40,18 +40,16 @@ public class MemoryCommands : ICommandModule
         {
             Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
         };
-        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        if (results is null)
-        {
-            KnowProWriter.WriteError("No results");
-            return;
-        }
-        foreach (var kType in results.Keys)
-        {
-            KnowProWriter.WriteKnowledgeSearchResult(_kpContext.Conversation!, kType, results[kType]);
-            KnowProWriter.WriteLine();
-        }
+        KnowProWriter.WriteLine(searchGroup);
 
+        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
+        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
+        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
+
+        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
     }
 
     private Command MessagesDef()

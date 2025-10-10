@@ -5,10 +5,6 @@ namespace TypeAgent.ExamplesLib.CommandLine;
 
 public class ConsoleWriter
 {
-    public class Style : ConsoleStyle
-    {
-    }
-
     static Stack<ConsoleColor> s_colorStack;
 
     static ConsoleWriter()
@@ -31,6 +27,9 @@ public class ConsoleWriter
     }
 
     public static void Write(int value) => Console.Write(value);
+    public static void Write(double value) => Console.Write(value);
+    public static void Write(bool value) => Console.Write(value);
+    public static void Write(object value) => Console.Write(value);
     public static void Write(string value)
     {
         if (!string.IsNullOrEmpty(value))
@@ -47,8 +46,23 @@ public class ConsoleWriter
         }
     }
 
+    public static void InColor(ConsoleColor color, System.Action writer)
+    {
+        PushColor(color);
+        try
+        {
+            writer();
+        }
+        finally
+        {
+            PopColor();
+        }
+    }
+
     public static void WriteLine() => Console.WriteLine();
     public static void WriteLine(int value) => Console.WriteLine(value);
+    public static void WriteLine(double value) => Console.WriteLine(value);
+    public static void WriteLine(object value) => Console.WriteLine(value);
     public static void WriteLine(string value) => Console.WriteLine(value);
     public static void WriteLine(ConsoleColor color, string value)
     {
@@ -62,6 +76,13 @@ public class ConsoleWriter
         WriteLine(Json.Stringify(value, true));
     }
 
+    public static void WriteJson(ConsoleColor color, object value)
+    {
+        PushColor(color);
+        WriteLine(Json.Stringify(value, true));
+        PopColor();
+    }
+
     public static void WriteJson(Array values)
     {
         foreach (var value in values)
@@ -70,25 +91,29 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteList(IEnumerable<string> list, ListOptions? options = null)
+    public static void WriteList(IEnumerable<string> list, string title, ListType type = ListType.Ul)
     {
-        options ??= new() { Type = ListType.Plain };
-
-        var isInline = options.Type == ListType.Plain || options.Type == ListType.Csv;
-        if (!string.IsNullOrEmpty(options.Title))
+        if (!string.IsNullOrEmpty(title))
         {
+            var isInline = type == ListType.Plain || type == ListType.Csv;
             if (isInline)
             {
-                Write(options.Title + ": ");
+                Write(title + ": ");
             }
             else
             {
-                WriteLine(options.Title);
+                WriteLine(title);
             }
         }
+        WriteList(list, type);
+    }
+
+    public static void WriteList(IEnumerable<string> list, ListType type = ListType.Ul)
+    {
+        var isInline = type == ListType.Plain || type == ListType.Csv;
         if (isInline)
         {
-            var sep = options.Type == ListType.Plain ? " " : ", ";
+            var sep = type == ListType.Plain ? " " : ", ";
             foreach (var (i, item) in list.Enumerate())
             {
                 if (i > 0)
@@ -103,17 +128,17 @@ public class ConsoleWriter
         {
             foreach (var (i, item) in list.Enumerate())
             {
-                WriteListItem(i, item, options);
+                WriteListItem(i + 1, item, type);
             }
         }
 
     }
 
-    private static void WriteListItem(int i, string item, ListOptions options)
+    private static void WriteListItem(int i, string item, ListType type)
     {
         if (!string.IsNullOrEmpty(item))
         {
-            switch (options.Type)
+            switch (type)
             {
                 default:
                     WriteLine(item);
@@ -127,13 +152,6 @@ public class ConsoleWriter
             }
 
         }
-    }
-
-    public static void WriteListInColor(ConsoleColor color, IEnumerable<string> list, ListOptions? options = null)
-    {
-        PushColor(color);
-        WriteList(list, options);
-        PopColor();
     }
 
     public static void WriteLineHeading(string title, int level = 1)
@@ -162,7 +180,7 @@ public class ConsoleWriter
 
     public static void WriteBold(string text)
     {
-        Write(Style.Bold(text));
+        Write(ConsoleStyle.Bold(text));
     }
 
     public static void WriteLineBold(string text)
@@ -173,7 +191,7 @@ public class ConsoleWriter
 
     public static void WriteUnderline(string text)
     {
-        Write(Style.Underline(text));
+        Write(ConsoleStyle.Underline(text));
     }
 
     public static void WriteLineUnderline(string text)
@@ -190,10 +208,3 @@ public enum ListType
     Plain,
     Csv // List in csv format
 }
-
-public class ListOptions
-{
-    public string? Title { get; set; }
-
-    public ListType Type { get; set; }
-};

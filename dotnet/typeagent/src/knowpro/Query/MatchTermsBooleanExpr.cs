@@ -98,7 +98,7 @@ internal class MatchTermsOrMaxExpr : MatchTermsOrExpr
 
     public override async ValueTask<SemanticRefAccumulator> EvalAsync(QueryEvalContext context)
     {
-        var matches = await EvalAsync(context);
+        var matches = await base.EvalAsync(context);
         int maxHitCount = matches.GetMaxHitCount();
         if (maxHitCount > 1)
         {
