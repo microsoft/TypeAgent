@@ -202,6 +202,20 @@ internal class MatchAccumulator<T>
         return topN.Count;
     }
 
+    public IList<Match<T>> GetWithHitCount(int minHitCount)
+    {
+        return [.. MatchesWithMinHitCount(minHitCount)];
+    }
+
+    /// <summary>
+    /// Selects and retains only items with hitCount >= minHitCount.
+    /// </summary>
+    public int SelectWithHitCount(int minHitCount)
+    {
+        var matches = GetWithHitCount(minHitCount);
+        SetMatches(matches, true);
+        return matches.Count;
+    }
 
     private void CombineMatches(Match<T> target, Match<T> source)
     {

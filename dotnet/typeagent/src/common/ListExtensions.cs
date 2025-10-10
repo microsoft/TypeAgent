@@ -76,4 +76,9 @@ public static class ListExtensions
         }
         return filtered;
     }
+
+    public static string Join<T>(this IList<T> list, string sep = ", ")
+    {
+        return string.Join(sep, list.Select((t) => t.ToString()));
+    }
 }

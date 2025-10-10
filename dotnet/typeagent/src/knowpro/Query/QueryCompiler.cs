@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Threading.Tasks;
+
 namespace TypeAgent.KnowPro.Query;
 
 internal class QueryCompiler
@@ -20,18 +22,21 @@ internal class QueryCompiler
 
     public double RelatedIsExactThreshold { get; set; } = 0.95;
 
-    public ValueTask<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>>> CompileKnowledgeQueryAsync(
+    public async ValueTask<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>>> CompileKnowledgeQueryAsync(
         SearchTermGroup searchGroup,
         WhenFilter? whenFilter,
         SearchOptions? searchOptions
     )
     {
-        var queryExpr = CompileQuery(searchGroup, whenFilter);
+        var queryExpr = await CompileQueryAsync(searchGroup, whenFilter);
         QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> resultExpr = new GroupSearchResultsExpr(queryExpr);
-        return ValueTask.FromResult(resultExpr);
+        return resultExpr;
     }
 
-    public (IList<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchTermGroup(SearchTermGroup searchGroup)
+    public (IList<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchTermGroup(
+        SearchTermGroup searchGroup,
+        GetScopeExpr? scopeExpr
+    )
     {
         IList<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
 
@@ -53,21 +58,33 @@ internal class QueryCompiler
             }
         }
 
-        var boolExpr = MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr(termExpressions, searchGroup.BooleanOp);
+        var boolExpr = MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr(
+            termExpressions,
+            searchGroup.BooleanOp,
+            scopeExpr
+        );
         return (compiledTerms, boolExpr);
     }
 
-    private QueryOpExpr<IDictionary<KnowledgeType, SemanticRefAccumulator>> CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    private async Task<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefAccumulator>>> CompileQueryAsync(
+        SearchTermGroup searchGroup,
+        WhenFilter? whenFilter
+    )
     {
-        var selectExpr = CompileSelect(searchGroup);
+        var scopeExpr = await CompileScope(searchGroup, whenFilter);
+        var selectExpr = CompileSelect(searchGroup, scopeExpr);
+
         return new SelectTopNKnowledgeGroupExpr(
             new GroupByKnowledgeTypeExpr(selectExpr)
         );
     }
 
-    private QueryOpExpr<SemanticRefAccumulator> CompileSelect(SearchTermGroup searchGroup)
+    private QueryOpExpr<SemanticRefAccumulator> CompileSelect(
+        SearchTermGroup searchGroup,
+        GetScopeExpr? scopeExpr
+    )
     {
-        var (searchTermsUsed, selectExpr) = CompileSearchTermGroup(searchGroup);
+        var (searchTermsUsed, selectExpr) = CompileSearchTermGroup(searchGroup, scopeExpr);
         _allSearchTerms.AddRange(searchTermsUsed);
         return selectExpr;
     }
@@ -88,5 +105,11 @@ internal class QueryCompiler
     private QueryOpExpr<SemanticRefAccumulator?> CompilePropertyTerm(PropertySearchTerm propertyTerm)
     {
         throw new NotImplementedException();
+    }
+
+    private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)
+    {
+        // TODO
+        return ValueTask.FromResult<GetScopeExpr>(null);
     }
 }

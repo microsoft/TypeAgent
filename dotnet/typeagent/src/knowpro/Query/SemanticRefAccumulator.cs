@@ -57,6 +57,19 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         this.SearchTermMatches.Add(term.Text);
     }
 
+
+    public SemanticRefAccumulator Intersect(SemanticRefAccumulator other)
+    {
+        var intersection = new SemanticRefAccumulator();
+        Intersect(other, intersection);
+        if (intersection.Count > 0)
+        {
+            intersection.SearchTermMatches.AddRange(SearchTermMatches);
+            intersection.SearchTermMatches.AddRange(other.SearchTermMatches);
+        }
+        return intersection;
+    }
+
     public IList<ScoredSemanticRefOrdinal> ToScoredSemanticRefs()
     {
         return GetSortedByScore(0).Map((m) =>
@@ -68,5 +81,4 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
             };
         });
     }
-
 }

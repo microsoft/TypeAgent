@@ -31,6 +31,15 @@ public class SearchTerm : ISearchTerm
     /// </summary>
     public IList<Term>? RelatedTerms { get; set; }
 
+    public override string ToString()
+    {
+        string term = Term.ToString();
+        if (!RelatedTerms.IsNullOrEmpty())
+        {
+            term = $"{term}\n<\n{RelatedTerms.Join("\n")}>";
+        }
+        return term;
+    }
 
     public static implicit operator SearchTerm(string value)
     {

@@ -40,16 +40,31 @@ public class MemoryCommands : ICommandModule
         {
             Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
         };
+        KnowProWriter.WriteLine(searchGroup);
+
         var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        if (results is null)
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
+        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
+        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
+
+        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
+        searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
+        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
+
+        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
+        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
         {
-            KnowProWriter.WriteError("No results");
-            return;
-        }
-        foreach (var kType in results.Keys)
-        {
-            KnowProWriter.WriteLine($"{kType} {results[kType].SemanticRefMatches.Count} matches");
-        }
+            Terms = [new SearchTerm("Children of Physics"), new SearchTerm("book")]
+        };
+        KnowProWriter.WriteLine(searchGroup);
+
+        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
 
     }
 
