@@ -5,6 +5,10 @@ namespace TypeAgent.ExamplesLib.CommandLine;
 
 public class ConsoleWriter
 {
+    public class Style : ConsoleStyle
+    {
+    }
+
     static Stack<ConsoleColor> s_colorStack;
 
     static ConsoleWriter()
@@ -66,13 +70,10 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteList(IEnumerable<string> list)
+    public static void WriteList(IEnumerable<string> list, ListOptions? options = null)
     {
-        WriteList(list, new() { Type = ListType.Plain });
-    }
+        options ??= new() { Type = ListType.Plain };
 
-    public static void WriteList(IEnumerable<string> list, ListOptions options)
-    {
         var isInline = options.Type == ListType.Plain || options.Type == ListType.Csv;
         if (!string.IsNullOrEmpty(options.Title))
         {
@@ -118,7 +119,7 @@ public class ConsoleWriter
                     WriteLine(item);
                     break;
                 case ListType.Ol:
-                    WriteLine($"{i}. ${item}");
+                    WriteLine($"{i}. {item}");
                     break;
                 case ListType.Ul:
                     WriteLine("• " + item);
@@ -126,6 +127,13 @@ public class ConsoleWriter
             }
 
         }
+    }
+
+    public static void WriteListInColor(ConsoleColor color, IEnumerable<string> list, ListOptions? options = null)
+    {
+        PushColor(color);
+        WriteList(list, options);
+        PopColor();
     }
 
     public static void WriteLineHeading(string title, int level = 1)
@@ -151,6 +159,28 @@ public class ConsoleWriter
     {
         WriteError(ex.Message);
     }
+
+    public static void WriteBold(string text)
+    {
+        Write(Style.Bold(text));
+    }
+
+    public static void WriteLineBold(string text)
+    {
+        WriteBold(text);
+        WriteLine();
+    }
+
+    public static void WriteUnderline(string text)
+    {
+        Write(Style.Underline(text));
+    }
+
+    public static void WriteLineUnderline(string text)
+    {
+        WriteUnderline(text);
+        WriteLine();
+    }
 }
 
 public enum ListType
@@ -161,7 +191,7 @@ public enum ListType
     Csv // List in csv format
 }
 
-public struct ListOptions
+public class ListOptions
 {
     public string? Title { get; set; }
 

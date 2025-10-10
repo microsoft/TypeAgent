@@ -45,6 +45,25 @@ public class KnowProWriter : ConsoleWriter
         }
     }
 
+    public static void WriteKnowledgeSearchResult(
+        IConversation conversation,
+        KnowledgeType kType,
+        SemanticRefSearchResult result
+    )
+    {
+        WriteLineUnderline(kType.ToString().ToUpper());
+        WriteListInColor(
+            ConsoleColor.Cyan,
+            result.TermMatches,
+            new()
+            {
+                Title = "Matched terms",
+                Type = ListType.Ol,
+            });
+        WriteLine($"{result.SemanticRefMatches.Count} matches");
+        WriteJson(result.SemanticRefMatches);
+    }
+
     public static void WriteDataFileStats<TMessage>(ConversationData<TMessage> data)
         where TMessage : IMessage
     {

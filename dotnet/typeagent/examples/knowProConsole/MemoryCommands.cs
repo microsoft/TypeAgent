@@ -48,7 +48,8 @@ public class MemoryCommands : ICommandModule
         }
         foreach (var kType in results.Keys)
         {
-            KnowProWriter.WriteLine($"{kType} {results[kType].SemanticRefMatches.Count} matches");
+            KnowProWriter.WriteKnowledgeSearchResult(_kpContext.Conversation!, kType, results[kType]);
+            KnowProWriter.WriteLine();
         }
 
     }
