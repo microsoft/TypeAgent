@@ -163,7 +163,7 @@ public class PodcastCommands : ICommandModule
         if (podcast is not null)
         {
             _podcast = podcast;
-            _kpContext.SetConversation(podcast);
+            _kpContext.Conversation = podcast;
         }
     }
 }

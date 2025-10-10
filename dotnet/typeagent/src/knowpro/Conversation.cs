@@ -3,17 +3,15 @@
 
 namespace TypeAgent.KnowPro;
 
-public class Conversation<TMessage> : IConversation<TMessage>, IDisposable
+public class Conversation<TMessage> : IConversation<TMessage>, IConversation, IDisposable
     where TMessage : IMessage, new()
 {
     private IStorageProvider<TMessage> _storageProvider;
-    private readonly Conversation _readonlyConversation;
 
     public Conversation(IStorageProvider<TMessage> provider)
     {
         ArgumentVerify.ThrowIfNull(provider, nameof(provider));
         _storageProvider = provider;
-        _readonlyConversation = new Conversation(provider);
     }
 
     public IMessageCollection<TMessage> Messages => _storageProvider.TypedMessages;
@@ -24,11 +22,11 @@ public class Conversation<TMessage> : IConversation<TMessage>, IDisposable
 
     public IConversationSecondaryIndexes SecondaryIndexes => _storageProvider.SecondaryIndexes;
 
-    public IConversation AsConversation() => _readonlyConversation;
+    IMessageCollection IConversation.Messages => _storageProvider.Messages;
 
     public static implicit operator Conversation(Conversation<TMessage> conversation)
     {
-        return conversation._readonlyConversation;
+        return new Conversation(conversation);
     }
 
     protected virtual void Dispose(bool disposing)
@@ -57,6 +55,16 @@ public class Conversation : IConversation
               provider.SemanticRefIndex,
               provider.SecondaryIndexes
           )
+    {
+    }
+
+    public Conversation(IConversation conversation)
+        : this(
+              conversation.Messages,
+              conversation.SemanticRefs,
+              conversation.SemanticRefIndex,
+              conversation.SecondaryIndexes
+        )
     {
     }
 
