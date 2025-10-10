@@ -28,18 +28,13 @@ internal class MatchTermsBooleanExpr : QueryOpExpr<SemanticRefAccumulator>
         GetScopeExpr? scopeExpr
     )
     {
-        switch (booleanOp)
+        return booleanOp switch
         {
-            case SearchTermBooleanOp.And:
-                break;
-
-            case SearchTermBooleanOp.Or:
-                return new MatchTermsOrExpr(termExpressions, scopeExpr);
-
-            case SearchTermBooleanOp.OrMax:
-                return new MatchTermsOrMaxExpr(termExpressions, scopeExpr);
-        }
-        throw new NotSupportedException();
+            SearchTermBooleanOp.And => new MatchTermsAndExpr(termExpressions, scopeExpr),
+            SearchTermBooleanOp.Or => new MatchTermsOrExpr(termExpressions, scopeExpr),
+            SearchTermBooleanOp.OrMax => new MatchTermsOrMaxExpr(termExpressions, scopeExpr),
+            _ => throw new NotSupportedException(),
+        };
     }
 
 }
@@ -57,7 +52,7 @@ internal class MatchTermsOrExpr : MatchTermsBooleanExpr
         TermExpressions = termExpressions;
     }
 
-    public IList<QueryOpExpr<SemanticRefAccumulator>> TermExpressions { get; }
+    public IList<QueryOpExpr<SemanticRefAccumulator?>> TermExpressions { get; }
 
     public override async ValueTask<SemanticRefAccumulator> EvalAsync(QueryEvalContext context)
     {
@@ -98,12 +93,61 @@ internal class MatchTermsOrMaxExpr : MatchTermsOrExpr
 
     public override async ValueTask<SemanticRefAccumulator> EvalAsync(QueryEvalContext context)
     {
-        var matches = await base.EvalAsync(context);
+        SemanticRefAccumulator matches = await base.EvalAsync(context);
         int maxHitCount = matches.GetMaxHitCount();
         if (maxHitCount > 1)
         {
             matches.SelectWithHitCount(maxHitCount);
         }
         return matches;
+    }
+}
+
+internal class MatchTermsAndExpr : MatchTermsBooleanExpr
+{
+    public MatchTermsAndExpr(
+        IList<QueryOpExpr<SemanticRefAccumulator?>> termExpressions,
+        GetScopeExpr? getScopeExpr
+    )
+        : base(getScopeExpr)
+    {
+        ArgumentVerify.ThrowIfNull(termExpressions, nameof(termExpressions));
+        TermExpressions = termExpressions;
+    }
+
+    public IList<QueryOpExpr<SemanticRefAccumulator?>> TermExpressions { get; }
+
+    public override async ValueTask<SemanticRefAccumulator> EvalAsync(QueryEvalContext context)
+    {
+        await base.BeginMatchAsync(context);
+
+        SemanticRefAccumulator? allMatches = null;
+        int iTerm = 0;
+        // Loop over each search term, intersecting the returned results...
+        for (; iTerm < TermExpressions.Count; ++iTerm)
+        {
+            var termExpr = TermExpressions[iTerm];
+            SemanticRefAccumulator? termMatches = await termExpr.EvalAsync(context);
+            if (termMatches is null || termMatches.Count == 0)
+            {
+                // We can't possibly have an 'and'
+                break;
+            }
+            allMatches = allMatches is null ? termMatches : allMatches.Intersect(termMatches);
+        }
+        if (allMatches is not null)
+        {
+            if (iTerm == TermExpressions.Count)
+            {
+                allMatches.CalculateTotalScore();
+                allMatches.SelectWithHitCount(TermExpressions.Count);
+            }
+            else
+            {
+                // And is not possible
+                allMatches.Clear();
+            }
+        }
+        return allMatches ?? new SemanticRefAccumulator();
     }
 }

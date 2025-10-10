@@ -50,6 +50,22 @@ public class MemoryCommands : ICommandModule
 
         results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
+        searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
+        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
+
+        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
+        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
+        {
+            Terms = [new SearchTerm("Children of Physics"), new SearchTerm("book")]
+        };
+        KnowProWriter.WriteLine(searchGroup);
+
+        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
     }
 
     private Command MessagesDef()

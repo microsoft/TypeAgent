@@ -26,16 +26,28 @@ public class ConsoleWriter
         }
     }
 
-    public static void Write(int value) => Console.Write(value);
-    public static void Write(double value) => Console.Write(value);
-    public static void Write(bool value) => Console.Write(value);
-    public static void Write(object value) => Console.Write(value);
-    public static void Write(string value)
+    public static void Write(string value) => Console.Write(value);
+
+    public static void Write<T>(T value)
     {
-        if (!string.IsNullOrEmpty(value))
+        if (value is not null)
         {
-            Console.Write(value);
+            Console.Write(value.ToString());
         }
+    }
+
+    public static void Write<T>(ConsoleColor color, string value)
+    {
+        PushColor(color);
+        Write(value);
+        PopColor();
+    }
+
+    public static void Write<T>(ConsoleColor color, T value)
+    {
+        PushColor(color);
+        Write(value);
+        PopColor();
     }
 
     public static void Write(char ch, int count)
@@ -60,11 +72,24 @@ public class ConsoleWriter
     }
 
     public static void WriteLine() => Console.WriteLine();
-    public static void WriteLine(int value) => Console.WriteLine(value);
-    public static void WriteLine(double value) => Console.WriteLine(value);
-    public static void WriteLine(object value) => Console.WriteLine(value);
     public static void WriteLine(string value) => Console.WriteLine(value);
-    public static void WriteLine(ConsoleColor color, string value)
+
+    public static void WriteLine<T>(T value)
+    {
+        if (value is not null)
+        {
+            Console.WriteLine(value.ToString());
+        }
+    }
+
+    public static void WriteLine<T>(ConsoleColor color, string value)
+    {
+        PushColor(color);
+        WriteLine(value);
+        PopColor();
+    }
+
+    public static void WriteLine<T>(ConsoleColor color, T value)
     {
         PushColor(color);
         WriteLine(value);

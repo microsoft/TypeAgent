@@ -8,8 +8,13 @@ public class ConsoleStyle
     const string Ansi_Reset = "\x1b[0m";
 
     // ANSI color codes for ConsoleColor equivalents
-    public static string Color(ConsoleColor color, string text)
+    public static string Color(ConsoleColor color, string? text)
     {
+        if (string.IsNullOrEmpty(text))
+        {
+            text = string.Empty;
+        }
+
         string ansiCode = color switch
         {
             ConsoleColor.Black => "\x1b[30m",
@@ -32,6 +37,8 @@ public class ConsoleStyle
         };
         return $"{ansiCode}{text}{Ansi_Reset}";
     }
+
+    public static string Color<T>(ConsoleColor color, T obj) => Color(color, obj?.ToString());
 
     public static string Bold(string text)
     {
