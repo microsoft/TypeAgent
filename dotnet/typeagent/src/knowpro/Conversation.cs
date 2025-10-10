@@ -22,12 +22,9 @@ public class Conversation<TMessage> : IConversation<TMessage>, IConversation, ID
 
     public IConversationSecondaryIndexes SecondaryIndexes => _storageProvider.SecondaryIndexes;
 
+    // If used as IConversation, return a message collection of IMessage
+    // Keeps the .NET type system happy
     IMessageCollection IConversation.Messages => _storageProvider.Messages;
-
-    public static implicit operator Conversation(Conversation<TMessage> conversation)
-    {
-        return new Conversation(conversation);
-    }
 
     protected virtual void Dispose(bool disposing)
     {
