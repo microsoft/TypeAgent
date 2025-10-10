@@ -22,6 +22,8 @@ internal class QueryEvalContext
 
     public ITermToSemanticRefIndex SemanticRefIndex => Conversation.SemanticRefIndex;
 
+    public IPropertyToSemanticRefIndex PropertyIndex => Conversation.SecondaryIndexes.PropertyToSemanticRefIndex;
+
     public TermSet MatchedTerms { get; private set; }
 
     public TextRangesInScope? TextRangesInScope { get; set; }

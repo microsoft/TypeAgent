@@ -41,6 +41,11 @@ public class SearchTerm : ISearchTerm
         return term;
     }
 
+    public bool IsWildcard()
+    {
+        return Term.Text == "*";
+    }
+
     public static implicit operator SearchTerm(string value)
     {
         return new SearchTerm(value);

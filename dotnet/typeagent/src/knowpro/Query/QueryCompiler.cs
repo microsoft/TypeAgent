@@ -96,7 +96,7 @@ internal class QueryCompiler
 
         return new MatchSearchTermExpr(
             searchTerm,
-            (term, semanticRef, scoredOrdinal) =>
+            (semanticRef, scoredOrdinal) =>
         {
             return Ranker.BoostEntities(semanticRef, scoredOrdinal, boostWeight);
         });

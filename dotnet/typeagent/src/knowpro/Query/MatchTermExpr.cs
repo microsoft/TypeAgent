@@ -4,7 +4,6 @@
 namespace TypeAgent.KnowPro.Query;
 
 internal delegate ScoredSemanticRefOrdinal ScoreBooster(
-    Term term,
     SemanticRef semanticRef,
     ScoredSemanticRefOrdinal scoredOrdinal
 );
@@ -63,7 +62,7 @@ internal class MatchSearchTermExpr : MatchTermExpr
                     matches,
                     SearchTerm.Term,
                     relatedTerm
-                );
+                ).ConfigureAwait(false);
             }
         }
     }
@@ -123,6 +122,91 @@ internal class MatchSearchTermExpr : MatchTermExpr
             context.TextRangesInScope,
             null,
             ScoreBooster
+        );
+    }
+}
+
+internal class MatchPropertySearchTermExpr : MatchTermExpr
+{
+    public MatchPropertySearchTermExpr(PropertySearchTerm propertyTerm)
+    {
+        ArgumentVerify.ThrowIfNull(propertyTerm, nameof(propertyTerm));
+        PropertySearchTerm = propertyTerm;
+    }
+
+    public PropertySearchTerm PropertySearchTerm { get; }
+
+    protected override ValueTask AccumulateMatchesAsync(QueryEvalContext context, SemanticRefAccumulator matches)
+    {
+        if (PropertySearchTerm.PropertyName is KnowledgePropertyNameSearchTerm stringName)
+        {
+            return AccumulateMatchesForPropertyAsync(
+                context,
+                stringName,
+                PropertySearchTerm.PropertyValue,
+                matches
+            );
+        }
+        else if (PropertySearchTerm.PropertyName is PropertyNameSearchTerm fullName)
+        {
+            return AccumulateMatchesForFacetsAsync(
+                context,
+                fullName,
+                PropertySearchTerm.PropertyValue,
+                matches
+            );
+        }
+        return ValueTask.CompletedTask;
+    }
+
+    private ValueTask AccumulateMatchesForPropertyAsync(
+        QueryEvalContext context,
+        string propertyName,
+        SearchTerm propertyValue,
+        SemanticRefAccumulator matches
+    )
+    {
+        throw new NotImplementedException();
+    }
+
+    private async ValueTask AccumulateMatchesForFacetsAsync(
+        QueryEvalContext context,
+        SearchTerm propertyName,
+        SearchTerm propertyValue,
+        SemanticRefAccumulator matches
+    )
+    {
+        // Assuming PropertyNames.FacetName and PropertyNames.FacetValue are of type KnowledgePropertyName
+        await AccumulateMatchesForPropertyAsync(
+            context,
+            KnowledgePropertyName.FacetName,
+            propertyName,
+            matches
+        ).ConfigureAwait(false);
+
+        // Assuming isSearchTermWildcard is a method that checks if the SearchTerm is a wildcard
+        if (!propertyValue.IsWildcard())
+        {
+            await AccumulateMatchesForPropertyAsync(
+                context,
+                KnowledgePropertyName.FacetValue,
+                propertyValue,
+                matches
+            ).ConfigureAwait(false);
+        }
+    }
+
+    private ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupPropertyAsync(
+        QueryEvalContext context,
+        string propertyName,
+        string propertyValue
+    )
+    {
+        return context.PropertyIndex.LookupPropertyAsync(
+            context,
+            propertyName,
+            propertyValue,
+            context.TextRangesInScope
         );
     }
 }
