@@ -169,6 +169,35 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
         throw new NotImplementedException();
     }
 
+    private async ValueTask AccumulateMatchesForPropertyValueAsync(
+        QueryEvalContext context,
+        SemanticRefAccumulator matches,
+        string propertyName,
+        Term propertyValue,
+        Term? relatedPropVal
+    )
+    {
+        if (relatedPropVal is null)
+        {
+            if (
+                !context.MatchedPropertyTerms.Has(propertyName, propertyValue)
+            )
+            {
+                var semanticRefs = await LookupPropertyAsync(
+                    context,
+                    propertyName,
+                    propertyValue.Text
+                ).ConfigureAwait(false);
+
+                if (!semanticRefs.IsNullOrEmpty())
+                {
+                    matches.AddTermMatches(propertyValue, semanticRefs, true);
+                    context.MatchedPropertyTerms.Add(propertyName, propertyValue);
+                }
+            }
+        }
+    }
+
     private async ValueTask AccumulateMatchesForFacetsAsync(
         QueryEvalContext context,
         SearchTerm propertyName,

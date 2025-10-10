@@ -16,6 +16,7 @@ internal class QueryEvalContext
         Conversation = conversation;
         _semanticRefs = [];
         MatchedTerms = new TermSet();
+        MatchedPropertyTerms = new PropertyTermSet();
     }
 
     public IConversation Conversation { get; private set; }
@@ -26,13 +27,16 @@ internal class QueryEvalContext
 
     public TermSet MatchedTerms { get; private set; }
 
+    public PropertyTermSet MatchedPropertyTerms { get; private set; }
+
     public TextRangesInScope? TextRangesInScope { get; set; }
 
-    public CancellationToken CancellationToken { get; private set; }
+    public CancellationToken CancellationToken { get; set; }
 
     public void ClearMatchedTerms()
     {
         MatchedTerms.Clear();
+        MatchedPropertyTerms.Clear();
     }
 
     public ValueTask<SemanticRef> GetSemanticRefAsync(int semanticRefOrdinal)
