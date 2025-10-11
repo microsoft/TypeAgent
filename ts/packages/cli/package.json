@@ -46,6 +46,7 @@
     "@oclif/core": "^4.2.10",
     "@oclif/plugin-help": "^6",
     "@typeagent/agent-sdk": "workspace:*",
+    "action-grammar": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
