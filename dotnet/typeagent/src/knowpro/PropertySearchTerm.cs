@@ -3,28 +3,57 @@
 
 namespace TypeAgent.KnowPro;
 
+/*
+* PropertySearch terms let you match named property, values
+* - You can  match a well known property name (name("Bach") type("book"))
+* - Or you can provide a SearchTerm as a propertyName.
+*   E.g. to match hue(red)
+*      - propertyName as SearchTerm, set to 'hue'
+*      - propertyValue as SearchTerm, set to 'red'
+*    We also want hue(red) to match any facets called color(red)
+* SearchTerms can included related terms
+*   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
+*
+* See {@link KnowledgePropertyName} for well known property names
+*
+* The the query processor can also related terms using a related terms secondary index, if one is available
+*/
 public class PropertySearchTerm : ISearchTerm
 {
-    /*
-    * PropertySearch terms let you match named property, values
-    * - You can  match a well known property name (name("Bach") type("book"))
-    * - Or you can provide a SearchTerm as a propertyName.
-    *   E.g. to match hue(red)
-    *      - propertyName as SearchTerm, set to 'hue'
-    *      - propertyValue as SearchTerm, set to 'red'
-    *    We also want hue(red) to match any facets called color(red)
-    * SearchTerms can included related terms
-    *   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
-    *
-    * See {@link KnowledgePropertyName} for well known property names
-    *
-    * The the query processor can also related terms using a related terms secondary index, if one is available
-    */
-    public IPropertyNameSearchTerm PropertyName { get; set; }
-    public SearchTerm PropertyValue { get; set; }
+    public PropertySearchTerm(KnowledgePropertyName propertyName, SearchTerm propertyValue)
+        : this(new KnowledgePropertyNameSearchTerm(propertyName), propertyValue)
+    {
+    }
+
+    public PropertySearchTerm(SearchTerm propertyName, SearchTerm propertyValue)
+    {
+        ArgumentVerify.ThrowIfNull(propertyName, nameof(propertyName));
+        ArgumentVerify.ThrowIfNull(propertyValue, nameof(propertyValue));
+
+        PropertyName = new PropertyNameSearchTerm(propertyName);
+        PropertyValue = propertyValue;
+    }
+
+    public PropertySearchTerm(IPropertyNameSearchTerm propertyName, SearchTerm propertyValue)
+    {
+        ArgumentVerify.ThrowIfNull(propertyName, nameof(propertyName));
+        ArgumentVerify.ThrowIfNull(propertyValue, nameof(propertyValue));
+
+        PropertyName = propertyName;
+        PropertyValue = propertyValue;
+    }
+
+    public IPropertyNameSearchTerm PropertyName { get; }
+
+    public SearchTerm PropertyValue { get; }
+
+    public override string ToString()
+    {
+        return $"{PropertyName} == {PropertyValue}";
+    }
 }
 
-public interface IPropertyNameSearchTerm { }
+inernal interface IPropertyNameSearchTerm { }
 
 public class KnowledgePropertyNameSearchTerm : IPropertyNameSearchTerm
 {
@@ -34,6 +63,8 @@ public class KnowledgePropertyNameSearchTerm : IPropertyNameSearchTerm
     }
 
     public KnowledgePropertyName Value { get; }
+
+    public override string ToString() => Value;
 
     public static implicit operator string(KnowledgePropertyNameSearchTerm propertyName)
     {
@@ -49,6 +80,8 @@ public class PropertyNameSearchTerm : IPropertyNameSearchTerm
     }
 
     public SearchTerm Value { get; }
+
+    public override string ToString() => Value.ToString();
 
     public static implicit operator SearchTerm(PropertyNameSearchTerm propertyName)
     {
