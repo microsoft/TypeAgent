@@ -13,12 +13,13 @@ public class SearchTerm : ISearchTerm
     public SearchTerm(string term)
         : this(new Term(term))
     {
-
     }
+
     public SearchTerm(Term term)
     {
         ArgumentVerify.ThrowIfNull(term, nameof(term));
         Term = term;
+        RelatedTermsRequired = false;
     }
 
     /// <summary>
@@ -41,8 +42,23 @@ public class SearchTerm : ISearchTerm
         return term;
     }
 
+    public bool IsWildcard()
+    {
+        return Term.Text == "*";
+    }
+
+    internal bool RelatedTermsRequired { get; set; }
+
+    internal SearchTerm ToRequired()
+    {
+        var copy = new SearchTerm(Term);
+        copy.RelatedTermsRequired = true;
+        return copy;
+    }
+
     public static implicit operator SearchTerm(string value)
     {
         return new SearchTerm(value);
     }
 }
+

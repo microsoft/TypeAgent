@@ -91,7 +91,7 @@ internal class GroupSearchResultsExpr : QueryOpExpr<IDictionary<KnowledgeType, S
                     new SemanticRefSearchResult()
                     {
                         TermMatches = accumulator.SearchTermMatches,
-                        SemanticRefMatches = accumulator.ToScoredSemanticRefs(),
+                        SemanticRefMatches = accumulator.ToScoredOrdinals(),
                     }
                 );
             }

@@ -19,7 +19,7 @@ internal class GetScopeExpr : QueryOpExpr<TextRangesInScope>
         var rangesInScope = new TextRangesInScope();
         foreach (var selector in RangeSelectors)
         {
-            TextRangeCollection? range = await selector.EvalAsync(context);
+            TextRangeCollection? range = await selector.EvalAsync(context).ConfigureAwait(false);
             if (range is not null)
             {
                 rangesInScope.AddTextRanges(range);

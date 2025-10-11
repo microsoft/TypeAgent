@@ -31,41 +31,11 @@ public class MemoryCommands : ICommandModule
         return cmd;
     }
 
-    private async Task SearchTermsAsync(ParseResult result, CancellationToken cancellationToken)
+    private Task SearchTermsAsync(ParseResult result, CancellationToken cancellationToken)
     {
         IConversation conversation = EnsureConversation();
-
-        // Hard coded test for now
-        SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
-        {
-            Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
-        };
-        KnowProWriter.WriteLine(searchGroup);
-
-        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
-
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
-        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
-
-        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
-
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
-        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
-
-        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
-
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
-        {
-            Terms = [new SearchTerm("Children of Physics"), new SearchTerm("book")]
-        };
-        KnowProWriter.WriteLine(searchGroup);
-
-        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
-
+        KnowProWriter.WriteError("Not impl");
+        return Task.CompletedTask;
     }
 
     private Command MessagesDef()
