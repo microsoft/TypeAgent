@@ -5,10 +5,10 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class SemanticRefAccumulator : MatchAccumulator<int>
 {
-    public SemanticRefAccumulator()
+    public SemanticRefAccumulator(HashSet<string>? searchTermMatches = null)
         : base()
     {
-        SearchTermMatches = [];
+        SearchTermMatches = searchTermMatches ?? [];
     }
 
     public HashSet<string> SearchTermMatches { get; set; }
@@ -70,7 +70,34 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         return intersection;
     }
 
-    public IList<ScoredSemanticRefOrdinal> ToScoredSemanticRefs()
+    public async ValueTask<IList<Match<int>>> GetMatchesAsync(
+        QueryEvalContext context,
+        Func<SemanticRef, bool> predicate
+    )
+    {
+        var ordinals = ToOrdinals();
+        var semanticRefs = await context.GetSemanticRefsAsync(ordinals);
+        Debug.Assert(semanticRefs.Count == ordinals.Count);
+
+        List<Match<int>> filtered = [];
+        int i = 0;
+        foreach(Match<int> match in GetMatches())
+        {
+            if (predicate(semanticRefs[i]))
+            {
+                filtered.Add(match);
+            }
+            ++i;
+        }
+        return filtered;
+    }
+
+    public IList<int> ToOrdinals()
+    {
+        return GetMatches().Map((m) => m.Value);
+    }
+
+    public IList<ScoredSemanticRefOrdinal> ToScoredOrdinals()
     {
         return GetSortedByScore(0).Map((m) =>
         {

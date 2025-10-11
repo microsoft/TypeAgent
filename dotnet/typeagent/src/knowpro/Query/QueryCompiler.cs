@@ -8,7 +8,7 @@ namespace TypeAgent.KnowPro.Query;
 internal class QueryCompiler
 {
     private IConversation _conversation;
-    private List<CompiledTermGroup> _allSearchTerms;
+    private List<SearchTermGroup> _allSearchTerms;
 
     public QueryCompiler(IConversation conversation)
     {
@@ -33,14 +33,15 @@ internal class QueryCompiler
         return resultExpr;
     }
 
-    public (IList<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchTermGroup(
+    public (IList<SearchTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroup(
         SearchTermGroup searchGroup,
-        GetScopeExpr? scopeExpr
+        GetScopeExpr? scopeExpr,
+        IQuerySemanticRefPredicate? matchFilter = null
     )
     {
-        IList<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
+        List<SearchTermGroup> compiledTerms = [new SearchTermGroup(searchGroup.BooleanOp)];
 
-        IList<QueryOpExpr<SemanticRefAccumulator?>> termExpressions = [];
+        List<QueryOpExpr<SemanticRefAccumulator?>> termExpressions = [];
         foreach (var term in searchGroup.Terms)
         {
             switch (term)
@@ -48,13 +49,34 @@ internal class QueryCompiler
                 default:
                     break;
 
-                case SearchTerm searchTerm:
-                    var searchTermExpr = CompileSearchTerm(searchTerm);
-                    termExpressions.Add(searchTermExpr);
+                case PropertySearchTerm propertyTerm:
+                    var propertyExpr = CompilePropertyTerm(propertyTerm);
+                    propertyExpr = CompileMatchFiler(propertyExpr, matchFilter);
+                    termExpressions.Add(propertyExpr);
+                    if (propertyTerm.PropertyName is PropertyNameSearchTerm kp)
+                    {
+                        compiledTerms[0].Terms.Add(kp.Value.ToRequired());
+                    }
+                    compiledTerms[0].Terms.Add(propertyTerm.PropertyValue.ToRequired());
                     break;
 
                 case SearchTermGroup subGroup:
+                    var (nestedTerms, groupExpr) = CompileSearchGroup(
+                        subGroup,
+                        null,  // Apply scopes on the outermost expression only
+                        matchFilter
+                    );
+                    compiledTerms.AddRange(nestedTerms);
+                    termExpressions.Add(groupExpr);
                     break;
+
+                case SearchTerm searchTerm:
+                    var searchTermExpr = CompileSearchTerm(searchTerm);
+                    searchTermExpr = CompileMatchFiler(searchTermExpr, matchFilter);
+                    termExpressions.Add(searchTermExpr);
+                    compiledTerms[0].Terms.Add(searchTerm);
+                    break;
+
             }
         }
 
@@ -84,7 +106,7 @@ internal class QueryCompiler
         GetScopeExpr? scopeExpr
     )
     {
-        var (searchTermsUsed, selectExpr) = CompileSearchTermGroup(searchGroup, scopeExpr);
+        var (searchTermsUsed, selectExpr) = CompileSearchGroup(searchGroup, scopeExpr);
         _allSearchTerms.AddRange(searchTermsUsed);
         return selectExpr;
     }
@@ -105,6 +127,18 @@ internal class QueryCompiler
     private QueryOpExpr<SemanticRefAccumulator?> CompilePropertyTerm(PropertySearchTerm propertyTerm)
     {
         throw new NotImplementedException();
+    }
+
+    private QueryOpExpr<SemanticRefAccumulator> CompileMatchFiler(
+        QueryOpExpr<SemanticRefAccumulator> termExpr,
+        IQuerySemanticRefPredicate matchFilter
+)
+    {
+        if (matchFilter is not null)
+        {
+            termExpr = new FilterMatchTermExpr(termExpr, matchFilter);
+        }
+        return termExpr;
     }
 
     private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)

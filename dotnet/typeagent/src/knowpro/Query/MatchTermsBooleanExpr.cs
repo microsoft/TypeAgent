@@ -17,7 +17,7 @@ internal class MatchTermsBooleanExpr : QueryOpExpr<SemanticRefAccumulator>
     {
         if (GetScopeExpr is not null)
         {
-            context.TextRangesInScope = await GetScopeExpr.EvalAsync(context);
+            context.TextRangesInScope = await GetScopeExpr.EvalAsync(context).ConfigureAwait(false);
         }
         context.ClearMatchedTerms();
     }
@@ -61,7 +61,7 @@ internal class MatchTermsOrExpr : MatchTermsBooleanExpr
         SemanticRefAccumulator? allMatches = null;
         foreach (var termExpr in TermExpressions)
         {
-            var termMatches = await termExpr.EvalAsync(context);
+            var termMatches = await termExpr.EvalAsync(context).ConfigureAwait(false);
             if (termMatches is not null && termMatches.Count > 0)
             {
                 if (allMatches is not null)
@@ -93,7 +93,7 @@ internal class MatchTermsOrMaxExpr : MatchTermsOrExpr
 
     public override async ValueTask<SemanticRefAccumulator> EvalAsync(QueryEvalContext context)
     {
-        SemanticRefAccumulator matches = await base.EvalAsync(context);
+        SemanticRefAccumulator matches = await base.EvalAsync(context).ConfigureAwait(false);
         int maxHitCount = matches.GetMaxHitCount();
         if (maxHitCount > 1)
         {
@@ -127,7 +127,7 @@ internal class MatchTermsAndExpr : MatchTermsBooleanExpr
         for (; iTerm < TermExpressions.Count; ++iTerm)
         {
             var termExpr = TermExpressions[iTerm];
-            SemanticRefAccumulator? termMatches = await termExpr.EvalAsync(context);
+            SemanticRefAccumulator? termMatches = await termExpr.EvalAsync(context).ConfigureAwait(false);
             if (termMatches is null || termMatches.Count == 0)
             {
                 // We can't possibly have an 'and'
