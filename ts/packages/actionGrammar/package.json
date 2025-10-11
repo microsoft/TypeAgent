@@ -1,22 +1,19 @@
 {
-  "name": "agent-cache",
+  "name": "action-grammar",
   "version": "0.0.1",
-  "description": "Construction cache for TypeAgent requests",
+  "description": "Grammar for typeagent actions.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/cache"
+    "directory": "ts/packages/actionGrammar"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": {
-      "node": "./dist/index.js",
-      "default": "./dist/indexBrowser.js"
-    },
-    "./grammar": "./dist/indexGrammar.js"
+    ".": "./dist/index.js",
+    "./rules": "./dist/indexRules.js"
   },
   "files": [
     "dist",
@@ -33,17 +30,10 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*",
-    "action-grammar": "workspace:*",
     "action-schema": "workspace:*",
-    "aiclient": "workspace:*",
-    "async": "^3.2.5",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
-    "regexp.escape": "^2.0.1",
-    "telemetry": "workspace:*",
-    "typechat": "^0.1.1"
+    "regexp.escape": "^2.0.1"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",

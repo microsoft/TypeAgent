@@ -39,6 +39,7 @@
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
+    "action-grammar": "workspace:*",
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "android-mobile-agent": "workspace:*",
