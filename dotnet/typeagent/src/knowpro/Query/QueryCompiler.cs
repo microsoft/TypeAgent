@@ -126,7 +126,26 @@ internal class QueryCompiler
 
     private QueryOpExpr<SemanticRefAccumulator?> CompilePropertyTerm(PropertySearchTerm propertyTerm)
     {
-        throw new NotImplementedException();
+        if (propertyTerm.PropertyName is KnowledgePropertyNameSearchTerm term)
+        {
+            switch (term.Value)
+            {
+                default:
+                    if (propertyTerm.isEntityPropertyTerm())
+                    {
+                        propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
+                    }
+                    return new MatchPropertySearchTermExpr(propertyTerm);
+                case "tag":
+                case "topic":
+                    // TODO
+                    throw new NotImplementedException();
+            }
+        }
+        else
+        {
+            return new MatchPropertySearchTermExpr(propertyTerm);
+        }
     }
 
     private QueryOpExpr<SemanticRefAccumulator> CompileMatchFiler(

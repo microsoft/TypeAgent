@@ -39,31 +39,19 @@ public class TestCommands : ICommandModule
         {
             Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
         };
-        KnowProWriter.WriteLine(searchGroup);
-
-        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+        await TestSearchAsync(conversation, searchGroup, cancellationToken);
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
-        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
-
-        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+        await TestSearchAsync(conversation, searchGroup, cancellationToken);
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
-        KnowProWriter.WriteLine(ConsoleStyle.Color(ConsoleColor.Cyan, searchGroup.ToString()));
-
-        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+        await TestSearchAsync(conversation, searchGroup, cancellationToken);
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
         {
             Terms = [new SearchTerm("Children of Physics"), new SearchTerm("book")]
         };
-        KnowProWriter.WriteLine(searchGroup);
-
-        results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+        await TestSearchAsync(conversation, searchGroup, cancellationToken);
     }
 
     private Command SearchPropertyTermsDef()
@@ -88,9 +76,18 @@ public class TestCommands : ICommandModule
                 new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
             ]
         };
-        KnowProWriter.WriteLine(searchGroup);
+        await TestSearchAsync(conversation, searchGroup, cancellationToken);
+
     }
 
+    async Task TestSearchAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
+    {
+        KnowProWriter.WriteLine(searchGroup);
+
+        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken).ConfigureAwait(false);
+        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+
+    }
     private IConversation EnsureConversation()
     {
         return (_kpContext.Conversation is not null)

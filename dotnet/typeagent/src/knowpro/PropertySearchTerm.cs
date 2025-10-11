@@ -34,7 +34,7 @@ public class PropertySearchTerm : ISearchTerm
         PropertyValue = propertyValue;
     }
 
-    public PropertySearchTerm(IPropertyNameSearchTerm propertyName, SearchTerm propertyValue)
+    private PropertySearchTerm(IPropertyNameSearchTerm propertyName, SearchTerm propertyValue)
     {
         ArgumentVerify.ThrowIfNull(propertyName, nameof(propertyName));
         ArgumentVerify.ThrowIfNull(propertyValue, nameof(propertyValue));
@@ -51,9 +51,25 @@ public class PropertySearchTerm : ISearchTerm
     {
         return $"{PropertyName} == {PropertyValue}";
     }
+
+    internal bool isEntityPropertyTerm()
+    {
+        if (PropertyName is KnowledgePropertyNameSearchTerm st)
+        {
+            switch (st.Value) {
+                default:
+                    break;
+                case "name":
+                case "type":
+                    return true;
+            }
+        }
+        return false;
+    }
+
 }
 
-inernal interface IPropertyNameSearchTerm { }
+public interface IPropertyNameSearchTerm { }
 
 public class KnowledgePropertyNameSearchTerm : IPropertyNameSearchTerm
 {
