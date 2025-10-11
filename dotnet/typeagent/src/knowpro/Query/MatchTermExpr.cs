@@ -215,6 +215,34 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
                 }
             }
         }
+        else {
+            //
+            // To prevent over-counting, ensure this relatedPropValue was not already used to match
+            // terms earlier
+            if (
+                !context.MatchedPropertyTerms.Has(propertyName, relatedPropVal)
+            ) {
+                var semanticRefs = await LookupPropertyAsync(
+                    context,
+                    propertyName,
+                    relatedPropVal.Text
+                );
+                if (!semanticRefs.IsNullOrEmpty()) {
+                    // This will only consider semantic refs that were not already matched by this expression.
+                    // In other words, if a semantic ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+                    matches.AddTermMatchesIfNew(
+                        propertyValue,
+                        semanticRefs,
+                        false,
+                        relatedPropVal.Weight
+                    );
+                    context.MatchedPropertyTerms.Add(
+                        propertyName,
+                        relatedPropVal
+                    );
+                }
+            }
+        }
     }
 
     private async ValueTask AccumulateMatchesForFacetsAsync(

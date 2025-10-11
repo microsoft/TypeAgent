@@ -57,6 +57,11 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         this.SearchTermMatches.Add(term.Text);
     }
 
+    public void AddUnion(SemanticRefAccumulator other)
+    {
+        base.AddUnion(other);
+        this.SearchTermMatches.AddRange(other.SearchTermMatches);
+    }
 
     public SemanticRefAccumulator Intersect(SemanticRefAccumulator other)
     {
