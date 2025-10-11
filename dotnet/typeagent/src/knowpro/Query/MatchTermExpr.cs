@@ -55,6 +55,7 @@ internal class MatchSearchTermExpr : MatchTermExpr
         // And any related terms
         if (!SearchTerm.RelatedTerms.IsNullOrEmpty())
         {
+            // TODO: do this in parallel
             foreach (var relatedTerm in SearchTerm.RelatedTerms)
             {
                 await AccumulateMatchesAsync(
@@ -159,14 +160,32 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
         return ValueTask.CompletedTask;
     }
 
-    private ValueTask AccumulateMatchesForPropertyAsync(
+    private async ValueTask AccumulateMatchesForPropertyAsync(
         QueryEvalContext context,
         string propertyName,
         SearchTerm propertyValue,
         SemanticRefAccumulator matches
     )
     {
-        throw new NotImplementedException();
+        await AccumulateMatchesForPropertyValueAsync(
+            context,
+            matches,
+            propertyName,
+            propertyValue.Term
+        );
+        if (!propertyValue.RelatedTerms.IsNullOrEmpty())
+        {
+            // TODO: Do this in parallel
+            foreach (var relatedPropertyValue in propertyValue.RelatedTerms) {
+                await AccumulateMatchesForPropertyValueAsync(
+                    context,
+                    matches,
+                    propertyName,
+                    propertyValue.Term,
+                    relatedPropertyValue
+                );
+            }
+        }
     }
 
     private async ValueTask AccumulateMatchesForPropertyValueAsync(
@@ -174,7 +193,7 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
         SemanticRefAccumulator matches,
         string propertyName,
         Term propertyValue,
-        Term? relatedPropVal
+        Term? relatedPropVal = null
     )
     {
         if (relatedPropVal is null)
