@@ -11,7 +11,7 @@ import {
     CompletionJsonSchema,
     CompleteUsageStatsCallback,
     VideoModel,
-    VideoGeneration,
+    VideoGenerationJob,
 } from "./models.js";
 import { callApi, callJsonApi, FetchThrottler } from "./restClient.js";
 import { getEnvSetting } from "./common.js";
@@ -361,10 +361,10 @@ type ImageData = {
     url: string;
 };
 
-type VideoCompletion = {
-    created: number;
-    data: ImageData[];
-};
+// type VideoCompletion = {
+//     created: number;
+//     data: ImageData[];
+// };
 
 // Statistics returned by the OAI api
 export type CompletionUsageStats = {
@@ -1032,7 +1032,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         durationInSeconds: number = 5,
         width: number = 1920,
         height: number = 1080,
-    ): Promise<Result<VideoGeneration>> {
+    ): Promise<Result<VideoGenerationJob>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
@@ -1062,24 +1062,6 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             return result;
         }
 
-        const data = result.data as VideoCompletion;
-        const retValue: VideoGeneration = { videos: [] };
-
-        data.data.map((i) => {
-            verifyContentSafety(i);
-            retValue.videos.push({
-                revised_prompt: i.revised_prompt,
-                video_url: i.url,
-            });
-        });
-
-        return success(retValue);
-    }
-
-    function verifyContentSafety(data: ImageData): boolean {
-        verifyFilterResults(data.content_filter_results as FilterResult);
-        verifyFilterResults(data.prompt_filter_results as FilterResult);
-
-        return true;
+        return success({ endpoint: new URL(settings.endpoint), headers: headerResult.data, ...result.data as VideoGenerationJob});
     }
 }

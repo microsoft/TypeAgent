@@ -151,11 +151,27 @@ export interface VideoModel {
         durationInSeconds: number,
         width: number,
         height: number,
-    ): Promise<Result<VideoGeneration>>;
+    ): Promise<Result<VideoGenerationJob>>;
 }
 
-export type VideoGeneration = {
-    videos: GeneratedVideo[];
+export type VideoGenerationJob = {
+    object: string;
+    id: string;
+    status: string;
+    created_at: number;
+    finished_at?: number;
+    exipres_at?: number;
+    generations: Array<any>;
+    prompt: string;
+    model: string;
+    n_variants: number;
+    n_seconds: number;
+    height: number;
+    width: number;
+    inpaint_items?: any;
+    failure_reason?: string;
+    endpoint?: URL;
+    headers?: Record<string, string>;
 };
 
 export type GeneratedVideo = {

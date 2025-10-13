@@ -6,12 +6,17 @@ import {
     AppAction,
     AppAgent,
     ActionResult,
+    ActionResultSuccess,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromError,
+    createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
-import { openai } from "aiclient";
+import { openai, VideoGenerationJob } from "aiclient";
 import { CreateVideoAction, VideoAction } from "./videoActionSchema.js";
+import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
+import { randomBytes } from "crypto";
 
 export function instantiate(): AppAgent {
     return {
@@ -51,10 +56,7 @@ async function handleVideoAction(
             });
 
             const videoModel = openai.createVideoModel();
-            //const videos: GeneratedVideo[] = [];
-
-            let lastError: string = "";
-            const r = await videoModel.generateVideo(
+            const response = await videoModel.generateVideo(
                 createVideoAction.parameters.caption,
                 1,
                 5,
@@ -62,75 +64,41 @@ async function handleVideoAction(
                 1080
             );
 
-            // TODO: poll and wait for video to be ready 
-            //   let response = await axios.post(constructedUrl, body, { headers });
-            //   console.log(JSON.stringify(response.data, null, 4));
+            if (response.success) {
+                displayStatus("Video generation request accepted...processing.", videoContext);
 
-            //   const jobId = response.data.id;
-            //   console.log("⏳ Polling job status for ID: ", jobId);
-            //   let status = response.data.status;
-            //   const statusUrl = `${endpoint}openai/v1/video/generations/jobs/${jobId}?api-version=${apiVersion}`;
-            //   while (status !== "succeeded" && status !== "failed") {
-            //     await new Promise((resolve) => setTimeout(resolve, 5000));
-            //     response = await axios.get(statusUrl, { headers });
-            //     status = response.data.status;
-            //     console.log("Status:", status);
-            //   }
+                result = createVideoPlaceHolder(response.data)
+                // const videoJob: VideoGenerationJob = response.data;
+                // let status = "";
+                // let waitResponse: Response | undefined = undefined;
+                // const statusUrl = `${videoJob.endpoint!.origin}/openai/v1/video/generations/jobs/${videoJob.id}?api-version=${videoJob.endpoint!.searchParams.get("api-version")}`;
+                // let i = 1;
+                // while (status !== "succeeded" && status !== "failed") {
+                //     await new Promise((resolve) => setTimeout(resolve, 5000));
+                //     waitResponse = await fetch(statusUrl, { headers: videoJob.headers! });
+                //     const wr: any = await waitResponse.json();
+                //     status = wr.status;
+                //     displayStatus(`Waiting (${i++ * 5} seconds):`, wr.status);
+                // }                
 
-            //   if (status === "succeeded") {
-            //     const generations = response.data.generations ?? [];
-            //     if (generations.length > 0) {
-            //       console.log("✅ Video generation succeeded.");
-            //       const generationId = generations[0].id;
-            //       const video_url = `${endpoint}openai/v1/video/generations/${generationId}/content/video${params}`;
-            //       const videoResponse = await axios.get(video_url, { headers, responseType: "arraybuffer" });
-            //       if (videoResponse.status === 200) {
-            //         const outputFilename = "output.mp4";
-            //         const fs = require("fs");
-            //         fs.writeFileSync(outputFilename, videoResponse.data);
-            //         console.log(`Generated video saved as "${outputFilename}"`);
-            //       } else {
-            //         console.log("❌ Failed to retrieve video content.");
-            //       }
-
-            //     } else {
-            //       console.log("⚠️ Status is succeeded, but no generations were returned.");
-            //     }
-            //   } else {
-            //     console.log("❌ Video generation failed.");
-            //     console.log(JSON.stringify(response.data, null, 4));
-            //   }
-
-            if (!r.success) {
-                result = createActionResult(
-                    `Failed to generate the requested image. ${lastError}`,
-                );
-            } else {
-                //const urls: string[] = [];
-                //const captions: string[] = [];
-                // images.map((i) => {
-                //     urls.push(i.image_url);
-                //     captions.push(i.revised_prompt);
-                // });
-                // result = createCarouselForImages(urls, captions);
-
-                // // save the generated image in the session store and add the image to the knowledge store
-                // const id = randomUUID();
-                // const fileName = `../generated_images/${id.toString()}.png`;
-                // if (
-                //     await downloadImage(
-                //         urls[0],
-                //         fileName,
-                //         videoContext.sessionContext.sessionStorage!,
-                //     )
-                // ) {
-                //     // add the generated image to the entities
-                //     result.entities.push({
-                //         name: fileName.substring(3),
-                //         type: ["file", "image", "ai_generated"],
-                //     });
+                // if (!waitResponse || waitResponse.status !== 200) {
+                //     result = createActionResult(
+                //         `Failed to generate the requested video. ${waitResponse?.statusText}`,
+                //     );
+                // } else {
+                //    result = createActionResult("done!");
                 // }
+            } else {
+                return createActionResultFromError(response.message);
             }
+
+            // if (!response.success) {
+            //     result = createActionResult(
+            //         `Failed to generate the requested video. ${response.message}`,
+            //     );
+            // } else {
+            //     result = createVideoPlaceHolder(response.data)
+            // }
             break;
         default:
             throw new Error(`Unknown action: ${(action as any).actionName}`);
@@ -138,92 +106,72 @@ async function handleVideoAction(
     return result;
 }
 
-// function createCarouselForImages(
-//     images: string[],
-//     captions: string[],
-// ): ActionResultSuccess {
-//     let literal: string = `There are ${images.length} shown. `;
-//     const hash: string = randomBytes(4).readUInt32LE(0).toString();
-//     const jScript: string = `
-//     <script>
-//     var slideShow_${hash} = new function()  {
-//         let slideIndex = 1;
-//         showSlides(slideIndex);
+function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSuccess {
 
-//         // Next/previous controls
-//         this.plusSlides = function(n) {
-//         showSlides(slideIndex += n);
-//         }
+    if (videoJob.endpoint === undefined) {
+        return createActionResult(
+            `Failed to generate the requested video. No endpoint returned.`,
+        );
+    }
 
-//         // Thumbnail image controls
-//         this.currentSlide = function(n) {
-//         showSlides(slideIndex = n);
-//         }
+    const statusUrl = `${videoJob.endpoint.origin}/openai/v1/video/generations/jobs/${videoJob.id}?api-version=${videoJob.endpoint.searchParams.get("api-version")}`;
+    //const videoUrl = `${endpoint}openai/v1/video/generations/${videoJob.generationId}/content/video${params}`;
+    const hash: string = randomBytes(4).readUInt32LE(0).toString();
+    //const outputFilename: string = ''
+    const jScript: string = `
+    <script>
+        async function pollVideo_${hash}() {
+            const container = document.getElementById("video_div_${hash}");
+            const jobId = "${videoJob.id}";
+            console.log("⏳ Polling job status for ID:", jobId);
 
-//         function showSlides(n) {
-//             let i;
-//             let slides = document.getElementsByClassName("mySlides ${hash}");
-//             let dots = document.getElementsByClassName("dot ${hash}");
+            let status = "";
+            while (status !== "succeeded" && status !== "failed") {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                const statusResponse = await fetch("${statusUrl}", { headers: ${JSON.stringify(videoJob.headers)} });
+                const statusData = await statusResponse.json();
+                console.log("Waiting..." + JSON.stringify(statusData, null, 2));
+                status = statusData.status;
+                console.log("Status:", status);
+            }
 
-//             if (slides === undefined || slides.length == 0) return;
-//             if (n > slides.length) {slideIndex = 1}
-//             if (n < 1) {slideIndex = slides.length}
-//             for (i = 0; i < slides.length; i++) {
-//                 slides[i].classList.add("slideshow-hidden");
-//             }
-//             for (i = 0; i < dots.length; i++) {
-//                 dots[i].classList.remove("active");
-//             }
-//             slides[slideIndex-1].classList.remove("slideshow-hidden");
-//             dots[slideIndex-1].classList.add("active");
-//         }
+            const response = await fetch("${statusUrl}", { headers: ${JSON.stringify(videoJob.headers)} });
+            console.log(response);
+            if (status === "succeeded") {
+                const generations = response.data.generations ?? [];
+                if (generations.length > 0) {
+                    console.log("✅ Video generation succeeded.");
+                    const videoResponse = await fetch(videoUrl, { headers: ${JSON.stringify(videoJob.headers)} });
+                    if (videoResponse.ok) {
+                        const videoBlob = await videoResponse.blob();
+                        const videoObjectURL = URL.createObjectURL(videoBlob);
 
-//         var ro = new ResizeObserver(entries => {
-//          for (let e of entries) {
-//             window.top.postMessage('slideshow_${hash}_' + document.getElementById('slideshow_${hash}').scrollHeight, '*');
-//          }
-//         });
+                        // Create and configure video element
+                        const videoElement = document.createElement("video");
+                        videoElement.src = videoObjectURL;
+                        videoElement.controls = true;
+                        videoElement.width = 640; // optional
+                        videoElement.height = 360; // optional
+                        videoElement.autoplay = false;
 
-//         ro.observe(document.querySelector('#slideshow_${hash}'));
-//     };
-//     </script>`;
+                        // Append to container
+                        container.appendChild(videoElement);
+                        console.log("🎥 Video added to the page.");
+                    } else {
+                        console.log("❌ Failed to retrieve video content.");
+                    }
+                } else {
+                    console.log("⚠️ Status is succeeded, but no generations were returned.");
+                }
+            } else {
+                console.log("❌ Video generation failed.");
+                console.log(JSON.stringify(response.data, null, 4));
+            }
+        }
+        
+        pollVideo_${hash}();
+    </script>
+    `;
 
-//     const carousel_start: string = `
-//     <div id="slideshow_${hash}">
-//         <!-- Slideshow container -->
-//     <div class="slideshow-container ${hash}">`;
-//     let carouselDots: string = "";
-
-//     let carousel: string = "";
-
-//     images.map((url, index) => {
-//         carousel += `<div class="mySlides corousel-fade ${hash}">
-//         <div class="numbertext">${index + 1} / ${images.length}</div>
-//         <div style="display: flex;justify-content: center;">
-//         <img src="${url}" class="chat-input-image" alt="${captions[index]}" onerror="if (this.src.indexOf('data:image') != 0) this.width='64px'; this.src = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%202048%202048%22%20width%3D%22150%22%20height%3D%22150%22%3E%0A%20%20%3Cpath%20d%3D%22M1600%201152q93%200%20174%2035t143%2096%2096%20142%2035%20175q0%2093-35%20174t-96%20143-142%2096-175%2035q-93%200-174-35t-143-96-96-142-35-175q0-93%2035-174t96-143%20142-96%20175-35zm-320%20448q0%2066%2025%20124t68%20102%20102%2069%20125%2025q47%200%2092-13t84-40l-443-443q-26%2039-39%2084t-14%2092zm587%20176q26-39%2039-84t14-92q0-66-25-124t-69-101-102-69-124-26q-47%200-92%2013t-84%2040l443%20443zm-774%20125q22%2036%2048%2069t57%2062q-43%208-86%2012t-88%204q-141%200-272-36t-244-104-207-160-161-207-103-245-37-272q0-141%2036-272t104-244%20160-207%20207-161T752%2037t272-37q141%200%20272%2036t244%20104%20207%20160%20161%20207%20103%20245%2037%20272q0%2044-4%2087t-12%2087q-54-59-118-98l4-38q2-19%202-38%200-130-38-256h-362q8%2062%2011%20123t5%20124q-33%203-65%2010t-64%2018q2-69-2-137t-14-138H657q-9%2064-13%20127t-4%20129q0%2065%204%20128t13%20128h446q-37%2059-60%20128H679q8%2037%2023%2089t37%20109%2051%20113%2064%20101%2078%2072%2092%2028q18%200%2035-5t34-14zm739-1261q-38-81-91-152t-120-131-143-104-162-75q36%2049%2064%20105t51%20115%2040%20121%2029%20121h332zm-808-512q-49%200-91%2027t-78%2073-65%20101-51%20113-37%20109-23%2089h690q-8-37-23-89t-37-109-51-113-64-101-78-72-92-28zm-292%2050q-85%2029-162%2074T427%20357%20308%20487t-92%20153h332q12-59%2028-120t39-121%2052-116%2065-105zm-604%20846q0%20130%2038%20256h362q-8-64-12-127t-4-129q0-65%204-128t12-128H166q-38%20126-38%20256zm88%20384q38%2081%2091%20152t120%20131%20143%20104%20162%2075q-36-49-65-105t-51-115-39-121-29-121H216z%22%20%2F%3E%0A%3C%2Fsvg%3E';">
-//         <div class="image-search-caption">${captions[index]}</div>
-//         </div>        
-//     </div>`;
-
-//         carouselDots += `<span class="dot ${hash}" onclick="slideShow_${hash}.currentSlide(${index + 1})"></span>`;
-
-//         literal += `Image ${index + 1}: ${url}, Caption: ${captions[index]} `;
-//     });
-
-//     const carousel_end: string = `
-//     <!-- Next and previous buttons -->
-//     <a class="prev" onclick="slideShow_${hash}.plusSlides(-1)">&#10094;</a>
-//     <a class="next" onclick="slideShow_${hash}.plusSlides(1)">&#10095;</a>
-//     </div>
-    
-//     <!-- The dots/circles -->
-//     <div style="text-align:center; margin: 10px 0px;">
-//     ${carouselDots}
-//     </div>    
-//     </div>`;
-
-//     return createActionResultFromHtmlDisplayWithScript(
-//         carousel_start + carousel + carousel_end + jScript,
-//         literal,
-//     );
-// }
+    return createActionResultFromHtmlDisplayWithScript(`<div id="video_div_${hash}" class="ai-video-container"></div>` + jScript);
+}
