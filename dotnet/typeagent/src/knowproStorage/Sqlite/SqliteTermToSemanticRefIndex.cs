@@ -19,9 +19,9 @@ public class SqliteTermToSemanticRefIndex : ITermToSemanticRefIndex
         return _db.GetCount(SqliteStorageProviderSchema.SemanticRefIndexTable);
     }
 
-    public Task<int> GetCountAsync(CancellationToken cancellation = default)
+    public ValueTask<int> GetCountAsync(CancellationToken cancellation = default)
     {
-        return Task.FromResult(GetCount());
+        return ValueTask.FromResult(GetCount());
     }
 
     public string AddTerm(string term, int semanticRefOrdinal)
@@ -47,17 +47,17 @@ VALUES (@term, @semref_id, @score)
         return term;
     }
 
-    public Task<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellation = default)
+    public ValueTask<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellation = default)
     {
-        return Task.FromResult<string>(AddTerm(term, scoredOrdinal));
+        return ValueTask.FromResult<string>(AddTerm(term, scoredOrdinal));
     }
 
     public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.SemanticRefIndexTable);
 
-    public Task ClearAsync(CancellationToken cancellation = default)
+    public ValueTask ClearAsync(CancellationToken cancellation = default)
     {
         Clear();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     public IList<string> GetTerms()
@@ -68,9 +68,9 @@ VALUES (@term, @semref_id, @score)
         });
     }
 
-    public Task<IList<string>> GetTermsAsync(CancellationToken cancellation = default)
+    public ValueTask<IList<string>> GetTermsAsync(CancellationToken cancellation = default)
     {
-        return Task.FromResult(GetTerms());
+        return ValueTask.FromResult(GetTerms());
     }
 
     public IList<ScoredSemanticRefOrdinal> LookupTerm(string term)
@@ -93,9 +93,9 @@ VALUES (@term, @semref_id, @score)
         });
     }
 
-    public Task<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellation = default)
+    public ValueTask<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellation = default)
     {
-        return Task.FromResult(LookupTerm(term));
+        return ValueTask.FromResult(LookupTerm(term));
     }
 
     public void RemoveTerm(string term, int semanticRefOrdinal)
@@ -114,10 +114,10 @@ VALUES (@term, @semref_id, @score)
         cmd.ExecuteNonQuery();
     }
 
-    public Task RemoveTermAsync(string term, int semanticRefOrdinal, CancellationToken cancellation = default)
+    public ValueTask RemoveTermAsync(string term, int semanticRefOrdinal, CancellationToken cancellation = default)
     {
         RemoveTerm(term, semanticRefOrdinal);
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     private string PrepareTerm(string term)

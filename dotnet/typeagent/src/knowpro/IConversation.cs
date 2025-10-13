@@ -37,7 +37,7 @@ public interface IConversation
 
 public static class ConversationExtensions
 {
-    public static async Task<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
+    public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
         this IConversation conversation,
         SearchTermGroup searchGroup,
         WhenFilter? whenFilter = null,
