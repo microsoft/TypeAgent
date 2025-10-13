@@ -7,11 +7,10 @@ public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 {
 }
 
-
 public static class SemanticRefCollectionExtensions
 {
-    public static Task<IList<SemanticRef>> GetAsync(
-        this ISemanticRefCollection semanticRefs,
+    public static ValueTask<IList<SemanticRef>> GetAsync(
+        this IAsyncCollectionReader<SemanticRef> semanticRefs,
         IList<ScoredSemanticRefOrdinal> scoredOrdinals,
         CancellationToken cancellationToken = default)
     {

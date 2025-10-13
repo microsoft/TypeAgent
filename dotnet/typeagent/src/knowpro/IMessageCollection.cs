@@ -10,23 +10,32 @@ public interface IMessageCollection<TMessage> : IAsyncCollection<TMessage>
 
 public interface IMessageCollection : IReadOnlyAsyncCollection<IMessage>
 {
-
 }
 
+public interface IMessageLoader
+{
+    ValueTask<IMessage> GetMessageAsync(int messageOrdinal);
+    ValueTask<IList<IMessage>> GetMessagesAsync(IList<int> messageOrdinals);
+}
 
 public static class MessageCollectionExtensions
 {
-    /*
-    public ValueTask<int> GetCountOfMessagesInCharBudget(this IMessageCollection messages, IEnumerable<int> messageOrdinals, int maxCharsInBudget)
+    public static async ValueTask<int> GetCountInCharBudgetAsync(
+        this IAsyncCollectionReader<IMessage> messages,
+        IList<int> messageOrdinals,
+        int maxCharsInBudget
+    )
     {
         int i = 0;
         int totalCharCount = 0;
 
+        // TODO: load in batches/bulk
         foreach (var messageOrdinal in messageOrdinals)
         {
-            var message = messages.GetAsync(messageOrdinal);
-        const messageCharCount = getMessageCharCount(message);
-            if (messageCharCount + totalCharCount > maxCharsInBudget) {
+            var message = await messages.GetAsync(messageOrdinal).ConfigureAwait(false);
+            var messageCharCount = message.GetCharCount();
+            if (messageCharCount + totalCharCount > maxCharsInBudget)
+            {
                 break;
             }
             totalCharCount += messageCharCount;
@@ -34,6 +43,4 @@ public static class MessageCollectionExtensions
         }
         return i;
     }
-    */
-
 }

@@ -14,6 +14,11 @@ public interface ICache<TKey, TValue>
     void Add(TKey key, TValue value);
 }
 
+/// <summary>
+/// Cache that implements LRU Cache policy
+/// </summary>
+/// <typeparam name="TKey"></typeparam>
+/// <typeparam name="TValue"></typeparam>
 public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
 {
     private readonly Dictionary<TKey, LinkedListNode<KeyValuePair<TKey, TValue>>> _index;
@@ -147,9 +152,14 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
     }
 }
 
-public class DictionaryCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey, TValue>
+/// <summary>
+/// Vanilla cache that holds on everything read
+/// </summary>
+/// <typeparam name="TKey"></typeparam>
+/// <typeparam name="TValue"></typeparam>
+public class KeyValueCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey, TValue>
 {
-    public DictionaryCache(IEqualityComparer<TKey> comparer = null)
+    public KeyValueCache(IEqualityComparer<TKey> comparer = null)
         : base(comparer)
     {
     }
@@ -164,7 +174,7 @@ public static class CacheExtensions
     public static async ValueTask<TValue> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         TKey key,
-        Func<TKey, CancellationToken, Task<TValue>> loader,
+        Func<TKey, CancellationToken, ValueTask<TValue>> loader,
         CancellationToken cancellationToken = default
     )
         where TValue : class
@@ -180,7 +190,7 @@ public static class CacheExtensions
     public static async ValueTask<IList<TValue>> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
-        Func<IList<TKey>, CancellationToken, Task<IList<TValue>>> loader,
+        Func<IList<TKey>, CancellationToken, ValueTask<IList<TValue>>> loader,
         CancellationToken cancellationToken = default
     )
         where TValue : class

@@ -17,7 +17,7 @@ internal class QueryOpExpr<T> : QueryOpExpr
 
     public override async ValueTask<object> GetResultAsync(QueryEvalContext context)
     {
-        return await EvalAsync(context);
+        return await EvalAsync(context).ConfigureAwait(false);
     }
 
     public virtual ValueTask<T> EvalAsync(QueryEvalContext context)

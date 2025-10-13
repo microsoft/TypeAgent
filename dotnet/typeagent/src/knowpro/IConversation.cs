@@ -47,7 +47,7 @@ public static class ConversationExtensions
     {
         QueryCompiler compiler = new QueryCompiler(conversation);
         var query = await compiler.CompileKnowledgeQueryAsync(searchGroup, whenFilter, options);
-        var result = await conversation.RunQueryAsync(query, cancellationToken);
+        var result = await conversation.RunQueryAsync(query, cancellationToken).ConfigureAwait(false);
         return result;
     }
 }

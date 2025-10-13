@@ -81,12 +81,12 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
     )
     {
         var ordinals = ToOrdinals();
-        var semanticRefs = await context.GetSemanticRefsAsync(ordinals);
+        var semanticRefs = await context.SemanticRefs.GetAsync(ordinals).ConfigureAwait(false);
         Debug.Assert(semanticRefs.Count == ordinals.Count);
 
         List<Match<int>> filtered = [];
         int i = 0;
-        foreach(Match<int> match in GetMatches())
+        foreach (Match<int> match in GetMatches())
         {
             if (predicate(semanticRefs[i]))
             {

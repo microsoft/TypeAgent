@@ -28,7 +28,7 @@ internal class QueryCompiler
         SearchOptions? searchOptions
     )
     {
-        var queryExpr = await CompileQueryAsync(searchGroup, whenFilter);
+        var queryExpr = await CompileQueryAsync(searchGroup, whenFilter).ConfigureAwait(false);
         QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> resultExpr = new GroupSearchResultsExpr(queryExpr);
         return resultExpr;
     }
