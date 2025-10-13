@@ -51,7 +51,7 @@ internal class QueryCompiler
 
                 case PropertySearchTerm propertyTerm:
                     var propertyExpr = CompilePropertyTerm(propertyTerm);
-                    propertyExpr = CompileMatchFiler(propertyExpr, matchFilter);
+                    propertyExpr = CompileMatchFilter(propertyExpr, matchFilter);
                     termExpressions.Add(propertyExpr);
                     if (propertyTerm.PropertyName is PropertyNameSearchTerm kp)
                     {
@@ -72,7 +72,7 @@ internal class QueryCompiler
 
                 case SearchTerm searchTerm:
                     var searchTermExpr = CompileSearchTerm(searchTerm);
-                    searchTermExpr = CompileMatchFiler(searchTermExpr, matchFilter);
+                    searchTermExpr = CompileMatchFilter(searchTermExpr, matchFilter);
                     termExpressions.Add(searchTermExpr);
                     compiledTerms[0].Terms.Add(searchTerm);
                     break;
@@ -148,7 +148,7 @@ internal class QueryCompiler
         }
     }
 
-    private QueryOpExpr<SemanticRefAccumulator> CompileMatchFiler(
+    private QueryOpExpr<SemanticRefAccumulator> CompileMatchFilter(
         QueryOpExpr<SemanticRefAccumulator> termExpr,
         IQuerySemanticRefPredicate matchFilter
 )

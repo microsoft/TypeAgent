@@ -27,7 +27,7 @@ public interface ITermToSemanticRefIndex
     Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(string term, CancellationToken cancellationToken = default);
 }
 
-public static class TermToSemanticRefIndexEx
+public static class TermToSemanticRefIndexExtensions
 {
     public static Task<string> AddTermAsync(this ITermToSemanticRefIndex index, string term, int semanticRefOrdinal, CancellationToken cancellationToken = default)
     {
