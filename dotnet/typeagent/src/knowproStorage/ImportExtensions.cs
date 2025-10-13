@@ -7,7 +7,7 @@ namespace TypeAgent.KnowPro.Storage;
 
 public static class ImportExtensions
 {
-    public static async Task<int> ImportMessagesAsync<TMessage>(
+    public static async ValueTask<int> ImportMessagesAsync<TMessage>(
         this IConversation<TMessage> conversation,
         IEnumerable<TMessage> messages,
         CancellationToken cancellationToken = default
@@ -22,7 +22,7 @@ public static class ImportExtensions
         return await conversation.Messages.GetCountAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public static async Task<int> ImportSemanticRefsAsync<TMessage>(
+    public static async ValueTask<int> ImportSemanticRefsAsync<TMessage>(
         this IConversation<TMessage> conversation,
         IEnumerable<SemanticRef> semanticRefs,
         CancellationToken cancellationToken = default
@@ -38,7 +38,11 @@ public static class ImportExtensions
         return await conversation.SemanticRefs.GetCountAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public static async Task ImportTermToSemanticRefIndexAsync<TMessage>(this IConversation<TMessage> conversation, IEnumerable<TermToSemanticRefIndexDataItem> indexItems, CancellationToken cancellationToken = default)
+    public static async ValueTask ImportTermToSemanticRefIndexAsync<TMessage>(
+        this IConversation<TMessage> conversation,
+        IEnumerable<TermToSemanticRefIndexDataItem> indexItems,
+        CancellationToken cancellationToken = default
+    )
         where TMessage : IMessage
     {
         var semanticRefIndex = conversation.SemanticRefIndex;
@@ -56,7 +60,7 @@ public static class ImportExtensions
         }
     }
 
-    public static async Task<int> ImportPropertyIndexAsync<TMessage>(
+    public static async ValueTask<int> ImportPropertyIndexAsync<TMessage>(
         this IConversation<TMessage> conversation,
         IEnumerable<SemanticRef> semanticRefs,
         CancellationToken cancellationToken = default
@@ -76,7 +80,7 @@ public static class ImportExtensions
         return await propertyIndex.GetCountAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public static async Task ImportDataAsync<TMessage>(this IConversation<TMessage> conversation, ConversationData<TMessage> data, CancellationToken cancellationToken = default)
+    public static async ValueTask ImportDataAsync<TMessage>(this IConversation<TMessage> conversation, ConversationData<TMessage> data, CancellationToken cancellationToken = default)
         where TMessage : IMessage
     {
         if (!data.Messages.IsNullOrEmpty())
