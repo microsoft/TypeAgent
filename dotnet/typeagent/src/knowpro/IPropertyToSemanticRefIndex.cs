@@ -5,15 +5,15 @@ namespace TypeAgent.KnowPro;
 
 public interface IPropertyToSemanticRefIndex
 {
-    Task<int> GetCountAsync(CancellationToken cancellationToken = default);
+    ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
-    Task<IList<string>> GetValuesAsync(CancellationToken cancellationToken = default);
+    ValueTask<IList<string>> GetValuesAsync(CancellationToken cancellationToken = default);
 
-    Task AddPropertyAync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
+    ValueTask AddPropertyAync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
 
-    Task ClearAsync(CancellationToken cancellationToken = default);
+    ValueTask ClearAsync(CancellationToken cancellationToken = default);
 
-    Task<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default);
+    ValueTask<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default);
 }
 
 
@@ -22,7 +22,7 @@ public interface IPropertyToSemanticRefIndex
 /// </summary>
 public static class PropertyToSemanticRefIndexExtensions
 {
-    public static Task AddPropertyAsync(
+    public static ValueTask AddPropertyAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         string propertyName, string value,
         int semanticRefOrdinal,
@@ -32,7 +32,7 @@ public static class PropertyToSemanticRefIndexExtensions
         return propertyIndex.AddPropertyAync(propertyName, value, ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken);
     }
 
-    public static Task AddSemanticRefAsync(
+    public static ValueTask AddSemanticRefAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         SemanticRef semanticRef,
         CancellationToken cancellationToken = default)
@@ -40,7 +40,7 @@ public static class PropertyToSemanticRefIndexExtensions
         ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
         KnowProVerify.ThrowIfInvalid(semanticRef);
 
-        Task result = Task.CompletedTask;
+        ValueTask result = ValueTask.CompletedTask;
         switch (semanticRef.KnowledgeType)
         {
             default:
@@ -94,7 +94,7 @@ public static class PropertyToSemanticRefIndexExtensions
         return result;
     }
 
-    public static async Task AddSemanticRefsAsync(
+    public static async ValueTask AddSemanticRefsAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         IEnumerable<SemanticRef> semanticRefs,
         CancellationToken cancellationToken = default
@@ -109,7 +109,7 @@ public static class PropertyToSemanticRefIndexExtensions
         }
     }
 
-    public static async Task AddEntityPropertiesAsync(
+    public static async ValueTask AddEntityPropertiesAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         ConcreteEntity entity,
         int semanticRefOrdinal,
@@ -148,7 +148,7 @@ public static class PropertyToSemanticRefIndexExtensions
 
     }
 
-    public static async Task AddFacetAsync(
+    public static async ValueTask AddFacetAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         Facet facet,
         int semanticRefOrdinal,
@@ -176,7 +176,7 @@ public static class PropertyToSemanticRefIndexExtensions
         }
     }
 
-    public static async Task AddActionPropertiesAsync(
+    public static async ValueTask AddActionPropertiesAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         Action action,
         int semanticRefOrdinal,
@@ -223,7 +223,7 @@ public static class PropertyToSemanticRefIndexExtensions
         }
     }
 
-    public static Task AddTagPropertiesAsync(
+    public static ValueTask AddTagPropertiesAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         Tag tag,
         int semanticRefOrdinal,
