@@ -3,18 +3,53 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface IReadOnlyAsyncCollection<T> : IAsyncEnumerable<T>
+public interface IAsyncCollectionReader<T>
 {
-    Task<int> GetCountAsync(CancellationToken cancellationToken = default);
-    Task<T> GetAsync(int ordinal, CancellationToken cancellationToken = default);
-    Task<IList<T>> GetAsync(IList<int> ordinals, CancellationToken cancellationToken = default);
-    Task<IList<T>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default);
+    ValueTask<T> GetAsync(int ordinal, CancellationToken cancellationToken = default);
+    ValueTask<IList<T>> GetAsync(IList<int> ordinals, CancellationToken cancellationToken = default);
+}
+
+public interface IReadOnlyAsyncCollection<T> : IAsyncCollectionReader<T>, IAsyncEnumerable<T>
+{
+    ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
+    ValueTask<IList<T>> GetSliceAsync(int start, int end, CancellationToken cancellationToken = default);
 }
 
 public interface IAsyncCollection<T> : IReadOnlyAsyncCollection<T>
 {
     bool IsPersistent { get; }
 
-    Task AppendAsync(T item, CancellationToken cancellationToken = default);
-    Task AppendAsync(IEnumerable<T> items, CancellationToken cancellationToken = default);
+    ValueTask AppendAsync(T item, CancellationToken cancellationToken = default);
+    ValueTask AppendAsync(IEnumerable<T> items, CancellationToken cancellationToken = default);
+}
+
+public class CachingCollectionReader<TValue> : IAsyncCollectionReader<TValue>
+    where TValue : class
+{
+    IReadOnlyAsyncCollection<TValue> _collection;
+    ICache<int, TValue> _cache;
+
+    public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection)
+        : this(collection, new KeyValueCache<int, TValue>())
+    {
+
+    }
+
+    public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection, ICache<int, TValue> cache)
+    {
+        ArgumentVerify.ThrowIfNull(collection, nameof(collection));
+        ArgumentVerify.ThrowIfNull(cache, nameof(cache));
+        _collection = collection;
+        _cache = cache;
+    }
+
+    public ValueTask<TValue> GetAsync(int ordinal, CancellationToken cancellationToken = default)
+    {
+        return _cache.GetOrLoadAsync(ordinal, _collection.GetAsync, cancellationToken);
+    }
+
+    public ValueTask<IList<TValue>> GetAsync(IList<int> ordinals, CancellationToken cancellationToken = default)
+    {
+        return _cache.GetOrLoadAsync(ordinals, _collection.GetAsync, cancellationToken);
+    }
 }

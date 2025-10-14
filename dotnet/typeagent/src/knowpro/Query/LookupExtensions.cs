@@ -38,7 +38,23 @@ internal static class LookupExtensions
             return scoredOrdinals;
         }
 
-        IList<SemanticRef> selectedRefs = await context.GetSemanticRefsAsync(scoredOrdinals).ConfigureAwait(false);
+        var filtered = await FilterAsync(context, scoredOrdinals, filter, scoreBooster).ConfigureAwait(false);
+        return filtered ?? scoredOrdinals;
+    }
+
+    // FUTURE:
+    // Since we are only filtering by ranges, alter schema shred and store ranges so that
+    // we don't have to load the entire semantic ref here
+    // Further future: Consider implementing as a subquery if the underlying store supports it
+
+    public static async ValueTask<IList<ScoredSemanticRefOrdinal>?> FilterAsync(
+        QueryEvalContext context,
+        IList<ScoredSemanticRefOrdinal> scoredOrdinals,
+        Func<SemanticRef, ScoredSemanticRefOrdinal, bool>? filter = null,
+        ScoreBooster? scoreBooster = null
+    )
+    {
+        IList<SemanticRef> selectedRefs = await context.SemanticRefs.GetAsync(scoredOrdinals).ConfigureAwait(false);
 
         IList<ScoredSemanticRefOrdinal>? filtered = null;
         for (int i = 0; i < selectedRefs.Count; ++i)
@@ -56,10 +72,11 @@ internal static class LookupExtensions
             }
             if (scoreBooster is not null)
             {
-                scoredOrdinals[i] = scoreBooster(term, semanticRef, scoredOrdinal);
+                scoredOrdinals[i] = scoreBooster(semanticRef, scoredOrdinal);
             }
         }
         return filtered ?? scoredOrdinals;
+
     }
 
     public static ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(
@@ -82,5 +99,29 @@ internal static class LookupExtensions
             },
             scoreBooster
         );
+    }
+
+    public static async ValueTask<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(
+        this IPropertyToSemanticRefIndex propertyIndex,
+        QueryEvalContext context,
+        string propertyName,
+        string propertyValue,
+        TextRangesInScope? rangesInScope
+    )
+    {
+        var scoredRefs = await propertyIndex.LookupPropertyAsync(
+            propertyName,
+            propertyValue,
+            context.CancellationToken
+        ).ConfigureAwait(false);
+        if (!scoredRefs.IsNullOrEmpty() && rangesInScope is not null)
+        {
+            scoredRefs = await FilterAsync(
+                context,
+                scoredRefs,
+                (sr, ordinal) => rangesInScope.IsRangeInScope(sr.Range)
+            ).ConfigureAwait(false);
+        }
+        return scoredRefs;
     }
 }

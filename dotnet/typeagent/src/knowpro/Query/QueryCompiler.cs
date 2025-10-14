@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Threading.Tasks;
+
 namespace TypeAgent.KnowPro.Query;
 
 internal class QueryCompiler
 {
     private IConversation _conversation;
-    private List<CompiledTermGroup> _allSearchTerms;
+    private List<SearchTermGroup> _allSearchTerms;
 
     public QueryCompiler(IConversation conversation)
     {
@@ -20,22 +22,26 @@ internal class QueryCompiler
 
     public double RelatedIsExactThreshold { get; set; } = 0.95;
 
-    public ValueTask<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>>> CompileKnowledgeQueryAsync(
+    public async ValueTask<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>>> CompileKnowledgeQueryAsync(
         SearchTermGroup searchGroup,
         WhenFilter? whenFilter,
         SearchOptions? searchOptions
     )
     {
-        var queryExpr = CompileQuery(searchGroup, whenFilter);
+        var queryExpr = await CompileQueryAsync(searchGroup, whenFilter).ConfigureAwait(false);
         QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> resultExpr = new GroupSearchResultsExpr(queryExpr);
-        return ValueTask.FromResult(resultExpr);
+        return resultExpr;
     }
 
-    public (IList<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchTermGroup(SearchTermGroup searchGroup)
+    public (IList<SearchTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroup(
+        SearchTermGroup searchGroup,
+        GetScopeExpr? scopeExpr,
+        IQuerySemanticRefPredicate? matchFilter = null
+    )
     {
-        IList<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
+        List<SearchTermGroup> compiledTerms = [new SearchTermGroup(searchGroup.BooleanOp)];
 
-        IList<QueryOpExpr<SemanticRefAccumulator?>> termExpressions = [];
+        List<QueryOpExpr<SemanticRefAccumulator?>> termExpressions = [];
         foreach (var term in searchGroup.Terms)
         {
             switch (term)
@@ -43,31 +49,64 @@ internal class QueryCompiler
                 default:
                     break;
 
-                case SearchTerm searchTerm:
-                    var searchTermExpr = CompileSearchTerm(searchTerm);
-                    termExpressions.Add(searchTermExpr);
+                case PropertySearchTerm propertyTerm:
+                    var propertyExpr = CompilePropertyTerm(propertyTerm);
+                    propertyExpr = CompileMatchFilter(propertyExpr, matchFilter);
+                    termExpressions.Add(propertyExpr);
+                    if (propertyTerm.PropertyName is PropertyNameSearchTerm kp)
+                    {
+                        compiledTerms[0].Terms.Add(kp.Value.ToRequired());
+                    }
+                    compiledTerms[0].Terms.Add(propertyTerm.PropertyValue.ToRequired());
                     break;
 
                 case SearchTermGroup subGroup:
+                    var (nestedTerms, groupExpr) = CompileSearchGroup(
+                        subGroup,
+                        null,  // Apply scopes on the outermost expression only
+                        matchFilter
+                    );
+                    compiledTerms.AddRange(nestedTerms);
+                    termExpressions.Add(groupExpr);
                     break;
+
+                case SearchTerm searchTerm:
+                    var searchTermExpr = CompileSearchTerm(searchTerm);
+                    searchTermExpr = CompileMatchFilter(searchTermExpr, matchFilter);
+                    termExpressions.Add(searchTermExpr);
+                    compiledTerms[0].Terms.Add(searchTerm);
+                    break;
+
             }
         }
 
-        var boolExpr = MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr(termExpressions, searchGroup.BooleanOp);
+        var boolExpr = MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr(
+            termExpressions,
+            searchGroup.BooleanOp,
+            scopeExpr
+        );
         return (compiledTerms, boolExpr);
     }
 
-    private QueryOpExpr<IDictionary<KnowledgeType, SemanticRefAccumulator>> CompileQuery(SearchTermGroup searchGroup, WhenFilter? whenFilter)
+    private async Task<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefAccumulator>>> CompileQueryAsync(
+        SearchTermGroup searchGroup,
+        WhenFilter? whenFilter
+    )
     {
-        var selectExpr = CompileSelect(searchGroup);
+        var scopeExpr = await CompileScope(searchGroup, whenFilter);
+        var selectExpr = CompileSelect(searchGroup, scopeExpr);
+
         return new SelectTopNKnowledgeGroupExpr(
             new GroupByKnowledgeTypeExpr(selectExpr)
         );
     }
 
-    private QueryOpExpr<SemanticRefAccumulator> CompileSelect(SearchTermGroup searchGroup)
+    private QueryOpExpr<SemanticRefAccumulator> CompileSelect(
+        SearchTermGroup searchGroup,
+        GetScopeExpr? scopeExpr
+    )
     {
-        var (searchTermsUsed, selectExpr) = CompileSearchTermGroup(searchGroup);
+        var (searchTermsUsed, selectExpr) = CompileSearchGroup(searchGroup, scopeExpr);
         _allSearchTerms.AddRange(searchTermsUsed);
         return selectExpr;
     }
@@ -79,7 +118,7 @@ internal class QueryCompiler
 
         return new MatchSearchTermExpr(
             searchTerm,
-            (term, semanticRef, scoredOrdinal) =>
+            (semanticRef, scoredOrdinal) =>
         {
             return Ranker.BoostEntities(semanticRef, scoredOrdinal, boostWeight);
         });
@@ -87,6 +126,43 @@ internal class QueryCompiler
 
     private QueryOpExpr<SemanticRefAccumulator?> CompilePropertyTerm(PropertySearchTerm propertyTerm)
     {
-        throw new NotImplementedException();
+        if (propertyTerm.PropertyName is KnowledgePropertyNameSearchTerm term)
+        {
+            switch (term.Value)
+            {
+                default:
+                    if (propertyTerm.isEntityPropertyTerm())
+                    {
+                        propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
+                    }
+                    return new MatchPropertySearchTermExpr(propertyTerm);
+                case "tag":
+                case "topic":
+                    // TODO
+                    throw new NotImplementedException();
+            }
+        }
+        else
+        {
+            return new MatchPropertySearchTermExpr(propertyTerm);
+        }
+    }
+
+    private QueryOpExpr<SemanticRefAccumulator> CompileMatchFilter(
+        QueryOpExpr<SemanticRefAccumulator> termExpr,
+        IQuerySemanticRefPredicate matchFilter
+)
+    {
+        if (matchFilter is not null)
+        {
+            termExpr = new FilterMatchTermExpr(termExpr, matchFilter);
+        }
+        return termExpr;
+    }
+
+    private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)
+    {
+        // TODO
+        return ValueTask.FromResult<GetScopeExpr>(null);
     }
 }

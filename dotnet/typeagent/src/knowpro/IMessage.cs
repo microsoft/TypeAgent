@@ -36,3 +36,23 @@ public interface IMessageEx : IMessage
     string? SerializeExtraDataToJson();
     void DeserializeExtraDataFromJson(string json);
 }
+
+
+public static class MessageExtensions
+{
+    /**
+     * Get the total number of a characters in a message.
+     * A message can contain multiple text chunks
+     * @param {IMessage} message
+     * @returns
+     */
+    public static int GetCharCount(this IMessage message)
+    {
+        int total = 0;
+        for (int i = 0; i < message.TextChunks.Count; ++i)
+        {
+            total += message.TextChunks[i].Length;
+        }
+        return total;
+    }
+}

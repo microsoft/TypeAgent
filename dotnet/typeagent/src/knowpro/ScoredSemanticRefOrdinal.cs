@@ -16,3 +16,15 @@ public struct ScoredSemanticRefOrdinal
         return new ScoredSemanticRefOrdinal { SemanticRefOrdinal = semanticRefOrdinal, Score = 1 };
     }
 }
+
+
+public static class ScoredSemanticRefOrdinalExtensions
+{
+    public static IEnumerable<int> ToSemanticRefOrdinals(
+        this IEnumerable<ScoredSemanticRefOrdinal> items
+    )
+    {
+        return from item in items
+               select item.SemanticRefOrdinal;
+    }
+}
