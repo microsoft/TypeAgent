@@ -45,15 +45,6 @@ async function handleVideoAction(
         case "createVideoAction":
             const createVideoAction: CreateVideoAction =
                 action as CreateVideoAction;
-            console.log(createVideoAction);
-            // videoContext.actionIO.setDisplay({
-            //     type: "html",
-            //     content: `
-            //     <div style="loading-container">
-            //     <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
-            //     <div class="generating">Generating</div>
-            //     </div>`,
-            // });
 
             const videoModel = openai.createVideoModel();
             const response = await videoModel.generateVideo(
@@ -66,39 +57,10 @@ async function handleVideoAction(
 
             if (response.success) {
                 displayStatus("Video generation request accepted...processing.", videoContext);
-
                 result = createVideoPlaceHolder(response.data)
-                // const videoJob: VideoGenerationJob = response.data;
-                // let status = "";
-                // let waitResponse: Response | undefined = undefined;
-                // const statusUrl = `${videoJob.endpoint!.origin}/openai/v1/video/generations/jobs/${videoJob.id}?api-version=${videoJob.endpoint!.searchParams.get("api-version")}`;
-                // let i = 1;
-                // while (status !== "succeeded" && status !== "failed") {
-                //     await new Promise((resolve) => setTimeout(resolve, 5000));
-                //     waitResponse = await fetch(statusUrl, { headers: videoJob.headers! });
-                //     const wr: any = await waitResponse.json();
-                //     status = wr.status;
-                //     displayStatus(`Waiting (${i++ * 5} seconds):`, wr.status);
-                // }                
-
-                // if (!waitResponse || waitResponse.status !== 200) {
-                //     result = createActionResult(
-                //         `Failed to generate the requested video. ${waitResponse?.statusText}`,
-                //     );
-                // } else {
-                //    result = createActionResult("done!");
-                // }
             } else {
                 return createActionResultFromError(response.message);
             }
-
-            // if (!response.success) {
-            //     result = createActionResult(
-            //         `Failed to generate the requested video. ${response.message}`,
-            //     );
-            // } else {
-            //     result = createVideoPlaceHolder(response.data)
-            // }
             break;
         default:
             throw new Error(`Unknown action: ${(action as any).actionName}`);
@@ -115,7 +77,6 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
     }
 
     const statusUrl = `${videoJob.endpoint.origin}/openai/v1/video/generations/jobs/${videoJob.id}?api-version=${videoJob.endpoint.searchParams.get("api-version")}`;
-    //const videoUrl = `${endpoint}openai/v1/video/generations/${videoJob.generationId}/content/video${params}`;
     const hash: string = randomBytes(4).readUInt32LE(0).toString();
     const jScript: string = `
     <script>
