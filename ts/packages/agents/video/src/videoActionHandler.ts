@@ -13,10 +13,11 @@ import {
     createActionResultFromError,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
-import { openai, VideoGenerationJob } from "aiclient";
+import { ImageInPaintItem, openai, VideoGenerationJob } from "aiclient";
 import { CreateVideoAction, VideoAction } from "./videoActionSchema.js";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { randomBytes } from "crypto";
+import { getMimeType } from "common-utils";
 
 export function instantiate(): AppAgent {
     return {
@@ -45,14 +46,15 @@ async function handleVideoAction(
         case "createVideoAction":
             const createVideoAction: CreateVideoAction =
                 action as CreateVideoAction;
-
+// TODO: dynamic duration
             const videoModel = openai.createVideoModel();
             const response = await videoModel.generateVideo(
                 createVideoAction.parameters.caption,
                 1,
                 5,
                 1280,
-                720
+                720,
+                await getInPaintItems(createVideoAction.parameters.relatedFiles, videoContext),
             );
 
             if (response.success) {
@@ -66,6 +68,41 @@ async function handleVideoAction(
             throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
     return result;
+}
+
+/**
+ * Get inpainting items from the list of related files.
+ * @param relatedFiles The list of related files (attachments) the user provided
+ * @returns An array of inpainting items or undefined if no valid files are found
+ */
+async function getInPaintItems(relatedFiles?: string[], context?: ActionContext<VideoActionContext>): Promise<ImageInPaintItem[] | undefined> {
+
+    if (relatedFiles === undefined || relatedFiles.length === 0) {
+        return undefined;
+    }
+
+    return await Promise.all(relatedFiles.map(async file => {
+
+        let a = await context!.sessionContext.sessionStorage?.read(
+            `\\..\\user_files\\${file}`,
+            "base64",
+        );
+
+        return {
+            frame_index: 0,
+            type: "image",
+            file_name: file,
+            crop_bounds: {
+                left_fraction: 0,
+                top_fraction: 0,
+                right_fraction: 1,
+                bottom_fraction: 1
+            },
+            contents: a,
+            mime_type: getMimeType(file.substring(file.indexOf(".")))
+        };
+    }));
+
 }
 
 function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSuccess {

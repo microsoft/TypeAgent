@@ -151,6 +151,7 @@ export interface VideoModel {
         durationInSeconds: number,
         width: number,
         height: number,
+        inpaintItems?: ImageInPaintItem[],
     ): Promise<Result<VideoGenerationJob>>;
 }
 
@@ -189,7 +190,7 @@ export type ImageInPaintItem = {
         right_fraction: number;
         bottom_fraction: number;
     }
-    contents?: string; // base64 encoded image contents
+    contents?: string | undefined; // base64 encoded image contents
     mime_type?: string
 }
 

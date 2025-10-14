@@ -11,5 +11,7 @@ export type CreateVideoAction = {
         originalRequest: string;
         // the video caption
         caption: string;
+        // The file names of any attachments the user provided
+        relatedFiles?: string[];
     };
 };
