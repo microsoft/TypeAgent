@@ -46,14 +46,14 @@ async function handleVideoAction(
             const createVideoAction: CreateVideoAction =
                 action as CreateVideoAction;
             console.log(createVideoAction);
-            videoContext.actionIO.setDisplay({
-                type: "html",
-                content: `
-                <div style="loading-container">
-                <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
-                <div class="generating">Generating</div>
-                </div>`,
-            });
+            // videoContext.actionIO.setDisplay({
+            //     type: "html",
+            //     content: `
+            //     <div style="loading-container">
+            //     <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
+            //     <div class="generating">Generating</div>
+            //     </div>`,
+            // });
 
             const videoModel = openai.createVideoModel();
             const response = await videoModel.generateVideo(
@@ -117,32 +117,52 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
     const statusUrl = `${videoJob.endpoint.origin}/openai/v1/video/generations/jobs/${videoJob.id}?api-version=${videoJob.endpoint.searchParams.get("api-version")}`;
     //const videoUrl = `${endpoint}openai/v1/video/generations/${videoJob.generationId}/content/video${params}`;
     const hash: string = randomBytes(4).readUInt32LE(0).toString();
-    //const outputFilename: string = ''
     const jScript: string = `
     <script>
+    
+        var ro = new ResizeObserver(entries => {
+            for (let e of entries) {
+                window.top.postMessage('aivideo_${hash}_' + document.documentElement.scrollHeight, '*');
+            }
+        });
+
+        ro.observe(document.querySelector('#video_div_${hash}'));
+
         async function pollVideo_${hash}() {
             const container = document.getElementById("video_div_${hash}");
             const jobId = "${videoJob.id}";
-            console.log("⏳ Polling job status for ID:", jobId);
-
+            console.log("⏳ Polling job status for ID:", jobId);            
+            
+            let i = 1;
             let status = "";
+            let statusData = undefined;
             while (status !== "succeeded" && status !== "failed") {
                 await new Promise(resolve => setTimeout(resolve, 5000));
                 const statusResponse = await fetch("${statusUrl}", { headers: ${JSON.stringify(videoJob.headers)} });
-                const statusData = await statusResponse.json();
+
+                if (!statusResponse.ok) {
+                    console.log("❌ Failed to get job status.");
+                    container.innerText = "Failed to get job status. " + statusResponse.statusText;
+                    return;
+                }
+
+                statusData = await statusResponse.json();
                 console.log("Waiting..." + JSON.stringify(statusData, null, 2));
                 status = statusData.status;
-                console.log("Status:", status);
+                container.previousElementSibling.children[1].innerText = "JobID - " + jobId + ", Status: " + status + " " + (i++) * 5  + " seconds elapsed";
             }
 
-            const response = await fetch("${statusUrl}", { headers: ${JSON.stringify(videoJob.headers)} });
-            console.log(response);
+            // hide the generating graphic
+            container.previousElementSibling.style.display = 'none';
+
             if (status === "succeeded") {
-                const generations = response.data.generations ?? [];
+                const generations = statusData.generations ?? [];
                 if (generations.length > 0) {
                     console.log("✅ Video generation succeeded.");
-                    const videoResponse = await fetch(videoUrl, { headers: ${JSON.stringify(videoJob.headers)} });
+                    const video_url = '${videoJob.endpoint.origin}/openai/v1/video/generations/' + generations[0].id + '/content/video?api-version=${videoJob.endpoint.searchParams.get("api-version")}';
+                    const videoResponse = await fetch(video_url, { headers: ${JSON.stringify(videoJob.headers)} });
                     if (videoResponse.ok) {
+                        container.innerText = '';
                         const videoBlob = await videoResponse.blob();
                         const videoObjectURL = URL.createObjectURL(videoBlob);
 
@@ -152,11 +172,11 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
                         videoElement.controls = true;
                         videoElement.width = 640; // optional
                         videoElement.height = 360; // optional
-                        videoElement.autoplay = false;
+                        videoElement.autoplay = true;
 
                         // Append to container
                         container.appendChild(videoElement);
-                        console.log("🎥 Video added to the page.");
+                        console.log("🎥 Video added to the page.");                        
                     } else {
                         console.log("❌ Failed to retrieve video content.");
                     }
@@ -173,5 +193,11 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
     </script>
     `;
 
-    return createActionResultFromHtmlDisplayWithScript(`<div id="video_div_${hash}" class="ai-video-container"></div>` + jScript);
+    return createActionResultFromHtmlDisplayWithScript(`
+        <div style="loading-container">
+            <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
+            <div class="generating">Generating</div>
+        </div>        
+        <div id="video_div_${hash}" class="ai-video-container"></div>`
+         + jScript, "An AI generated video of '" + videoJob.prompt + "'");
 }

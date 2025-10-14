@@ -75,27 +75,32 @@ export class ChatView {
 
         this.topDiv.appendChild(this.messageDiv);
 
-        // wire up messages from slide show iframes
+        // wire up messages from iframes so we can resize them
         window.onmessage = (e) => {
-            if (e.data.startsWith("slideshow_")) {
-                const temp: string[] = (e.data as string).split("_");
+
+            const source = e.data as string;
+            if (source.startsWith("slideshow_") || source.startsWith("aivideo_")) {
+                const temp: string[] = source.split("_");
                 if (temp.length != 3) {
                     return;
                 }
 
+                const name = temp[0];
                 const hash = temp[1];
                 const size = temp[2];
 
                 // find the iframe from which this message originated
                 const iframes = document.getElementsByTagName("iframe");
                 for (let i = 0; i < iframes.length; i++) {
-                    if (iframes[i].srcdoc.indexOf(`slideshow_${hash}`) > -1) {
+                    if (iframes[i].srcdoc.indexOf(`${name}_${hash}`) > -1) {
                         // resize the host iframe to fit the content size as reported by the iframe
                         iframes[i].style.height = size + "px";
 
                         break;
                     }
                 }
+            } else {
+                console.log("Unknown message received: " + e.data);
             }
         };
     }
