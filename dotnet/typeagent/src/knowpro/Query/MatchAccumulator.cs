@@ -140,6 +140,9 @@ internal class MatchAccumulator<T>
 
     public MatchAccumulator<T> Intersect(MatchAccumulator<T> other, MatchAccumulator<T> intersection)
     {
+        ArgumentVerify.ThrowIfNull(other, nameof(other));
+        ArgumentVerify.ThrowIfNull(intersection, nameof(intersection));
+
         foreach (var thisMatch in GetMatches())
         {
             var otherMatch = other[thisMatch.Value];
@@ -158,6 +161,18 @@ internal class MatchAccumulator<T>
         foreach (var match in GetMatches())
         {
             scorer(match);
+        }
+    }
+
+    public void SmoothScores()
+    {
+        // Normalize the score relative to # of hits.
+        foreach (var match in GetMatches())
+        {
+            if (match.HitCount > 0)
+            {
+                match.Score = Ranker.GetSmoothScore(match.Score, match.HitCount);
+            }
         }
     }
 

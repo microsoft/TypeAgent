@@ -54,7 +54,7 @@ internal static class LookupExtensions
         ScoreBooster? scoreBooster = null
     )
     {
-        IList<SemanticRef> selectedRefs = await context.GetSemanticRefsAsync(scoredOrdinals).ConfigureAwait(false);
+        IList<SemanticRef> selectedRefs = await context.SemanticRefs.GetAsync(scoredOrdinals).ConfigureAwait(false);
 
         IList<ScoredSemanticRefOrdinal>? filtered = null;
         for (int i = 0; i < selectedRefs.Count; ++i)

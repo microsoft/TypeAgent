@@ -43,6 +43,16 @@ public class TextRange
         return End is null ? $"[{Start}]" : $"[{Start}, {End}]";
     }
 
+    /// <summary>
+    /// Always returns a valid range End.
+    /// If this TextRange has no supplied End, returns an inferred end
+    /// </summary>
+    /// <returns></returns>
+    public TextLocation GetEnd()
+    {
+        return End ?? AsEnd();
+    }
+
     private TextLocation AsEnd()
     {
         return new TextLocation(Start.MessageOrdinal, Start.ChunkOrdinal + 1);

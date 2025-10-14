@@ -35,8 +35,8 @@ internal static class Ranker
             {
                 return totalScore;
             }
-            double avg = totalScore / hitCount;
-            double smoothAvg = Math.Log(hitCount + 1) * avg;
+            double avgScore = totalScore / hitCount;
+            double smoothAvg = Math.Log(hitCount + 1) * avgScore;
             return smoothAvg;
         }
 

@@ -75,20 +75,20 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         return intersection;
     }
 
-    public async ValueTask<IList<Match<int>>> GetMatchesAsync(
+    public async ValueTask<IList<Match<int>>> GetFilteredMatchesAsync(
         QueryEvalContext context,
-        Func<SemanticRef, bool> predicate
+        Func<QueryEvalContext, SemanticRef, bool> predicate
     )
     {
         var ordinals = ToOrdinals();
-        var semanticRefs = await context.GetSemanticRefsAsync(ordinals);
+        var semanticRefs = await context.SemanticRefs.GetAsync(ordinals).ConfigureAwait(false);
         Debug.Assert(semanticRefs.Count == ordinals.Count);
 
         List<Match<int>> filtered = [];
         int i = 0;
-        foreach(Match<int> match in GetMatches())
+        foreach (Match<int> match in GetMatches())
         {
-            if (predicate(semanticRefs[i]))
+            if (predicate(context, semanticRefs[i]))
             {
                 filtered.Add(match);
             }

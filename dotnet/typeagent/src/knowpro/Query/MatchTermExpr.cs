@@ -172,7 +172,8 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
             matches,
             propertyName,
             propertyValue.Term
-        );
+        ).ConfigureAwait(false);
+
         if (!propertyValue.RelatedTerms.IsNullOrEmpty())
         {
             // TODO: Do this in parallel
@@ -183,7 +184,7 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
                     propertyName,
                     propertyValue.Term,
                     relatedPropertyValue
-                );
+                ).ConfigureAwait(false);
             }
         }
     }
@@ -226,7 +227,8 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
                     context,
                     propertyName,
                     relatedPropVal.Text
-                );
+                ).ConfigureAwait(false);
+
                 if (!semanticRefs.IsNullOrEmpty()) {
                     // This will only consider semantic refs that were not already matched by this expression.
                     // In other words, if a semantic ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'

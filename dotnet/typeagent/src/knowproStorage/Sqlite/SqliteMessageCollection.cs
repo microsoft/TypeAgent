@@ -34,9 +34,9 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return _count;
     }
 
-    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
+    public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(GetCount());
+        return ValueTask.FromResult(GetCount());
     }
 
     public void Append(TMessage message)
@@ -58,13 +58,13 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         }
     }
 
-    public Task AppendAsync(TMessage message, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(TMessage message, CancellationToken cancellationToken = default)
     {
         Append(message);
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
-    public Task AppendAsync(IEnumerable<TMessage> messages, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(IEnumerable<TMessage> messages, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(messages, nameof(messages));
 
@@ -73,7 +73,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         {
             Append(message);
         }
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     public TMessage Get(int msgId)
@@ -83,13 +83,13 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return message;
     }
 
-    public Task<TMessage> GetAsync(int msgId, CancellationToken cancellationToken = default)
+    public ValueTask<TMessage> GetAsync(int msgId, CancellationToken cancellationToken = default)
     {
         TMessage message = Get(msgId);
-        return Task.FromResult(message);
+        return ValueTask.FromResult(message);
     }
 
-    public Task<IList<TMessage>> GetAsync(IList<int> messageIds, CancellationToken cancellationToken = default)
+    public ValueTask<IList<TMessage>> GetAsync(IList<int> messageIds, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
 
@@ -99,7 +99,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         {
             messages.Add(Get(msgId));
         }
-        return Task.FromResult(messages);
+        return ValueTask.FromResult(messages);
     }
 
     public async IAsyncEnumerator<TMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -115,10 +115,10 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return MessagesTable.GetSlice(_db, startOrdinal, endOrdinal).Map(FromMessageRow);
     }
 
-    public Task<IList<TMessage>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    public ValueTask<IList<TMessage>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
     {
         var messageList = GetSlice(startOrdinal, endOrdinal);
-        return Task.FromResult(messageList);
+        return ValueTask.FromResult(messageList);
     }
 
     int GetNextMessageId()
@@ -219,9 +219,9 @@ public class SqliteMessageCollection : IMessageCollection
 
     public int GetCount() => MessagesTable.GetCount(_db);
 
-    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
+    public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(GetCount());
+        return ValueTask.FromResult(GetCount());
     }
 
     public IMessage Get(int msgId)
@@ -231,13 +231,13 @@ public class SqliteMessageCollection : IMessageCollection
         return message;
     }
 
-    public Task<IMessage> GetAsync(int msgId, CancellationToken cancellationToken = default)
+    public ValueTask<IMessage> GetAsync(int msgId, CancellationToken cancellationToken = default)
     {
         IMessage message = Get(msgId);
-        return Task.FromResult(message);
+        return ValueTask.FromResult(message);
     }
 
-    public Task<IList<IMessage>> GetAsync(IList<int> messageIds, CancellationToken cancellationToken = default)
+    public ValueTask<IList<IMessage>> GetAsync(IList<int> messageIds, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
 
@@ -247,7 +247,7 @@ public class SqliteMessageCollection : IMessageCollection
         {
             messages.Add(Get(msgId));
         }
-        return Task.FromResult(messages);
+        return ValueTask.FromResult(messages);
     }
 
     public async IAsyncEnumerator<IMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -264,10 +264,10 @@ public class SqliteMessageCollection : IMessageCollection
         return MessagesTable.GetSlice(_db, startOrdinal, endOrdinal).Map(FromMessageRow);
     }
 
-    public Task<IList<IMessage>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    public ValueTask<IList<IMessage>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
     {
         var messageList = GetSlice(startOrdinal, endOrdinal);
-        return Task.FromResult(messageList);
+        return ValueTask.FromResult(messageList);
     }
 
     IMessage FromMessageRow(MessageRow messageRow)

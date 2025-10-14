@@ -23,7 +23,7 @@ internal class GroupByKnowledgeTypeExpr : QueryOpExpr<IDictionary<KnowledgeType,
         //
         foreach (var match in semanticRefMatches.GetMatches())
         {
-            var semanticRef = await context.GetSemanticRefAsync(match.Value);
+            var semanticRef = await context.SemanticRefs.GetAsync(match.Value);
             var group = groups.GetValueOrDefault(semanticRef.KnowledgeType);
             if (group is null)
             {
@@ -42,7 +42,8 @@ internal class SelectTopNKnowledgeGroupExpr : QueryOpExpr<IDictionary<KnowledgeT
     public SelectTopNKnowledgeGroupExpr(QueryOpExpr<IDictionary<KnowledgeType, SemanticRefAccumulator>> srcExpr,
         int maxMatches = -1,
         int minHitCount = -1
-    ) {
+    )
+    {
         ArgumentVerify.ThrowIfNull(srcExpr, nameof(srcExpr));
 
         SrcExpr = srcExpr;
@@ -57,7 +58,7 @@ internal class SelectTopNKnowledgeGroupExpr : QueryOpExpr<IDictionary<KnowledgeT
     public override async ValueTask<IDictionary<KnowledgeType, SemanticRefAccumulator>> EvalAsync(QueryEvalContext context)
     {
         var groupsAccumulators = await SrcExpr.EvalAsync(context);
-        foreach(var group in groupsAccumulators.Values)
+        foreach (var group in groupsAccumulators.Values)
         {
             group.SelectTopNScoring(MaxMatches, MinHitCount);
         }
