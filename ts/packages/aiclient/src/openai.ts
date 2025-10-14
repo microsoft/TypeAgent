@@ -1047,28 +1047,39 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             prompt,
             n_variants: numVariants,
             n_seconds: durationInSeconds,
-            height: 720,
-            width: 1280,
-            model: "sora"
+            height: height,
+            width: width,
+            model: "sora",
+            inpaint_items: []
         };
 
-        // make the API call with form data
-        // simple parameters
-        const formData = new FormData();
-        for (const [k, v] of Object.entries(params)) {
-            formData.append(k, v);
-        }
-
         // file parameters
-        if (params.inpaint_items) {
-            params.inpaint_items.forEach((item) => {
-
+        const formData = new FormData();
+        if (inpaintItems) {
+            inpaintItems.forEach((item) => {
+                // add the file contents to the form data
                 const buffer = Buffer.from(item.contents!, 'base64');
                 const blob = new Blob([buffer], { type: item.mime_type! });
 
                 formData.append('files', blob, item.file_name);
+
+                // remove contents and mime type from the item, since we are sending the file
+                delete item.contents;
+                delete item.mime_type;
+
+                // add the inpaint item to the form data
+                params.inpaint_items?.push(item)
             });
         }
+
+        // simple parameters
+        for (const [k, v] of Object.entries(params)) { 
+            if (typeof v === 'object') 
+                formData.append(k, JSON.stringify(v));
+            else        
+                formData.append(k, v);
+        }
+
 
         // send it
         const result = await fetch(settings.endpoint, {

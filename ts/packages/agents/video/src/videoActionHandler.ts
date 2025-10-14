@@ -44,9 +44,12 @@ async function handleVideoAction(
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
         case "createVideoAction":
+
+            displayStatus("Submitting video generation request...", videoContext);
+
             const createVideoAction: CreateVideoAction =
                 action as CreateVideoAction;
-// TODO: dynamic duration
+            // TODO: dynamic duration
             const videoModel = openai.createVideoModel();
             const response = await videoModel.generateVideo(
                 createVideoAction.parameters.caption,
