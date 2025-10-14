@@ -51,8 +51,8 @@ async function handleVideoAction(
                 createVideoAction.parameters.caption,
                 1,
                 5,
-                1920,
-                1080
+                1280,
+                720
             );
 
             if (response.success) {

@@ -1030,8 +1030,8 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         prompt: string,
         numVariants: number = 1,
         durationInSeconds: number = 5,
-        width: number = 1920,
-        height: number = 1080,
+        width: number = 1280,
+        height: number = 720,
     ): Promise<Result<VideoGenerationJob>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
@@ -1045,8 +1045,8 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             prompt,
             n_variants: numVariants,
             n_seconds: durationInSeconds,
-            height: 1080,
-            width: 1920,
+            height: 720,
+            width: 1280,
             model: "sora"
         };
 
