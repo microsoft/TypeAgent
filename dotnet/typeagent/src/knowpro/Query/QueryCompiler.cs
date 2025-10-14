@@ -33,6 +33,13 @@ internal class QueryCompiler
         return resultExpr;
     }
 
+    public async ValueTask<MessagesFromKnowledgeExpr> CompileMessageQuery(
+            QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> knowledgeMatches
+        )
+    {
+        return new MessagesFromKnowledgeExpr(knowledgeMatches);
+    }
+
     public (IList<SearchTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroup(
         SearchTermGroup searchGroup,
         GetScopeExpr? scopeExpr,
