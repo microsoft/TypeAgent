@@ -12,6 +12,7 @@ import {
     CompleteUsageStatsCallback,
     VideoModel,
     VideoGenerationJob,
+    ImageInPaintItem,
 } from "./models.js";
 import { callApi, callJsonApi, FetchThrottler } from "./restClient.js";
 import { getEnvSetting } from "./common.js";
@@ -1032,6 +1033,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         durationInSeconds: number = 5,
         width: number = 1280,
         height: number = 720,
+        inpaintItems?: ImageInPaintItem[],
     ): Promise<Result<VideoGenerationJob>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
@@ -1040,7 +1042,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         if (numVariants < 0 || numVariants > 2) {
             throw Error("n MUST equal 1"); // as of 10.09.2025 API will only accept n<2
         }
-        const params = {
+        const params: VideoGenerationJob = {
             ...defaultParams,
             prompt,
             n_variants: numVariants,
@@ -1050,18 +1052,35 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             model: "sora"
         };
 
-        const result = await callJsonApi(
-            headerResult.data,
-            settings.endpoint,
-            params,
-            settings.maxRetryAttempts,
-            settings.retryPauseMs,
-    );
-
-        if (!result.success) {
-            return result;
+        // make the API call with form data
+        // simple parameters
+        const formData = new FormData();
+        for (const [k, v] of Object.entries(params)) {
+            formData.append(k, v);
         }
 
-        return success({ endpoint: new URL(settings.endpoint), headers: headerResult.data, ...result.data as VideoGenerationJob});
+        // file parameters
+        if (params.inpaint_items) {
+            params.inpaint_items.forEach((item) => {
+
+                const buffer = Buffer.from(item.contents!, 'base64');
+                const blob = new Blob([buffer], { type: item.mime_type! });
+
+                formData.append('files', blob, item.file_name);
+            });
+        }
+
+        // send it
+        const result = await fetch(settings.endpoint, {
+            method: 'POST',
+            headers: headerResult.data,
+            body: formData
+        });
+
+        if (!result.ok) {
+            return error(`Error ${result.status}: ${await result.text()}`);
+        }
+
+        return success({ endpoint: new URL(settings.endpoint), headers: headerResult.data, ...(await result.json()) as VideoGenerationJob});
     }
 }

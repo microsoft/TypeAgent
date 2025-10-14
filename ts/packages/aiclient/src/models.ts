@@ -155,20 +155,20 @@ export interface VideoModel {
 }
 
 export type VideoGenerationJob = {
-    object: string;
-    id: string;
-    status: string;
-    created_at: number;
+    object?: string;
+    id?: string;
+    status?: string;
+    created_at?: number;
     finished_at?: number;
     exipres_at?: number;
-    generations: Array<any>;
+    generations?: Array<any>;
     prompt: string;
     model: string;
     n_variants: number;
     n_seconds: number;
     height: number;
     width: number;
-    inpaint_items?: any;
+    inpaint_items?: ImageInPaintItem[]; // TODO: add support for videos
     failure_reason?: string;
     endpoint?: URL;
     headers?: Record<string, string>;
@@ -178,4 +178,18 @@ export type GeneratedVideo = {
     revised_prompt: string;
     video_url: string;
 };
+
+export type ImageInPaintItem = {
+    frame_index: number;
+    type: "image";
+    file_name: string;
+    crop_bounds: {
+        left_fraction: number;
+        top_fraction: number;
+        right_fraction: number;
+        bottom_fraction: number;
+    }
+    contents?: string; // base64 encoded image contents
+    mime_type?: string
+}
 
