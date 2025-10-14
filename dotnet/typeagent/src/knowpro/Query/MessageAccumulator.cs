@@ -48,7 +48,7 @@ internal class MessageAccumulator : MatchAccumulator<int>
     }
 
 
-    public void AddForSemanticRef(SemanticRef semanticRef, double score)
+    public void AddFromSemanticRef(SemanticRef semanticRef, double score)
     {
         ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
 
@@ -110,6 +110,4 @@ internal class MessageAccumulator : MatchAccumulator<int>
             };
         });
     }
-
-
 }
