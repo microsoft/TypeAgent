@@ -15,7 +15,7 @@ public static class EnumerationExtensions
         }
     }
 
-    public static IList<TResult> Map<T, TResult>(this IEnumerable<T> list, Func<T, TResult> mapFn)
+    public static List<TResult> Map<T, TResult>(this IEnumerable<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
 

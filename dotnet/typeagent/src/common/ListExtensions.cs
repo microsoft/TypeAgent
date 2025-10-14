@@ -21,29 +21,6 @@ public static class ListExtensions
         return list is not null ? list.Count : 0;
     }
 
-    public static IEnumerable<T> Slice<T>(this IList<T> list, int startAt, int count, int stride = 1)
-    {
-        if (stride < 0)
-        {
-            for (int i = Math.Min(startAt + count, list.Count) - 1; i >= startAt; i -= stride)
-            {
-                yield return list[i];
-            }
-        }
-        else if (stride > 0)
-        {
-            for (int i = startAt, max = Math.Min(startAt + count, list.Count); i < max; i += stride)
-            {
-                yield return list[i];
-            }
-        }
-    }
-
-    public static IEnumerable<T> Slice<T>(this IList<T> list, int startAt)
-    {
-        return list.Slice(startAt, list.Count - startAt);
-    }
-
     public static void Shift<T>(this IList<T> list)
     {
         if (list.Count > 0)
@@ -52,7 +29,7 @@ public static class ListExtensions
         }
     }
 
-    public static IList<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
+    public static List<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
 
@@ -64,9 +41,9 @@ public static class ListExtensions
         return results;
     }
 
-    public static IList<T> Filter<T>(this IList<T> list, Func<T, bool> filter)
+    public static List<T> Filter<T>(this IList<T> list, Func<T, bool> filter)
     {
-        IList<T> filtered = [];
+        List<T> filtered = [];
         foreach (T item in list)
         {
             if (filter(item))

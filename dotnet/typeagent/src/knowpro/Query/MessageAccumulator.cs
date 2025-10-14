@@ -98,8 +98,7 @@ internal class MessageAccumulator : MatchAccumulator<int>
         return intersection;
     }
 
-
-    public IList<ScoredMessageOrdinal> ToScoredMessageOrdinals()
+    public List<ScoredMessageOrdinal> ToScoredOrdinals()
     {
         return GetSortedByScore(0).Map((m) =>
         {

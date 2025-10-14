@@ -33,11 +33,23 @@ internal class QueryCompiler
         return resultExpr;
     }
 
-    public async ValueTask<MessagesFromKnowledgeExpr> CompileMessageQuery(
-            QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> knowledgeMatches
-        )
+    public ValueTask<QueryOpExpr<List<ScoredMessageOrdinal>>> CompileMessageQueryAsync(
+        QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> knowledgeMatches,
+        SearchOptions? options,
+        string? rawSearchQuery
+    )
     {
-        return new MessagesFromKnowledgeExpr(knowledgeMatches);
+        QueryOpExpr<MessageAccumulator> query = new MessagesFromKnowledgeExpr(knowledgeMatches);
+        if (options is not null)
+        {
+            if (options.MaxCharsInBudget is not null && options.MaxCharsInBudget.Value > 0)
+            {
+                query = new SelectMessagesInCharBudget(query, options.MaxCharsInBudget.Value);
+            }
+        }
+
+        QueryOpExpr<List<ScoredMessageOrdinal>> messagesExpr = new GetScoredMessagesExpr(query);
+        return ValueTask.FromResult(messagesExpr);
     }
 
     public (IList<SearchTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroup(

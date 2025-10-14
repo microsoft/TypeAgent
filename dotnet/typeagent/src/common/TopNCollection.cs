@@ -59,7 +59,7 @@ public class TopNCollection<T>
     /// Returns the sorted buffer, and clears the collection
     /// </summary>
     /// <returns></returns>
-    public IList<ScoredItem<T>> ByRankAndClear()
+    public List<ScoredItem<T>> ByRankAndClear()
     {
         VerifyNotEmpty();
 

@@ -48,14 +48,14 @@ public static class ConversationExtensions
         QueryCompiler compiler = new QueryCompiler(conversation);
         options ??= SearchOptions.CreateDefault();
 
-        var query = await compiler.CompileKnowledgeQueryAsync(
+        var queryExpr = await compiler.CompileKnowledgeQueryAsync(
             searchTermGroup,
             whenFilter,
             options
         ).ConfigureAwait(false);
 
-        var result = await conversation.RunQueryAsync(query, cancellationToken).ConfigureAwait(false);
-        return result;
+        QueryEvalContext context = new QueryEvalContext(conversation, cancellationToken);
+        return await queryExpr.EvalAsync(context).ConfigureAwait(false);
     }
 
     public static async ValueTask<ConversationSearchResult?> SearchConversationAsync(
@@ -70,13 +70,26 @@ public static class ConversationExtensions
         options ??= SearchOptions.CreateDefault();
         QueryCompiler compiler = new QueryCompiler(conversation);
 
-        var knowledgeQuery = await compiler.CompileKnowledgeQueryAsync(
+        var knowledgeQueryExpr = await compiler.CompileKnowledgeQueryAsync(
             searchTermGroup,
             whenFilter,
             options
         ).ConfigureAwait(false);
 
-        var messageQuery = await compiler.CompileMessageQuery(knowledgeQuery).ConfigureAwait(false);
-        return null;
+        var messageQueryExpr = await compiler.CompileMessageQueryAsync(
+            knowledgeQueryExpr,
+            options,
+            rawSearchQuery
+        ).ConfigureAwait(false);
+
+        QueryEvalContext context = new QueryEvalContext(conversation, cancellationToken);
+        var messageOrdinals = await messageQueryExpr.EvalAsync(context).ConfigureAwait(false);
+        return new ConversationSearchResult()
+        {
+            MessageMatches = messageOrdinals,
+            KnowledgeMatches = context.KnowledgeMatches,
+            RawSearchQuery = rawSearchQuery,
+        };
     }
+
 }
