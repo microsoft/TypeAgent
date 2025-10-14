@@ -25,7 +25,7 @@ public static class CommandExtensions
     public static async Task<int> InvokeAsync(this RootCommand command, string cmdLine, CancellationToken cancellationToken)
     {
         var parseResult = command.Parse(cmdLine);
-        return await parseResult.InvokeAsync(null, cancellationToken);
+        return await parseResult.InvokeAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
     public static int Invoke(this RootCommand command, string cmdLine)

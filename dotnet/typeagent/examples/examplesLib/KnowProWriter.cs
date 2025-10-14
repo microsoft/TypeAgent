@@ -45,8 +45,14 @@ public class KnowProWriter : ConsoleWriter
         }
     }
 
-    public static void WriteConversationSearchResults(IConversation conversation, ConversationSearchResult searchResult)
+    public static void WriteConversationSearchResults(IConversation conversation, ConversationSearchResult? searchResult)
     {
+        if (searchResult is null)
+        {
+            WriteError("No conversation search results");
+            return;
+        }
+
         if (!searchResult.MessageMatches.IsNullOrEmpty())
         {
             WriteLineHeading("Message Ordinals");

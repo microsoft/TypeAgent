@@ -40,19 +40,19 @@ public class TestCommands : ICommandModule
         {
             Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
         };
-        await TestSearchAsync(conversation, searchGroup, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
-        await TestSearchAsync(conversation, searchGroup, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
-        await TestSearchAsync(conversation, searchGroup, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
         {
             Terms = [new SearchTerm("Children of Physics"), new SearchTerm("book")]
         };
-        await TestSearchAsync(conversation, searchGroup, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
     }
 
     private Command SearchPropertyTermsDef()
@@ -77,7 +77,7 @@ public class TestCommands : ICommandModule
                 new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
             ]
         };
-        await TestSearchAsync(conversation, searchGroup, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
     }
 
@@ -103,18 +103,19 @@ public class TestCommands : ICommandModule
                 new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
             ]
         };
-        var searchResults = await conversation.SearchConversationAsync(searchGroup, cancellationToken);
-
+        ConversationSearchResult? searchResults = await conversation.SearchConversationAsync(searchGroup, cancellationToken);
+        KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
     }
 
 
-    async Task TestSearchAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
+    async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
     {
         KnowProWriter.WriteLine(searchGroup);
 
         var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken).ConfigureAwait(false);
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
     }
+
     private IConversation EnsureConversation()
     {
         return (_kpContext.Conversation is not null)

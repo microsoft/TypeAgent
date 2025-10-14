@@ -38,7 +38,13 @@ internal static class LookupExtensions
             return scoredOrdinals;
         }
 
-        var filtered = await FilterAsync(context, scoredOrdinals, filter, scoreBooster).ConfigureAwait(false);
+        var filtered = await FilterAsync(
+            context,
+            scoredOrdinals,
+            filter,
+            scoreBooster
+        ).ConfigureAwait(false);
+
         return filtered ?? scoredOrdinals;
     }
 
@@ -67,10 +73,14 @@ internal static class LookupExtensions
                 {
                     continue;
                 }
+                if (scoreBooster is not null)
+                {
+                    scoredOrdinal = scoreBooster(semanticRef, scoredOrdinal);
+                }
                 filtered ??= [];
                 filtered.Add(scoredOrdinal);
             }
-            if (scoreBooster is not null)
+            else if (scoreBooster is not null)
             {
                 scoredOrdinals[i] = scoreBooster(semanticRef, scoredOrdinal);
             }

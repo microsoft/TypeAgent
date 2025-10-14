@@ -176,7 +176,8 @@ internal class QueryCompiler
         WhenFilter? whenFilter
     )
     {
-        var scopeExpr = await CompileScope(searchGroup, whenFilter);
+        var scopeExpr = await CompileScope(searchGroup, whenFilter).ConfigureAwait(false);
+
         var selectExpr = CompileSelect(searchGroup, scopeExpr);
 
         return new SelectTopNKnowledgeGroupExpr(

@@ -40,11 +40,11 @@ public abstract class ConsoleApp
 
         if (string.IsNullOrEmpty(inputFilePath))
         {
-            await RunAsync();
+            await RunAsync().ConfigureAwait(false);
         }
         else
         {
-            await RunBatchAsync(inputFilePath);
+            await RunBatchAsync(inputFilePath).ConfigureAwait(false);
         }
     }
 
@@ -129,7 +129,7 @@ public abstract class ConsoleApp
             return CommandResult.NotHandled;
         }
         var parseResult = _allCommands.Parse(cmdLine);
-        return await parseResult.InvokeAsync(null, cancellationToken);
+        return await parseResult.InvokeAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

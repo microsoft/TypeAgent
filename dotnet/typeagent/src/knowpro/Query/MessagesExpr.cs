@@ -20,7 +20,8 @@ internal class MessagesFromKnowledgeExpr : QueryOpExpr<MessageAccumulator>
 
     public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
     {
-        context.KnowledgeMatches = await SrcExpr.EvalAsync(context);
+        context.KnowledgeMatches = await SrcExpr.EvalAsync(context).ConfigureAwait(false);
+
         var messageMatches = new MessageAccumulator();
         if (context.KnowledgeMatches.IsNullOrEmpty())
         {
@@ -36,7 +37,7 @@ internal class MessagesFromKnowledgeExpr : QueryOpExpr<MessageAccumulator>
                 knowledgeTypeHitCount++;
                 var semanticRefs = await context.SemanticRefs.GetAsync(
                     knowledgeMatches.SemanticRefMatches.ToOrdinals()
-                );
+                ).ConfigureAwait(false);
                 for (int i = 0; i < semanticRefs.Count; ++i)
                 {
                     messageMatches.AddFromSemanticRef(semanticRefs[i], knowledgeMatches.SemanticRefMatches[i].Score);
@@ -73,7 +74,7 @@ internal class SelectMessagesInCharBudget : QueryOpExpr<MessageAccumulator>
 
     public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
     {
-        var matches = await SrcExpr.EvalAsync(context);
+        var matches = await SrcExpr.EvalAsync(context).ConfigureAwait(false);
 
         var scoredMatches = matches.GetSortedByScore();
         var sortedOrdinals = scoredMatches.Map((m) => m.Value);

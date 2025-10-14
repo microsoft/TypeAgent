@@ -244,7 +244,7 @@ internal class MatchAccumulator<T>
 
     private IEnumerable<Match<T>> MatchesWithMinHitCount(int minHitCount)
     {
-        return minHitCount > 0
+        return minHitCount > 1
             ? GetMatches((m) => m.HitCount >= minHitCount)
             : GetMatches();
     }
