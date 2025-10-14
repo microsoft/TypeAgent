@@ -5,15 +5,29 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
 {
-    public MatchMessagesBooleanExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesBooleanExpr(IList<QueryOpExpr> termExpressions)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(termExpressions, nameof(termExpressions));
 
         TermExpressions = termExpressions;
     }
 
-    public IList<QueryOpExpr<object?>> TermExpressions { get; }
+    public IList<QueryOpExpr> TermExpressions { get; }
 
+
+    public static MatchMessagesBooleanExpr Create(
+        IList<QueryOpExpr> termExpressions,
+        SearchTermBooleanOp booleanOp
+    )
+    {
+        return booleanOp switch
+        {
+            SearchTermBooleanOp.And => new MatchMessagesAndExpr(termExpressions),
+            SearchTermBooleanOp.Or => new MatchMessagesOrExpr(termExpressions),
+            SearchTermBooleanOp.OrMax => new MatchMessagesOrMaxExpr(termExpressions),
+            _ => throw new NotSupportedException(),
+        };
+    }
 
     protected void BeginMatch(QueryEvalContext context)
     {
@@ -56,7 +70,7 @@ internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
 
 internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
 {
-    public MatchMessagesOrExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesOrExpr(IList<QueryOpExpr> termExpressions)
         : base(termExpressions)
     {
     }
@@ -67,7 +81,7 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
 
         MessageAccumulator? allMatches = null;
         foreach (var termExpr in TermExpressions) {
-            var matches = await termExpr.EvalAsync(context);
+            var matches = await termExpr.GetResultAsync(context);
             if (matches is null)
             {
                 continue;
@@ -93,7 +107,7 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
 
 internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
 {
-    public MatchMessagesAndExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesAndExpr(IList<QueryOpExpr> termExpressions)
         : base(termExpressions)
     {
     }
@@ -107,7 +121,7 @@ internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
 
         for (; iTerm < TermExpressions.Count; ++iTerm)
         {
-            var matches = await TermExpressions[iTerm].EvalAsync(context);
+            var matches = await TermExpressions[iTerm].GetResultAsync(context);
             if (matches is null)
             {
                 // We can't possibly have an 'and'
@@ -155,7 +169,7 @@ internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
 
 internal class MatchMessagesOrMaxExpr : MatchMessagesOrExpr
 {
-    public MatchMessagesOrMaxExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesOrMaxExpr(IList<QueryOpExpr> termExpressions)
         : base(termExpressions)
     {
     }

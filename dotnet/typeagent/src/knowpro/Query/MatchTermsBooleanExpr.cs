@@ -20,9 +20,9 @@ internal class MatchTermsBooleanExpr : QueryOpExpr<SemanticRefAccumulator>
             context.TextRangesInScope = await GetScopeExpr.EvalAsync(context).ConfigureAwait(false);
         }
         context.ClearMatchedTerms();
-    }
+    }   
 
-    public static QueryOpExpr<SemanticRefAccumulator> CreateMatchTermsBooleanExpr(
+    public static QueryOpExpr<SemanticRefAccumulator> Create    (
         IList<QueryOpExpr<SemanticRefAccumulator>> termExpressions,
         SearchTermBooleanOp booleanOp,
         GetScopeExpr? scopeExpr
