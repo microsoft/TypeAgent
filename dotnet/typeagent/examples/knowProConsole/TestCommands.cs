@@ -16,7 +16,8 @@ public class TestCommands : ICommandModule
     {
         return [
             SearchTermsDef(),
-            SearchPropertyTermsDef()
+            SearchPropertyTermsDef(),
+            SearchMessagesTermsDef()
         ];
     }
 
@@ -80,13 +81,39 @@ public class TestCommands : ICommandModule
 
     }
 
+    private Command SearchMessagesTermsDef()
+    {
+        Command cmd = new("kpTestMessageTerms")
+        {
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.SearchMessagesAsync);
+        return cmd;
+    }
+
+    private async Task SearchMessagesAsync(ParseResult result, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        // Hard coded test for now
+        SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
+        {
+            Terms = [
+                new PropertySearchTerm("genre", "sci-fi"),
+                new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
+            ]
+        };
+        var searchResults = await conversation.SearchConversationAsync(searchGroup, cancellationToken);
+
+    }
+
+
     async Task TestSearchAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
     {
         KnowProWriter.WriteLine(searchGroup);
 
         var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken).ConfigureAwait(false);
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
-
     }
     private IConversation EnsureConversation()
     {

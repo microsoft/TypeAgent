@@ -58,6 +58,15 @@ public static class ConversationExtensions
         return await queryExpr.EvalAsync(context).ConfigureAwait(false);
     }
 
+    public static ValueTask<ConversationSearchResult?> SearchConversationAsync(
+        this IConversation conversation,
+        SearchTermGroup searchTermGroup,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return conversation.SearchConversationAsync(searchTermGroup, null, null, null, cancellationToken);
+    }
+
     public static async ValueTask<ConversationSearchResult?> SearchConversationAsync(
         this IConversation conversation,
         SearchTermGroup searchTermGroup,

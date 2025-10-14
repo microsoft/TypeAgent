@@ -80,7 +80,8 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
         BeginMatch(context);
 
         MessageAccumulator? allMatches = null;
-        foreach (var termExpr in TermExpressions) {
+        foreach (var termExpr in TermExpressions)
+        {
             var matches = await termExpr.GetResultAsync(context);
             if (matches is null)
             {

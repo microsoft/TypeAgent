@@ -36,10 +36,7 @@ internal class FilterMatchTermExpr : QueryOpExpr<SemanticRefAccumulator?>
         }
         var filtered = new SemanticRefAccumulator(accumulator.SearchTermMatches);
         filtered.SetMatches(
-            await accumulator.GetFilteredMatchesAsync(
-            context,
-            Filter.Eval
-            )
+            await accumulator.GetFilteredMatchesAsync(context, Filter.Eval)
         );
         return filtered;
     }

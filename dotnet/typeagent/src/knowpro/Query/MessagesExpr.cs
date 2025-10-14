@@ -16,14 +16,45 @@ internal class MessagesFromKnowledgeExpr : QueryOpExpr<MessageAccumulator>
 
     public QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> SrcExpr { get; }
 
+    public bool IntersectKnowlegeTypes { get; set; } = true;
+
     public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
     {
         context.KnowledgeMatches = await SrcExpr.EvalAsync(context);
-        var messages = new MessageAccumulator();
-        if (!context.KnowledgeMatches.IsNullOrEmpty())
+        var messageMatches = new MessageAccumulator();
+        if (context.KnowledgeMatches.IsNullOrEmpty())
         {
+            return messageMatches;
         }
-        return messages;
+        int knowledgeTypeHitCount = 0; // How many types of knowledge matched? (e.g. entity, topic, action)
+        foreach (var kv in context.KnowledgeMatches)
+        {
+            var knowledgeType = kv.Key;
+            var knowledgeMatches = kv.Value;
+            if (!knowledgeMatches.SemanticRefMatches.IsNullOrEmpty())
+            {
+                knowledgeTypeHitCount++;
+                var semanticRefs = await context.SemanticRefs.GetAsync(
+                    knowledgeMatches.SemanticRefMatches.ToOrdinals()
+                );
+                for (int i = 0; i < semanticRefs.Count; ++i)
+                {
+                    messageMatches.AddFromSemanticRef(semanticRefs[i], knowledgeMatches.SemanticRefMatches[i].Score);
+                }
+            }
+        }
+        if (IntersectKnowlegeTypes && knowledgeTypeHitCount > 0)
+        {
+            // This basically intersects the sets of messages that matched each knowledge type
+            // E.g. if topics and entities matched, then a relevant message must have both matching topics and entities
+            var relevantMessages = messageMatches.GetWithHitCount(knowledgeTypeHitCount);
+            if (relevantMessages.Count > 0)
+            {
+                messageMatches = new MessageAccumulator(relevantMessages);
+            }
+        }
+        messageMatches.SmoothScores();
+        return messageMatches;
     }
 }
 
@@ -65,6 +96,8 @@ internal class GetScoredMessagesExpr : QueryOpExpr<List<ScoredMessageOrdinal>>
     public GetScoredMessagesExpr(QueryOpExpr<MessageAccumulator> srcExpr)
         : base()
     {
+        ArgumentVerify.ThrowIfNull(srcExpr, nameof(srcExpr));
+        SrcExpr = srcExpr;
     }
 
     public QueryOpExpr<MessageAccumulator> SrcExpr { get; }

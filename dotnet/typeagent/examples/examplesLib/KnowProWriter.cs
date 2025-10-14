@@ -11,7 +11,7 @@ public class KnowProWriter : ConsoleWriter
     {
         await foreach (var message in conversation.Messages)
         {
-            KnowProWriter.WriteJson(message);
+            WriteJson(message);
         }
     }
 
@@ -25,7 +25,7 @@ public class KnowProWriter : ConsoleWriter
             }
             else
             {
-                KnowProWriter.WriteJson(sr);
+                WriteJson(sr);
             }
             WriteLine();
         }
@@ -45,6 +45,25 @@ public class KnowProWriter : ConsoleWriter
         }
     }
 
+    public static void WriteConversationSearchResults(IConversation conversation, ConversationSearchResult searchResult)
+    {
+        if (!searchResult.MessageMatches.IsNullOrEmpty())
+        {
+            WriteLineHeading("Message Ordinals");
+            WriteScoredMessagesAsync(conversation, searchResult.MessageMatches);
+        }
+        if (!searchResult.KnowledgeMatches.IsNullOrEmpty())
+        {
+            WriteLineHeading("Knowledge");
+            WriteKnowledgeSearchResults(conversation, searchResult.KnowledgeMatches);
+        }
+    }
+
+    public static void WriteScoredMessagesAsync(IConversation conversation, IList<ScoredMessageOrdinal> messageOrdinals)
+    {
+        WriteJson(messageOrdinals);
+    }
+
     public static void WriteKnowledgeSearchResults(
         IConversation conversation,
         IDictionary<KnowledgeType, SemanticRefSearchResult>? results
@@ -52,14 +71,14 @@ public class KnowProWriter : ConsoleWriter
     {
         if (results.IsNullOrEmpty())
         {
-            WriteError("No results");
+            WriteError("No knowledge results");
             return;
         }
 
-        foreach (var kType in results!.Keys)
+        foreach (var kv in results!)
         {
-            KnowProWriter.WriteKnowledgeSearchResult(conversation, kType, results[kType]);
-            KnowProWriter.WriteLine();
+            WriteKnowledgeSearchResult(conversation, kv.Key, kv.Value);
+            WriteLine();
         }
     }
 
