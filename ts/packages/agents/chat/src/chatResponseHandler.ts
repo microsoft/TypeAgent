@@ -108,7 +108,10 @@ async function generateResponse(
             generateResponseAction.parameters.relatedFiles.length > 0
         ) {
             context.actionIO.appendDisplay(
-                `<div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`,
+                { 
+                    type: "html",
+                    content: `<div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`
+                },
                 "block",
             );
         }
