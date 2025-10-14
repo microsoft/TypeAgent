@@ -20,10 +20,27 @@ internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
         context.ClearMatchedTerms();
     }
 
-    protected async ValueTask<MessageAccumulator> AccumulateMessagesAsync(
-        QueryEvalContext context,
-        SemanticRefAccumulator semanticRefMatches
-    )
+    protected async ValueTask<MessageAccumulator?> AccumulateMessagesAsync(QueryEvalContext context, object? matches)
+    {
+        MessageAccumulator? messageMatches = null;
+        if (matches is not null)
+        {
+            if (matches is SemanticRefAccumulator sra)
+            {
+                if (sra.Count > 0)
+                {
+                    messageMatches = await AccumulateMessagesAsync(context, sra);
+                }
+            }
+            else if (matches is MessageAccumulator ma)
+            {
+                messageMatches = ma;
+            }
+        }
+        return messageMatches;
+    }
+
+    protected async ValueTask<MessageAccumulator> AccumulateMessagesAsync(QueryEvalContext context, SemanticRefAccumulator semanticRefMatches)
     {
         var messageMatches = new MessageAccumulator();
         IList<SemanticRef> semanticRefs = await context.SemanticRefs.GetAsync(semanticRefMatches.ToOrdinals());
@@ -47,6 +64,7 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
     public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
     {
         BeginMatch(context);
+
         MessageAccumulator? allMatches = null;
         foreach (var termExpr in TermExpressions) {
             var matches = await termExpr.EvalAsync(context);
@@ -55,18 +73,7 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
                 continue;
             }
 
-            MessageAccumulator? messageMatches = null;
-            if (matches is SemanticRefAccumulator sra)
-            {
-                if (sra.Count > 0)
-                {
-                    messageMatches = await AccumulateMessagesAsync(context, sra);
-                }
-            }
-            else if (matches is MessageAccumulator ma)
-            {
-                messageMatches = ma;
-            }
+            MessageAccumulator? messageMatches = await AccumulateMessagesAsync(context, matches);
             if (messageMatches is not null)
             {
                 if (allMatches is not null)
@@ -81,5 +88,86 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
         }
         allMatches?.CalculateTotalScore();
         return allMatches ?? new MessageAccumulator();
+    }
+}
+
+internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
+{
+    public MatchMessagesAndExpr(IList<QueryOpExpr<object?>> termExpressions)
+        : base(termExpressions)
+    {
+    }
+
+    public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
+    {
+        BeginMatch(context);
+
+        MessageAccumulator? allMatches = null;
+        int iTerm = 0;
+
+        for (; iTerm < TermExpressions.Count; ++iTerm)
+        {
+            var matches = await TermExpressions[iTerm].EvalAsync(context);
+            if (matches is null)
+            {
+                // We can't possibly have an 'and'
+                break;
+            }
+            var messageMatches = await AccumulateMessagesAsync(context, matches);
+            if (messageMatches is null)
+            {
+                // Can't possibly be an 'and'
+                break;
+            }
+
+            if (allMatches is null)
+            {
+                allMatches = messageMatches;
+            }
+            else
+            {
+                allMatches = allMatches.Intersect(messageMatches);
+                if (allMatches.Count == 0)
+                {
+                    // we can't possibly have an 'and'
+                    break;
+                }
+            }
+        }
+
+        if (allMatches is not null && allMatches.Count > 0)
+        {
+            if (iTerm == TermExpressions.Count)
+            {
+                // And happened only if all expressions matched
+                allMatches.CalculateTotalScore();
+                allMatches.SelectWithHitCount(TermExpressions.Count);
+            }
+            else
+            {
+                // And is not possible
+                allMatches.Clear();
+            }
+        }
+        return allMatches ?? new MessageAccumulator();
+    }
+}
+
+internal class MatchMessagesOrMaxExpr : MatchMessagesOrExpr
+{
+    public MatchMessagesOrMaxExpr(IList<QueryOpExpr<object?>> termExpressions)
+        : base(termExpressions)
+    {
+    }
+
+    public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
+    {
+        var matches = await base.EvalAsync(context);
+        var maxHitCount = matches.GetMaxHitCount();
+        if (maxHitCount > 1)
+        {
+            matches.SelectWithHitCount(maxHitCount);
+        }
+        return matches;
     }
 }
