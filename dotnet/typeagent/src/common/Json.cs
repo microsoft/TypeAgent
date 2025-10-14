@@ -117,6 +117,6 @@ public class Json
         ArgumentVerify.ThrowIfNullOrEmpty(filePath, nameof(filePath));
         using Stream stream = System.IO.File.OpenRead(filePath);
         var value = Deserialize(stream, typeof(T));
-        return value is not null ? (T)value : default(T);
+        return value is not null ? (T)value : default;
     }
 }

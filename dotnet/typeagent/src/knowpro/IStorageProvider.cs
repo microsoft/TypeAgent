@@ -3,9 +3,9 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface IStorageProvider
+public interface IStorageProvider : IDisposable
 {
-    IReadOnlyAsyncCollection<IMessage> Messages { get; }
+    IMessageCollection Messages { get; }
     ISemanticRefCollection SemanticRefs { get; }
     ITermToSemanticRefIndex SemanticRefIndex { get; }
     IConversationSecondaryIndexes SecondaryIndexes { get; }

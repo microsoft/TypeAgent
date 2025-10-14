@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { BrowserControl, SearchProvider } from "../common/browserControl.mjs";
+import { ExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
@@ -18,7 +19,7 @@ import {
 
 export type BrowserActionContext = {
     clientBrowserControl?: BrowserControl | undefined;
-    externalBrowserControl?: BrowserControl | undefined;
+    externalBrowserControl?: ExternalBrowserClient | undefined;
     useExternalBrowserControl: boolean;
     preferredClientType?: "extension" | "electron";
     agentWebSocketServer?: AgentWebSocketServer;
@@ -50,7 +51,7 @@ export type BrowserActionContext = {
 
 export function getBrowserControl(agentContext: BrowserActionContext) {
     const browserControl = agentContext.useExternalBrowserControl
-        ? agentContext.externalBrowserControl
+        ? agentContext.externalBrowserControl?.control
         : agentContext.clientBrowserControl;
     if (!browserControl) {
         throw new Error(

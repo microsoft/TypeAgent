@@ -9,7 +9,6 @@ import {
     StructuredDataCollection,
     ActionInfo,
 } from "./extraction/types.js";
-import { splitLargeTextIntoChunks } from "knowledge-processor";
 import { DetectedAction, ActionSummary } from "./extraction/types.js";
 
 export interface WebsiteVisitInfo {
@@ -34,6 +33,9 @@ export interface WebsiteVisitInfo {
     contentSummary?: string;
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
+    entityFacets?: Record<string, any[]>;
+    topicCorrelations?: any[];
+    temporalContext?: any;
 }
 
 export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
@@ -58,6 +60,9 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     public contentSummary?: string;
     public detectedActions?: DetectedAction[];
     public actionSummary?: ActionSummary;
+    public entityFacets?: Record<string, any[]>;
+    public topicCorrelations?: any[];
+    public temporalContext?: any;
 
     constructor(visitInfo: WebsiteVisitInfo) {
         this.url = visitInfo.url;
@@ -94,11 +99,17 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (visitInfo.contentSummary !== undefined)
             this.contentSummary = visitInfo.contentSummary;
 
-        // Action detection properties
         if (visitInfo.detectedActions !== undefined)
             this.detectedActions = visitInfo.detectedActions;
         if (visitInfo.actionSummary !== undefined)
             this.actionSummary = visitInfo.actionSummary;
+
+        if (visitInfo.entityFacets !== undefined)
+            this.entityFacets = visitInfo.entityFacets;
+        if (visitInfo.topicCorrelations !== undefined)
+            this.topicCorrelations = visitInfo.topicCorrelations;
+        if (visitInfo.temporalContext !== undefined)
+            this.temporalContext = visitInfo.temporalContext;
     }
 
     public get source() {
@@ -233,6 +244,19 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
                 }
             }
 
+            if (this.pageType) {
+                const existingFacetNames = new Set(
+                    domainEntity.facets.map((f: any) => f.name),
+                );
+
+                if (!existingFacetNames.has("pageType")) {
+                    domainEntity.facets.push({
+                        name: "pageType",
+                        value: this.pageType,
+                    });
+                }
+            }
+
             // Folder context for bookmarks
             if (this.folder && this.websiteSource === "bookmark") {
                 const existingFacetNames = new Set(
@@ -308,6 +332,7 @@ export class Website implements kp.IMessage {
     public tags: string[];
     public timestamp: string | undefined;
     public knowledge: kpLib.KnowledgeResponse | undefined;
+    public topicHierarchy: kpLib.TopicHierarchy | undefined;
     public deletionInfo: kp.DeletionInfo | undefined;
 
     constructor(
@@ -315,11 +340,13 @@ export class Website implements kp.IMessage {
         pageContent: string | string[],
         tags: string[] = [],
         knowledge?: kpLib.KnowledgeResponse | undefined,
+        topicHierarchy?: kpLib.TopicHierarchy | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
         isNew: boolean = true,
     ) {
         this.tags = tags;
         this.knowledge = knowledge;
+        this.topicHierarchy = topicHierarchy;
         this.deletionInfo = deletionInfo;
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
@@ -328,36 +355,6 @@ export class Website implements kp.IMessage {
         } else {
             this.textChunks = [pageContent];
         }
-    }
-
-    static createWithProcessedContent(
-        metadata: WebsiteMeta,
-        processedContent: string,
-        tags: string[] = [],
-        knowledge?: kpLib.KnowledgeResponse | undefined,
-        deletionInfo?: kp.DeletionInfo | undefined,
-    ): Website {
-        let content = "";
-        if (metadata.title) {
-            content += `Title: ${metadata.title}\n`;
-        }
-        if (metadata.url) {
-            content += `URL: ${metadata.url}\n\n`;
-        }
-        content += processedContent;
-
-        const chunks = Array.from(
-            splitLargeTextIntoChunks(content, 2000, true),
-        );
-
-        return new Website(
-            metadata,
-            chunks,
-            tags,
-            knowledge,
-            deletionInfo,
-            false,
-        );
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
@@ -386,12 +383,11 @@ export function importWebsiteVisit(
     pageContent?: string,
 ): Website {
     const meta = new WebsiteMeta(visitInfo);
-    const knowledge = meta.getKnowledge(); // Extract knowledge from metadata
+    const knowledge = meta.getKnowledge();
 
-    const content = pageContent || visitInfo.description || "";
+    let content = pageContent || visitInfo.description || "";
 
-    // For bookmarks and basic imports, add title/URL formatting like the old websiteToTextChunks behavior
-    if (!pageContent) {
+    if (!pageContent && (visitInfo.title || visitInfo.url)) {
         let formattedContent = "";
         if (visitInfo.title) {
             formattedContent += `Title: ${visitInfo.title}\n`;
@@ -400,12 +396,16 @@ export function importWebsiteVisit(
             formattedContent += `URL: ${visitInfo.url}\n\n`;
         }
         formattedContent += content;
-
-        const chunks = Array.from(
-            splitLargeTextIntoChunks(formattedContent, 2000, true),
-        );
-        return new Website(meta, chunks, [], knowledge, undefined, false);
+        content = formattedContent;
     }
 
-    return new Website(meta, content, [], knowledge);
+    return new Website(
+        meta,
+        content,
+        [],
+        knowledge,
+        undefined,
+        undefined,
+        false,
+    );
 }

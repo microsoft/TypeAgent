@@ -107,6 +107,14 @@ export interface GraphCache {
     isValid: boolean;
 }
 
+export interface TopicGraphCache {
+    topics: any[];
+    relationships: any[];
+    topicMetrics: any[];
+    lastUpdated: number;
+    isValid: boolean;
+}
+
 export interface ImportanceLevel {
     entities: Array<{
         id: string;

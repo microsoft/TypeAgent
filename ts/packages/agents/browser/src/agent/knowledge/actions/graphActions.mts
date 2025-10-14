@@ -4,7 +4,8 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
 import { searchByEntities } from "../../searchWebMemories.mjs";
-import { GraphCache } from "../types/knowledgeTypes.mjs";
+import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
+import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:knowledge:graph");
@@ -154,6 +155,17 @@ export async function buildKnowledgeGraph(
 
         debug("[Knowledge Graph] Build completed:", stats);
 
+        // Invalidate caches after graph build
+        setGraphCache(websiteCollection, {
+            entities: [],
+            relationships: [],
+            communities: [],
+            entityMetrics: [],
+            lastUpdated: 0,
+            isValid: false,
+        });
+        invalidateTopicCache(websiteCollection);
+
         return {
             success: true,
             message: `Knowledge graph build completed in ${timeElapsed}ms`,
@@ -202,6 +214,17 @@ export async function rebuildKnowledgeGraph(
 
         // Rebuild the knowledge graph
         await websiteCollection.buildGraph();
+
+        // Invalidate caches after graph rebuild
+        setGraphCache(websiteCollection, {
+            entities: [],
+            relationships: [],
+            communities: [],
+            entityMetrics: [],
+            lastUpdated: 0,
+            isValid: false,
+        });
+        invalidateTopicCache(websiteCollection);
 
         return {
             success: true,
@@ -1134,7 +1157,7 @@ export async function getImportanceStatistics(
 // Cache Management Functions
 // ============================================================================
 
-// Cache storage attached to websiteCollection
+// Entity graph cache storage attached to websiteCollection
 function getGraphCache(websiteCollection: any): GraphCache | null {
     return (websiteCollection as any).__graphCache || null;
 }
@@ -1143,13 +1166,135 @@ function setGraphCache(websiteCollection: any, cache: GraphCache): void {
     (websiteCollection as any).__graphCache = cache;
 }
 
+// Topic graph cache storage attached to websiteCollection
+function getTopicGraphCache(websiteCollection: any): TopicGraphCache | null {
+    return (websiteCollection as any).__topicGraphCache || null;
+}
+
+function setTopicGraphCache(
+    websiteCollection: any,
+    cache: TopicGraphCache,
+): void {
+    (websiteCollection as any).__topicGraphCache = cache;
+}
+
+// Invalidate topic cache (called on graph rebuild or knowledge import)
+export function invalidateTopicCache(websiteCollection: any): void {
+    setTopicGraphCache(websiteCollection, {
+        topics: [],
+        relationships: [],
+        topicMetrics: [],
+        lastUpdated: 0,
+        isValid: false,
+    });
+}
+
+// Ensure topic graph data is cached for fast access
+async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
+    const cache = getTopicGraphCache(websiteCollection);
+
+    // Cache never expires - only invalidated on graph rebuild or knowledge import
+    if (cache && cache.isValid) {
+        return;
+    }
+
+    try {
+        // Fetch all topics from database
+        const topics =
+            websiteCollection.hierarchicalTopics?.getTopicHierarchy() || [];
+
+        // Enrich topics with entity references if available
+        if (websiteCollection.topicEntityRelations) {
+            for (const topic of topics) {
+                const entityRelations =
+                    websiteCollection.topicEntityRelations.getEntitiesForTopic(
+                        topic.topicId,
+                    );
+                // Add top entities (limit to 10 for performance)
+                topic.entityReferences = entityRelations
+                    .sort((a: any, b: any) => b.relevance - a.relevance)
+                    .slice(0, 10)
+                    .map((rel: any) => rel.entityName);
+            }
+        }
+
+        // Build relationships from parent-child structure
+        let relationships = buildTopicRelationships(topics);
+
+        // Add lateral relationships from topic relationships table
+        if (websiteCollection.topicRelationships) {
+            const topicIds = new Set(topics.map((t: any) => t.topicId));
+            const lateralRels: any[] = [];
+
+            for (const topicId of topicIds) {
+                const rels =
+                    websiteCollection.topicRelationships.getRelationshipsForTopic(
+                        topicId,
+                    );
+                for (const rel of rels) {
+                    if (
+                        topicIds.has(rel.fromTopic) &&
+                        topicIds.has(rel.toTopic)
+                    ) {
+                        lateralRels.push({
+                            from: rel.fromTopic,
+                            to: rel.toTopic,
+                            type: rel.relationshipType,
+                            strength: rel.strength,
+                        });
+                    }
+                }
+            }
+
+            // Deduplicate lateral relationships
+            const relKeys = new Set<string>();
+            for (const rel of lateralRels) {
+                const key = `${rel.from}|${rel.to}|${rel.type}`;
+                if (!relKeys.has(key)) {
+                    relKeys.add(key);
+                    relationships.push(rel);
+                }
+            }
+        }
+
+        // Get entity counts for topics from topic-entity relations
+        const topicMetricsInput = topics.map((topic: any) => ({
+            topicId: topic.topicId,
+            entityCount: topic.entityReferences?.length || 0,
+        }));
+
+        // Calculate topic importance metrics
+        const topicMetrics = calculateTopicImportance(
+            topics,
+            relationships,
+            topicMetricsInput,
+        );
+
+        // Store in cache
+        const newCache: TopicGraphCache = {
+            topics: topics,
+            relationships: relationships,
+            topicMetrics: topicMetrics,
+            lastUpdated: Date.now(),
+            isValid: true,
+        };
+
+        setTopicGraphCache(websiteCollection, newCache);
+    } catch (error) {
+        // Mark cache as invalid
+        const existingCache = getTopicGraphCache(websiteCollection);
+        if (existingCache) {
+            existingCache.isValid = false;
+        }
+    }
+}
+
 // Ensure graph data is cached for fast access
 async function ensureGraphCache(websiteCollection: any): Promise<void> {
     const cache = getGraphCache(websiteCollection);
-    const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-    // Check if cache is valid
-    if (cache && cache.isValid && Date.now() - cache.lastUpdated < CACHE_TTL) {
+    // Check if cache is valid (no TTL - only invalidated on rebuild)
+    if (cache && cache.isValid) {
         debug("[Knowledge Graph] Using valid cached graph data");
         return;
     }
@@ -1598,4 +1743,589 @@ function calculateDistributionPercentiles(
         const index = Math.floor(p * (importanceScores.length - 1));
         return importanceScores[index] || 0;
     });
+}
+
+// ============================================================================
+// Hierarchical Topics Functions
+// ============================================================================
+
+/**
+ * Get hierarchical topics from the website collection
+ */
+export async function getTopicImportanceLayer(
+    parameters: {
+        maxNodes?: number;
+        minImportanceThreshold?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    topics: any[];
+    relationships: any[];
+    metadata: any;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                topics: [],
+                relationships: [],
+                metadata: {
+                    totalTopicsInSystem: 0,
+                    selectedTopicCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
+                    layer: "topic_importance",
+                },
+            };
+        }
+
+        if (!websiteCollection.hierarchicalTopics) {
+            return {
+                topics: [],
+                relationships: [],
+                metadata: {
+                    error: "Hierarchical topics not available",
+                    layer: "topic_importance",
+                },
+            };
+        }
+
+        await ensureTopicGraphCache(websiteCollection);
+
+        const cache = getTopicGraphCache(websiteCollection);
+        if (!cache || !cache.isValid) {
+            return {
+                topics: [],
+                relationships: [],
+                metadata: {
+                    error: "Topic cache not available",
+                    layer: "topic_importance",
+                },
+            };
+        }
+
+        const allTopics = cache.topics || [];
+        const allRelationships = cache.relationships || [];
+        const topicMetrics = cache.topicMetrics || [];
+
+        if (allTopics.length === 0) {
+            return {
+                topics: [],
+                relationships: [],
+                metadata: {
+                    totalTopicsInSystem: 0,
+                    selectedTopicCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
+                    layer: "topic_importance",
+                },
+            };
+        }
+
+        const maxNodes = parameters.maxNodes || 500;
+
+        // Build adjacency maps for BFS
+        const childrenMap = new Map<string, string[]>();
+        const parentMap = new Map<string, string>();
+        const topicMap = new Map<string, any>();
+        const metricsMap = new Map<string, any>();
+
+        allTopics.forEach((topic: any) => {
+            topicMap.set(topic.topicId, topic);
+            if (!childrenMap.has(topic.topicId)) {
+                childrenMap.set(topic.topicId, []);
+            }
+            if (topic.parentTopicId) {
+                parentMap.set(topic.topicId, topic.parentTopicId);
+                if (!childrenMap.has(topic.parentTopicId)) {
+                    childrenMap.set(topic.parentTopicId, []);
+                }
+                childrenMap.get(topic.parentTopicId)!.push(topic.topicId);
+            }
+        });
+
+        topicMetrics.forEach((metric: any) => {
+            metricsMap.set(metric.topicId, metric);
+        });
+
+        // BFS-based balanced selection
+        const selectedTopicIds = new Set<string>();
+        const rootTopics = allTopics.filter((t: any) => !t.parentTopicId);
+
+        // Sort root topics by importance
+        const sortedRoots = rootTopics.sort((a: any, b: any) => {
+            const importanceA = metricsMap.get(a.topicId)?.importance || 0;
+            const importanceB = metricsMap.get(b.topicId)?.importance || 0;
+            return importanceB - importanceA;
+        });
+
+        // Start with all roots
+        const queue: Array<{ id: string; depth: number }> = [];
+        sortedRoots.forEach((root: any) => {
+            if (selectedTopicIds.size < maxNodes) {
+                selectedTopicIds.add(root.topicId);
+                queue.push({ id: root.topicId, depth: 0 });
+            }
+        });
+
+        // First pass: ensure each root gets at least one child
+        const rootsWithChildren = new Set<string>();
+        sortedRoots.forEach((root: any) => {
+            if (selectedTopicIds.size >= maxNodes) return;
+            const children = childrenMap.get(root.topicId) || [];
+            if (children.length > 0) {
+                const sortedChildren = children
+                    .map((id) => ({
+                        id,
+                        importance: metricsMap.get(id)?.importance || 0,
+                    }))
+                    .sort((a, b) => b.importance - a.importance);
+
+                // Add at least one child for this root
+                const firstChild = sortedChildren[0];
+                if (firstChild && !selectedTopicIds.has(firstChild.id)) {
+                    selectedTopicIds.add(firstChild.id);
+                    queue.push({ id: firstChild.id, depth: 1 });
+                }
+                rootsWithChildren.add(root.topicId);
+            }
+        });
+
+        // BFS to expand around roots, level by level
+        while (queue.length > 0 && selectedTopicIds.size < maxNodes) {
+            const { id: currentId, depth } = queue.shift()!;
+            const children = childrenMap.get(currentId) || [];
+
+            // Sort children by importance
+            const sortedChildren = children
+                .map((id) => ({
+                    id,
+                    importance: metricsMap.get(id)?.importance || 0,
+                }))
+                .sort((a, b) => b.importance - a.importance);
+
+            for (const { id } of sortedChildren) {
+                if (selectedTopicIds.size >= maxNodes) break;
+                if (!selectedTopicIds.has(id)) {
+                    selectedTopicIds.add(id);
+                    queue.push({ id, depth: depth + 1 });
+                }
+            }
+        }
+
+        // If still under maxNodes, add remaining high-importance topics
+        // and connect orphaned nodes to the graph
+        if (selectedTopicIds.size < maxNodes) {
+            const sortedMetrics = topicMetrics
+                .filter((m: any) => !selectedTopicIds.has(m.topicId))
+                .sort((a, b) => (b.importance || 0) - (a.importance || 0));
+
+            const remaining = maxNodes - selectedTopicIds.size;
+
+            for (
+                let i = 0;
+                i < Math.min(remaining, sortedMetrics.length);
+                i++
+            ) {
+                const topicId = sortedMetrics[i].topicId;
+
+                // Check if this topic has any neighbors in the selected set
+                const hasNeighbors = (() => {
+                    // Check if parent is in set
+                    const parent = parentMap.get(topicId);
+                    if (parent && selectedTopicIds.has(parent)) return true;
+
+                    // Check if any children are in set
+                    const children = childrenMap.get(topicId) || [];
+                    return children.some((childId) =>
+                        selectedTopicIds.has(childId),
+                    );
+                })();
+
+                if (!hasNeighbors) {
+                    // Find path to existing node by traversing up to root
+                    const pathToRoot: string[] = [];
+                    let currentId = topicId;
+
+                    while (
+                        currentId &&
+                        !selectedTopicIds.has(currentId) &&
+                        pathToRoot.length < 10
+                    ) {
+                        pathToRoot.push(currentId);
+                        const parent = parentMap.get(currentId);
+                        if (!parent) break; // Reached root
+                        currentId = parent;
+                    }
+
+                    // If we found a connection, add the path
+                    if (selectedTopicIds.has(currentId)) {
+                        // Add nodes in reverse order (from existing node down to new node)
+                        for (
+                            let j = pathToRoot.length - 1;
+                            j >= 0 && selectedTopicIds.size < maxNodes;
+                            j--
+                        ) {
+                            selectedTopicIds.add(pathToRoot[j]);
+                        }
+                    } else {
+                        // Just add the node even if orphaned
+                        selectedTopicIds.add(topicId);
+                    }
+                } else {
+                    // Already connected, just add it
+                    selectedTopicIds.add(topicId);
+                }
+            }
+        }
+
+        const selectedMetrics = topicMetrics.filter((m: any) =>
+            selectedTopicIds.has(m.topicId),
+        );
+
+        const selectedTopics = allTopics.filter((t: any) =>
+            selectedTopicIds.has(t.topicId),
+        );
+
+        const selectedRelationships = allRelationships.filter(
+            (rel: any) =>
+                selectedTopicIds.has(rel.from) && selectedTopicIds.has(rel.to),
+        );
+
+        const topicsWithMetrics = selectedTopics.map((topic: any) => {
+            const metrics = selectedMetrics.find(
+                (m: any) => m.topicId === topic.topicId,
+            );
+            return {
+                ...topic,
+                importance: metrics?.importance || 0,
+                pageRank: metrics?.pageRank || 0,
+                betweenness: metrics?.betweenness || 0,
+                descendantCount: metrics?.descendantCount || 0,
+            };
+        });
+
+        const metadata = {
+            totalTopicsInSystem: allTopics.length,
+            selectedTopicCount: selectedTopics.length,
+            coveragePercentage:
+                (selectedTopics.length / allTopics.length) * 100,
+            importanceThreshold:
+                selectedMetrics[selectedMetrics.length - 1]?.importance || 0,
+            layer: "topic_importance",
+        };
+
+        return {
+            topics: topicsWithMetrics,
+            relationships: selectedRelationships,
+            metadata,
+        };
+    } catch (error) {
+        console.error("Error getting topic importance layer:", error);
+        return {
+            topics: [],
+            relationships: [],
+            metadata: {
+                error: error instanceof Error ? error.message : "Unknown error",
+                layer: "topic_importance",
+            },
+        };
+    }
+}
+
+/**
+ * Get viewport-based topic neighborhood expansion
+ * Similar to entity graph neighborhood, but for topics
+ */
+export async function getTopicViewportNeighborhood(
+    parameters: {
+        centerTopic: string;
+        viewportTopicIds: string[];
+        maxNodes?: number;
+        maxDepth?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    topics: any[];
+    relationships: any[];
+    metadata: any;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                topics: [],
+                relationships: [],
+                metadata: {
+                    error: "Website collection not available",
+                    layer: "viewport_neighborhood",
+                },
+            };
+        }
+
+        // Ensure cache is populated
+        await ensureTopicGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getTopicGraphCache(websiteCollection);
+        if (!cache || !cache.isValid) {
+            return {
+                topics: [],
+                relationships: [],
+                metadata: {
+                    error: "Topic cache not available",
+                    layer: "viewport_neighborhood",
+                },
+            };
+        }
+
+        const allTopics = cache.topics || [];
+        const topicMetrics = cache.topicMetrics || [];
+        const maxNodes = parameters.maxNodes || 200;
+        const maxDepth = parameters.maxDepth || 3;
+
+        // Find center topic
+        const centerTopicData = allTopics.find(
+            (t: any) =>
+                t.topicId?.toLowerCase() ===
+                    parameters.centerTopic.toLowerCase() ||
+                t.topicName?.toLowerCase() ===
+                    parameters.centerTopic.toLowerCase(),
+        );
+
+        if (!centerTopicData) {
+            return {
+                topics: [],
+                relationships: [],
+                metadata: {
+                    error: "Center topic not found",
+                    layer: "viewport_neighborhood",
+                },
+            };
+        }
+
+        // Find viewport topics
+        const viewportTopics: any[] = [];
+        const viewportIdsLower = (parameters.viewportTopicIds || []).map((id) =>
+            id.toLowerCase(),
+        );
+
+        for (const topicId of viewportIdsLower) {
+            const topic = allTopics.find(
+                (t: any) =>
+                    t.topicId?.toLowerCase() === topicId ||
+                    t.topicName?.toLowerCase() === topicId,
+            );
+            if (topic) {
+                viewportTopics.push(topic);
+            }
+        }
+
+        // Build adjacency map (parent-child relationships)
+        const childrenMap = new Map<string, any[]>();
+        const parentMap = new Map<string, any>();
+
+        allTopics.forEach((topic: any) => {
+            if (topic.parentTopicId) {
+                if (!childrenMap.has(topic.parentTopicId)) {
+                    childrenMap.set(topic.parentTopicId, []);
+                }
+                childrenMap.get(topic.parentTopicId)!.push(topic);
+                parentMap.set(topic.topicId, topic.parentTopicId);
+            }
+        });
+
+        // Get topic importance
+        const topicImportanceMap = new Map<string, number>();
+        topicMetrics.forEach((metric: any) => {
+            topicImportanceMap.set(metric.topicId, metric.importance || 0.5);
+        });
+
+        // Start with center and viewport topics
+        const initialTopics = [centerTopicData, ...viewportTopics];
+        const visited = new Set<string>();
+        const result: any[] = [];
+
+        // Add all initial topics
+        initialTopics.forEach((topic) => {
+            if (!visited.has(topic.topicId)) {
+                visited.add(topic.topicId);
+                result.push(topic);
+            }
+        });
+
+        // BFS to expand neighborhood
+        type QueueItem = {
+            topic: any;
+            depth: number;
+        };
+        const queue: QueueItem[] = [];
+
+        // Add children and parents of initial topics
+        initialTopics.forEach((topic) => {
+            // Add children
+            const children = childrenMap.get(topic.topicId) || [];
+            children.forEach((child) => {
+                if (!visited.has(child.topicId)) {
+                    queue.push({ topic: child, depth: 1 });
+                }
+            });
+
+            // Add parent
+            const parentId = parentMap.get(topic.topicId);
+            if (parentId) {
+                const parent = allTopics.find(
+                    (t: any) => t.topicId === parentId,
+                );
+                if (parent && !visited.has(parent.topicId)) {
+                    queue.push({ topic: parent, depth: 1 });
+                }
+            }
+        });
+
+        // Sort by importance
+        queue.sort((a, b) => {
+            const impA = topicImportanceMap.get(a.topic.topicId) || 0;
+            const impB = topicImportanceMap.get(b.topic.topicId) || 0;
+            return impB - impA;
+        });
+
+        // Expand neighborhood
+        while (queue.length > 0 && result.length < maxNodes) {
+            const current = queue.shift()!;
+
+            if (visited.has(current.topic.topicId)) continue;
+            if (current.depth > maxDepth) continue;
+
+            visited.add(current.topic.topicId);
+            result.push(current.topic);
+
+            // Add children of this topic
+            const children = childrenMap.get(current.topic.topicId) || [];
+            children.forEach((child) => {
+                if (!visited.has(child.topicId)) {
+                    queue.push({ topic: child, depth: current.depth + 1 });
+                }
+            });
+
+            // Add parent
+            const parentId = parentMap.get(current.topic.topicId);
+            if (parentId) {
+                const parent = allTopics.find(
+                    (t: any) => t.topicId === parentId,
+                );
+                if (parent && !visited.has(parent.topicId)) {
+                    queue.push({ topic: parent, depth: current.depth + 1 });
+                }
+            }
+
+            // Re-sort by importance
+            queue.sort((a, b) => {
+                const impA = topicImportanceMap.get(a.topic.topicId) || 0;
+                const impB = topicImportanceMap.get(b.topic.topicId) || 0;
+                return impB - impA;
+            });
+        }
+
+        // Build relationships for returned topics
+        const relationships = buildTopicRelationships(result);
+
+        return {
+            topics: result,
+            relationships: relationships,
+            metadata: {
+                layer: "viewport_neighborhood",
+                centerTopic: centerTopicData.topicName,
+                viewportTopicCount: viewportTopics.length,
+                totalTopicsReturned: result.length,
+                maxDepth: maxDepth,
+            },
+        };
+    } catch (error) {
+        debug("[Topic Viewport Neighborhood] Error:", error);
+        return {
+            topics: [],
+            relationships: [],
+            metadata: {
+                error: String(error),
+                layer: "viewport_neighborhood",
+            },
+        };
+    }
+}
+
+/**
+ * Build relationships from hierarchical topic parent-child structure
+ */
+function buildTopicRelationships(topics: any[]): any[] {
+    const relationships: any[] = [];
+
+    for (const topic of topics) {
+        if (topic.parentTopicId) {
+            relationships.push({
+                from: topic.parentTopicId,
+                to: topic.topicId,
+                type: "parent-child",
+                strength: topic.confidence || 0.8,
+            });
+        }
+    }
+
+    return relationships;
+}
+
+/**
+ * Get topic metrics for a specific topic
+ */
+export async function getTopicMetrics(
+    parameters: {
+        topicId: string;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    metrics?: any;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        if (!websiteCollection.topicMetrics) {
+            return {
+                success: false,
+                error: "Topic metrics not available",
+            };
+        }
+
+        const metrics = websiteCollection.topicMetrics.getMetrics(
+            parameters.topicId,
+        );
+
+        if (!metrics) {
+            return {
+                success: false,
+                error: "Topic metrics not found for this topic",
+            };
+        }
+
+        return {
+            success: true,
+            metrics,
+        };
+    } catch (error) {
+        console.error("Error getting topic metrics:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
 }

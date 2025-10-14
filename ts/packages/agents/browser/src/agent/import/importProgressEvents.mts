@@ -12,6 +12,8 @@ export interface ImportProgressEvent {
         | "fetching"
         | "processing"
         | "extracting"
+        | "graph-building"
+        | "persisting"
         | "complete"
         | "error";
     current: number;
@@ -36,6 +38,18 @@ export interface ImportProgressEvent {
         filename?: string;
         currentAction?: string;
     };
+    graphBuildingPhase?:
+        | "entities"
+        | "relationships"
+        | "topics"
+        | "communities";
+    entitiesProcessed?: number;
+    relationshipsBuilt?: number;
+    topicsHierarchized?: number;
+    lastSavePoint?: number;
+    nextSavePoint?: number;
+    dataPersistedToDisk?: boolean;
+    graphPersistedToDb?: boolean;
 }
 
 export class ImportProgressEventEmitter extends EventEmitter {

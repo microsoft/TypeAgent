@@ -23,6 +23,7 @@ import {
 } from "../schema/knowledgeExtraction.mjs";
 import { ExtractionMode, ExtractionInput } from "website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
+import { docPartsFromHtml } from "conversation-memory";
 import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
 import {
     generateDetailedKnowledgeCards,
@@ -61,19 +62,65 @@ export function createExtractionInputsFromFragments(
     timestamp?: string,
 ): ExtractionInput[] {
     return htmlFragments
-        .filter((fragment) => fragment.text && fragment.text.trim().length > 50) // Filter out empty/tiny fragments
-        .map((fragment, index) => ({
-            url: `${url}#iframe-${fragment.frameId || index}`, // Include frame context in URL
-            title: `${title} (Frame ${fragment.frameId || index})`,
-            htmlFragments: [fragment], // Keep individual fragment context
-            textContent: fragment.text.trim(),
-            source: source,
-            ...(timestamp && { timestamp }), // Only include timestamp if it exists
-            metadata: {
-                frameId: fragment.frameId,
-                isIframe: fragment.frameId !== 0, // Main frame is typically 0
-            },
-        }));
+        .map((fragment, index) => {
+            let textContent = "";
+            let htmlContent = "";
+            let docParts: any[] | undefined;
+
+            if (fragment.text && fragment.text.trim().length > 0) {
+                textContent = fragment.text.trim();
+            } else if (fragment.content && fragment.content.trim().length > 0) {
+                htmlContent = fragment.content;
+
+                try {
+                    docParts = docPartsFromHtml(
+                        fragment.content,
+                        false,
+                        8000,
+                        `${url}#iframe-${fragment.frameId || index}`,
+                    );
+
+                    if (docParts && docParts.length > 0) {
+                        textContent = docParts
+                            .map((p: any) => p.textChunks)
+                            .join("\n\n");
+                    }
+                } catch (error) {
+                    console.warn(
+                        "Failed to create doc parts from HTML:",
+                        error,
+                    );
+                    textContent = fragment.content
+                        .replace(/<[^>]*>/g, "")
+                        .trim();
+                }
+            }
+
+            const input: ExtractionInput = {
+                url: `${url}#iframe-${fragment.frameId || index}`,
+                title: `${title} (Frame ${fragment.frameId || index})`,
+                htmlFragments: [fragment],
+                textContent: textContent,
+                source: source,
+                metadata: {
+                    frameId: fragment.frameId,
+                    isIframe: fragment.frameId !== 0,
+                },
+            };
+
+            if (htmlContent) {
+                input.htmlContent = htmlContent;
+            }
+            if (docParts) {
+                input.docParts = docParts;
+            }
+            if (timestamp) {
+                input.timestamp = timestamp;
+            }
+
+            return input;
+        })
+        .filter((input) => input.textContent && input.textContent.length > 50);
 }
 
 // Helper function to aggregate extraction results from multiple fragments
@@ -892,7 +939,10 @@ export async function performKnowledgeExtraction(
         // Get page contents
         let title = "Unknown Page";
         const htmlFragments =
-            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments();
+            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments(
+                false,
+                "knowledgeExtraction",
+            );
         if (!htmlFragments) {
             return null;
         }
@@ -1065,12 +1115,15 @@ export async function performKnowledgeExtractionWithNotifications(
 
             const { progressState, aggregatedKnowledge } = activeExtraction;
             const entitiesCount = aggregatedKnowledge.entities?.length || 0;
-            const topicsCount = aggregatedKnowledge.topics?.length || 0;
+            const topicsCount =
+                aggregatedKnowledge.topics?.length ||
+                (aggregatedKnowledge as any).keyTopics?.length ||
+                0;
             const relationshipsCount =
                 aggregatedKnowledge.relationships?.length || 0;
 
             // Only send notification if knowledge has changed
-            const currentState = `${entitiesCount}-${topicsCount}-${relationshipsCount}-${progressState.phase}`;
+            const currentState = `${entitiesCount}-${topicsCount}-${relationshipsCount}-${progressState.phase}-${progressState.percentage}`;
             if (
                 currentState !== lastNotificationState &&
                 (entitiesCount > 0 || topicsCount > 0 || relationshipsCount > 0)
@@ -1141,7 +1194,10 @@ export async function performKnowledgeExtractionWithNotifications(
                     updateExtractionTimestamp(url);
 
                     const entitiesCount = knowledge.entities?.length || 0;
-                    const topicsCount = knowledge.topics?.length || 0;
+                    const topicsCount =
+                        knowledge.topics?.length ||
+                        knowledge.keyTopics?.length ||
+                        0;
                     const relationshipsCount =
                         knowledge.relationships?.length || 0;
 
@@ -1177,7 +1233,10 @@ export async function performKnowledgeExtractionWithNotifications(
                         indexError,
                     );
                     const entitiesCount = knowledge.entities?.length || 0;
-                    const topicsCount = knowledge.topics?.length || 0;
+                    const topicsCount =
+                        knowledge.topics?.length ||
+                        knowledge.keyTopics?.length ||
+                        0;
                     const relationshipsCount =
                         knowledge.relationships?.length || 0;
 

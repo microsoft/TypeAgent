@@ -97,7 +97,7 @@ import {
     ChangeTabs,
     Search,
     DisabledBrowserActions,
-} from "./actionsSchema.mjs";
+} from "./browserActionSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteDataFromSession,
@@ -382,6 +382,12 @@ async function updateBrowserContext(
                     debug(
                         `Extension client connected: ${client.id}, recreating externalBrowserControl`,
                     );
+
+                    // Dispose old RPC instance to prevent handler chaining
+                    if (context.agentContext.externalBrowserControl) {
+                        context.agentContext.externalBrowserControl.dispose();
+                    }
+
                     context.agentContext.externalBrowserControl =
                         createExternalBrowserClient(
                             context.agentContext.agentWebSocketServer!,
@@ -420,7 +426,7 @@ async function updateBrowserContext(
                 if (data.method) {
                     const browserControls = context.agentContext
                         .useExternalBrowserControl
-                        ? context.agentContext.externalBrowserControl
+                        ? context.agentContext.externalBrowserControl?.control
                         : context.agentContext.clientBrowserControl;
 
                     if (
@@ -460,7 +466,7 @@ async function updateBrowserContext(
         if (!context.agentContext.browserConnector) {
             const browserControls = context.agentContext
                 .useExternalBrowserControl
-                ? context.agentContext.externalBrowserControl
+                ? context.agentContext.externalBrowserControl?.control
                 : context.agentContext.clientBrowserControl;
 
             if (browserControls && context.agentContext.agentWebSocketServer) {
@@ -635,6 +641,10 @@ async function processBrowserAgentMessage(
         case "getEntityNeighborhood":
         case "getGlobalImportanceLayer":
         case "getImportanceStatistics":
+        case "getHierarchicalTopics":
+        case "getTopicImportanceLayer":
+        case "getTopicViewportNeighborhood":
+        case "getTopicMetrics":
         case "getViewportBasedNeighborhood": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,
@@ -944,6 +954,7 @@ async function resolveWebPage(
         entityGraph: "typeagent-browser://views/entityGraphView.html",
         knowledgelibrary: "typeagent-browser://views/knowledgeLibrary.html",
         macroslibrary: "typeagent-browser://views/macrosLibrary.html",
+        topicGraph: "typeagent-browser://views/topicGraphView.html",
     };
 
     const libraryUrl = libraryPages[site.toLowerCase()];
@@ -1511,11 +1522,13 @@ async function executeBrowserAction(
                             context,
                         ).getPageTextContent(),
                     );
-                case "readPage":
-                    await getActionBrowserControl(context).readPage();
+                case "readPageContent":
+                    await getActionBrowserControl(context).readPageContent();
                     return;
-                case "stopReadPage":
-                    await getActionBrowserControl(context).stopReadPage();
+                case "stopReadPageContent":
+                    await getActionBrowserControl(
+                        context,
+                    ).stopReadPageContent();
                     return;
                 case "captureScreenshot":
                     const dataUrl =
@@ -1931,7 +1944,10 @@ async function handlePageNavigation(
 
         // Get page contents
         const htmlFragments =
-            await context.agentContext.browserConnector?.getHtmlFragments();
+            await context.agentContext.browserConnector?.getHtmlFragments(
+                false,
+                "knowledgeExtraction",
+            );
 
         if (!htmlFragments) {
             return;
@@ -2148,7 +2164,7 @@ async function handleGetActionRequest(
     }
 }
 
-export async function createViewServiceHost(
+async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
 ) {
     let timeoutHandle: NodeJS.Timeout;

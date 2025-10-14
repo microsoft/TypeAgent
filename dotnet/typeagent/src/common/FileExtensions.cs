@@ -12,4 +12,12 @@ public static class FileExtensions
             File.Delete(filePath);
         }
     }
+
+    public static void VerifyExists(string path)
+    {
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException(path);
+        }
+    }
 }

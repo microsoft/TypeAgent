@@ -646,13 +646,34 @@ function createWebsiteWithKnowledge(
     if (extractionResult.actionSummary)
         enhancedVisitInfo.actionSummary = extractionResult.actionSummary;
 
-    // Use page content as the main text if available, otherwise use existing text
+    // Store rich metadata from unified processing
+    if (
+        extractionResult.entityFacets &&
+        extractionResult.entityFacets.size > 0
+    ) {
+        const facetsObj: Record<string, any[]> = {};
+        for (const [entityName, facets] of extractionResult.entityFacets) {
+            facetsObj[entityName] = facets;
+        }
+        enhancedVisitInfo.entityFacets = facetsObj;
+    }
+
+    if (
+        extractionResult.topicCorrelations &&
+        extractionResult.topicCorrelations.length > 0
+    ) {
+        enhancedVisitInfo.topicCorrelations =
+            extractionResult.topicCorrelations;
+    }
+
+    if (extractionResult.temporalContext) {
+        enhancedVisitInfo.temporalContext = extractionResult.temporalContext;
+    }
+
     const mainText = extractionResult.pageContent?.mainContent || "";
 
-    // Create website with enhanced metadata
     const meta = new WebsiteMeta(enhancedVisitInfo);
 
-    // Get enhanced knowledge if available
     let finalKnowledge;
     if (extractionResult.knowledge) {
         finalKnowledge = meta.getMergedKnowledge(extractionResult.knowledge);
@@ -660,20 +681,17 @@ function createWebsiteWithKnowledge(
         finalKnowledge = meta.getKnowledge();
     }
 
-    // TODO: Utilize rich metadata from unified processing
-    // extractionResult.entityFacets, topicCorrelations, temporalContext
-    // These could be stored in WebsiteMeta or used to enhance finalKnowledge
+    const topicHierarchy = (finalKnowledge as any)?.topicHierarchy;
 
-    // Create website with enhanced knowledge and proper chunking
-    const enhancedWebsite = Website.createWithProcessedContent(
+    return new Website(
         meta,
         mainText,
         [],
         finalKnowledge,
+        topicHierarchy,
         undefined,
+        false,
     );
-
-    return enhancedWebsite;
 }
 
 /**

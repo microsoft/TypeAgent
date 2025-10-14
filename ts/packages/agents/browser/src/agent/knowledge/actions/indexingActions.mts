@@ -264,6 +264,22 @@ export async function indexWebPageContent(
                     error,
                 );
             }
+
+            try {
+                if (
+                    aggregatedResults.keyTopics?.length > 0 ||
+                    aggregatedResults.topics?.length > 0
+                ) {
+                    await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                        [websiteObj],
+                    );
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to update hierarchical topics incrementally:",
+                    error,
+                );
+            }
         }
 
         const entityCount = aggregatedResults.entities?.length || 0;

@@ -7,7 +7,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { GetWebsiteStats } from "./actionsSchema.mjs";
+import { GetWebsiteStats } from "./browserActionSchema.mjs";
 import {
     ImportWebsiteData,
     ImportHtmlFolder,
@@ -21,10 +21,16 @@ import * as website from "website-memory";
 import * as kpLib from "knowledge-processor";
 import { openai as ai } from "aiclient";
 import registerDebug from "debug";
+import { docPartsFromHtml } from "conversation-memory";
 import {
     importProgressEvents,
     ImportProgressEvent,
 } from "./import/importProgressEvents.mjs";
+import {
+    ImportStateManager,
+    ImportState,
+} from "./import/importStateManager.mjs";
+import * as path from "path";
 
 function logStructuredProgress(
     current: number,
@@ -52,6 +58,20 @@ function logStructuredProgress(
         filename?: string;
         currentAction?: string;
     },
+    additionalData?: {
+        graphBuildingPhase?:
+            | "entities"
+            | "relationships"
+            | "topics"
+            | "communities";
+        entitiesProcessed?: number;
+        relationshipsBuilt?: number;
+        topicsHierarchized?: number;
+        lastSavePoint?: number;
+        nextSavePoint?: number;
+        dataPersistedToDisk?: boolean;
+        graphPersistedToDb?: boolean;
+    },
 ) {
     if (importContext) {
         const progressEvent: ImportProgressEvent = {
@@ -70,6 +90,16 @@ function logStructuredProgress(
             }),
             ...(summary && { summary }),
             ...(itemDetails && { itemDetails }),
+            ...(additionalData && {
+                graphBuildingPhase: additionalData.graphBuildingPhase,
+                entitiesProcessed: additionalData.entitiesProcessed,
+                relationshipsBuilt: additionalData.relationshipsBuilt,
+                topicsHierarchized: additionalData.topicsHierarchized,
+                lastSavePoint: additionalData.lastSavePoint,
+                nextSavePoint: additionalData.nextSavePoint,
+                dataPersistedToDisk: additionalData.dataPersistedToDisk,
+                graphPersistedToDb: additionalData.graphPersistedToDb,
+            }),
         };
         importProgressEvents.emitProgress(progressEvent);
     }
@@ -91,11 +121,7 @@ import {
 } from "website-memory";
 import { BrowserKnowledgeExtractor } from "./knowledge/browserKnowledgeExtractor.mjs";
 
-import {
-    createContentExtractor,
-    logProcessingStatus,
-    processHtmlFolder,
-} from "./websiteImport.mjs";
+import { createContentExtractor, processHtmlFolder } from "./websiteImport.mjs";
 
 const debug = registerDebug("typeagent:browser:website-memory");
 
@@ -281,9 +307,6 @@ export async function importWebsiteDataFromSession(
 
         const extractionMode = mode || "basic";
 
-        // Log processing status for debugging
-        logProcessingStatus(context);
-
         // Build options object with only defined values
         const importOptions: any = {};
         if (limit !== undefined) importOptions.limit = limit;
@@ -353,114 +376,198 @@ export async function importWebsiteDataFromSession(
             }
         }
 
-        // Import websites using basic import first to get metadata
-        let websites: any[] = await website.importWebsites(
-            source,
-            type,
-            filePath,
-            importOptions,
-            progressCallback,
-        );
+        let websites: any[] = [];
 
-        // Enhance with HTML content fetching and AI analysis for non-basic modes
-        if (extractionMode !== "basic" && websites.length > 0) {
-            logStructuredProgress(
-                0,
-                websites.length,
-                "Enhancing with content extraction",
-                "extracting",
-                importContext,
+        if (extractionMode === "basic") {
+            // Basic mode: import metadata only, no content fetching or AI extraction
+            websites = await website.importWebsites(
+                source,
+                type,
+                filePath,
+                importOptions,
+                progressCallback,
+            );
+        } else {
+            // LLM-based modes (content, full, etc.): fetch content and extract knowledge directly
+            // First get basic metadata to know what to process
+            const metadataWebsites = await website.importWebsites(
+                source,
+                type,
+                filePath,
+                { ...importOptions, mode: "basic" },
+                progressCallback,
             );
 
-            // Create inputs that will trigger HTML fetching in ContentExtractor
-            const contentInputs: ExtractionInput[] = websites.map((site) => ({
-                url: site.metadata.url,
-                title: site.metadata.title || site.metadata.url,
-                // NO textContent or htmlContent - let ContentExtractor fetch HTML
-                source: type === "bookmarks" ? "bookmark" : "history",
-                timestamp:
-                    site.metadata.visitDate || site.metadata.bookmarkDate,
-            }));
-
-            try {
-                // Create ContentExtractor with AI model
-                const extractor = createContentExtractor(
-                    {
-                        mode: extractionMode,
-                        knowledgeExtractor: importOptions.knowledgeExtractor,
-                        timeout: importOptions.contentTimeout || 10000,
-                        maxConcurrentExtractions:
-                            importOptions.maxConcurrent || 5,
-                    },
-                    context,
-                );
-
-                // Use BatchProcessor for efficient processing
-                const batchProcessor = new website.BatchProcessor(extractor);
-
-                const enhancedProgressCallback = (progress: BatchProgress) => {
-                    const phase =
-                        progress.processed <= progress.total * 0.6
-                            ? "fetching"
-                            : "extracting";
-                    const currentAction =
-                        progress.processed <= progress.total * 0.6
-                            ? "fetching content"
-                            : "analyzing";
-                    const description = `Processing items (${progress.percentage}%)`;
-
-                    logStructuredProgress(
-                        progress.processed,
-                        progress.total,
-                        description,
-                        phase,
-                        importContext,
-                        undefined,
-                        {
-                            currentAction,
-                        },
-                    );
-                };
-
-                const enhancedResults = await batchProcessor.processBatch(
-                    contentInputs,
-                    extractionMode,
-                    {
-                        processingMode: "batch", // Website memory uses batch mode
-                        progressCallback: enhancedProgressCallback,
-                    },
-                );
-
-                // Apply results back to websites
-                enhancedResults.forEach((result, index) => {
-                    if (websites[index] && result.knowledge) {
-                        websites[index].knowledge = result.knowledge;
-
-                        // Update textChunks with actual fetched content
-                        if (result.pageContent?.mainContent) {
-                            websites[index].textChunks = [
-                                result.pageContent.mainContent,
-                            ];
-                        }
-                    }
-                });
-
-                // This progress is for the enhancement phase, not the final completion
+            if (metadataWebsites.length > 0) {
                 logStructuredProgress(
-                    enhancedResults.length,
-                    enhancedResults.length,
-                    `Analyzing ${enhancedResults.length} items with ${extractionMode} mode extraction`,
+                    0,
+                    metadataWebsites.length,
+                    `Fetching and extracting with ${extractionMode} mode`,
                     "extracting",
                     importContext,
                 );
-            } catch (error) {
-                if (error instanceof AIModelRequiredError) {
-                    throw error;
-                }
-                console.warn(
-                    "Enhanced extraction failed, using basic import:",
-                    error,
+
+                logStructuredProgress(
+                    0,
+                    metadataWebsites.length,
+                    "Fetching content from URLs",
+                    "fetching",
+                    importContext,
                 );
+
+                const contentInputs: ExtractionInput[] = [];
+                const htmlFetcher = new website.HtmlFetcher();
+
+                for (let i = 0; i < metadataWebsites.length; i++) {
+                    const site = metadataWebsites[i];
+                    const input: ExtractionInput = {
+                        url: site.metadata.url,
+                        title: site.metadata.title || site.metadata.url,
+                        source: (type === "bookmarks"
+                            ? "bookmark"
+                            : "history") as "bookmark" | "history",
+                    };
+
+                    const timestamp =
+                        site.metadata.visitDate || site.metadata.bookmarkDate;
+                    if (timestamp) {
+                        input.timestamp = timestamp;
+                    }
+
+                    const fetchResult = await htmlFetcher.fetchHtml(
+                        site.metadata.url,
+                        importOptions.contentTimeout || 10000,
+                    );
+
+                    if (fetchResult.html) {
+                        try {
+                            const parts = docPartsFromHtml(
+                                fetchResult.html,
+                                false,
+                                importOptions.maxCharsPerChunk || 8000,
+                                site.metadata.url,
+                            );
+
+                            input.htmlContent = fetchResult.html;
+                            input.docParts = parts;
+
+                            if (parts.length > 0) {
+                                input.textContent = parts
+                                    .map((p: any) => p.textChunks)
+                                    .join("\n\n");
+                            }
+                        } catch (error) {
+                            debug(
+                                `Failed to process HTML for ${site.metadata.url}:`,
+                                error,
+                            );
+                        }
+                    } else {
+                        debug(
+                            `Failed to fetch content for ${site.metadata.url}: ${fetchResult.error}`,
+                        );
+
+                        if (
+                            fetchResult.error?.includes("404") ||
+                            fetchResult.error?.includes("403") ||
+                            fetchResult.error?.includes("410")
+                        ) {
+                            input.isUnavailable = true;
+                        }
+                    }
+
+                    contentInputs.push(input);
+
+                    if (
+                        (i + 1) % 10 === 0 ||
+                        i === metadataWebsites.length - 1
+                    ) {
+                        logStructuredProgress(
+                            i + 1,
+                            metadataWebsites.length,
+                            `Fetched ${i + 1}/${metadataWebsites.length} pages`,
+                            "fetching",
+                            importContext,
+                        );
+                    }
+                }
+
+                try {
+                    // Create ContentExtractor with AI model
+                    const extractor = createContentExtractor(
+                        {
+                            mode: extractionMode,
+                            knowledgeExtractor:
+                                importOptions.knowledgeExtractor,
+                            timeout: importOptions.contentTimeout || 10000,
+                            maxConcurrentExtractions:
+                                importOptions.maxConcurrent || 5,
+                        },
+                        context,
+                    );
+
+                    // Use BatchProcessor for efficient processing
+                    const batchProcessor = new website.BatchProcessor(
+                        extractor,
+                    );
+
+                    const extractionProgressCallback = (
+                        progress: BatchProgress,
+                    ) => {
+                        logStructuredProgress(
+                            progress.processed,
+                            progress.total,
+                            `Extracting knowledge (${progress.percentage}%)`,
+                            "extracting",
+                            importContext,
+                            undefined,
+                            {
+                                currentAction: "analyzing",
+                            },
+                        );
+                    };
+
+                    const extractionResults = await batchProcessor.processBatch(
+                        contentInputs,
+                        extractionMode,
+                        {
+                            processingMode: "batch",
+                            progressCallback: extractionProgressCallback,
+                        },
+                    );
+
+                    // Build complete website objects from extraction results
+                    websites = metadataWebsites.map((metaSite, index) => {
+                        const result = extractionResults[index];
+                        return {
+                            ...metaSite,
+                            knowledge: result?.knowledge,
+                            textChunks: result?.pageContent?.mainContent
+                                ? [result.pageContent.mainContent]
+                                : metaSite.textChunks || [],
+                        };
+                    });
+
+                    logStructuredProgress(
+                        extractionResults.length,
+                        extractionResults.length,
+                        `Completed ${extractionMode} mode extraction for ${extractionResults.length} items`,
+                        "extracting",
+                        importContext,
+                    );
+                } catch (error) {
+                    if (error instanceof AIModelRequiredError) {
+                        throw error;
+                    }
+                    console.warn(
+                        `Extraction with ${extractionMode} mode failed:`,
+                        error,
+                    );
+                    // Don't fall back to basic - fail the import with clear error
+                    throw new Error(
+                        `Failed to import with ${extractionMode} mode: ${(error as Error).message}`,
+                    );
+                }
             }
         }
 
@@ -469,21 +576,155 @@ export async function importWebsiteDataFromSession(
                 new website.WebsiteCollection();
         }
 
-        context.agentContext.websiteCollection.addWebsites(websites);
+        //Set up periodic persistence
+        const importId = importContext.importId;
+        const chunkSize = Math.min(50, Math.ceil(websites.length * 0.2));
+        const savePoints = ImportStateManager.calculateSavePoints(
+            websites.length,
+        );
+        let currentSavePointIndex = 0;
 
-        try {
-            await context.agentContext.websiteCollection.addToIndex();
-        } catch (error) {
-            debug(
-                `Incremental indexing failed, falling back to full rebuild: ${error}`,
+        // Initialize import state
+        const importState: ImportState = {
+            importId,
+            totalWebsites: websites.length,
+            processedWebsites: 0,
+            lastSavePoint: 0,
+            failedUrls: [],
+            startTime: Date.now(),
+            lastProgressTime: Date.now(),
+            extractionMode,
+            source,
+            type,
+            filePath,
+        };
+        await ImportStateManager.saveImportState(importState);
+
+        for (let i = 0; i < websites.length; i += chunkSize) {
+            const chunk = websites.slice(i, i + chunkSize);
+            const chunkIndex = Math.floor(i / chunkSize) + 1;
+            const totalChunks = Math.ceil(websites.length / chunkSize);
+            const processedCount = i + chunk.length;
+
+            logStructuredProgress(
+                processedCount,
+                websites.length,
+                `Building knowledge graph (chunk ${chunkIndex}/${totalChunks})`,
+                "graph-building",
+                importContext,
+                undefined, // summary
+                undefined, // itemDetails
+                {
+                    graphBuildingPhase: "entities",
+                    nextSavePoint: savePoints[currentSavePointIndex],
+                    lastSavePoint: importState.lastSavePoint,
+                },
             );
-            await context.agentContext.websiteCollection.buildIndex();
+
+            context.agentContext.websiteCollection.addWebsites(chunk);
+
+            try {
+                await context.agentContext.websiteCollection.addToIndex();
+            } catch (error) {
+                debug(
+                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                );
+                await context.agentContext.websiteCollection.buildIndex();
+            }
+
+            await context.agentContext.websiteCollection.updateGraphIncremental(
+                chunk,
+            );
+
+            try {
+                const topicsCount = chunk.filter(
+                    (site) => site.knowledge?.topics?.length > 0,
+                ).length;
+                if (topicsCount > 0) {
+                    await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                        chunk,
+                    );
+                    debug(
+                        `Updated hierarchical topics for ${topicsCount} websites in chunk ${chunkIndex}/${totalChunks}`,
+                    );
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to update hierarchical topics during import:",
+                    error,
+                );
+            }
+
+            // Check if we should save progress
+            if (
+                currentSavePointIndex < savePoints.length &&
+                processedCount >= savePoints[currentSavePointIndex]
+            ) {
+                logStructuredProgress(
+                    processedCount,
+                    websites.length,
+                    `Saving progress (${processedCount}/${websites.length} websites)`,
+                    "persisting",
+                    importContext,
+                    undefined, // summary
+                    undefined, // itemDetails
+                    {
+                        dataPersistedToDisk: false,
+                        graphPersistedToDb: false,
+                    },
+                );
+
+                try {
+                    // Save WebsiteCollection to backup location
+                    if (context.agentContext.index?.path) {
+                        const backupPath =
+                            ImportStateManager.getCollectionBackupPath(
+                                importId,
+                                processedCount,
+                            );
+                        await context.agentContext.websiteCollection.writeToFile(
+                            path.dirname(backupPath),
+                            path.basename(backupPath, ".json"),
+                        );
+                        debug(
+                            `Saved website collection backup to ${backupPath}`,
+                        );
+                    }
+
+                    // Update import state
+                    importState.processedWebsites = processedCount;
+                    importState.lastSavePoint = processedCount;
+                    importState.lastProgressTime = Date.now();
+                    await ImportStateManager.saveImportState(importState);
+
+                    logStructuredProgress(
+                        processedCount,
+                        websites.length,
+                        `Progress saved (${processedCount}/${websites.length} websites)`,
+                        "persisting",
+                        importContext,
+                        undefined, // summary
+                        undefined, // itemDetails
+                        {
+                            dataPersistedToDisk: true,
+                            graphPersistedToDb: true,
+                            lastSavePoint: processedCount,
+                        },
+                    );
+
+                    currentSavePointIndex++;
+                } catch (error) {
+                    debug(
+                        `Failed to save progress at ${processedCount}: ${error}`,
+                    );
+                }
+            }
         }
 
         // Entity processing is now handled by the website-memory package integration
         debug(`Website import completed for ${websites.length} websites`);
 
-        // Persist the website collection to disk
+        // Final save and cleanup
         try {
             if (context.agentContext.index?.path) {
                 await context.agentContext.websiteCollection.writeToFile(
@@ -496,8 +737,13 @@ export async function importWebsiteDataFromSession(
             } else {
                 debug("No index path available, website data not persisted");
             }
+
+            // Clean up import state and backups
+            await ImportStateManager.deleteImportState(importId);
+            await ImportStateManager.cleanupOldBackups(importId);
+            debug(`Cleaned up import state and backups for ${importId}`);
         } catch (error) {
-            debug(`Failed to save website collection: ${error}`);
+            debug(`Failed to save website collection or cleanup: ${error}`);
         }
 
         // Calculate knowledge statistics for the completion event
@@ -845,15 +1091,55 @@ export async function importHtmlFolderFromSession(
             const websites = websiteDataResults.map((data) =>
                 convertWebsiteDataToWebsite(data),
             );
-            context.agentContext.websiteCollection.addWebsites(websites);
 
-            try {
-                await context.agentContext.websiteCollection.addToIndex();
-            } catch (error) {
-                debug(
-                    `Incremental indexing failed, falling back to full rebuild: ${error}`,
+            const chunkSize = Math.min(50, Math.ceil(websites.length * 0.2));
+
+            for (let i = 0; i < websites.length; i += chunkSize) {
+                const chunk = websites.slice(i, i + chunkSize);
+                const chunkIndex = Math.floor(i / chunkSize) + 1;
+                const totalChunks = Math.ceil(websites.length / chunkSize);
+
+                logStructuredProgress(
+                    i + chunk.length,
+                    websites.length,
+                    `Building knowledge graph (chunk ${chunkIndex}/${totalChunks})`,
+                    "graph-building",
+                    importContext,
                 );
-                await context.agentContext.websiteCollection.buildIndex();
+
+                context.agentContext.websiteCollection.addWebsites(chunk);
+
+                try {
+                    await context.agentContext.websiteCollection.addToIndex();
+                } catch (error) {
+                    debug(
+                        `Incremental indexing failed, falling back to full rebuild: ${error}`,
+                    );
+                    await context.agentContext.websiteCollection.buildIndex();
+                }
+
+                await context.agentContext.websiteCollection.updateGraphIncremental(
+                    chunk,
+                );
+
+                try {
+                    const topicsCount = chunk.filter(
+                        (site) => site.knowledge?.topics?.length > 0,
+                    ).length;
+                    if (topicsCount > 0) {
+                        await context.agentContext.websiteCollection.updateHierarchicalTopics(
+                            chunk,
+                        );
+                        debug(
+                            `Updated hierarchical topics for ${topicsCount} websites in chunk ${chunkIndex}/${totalChunks}`,
+                        );
+                    }
+                } catch (error) {
+                    console.warn(
+                        "Failed to update hierarchical topics during HTML folder import:",
+                        error,
+                    );
+                }
             }
 
             // Entity processing is now handled by the website-memory package integration
@@ -1040,6 +1326,7 @@ function convertWebsiteDataToWebsite(data: WebsiteData): any {
         data.content,
         [], // tags
         data.extractionResult?.knowledge, // knowledge from extraction
+        undefined, // topicHierarchy
         undefined, // deletionInfo
         false, // isNew = false since content is already processed
     );

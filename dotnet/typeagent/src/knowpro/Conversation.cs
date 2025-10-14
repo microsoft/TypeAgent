@@ -3,17 +3,15 @@
 
 namespace TypeAgent.KnowPro;
 
-public class Conversation<TMessage> : IConversation<TMessage>
+public class Conversation<TMessage> : IConversation<TMessage>, IConversation, IDisposable
     where TMessage : IMessage, new()
 {
-    private readonly IStorageProvider<TMessage> _storageProvider;
-    private readonly Conversation _readonlyConversation;
+    private IStorageProvider<TMessage> _storageProvider;
 
     public Conversation(IStorageProvider<TMessage> provider)
     {
         ArgumentVerify.ThrowIfNull(provider, nameof(provider));
         _storageProvider = provider;
-        _readonlyConversation = new Conversation(provider);
     }
 
     public IMessageCollection<TMessage> Messages => _storageProvider.TypedMessages;
@@ -24,9 +22,24 @@ public class Conversation<TMessage> : IConversation<TMessage>
 
     public IConversationSecondaryIndexes SecondaryIndexes => _storageProvider.SecondaryIndexes;
 
-    public static implicit operator Conversation(Conversation<TMessage> conversation)
+    // If used as IConversation, return a message collection of IMessage
+    // Keeps the .NET type system happy
+    IMessageCollection IConversation.Messages => _storageProvider.Messages;
+
+    protected virtual void Dispose(bool disposing)
     {
-        return conversation._readonlyConversation;
+        if (_storageProvider is not null && disposing)
+        {
+            _storageProvider.Dispose();
+            _storageProvider = null;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }
 
@@ -42,8 +55,18 @@ public class Conversation : IConversation
     {
     }
 
+    public Conversation(IConversation conversation)
+        : this(
+              conversation.Messages,
+              conversation.SemanticRefs,
+              conversation.SemanticRefIndex,
+              conversation.SecondaryIndexes
+        )
+    {
+    }
+
     public Conversation(
-        IReadOnlyAsyncCollection<IMessage> messages,
+        IMessageCollection messages,
         ISemanticRefCollection semanticRefs,
         ITermToSemanticRefIndex semanticRefIndex,
         IConversationSecondaryIndexes secondaryIndexes
@@ -60,7 +83,7 @@ public class Conversation : IConversation
         SecondaryIndexes = secondaryIndexes;
     }
 
-    public IReadOnlyAsyncCollection<IMessage> Messages { get; private set; }
+    public IMessageCollection Messages { get; private set; }
 
     public ISemanticRefCollection SemanticRefs { get; private set; }
 

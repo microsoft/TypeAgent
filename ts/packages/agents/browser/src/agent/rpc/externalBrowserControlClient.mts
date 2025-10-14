@@ -12,9 +12,14 @@ import { createRpc } from "agent-rpc/rpc";
 import { WebSocketMessageV2 } from "common-utils";
 import { AgentWebSocketServer } from "../agentWebSocketServer.mjs";
 
+export interface ExternalBrowserClient {
+    control: BrowserControl;
+    dispose: () => void;
+}
+
 export function createExternalBrowserClient(
     agentWebSocketServer: AgentWebSocketServer,
-): BrowserControl {
+): ExternalBrowserClient {
     const browserControlChannel = createGenericChannel((message) => {
         // Message to the active browser extension client (fallback to extension type only)
         const activeClient = agentWebSocketServer.getActiveClient("extension");
@@ -29,8 +34,6 @@ export function createExternalBrowserClient(
         }
     });
 
-    // Add browser control message handling to existing message handler
-    // This approach avoids replacing the entire handler and allows multiple instances
     const handleBrowserControlMessage = (client: any, message: string) => {
         try {
             const data: WebSocketMessageV2 = JSON.parse(message);
@@ -45,15 +48,17 @@ export function createExternalBrowserClient(
         }
     };
 
-    // Store reference to our handler so it can be cleaned up if needed
-    (browserControlChannel as any)._messageHandler =
-        handleBrowserControlMessage;
+    // Store the original handler so we can restore it on cleanup
+    const originalOnClientMessage = agentWebSocketServer.onClientMessage;
 
     // Wrap the existing onClientMessage handler to include our browser control handling
-    const originalOnClientMessage = agentWebSocketServer.onClientMessage;
     agentWebSocketServer.onClientMessage = (client, message) => {
-        // Call the original handler first
-        if (originalOnClientMessage) {
+        // Call the original handler first (but not if it's another RPC wrapper)
+        if (
+            originalOnClientMessage &&
+            originalOnClientMessage !==
+                (agentWebSocketServer as any)._lastRpcHandler
+        ) {
             originalOnClientMessage(client, message);
         }
 
@@ -61,12 +66,16 @@ export function createExternalBrowserClient(
         handleBrowserControlMessage(client, message);
     };
 
+    // Mark this handler so we can identify it later
+    (agentWebSocketServer as any)._lastRpcHandler =
+        agentWebSocketServer.onClientMessage;
+
     const rpc = createRpc<
         BrowserControlInvokeFunctions,
         BrowserControlCallFunctions
     >("browser:extension", browserControlChannel.channel);
 
-    return {
+    const control: BrowserControl = {
         openWebPage: async (...args) => {
             return rpc.invoke("openWebPage", ...args);
         },
@@ -122,11 +131,11 @@ export function createExternalBrowserClient(
         search: async (query?: string) => {
             return rpc.invoke("search", query);
         },
-        readPage: async () => {
-            return rpc.invoke("readPage");
+        readPageContent: async () => {
+            return rpc.invoke("readPageContent");
         },
-        stopReadPage: async () => {
-            return rpc.invoke("stopReadPage");
+        stopReadPageContent: async () => {
+            return rpc.invoke("stopReadPageContent");
         },
         captureScreenshot: async () => {
             return rpc.invoke("captureScreenshot");
@@ -159,4 +168,13 @@ export function createExternalBrowserClient(
             return rpc.invoke("awaitPageInteraction", ...args);
         },
     };
+
+    const dispose = () => {
+        if (originalOnClientMessage) {
+            agentWebSocketServer.onClientMessage = originalOnClientMessage;
+        }
+        delete (agentWebSocketServer as any)._lastRpcHandler;
+    };
+
+    return { control, dispose };
 }

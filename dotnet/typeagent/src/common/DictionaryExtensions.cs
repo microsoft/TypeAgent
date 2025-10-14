@@ -5,9 +5,13 @@ namespace TypeAgent.Common;
 
 public static class DictionaryExtensions
 {
-    public static TValue? Get<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key)
-        where TValue : class
+    public static bool IsNullOrEmpty<TKey, TValue>(this IDictionary<TKey, TValue>? dictionary)
     {
-        return dict.TryGetValue(key, out var value) ? value : null;
+        return dictionary is null || dictionary.Count == 0;
+    }
+
+    public static TValue GetValueOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default)
+    {
+        return dictionary.TryGetValue(key, out TValue? value) ? value : defaultValue;
     }
 }

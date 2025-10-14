@@ -21,6 +21,7 @@ export class HelpView {
                             <b>F12</b> - Toggle devTools</br>
                             <b>Alt</b> - Show menu</br>
                             <b>Alt+M</b> - Start speech recognition.<br/>
+                            <b>Alt+Shift+M</b> - Toggle continuous speech recognition on off.<br/>
                             <b>CmdOrCTRL+-</b> - Zoom in or out (alternatively use CmdOrCTRL and mouse wheel).</br>                            
                             
                         </div>`;

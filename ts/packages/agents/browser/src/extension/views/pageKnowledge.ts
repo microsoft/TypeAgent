@@ -905,6 +905,7 @@ class KnowledgePanel {
                 "/knowledgeLibrary.html": "views/knowledgeLibrary.html",
                 "/macrosLibrary.html": "views/macrosLibrary.html",
                 "/entityGraphView.html": "views/entityGraphView.html",
+                "/topicGraphView.html": "views/topicGraphView.html",
             };
 
             const extensionPath = libraryMapping[customPath];
@@ -1009,7 +1010,7 @@ class KnowledgePanel {
 
         container.innerHTML = topics
             .map((topic) => {
-                const customUrl = `typeagent-browser://views/entityGraphView.html?topic=${encodeURIComponent(topic)}`;
+                const customUrl = `typeagent-browser://views/topicGraphView.html?topic=${encodeURIComponent(topic)}`;
                 const topicUrl = this.resolveCustomProtocolUrl(customUrl);
                 return `
             <a href="${topicUrl}" 

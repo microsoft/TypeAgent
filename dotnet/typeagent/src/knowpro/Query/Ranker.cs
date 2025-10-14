@@ -35,8 +35,8 @@ internal static class Ranker
             {
                 return totalScore;
             }
-            double avg = totalScore / hitCount;
-            double smoothAvg = Math.Log(hitCount + 1) * avg;
+            double avgScore = totalScore / hitCount;
+            double smoothAvg = Math.Log(hitCount + 1) * avgScore;
             return smoothAvg;
         }
 
@@ -53,6 +53,24 @@ internal static class Ranker
             double smoothRelatedScore = GetSmoothScore(match.RelatedScore, match.RelatedHitCount);
             match.Score += smoothRelatedScore;
         }
+    }
+
+    public static ScoredSemanticRefOrdinal BoostEntities(
+        SemanticRef semanticRef,
+        ScoredSemanticRefOrdinal scoredOrdinal,
+        float boostWeight
+    )
+    {
+        ConcreteEntity? entity = semanticRef.AsEntity();
+        if (entity is not null)
+        {
+            scoredOrdinal = new ScoredSemanticRefOrdinal()
+            {
+                SemanticRefOrdinal = scoredOrdinal.SemanticRefOrdinal,
+                Score = scoredOrdinal.Score * boostWeight
+            };
+        }
+        return scoredOrdinal;
     }
 
 }

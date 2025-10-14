@@ -12,9 +12,14 @@ import {
     iconCamera,
     iconAttach,
     iconSend,
+    iconMicrophoneContinuousListening,
 } from "../icon";
 import { getClientAPI } from "../main";
-import { needSpeechToken, recognizeOnce } from "../speech";
+import {
+    needSpeechToken,
+    recognizeOnce,
+    ContinousSpeechRecognizer,
+} from "../speech";
 import { getSpeechToken, SpeechToken } from "../speechToken";
 import { uint8ArrayToBase64 } from "common-utils";
 
@@ -25,15 +30,25 @@ export class ChatInput {
     public attachButton: HTMLButtonElement;
     public camButton: HTMLButtonElement;
     private dragTemp: string | undefined = undefined;
-    //private fileInput: HTMLInputElement;
     public dragEnabled: boolean = true;
     public sendButton: HTMLButtonElement;
     private separator: HTMLDivElement;
     private separatorContainer: HTMLDivElement;
+    private listening: boolean = false;
+    private continuous: boolean = false;
     public readonly recognizeOnce: (
         token: SpeechToken | undefined,
         useLocalWhisper: boolean,
     ) => void;
+    public readonly toggleContinuous: () => void;
+    private continousRecognizer: ContinousSpeechRecognizer | undefined =
+        undefined;
+    private micIcon: HTMLElement;
+    private listeningMic: HTMLElement;
+    private disabledMic: HTMLElement;
+    private alwaysOnMic: HTMLElement;
+    private token: SpeechToken | undefined = undefined;
+    private uselocalWhisper: boolean = false;
 
     constructor(
         handlers: ExpandableTextareaHandlers,
@@ -121,54 +136,35 @@ export class ChatInput {
             e.preventDefault();
         };
 
-        const micButton = document.createElement("button");
-        micButton.disabled = false;
+        this.micButton = document.createElement("button");
+        this.micButton.disabled = true; // disabled until we get mic access and speech token
+        this.micButton.className = "chat-input-button";
 
-        const micIcon = iconMicrophone();
-        micIcon.className = "chat-message-hidden";
+        this.micIcon = iconMicrophone();
+        this.micIcon.className = "chat-message-hidden";
+        this.micButton.appendChild(this.micIcon);
+        this.listeningMic = iconMicrophoneListening();
+        this.listeningMic.className = "chat-message-hidden";
+        this.micButton.appendChild(this.listeningMic);
 
-        micButton.appendChild(micIcon);
-        micButton.className = "chat-input-button";
-        micButton.disabled = true;
-
-        const listeningMic = iconMicrophoneListening();
-        listeningMic.className = "chat-message-hidden";
-        micButton.appendChild(listeningMic);
-
-        const disabledMic = iconMicrophoneDisabled();
-        disabledMic.className = "chat-message-hidden";
-        micButton.appendChild(disabledMic);
-
-        this.micButton = micButton;
-
-        const micReady = () => {
-            micButton.disabled = false;
-            micIcon.classList.remove("chat-message-hidden");
-            listeningMic.classList.add("chat-message-hidden");
-            disabledMic.classList.add("chat-message-hidden");
-        };
-        const micListening = () => {
-            micButton.disabled = true;
-            micIcon.classList.add("chat-message-hidden");
-            listeningMic.classList.remove("chat-message-hidden");
-            disabledMic.classList.add("chat-message-hidden");
-        };
-        const micNotReady = () => {
-            micButton.disabled = false;
-            micIcon.classList.add("chat-message-hidden");
-            listeningMic.classList.add("chat-message-hidden");
-            disabledMic.classList.remove("chat-message-hidden");
-        };
+        this.disabledMic = iconMicrophoneDisabled();
+        this.disabledMic.className = "chat-message-hidden";
+        this.micButton.appendChild(this.disabledMic);
+        this.alwaysOnMic = iconMicrophoneContinuousListening();
+        this.alwaysOnMic.className = "chat-message-hidden";
+        this.micButton.appendChild(this.alwaysOnMic);
 
         getClientAPI()
             .getLocalWhisperStatus()
             .then((useLocalWhisper) => {
+                this.uselocalWhisper = useLocalWhisper;
                 if (needSpeechToken(useLocalWhisper)) {
                     getSpeechToken().then((token) => {
+                        this.token = token;
                         if (token === undefined) {
-                            micNotReady();
+                            this.micNotReady();
                         } else {
-                            micReady();
+                            this.micReady();
                         }
                     });
                 }
@@ -178,61 +174,63 @@ export class ChatInput {
             token: SpeechToken | undefined,
             useLocalWhisper: boolean,
         ) => {
-            if (micButton.disabled) {
-                // Listening already.
+            if (this.listening) {
+                this.listening = false; // toggle listening so we just throw away speech reco results already in progress.
                 return;
             }
-
             if (needSpeechToken(useLocalWhisper) && token === undefined) {
-                micNotReady();
+                this.micNotReady();
                 return;
             }
-            micListening();
+            this.micListening();
             this.textarea.setTextContent();
             recognizeOnce(
                 token,
-                // onRecognizing
-                (text: string) => {
-                    console.log("Running Recognizing step");
-                    // Update the hypothesis line in the phrase/result view (only have one)
-                    this.textarea.setTextContent(
-                        this.textarea
-                            .getTextContent()
-                            .replace(
-                                /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
-                                "$1$2",
-                            ) + `${text} [...]\r\n`,
-                    );
-                },
-                // onRecognized
-                (text: string) => {
-                    micReady();
-                    this.textarea.setTextContent(text);
-                    this.textarea.send();
-                },
-                // onError
-                (error: string) => {
-                    micReady();
-                    console.log(error);
-                    this.textarea.setTextContent();
-                },
+                (text) => this.onRecognizing(text),
+                (text) => this.onRecognized(text),
+                (error) => this.onError(error),
                 useLocalWhisper,
             );
         };
-        micButton.addEventListener("click", async () => {
-            if (micButton.disabled) {
-                // Listening already.
-                return;
-            }
+        this.toggleContinuous = () => {
+            this.continuous = !this.continuous;
+            this.listening = this.continuous;
+            this.micButton.disabled = false;
 
-            const useLocalWhisper =
-                await getClientAPI().getLocalWhisperStatus();
-            this.recognizeOnce(
-                needSpeechToken(useLocalWhisper)
-                    ? await getSpeechToken(false)
-                    : undefined,
-                useLocalWhisper,
-            );
+            if (this.continuous) {
+                if (this.continousRecognizer === undefined) {
+                    this.continousRecognizer = new ContinousSpeechRecognizer(
+                        this.uselocalWhisper,
+                        this.token,
+                        (text) => this.onRecognizing(text),
+                        (text) => this.onRecognized(text),
+                        (error) => this.onError(error),
+                    );
+                }
+                this.continousRecognizer?.start();
+
+                this.micIcon.classList.add("chat-message-hidden");
+                this.listeningMic.classList.add("chat-message-hidden");
+                this.disabledMic.classList.add("chat-message-hidden");
+                this.alwaysOnMic.classList.remove("chat-message-hidden");
+            } else {
+                this.continuous = false;
+                this.continousRecognizer?.stop();
+                this.micReady();
+            }
+        };
+        this.micButton.addEventListener("click", async (event) => {
+            if (event.altKey || event.metaKey) {
+                this.toggleContinuous();
+            } else {
+                if (!this.listening && !this.continuous) {
+                    this.startReco();
+                } else if (this.continuous) {
+                    this.toggleContinuous();
+                }
+
+                this.micReady();
+            }
         });
 
         this.camButton = document.createElement("button");
@@ -257,6 +255,102 @@ export class ChatInput {
         this.inputContainer.appendChild(this.micButton);
         this.inputContainer.appendChild(this.separatorContainer);
         this.inputContainer.appendChild(this.sendButton);
+    }
+
+    private onRecognizing(text: string) {
+        // user cancelled speech recognition
+        if (!this.listening) {
+            return;
+        }
+
+        console.log("Running Recognizing step");
+        // Update the hypothesis line in the phrase/result view (only have one)
+        this.textarea.setTextContent(
+            this.textarea
+                .getTextContent()
+                .replace(/(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/, "$1$2") +
+                `${text} [...]\r\n`,
+        );
+
+        if (this.continuous) {
+            // TODO: prefilter before sending
+            getClientAPI()
+                .continuousSpeechProcessing(text)
+                .then((response) => {
+                    if (response) {
+                        this.textarea.setTextContent(
+                            this.textarea
+                                .getTextContent()
+                                .replace(
+                                    /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
+                                    "$1$2",
+                                ) + `${response}\r\n`,
+                        );
+                    }
+                });
+        }
+    }
+
+    private onRecognized(text: string) {
+        // only update the text if the user didn't cancel speech recognition
+        if (this.listening || this.continuous) {
+            this.textarea.setTextContent(text);
+            this.textarea.send();
+        }
+
+        if (!this.continuous) {
+            this.listening = false;
+            this.micReady();
+        }
+    }
+
+    private onError(error: string) {
+        this.micReady();
+        console.log(error);
+        this.textarea.setTextContent();
+    }
+
+    private micReady() {
+        this.listening = false;
+        this.micButton.disabled = false;
+        this.micIcon.classList.remove("chat-message-hidden");
+        this.listeningMic.classList.add("chat-message-hidden");
+        this.disabledMic.classList.add("chat-message-hidden");
+        this.alwaysOnMic.classList.add("chat-message-hidden");
+    }
+
+    private micListening() {
+        this.listening = true;
+        this.micButton.disabled = false;
+        this.micIcon.classList.add("chat-message-hidden");
+        this.listeningMic.classList.remove("chat-message-hidden");
+        this.disabledMic.classList.add("chat-message-hidden");
+        this.alwaysOnMic.classList.add("chat-message-hidden");
+    }
+
+    private micNotReady() {
+        this.listening = false;
+        this.micButton.disabled = true;
+        this.micIcon.classList.add("chat-message-hidden");
+        this.listeningMic.classList.add("chat-message-hidden");
+        this.disabledMic.classList.remove("chat-message-hidden");
+        this.alwaysOnMic.classList.add("chat-message-hidden");
+    }
+
+    /**
+     * Starts speech recognition
+     */
+    public async startReco() {
+        if (!this.listening) {
+            const useLocalWhisper =
+                await getClientAPI().getLocalWhisperStatus();
+            this.recognizeOnce(
+                needSpeechToken(useLocalWhisper)
+                    ? await getSpeechToken(false)
+                    : undefined,
+                useLocalWhisper,
+            );
+        }
     }
 
     /**

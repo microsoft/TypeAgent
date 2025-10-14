@@ -56,6 +56,7 @@ export async function createKnowproTestCommands(
     commands.kpTestScoped = setScoped;
     commands.kpTestSearchCompare = testSearchCompare;
     commands.kpTestSearchCompareBatch = testSearchCompareBatch;
+    commands.kpTestSearchCompile = testSearchCompile;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
@@ -600,6 +601,39 @@ export async function createKnowproTestCommands(
                 `Scoped search: ${context.options.scopedSearch}`,
             );
         }
+    }
+
+    function testSearchCompileDef(): CommandMetadata {
+        const def = searchDef();
+        def.description = "Test search compilation";
+        return def;
+    }
+    commands.kpTestSearchCompile.metadata = testSearchCompileDef();
+    async function testSearchCompile(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testSearchDef());
+        const queryTranslator = context.getConversationQueryTranslator();
+        const queryResult = await queryTranslator.translate!(namedArgs.query);
+        context.printer.writeTranslation(queryResult);
+        if (!queryResult.success || !ensureConversationLoaded()) {
+            return;
+        }
+        const request = parseTypedArguments<kpTest.SearchRequest>(
+            args,
+            searchDef(),
+        );
+        const options: kp.LanguageSearchOptions = {
+            ...kpTest.createSearchOptions(request),
+            compileOptions: {
+                exactScope: request.exactScope,
+                applyScope: request.applyScope,
+            },
+        };
+        const searchExpressions = kp.compileSearchQuery(
+            context.conversation!,
+            queryResult.data,
+            options.compileOptions,
+        );
+        context.printer.writeJsonList(searchExpressions, true);
     }
 
     function writeSearchScore(

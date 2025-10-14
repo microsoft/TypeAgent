@@ -5,12 +5,26 @@ namespace TypeAgent.KnowPro;
 
 public struct ScoredSemanticRefOrdinal
 {
+    [JsonPropertyName("semanticRefOrdinal")]
     public int SemanticRefOrdinal { get; set; }
 
-    public float Score { get; set; }
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
 
     public static ScoredSemanticRefOrdinal New(int semanticRefOrdinal)
     {
         return new ScoredSemanticRefOrdinal { SemanticRefOrdinal = semanticRefOrdinal, Score = 1 };
+    }
+}
+
+
+public static class ScoredSemanticRefOrdinalExtensions
+{
+    public static IEnumerable<int> ToSemanticRefOrdinals(
+        this IEnumerable<ScoredSemanticRefOrdinal> items
+    )
+    {
+        return from item in items
+               select item.SemanticRefOrdinal;
     }
 }

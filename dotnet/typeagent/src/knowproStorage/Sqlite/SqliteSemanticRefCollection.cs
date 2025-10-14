@@ -26,9 +26,9 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         return _count;
     }
 
-    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
+    public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(GetCount());
+        return ValueTask.FromResult(GetCount());
     }
 
     public void Append(SemanticRef semanticRef)
@@ -49,13 +49,13 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         }
     }
 
-    public Task AppendAsync(SemanticRef semanticRef, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(SemanticRef semanticRef, CancellationToken cancellationToken = default)
     {
         Append(semanticRef);
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
-    public Task AppendAsync(IEnumerable<SemanticRef> items, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(IEnumerable<SemanticRef> items, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(items, nameof(items));
 
@@ -64,7 +64,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         {
             Append(sr);
         }
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     public SemanticRef Get(int semanticRefId)
@@ -88,12 +88,12 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     }
 
 
-    public Task<SemanticRef> GetAsync(int ordinal, CancellationToken cancellationToken = default)
+    public ValueTask<SemanticRef> GetAsync(int ordinal, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(Get(ordinal));
+        return ValueTask.FromResult(Get(ordinal));
     }
 
-    public Task<IList<SemanticRef>> GetAsync(IList<int> ids, CancellationToken cancellationToken = default)
+    public ValueTask<IList<SemanticRef>> GetAsync(IList<int> ids, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(ids, nameof(ids));
 
@@ -103,7 +103,7 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
         {
             semanticRefs.Add(Get(semrefId));
         }
-        return Task.FromResult(semanticRefs);
+        return ValueTask.FromResult(semanticRefs);
     }
 
     public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -122,7 +122,7 @@ ORDER BY semref_id
 
     }
 
-    public Task<IList<SemanticRef>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    public ValueTask<IList<SemanticRef>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
 
@@ -135,7 +135,7 @@ ORDER BY semref_id");
 
         using var reader = cmd.ExecuteReader();
         var semanticRefList = reader.GetList(ReadSemanticRef);
-        return Task.FromResult(semanticRefList);
+        return ValueTask.FromResult(semanticRefList);
     }
 
     int GetNextSemanicRefId()

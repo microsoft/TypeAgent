@@ -10,6 +10,7 @@ import {
     ShellUserSettings,
     Client,
     SearchMenuItem,
+    UserExpression,
 } from "../../preload/electronTypes";
 import { ChatView } from "./chat/chatView";
 import { TabView } from "./tabView";
@@ -19,7 +20,7 @@ import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./chat/metricsView";
 import { CameraView } from "./cameraView";
-import { createWebSocket, webapi, webdispatcher } from "./webSocketAPI";
+import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
 import { ClientIO, Dispatcher, IAgentMessage } from "agent-dispatcher";
@@ -43,14 +44,7 @@ export function getAndroidAPI() {
     return globalThis.Android;
 }
 
-async function getDispatcher(): Promise<Dispatcher> {
-    if (globalThis.dispatcher !== undefined) {
-        return globalThis.dispatcher;
-    }
-    return getWebDispatcher();
-}
-
-export function getWebSocketAPI(): ClientAPI {
+function getWebSocketAPI(): ClientAPI {
     if (globalThis.webApi === undefined) {
         globalThis.webApi = webapi;
 
@@ -58,14 +52,6 @@ export function getWebSocketAPI(): ClientAPI {
     }
 
     return globalThis.webApi;
-}
-
-export function getWebDispatcher(): Dispatcher {
-    if (globalThis.webDispatcher === undefined) {
-        globalThis.webDispatcher = webdispatcher;
-    }
-
-    return globalThis.webDispatcher;
 }
 
 async function initializeChatHistory(chatView: ChatView) {
@@ -312,6 +298,9 @@ function registerClient(
 
     const client: Client = {
         clientIO,
+        dispatcherInitialized(dispatcher: Dispatcher): void {
+            chatView.initializeDispatcher(dispatcher);
+        },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();
             for (const [key, value] of updatedAgents) {
@@ -341,6 +330,9 @@ function registerClient(
 
             chatView.chatInput?.recognizeOnce(token, useLocalWhisper);
         },
+        toggleAlwaysListen(): void {
+            chatView.chatInput?.toggleContinuous();
+        },
         focusInput(): void {
             chatView.chatInput?.focus();
         },
@@ -353,6 +345,24 @@ function registerClient(
 
             // update chatview title
             chatView.setTitle(title);
+        },
+        continuousSpeechProcessed(expressions: UserExpression[]): void {
+            // TODO: process messages and only add questions/requests.
+
+            console.log(
+                `Continuous speech processed: ${JSON.stringify(expressions)}`,
+            );
+
+            for (const expression of expressions) {
+                if (expression.complete_statement) {
+                    if (
+                        expression.type === "question" ||
+                        expression.type === "command"
+                    ) {
+                        chatView.addUserMessage(JSON.stringify(expression));
+                    }
+                }
+            }
         },
     };
 
@@ -522,10 +532,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     watchForDOMChanges(chatView.getScrollContainer());
-
-    getDispatcher().then((dispatcher) => {
-        chatView.initializeDispatcher(dispatcher);
-    });
 });
 
 function watchForDOMChanges(element: HTMLDivElement) {

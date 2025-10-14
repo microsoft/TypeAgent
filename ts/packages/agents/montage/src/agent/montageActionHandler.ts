@@ -293,21 +293,22 @@ async function updateMontageContext(
                 agentContext.localHostPort,
             );
 
-            const folders: string[] = [];
-            agentContext.indexes.forEach((idx) => {
-                folders.push(idx.location);
-            });
-
             // send the folder info
-            const indexPath = path.join(agentContext.indexes[0].path, "cache");
-            folders.push(indexPath);
-            agentContext.viewProcess?.send({
-                folders: {
-                    allowedFolders: folders,
-                    indexCachePath: indexPath,
-                    indexedLocation: agentContext.indexes[0].location,
-                },
-            });
+            if (agentContext.indexes.length !== 0) {
+                const folders = agentContext.indexes.map((idx) => idx.location);
+                const indexPath = path.join(
+                    agentContext.indexes[0].path,
+                    "cache",
+                );
+                folders.push(indexPath);
+                agentContext.viewProcess?.send({
+                    folders: {
+                        allowedFolders: folders,
+                        indexCachePath: indexPath,
+                        indexedLocation: agentContext.indexes[0].location,
+                    },
+                });
+            }
 
             // send initial state and allowed folder(s)
             if (agentContext.activeMontageId > -1) {
@@ -323,6 +324,7 @@ async function updateMontageContext(
         // shut down service
         if (agentContext.viewProcess) {
             agentContext.viewProcess.kill();
+            agentContext.viewProcess = undefined;
         }
     }
 }

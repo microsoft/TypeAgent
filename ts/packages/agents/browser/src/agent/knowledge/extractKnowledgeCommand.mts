@@ -190,7 +190,10 @@ async function performKnowledgeExtraction(
         // Get page contents
         let title = "Unknown Page";
         const htmlFragments =
-            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments();
+            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments(
+                false,
+                "knowledgeExtraction",
+            );
         if (!htmlFragments) {
             return null;
         }

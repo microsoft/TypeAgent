@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Query;
+
 namespace TypeAgent.KnowPro;
 
 /// <summary>
@@ -8,7 +10,7 @@ namespace TypeAgent.KnowPro;
 /// <see cref="ConversationExtensions"/>
 /// </summary>
 /// <typeparam name="TMessage"></typeparam>
-public interface IConversation<TMessage>
+public interface IConversation<TMessage> : IDisposable
     where TMessage : IMessage
 {
     IMessageCollection<TMessage> Messages { get; }
@@ -23,11 +25,29 @@ public interface IConversation<TMessage>
 
 public interface IConversation
 {
-    IReadOnlyAsyncCollection<IMessage> Messages { get; }
+    IMessageCollection Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
 
     ITermToSemanticRefIndex SemanticRefIndex { get; }
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
+}
+
+
+public static class ConversationExtensions
+{
+    public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
+        this IConversation conversation,
+        SearchTermGroup searchGroup,
+        WhenFilter? whenFilter = null,
+        SearchOptions? options = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        QueryCompiler compiler = new QueryCompiler(conversation);
+        var query = await compiler.CompileKnowledgeQueryAsync(searchGroup, whenFilter, options);
+        var result = await conversation.RunQueryAsync(query, cancellationToken).ConfigureAwait(false);
+        return result;
+    }
 }

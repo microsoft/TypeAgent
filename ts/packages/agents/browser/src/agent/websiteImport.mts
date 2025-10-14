@@ -11,11 +11,6 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:website-import");
 
 /**
- * Website import that adds browser-based downloading capability
- * This module provides drop-in replacements for standard import functions
- */
-
-/**
  * Content extractor that attempts browser-based downloading
  * Factory function that returns appropriate extractor based on capabilities
  */
@@ -123,64 +118,4 @@ function extractBasicText(html: string): string {
         .replace(/&[^;]+;/g, " ") // Remove HTML entities
         .replace(/\s+/g, " ") // Normalize whitespace
         .trim();
-}
-
-/**
- * Check if processing is available for the given context
- */
-export function isProcessingAvailable(
-    sessionContext?: SessionContext<BrowserActionContext>,
-): boolean {
-    if (!sessionContext) return false;
-
-    const extractor = new BrowserContentExtractor({}, sessionContext);
-    return extractor.isBrowserAvailable();
-}
-
-/**
- * Get detailed status of processing capabilities
- */
-export function getProcessingStatus(
-    sessionContext?: SessionContext<BrowserActionContext>,
-): {
-    available: boolean;
-    capabilities: string[];
-    webSocketConnected: boolean;
-    recommendation: string;
-} {
-    if (!sessionContext) {
-        return {
-            available: false,
-            capabilities: [],
-            webSocketConnected: false,
-            recommendation: "No session context provided",
-        };
-    }
-
-    const extractor = new BrowserContentExtractor({}, sessionContext);
-    const status = extractor.getBrowserStatus();
-
-    return {
-        available: status.available,
-        capabilities: status.capabilities,
-        webSocketConnected: status.webSocketConnected,
-        recommendation: status.available
-            ? "Processing available - authentication and dynamic content supported"
-            : "Standard processing only - browser extension not connected",
-    };
-}
-
-/**
- * Log processing status for debugging
- */
-export function logProcessingStatus(
-    sessionContext?: SessionContext<BrowserActionContext>,
-): void {
-    const status = getProcessingStatus(sessionContext);
-    debug("Processing status:", {
-        available: status.available,
-        capabilities: status.capabilities,
-        webSocketConnected: status.webSocketConnected,
-        recommendation: status.recommendation,
-    });
 }

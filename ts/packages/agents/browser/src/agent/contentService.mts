@@ -26,7 +26,7 @@ export class ContentService {
         ) {
             this.browserConnector = new BrowserConnector(
                 agentContext.agentWebSocketServer,
-                agentContext.externalBrowserControl,
+                agentContext.externalBrowserControl.control,
             );
             debug("Initialized with browser download capabilities");
         } else {
@@ -70,19 +70,23 @@ export class ContentService {
                 "browser",
             );
 
-            if (response && response.success) {
+            if (response?.data && response.data.success) {
                 debug(
-                    `Download successful for: ${url} (${response.htmlContent?.length || 0} chars)`,
+                    `Download successful for: ${url} (${response.data.htmlContent?.length || 0} chars)`,
                 );
                 return {
                     success: true,
-                    htmlContent: response.htmlContent,
-                    textContent: response.textContent,
-                    method: response.method || "browser",
-                    metadata: response.metadata || {},
+                    htmlContent: response.data.htmlContent,
+                    textContent: response.data.textContent,
+                    method: response.data.method || "browser",
+                    metadata: response.data.metadata || {},
                 };
             } else {
-                throw new Error(response?.error || "Browser download failed");
+                throw new Error(
+                    response?.data?.error ||
+                        response?.error ||
+                        "Browser download failed",
+                );
             }
         } catch (error: any) {
             debug(`Download error for ${url}:`, error);
@@ -149,32 +153,6 @@ export class ContentService {
             !!this.browserConnector &&
             !!this.sessionContext?.agentContext.agentWebSocketServer
         );
-    }
-
-    /**
-     * Get status of browser capabilities
-     */
-    getStatus(): {
-        browserAvailable: boolean;
-        agentWebSocketServerConnected: boolean;
-        capabilities: string[];
-    } {
-        const agentWebSocketServerConnected =
-            !!this.sessionContext?.agentContext.agentWebSocketServer;
-        const browserAvailable = this.isBrowserAvailable();
-
-        return {
-            browserAvailable,
-            agentWebSocketServerConnected,
-            capabilities: browserAvailable
-                ? [
-                      "content-download",
-                      "html-processing",
-                      "authentication",
-                      "dynamic-content",
-                  ]
-                : [],
-        };
     }
 }
 

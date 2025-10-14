@@ -7,72 +7,60 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class QueryEvalContext
 {
-    DictionaryCache<int, SemanticRef> _semanticRefs;
-
-    public QueryEvalContext(IConversation conversation, CancellationToken cancellationToken = default)
+    public QueryEvalContext(
+        IConversation conversation,
+        CancellationToken cancellationToken = default
+    )
+        : this(
+              conversation,
+              new CachingCollectionReader<SemanticRef>(conversation.SemanticRefs),
+              new CachingCollectionReader<IMessage>(conversation.Messages),
+              cancellationToken
+        )
     {
+
+    }
+    public QueryEvalContext(
+        IConversation conversation,
+        CachingCollectionReader<SemanticRef> semanticRefReader,
+        CachingCollectionReader<IMessage> messageReader,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentVerify.ThrowIfNull(semanticRefReader, nameof(semanticRefReader));
+        ArgumentVerify.ThrowIfNull(messageReader, nameof(messageReader));
+
         CancellationToken = cancellationToken;
 
         Conversation = conversation;
-        _semanticRefs = [];
+
+        SemanticRefs = semanticRefReader;
+        Messages = messageReader;
         MatchedTerms = new TermSet();
+        MatchedPropertyTerms = new PropertyTermSet();
     }
 
-    public IConversation Conversation { get; private set; }
+    public IConversation Conversation { get; }
+
+    public IAsyncCollectionReader<SemanticRef> SemanticRefs { get; }
+
+    public IAsyncCollectionReader<IMessage> Messages { get; }
 
     public ITermToSemanticRefIndex SemanticRefIndex => Conversation.SemanticRefIndex;
 
+    public IPropertyToSemanticRefIndex PropertyIndex => Conversation.SecondaryIndexes.PropertyToSemanticRefIndex;
+
     public TermSet MatchedTerms { get; private set; }
+
+    public PropertyTermSet MatchedPropertyTerms { get; private set; }
 
     public TextRangesInScope? TextRangesInScope { get; set; }
 
-    public CancellationToken CancellationToken { get; private set; }
+    public CancellationToken CancellationToken { get; set; }
 
     public void ClearMatchedTerms()
     {
         MatchedTerms.Clear();
-    }
-
-    public ValueTask<SemanticRef> GetSemanticRefAsync(int semanticRefOrdinal)
-    {
-        return _semanticRefs.GetOrLoadAsync(
-            semanticRefOrdinal,
-            LoadSemanticRef,
-            CancellationToken
-        );
-    }
-
-    public ValueTask<IList<SemanticRef>> GetSemanticRefsAsync(IList<int> semanticRefOrdinals)
-    {
-        return _semanticRefs.GetOrLoadAsync(
-            semanticRefOrdinals,
-            LoadSemanticRefs,
-            CancellationToken
-        );
-    }
-
-    public ValueTask<IList<SemanticRef>> GetSemanticRefsAsync(IList<ScoredSemanticRefOrdinal> scoredOrdinals)
-    {
-        IList<int> ordinals = [.. scoredOrdinals.ToSemanticRefOrdinals()];
-        return GetSemanticRefsAsync(ordinals);
-    }
-
-    public SemanticRefAccumulator AllocSemanticRefAccumulator()
-    {
-        return new SemanticRefAccumulator();
-    }
-
-    public void Free(SemanticRefAccumulator accumulator)
-    {
-    }
-
-    Task<IList<SemanticRef>> LoadSemanticRefs(IList<int> ordinals, CancellationToken cancellationToken)
-    {
-        return Conversation.SemanticRefs.GetAsync(ordinals, cancellationToken);
-    }
-
-    Task<SemanticRef> LoadSemanticRef(int ordinal, CancellationToken cancellationToken)
-    {
-        return Conversation.SemanticRefs.GetAsync(ordinal, cancellationToken);
+        MatchedPropertyTerms.Clear();
     }
 }

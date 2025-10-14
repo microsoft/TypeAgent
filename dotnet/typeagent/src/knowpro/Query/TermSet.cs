@@ -23,9 +23,9 @@ internal class TermSet
         return _termSet.ContainsKey(term.Text);
     }
 
-    public Term? Get(string term) => _termSet.Get(term);
+    public Term? Get(string term) => _termSet.GetValueOrDefault(term);
 
-    public Term? Get(Term term) => _termSet.Get(term.Text);
+    public Term? Get(Term term) => Get(term.Text);
 
     public bool Add(Term term)
     {
