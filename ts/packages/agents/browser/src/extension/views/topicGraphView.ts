@@ -3,6 +3,7 @@
 
 import { TopicGraphVisualizer } from "./topicGraphVisualizer";
 import { createExtensionService } from "./knowledgeUtilities";
+import { getFrontendTopicGraphTracker } from "./frontendTopicGraphPerformanceTracker";
 
 interface TopicGraphViewState {
     currentTopic: string | null;
@@ -163,23 +164,44 @@ class TopicGraphView {
     }
 
     private async loadInitialData(): Promise<void> {
+        const tracker = getFrontendTopicGraphTracker();
+        tracker.startOperation("loadInitialData");
+        
         this.showLoading();
 
         try {
+            tracker.startPhase("dataFetch");
             const topicData = await this.fetchGlobalImportanceView();
+            tracker.endPhase("dataFetch");
+            tracker.recordItemsFetched(
+                topicData?.topics?.length || 0, 
+                topicData?.relationships?.length || 0
+            );
 
             if (!topicData || topicData.topics.length === 0) {
                 this.showError("No topic data available");
+                tracker.endOperation();
                 return;
             }
 
+            tracker.startPhase("cytoscapeRender");
             await this.visualizer?.init(topicData);
+            tracker.endPhase("cytoscapeRender");
+            tracker.recordItemsRendered(
+                topicData.topics.length, 
+                topicData.relationships.length
+            );
 
+            tracker.startPhase("domRender");
             this.updateGraphStats();
             this.hideLoading();
+            tracker.endPhase("domRender");
+            
+            tracker.endOperation();
         } catch (error) {
             console.error("Failed to load topic data:", error);
             this.showError("Failed to load topic data");
+            tracker.endOperation();
         }
     }
 

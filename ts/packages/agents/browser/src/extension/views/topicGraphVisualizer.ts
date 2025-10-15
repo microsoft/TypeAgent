@@ -127,8 +127,14 @@ export class TopicGraphVisualizer {
                 webglConfig.webglTexPerBatch = 16;
             }
 
+            console.log(
+                `[WebGL] Enabled with texture size: ${webglConfig.webglTexSize}, batch size: ${webglConfig.webglBatchSize}`,
+            );
             return webglConfig;
         } else {
+            console.log(
+                `[WebGL] Not supported, falling back to Canvas renderer`,
+            );
             return { name: "canvas" };
         }
     }
@@ -945,75 +951,77 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Update edge visibility based on connected nodes
+     * Update edge visibility based on connected nodes with batch operations
      */
     private updateEdgeVisibility(zoom: number, lodSettings: any): void {
         if (!this.cy) return;
 
-        this.cy.edges().forEach((edge: any) => {
-            const source = edge.source();
-            const target = edge.target();
+        // Use batch for better performance
+        this.cy.batch(() => {
+            this.cy.edges().forEach((edge: any) => {
+                const source = edge.source();
+                const target = edge.target();
 
-            const sourceVisible = source.hasClass("visible-at-zoom");
-            const targetVisible = target.hasClass("visible-at-zoom");
+                const sourceVisible = source.hasClass("visible-at-zoom");
+                const targetVisible = target.hasClass("visible-at-zoom");
 
-            // Show edge only if both nodes are visible
-            if (sourceVisible && targetVisible) {
-                // Apply additional filtering based on edge importance
-                const edgeStrength = edge.data("strength") || 0.5;
-                if (edgeStrength >= lodSettings.edgeThreshold) {
-                    edge.addClass("visible-at-zoom");
-                    edge.removeClass("hidden-at-zoom");
+                // Show edge only if both nodes are visible
+                if (sourceVisible && targetVisible) {
+                    // Apply additional filtering based on edge importance
+                    const edgeStrength = edge.data("strength") || 0.5;
+                    if (edgeStrength >= lodSettings.edgeThreshold) {
+                        edge.addClass("visible-at-zoom");
+                        edge.removeClass("hidden-at-zoom");
+                    } else {
+                        edge.addClass("hidden-at-zoom");
+                        edge.removeClass("visible-at-zoom");
+                    }
                 } else {
                     edge.addClass("hidden-at-zoom");
                     edge.removeClass("visible-at-zoom");
                 }
-            } else {
-                edge.addClass("hidden-at-zoom");
-                edge.removeClass("visible-at-zoom");
-            }
+            });
         });
     }
 
     /**
-     * Update label visibility based on zoom and importance
+     * Update label visibility based on zoom and importance with batch operations
      */
     private updateLabelVisibility(zoom: number): void {
         if (!this.cy) return;
 
-        // Calculate label opacity based on importance and zoom
-        this.cy.nodes().forEach((node: any) => {
-            const isVisible = node.hasClass("visible-at-zoom");
-            const computedImportance = node.data("computedImportance") || 0.5;
-            const level = node.data("level") || 0;
+        // Calculate label opacity based on importance and zoom with batching
+        this.cy.batch(() => {
+            this.cy.nodes().forEach((node: any) => {
+                const isVisible = node.hasClass("visible-at-zoom");
+                const computedImportance = node.data("computedImportance") || 0.5;
+                const level = node.data("level") || 0;
 
-            let textOpacity = 0;
+                let textOpacity = 0;
 
-            if (isVisible) {
-                if (zoom < 0.5) {
-                    // Hide all labels at very low zoom
-                    textOpacity = 0;
-                } else if (zoom < 1.0) {
-                    // Show only high-importance nodes at low zoom
-                    textOpacity = computedImportance > 0.7 ? 1 : 0;
-                } else if (zoom < 1.5) {
-                    // Progressive visibility based on importance and level
-                    if (level === 0 || computedImportance > 0.6) {
-                        textOpacity = 1;
-                    } else if (computedImportance > 0.4) {
-                        textOpacity = 0.7;
+                if (isVisible) {
+                    if (zoom < 0.5) {
+                        // Hide all labels at very low zoom except level 0
+                        textOpacity = level === 0 ? 0.7 : 0;
+                    } else if (zoom < 1.0) {
+                        // Show important labels only
+                        textOpacity = computedImportance > 0.7 ? 0.8 : 0;
+                    } else if (zoom < 2.0) {
+                        // Show more labels based on importance and level
+                        if (level <= 1) {
+                            textOpacity = Math.min(1.0, computedImportance + 0.2);
+                        } else {
+                            textOpacity = computedImportance > 0.5 ? 0.7 : 0;
+                        }
+                    } else {
+                        // High zoom: show all visible node labels
+                        textOpacity = Math.min(1.0, computedImportance + 0.3);
                     }
-                } else {
-                    // Show labels for all visible nodes with importance-based opacity
-                    textOpacity = Math.max(0.5, computedImportance);
                 }
 
-                // Apply additional zoom-based scaling
-                const zoomFactor = Math.min(1, zoom / 2.0);
-                textOpacity *= zoomFactor;
-            }
-
-            node.style("text-opacity", textOpacity);
+                // Apply opacity
+                node.style("text-opacity", textOpacity);
+            });
         });
     }
 
@@ -1025,7 +1033,7 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Load data into a specific Cytoscape instance (avoids triggering zoom on inactive instances)
+     * Load data into a specific Cytoscape instance with batch operations for performance
      */
     private async loadDataIntoInstance(
         instance: any,
@@ -1033,8 +1041,11 @@ export class TopicGraphVisualizer {
     ): Promise<void> {
         const elements = this.convertToTopicElements(data);
 
-        instance.elements().remove();
-        instance.add(elements);
+        // Use batch operations for better performance
+        instance.batch(() => {
+            instance.elements().remove();
+            instance.add(elements);
+        });
 
         // Apply layout on this specific instance
         await this.applyLayoutToInstance(instance);
@@ -1224,7 +1235,7 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Get base topic graph styles matching entity graph patterns
+     * Get base topic graph styles matching entity graph patterns with performance optimizations
      */
     private getBaseTopicStyles(): any[] {
         return [
@@ -1233,53 +1244,48 @@ export class TopicGraphVisualizer {
                 selector: "node",
                 style: {
                     "min-zoomed-font-size": 8,
-                    "text-opacity": 1,
+                    "text-opacity": 0, // Start with labels hidden for performance
                     "transition-property": "none",
                     "transition-duration": 0,
                     events: "yes",
+                    // Use fixed sizing for better performance instead of dynamic mapData
+                    width: 40,
+                    height: 40,
                 },
             },
 
-            // Topic nodes with importance-based sizing
+            // Topic nodes with simplified styling
             {
                 selector: 'node[nodeType="topic"]',
                 style: {
                     "background-color": "#FF6B9D",
-                    // Use computed importance for more meaningful sizing (20-100px range)
-                    width: "mapData(computedImportance, 0, 1, 20, 100)",
-                    height: "mapData(computedImportance, 0, 1, 20, 100)",
                     label: "data(label)",
                     "text-valign": "bottom",
                     "text-margin-y": 5,
-                    // Scale font size with importance
-                    "font-size": "mapData(computedImportance, 0, 1, 10, 16)",
+                    "font-size": "12px",
                     "font-weight": "bold",
                     color: "#333",
-                    "text-wrap": "wrap",
-                    "text-max-width":
-                        "mapData(computedImportance, 0, 1, 60, 120)",
-                    // Scale border width with importance
-                    "border-width": "mapData(computedImportance, 0, 1, 2, 4)",
+                    "border-width": 2,
                     "border-color": "#E5507A",
                     "min-zoomed-font-size": 8,
-                    "text-opacity": 1,
                     "transition-property": "none",
                     "transition-duration": 0,
                     opacity: 1.0,
                 },
             },
 
-            // Level-specific styling with entity graph consistency
+            // Level-specific styling with fixed sizes for performance
             {
                 selector: ".level-0",
                 style: {
                     "background-color": "#4A90E2",
                     "border-color": "#1565C0",
                     shape: "roundrectangle",
-                    width: 90,
-                    height: 90,
+                    width: 60,
+                    height: 60,
                     "font-size": "14px",
                     "font-weight": "bold",
+                    "text-opacity": 1, // Show labels for important level-0 nodes
                     "z-index": 1000,
                 },
             },
@@ -1289,9 +1295,10 @@ export class TopicGraphVisualizer {
                     "background-color": "#7ED321",
                     "border-color": "#388E3C",
                     shape: "ellipse",
-                    width: 70,
-                    height: 70,
+                    width: 50,
+                    height: 50,
                     "font-size": "12px",
+                    "text-opacity": 1, // Show labels for level-1 nodes
                     "z-index": 900,
                 },
             },
@@ -1301,8 +1308,8 @@ export class TopicGraphVisualizer {
                     "background-color": "#F5A623",
                     "border-color": "#F57C00",
                     shape: "diamond",
-                    width: 50,
-                    height: 50,
+                    width: 35,
+                    height: 35,
                     "font-size": "11px",
                     "z-index": 800,
                 },
@@ -1313,8 +1320,8 @@ export class TopicGraphVisualizer {
                     "background-color": "#BD10E0",
                     "border-color": "#9013FE",
                     shape: "triangle",
-                    width: 40,
-                    height: 40,
+                    width: 30,
+                    height: 30,
                     "font-size": "10px",
                     "z-index": 700,
                 },
@@ -1325,33 +1332,18 @@ export class TopicGraphVisualizer {
                     "background-color": "#50E3C2",
                     "border-color": "#4ECDC4",
                     shape: "pentagon",
-                    width: 35,
-                    height: 35,
+                    width: 25,
+                    height: 25,
                     "font-size": "9px",
                     "z-index": 600,
                 },
             },
 
-            // Confidence-based styling with importance indicators
+            // Show labels only for important nodes
             {
-                selector: ".high-confidence",
+                selector: 'node[?important]',
                 style: {
-                    "border-width": 4,
-                    "overlay-padding": 3,
-                    "overlay-opacity": 0.1,
-                    "overlay-color": "#000",
-                },
-            },
-            {
-                selector: ".medium-confidence",
-                style: {
-                    "border-width": 3,
-                },
-            },
-            {
-                selector: ".low-confidence",
-                style: {
-                    "border-width": 2,
+                    "text-opacity": 1,
                 },
             },
 
@@ -1371,77 +1363,52 @@ export class TopicGraphVisualizer {
                 },
             },
 
-            // Expanded/collapsed states
-            {
-                selector: ".has-children",
-                style: {
-                    "border-style": "double",
-                },
-            },
-            {
-                selector: ".expanded",
-                style: {
-                    "background-opacity": 1.0,
-                },
-            },
-
-            // Edge base styles with lighter colors and increased transparency
+            // Edge base styles with haystack for performance
             {
                 selector: "edge",
                 style: {
-                    width: "mapData(strength, 0, 1, 1, 4)",
-                    "line-color": "#ddd",
-                    "target-arrow-color": "#ddd",
-                    "target-arrow-shape": "triangle",
-                    "curve-style": "haystack",
+                    "curve-style": "haystack", // Fastest edge rendering
                     "haystack-radius": 0.5,
-                    opacity: 0.25,
-                    "transition-property": "opacity, width",
-                    "transition-duration": "0.2s",
+                    width: 1,
+                    "line-color": "#ddd",
+                    "target-arrow-shape": "none", // Remove arrows for performance
+                    opacity: 0.6,
+                    "transition-property": "none",
+                    "transition-duration": 0,
                 },
             },
 
-            // Edge types with lighter colors and increased transparency
+            // Edge types with simplified styling for performance
             {
                 selector: ".edge-parent-child",
                 style: {
                     "line-color": "#A4C8F0",
-                    "target-arrow-color": "#A4C8F0",
-                    "line-style": "solid",
-                    width: 3,
-                    opacity: 0.4,
+                    width: 2,
+                    opacity: 0.5,
                 },
             },
             {
                 selector: ".edge-co_occurs",
                 style: {
                     "line-color": "#C8F0A0",
-                    "target-arrow-color": "#C8F0A0",
-                    "line-style": "solid",
-                    width: 2,
-                    opacity: 0.25,
+                    width: 1,
+                    opacity: 0.4,
                 },
             },
             {
                 selector: ".edge-related-to",
                 style: {
                     "line-color": "#C8F0A0",
-                    "target-arrow-color": "#C8F0A0",
-                    "line-style": "dashed",
-                    "line-dash-pattern": [6, 3],
-                    width: 2,
-                    opacity: 0.25,
+                    width: 1,
+                    opacity: 0.3,
                 },
             },
             {
                 selector: ".edge-derived-from",
                 style: {
                     "line-color": "#FBD89C",
-                    "target-arrow-color": "#FBD89C",
-                    "line-style": "dotted",
-                    "line-dash-pattern": [2, 2],
-                    width: 2,
-                    opacity: 0.25,
+                    width: 1,
+                    opacity: 0.3,
                 },
             },
 
@@ -1498,56 +1465,60 @@ export class TopicGraphVisualizer {
         const nodeCount = this.topicGraphData?.topics?.length || 0;
         const edgeCount = this.topicGraphData?.relationships?.length || 0;
 
-        const avgDegree = nodeCount > 0 ? (edgeCount * 2) / nodeCount : 0;
+        // Drastically reduce iterations for performance - matching entity graph approach
+        let iterations;
+        if (nodeCount < 100) {
+            iterations = 300;
+        } else if (nodeCount < 300) {
+            iterations = 200;
+        } else if (nodeCount < 800) {
+            iterations = 100;
+        } else {
+            iterations = 50; // Very few iterations for large graphs
+        }
 
-        // Significantly increase edge length to accommodate large nodes (20-100px)
-        // With 100px max node size, edges need to be 200-300px to prevent overlap
-        const idealEdgeLength = 250;
+        // Further reduce if edge density is high
+        const edgeDensity = edgeCount / (nodeCount * nodeCount);
+        if (edgeDensity > 0.1) {
+            // Dense graph
+            iterations = Math.max(20, iterations / 2);
+        }
+
+        console.log(
+            `[Perf] Using ${iterations} iterations for ${nodeCount} nodes, ${edgeCount} edges (density: ${edgeDensity.toFixed(3)})`,
+        );
 
         const baseConfig = {
             name: "cose",
-            idealEdgeLength: idealEdgeLength,
-            nodeOverlap: 50,
+            idealEdgeLength: 80, // Reduced from 250 for faster layout
+            nodeOverlap: 20, // Reduced from 50
             refresh: 20,
             fit: false,
             animate: "end",
-            padding: 40,
+            padding: 30, // Reduced from 40
             randomize: false,
-            componentSpacing: 150,
+            componentSpacing: 100, // Reduced from 150
             nodeRepulsion: (node: any) => {
                 const importance = node.data("computedImportance") || 0.5;
-                // Much higher repulsion to counter the massive edge count
-                return 2000000 * (importance + 0.1);
+                // Reduced repulsion for faster calculation
+                return 400000 * (importance + 0.1);
             },
             edgeElasticity: (edge: any) => {
                 const strength = edge.data("strength") || 0.5;
                 const type = edge.data("relationship");
-                // Co_occurs edges should be more elastic (stretch easier)
+                // Simplified edge elasticity
                 if (type === "co_occurs") {
-                    return 30 * strength;
+                    return 50 * strength; // Reduced from 30
                 }
-                // Parent-child edges should be less elastic (maintain structure)
-                return 50 * strength;
+                return 100 * strength; // Reduced from 50
             },
             nestingFactor: 5,
-            gravity: 40,
-            numIter: 2000,
-            initialTemp: 300,
+            gravity: 80, // Increased from 40 for faster convergence
+            numIter: iterations,
+            initialTemp: 200, // Reduced from 300
             coolingFactor: 0.95,
             minTemp: 1.0,
         };
-
-        if (nodeCount > 500) {
-            baseConfig.numIter = 1200;
-            baseConfig.coolingFactor = 0.98;
-            baseConfig.gravity = 90;
-        } else if (nodeCount > 200) {
-            baseConfig.numIter = 1500;
-            baseConfig.gravity = 80;
-        } else {
-            baseConfig.numIter = 2000;
-            baseConfig.gravity = 60;
-        }
 
         return baseConfig;
     }
@@ -1672,7 +1643,7 @@ export class TopicGraphVisualizer {
         );
 
         // Add child elements to the graph
-        const newElements = [];
+        const newElements: any[] = [];
         for (const topic of childTopics) {
             if (!this.cy.getElementById(topic.id).length) {
                 const computedImportance = this.calculateTopicImportance(topic);
@@ -1708,7 +1679,11 @@ export class TopicGraphVisualizer {
         }
 
         if (newElements.length > 0) {
-            this.cy.add(newElements);
+            // Use batch for adding new elements
+            this.cy.batch(() => {
+                this.cy.add(newElements);
+            });
+            
             this.applyLayout();
 
             // Reapply LOD to ensure new nodes respect visibility rules
@@ -1717,14 +1692,19 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Collapse children of a topic
+     * Collapse children of a topic with batch operations
      */
     private collapseTopicChildren(topicId: string): void {
         const childNodes = this.cy.nodes().filter((node: any) => {
             return node.data("parentId") === topicId;
         });
 
-        childNodes.remove();
+        if (childNodes.length > 0) {
+            // Use batch for removing elements
+            this.cy.batch(() => {
+                childNodes.remove();
+            });
+        }
     }
 
     /**
