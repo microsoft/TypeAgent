@@ -521,6 +521,7 @@ class CacheGrammarParser {
     }
 
     private parseRule(): Rule {
+        const start = this.curr;
         const expNodes = this.parseExpression();
         const result: Rule = {
             expressions: expNodes,
@@ -545,7 +546,7 @@ class CacheGrammarParser {
 
         // Delay semantic error until syntax is fully parsed
         if (expNodes.length === 0) {
-            this.throwError(`Empty expression.`);
+            this.throwError(`Empty expression.`, start);
         }
 
         return result;
