@@ -124,7 +124,8 @@ internal class MatchTermsAndExpr : MatchTermsBooleanExpr
         SemanticRefAccumulator? allMatches = null;
         int iTerm = 0;
         // Loop over each search term, intersecting the returned results...
-        for (; iTerm < TermExpressions.Count; ++iTerm)
+        int count = TermExpressions.Count;
+        for (; iTerm < count; ++iTerm)
         {
             var termExpr = TermExpressions[iTerm];
             SemanticRefAccumulator? termMatches = await termExpr.EvalAsync(context).ConfigureAwait(false);

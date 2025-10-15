@@ -122,7 +122,8 @@ internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
         MessageAccumulator? allMatches = null;
         int iTerm = 0;
 
-        for (; iTerm < TermExpressions.Count; ++iTerm)
+        int count = TermExpressions.Count;
+        for (; iTerm < count; ++iTerm)
         {
             var matches = await TermExpressions[iTerm].GetResultAsync(context).ConfigureAwait(false);
             if (matches is null)

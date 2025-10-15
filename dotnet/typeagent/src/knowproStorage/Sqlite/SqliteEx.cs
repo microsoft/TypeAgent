@@ -15,6 +15,16 @@ internal static class SqliteEx
         cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value);
     }
 
+    public static void AddIdParameters(this SqliteCommand cmd, string[] placeHolders, IList<int> ids)
+    {
+        ArgumentVerify.ThrowIfNotEqual(placeHolders.Length, ids.Count, nameof(ids));
+        int count = ids.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            cmd.Parameters.AddWithValue(placeHolders[i], ids[i]);
+        }
+    }
+
     public static IList<T> GetList<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
     {
         IList<T> list = [];

@@ -63,7 +63,8 @@ internal static class LookupExtensions
         IList<SemanticRef> selectedRefs = await context.SemanticRefs.GetAsync(scoredOrdinals).ConfigureAwait(false);
 
         IList<ScoredSemanticRefOrdinal>? filtered = null;
-        for (int i = 0; i < selectedRefs.Count; ++i)
+        int count = selectedRefs.Count;
+        for (int i = 0; i < count; ++i)
         {
             SemanticRef semanticRef = selectedRefs[i];
             ScoredSemanticRefOrdinal scoredOrdinal = scoredOrdinals[i];

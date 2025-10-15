@@ -38,7 +38,8 @@ internal class MessagesFromKnowledgeExpr : QueryOpExpr<MessageAccumulator>
                 var semanticRefs = await context.SemanticRefs.GetAsync(
                     knowledgeMatches.SemanticRefMatches.ToOrdinals()
                 ).ConfigureAwait(false);
-                for (int i = 0; i < semanticRefs.Count; ++i)
+                int count = semanticRefs.Count;
+                for (int i = 0; i < count; ++i)
                 {
                     messageMatches.AddFromSemanticRef(semanticRefs[i], knowledgeMatches.SemanticRefMatches[i].Score);
                 }

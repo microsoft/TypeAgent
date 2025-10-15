@@ -49,7 +49,8 @@ public static class MessageExtensions
     public static int GetCharCount(this IMessage message)
     {
         int total = 0;
-        for (int i = 0; i < message.TextChunks.Count; ++i)
+        int count = message.TextChunks.Count;
+        for (int i = 0; i < count; ++i)
         {
             total += message.TextChunks[i].Length;
         }

@@ -26,4 +26,33 @@ public static class EnumerationExtensions
         }
         return results;
     }
+
+    public static IEnumerable<IList<T>> Batch<T>(this IEnumerable<T> items, int batchSize, IList<T>? buffer = null)
+    {
+        bool userBuffer = buffer is not null;
+        using var enumerator = items.GetEnumerator();
+
+        IList<T> batch = userBuffer ? buffer : new List<T>(batchSize);
+        while (enumerator.MoveNext())
+        {
+            batch.Add(enumerator.Current);
+            if (batch.Count == batchSize)
+            {
+                yield return batch;
+                if (userBuffer)
+                {
+                    batch.Clear();
+                }
+                else
+                {
+                    batch = new List<T>(batchSize);
+                }
+            }
+        }
+
+        if (!batch.IsNullOrEmpty())
+        {
+            yield return batch;
+        }
+    }
 }
