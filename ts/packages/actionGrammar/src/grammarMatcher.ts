@@ -290,10 +290,10 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
         switch (part.type) {
             case "string":
                 debugMatch(
-                    `Checking string expr "${part.value.join(" ")}" at ${curr}`,
+                    `Checking string expr "${part.value.join(" ")}" at ${curr} with${state.pendingWildcard ? "" : "out"} wildcard`,
                 );
                 // REVIEW: better separator policy
-                const regExpStr = `[${separatorRegExpStr}]*${part.value.map(escapeMatch).join(`[${separatorRegExpStr}]+`)}`;
+                const regExpStr = `[${separatorRegExpStr}]*?${part.value.map(escapeMatch).join(`[${separatorRegExpStr}]+`)}`;
                 if (state.pendingWildcard !== undefined) {
                     const regExp = new RegExp(regExpStr, "iug");
                     regExp.lastIndex = curr;
@@ -376,15 +376,18 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                 break;
             }
             case "number":
+                debugMatch(
+                    `Checking number expr at ${curr} with${state.pendingWildcard ? "" : "out"} wildcard`,
+                );
                 if (state.pendingWildcard !== undefined) {
-                    const regexp = /[0-9a-fxbo\+\-\.]+/gi;
+                    const regexp = /[\s\p{P}]*?([0-9a-fxbo\+\-\.]+)/giu;
                     regexp.lastIndex = curr;
                     while (true) {
                         const match = regexp.exec(request);
                         if (match === null) {
                             break;
                         }
-                        const n = Number(match[0]);
+                        const n = Number(match[1]);
                         if (isNaN(n)) {
                             continue;
                         }
@@ -394,7 +397,9 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         if (!isSeparated(request, newIndex)) {
                             continue;
                         }
-
+                        debugMatch(
+                            `Matched number at ${wildcardEnd} to ${newIndex}`,
+                        );
                         const newState = createCaptureWildcardState(
                             state,
                             request,
@@ -408,13 +413,13 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         // continue to look for possible longer matches
                     }
                 } else {
-                    const regexp = /[0-9a-fxbo\+\-\.]+/iy;
+                    const regexp = /[\s\p{P}]*?([0-9a-fxbo\+\-\.]+)/iuy;
                     regexp.lastIndex = curr;
                     const m = regexp.exec(request);
                     if (m === null) {
                         continue;
                     }
-                    const n = Number(m[0]);
+                    const n = Number(m[1]);
                     if (isNaN(n)) {
                         continue;
                     }
@@ -423,6 +428,7 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         continue;
                     }
                     // Reuse state
+                    debugMatch(`Matched number at ${curr} to ${newIndex}`);
                     state.index = newIndex;
                     addValue(state, part.variable, n);
                     pending.push(state);
