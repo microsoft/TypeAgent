@@ -128,6 +128,21 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return ValueTask.FromResult(messageList);
     }
 
+    public int GetMessageLength(int messageOrdinal) => MessagesTable.GetMessageLength(_db, messageOrdinal);
+
+    public ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetMessageLength(messageOrdinal));
+    }
+
+    public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals) => MessagesTable.GetMessageLengths(_db, messageOrdinals);
+
+    public ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
+    {
+        IList<int> lengths = [.. GetMessageLengths(messageOrdinals)];
+        return ValueTask.FromResult(lengths);
+    }
+
     int GetNextMessageId()
     {
         return GetCount();
@@ -309,6 +324,21 @@ public class SqliteMessageCollection : IMessageCollection
 
         return message;
     }
+
+    public int GetMessageLength(int messageOrdinal) => MessagesTable.GetMessageLength(_db, messageOrdinal);
+
+    public ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetMessageLength(messageOrdinal));
+    }
+
+    public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals) => MessagesTable.GetMessageLengths(_db, messageOrdinals);
+
+    public ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
+    {
+        IList<int> lengths = [.. GetMessageLengths(messageOrdinals)];
+        return ValueTask.FromResult(lengths);
+    }
 }
 
 
@@ -356,6 +386,42 @@ ORDER BY msg_id",
             foreach (var row in rows)
             {
                 yield return row;
+            }
+        }
+    }
+
+    public static int GetMessageLength(SqliteDatabase db, int msgId)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
+
+        return db.Get(@"
+SELECT message_length
+FROM Messages WHERE msg_id = @msg_id",
+            (cmd) =>
+            {
+                cmd.AddParameter("@msg_id", msgId);
+            },
+            (reader) => reader.GetInt32(0)
+        );
+    }
+
+    public static IEnumerable<int> GetMessageLengths(SqliteDatabase db, IList<int> messageIds)
+    {
+        foreach (var batch in messageIds.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+
+            var lengths = db.Enumerate(
+                $@"
+SELECT message_length
+FROM Messages WHERE msg_id IN ({string.Join(", ", placeholderIds)})
+ORDER BY msg_id",
+                (cmd) => cmd.AddIdParameters(placeholderIds, batch),
+                (reader) => reader.GetInt32(0)
+            );
+            foreach (var length in lengths)
+            {
+                yield return length;
             }
         }
     }

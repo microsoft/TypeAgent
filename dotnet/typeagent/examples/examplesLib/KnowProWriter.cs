@@ -67,6 +67,7 @@ public class KnowProWriter : ConsoleWriter
 
     public static void WriteScoredMessagesAsync(IConversation conversation, IList<ScoredMessageOrdinal> messageOrdinals)
     {
+        WriteLine($"{messageOrdinals.Count} matches");
         WriteJson(messageOrdinals);
     }
 

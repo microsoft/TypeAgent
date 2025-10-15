@@ -6,41 +6,38 @@ namespace TypeAgent.KnowPro;
 public interface IMessageCollection<TMessage> : IAsyncCollection<TMessage>
     where TMessage : IMessage
 {
+    ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default);
+    ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
 }
 
 public interface IMessageCollection : IReadOnlyAsyncCollection<IMessage>
 {
-}
-
-public interface IMessageLoader
-{
-    ValueTask<IMessage> GetMessageAsync(int messageOrdinal);
-    ValueTask<IList<IMessage>> GetMessagesAsync(IList<int> messageOrdinals);
+    ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default);
+    ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
 }
 
 public static class MessageCollectionExtensions
 {
-    public static async ValueTask<int> GetCountInCharBudgetAsync(
-        this IAsyncCollectionReader<IMessage> messages,
+    internal static async ValueTask<int> GetCountInCharBudgetAsync(
+        this IMessageCollection messages,
         IList<int> messageOrdinals,
         int maxCharsInBudget
     )
     {
-        int i = 0;
-        int totalCharCount = 0;
 
-        // TODO: Should
-        foreach (var messageOrdinal in messageOrdinals)
+        int messageCount = messageOrdinals.Count;
+        var messageLengths = await messages.GetMessageLengthsAsync(messageOrdinals).ConfigureAwait(false);
+        int totalCharCount = 0;
+        for (int i = 0; i < messageCount; ++i)
         {
-            var message = await messages.GetAsync(messageOrdinal).ConfigureAwait(false);
-            var messageCharCount = message.GetCharCount();
+            var messageCharCount = messageLengths[i];
             if (messageCharCount + totalCharCount > maxCharsInBudget)
             {
-                break;
+                return i;
             }
             totalCharCount += messageCharCount;
             ++i;
         }
-        return i;
+        return messageCount;
     }
 }

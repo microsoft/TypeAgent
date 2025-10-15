@@ -179,14 +179,16 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteLineHeading(string title, int level = 1)
+    public static void WriteLineHeading(string title)
     {
-        Write('#', level);
+        Write('#', title.Length);
+        WriteLine();
         if (!string.IsNullOrEmpty(title))
         {
             Write(" ");
             Write(title);
         }
+        Write('#', title.Length);
         WriteLine();
     }
 

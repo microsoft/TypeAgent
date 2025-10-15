@@ -71,8 +71,8 @@ public static class ConversationExtensions
         this IConversation conversation,
         SearchTermGroup searchTermGroup,
         WhenFilter? whenFilter = null,
-        SearchOptions? options = null,
         string? rawSearchQuery = null,
+        SearchOptions? options = null,
         CancellationToken cancellationToken = default
     )
     {

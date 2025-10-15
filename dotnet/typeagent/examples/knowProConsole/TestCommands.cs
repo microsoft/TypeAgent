@@ -105,6 +105,19 @@ public class TestCommands : ICommandModule
         };
         ConversationSearchResult? searchResults = await conversation.SearchConversationAsync(searchGroup, cancellationToken);
         KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
+
+        searchResults = await conversation.SearchConversationAsync(
+            searchGroup,
+            null,
+            null,
+            new SearchOptions()
+            {
+                ExactMatch = false,
+                MaxCharsInBudget = 1024
+            },
+            cancellationToken
+        );
+        KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
     }
 
 
