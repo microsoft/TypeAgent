@@ -362,11 +362,6 @@ type ImageData = {
     url: string;
 };
 
-// type VideoCompletion = {
-//     created: number;
-//     data: ImageData[];
-// };
-
 // Statistics returned by the OAI api
 export type CompletionUsageStats = {
     // Number of tokens in the generated completion
