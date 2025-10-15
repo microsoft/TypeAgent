@@ -16,7 +16,8 @@ internal class GroupByKnowledgeTypeExpr : QueryOpExpr<IDictionary<KnowledgeType,
 
     public override async ValueTask<IDictionary<KnowledgeType, SemanticRefAccumulator>> EvalAsync(QueryEvalContext context)
     {
-        SemanticRefAccumulator semanticRefMatches = await Matches.EvalAsync(context);
+        SemanticRefAccumulator semanticRefMatches = await Matches.EvalAsync(context).ConfigureAwait(false);
+
         var groups = new Dictionary<KnowledgeType, SemanticRefAccumulator>();
         //
         // TODO: parallelize
@@ -57,7 +58,7 @@ internal class SelectTopNKnowledgeGroupExpr : QueryOpExpr<IDictionary<KnowledgeT
 
     public override async ValueTask<IDictionary<KnowledgeType, SemanticRefAccumulator>> EvalAsync(QueryEvalContext context)
     {
-        var groupsAccumulators = await SrcExpr.EvalAsync(context);
+        var groupsAccumulators = await SrcExpr.EvalAsync(context).ConfigureAwait(false);
         foreach (var group in groupsAccumulators.Values)
         {
             group.SelectTopNScoring(MaxMatches, MinHitCount);
@@ -79,7 +80,7 @@ internal class GroupSearchResultsExpr : QueryOpExpr<IDictionary<KnowledgeType, S
 
     public override async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>> EvalAsync(QueryEvalContext context)
     {
-        var evalResults = await SrcExpr.EvalAsync(context);
+        var evalResults = await SrcExpr.EvalAsync(context).ConfigureAwait(false);
 
         var semanticRefMatches = new Dictionary<KnowledgeType, SemanticRefSearchResult>();
         foreach (var kv in evalResults)

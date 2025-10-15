@@ -97,13 +97,24 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     {
         ArgumentVerify.ThrowIfNullOrEmpty(ids, nameof(ids));
 
-        // TODO: Bulk operations
-        IList<SemanticRef> semanticRefs = [];
-        foreach (int semrefId in ids)
+        List<SemanticRef> semanticRefs = new(ids.Count);
+        foreach (var batch in ids.Batch(SqliteDatabase.MaxBatchSize))
         {
-            semanticRefs.Add(Get(semrefId));
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var sql = $@"
+                SELECT semref_id, range_json, knowledge_type, knowledge_json
+                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
+                ORDER BY semref_id";
+            var rows = _db.Enumerate(
+                sql,
+                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                ReadSemanticRefRow);
+            foreach (var row in rows)
+            {
+                semanticRefs.Add(FromSemanticRefRow(row));
+            }
         }
-        return ValueTask.FromResult(semanticRefs);
+        return ValueTask.FromResult((IList<SemanticRef>)semanticRefs);
     }
 
     public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)

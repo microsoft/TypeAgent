@@ -97,10 +97,7 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         return filtered;
     }
 
-    public IList<int> ToOrdinals()
-    {
-        return GetMatches().Map((m) => m.Value);
-    }
+    public IList<int> ToOrdinals() => ToValues();
 
     public IList<ScoredSemanticRefOrdinal> ToScoredOrdinals()
     {

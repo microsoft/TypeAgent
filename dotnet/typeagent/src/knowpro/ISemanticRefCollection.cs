@@ -16,7 +16,7 @@ public static class SemanticRefCollectionExtensions
     {
 
         return semanticRefs.GetAsync(
-            [.. scoredOrdinals.ToSemanticRefOrdinals()],
+            [.. scoredOrdinals.ToOrdinals()],
             cancellationToken
         );
     }

@@ -20,11 +20,5 @@ public struct ScoredSemanticRefOrdinal
 
 public static class ScoredSemanticRefOrdinalExtensions
 {
-    public static IEnumerable<int> ToSemanticRefOrdinals(
-        this IEnumerable<ScoredSemanticRefOrdinal> items
-    )
-    {
-        return from item in items
-               select item.SemanticRefOrdinal;
-    }
+    public static IList<int> ToOrdinals(this IList<ScoredSemanticRefOrdinal> items) => items.Map((m) => m.SemanticRefOrdinal);
 }
