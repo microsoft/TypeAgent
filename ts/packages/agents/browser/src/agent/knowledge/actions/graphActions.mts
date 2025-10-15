@@ -1214,27 +1214,36 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
         topicTracker.recordDatabaseQuery("getTopicHierarchy", queryTime);
         tracker.endOperation("ensureTopicGraphCache.getTopicHierarchy", topics.length, topics.length);
 
-        // Enrich topics with entity references if available
+        // Enrich topics with entity references if available - OPTIMIZED
         if (websiteCollection.topicEntityRelations) {
             tracker.startOperation("ensureTopicGraphCache.enrichTopicsWithEntities");
-            let totalEntityRelations = 0;
+            const topicIds = topics.map((t: any) => t.topicId);
+            
+            // OPTIMIZATION: Single batch query instead of N individual queries
+            const batchQueryStart = performance.now();
+            const allEntityRelations = websiteCollection.topicEntityRelations.getEntitiesForTopics(topicIds);
+            const batchQueryTime = performance.now() - batchQueryStart;
+            topicTracker.recordDatabaseQuery(`getEntitiesForTopics_batch_${topicIds.length}_topics`, batchQueryTime);
+            
+            // Group entity relations by topic ID for efficient lookup
+            const entityRelationsByTopic = new Map<string, any[]>();
+            for (const relation of allEntityRelations) {
+                if (!entityRelationsByTopic.has(relation.topicId)) {
+                    entityRelationsByTopic.set(relation.topicId, []);
+                }
+                entityRelationsByTopic.get(relation.topicId)!.push(relation);
+            }
+            
+            // Assign top entities to each topic (limit to 10 for performance)
             for (const topic of topics) {
-                const entityQueryStart = performance.now();
-                const entityRelations =
-                    websiteCollection.topicEntityRelations.getEntitiesForTopic(
-                        topic.topicId,
-                    );
-                const entityQueryTime = performance.now() - entityQueryStart;
-                topicTracker.recordDatabaseQuery(`getEntitiesForTopic_${topic.topicId}`, entityQueryTime);
-                
-                totalEntityRelations += entityRelations.length;
-                // Add top entities (limit to 10 for performance)
+                const entityRelations = entityRelationsByTopic.get(topic.topicId) || [];
                 topic.entityReferences = entityRelations
                     .sort((a: any, b: any) => b.relevance - a.relevance)
                     .slice(0, 10)
                     .map((rel: any) => rel.entityName);
             }
-            tracker.endOperation("ensureTopicGraphCache.enrichTopicsWithEntities", totalEntityRelations, topics.length);
+            
+            tracker.endOperation("ensureTopicGraphCache.enrichTopicsWithEntities", allEntityRelations.length, topics.length);
         }
 
         // Build relationships from parent-child structure
@@ -1242,37 +1251,28 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
         let relationships = buildTopicRelationships(topics);
         tracker.endOperation("ensureTopicGraphCache.buildTopicRelationships", topics.length, relationships.length);
 
-        // Add lateral relationships from topic relationships table
+        // Add lateral relationships from topic relationships table - SUPER OPTIMIZED
         if (websiteCollection.topicRelationships) {
             tracker.startOperation("ensureTopicGraphCache.getLateralRelationships");
             const topicIds = new Set(topics.map((t: any) => t.topicId));
-            const lateralRels: any[] = [];
-            let totalLateralRelsRead = 0;
-
-            for (const topicId of topicIds) {
-                const relQueryStart = performance.now();
-                const rels =
-                    websiteCollection.topicRelationships.getRelationshipsForTopic(
-                        topicId,
-                    );
-                const relQueryTime = performance.now() - relQueryStart;
-                topicTracker.recordDatabaseQuery(`getRelationshipsForTopic_${topicId}`, relQueryTime);
-                
-                totalLateralRelsRead += rels.length;
-                for (const rel of rels) {
-                    if (
-                        topicIds.has(rel.fromTopic) &&
-                        topicIds.has(rel.toTopic)
-                    ) {
-                        lateralRels.push({
-                            from: rel.fromTopic,
-                            to: rel.toTopic,
-                            type: rel.relationshipType,
-                            strength: rel.strength,
-                        });
-                    }
-                }
-            }
+            const topicIdsArray = Array.from(topicIds);
+            
+            // SUPER OPTIMIZATION: Use optimized query that filters at database level
+            const batchQueryStart = performance.now();
+            const allRels = websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
+                topicIdsArray, 
+                0.3 // Only get relationships with strength >= 0.3 for better performance
+            );
+            const batchQueryTime = performance.now() - batchQueryStart;
+            topicTracker.recordDatabaseQuery(`getRelationshipsForTopicsOptimized_batch_${topicIdsArray.length}_topics`, batchQueryTime);
+            
+            // Convert to our format - no need to filter since DB already filtered
+            const lateralRels: any[] = allRels.map((rel: any) => ({
+                from: rel.fromTopic,
+                to: rel.toTopic,
+                type: rel.relationshipType,
+                strength: rel.strength,
+            }));
 
             // Deduplicate lateral relationships
             const relKeys = new Set<string>();
@@ -1283,7 +1283,7 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
                     relationships.push(rel);
                 }
             }
-            tracker.endOperation("ensureTopicGraphCache.getLateralRelationships", totalLateralRelsRead, lateralRels.length);
+            tracker.endOperation("ensureTopicGraphCache.getLateralRelationships", allRels.length, lateralRels.length);
         }
 
         // Get entity counts for topics from topic-entity relations

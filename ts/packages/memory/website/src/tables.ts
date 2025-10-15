@@ -559,6 +559,25 @@ export class TopicEntityRelationTable extends ms.sqlite.SqliteDataFrame {
         return stmt.all(entityName) as TopicEntityRelation[];
     }
 
+    /**
+     * Batch method to get entities for multiple topics at once
+     * This dramatically reduces database queries from N to 1
+     */
+    public getEntitiesForTopics(topicIds: string[]): TopicEntityRelation[] {
+        if (topicIds.length === 0) return [];
+        
+        // Create placeholders for the IN clause
+        const placeholders = topicIds.map(() => "?").join(",");
+        
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicEntityRelations
+            WHERE topicId IN (${placeholders})
+            ORDER BY topicId, relevance DESC
+        `);
+        
+        return stmt.all(...topicIds) as TopicEntityRelation[];
+    }
+
     public addRelation(relation: TopicEntityRelation): void {
         this.addRows({
             sourceRef: {
@@ -649,6 +668,13 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
                         UNIQUE (fromTopic, toTopic, relationshipType)
                     )
                 `);
+                
+                // Add performance indexes for topic relationship queries
+                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_fromtopic ON topicRelationships(fromTopic)`);
+                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_totopic ON topicRelationships(toTopic)`);
+                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_strength ON topicRelationships(strength DESC)`);
+                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_from_strength ON topicRelationships(fromTopic, strength DESC)`);
+                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_to_strength ON topicRelationships(toTopic, strength DESC)`);
             }
         } catch (error) {}
     }
@@ -672,6 +698,51 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
             ORDER BY strength DESC
         `);
         return stmt.all(topicId, topicId, minStrength) as TopicRelationship[];
+    }
+
+    /**
+     * Batch method to get relationships for multiple topics at once
+     * This dramatically reduces database queries from N to 1
+     */
+    public getRelationshipsForTopics(topicIds: string[]): TopicRelationship[] {
+        if (topicIds.length === 0) return [];
+        
+        // Create placeholders for the IN clause
+        const placeholders = topicIds.map(() => "?").join(",");
+        
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicRelationships
+            WHERE fromTopic IN (${placeholders}) OR toTopic IN (${placeholders})
+            ORDER BY strength DESC
+        `);
+        
+        // Pass topicIds twice - once for fromTopic IN, once for toTopic IN
+        return stmt.all(...topicIds, ...topicIds) as TopicRelationship[];
+    }
+
+    /**
+     * Optimized batch method with filtering for high-performance scenarios
+     * Only returns relationships between topics in the provided set with minimum strength
+     */
+    public getRelationshipsForTopicsOptimized(
+        topicIds: string[], 
+        minStrength: number = 0.3
+    ): TopicRelationship[] {
+        if (topicIds.length === 0) return [];
+        
+        // Create placeholders for the IN clause
+        const placeholders = topicIds.map(() => "?").join(",");
+        
+        const stmt = this.db.prepare(`
+            SELECT * FROM topicRelationships
+            WHERE strength >= ? 
+            AND fromTopic IN (${placeholders}) 
+            AND toTopic IN (${placeholders})
+            ORDER BY strength DESC
+        `);
+        
+        // Pass minStrength first, then topicIds twice
+        return stmt.all(minStrength, ...topicIds, ...topicIds) as TopicRelationship[];
     }
 
     public upsertRelationship(relationship: TopicRelationship): void {

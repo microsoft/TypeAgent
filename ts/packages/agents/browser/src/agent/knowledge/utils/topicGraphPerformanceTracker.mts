@@ -140,6 +140,21 @@ export class TopicGraphPerformanceTracker {
             this.metrics.databaseMetrics.slowestQuery = queryName;
             this.metrics.databaseMetrics.slowestQueryTime = duration;
         }
+
+        // Enhanced profiling: Track slow queries (> 50ms)
+        const SLOW_QUERY_THRESHOLD = 50; // milliseconds
+        if (duration > SLOW_QUERY_THRESHOLD) {
+            console.warn(`🐌 SLOW QUERY DETECTED: ${queryName} took ${duration.toFixed(2)}ms`);
+        }
+
+        // Enhanced profiling: Track batch vs individual query efficiency
+        if (queryName.includes("_batch_")) {
+            const batchSize = queryName.split("_batch_")[1]?.split("_")[0];
+            if (batchSize) {
+                const efficiencyScore = parseFloat(batchSize) / (duration / 10); // topics per 10ms
+                console.log(`⚡ BATCH EFFICIENCY: ${queryName} processed ${batchSize} items in ${duration.toFixed(2)}ms (efficiency: ${efficiencyScore.toFixed(1)} items/10ms)`);
+            }
+        }
     }
 
     endTopicGraphOperation(): TopicGraphMetrics | null {
