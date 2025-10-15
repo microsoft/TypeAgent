@@ -85,7 +85,7 @@ async function handlePhotoAction(
             photoContext.actionIO.setDisplay({
                 type: "html",
                 content: ``,
-            });            
+            });
 
             if (images.length == 0) {
                 result = createActionResult(

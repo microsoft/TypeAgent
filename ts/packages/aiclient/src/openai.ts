@@ -1050,7 +1050,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             height: height,
             width: width,
             model: "sora",
-            inpaint_items: []
+            inpaint_items: [],
         };
 
         // file parameters
@@ -1058,40 +1058,41 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         if (inpaintItems) {
             inpaintItems.forEach((item) => {
                 // add the file contents to the form data
-                const buffer = Buffer.from(item.contents!, 'base64');
+                const buffer = Buffer.from(item.contents!, "base64");
                 const blob = new Blob([buffer], { type: item.mime_type! });
 
-                formData.append('files', blob, item.file_name);
+                formData.append("files", blob, item.file_name);
 
                 // remove contents and mime type from the item, since we are sending the file
                 delete item.contents;
                 delete item.mime_type;
 
                 // add the inpaint item to the form data
-                params.inpaint_items?.push(item)
+                params.inpaint_items?.push(item);
             });
         }
 
         // simple parameters
-        for (const [k, v] of Object.entries(params)) { 
-            if (typeof v === 'object') 
-                formData.append(k, JSON.stringify(v));
-            else        
-                formData.append(k, v);
+        for (const [k, v] of Object.entries(params)) {
+            if (typeof v === "object") formData.append(k, JSON.stringify(v));
+            else formData.append(k, v);
         }
-
 
         // send it
         const result = await fetch(settings.endpoint, {
-            method: 'POST',
+            method: "POST",
             headers: headerResult.data,
-            body: formData
+            body: formData,
         });
 
         if (!result.ok) {
             return error(`Error ${result.status}: ${await result.text()}`);
         }
 
-        return success({ endpoint: new URL(settings.endpoint), headers: headerResult.data, ...(await result.json()) as VideoGenerationJob});
+        return success({
+            endpoint: new URL(settings.endpoint),
+            headers: headerResult.data,
+            ...((await result.json()) as VideoGenerationJob),
+        });
     }
 }

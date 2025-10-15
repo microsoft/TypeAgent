@@ -77,9 +77,11 @@ export class ChatView {
 
         // wire up messages from iframes so we can resize them
         window.onmessage = (e) => {
-
             const source = e.data as string;
-            if (source.startsWith("slideshow_") || source.startsWith("aivideo_")) {
+            if (
+                source.startsWith("slideshow_") ||
+                source.startsWith("aivideo_")
+            ) {
                 const temp: string[] = source.split("_");
                 if (temp.length != 3) {
                     return;

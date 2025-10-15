@@ -189,8 +189,7 @@ export type ImageInPaintItem = {
         top_fraction: number;
         right_fraction: number;
         bottom_fraction: number;
-    }
+    };
     contents?: string | undefined; // base64 encoded image contents
-    mime_type?: string
-}
-
+    mime_type?: string;
+};

@@ -44,8 +44,10 @@ async function handleVideoAction(
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
         case "createVideoAction":
-
-            displayStatus("Submitting video generation request...", videoContext);
+            displayStatus(
+                "Submitting video generation request...",
+                videoContext,
+            );
 
             const createVideoAction: CreateVideoAction =
                 action as CreateVideoAction;
@@ -57,12 +59,18 @@ async function handleVideoAction(
                 parseInt(createVideoAction.parameters.duration ?? "5"),
                 1280,
                 720,
-                await getInPaintItems(createVideoAction.parameters.relatedFiles, videoContext),
+                await getInPaintItems(
+                    createVideoAction.parameters.relatedFiles,
+                    videoContext,
+                ),
             );
 
             if (response.success) {
-                displayStatus("Video generation request accepted...processing.", videoContext);
-                result = createVideoPlaceHolder(response.data)
+                displayStatus(
+                    "Video generation request accepted...processing.",
+                    videoContext,
+                );
+                result = createVideoPlaceHolder(response.data);
             } else {
                 return createActionResultFromError(response.message);
             }
@@ -78,38 +86,41 @@ async function handleVideoAction(
  * @param relatedFiles The list of related files (attachments) the user provided
  * @returns An array of inpainting items or undefined if no valid files are found
  */
-async function getInPaintItems(relatedFiles?: string[], context?: ActionContext<VideoActionContext>): Promise<ImageInPaintItem[] | undefined> {
-
+async function getInPaintItems(
+    relatedFiles?: string[],
+    context?: ActionContext<VideoActionContext>,
+): Promise<ImageInPaintItem[] | undefined> {
     if (relatedFiles === undefined || relatedFiles.length === 0) {
         return undefined;
     }
 
-    return await Promise.all(relatedFiles.map(async file => {
+    return await Promise.all(
+        relatedFiles.map(async (file) => {
+            let a = await context!.sessionContext.sessionStorage?.read(
+                `\\..\\user_files\\${file}`,
+                "base64",
+            );
 
-        let a = await context!.sessionContext.sessionStorage?.read(
-            `\\..\\user_files\\${file}`,
-            "base64",
-        );
-
-        return {
-            frame_index: 0,
-            type: "image",
-            file_name: file,
-            crop_bounds: {
-                left_fraction: 0,
-                top_fraction: 0,
-                right_fraction: 1,
-                bottom_fraction: 1
-            },
-            contents: a,
-            mime_type: getMimeType(file.substring(file.indexOf(".")))
-        };
-    }));
-
+            return {
+                frame_index: 0,
+                type: "image",
+                file_name: file,
+                crop_bounds: {
+                    left_fraction: 0,
+                    top_fraction: 0,
+                    right_fraction: 1,
+                    bottom_fraction: 1,
+                },
+                contents: a,
+                mime_type: getMimeType(file.substring(file.indexOf("."))),
+            };
+        }),
+    );
 }
 
-function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSuccess {
-
+function createVideoPlaceHolder(
+    videoJob: VideoGenerationJob,
+): ActionResultSuccess {
     if (videoJob.endpoint === undefined) {
         return createActionResult(
             `Failed to generate the requested video. No endpoint returned.`,
@@ -197,11 +208,14 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
     </script>
     `;
 
-    return createActionResultFromHtmlDisplayWithScript(` 
+    return createActionResultFromHtmlDisplayWithScript(
+        ` 
         <div style="loading-container">
             <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
             <div class="generating">Generating</div>
         </div>          
-        <div id="video_div_${hash}" class="ai-video-container"></div>`
-         + jScript, "An AI generated video of '" + videoJob.prompt + "'");
+        <div id="video_div_${hash}" class="ai-video-container"></div>` +
+            jScript,
+        "An AI generated video of '" + videoJob.prompt + "'",
+    );
 }

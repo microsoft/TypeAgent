@@ -36,7 +36,7 @@ export function azureApiSettingsFromEnv(
 ): AzureApiSettings {
     env ??= process.env;
 
-    let settings: AzureApiSettings | undefined; 
+    let settings: AzureApiSettings | undefined;
 
     switch (modelType) {
         case ModelType.Chat:
