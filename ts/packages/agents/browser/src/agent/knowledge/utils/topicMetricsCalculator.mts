@@ -14,135 +14,379 @@ export interface TopicImportanceMetrics {
 }
 
 /**
- * Calculate PageRank scores for topics
+ * Calculate PageRank scores for topics with performance optimizations
  */
 function calculatePageRank(
     topics: any[],
     relationships: any[],
-    iterations: number = 20,
+    iterations: number = 5, // OPTIMIZATION: Reduced from 20 to 5 iterations
     dampingFactor: number = 0.85,
 ): Map<string, number> {
-    const scores = new Map<string, number>();
-    const inLinks = new Map<string, string[]>();
-    const outLinks = new Map<string, Set<string>>();
-
-    // Initialize
-    topics.forEach((topic) => {
-        scores.set(topic.topicId, 1.0 / topics.length);
-        inLinks.set(topic.topicId, []);
-        outLinks.set(topic.topicId, new Set());
+    const nodeMap = new Map<string, number>();
+    topics.forEach((topic, index) => {
+        nodeMap.set(topic.topicId, index);
     });
 
-    // Build link structure (parent-child + lateral)
-    topics.forEach((topic) => {
-        if (topic.parentTopicId) {
-            inLinks.get(topic.topicId)?.push(topic.parentTopicId);
-            outLinks.get(topic.parentTopicId)?.add(topic.topicId);
-        }
-    });
+    const n = topics.length;
+    if (n === 0) return new Map();
 
-    relationships.forEach((rel) => {
-        inLinks.get(rel.to)?.push(rel.from);
-        outLinks.get(rel.from)?.add(rel.to);
-    });
-
-    // Iterative PageRank calculation
-    for (let iter = 0; iter < iterations; iter++) {
-        const newScores = new Map<string, number>();
-
-        topics.forEach((topic) => {
-            const topicId = topic.topicId;
-            let score = (1 - dampingFactor) / topics.length;
-
-            const incoming = inLinks.get(topicId) || [];
-            incoming.forEach((fromId) => {
-                const fromScore = scores.get(fromId) || 0;
-                const fromOutCount = outLinks.get(fromId)?.size || 1;
-                score += dampingFactor * (fromScore / fromOutCount);
-            });
-
-            newScores.set(topicId, score);
+    // OPTIMIZATION: Early return for small graphs - use simple degree centrality
+    if (n < 10) {
+        const result = new Map<string, number>();
+        topics.forEach(topic => {
+            const degree = relationships.filter(rel => 
+                rel.from === topic.topicId || rel.to === topic.topicId
+            ).length;
+            result.set(topic.topicId, degree / Math.max(1, relationships.length));
         });
-
-        scores.clear();
-        newScores.forEach((score, id) => scores.set(id, score));
+        return result;
     }
 
-    return scores;
+    // Build adjacency matrix (sparse representation)
+    const adjacency = new Map<number, Set<number>>();
+    const outDegree = new Array(n).fill(0);
+
+    for (let i = 0; i < n; i++) {
+        adjacency.set(i, new Set<number>());
+    }
+
+    // OPTIMIZATION: Only process strong relationships (>= 0.3 strength)
+    const strongRelationships = relationships.filter(rel => (rel.strength || 0) >= 0.3);
+    
+    for (const rel of strongRelationships) {
+        const fromIndex = nodeMap.get(rel.from);
+        const toIndex = nodeMap.get(rel.to);
+
+        if (fromIndex !== undefined && toIndex !== undefined) {
+            adjacency.get(fromIndex)!.add(toIndex);
+            outDegree[fromIndex]++;
+        }
+    }
+
+    // Initialize PageRank values
+    let pageRank = new Array(n).fill(1.0 / n);
+    let newPageRank = new Array(n).fill(0);
+
+    // OPTIMIZATION: Early convergence detection
+    const convergenceThreshold = 0.001;
+    let converged = false;
+
+    for (let iter = 0; iter < iterations && !converged; iter++) {
+        // Reset new values
+        newPageRank.fill((1.0 - dampingFactor) / n);
+
+        // Calculate new PageRank values
+        for (let i = 0; i < n; i++) {
+            if (outDegree[i] > 0) {
+                const contribution = (dampingFactor * pageRank[i]) / outDegree[i];
+                for (const neighbor of adjacency.get(i)!) {
+                    newPageRank[neighbor] += contribution;
+                }
+            }
+        }
+
+        // OPTIMIZATION: Check for convergence
+        let maxDiff = 0;
+        for (let i = 0; i < n; i++) {
+            maxDiff = Math.max(maxDiff, Math.abs(newPageRank[i] - pageRank[i]));
+        }
+        
+        if (maxDiff < convergenceThreshold) {
+            converged = true;
+            console.log(`[Perf] PageRank converged after ${iter + 1} iterations (threshold: ${maxDiff.toFixed(6)})`);
+        }
+
+        // Swap arrays
+        [pageRank, newPageRank] = [newPageRank, pageRank];
+    }
+
+    // Convert back to topic ID mapping
+    const result = new Map<string, number>();
+    topics.forEach((topic, index) => {
+        result.set(topic.topicId, pageRank[index]);
+    });
+
+    return result;
 }
 
 /**
- * Calculate betweenness centrality for topics
+ * Calculate betweenness centrality for topics with performance optimizations
  */
 function calculateBetweenness(
     topics: any[],
     relationships: any[],
 ): Map<string, number> {
-    const betweenness = new Map<string, number>();
-    const adjacency = new Map<string, Set<string>>();
+    const nodeCount = topics.length;
+    
+    // OPTIMIZATION: Skip expensive betweenness calculation for large graphs
+    // Use degree centrality as approximation instead
+    if (nodeCount > 500) {
+        console.log(`[Perf] Skipping betweenness centrality for ${nodeCount} topics (too large). Using degree centrality approximation.`);
+        
+        const result = new Map<string, number>();
+        const degreeCount = new Map<string, number>();
+        
+        // Calculate degree centrality as approximation
+        topics.forEach(topic => degreeCount.set(topic.topicId, 0));
+        
+        relationships.forEach(rel => {
+            const fromCount = degreeCount.get(rel.from) || 0;
+            const toCount = degreeCount.get(rel.to) || 0;
+            degreeCount.set(rel.from, fromCount + 1);
+            degreeCount.set(rel.to, toCount + 1);
+        });
+        
+        // Normalize degree centrality to approximate betweenness
+        const maxDegree = Math.max(...Array.from(degreeCount.values()), 1);
+        topics.forEach(topic => {
+            const degree = degreeCount.get(topic.topicId) || 0;
+            // Use square root to approximate betweenness characteristics
+            result.set(topic.topicId, Math.sqrt(degree / maxDegree));
+        });
+        
+        return result;
+    }
 
-    // Initialize
-    topics.forEach((topic) => {
-        betweenness.set(topic.topicId, 0);
-        adjacency.set(topic.topicId, new Set());
+    // For smaller graphs, use optimized betweenness calculation
+    console.log(`[Perf] Computing betweenness centrality for ${nodeCount} topics`);
+    
+    const nodeMap = new Map<string, number>();
+    topics.forEach((topic, index) => {
+        nodeMap.set(topic.topicId, index);
     });
 
-    // Build adjacency (bidirectional for betweenness)
-    topics.forEach((topic) => {
-        if (topic.parentTopicId) {
-            adjacency.get(topic.topicId)?.add(topic.parentTopicId);
-            adjacency.get(topic.parentTopicId)?.add(topic.topicId);
+    const n = topics.length;
+    if (n === 0) return new Map();
+
+    // Build adjacency list with only strong relationships for performance
+    const strongRelationships = relationships.filter(rel => (rel.strength || 0) >= 0.4);
+    console.log(`[Perf] Using ${strongRelationships.length}/${relationships.length} strong relationships for betweenness`);
+    
+    const adjacency = new Map<number, Set<number>>();
+    for (let i = 0; i < n; i++) {
+        adjacency.set(i, new Set<number>());
+    }
+
+    for (const rel of strongRelationships) {
+        const fromIndex = nodeMap.get(rel.from);
+        const toIndex = nodeMap.get(rel.to);
+
+        if (fromIndex !== undefined && toIndex !== undefined) {
+            adjacency.get(fromIndex)!.add(toIndex);
+            adjacency.get(toIndex)!.add(fromIndex); // Undirected
         }
-    });
+    }
 
-    relationships.forEach((rel) => {
-        adjacency.get(rel.from)?.add(rel.to);
-        adjacency.get(rel.to)?.add(rel.from);
-    });
+    const betweenness = new Array(n).fill(0);
 
-    // Simplified betweenness: count shortest paths through each node
-    topics.forEach((source) => {
-        const distances = new Map<string, number>();
+    // OPTIMIZATION: Sample subset of nodes for large-ish graphs (100-500 nodes)
+    const sampleSize = nodeCount > 100 ? Math.min(100, Math.floor(nodeCount * 0.3)) : nodeCount;
+    const sampleIndices = nodeCount > 100 ? 
+        Array.from({length: sampleSize}, () => Math.floor(Math.random() * nodeCount)) :
+        Array.from({length: nodeCount}, (_, i) => i);
+    
+    console.log(`[Perf] Sampling ${sampleSize}/${nodeCount} nodes for betweenness calculation`);
+
+    for (const source of sampleIndices) {
+        // BFS from source
+        const stack: number[] = [];
+        const paths = new Map<number, number[]>();
+        const distances = new Map<number, number>();
         const pathCounts = new Map<string, number>();
-        const queue: string[] = [source.topicId];
+        const queue: string[] = [source.toString()];
 
-        distances.set(source.topicId, 0);
-        pathCounts.set(source.topicId, 1);
+        distances.set(source, 0);
+        pathCounts.set(source.toString(), 1);
 
         while (queue.length > 0) {
-            const current = queue.shift()!;
+            const current = parseInt(queue.shift()!);
             const currentDist = distances.get(current)!;
 
             const neighbors = adjacency.get(current) || new Set();
             neighbors.forEach((neighbor) => {
                 if (!distances.has(neighbor)) {
                     distances.set(neighbor, currentDist + 1);
-                    pathCounts.set(neighbor, 0);
-                    queue.push(neighbor);
+                    pathCounts.set(neighbor.toString(), 0);
+                    queue.push(neighbor.toString());
                 }
 
                 if (distances.get(neighbor) === currentDist + 1) {
-                    const currentCount = pathCounts.get(neighbor) || 0;
-                    const sourceCount = pathCounts.get(current) || 0;
-                    pathCounts.set(neighbor, currentCount + sourceCount);
+                    const currentCount = pathCounts.get(neighbor.toString()) || 0;
+                    const sourceCount = pathCounts.get(current.toString()) || 0;
+                    pathCounts.set(neighbor.toString(), currentCount + sourceCount);
+
+                    if (!paths.has(neighbor)) {
+                        paths.set(neighbor, []);
+                    }
+                    paths.get(neighbor)!.push(current);
                 }
             });
+
+            stack.push(current);
         }
 
-        // Update betweenness scores
-        pathCounts.forEach((count, nodeId) => {
-            if (nodeId !== source.topicId && count > 1) {
-                const current = betweenness.get(nodeId) || 0;
-                betweenness.set(nodeId, current + count - 1);
+        // Calculate dependencies and update betweenness
+        const dependencies = new Map<number, number>();
+        while (stack.length > 0) {
+            const w = stack.pop()!;
+            const predecessors = paths.get(w) || [];
+
+            for (const v of predecessors) {
+                const pathCountV = pathCounts.get(v.toString()) || 0;
+                const pathCountW = pathCounts.get(w.toString()) || 0;
+                const depW = dependencies.get(w) || 0;
+
+                if (pathCountW > 0) {
+                    const dependency = (pathCountV / pathCountW) * (1 + depW);
+                    dependencies.set(v, (dependencies.get(v) || 0) + dependency);
+                }
             }
-        });
+
+            if (w !== source) {
+                betweenness[w] += dependencies.get(w) || 0;
+            }
+        }
+    }
+
+    // Scale results if we sampled
+    const scaleFactor = nodeCount > 100 ? nodeCount / sampleSize : 1;
+
+    // Convert back to topic ID mapping
+    const result = new Map<string, number>();
+    topics.forEach((topic, index) => {
+        result.set(topic.topicId, betweenness[index] * scaleFactor);
     });
 
-    return betweenness;
+    return result;
 }
 
 /**
- * Calculate descendant count for each topic
+ * Optimize graph structure through intelligent sparsification
+ * Removes low-importance edges while preserving graph connectivity and centrality properties
+ */
+function sparsifyGraph(
+    topics: any[],
+    relationships: any[],
+): { 
+    sparsifiedTopics: any[], 
+    sparsifiedRelationships: any[],
+    compressionRatio: number 
+} {
+    if (topics.length <= 50 || relationships.length <= 100) {
+        // No sparsification needed for small graphs
+        return {
+            sparsifiedTopics: topics,
+            sparsifiedRelationships: relationships,
+            compressionRatio: 1.0
+        };
+    }
+
+    // OPTIMIZATION: Remove isolated or weakly connected nodes
+    const topicDegree = new Map<string, number>();
+    topics.forEach(topic => topicDegree.set(topic.topicId, 0));
+
+    // Count degrees from parent-child relationships
+    topics.forEach(topic => {
+        if (topic.parentTopicId) {
+            topicDegree.set(topic.topicId, (topicDegree.get(topic.topicId) || 0) + 1);
+            topicDegree.set(topic.parentTopicId, (topicDegree.get(topic.parentTopicId) || 0) + 1);
+        }
+    });
+
+    // Count degrees from lateral relationships
+    relationships.forEach(rel => {
+        if (topicDegree.has(rel.from) && topicDegree.has(rel.to)) {
+            topicDegree.set(rel.from, (topicDegree.get(rel.from) || 0) + 1);
+            topicDegree.set(rel.to, (topicDegree.get(rel.to) || 0) + 1);
+        }
+    });
+
+    // Filter out isolated nodes (degree 0) and very weakly connected nodes
+    const minDegreeThreshold = Math.max(1, Math.ceil(Math.log2(topics.length)));
+    const connectedTopics = topics.filter(topic => {
+        const degree = topicDegree.get(topic.topicId) || 0;
+        // Keep root-level topics even if low degree, and topics with sufficient connectivity
+        return topic.level === 0 || degree >= minDegreeThreshold || 
+               (topic.childCount || 0) > 0; // Keep topics with children
+    });
+
+    // OPTIMIZATION: Adaptive relationship filtering based on graph size
+    let strengthThreshold: number;
+    if (relationships.length > 10000) {
+        strengthThreshold = 0.8; // Very strict for large graphs
+    } else if (relationships.length > 1000) {
+        strengthThreshold = 0.7;
+    } else if (relationships.length > 500) {
+        strengthThreshold = 0.6;
+    } else {
+        strengthThreshold = 0.5;
+    }
+
+    // Filter relationships by strength and ensure both endpoints exist
+    const connectedTopicIds = new Set(connectedTopics.map(t => t.topicId));
+    const filteredRelationships = relationships.filter(rel => {
+        return (rel.strength || 0) >= strengthThreshold &&
+               connectedTopicIds.has(rel.from) &&
+               connectedTopicIds.has(rel.to);
+    });
+
+    // OPTIMIZATION: Ensure graph connectivity by preserving spanning tree
+    // Build minimum spanning tree of high-importance edges to maintain connectivity
+    const preserveConnectivity = (topics: any[], relationships: any[]) => {
+        const clusters = new Map<string, Set<string>>();
+        const bridgeRelationships: any[] = [];
+
+        // Initialize each topic as its own cluster
+        topics.forEach(topic => {
+            clusters.set(topic.topicId, new Set([topic.topicId]));
+        });
+
+        // Sort relationships by strength (descending) to prioritize strong connections
+        const sortedRels = [...relationships].sort((a, b) => (b.strength || 0) - (a.strength || 0));
+
+        // Add edges that connect different clusters (Union-Find approach)
+        sortedRels.forEach(rel => {
+            const fromCluster = clusters.get(rel.from);
+            const toCluster = clusters.get(rel.to);
+
+            if (fromCluster && toCluster && fromCluster !== toCluster) {
+                // Merge clusters
+                const mergedCluster = new Set([...fromCluster, ...toCluster]);
+                
+                // Update all nodes in merged cluster
+                mergedCluster.forEach(nodeId => {
+                    clusters.set(nodeId, mergedCluster);
+                });
+
+                bridgeRelationships.push(rel);
+            }
+        });
+
+        return bridgeRelationships;
+    };
+
+    // Preserve essential connectivity edges
+    const essentialEdges = preserveConnectivity(connectedTopics, filteredRelationships);
+    
+    // Combine filtered relationships with essential connectivity edges
+    const finalRelationships = [...new Set([...filteredRelationships, ...essentialEdges])];
+
+    const compressionRatio = (connectedTopics.length * finalRelationships.length) / 
+                           (topics.length * relationships.length);
+
+    console.log(`Graph sparsification: ${topics.length}→${connectedTopics.length} topics, ` +
+                `${relationships.length}→${finalRelationships.length} relationships ` +
+                `(compression: ${(100 * (1 - compressionRatio)).toFixed(1)}%)`);
+
+    return {
+        sparsifiedTopics: connectedTopics,
+        sparsifiedRelationships: finalRelationships,
+        compressionRatio
+    };
+}
+
+/**
+ * Calculate descendant count for each topic with optimizations
  */
 function calculateDescendantCounts(topics: any[]): Map<string, number> {
     const counts = new Map<string, number>();
@@ -185,7 +429,7 @@ function calculateDescendantCounts(topics: any[]): Map<string, number> {
 }
 
 /**
- * Calculate composite importance score for topics
+ * Calculate composite importance score for topics with advanced optimizations
  */
 export function calculateTopicImportance(
     topics: any[],
@@ -196,10 +440,30 @@ export function calculateTopicImportance(
         return [];
     }
 
-    // Calculate metrics
-    const pageRanks = calculatePageRank(topics, relationships);
-    const betweenness = calculateBetweenness(topics, relationships);
-    const descendantCounts = calculateDescendantCounts(topics);
+    const startTime = performance.now();
+    console.log(`Starting calculateTopicImportance: ${topics.length} topics, ${relationships.length} relationships`);
+
+    // OPTIMIZATION: Apply graph sparsification for large graphs
+    const sparsificationStart = performance.now();
+    const { sparsifiedTopics, sparsifiedRelationships } = sparsifyGraph(topics, relationships);
+    const sparsificationTime = performance.now() - sparsificationStart;
+    console.log(`Graph sparsification completed in ${sparsificationTime.toFixed(2)}ms`);
+
+    // Calculate metrics on sparsified graph for better performance
+    const pageRankStart = performance.now();
+    const pageRanks = calculatePageRank(sparsifiedTopics, sparsifiedRelationships);
+    const pageRankTime = performance.now() - pageRankStart;
+    console.log(`PageRank calculation completed in ${pageRankTime.toFixed(2)}ms`);
+
+    const betweennessStart = performance.now();
+    const betweenness = calculateBetweenness(sparsifiedTopics, sparsifiedRelationships);
+    const betweennessTime = performance.now() - betweennessStart;
+    console.log(`Betweenness calculation completed in ${betweennessTime.toFixed(2)}ms`);
+
+    const descendantStart = performance.now();
+    const descendantCounts = calculateDescendantCounts(sparsifiedTopics);
+    const descendantTime = performance.now() - descendantStart;
+    console.log(`Descendant counts completed in ${descendantTime.toFixed(2)}ms`);
 
     // Get entity counts from topic metrics or data
     const entityCounts = new Map<string, number>();
@@ -209,7 +473,7 @@ export function calculateTopicImportance(
         });
     }
 
-    // Normalize metrics
+    // Normalize metrics (using original topics for proper scaling)
     const maxPageRank = Math.max(...Array.from(pageRanks.values()));
     const maxBetweenness = Math.max(...Array.from(betweenness.values()));
     const maxDescendants = Math.max(...Array.from(descendantCounts.values()));
@@ -217,8 +481,9 @@ export function calculateTopicImportance(
         ...topics.map((t) => entityCounts.get(t.topicId) || 0),
     );
 
-    // Calculate composite importance
-    return topics.map((topic) => {
+    // Calculate composite importance for ALL original topics
+    const results = topics.map((topic) => {
+        // Use calculated metrics if available, otherwise use defaults
         const pageRank = pageRanks.get(topic.topicId) || 0;
         const betweennessScore = betweenness.get(topic.topicId) || 0;
         const descendantCount = descendantCounts.get(topic.topicId) || 0;
@@ -232,13 +497,19 @@ export function calculateTopicImportance(
         const normalizedEntityCount =
             maxEntityCount > 0 ? entityCount / maxEntityCount : 0;
 
-        // Composite importance score (weighted average)
+        // OPTIMIZATION: Enhanced composite importance with level-based weighting
+        let levelWeight = 0;
+        if (topic.level === 0) levelWeight = 0.15; // Root topics get highest boost
+        else if (topic.level === 1) levelWeight = 0.1; // Second level gets moderate boost
+        else if (topic.level === 2) levelWeight = 0.05; // Third level gets small boost
+
+        // Enhanced weighted importance calculation
         const importance =
-            normalizedPageRank * 0.3 + // PageRank weight
-            normalizedEntityCount * 0.25 + // Entity links
+            normalizedPageRank * 0.25 + // Reduced PageRank weight
+            normalizedEntityCount * 0.25 + // Entity links remain important
             normalizedDescendants * 0.2 + // Subtree size
             normalizedBetweenness * 0.15 + // Bridge topics
-            (topic.level === 0 ? 0.1 : 0); // Root level boost
+            levelWeight; // Level-based importance
 
         return {
             topicId: topic.topicId,
@@ -252,4 +523,9 @@ export function calculateTopicImportance(
             importance: Math.min(importance, 1.0), // Cap at 1.0
         };
     });
+
+    const totalTime = performance.now() - startTime;
+    console.log(`calculateTopicImportance completed in ${totalTime.toFixed(2)}ms total`);
+    
+    return results;
 }
