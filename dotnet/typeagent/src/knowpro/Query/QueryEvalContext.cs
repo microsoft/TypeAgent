@@ -7,44 +7,31 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class QueryEvalContext
 {
-    public QueryEvalContext(
-        IConversation conversation,
-        CancellationToken cancellationToken = default
-    )
-        : this(
-              conversation,
-              new CachingCollectionReader<SemanticRef>(conversation.SemanticRefs),
-              new CachingCollectionReader<IMessage>(conversation.Messages),
-              cancellationToken
-        )
-    {
-    }
+    IConversationCache _cache;
 
     public QueryEvalContext(
         IConversation conversation,
-        CachingCollectionReader<SemanticRef> semanticRefReader,
-        CachingCollectionReader<IMessage> messageReader,
-        CancellationToken cancellationToken
+        IConversationCache? cache = null,
+        CancellationToken cancellationToken = default
     )
     {
-        ArgumentVerify.ThrowIfNull(semanticRefReader, nameof(semanticRefReader));
-        ArgumentVerify.ThrowIfNull(messageReader, nameof(messageReader));
+        ArgumentVerify.ThrowIfNull(cache, nameof(cache));
 
         CancellationToken = cancellationToken;
 
         Conversation = conversation;
 
-        SemanticRefs = semanticRefReader;
-        Messages = messageReader;
+        _cache = cache ?? new ConversationCache(conversation);
+
         MatchedTerms = new TermSet();
         MatchedPropertyTerms = new PropertyTermSet();
     }
 
     public IConversation Conversation { get; }
 
-    public IAsyncCollectionReader<SemanticRef> SemanticRefs { get; }
+    public IAsyncCollectionReader<SemanticRef> SemanticRefs => _cache.SemanticRefs;
 
-    public IAsyncCollectionReader<IMessage> Messages { get; }
+    public IAsyncCollectionReader<IMessage> Messages => _cache.Messages;
 
     public ITermToSemanticRefIndex SemanticRefIndex => Conversation.SemanticRefIndex;
 

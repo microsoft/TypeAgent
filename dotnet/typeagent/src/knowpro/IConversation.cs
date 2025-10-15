@@ -37,20 +37,11 @@ public interface IConversation
 
 public static class ConversationExtensions
 {
-
-    public static ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
-        this IConversation conversation,
-        SearchSelectExpr select,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return conversation.SearchKnowledgeAsync(select, null, cancellationToken);
-    }
-
     public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
         this IConversation conversation,
         SearchSelectExpr select,
-        SearchOptions? options = null,
+        SearchOptions? options,
+        IConversationCache? cache = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -63,23 +54,25 @@ public static class ConversationExtensions
             options
         ).ConfigureAwait(false);
 
-        QueryEvalContext context = new QueryEvalContext(conversation, cancellationToken);
+        QueryEvalContext context = new QueryEvalContext(conversation, cache, cancellationToken);
         return await queryExpr.EvalAsync(context).ConfigureAwait(false);
     }
 
     public static ValueTask<ConversationSearchResult?> SearchConversationAsync(
         this IConversation conversation,
-        SearchTermGroup searchTermGroup,
+        SearchSelectExpr select,
+        SearchOptions? options = null,
         CancellationToken cancellationToken = default
     )
     {
-        return conversation.SearchConversationAsync(new SearchSelectExpr(searchTermGroup), null, null, cancellationToken);
+        return conversation.SearchConversationAsync(select, options, null, null, cancellationToken);
     }
 
     public static async ValueTask<ConversationSearchResult?> SearchConversationAsync(
         this IConversation conversation,
         SearchSelectExpr select,
         SearchOptions? options = null,
+        IConversationCache? conversationCache = null,
         string? rawSearchQuery = null,
         CancellationToken cancellationToken = default
     )
@@ -99,7 +92,7 @@ public static class ConversationExtensions
             rawSearchQuery
         ).ConfigureAwait(false);
 
-        QueryEvalContext context = new QueryEvalContext(conversation, cancellationToken);
+        QueryEvalContext context = new QueryEvalContext(conversation, conversationCache, cancellationToken);
         var messageOrdinals = await messageQueryExpr.EvalAsync(context).ConfigureAwait(false);
         return new ConversationSearchResult()
         {

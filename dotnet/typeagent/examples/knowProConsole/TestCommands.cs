@@ -96,20 +96,25 @@ public class TestCommands : ICommandModule
         IConversation conversation = EnsureConversation();
 
         // Hard coded test for now
-        SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
-        {
-            Terms = [
-                new PropertySearchTerm("genre", "sci-fi"),
-                new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
-            ]
-        };
-        ConversationSearchResult? searchResults = await conversation.SearchConversationAsync(searchGroup, cancellationToken);
+        SearchSelectExpr select = new(
+            new SearchTermGroup(SearchTermBooleanOp.Or)
+            {
+                Terms = [
+                    new PropertySearchTerm("genre", "sci-fi"),
+                    new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
+                ]
+            }
+        );
+
+        ConversationSearchResult? searchResults = await conversation.SearchConversationAsync(
+            select,
+            null,
+            cancellationToken
+        );
         KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
 
         searchResults = await conversation.SearchConversationAsync(
-            searchGroup,
-            null,
-            null,
+            select,
             new SearchOptions()
             {
                 ExactMatch = false,
@@ -125,7 +130,8 @@ public class TestCommands : ICommandModule
     {
         KnowProWriter.WriteLine(searchGroup);
 
-        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken).ConfigureAwait(false);
+        var results = await conversation.SearchKnowledgeAsync(
+            new SearchSelectExpr(searchGroup), null, null, cancellationToken).ConfigureAwait(false);
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
     }
 
