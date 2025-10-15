@@ -35,6 +35,8 @@ internal class MatchAccumulator<T>
 
     public IEnumerable<T> GetMatchedValues() => _matches.Keys;
 
+    public List<T> ToValues() => _matches.Values.Map((m) => m.Value);
+
     public void SetMatches(IEnumerable<Match<T>> matches, bool clear = false)
     {
         ArgumentVerify.ThrowIfNull(matches, nameof(matches));
@@ -176,7 +178,7 @@ internal class MatchAccumulator<T>
         }
     }
 
-    public IList<Match<T>> GetSortedByScore(int minHitCount)
+    public List<Match<T>> GetSortedByScore(int minHitCount = -1)
     {
         if (_matches.Count == 0)
         {
@@ -187,7 +189,7 @@ internal class MatchAccumulator<T>
         return matches;
     }
 
-    public IList<Match<T>> GetTopNScoring(int maxMatches = -1, int minHitCount = -1)
+    public List<Match<T>> GetTopNScoring(int maxMatches = -1, int minHitCount = -1)
     {
         if (Count == 0)
         {
@@ -217,7 +219,7 @@ internal class MatchAccumulator<T>
         return topN.Count;
     }
 
-    public IList<Match<T>> GetWithHitCount(int minHitCount)
+    public List<Match<T>> GetWithHitCount(int minHitCount)
     {
         return [.. MatchesWithMinHitCount(minHitCount)];
     }
@@ -242,7 +244,7 @@ internal class MatchAccumulator<T>
 
     private IEnumerable<Match<T>> MatchesWithMinHitCount(int minHitCount)
     {
-        return minHitCount > 0
+        return minHitCount > 1
             ? GetMatches((m) => m.HitCount >= minHitCount)
             : GetMatches();
     }

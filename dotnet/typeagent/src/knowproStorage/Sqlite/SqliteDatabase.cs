@@ -7,6 +7,8 @@ namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqliteDatabase : IDisposable
 {
+    public const int MaxBatchSize = 999;
+
     private SqliteConnection _connection;
 
     public SqliteDatabase(string filePath, bool createNew = false)
@@ -158,5 +160,16 @@ public class SqliteDatabase : IDisposable
         );
     }
 
+    internal static string[] MakeInPlaceholderIds(int count, string prefix = "@id")
+    {
+        ArgumentVerify.ThrowIfLessThanEqual(count, 0, nameof(count));
+
+        string[] ids = new string[count];
+        for (int i = 0; i < count; ++i)
+        {
+            ids[i] = $"@id{i}";
+        }
+        return ids;
+    }
 }
 

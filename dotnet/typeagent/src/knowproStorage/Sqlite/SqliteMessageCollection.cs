@@ -93,13 +93,20 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
 
+        /*
         // TODO: Bulk operations
         IList<TMessage> messages = [];
         foreach (int msgId in messageIds)
         {
             messages.Add(Get(msgId));
         }
-        return ValueTask.FromResult(messages);
+        */
+        List<TMessage> messages = new List<TMessage>(messageIds.Count);
+        foreach (var messageRow in MessagesTable.GetMessages(_db, messageIds))
+        {
+            messages.Add(FromMessageRow(messageRow));
+        }
+        return ValueTask.FromResult((IList<TMessage>)messages);
     }
 
     public async IAsyncEnumerator<TMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -241,13 +248,19 @@ public class SqliteMessageCollection : IMessageCollection
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
 
-        // TODO: Bulk operations
+        /*
         IList<IMessage> messages = [];
         foreach (int msgId in messageIds)
         {
             messages.Add(Get(msgId));
         }
-        return ValueTask.FromResult(messages);
+        */
+        List<IMessage> messages = new List<IMessage>(messageIds.Count);
+        foreach (var messageRow in MessagesTable.GetMessages(_db, messageIds))
+        {
+            messages.Add(FromMessageRow(messageRow));
+        }
+        return ValueTask.FromResult((IList<IMessage>)messages);
     }
 
     public async IAsyncEnumerator<IMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -315,6 +328,27 @@ FROM Messages WHERE msg_id = @msg_id",
                    throw new ArgumentException($"No message at ordinal {msgId}");
         }
         );
+    }
+
+    public static IEnumerable<MessageRow> GetMessages(SqliteDatabase db, IList<int> messageIds)
+    {
+        foreach (var batch in messageIds.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+
+            var rows = db.Enumerate(
+                $@"
+SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+FROM Messages WHERE msg_id IN ({string.Join(", ", placeholderIds)})
+ORDER BY msg_id",
+                (cmd) => cmd.AddIdParameters(placeholderIds, batch),
+                ReadMessageRow
+            );
+            foreach (var row in rows)
+            {
+                yield return row;
+            }
+        }
     }
 
     public static IAsyncEnumerable<MessageRow> GetAllMessagesAsync(SqliteDatabase db, CancellationToken cancellation = default)

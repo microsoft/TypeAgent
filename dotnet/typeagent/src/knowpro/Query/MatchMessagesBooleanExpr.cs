@@ -5,15 +5,29 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
 {
-    public MatchMessagesBooleanExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesBooleanExpr(IList<QueryOpExpr> termExpressions)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(termExpressions, nameof(termExpressions));
 
         TermExpressions = termExpressions;
     }
 
-    public IList<QueryOpExpr<object?>> TermExpressions { get; }
+    public IList<QueryOpExpr> TermExpressions { get; }
 
+
+    public static MatchMessagesBooleanExpr Create(
+        IList<QueryOpExpr> termExpressions,
+        SearchTermBooleanOp booleanOp
+    )
+    {
+        return booleanOp switch
+        {
+            SearchTermBooleanOp.And => new MatchMessagesAndExpr(termExpressions),
+            SearchTermBooleanOp.Or => new MatchMessagesOrExpr(termExpressions),
+            SearchTermBooleanOp.OrMax => new MatchMessagesOrMaxExpr(termExpressions),
+            _ => throw new NotSupportedException(),
+        };
+    }
 
     protected void BeginMatch(QueryEvalContext context)
     {
@@ -29,7 +43,7 @@ internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
             {
                 if (sra.Count > 0)
                 {
-                    messageMatches = await AccumulateMessagesAsync(context, sra);
+                    messageMatches = await AccumulateMessagesAsync(context, sra).ConfigureAwait(false);
                 }
             }
             else if (matches is MessageAccumulator ma)
@@ -43,7 +57,9 @@ internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
     protected async ValueTask<MessageAccumulator> AccumulateMessagesAsync(QueryEvalContext context, SemanticRefAccumulator semanticRefMatches)
     {
         var messageMatches = new MessageAccumulator();
-        IList<SemanticRef> semanticRefs = await context.SemanticRefs.GetAsync(semanticRefMatches.ToOrdinals());
+        IList<SemanticRef> semanticRefs = await context.SemanticRefs.GetAsync(
+            semanticRefMatches.ToOrdinals()
+        ).ConfigureAwait(false);
         int i = 0;
         foreach (var match in semanticRefMatches.GetMatches())
         {
@@ -56,7 +72,7 @@ internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
 
 internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
 {
-    public MatchMessagesOrExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesOrExpr(IList<QueryOpExpr> termExpressions)
         : base(termExpressions)
     {
     }
@@ -66,14 +82,15 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
         BeginMatch(context);
 
         MessageAccumulator? allMatches = null;
-        foreach (var termExpr in TermExpressions) {
-            var matches = await termExpr.EvalAsync(context);
+        foreach (var termExpr in TermExpressions)
+        {
+            var matches = await termExpr.GetResultAsync(context).ConfigureAwait(false);
             if (matches is null)
             {
                 continue;
             }
 
-            MessageAccumulator? messageMatches = await AccumulateMessagesAsync(context, matches);
+            MessageAccumulator? messageMatches = await AccumulateMessagesAsync(context, matches).ConfigureAwait(false);
             if (messageMatches is not null)
             {
                 if (allMatches is not null)
@@ -93,7 +110,7 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
 
 internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
 {
-    public MatchMessagesAndExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesAndExpr(IList<QueryOpExpr> termExpressions)
         : base(termExpressions)
     {
     }
@@ -105,15 +122,16 @@ internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
         MessageAccumulator? allMatches = null;
         int iTerm = 0;
 
-        for (; iTerm < TermExpressions.Count; ++iTerm)
+        int count = TermExpressions.Count;
+        for (; iTerm < count; ++iTerm)
         {
-            var matches = await TermExpressions[iTerm].EvalAsync(context);
+            var matches = await TermExpressions[iTerm].GetResultAsync(context).ConfigureAwait(false);
             if (matches is null)
             {
                 // We can't possibly have an 'and'
                 break;
             }
-            var messageMatches = await AccumulateMessagesAsync(context, matches);
+            var messageMatches = await AccumulateMessagesAsync(context, matches).ConfigureAwait(false);
             if (messageMatches is null)
             {
                 // Can't possibly be an 'and'
@@ -155,14 +173,14 @@ internal class MatchMessagesAndExpr : MatchMessagesBooleanExpr
 
 internal class MatchMessagesOrMaxExpr : MatchMessagesOrExpr
 {
-    public MatchMessagesOrMaxExpr(IList<QueryOpExpr<object?>> termExpressions)
+    public MatchMessagesOrMaxExpr(IList<QueryOpExpr> termExpressions)
         : base(termExpressions)
     {
     }
 
     public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
     {
-        var matches = await base.EvalAsync(context);
+        var matches = await base.EvalAsync(context).ConfigureAwait(false);
         var maxHitCount = matches.GetMaxHitCount();
         if (maxHitCount > 1)
         {

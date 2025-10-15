@@ -33,6 +33,25 @@ internal class QueryCompiler
         return resultExpr;
     }
 
+    public ValueTask<QueryOpExpr<List<ScoredMessageOrdinal>>> CompileMessageQueryAsync(
+        QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> knowledgeMatches,
+        SearchOptions? options,
+        string? rawSearchQuery
+    )
+    {
+        QueryOpExpr<MessageAccumulator> query = new MessagesFromKnowledgeExpr(knowledgeMatches);
+        if (options is not null)
+        {
+            if (options.MaxCharsInBudget is not null && options.MaxCharsInBudget.Value > 0)
+            {
+                query = new SelectMessagesInCharBudget(query, options.MaxCharsInBudget.Value);
+            }
+        }
+
+        QueryOpExpr<List<ScoredMessageOrdinal>> messagesExpr = new GetScoredMessagesExpr(query);
+        return ValueTask.FromResult(messagesExpr);
+    }
+
     public (IList<SearchTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroup(
         SearchTermGroup searchGroup,
         GetScopeExpr? scopeExpr,
@@ -50,8 +69,10 @@ internal class QueryCompiler
                     break;
 
                 case PropertySearchTerm propertyTerm:
-                    var propertyExpr = CompilePropertyTerm(propertyTerm);
-                    propertyExpr = CompileMatchFilter(propertyExpr, matchFilter);
+                    var propertyExpr = CompileMatchFilter(
+                        CompilePropertyTerm(propertyTerm),
+                        matchFilter
+                    );
                     termExpressions.Add(propertyExpr);
                     if (propertyTerm.PropertyName is PropertyNameSearchTerm kp)
                     {
@@ -71,8 +92,10 @@ internal class QueryCompiler
                     break;
 
                 case SearchTerm searchTerm:
-                    var searchTermExpr = CompileSearchTerm(searchTerm);
-                    searchTermExpr = CompileMatchFilter(searchTermExpr, matchFilter);
+                    var searchTermExpr = CompileMatchFilter(
+                        CompileSearchTerm(searchTerm),
+                        matchFilter
+                    );
                     termExpressions.Add(searchTermExpr);
                     compiledTerms[0].Terms.Add(searchTerm);
                     break;
@@ -80,10 +103,70 @@ internal class QueryCompiler
             }
         }
 
-        var boolExpr = MatchTermsBooleanExpr.CreateMatchTermsBooleanExpr(
+        var boolExpr = MatchTermsBooleanExpr.Create(
             termExpressions,
             searchGroup.BooleanOp,
             scopeExpr
+        );
+        return (compiledTerms, boolExpr);
+    }
+
+    public (IList<SearchTermGroup>, QueryOpExpr<MessageAccumulator>) CompileMessageSearchGroup(
+       SearchTermGroup searchGroup,
+       IQuerySemanticRefPredicate? matchFilter = null
+   )
+    {
+        List<SearchTermGroup> compiledTerms = [new SearchTermGroup(searchGroup.BooleanOp)];
+
+        List<QueryOpExpr> termExpressions = [];
+        foreach (var term in searchGroup.Terms)
+        {
+            switch (term)
+            {
+                default:
+                    break;
+
+                case PropertySearchTerm propertyTerm:
+                    // FIX: Cast propertyExpr to QueryOpExpr<IMessageOrdinalSource?>
+                    var propertyExpr = CompileMatchFilter(
+                        CompilePropertyTerm(propertyTerm),
+                        matchFilter
+                    );
+                    termExpressions.Add(propertyExpr);
+                    if (propertyTerm.PropertyName is PropertyNameSearchTerm kp)
+                    {
+                        compiledTerms[0].Terms.Add(kp.Value.ToRequired());
+                    }
+                    compiledTerms[0].Terms.Add(propertyTerm.PropertyValue.ToRequired());
+                    break;
+
+                case SearchTermGroup subGroup:
+                    // FIX: Cast groupExpr to QueryOpExpr<IMessageOrdinalSource?>
+                    var (nestedTerms, groupExpr) = CompileSearchGroup(
+                        subGroup,
+                        null,  // Apply scopes on the outermost expression only
+                        matchFilter
+                    );
+                    compiledTerms.AddRange(nestedTerms);
+                    termExpressions.Add(groupExpr);
+                    break;
+
+                case SearchTerm searchTerm:
+                    // FIX: Cast searchTermExpr to QueryOpExpr<IMessageOrdinalSource?>
+                    var searchTermExpr = CompileMatchFilter(
+                        CompileSearchTerm(searchTerm),
+                        matchFilter
+                    );
+                    termExpressions.Add(searchTermExpr);
+                    compiledTerms[0].Terms.Add(searchTerm);
+                    break;
+
+            }
+        }
+
+        var boolExpr = MatchMessagesBooleanExpr.Create(
+            termExpressions,
+            searchGroup.BooleanOp
         );
         return (compiledTerms, boolExpr);
     }
@@ -93,7 +176,8 @@ internal class QueryCompiler
         WhenFilter? whenFilter
     )
     {
-        var scopeExpr = await CompileScope(searchGroup, whenFilter);
+        var scopeExpr = await CompileScope(searchGroup, whenFilter).ConfigureAwait(false);
+
         var selectExpr = CompileSelect(searchGroup, scopeExpr);
 
         return new SelectTopNKnowledgeGroupExpr(
