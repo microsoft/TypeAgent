@@ -37,10 +37,19 @@ public interface IConversation
 
 public static class ConversationExtensions
 {
+
+    public static ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
+        this IConversation conversation,
+        SearchSelectExpr select,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return conversation.SearchKnowledgeAsync(select, null, cancellationToken);
+    }
+
     public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
         this IConversation conversation,
-        SearchTermGroup searchTermGroup,
-        WhenFilter? whenFilter = null,
+        SearchSelectExpr select,
         SearchOptions? options = null,
         CancellationToken cancellationToken = default
     )
@@ -49,8 +58,8 @@ public static class ConversationExtensions
         options ??= SearchOptions.CreateDefault();
 
         var queryExpr = await compiler.CompileKnowledgeQueryAsync(
-            searchTermGroup,
-            whenFilter,
+            select.SearchTermGroup,
+            select.When,
             options
         ).ConfigureAwait(false);
 
@@ -64,15 +73,14 @@ public static class ConversationExtensions
         CancellationToken cancellationToken = default
     )
     {
-        return conversation.SearchConversationAsync(searchTermGroup, null, null, null, cancellationToken);
+        return conversation.SearchConversationAsync(new SearchSelectExpr(searchTermGroup), null, null, cancellationToken);
     }
 
     public static async ValueTask<ConversationSearchResult?> SearchConversationAsync(
         this IConversation conversation,
-        SearchTermGroup searchTermGroup,
-        WhenFilter? whenFilter = null,
-        string? rawSearchQuery = null,
+        SearchSelectExpr select,
         SearchOptions? options = null,
+        string? rawSearchQuery = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -80,8 +88,8 @@ public static class ConversationExtensions
         QueryCompiler compiler = new QueryCompiler(conversation);
 
         var knowledgeQueryExpr = await compiler.CompileKnowledgeQueryAsync(
-            searchTermGroup,
-            whenFilter,
+            select.SearchTermGroup,
+            select.When,
             options
         ).ConfigureAwait(false);
 
