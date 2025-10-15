@@ -1984,6 +1984,31 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.99.8)
 
+  packages/agents/video:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
+      telemetry:
+        specifier: workspace:*
+        version: link:../../telemetry
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/aiclient:
     dependencies:
       '@azure/identity':
@@ -2604,6 +2629,9 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+      video-agent:
+        specifier: workspace:*
+        version: link:../agents/video
       ws:
         specifier: ^8.17.1
         version: 8.18.2

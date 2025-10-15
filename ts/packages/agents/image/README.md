@@ -1,6 +1,6 @@
 # image
 
-Image dispatcher agent. This **sample agent** shows how to make calls to varying APIs to retrieve images and show them to the user. Currently the image agent calls Bing image search and Azure OpenAI Dall-E endpoints.
+Image dispatcher agent. This **sample agent** shows how to make calls to varying APIs to create images and show them to the user. Currently the image agent calls Azure OpenAI Dall-E endpoints.
 
 &lt;Deprecated&gt;
 [Bing [Image] Search is being Deprecated August 2025](https://learn.microsoft.com/en-us/microsoftsearch/retirement-microsoft-search-bing).
