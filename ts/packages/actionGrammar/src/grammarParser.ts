@@ -356,6 +356,7 @@ class CacheGrammarParser {
                 this.consume(")", "at end of variable");
                 continue;
             }
+
             if (this.isAt("(")) {
                 this.skipWhitespace(1);
                 const rules = this.parseRules();
@@ -385,11 +386,6 @@ class CacheGrammarParser {
 
             expNodes.push(s);
         } while (!this.isAtEnd());
-
-        if (expNodes.length === 0) {
-            this.throwError(`Empty expression.`);
-        }
-
         return expNodes;
     }
 
@@ -426,8 +422,7 @@ class CacheGrammarParser {
             this.throwError(`Invalid value.`);
         }
         const numStr = match[0];
-        this.curr += numStr.length;
-        this.skipWhitespace();
+
         const n = Number(numStr);
         if (isNaN(n)) {
             this.throwError(`Invalid literal '${numStr}'.`);
@@ -435,6 +430,8 @@ class CacheGrammarParser {
         if (n === Infinity || n === -Infinity) {
             this.throwError(`Infinity values are not allowed.`);
         }
+        this.curr += numStr.length;
+        this.skipWhitespace();
         return {
             type: "literal",
             value: n,
@@ -539,8 +536,18 @@ class CacheGrammarParser {
             !this.isAt(")")
         ) {
             // Early error
+            if (this.isAt("${")) {
+                // Common mistake
+                this.throwError("'${' is not valid, did you mean '$('?");
+            }
             this.throwError("Special character needs to be escaped");
         }
+
+        // Delay semantic error until syntax is fully parsed
+        if (expNodes.length === 0) {
+            this.throwError(`Empty expression.`);
+        }
+
         return result;
     }
 
