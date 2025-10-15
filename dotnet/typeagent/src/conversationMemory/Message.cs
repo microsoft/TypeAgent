@@ -4,6 +4,7 @@
 
 namespace TypeAgent.ConversationMemory;
 
+// TODO: move into KnowPro
 public class Message<TMeta> : IMessageEx where TMeta : IMessageMetadata
 {
     public Message()
@@ -22,6 +23,11 @@ public class Message<TMeta> : IMessageEx where TMeta : IMessageMetadata
     // Strongly-typed property
     [JsonPropertyName("metadata")]
     public TMeta? Metadata { get; set; }
+
+    public int GetLength()
+    {
+        return this.GetCharCount();
+    }
 
     // Explicit interface implementation for non-generic access
     IMessageMetadata? IMessage.Metadata

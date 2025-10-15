@@ -7,9 +7,14 @@ namespace TypeAgent.KnowPro;
 public interface IMessage : IKnowledgeSource
 {
     IList<string> TextChunks { get; set; }
+
     IList<string>? Tags { get; set; }
+
     string? Timestamp { get; set; }
+
     IMessageMetadata? Metadata { get; set; }
+
+    int GetLength();
 }
 
 public interface IMessageMetadata
@@ -29,6 +34,11 @@ public class Message : IMessage
     public IMessageMetadata? Metadata { get; set; }
 
     public KnowledgeResponse? GetKnowledge() { return null; }
+
+    public int GetLength()
+    {
+        return this.GetCharCount();
+    }
 }
 
 public interface IMessageEx : IMessage

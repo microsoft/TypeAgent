@@ -29,7 +29,7 @@ public static class MessageCollectionExtensions
         int i = 0;
         int totalCharCount = 0;
 
-        // TODO: load in batches/bulk
+        // TODO: Should
         foreach (var messageOrdinal in messageOrdinals)
         {
             var message = await messages.GetAsync(messageOrdinal).ConfigureAwait(false);

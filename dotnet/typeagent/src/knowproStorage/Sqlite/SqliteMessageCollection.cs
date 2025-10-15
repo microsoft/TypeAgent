@@ -46,8 +46,8 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         MessageRow messageRow = ToMessageRow(message);
 
         using var cmd = _db.CreateCommand(
-           @"INSERT INTO Messages (msg_id, chunks, chunk_uri, start_timestamp, tags, metadata, extra)
-          VALUES (@msg_id, @chunks, @chunk_uri, @start_timestamp, @tags, @metadata, @extra);"
+           @"INSERT INTO Messages (msg_id, chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra)
+          VALUES (@msg_id, @chunks, @chunk_uri, @message_length, @start_timestamp, @tags, @metadata, @extra);"
         );
         messageRow.Write(cmd, GetNextMessageId());
 
@@ -135,10 +135,16 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     MessageRow ToMessageRow(TMessage message)
     {
+        if (message.TextChunks.IsNullOrEmpty())
+        {
+            throw new NotImplementedException("message.TextChunks must be provided");
+        }
+
         MessageRow messageRow = new();
 
         messageRow.ChunksJson = StorageSerializer.ToJson(message.TextChunks);
         messageRow.ChunkUri = null;
+        messageRow.MessageLength = message.GetLength();
         messageRow.StartTimestamp = message.Timestamp;
         messageRow.TagsJson = StorageSerializer.ToJson(message.Tags);
         messageRow.MetadataJson = StorageSerializer.ToJson((TMeta)message.Metadata);
@@ -172,6 +178,7 @@ internal class MessageRow
 {
     public string? ChunksJson { get; set; }
     public string? ChunkUri { get; set; }
+    public int MessageLength { get; set; }
     public string? StartTimestamp { get; set; }
     public string? TagsJson { get; set; }
     public string? MetadataJson { get; set; }
@@ -182,6 +189,7 @@ internal class MessageRow
         int iCol = 0;
         ChunksJson = reader.GetStringOrNull(iCol++);
         ChunkUri = reader.GetStringOrNull(iCol++);
+        MessageLength = reader.GetInt32(iCol++);
         StartTimestamp = reader.GetStringOrNull(iCol++);
         TagsJson = reader.GetStringOrNull(iCol++);
         MetadataJson = reader.GetStringOrNull(iCol++);
@@ -199,6 +207,7 @@ internal class MessageRow
         cmd.AddParameter("@msg_id", messageId);
         cmd.AddParameter("@chunks", ChunksJson);
         cmd.AddParameter("@chunk_uri", ChunkUri);
+        cmd.AddParameter("@message_length", MessageLength);
         cmd.AddParameter("@start_timestamp", StartTimestamp);
         cmd.AddParameter("@tags", TagsJson);
         cmd.AddParameter("@metadata", MetadataJson);
