@@ -26,21 +26,6 @@ public interface IMessageMetadata
     IList<string>? Dest { get; }
 }
 
-public class Message : IMessage
-{
-    public IList<string> TextChunks { get; set; }
-    public IList<string>? Tags { get; set; }
-    public string? Timestamp { get; set; }
-    public IMessageMetadata? Metadata { get; set; }
-
-    public KnowledgeResponse? GetKnowledge() { return null; }
-
-    public int GetLength()
-    {
-        return this.GetCharCount();
-    }
-}
-
 public interface IMessageEx : IMessage
 {
     string? SerializeExtraDataToJson();

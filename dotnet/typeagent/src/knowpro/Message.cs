@@ -1,10 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+namespace TypeAgent.KnowPro;
 
-namespace TypeAgent.ConversationMemory;
+public class Message : IMessage
+{
+    public IList<string> TextChunks { get; set; }
+    public IList<string>? Tags { get; set; }
+    public string? Timestamp { get; set; }
+    public IMessageMetadata? Metadata { get; set; }
 
-// TODO: move into KnowPro
+    public KnowledgeResponse? GetKnowledge() { return null; }
+
+    public int GetLength()
+    {
+        return this.GetCharCount();
+    }
+}
+
 public class Message<TMeta> : IMessageEx where TMeta : IMessageMetadata
 {
     public Message()
