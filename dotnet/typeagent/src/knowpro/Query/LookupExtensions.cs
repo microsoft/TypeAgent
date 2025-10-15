@@ -38,7 +38,13 @@ internal static class LookupExtensions
             return scoredOrdinals;
         }
 
-        var filtered = await FilterAsync(context, scoredOrdinals, filter, scoreBooster).ConfigureAwait(false);
+        var filtered = await FilterAsync(
+            context,
+            scoredOrdinals,
+            filter,
+            scoreBooster
+        ).ConfigureAwait(false);
+
         return filtered ?? scoredOrdinals;
     }
 
@@ -57,7 +63,8 @@ internal static class LookupExtensions
         IList<SemanticRef> selectedRefs = await context.SemanticRefs.GetAsync(scoredOrdinals).ConfigureAwait(false);
 
         IList<ScoredSemanticRefOrdinal>? filtered = null;
-        for (int i = 0; i < selectedRefs.Count; ++i)
+        int count = selectedRefs.Count;
+        for (int i = 0; i < count; ++i)
         {
             SemanticRef semanticRef = selectedRefs[i];
             ScoredSemanticRefOrdinal scoredOrdinal = scoredOrdinals[i];
@@ -67,10 +74,14 @@ internal static class LookupExtensions
                 {
                     continue;
                 }
+                if (scoreBooster is not null)
+                {
+                    scoredOrdinal = scoreBooster(semanticRef, scoredOrdinal);
+                }
                 filtered ??= [];
                 filtered.Add(scoredOrdinal);
             }
-            if (scoreBooster is not null)
+            else if (scoreBooster is not null)
             {
                 scoredOrdinals[i] = scoreBooster(semanticRef, scoredOrdinal);
             }

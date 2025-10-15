@@ -46,6 +46,15 @@ public static class ArgumentVerify
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfNotEqual(int x, int y, string paramName)
+    {
+        if (x != y)
+        {
+            throw new ArgumentOutOfRangeException($"The value {x} must be < {y}", paramName);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfGreaterThanEqual(int value, int max, string paramName)
     {
         if (value >= max)

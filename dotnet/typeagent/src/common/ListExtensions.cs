@@ -21,29 +21,6 @@ public static class ListExtensions
         return list is not null ? list.Count : 0;
     }
 
-    public static IEnumerable<T> Slice<T>(this IList<T> list, int startAt, int count, int stride = 1)
-    {
-        if (stride < 0)
-        {
-            for (int i = Math.Min(startAt + count, list.Count) - 1; i >= startAt; i -= stride)
-            {
-                yield return list[i];
-            }
-        }
-        else if (stride > 0)
-        {
-            for (int i = startAt, max = Math.Min(startAt + count, list.Count); i < max; i += stride)
-            {
-                yield return list[i];
-            }
-        }
-    }
-
-    public static IEnumerable<T> Slice<T>(this IList<T> list, int startAt)
-    {
-        return list.Slice(startAt, list.Count - startAt);
-    }
-
     public static void Shift<T>(this IList<T> list)
     {
         if (list.Count > 0)
@@ -52,23 +29,26 @@ public static class ListExtensions
         }
     }
 
-    public static IList<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
+    public static List<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
 
         List<TResult> results = new List<TResult>(list.Count);
-        foreach (var item in list)
+        int count = list.Count;
+        for (int i = 0; i < count; ++i)
         {
-            results.Add(mapFn(item));
+            results.Add(mapFn(list[i]));
         }
         return results;
     }
 
-    public static IList<T> Filter<T>(this IList<T> list, Func<T, bool> filter)
+    public static List<T> Filter<T>(this IList<T> list, Func<T, bool> filter)
     {
-        IList<T> filtered = [];
-        foreach (T item in list)
+        List<T> filtered = [];
+        int count = list.Count;
+        for (int i = 0; i < count; ++i)
         {
+            var item = list[i];
             if (filter(item))
             {
                 filtered.Add(item);
@@ -80,5 +60,20 @@ public static class ListExtensions
     public static string Join<T>(this IList<T> list, string sep = ", ")
     {
         return string.Join(sep, list.Select((t) => t.ToString()));
+    }
+
+    public static IEnumerable<IList<T>> Batch<T>(this IList<T> items, int batchSize, IList<T>? buffer = null)
+    {
+        if (items.Count <= batchSize)
+        {
+            yield return items;
+        }
+        else
+        {
+            foreach (var batch in EnumerationExtensions.Batch(items, batchSize, buffer))
+            {
+                yield return batch;
+            }
+        }
     }
 }

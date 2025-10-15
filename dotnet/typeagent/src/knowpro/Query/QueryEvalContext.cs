@@ -18,8 +18,8 @@ internal class QueryEvalContext
               cancellationToken
         )
     {
-
     }
+
     public QueryEvalContext(
         IConversation conversation,
         CachingCollectionReader<SemanticRef> semanticRefReader,
@@ -55,6 +55,8 @@ internal class QueryEvalContext
     public PropertyTermSet MatchedPropertyTerms { get; private set; }
 
     public TextRangesInScope? TextRangesInScope { get; set; }
+
+    public IDictionary<KnowledgeType, SemanticRefSearchResult>? KnowledgeMatches { get; set; }
 
     public CancellationToken CancellationToken { get; set; }
 

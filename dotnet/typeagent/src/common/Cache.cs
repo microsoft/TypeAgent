@@ -213,7 +213,7 @@ public static class CacheExtensions
         return values;
     }
 
-    private static (IList<TValue> values, IList<TKey>? pending) ResolveKeys<TKey, TValue>(
+    private static (TValue[] values, List<TKey>? pending) ResolveKeys<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys
     )
@@ -221,7 +221,7 @@ public static class CacheExtensions
         //
         // Fill items from cache
         //
-        List<TValue> values = new List<TValue>(keys.Count);
+        TValue[] values = new TValue[keys.Count];
         List<TKey> pending = null;
         for (int i = 0; i < keys.Count; ++i)
         {
@@ -232,24 +232,25 @@ public static class CacheExtensions
             }
             else
             {
+                values[i] = default;
                 pending ??= [];
                 pending.Add(key);
             }
         }
-        return (values, keys);
+        return (values, pending);
     }
 
     private static void MergePendingResults<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
-        IList<TValue> values,
+        TValue[] values,
         IList<TValue> pendingValues
     )
         where TValue : class
     {
         // Merge the batch into results
         int iPending = 0;
-        for (int i = 0; i < values.Count; ++i)
+        for (int i = 0; i < values.Length; ++i)
         {
             if (values[i] is null)
             {
