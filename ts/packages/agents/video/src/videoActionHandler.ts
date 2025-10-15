@@ -54,7 +54,7 @@ async function handleVideoAction(
             const response = await videoModel.generateVideo(
                 createVideoAction.parameters.caption,
                 1,
-                5,
+                parseInt(createVideoAction.parameters.duration ?? "5"),
                 1280,
                 720,
                 await getInPaintItems(createVideoAction.parameters.relatedFiles, videoContext),
@@ -142,6 +142,9 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
                 const statusResponse = await fetch("${statusUrl}", { headers: ${JSON.stringify(videoJob.headers)} });
 
                 if (!statusResponse.ok) {
+                    // hide the generating graphic
+                    container.previousElementSibling.style.display = 'none';
+
                     console.log("❌ Failed to get job status.");
                     container.innerText = "Failed to get job status. " + statusResponse.statusText;
                     return;
@@ -150,7 +153,7 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
                 statusData = await statusResponse.json();
                 console.log("Waiting..." + JSON.stringify(statusData, null, 2));
                 status = statusData.status;
-                container.previousElementSibling.children[1].innerText = "JobID - " + jobId + ", Status: " + status + " " + (i++) * 5  + " seconds elapsed";
+                container.previousElementSibling.children[1].innerText = "JobID - " + jobId + "<br> Status: " + status + " " + (i++) * 5  + " seconds elapsed";
             }
 
             // hide the generating graphic
@@ -171,22 +174,22 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
                         const videoElement = document.createElement("video");
                         videoElement.src = videoObjectURL;
                         videoElement.controls = true;
-                        videoElement.width = 640; // optional
-                        videoElement.height = 360; // optional
+                        videoElement.width = 100%;
+                        videoElement.height = 100%;
                         videoElement.autoplay = true;
 
                         // Append to container
                         container.appendChild(videoElement);
                         console.log("🎥 Video added to the page.");                        
                     } else {
-                        console.log("❌ Failed to retrieve video content.");
+                        container.innerText = "❌ Failed to retrieve video content.";
                     }
                 } else {
-                    console.log("⚠️ Status is succeeded, but no generations were returned.");
+                    container.innerText = "⚠️ Status is succeeded, but no generations were returned.";
                 }
             } else {
-                console.log("❌ Video generation failed.");
-                console.log(JSON.stringify(response.data, null, 4));
+                container.innerHTML = "<div>❌ Video generation failed: " + statusData.failure_reason ?? "" + "</div>";
+                console.log(JSON.stringify(statusData, null, 2));
             }
         }
         
@@ -194,11 +197,11 @@ function createVideoPlaceHolder(videoJob: VideoGenerationJob): ActionResultSucce
     </script>
     `;
 
-    return createActionResultFromHtmlDisplayWithScript(`
+    return createActionResultFromHtmlDisplayWithScript(` 
         <div style="loading-container">
             <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
             <div class="generating">Generating</div>
-        </div>        
+        </div>          
         <div id="video_div_${hash}" class="ai-video-container"></div>`
          + jScript, "An AI generated video of '" + videoJob.prompt + "'");
 }

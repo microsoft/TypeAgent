@@ -13,5 +13,7 @@ export type CreateVideoAction = {
         caption: string;
         // The file names of any attachments the user provided
         relatedFiles?: string[];
+        // The duration in seconds (default is 5 seconds)
+        duration?: "5" | "10" | "15" | "20";
     };
 };
