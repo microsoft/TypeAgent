@@ -214,7 +214,6 @@ export function setContent(
         const links = document.head.getElementsByTagName("link");
         for (let i = 0; i < links.length; i++) {
             if (links[i].rel.toLowerCase() == "stylesheet") {
-
                 if (links[i].href.startsWith("./")) {
                     const l = links[i].cloneNode(true) as HTMLLinkElement;
                     l.href = window.location.origin + "/" + l.href;
