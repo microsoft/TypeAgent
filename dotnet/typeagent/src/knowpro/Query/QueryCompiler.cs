@@ -248,6 +248,11 @@ internal class QueryCompiler
 
         }
         var scopeSelectors = new List<IQueryTextRangeSelector>();
+        if (filter?.DateRange is not null)
+        {
+            scopeSelectors.Add(new TextRangesInDateRangeSelector(filter.DateRange!.Value));
+        }
+
 
         // TODO
 
