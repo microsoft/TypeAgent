@@ -212,7 +212,7 @@ export function setContent(
         // use the same stylesheets as the main page
         let css: string = "";
         const links = document.head.getElementsByTagName("link");
-        let promises: Promise<void>[] = []; 
+        let promises: Promise<void>[] = [];
         for (let i = 0; i < links.length; i++) {
             if (links[i].rel.toLowerCase() == "stylesheet") {
                 if (links[i].href.startsWith("./")) {
@@ -220,14 +220,14 @@ export function setContent(
                     l.href = window.location.origin + "/" + l.href;
                     css += l.outerHTML;
                 } else if (links[i].href.startsWith("file:")) {
-                    // Download the CSS 
+                    // Download the CSS
                     promises.push(
                         fetch(links[i].href)
-                        .then((response) => response.text())
-                        .then((text) => {
-                            css += `<style>${text}</style>`;
-                            console.log(text);
-                        })
+                            .then((response) => response.text())
+                            .then((text) => {
+                                css += `<style>${text}</style>`;
+                                console.log(text);
+                            }),
                     );
                 } else {
                     css += links[i].outerHTML;
@@ -242,7 +242,7 @@ export function setContent(
             ${css}
             </head>
             <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
-        });        
+        });
 
         contentElm.appendChild(iframe);
     } else {
