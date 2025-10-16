@@ -8,9 +8,9 @@ internal interface IQueryTextRangeSelector
     ValueTask<TextRangeCollection?> EvalAsync(QueryEvalContext context);
 }
 
-internal class TextRangeSelector : QueryOpExpr<TextRangeCollection>, IQueryTextRangeSelector
+internal class QueryTextRangeSelector : QueryOpExpr<TextRangeCollection>, IQueryTextRangeSelector
 {
-    public TextRangeSelector(IList<TextRange> rangesInScope)
+    public QueryTextRangeSelector(IList<TextRange> rangesInScope)
     {
         TextRangesInScope = new TextRangeCollection([.. rangesInScope]);
         TextRangesInScope.Sort();

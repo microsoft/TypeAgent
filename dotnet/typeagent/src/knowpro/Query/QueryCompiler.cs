@@ -215,7 +215,6 @@ internal class QueryCompiler
                 default:
                     if (term.Value.IsEntityProperty)
                     {
-
                         propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
                     }
                     return new MatchPropertySearchTermExpr(propertyTerm);
@@ -275,7 +274,7 @@ internal class QueryCompiler
 
             if (!filter.TextRangesInScope.IsNullOrEmpty())
             {
-                scopeSelectors.Add(new TextRangeSelector(filter.TextRangesInScope));
+                scopeSelectors.Add(new QueryTextRangeSelector(filter.TextRangesInScope));
             }
 
             if (!filter.Tags.IsNullOrEmpty())
@@ -285,6 +284,10 @@ internal class QueryCompiler
                 AddTermsScopeSelector(tagGroup, scopeSelectors);
             }
 
+            if (!filter.TagMatchingTerms.IsNullOrEmpty())
+            {
+                AddTermsScopeSelector(termGroup, scopeSelectors, new KnowledgeTypePredicate(KnowledgeType.STag));
+            }
         }
 
         GetScopeExpr? scopeExpr = !scopeSelectors.IsNullOrEmpty()
@@ -293,9 +296,13 @@ internal class QueryCompiler
         return ValueTask.FromResult(scopeExpr);
     }
 
-    private void AddTermsScopeSelector(SearchTermGroup termGroup, List<IQueryTextRangeSelector> scopeSelectors)
+    private void AddTermsScopeSelector(
+        SearchTermGroup termGroup,
+        List<IQueryTextRangeSelector> scopeSelectors,
+        IQuerySemanticRefPredicate? predicate = null
+    )
     {
-        var (searchTermsUsed, selectExpr) = CompileMessageSearchGroup(termGroup, null);
+        var (searchTermsUsed, selectExpr) = CompileMessageSearchGroup(termGroup, predicate);
         scopeSelectors.Add(new TextRangesFromMessagesSelector(selectExpr));
         _allScopeSearchTerms.AddRange(searchTermsUsed);
     }

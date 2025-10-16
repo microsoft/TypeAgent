@@ -75,30 +75,6 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         return intersection;
     }
 
-    // TODO: does this filter have to look at the entire SemanticRef?
-    // Can TextRanges be used directly?
-    public async ValueTask<IList<Match<int>>> GetFilteredMatchesAsync(
-        QueryEvalContext context,
-        Func<QueryEvalContext, SemanticRef, bool> predicate
-    )
-    {
-        var ordinals = ToOrdinals();
-        var semanticRefs = await context.SemanticRefs.GetAsync(ordinals).ConfigureAwait(false);
-        Debug.Assert(semanticRefs.Count == ordinals.Count);
-
-        List<Match<int>> filtered = [];
-        int i = 0;
-        foreach (Match<int> match in GetMatches())
-        {
-            if (predicate(context, semanticRefs[i]))
-            {
-                filtered.Add(match);
-            }
-            ++i;
-        }
-        return filtered;
-    }
-
     public IList<int> ToOrdinals() => ToValues();
 
     public IList<ScoredSemanticRefOrdinal> ToScoredOrdinals()
