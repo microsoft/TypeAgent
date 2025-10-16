@@ -18,6 +18,26 @@ public class SearchTermGroup : ISearchTerm
 
     public bool IsEmpty => Terms.IsNullOrEmpty();
 
+    public void Add(string term, bool exactMatch = false)
+    {
+        Terms.Add(new SearchTerm(term, exactMatch));
+    }
+
+    public void Add(KnowledgePropertyName propertyName, string value, bool exactMatch = false)
+    {
+        Terms.Add(new PropertySearchTerm(propertyName, new SearchTerm(value, exactMatch)));
+    }
+
+    public void Add(KnowledgePropertyName propertyName, IEnumerable<string> values, bool exactMatch = false)
+    {
+        ArgumentVerify.ThrowIfNull(values, nameof(values));
+
+        foreach (string value in values)
+        {
+            Terms.Add(new PropertySearchTerm(propertyName, new SearchTerm(value, exactMatch)));
+        }
+    }
+
     public override string ToString()
     {
         return $"{BooleanOp} ({Terms.Join()})";

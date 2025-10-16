@@ -215,6 +215,7 @@ internal class QueryCompiler
                 default:
                     if (term.Value.IsEntityProperty)
                     {
+
                         propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
                     }
                     return new MatchPropertySearchTermExpr(propertyTerm);
@@ -250,31 +251,42 @@ internal class QueryCompiler
 
         }
         var scopeSelectors = new List<IQueryTextRangeSelector>();
-        if (filter?.DateRange is not null)
-        {
-            scopeSelectors.Add(new TextRangesInDateRangeSelector(filter.DateRange!.Value));
-        }
 
-        if (filter is not null && !filter.ScopeDefiningTerms.IsNullOrEmpty())
+        if (filter is not null)
         {
-            AddTermsScopeSelector(filter.ScopeDefiningTerms, scopeSelectors);
-        }
-        else if (!termGroup.IsNullOrEmpty())
-        {
-            // Treat any actions as inherently scope selecting.
-            var actionTermsGroup = GetActionTermsFromSearchGroup(termGroup);
-            if (actionTermsGroup is not null)
+            if (filter.DateRange is not null)
             {
-                AddTermsScopeSelector(actionTermsGroup, scopeSelectors);
+                scopeSelectors.Add(new TextRangesInDateRangeSelector(filter.DateRange.Value));
             }
+
+            if (!filter.ScopeDefiningTerms.IsNullOrEmpty())
+            {
+                AddTermsScopeSelector(filter.ScopeDefiningTerms, scopeSelectors);
+            }
+            else if (!termGroup.IsNullOrEmpty())
+            {
+                // Treat any actions as inherently scope selecting.
+                var actionTermsGroup = GetActionTermsFromSearchGroup(termGroup);
+                if (actionTermsGroup is not null)
+                {
+                    AddTermsScopeSelector(actionTermsGroup, scopeSelectors);
+                }
+            }
+
+            if (!filter.TextRangesInScope.IsNullOrEmpty())
+            {
+                scopeSelectors.Add(new TextRangeSelector(filter.TextRangesInScope));
+            }
+
+            if (!filter.Tags.IsNullOrEmpty())
+            {
+                var tagGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax);
+                tagGroup.Add(KnowledgePropertyName.Tag, filter.Tags, true);
+                AddTermsScopeSelector(tagGroup, scopeSelectors);
+            }
+
         }
 
-        // TODO
-
-        if (filter is not null && !filter.TextRangesInScope.IsNullOrEmpty())
-        {
-            scopeSelectors.Add(new TextRangeSelector(filter.TextRangesInScope));
-        }
         GetScopeExpr? scopeExpr = !scopeSelectors.IsNullOrEmpty()
             ? new GetScopeExpr(scopeSelectors)
             : null;
