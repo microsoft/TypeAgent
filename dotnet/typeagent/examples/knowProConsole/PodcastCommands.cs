@@ -58,9 +58,14 @@ public class PodcastCommands : ICommandModule
         string name = namedArgs.GetRequired("name");
 
         UnloadCurrent();
+
+        _kpContext.Stopwatch.Restart();
         var podcast = new Podcast(
             new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, name)
         );
+        _kpContext.Stopwatch.Stop();
+        KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+
         SetCurrent(podcast);
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Loaded {name}");
     }

@@ -10,6 +10,11 @@ internal static class SqliteEx
         return reader.IsDBNull(iCol) ? null : reader.GetString(iCol);
     }
 
+    public static int? GetIntOrNull(this SqliteDataReader reader, int iCol)
+    {
+        return reader.IsDBNull(iCol) ? null : reader.GetInt32(iCol);
+    }
+
     public static void AddParameter(this SqliteCommand cmd, string name, object? value)
     {
         cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value);

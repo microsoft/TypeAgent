@@ -153,7 +153,7 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
 }
 
 /// <summary>
-/// Vanilla cache that holds on everything read
+/// Vanilla cache with no cache replacement policy
 /// </summary>
 /// <typeparam name="TKey"></typeparam>
 /// <typeparam name="TValue"></typeparam>
@@ -171,6 +171,7 @@ public class KeyValueCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey
 
 public static class CacheExtensions
 {
+    // If item is found in cache, return it, else load
     public static async ValueTask<TValue> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         TKey key,
@@ -187,6 +188,8 @@ public static class CacheExtensions
         return value;
     }
 
+    // Finds keys that don't have available values in the cache and loads only their values
+    // Keys that have values present in the cache are returned as i
     public static async ValueTask<IList<TValue>> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,

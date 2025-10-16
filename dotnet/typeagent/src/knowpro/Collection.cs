@@ -23,6 +23,10 @@ public interface IAsyncCollection<T> : IReadOnlyAsyncCollection<T>
     ValueTask AppendAsync(IEnumerable<T> items, CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Automatically injects a read cache in front of reading interfaces
+/// </summary>
+/// <typeparam name="TValue"></typeparam>
 public class CachingCollectionReader<TValue> : IAsyncCollectionReader<TValue>
     where TValue : class
 {

@@ -48,11 +48,9 @@ internal static class LookupExtensions
         return filtered ?? scoredOrdinals;
     }
 
-    // FUTURE:
-    // Since we are only filtering by ranges, alter schema shred and store ranges so that
-    // we don't have to load the entire semantic ref here
-    // Further future: Consider implementing as a subquery if the underlying store supports it
-
+    // TODO:
+    // Use the pre-shredded ranges here and a direct query for them
+    //
     public static async ValueTask<IList<ScoredSemanticRefOrdinal>?> FilterAsync(
         QueryEvalContext context,
         IList<ScoredSemanticRefOrdinal> scoredOrdinals,

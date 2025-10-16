@@ -179,14 +179,16 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteLineHeading(string title, int level = 1)
+    public static void WriteLineHeading(string title)
     {
-        Write('#', level);
+        Write('#', title.Length);
+        WriteLine();
         if (!string.IsNullOrEmpty(title))
         {
             Write(" ");
             Write(title);
         }
+        Write('#', title.Length);
         WriteLine();
     }
 
@@ -224,6 +226,21 @@ public class ConsoleWriter
         WriteUnderline(text);
         WriteLine();
     }
+
+    public static void WriteTiming(Stopwatch clock, string? label = null)
+    {
+        WriteTiming(ConsoleColor.Gray, clock, label);
+    }
+
+    public static void WriteTiming(ConsoleColor color, Stopwatch clock, string? label = null)
+    {
+        var timing = !string.IsNullOrEmpty(label)
+            ? $"{label}: { clock.ElapsedMilliseconds} ms"
+            : $"{clock.ElapsedMilliseconds} ms";
+
+        WriteLine(color, timing);
+    }
+
 }
 
 public enum ListType
