@@ -18,8 +18,8 @@ public class SqliteTimestampToTextRangeIndex : ITimestampToTextRangeIndex
         return _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
     }
 
-    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
-        => Task.FromResult(GetCount());
+    public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(GetCount());
 
     public void AddTimestamp(int messageOrdinal, string timestamp)
     {
@@ -34,10 +34,10 @@ WHERE msg_id = @msgId
         cmd.ExecuteNonQuery();
     }
 
-    public Task AddTimestampAsync(int messageOrdinal, string timestamp)
+    public ValueTask AddTimestampAsync(int messageOrdinal, string timestamp)
     {
         AddTimestamp(messageOrdinal, timestamp);
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     public IList<TimestampedTextRange> LookupRange(DateRange dateRange)
@@ -67,8 +67,8 @@ ORDER BY start_timestamp
         return reader.GetList(ReadTimestampedRange);
     }
 
-    public Task<IList<TimestampedTextRange>> LookupRangeAsync(DateRange dateRange)
-        => Task.FromResult(LookupRange(dateRange));
+    public ValueTask<IList<TimestampedTextRange>> LookupRangeAsync(DateRange dateRange)
+        => ValueTask.FromResult(LookupRange(dateRange));
 
     private TimestampedTextRange ReadTimestampedRange(SqliteDataReader reader)
     {

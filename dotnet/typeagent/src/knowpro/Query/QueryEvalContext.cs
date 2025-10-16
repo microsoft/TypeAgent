@@ -43,6 +43,8 @@ internal class QueryEvalContext
 
     public IPropertyToSemanticRefIndex PropertyIndex => Conversation.SecondaryIndexes.PropertyToSemanticRefIndex;
 
+    public ITimestampToTextRangeIndex TimestampIndex => Conversation.SecondaryIndexes.TimestampIndex;
+
     public TermSet MatchedTerms { get; private set; }
 
     public PropertyTermSet MatchedPropertyTerms { get; private set; }

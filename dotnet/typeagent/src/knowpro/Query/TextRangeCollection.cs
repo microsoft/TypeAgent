@@ -18,7 +18,7 @@ internal class TextRangeCollection
         _ranges = ranges;
     }
 
-    public bool AddRange(TextRange textRange)
+    public bool Add(TextRange textRange)
     {
         // TODO Future: merge ranges
 

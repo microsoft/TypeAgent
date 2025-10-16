@@ -23,3 +23,25 @@ internal class TextRangeSelector : QueryOpExpr<TextRangeCollection>, IQueryTextR
         return ValueTask.FromResult(TextRangesInScope);
     }
 }
+
+internal class TextRangesInDateRangeSelector : QueryOpExpr<TextRangeCollection>, IQueryTextRangeSelector
+{
+    public TextRangesInDateRangeSelector (DateRange dateRangeInScope)
+    {
+        DateRangeInScope = dateRangeInScope;
+    }
+
+    public DateRange DateRangeInScope { get; }
+
+    public override async ValueTask<TextRangeCollection> EvalAsync(QueryEvalContext context)
+    {
+        var textRangesInScope = new TextRangeCollection();
+
+        IList<TimestampedTextRange> textRanges = await context.TimestampIndex.LookupRangeAsync(DateRangeInScope);
+        foreach (var timeRange in textRanges)
+        {
+            textRangesInScope.Add(timeRange.Range);
+        }
+        return textRangesInScope;
+    }
+}

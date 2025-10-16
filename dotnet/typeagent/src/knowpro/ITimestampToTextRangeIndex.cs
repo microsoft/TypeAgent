@@ -5,13 +5,13 @@ namespace TypeAgent.KnowPro;
 
 public interface ITimestampToTextRangeIndex
 {
-    Task<int> GetCountAsync(CancellationToken cancellationToken = default);
+    ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
-    Task AddTimestampAsync(int messageOrdinal, string timestamp);
+    ValueTask AddTimestampAsync(int messageOrdinal, string timestamp);
 
     // TODO: Bulk operations
 
-    Task<IList<TimestampedTextRange>> LookupRangeAsync(DateRange dateRange);
+    ValueTask<IList<TimestampedTextRange>> LookupRangeAsync(DateRange dateRange);
 }
 
 public struct TimestampedTextRange
