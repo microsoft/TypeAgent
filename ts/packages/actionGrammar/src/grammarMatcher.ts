@@ -24,7 +24,9 @@ function isSeparated(request: string, index: number) {
 type MatchedValue =
     | string
     | number
+    | undefined
     | { node: ValueNode | undefined; valueIds: ValueIdNode | undefined };
+
 type MatchedValueNode = {
     valueId: number;
     value: MatchedValue;
@@ -38,6 +40,7 @@ type ValueIdNode = {
 };
 
 type NestedMatchState = {
+    name: string; // For debugging
     rule: GrammarRule;
     partIndex: number;
     variable: string | undefined;
@@ -46,6 +49,7 @@ type NestedMatchState = {
 };
 type MatchState = {
     // Current context
+    name: string; // For debugging
     rule: GrammarRule;
     partIndex: number;
     valueIds?: ValueIdNode | undefined;
@@ -224,6 +228,7 @@ function finalizeRule(
                 valueIds,
             });
         }
+        state.name = nested.name;
         state.rule = nested.rule;
         state.partIndex = nested.partIndex;
         pending.push(state);
@@ -266,7 +271,8 @@ function finalizeRule(
 
 type MatchResult = any;
 function matchRules(grammar: Grammar, request: string): MatchResult[] {
-    const pending: MatchState[] = grammar.rules.map((r) => ({
+    const pending: MatchState[] = grammar.rules.map((r, i) => ({
+        name: `<Start>[${i}]`,
         rule: r,
         partIndex: 0,
         index: 0,
@@ -280,17 +286,17 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
             finalizeRule(state, request, results, pending);
             continue;
         }
-        debugMatch(
-            `State: index=${state.index} exprIndex=${partIndex} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
-        );
-        const part = rule.parts[partIndex];
-        state.partIndex++;
 
+        const part = rule.parts[partIndex];
         const curr = state.index;
+        debugMatch(
+            `State ${state.name}{${partIndex}}: @${curr}, type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
+        );
+        state.partIndex++;
         switch (part.type) {
             case "string":
                 debugMatch(
-                    `Checking string expr "${part.value.join(" ")}" at ${curr} with${state.pendingWildcard ? "" : "out"} wildcard`,
+                    `  Checking string expr "${part.value.join(" ")}" at ${curr} with${state.pendingWildcard ? "" : "out"} wildcard`,
                 );
                 // REVIEW: better separator policy
                 const regExpStr = `[${separatorRegExpStr}]*?${part.value.map(escapeMatch).join(`[${separatorRegExpStr}]+`)}`;
@@ -306,12 +312,12 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         const newIndex = wildcardEnd + match[0].length;
                         if (!isSeparated(request, newIndex)) {
                             debugMatch(
-                                `Rejected non-separated matched string ${part.value.join(" ")} at ${wildcardEnd}`,
+                                `  Rejected non-separated matched string ${part.value.join(" ")} at ${wildcardEnd}`,
                             );
                             continue;
                         }
                         debugMatch(
-                            `Matched string ${part.value.join(" ")} at ${wildcardEnd}`,
+                            `  Matched string ${part.value.join(" ")} at ${wildcardEnd}`,
                         );
                         const newState = createCaptureWildcardState(
                             state,
@@ -333,14 +339,14 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         const newIndex = curr + match[0].length;
                         if (isSeparated(request, newIndex)) {
                             debugMatch(
-                                `Matched string ${part.value.join(" ")} at ${curr} to ${newIndex}`,
+                                `  Matched string ${part.value.join(" ")} at ${curr} to ${newIndex}`,
                             );
                             // Reuse state
                             state.index = newIndex;
                             pending.push(state);
                         } else {
                             debugMatch(
-                                `Rejected non-separated matched string ${part.value.join(" ")} at ${curr}`,
+                                `  Rejected non-separated matched string ${part.value.join(" ")} at ${curr}`,
                             );
                         }
                     }
@@ -348,16 +354,23 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                 break;
             case "rules": {
                 const rules = part.rules;
-                debugMatch(`Expanding ${rules.length} rules at ${state.index}`);
+                debugMatch(
+                    `  Expanding ${rules.length} rules at ${state.index}`,
+                );
                 const nested: NestedMatchState = {
+                    name: state.name,
                     variable: part.variable,
                     rule: state.rule,
                     partIndex: state.partIndex,
                     valueIds: state.valueIds,
                     prev: state.nested,
                 };
+                let i = 0;
                 for (const rule of rules) {
                     pending.push({
+                        name: part.name
+                            ? `<${part.name}>[${i}]`
+                            : `${state.name}{${partIndex}}[${i}]`,
                         rule,
                         partIndex: 0,
 
@@ -368,16 +381,25 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         index: curr,
                         pendingWildcard: state.pendingWildcard,
                     });
+                    i++;
                 }
                 if (part.optional) {
                     // Reuse state
+                    if (part.variable) {
+                        addValue(state, part.variable, undefined);
+                    }
                     pending.push(state);
                 }
                 break;
             }
             case "number":
+                if (part.optional) {
+                    const newState = { ...state };
+                    addValue(newState, part.variable, undefined);
+                    pending.push(newState);
+                }
                 debugMatch(
-                    `Checking number expr at ${curr} with${state.pendingWildcard ? "" : "out"} wildcard`,
+                    `  Checking number expr at ${curr} with${state.pendingWildcard ? "" : "out"} wildcard`,
                 );
                 if (state.pendingWildcard !== undefined) {
                     const regexp = /[\s\p{P}]*?([0-9a-fxbo\+\-\.]+)/giu;
@@ -398,7 +420,7 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                             continue;
                         }
                         debugMatch(
-                            `Matched number at ${wildcardEnd} to ${newIndex}`,
+                            `  Matched number at ${wildcardEnd} to ${newIndex}`,
                         );
                         const newState = createCaptureWildcardState(
                             state,
@@ -427,14 +449,20 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                     if (!isSeparated(request, newIndex)) {
                         continue;
                     }
-                    // Reuse state
-                    debugMatch(`Matched number at ${curr} to ${newIndex}`);
+
+                    debugMatch(`  Matched number at ${curr} to ${newIndex}`);
                     state.index = newIndex;
                     addValue(state, part.variable, n);
                     pending.push(state);
                 }
+
                 break;
             case "wildcard":
+                if (part.optional) {
+                    const newState = { ...state };
+                    addValue(newState, part.variable, undefined);
+                    pending.push(newState);
+                }
                 // string variable, wildcard
                 if (state.pendingWildcard !== undefined) {
                     // Disallow two wildcards in a row

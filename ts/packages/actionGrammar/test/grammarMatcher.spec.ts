@@ -162,6 +162,11 @@ describe("Grammar Matcher", () => {
                 45.678e-9,
             ]);
         });
+        it("simple variable - optional", () => {
+            const g = `@<Start> = hello $(x:number)? -> $(x)`;
+            const grammar = loadGrammar("test.grammar", g);
+            expect(matchGrammar(grammar, "hello")).toStrictEqual([undefined]);
+        });
         it("space around variable - string", () => {
             const g = `@<Start> = hello $(x) world -> $(x)`;
             const grammar = loadGrammar("test.grammar", g);

@@ -68,12 +68,12 @@ describe("Grammar Writer", () => {
         validateRoundTrip(
             `@<test> = hello -> { b: true, n: 12, s: "string", a: [1, 2, { o: "z" }], o: { x: [] } }`,
         );
-    }),
-        it("with variable", () => {
-            validateRoundTrip(
-                `@<test> = hello $(x) world -> { "type": "test", "var": $(x) }`,
-            );
-        });
+    });
+    it("with variable", () => {
+        validateRoundTrip(
+            `@<test> = hello $(x) world -> { "type": "test", "var": $(x) }`,
+        );
+    });
     it("with number variable", () => {
         validateRoundTrip(
             `@<test> = hello $(x: number) world -> { "type": "test", "var": $(x) }`,
@@ -82,5 +82,10 @@ describe("Grammar Writer", () => {
     it("with rules reference variable", () => {
         validateRoundTrip(`@<test> = hello $(x:<other>) world -> { "type": "test", "var": $(x) }
             @<other> = one -> 1 | two ->2 | three -> 3`);
+    });
+    it("with optional variable", () => {
+        validateRoundTrip(
+            `@<test> = hello $(x: number)? world -> { "type": "test", "var": $(x) }`,
+        );
     });
 });

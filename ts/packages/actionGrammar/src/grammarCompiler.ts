@@ -17,6 +17,7 @@ type StringPart = {
 type VarStringPart = {
     type: "wildcard";
     variable: string;
+    optional?: boolean | undefined;
 
     typeName: string; // Do we need this?
 };
@@ -24,6 +25,7 @@ type VarStringPart = {
 type VarNumberPart = {
     type: "number";
     variable: string;
+    optional?: boolean | undefined;
 };
 
 type RulesPart = {
@@ -107,16 +109,19 @@ function createGrammarRule(ruleDefMap: DefinitionMap, rule: Rule): GrammarRule {
                         rules: createGrammarRules(ruleDefMap, typeName),
                         variable: name,
                         name: typeName,
+                        optional: expr.optional,
                     });
                 } else if (typeName === "number") {
                     parts.push({
                         type: "number",
                         variable: name,
+                        optional: expr.optional,
                     });
                 } else {
                     parts.push({
                         type: "wildcard",
                         variable: name,
+                        optional: expr.optional,
                         typeName,
                     });
                 }
