@@ -214,7 +214,13 @@ export function setContent(
         const links = document.head.getElementsByTagName("link");
         for (let i = 0; i < links.length; i++) {
             if (links[i].rel.toLowerCase() == "stylesheet") {
-                css += links[i].outerHTML;
+                if (links[i].href.startsWith("./")) {
+                    const l = links[i].cloneNode(true) as HTMLLinkElement;
+                    l.href = window.location.origin + "/" + l.href;
+                    css += l.outerHTML;
+                } else {
+                    css += links[i].outerHTML;
+                }
             }
         }
 

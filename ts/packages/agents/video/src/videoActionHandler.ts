@@ -185,8 +185,8 @@ function createVideoPlaceHolder(
                         const videoElement = document.createElement("video");
                         videoElement.src = videoObjectURL;
                         videoElement.controls = true;
-                        videoElement.width = 100%;
-                        videoElement.height = 100%;
+                        videoElement.width = "100%";
+                        videoElement.height = "100%";
                         videoElement.autoplay = true;
 
                         // Append to container
