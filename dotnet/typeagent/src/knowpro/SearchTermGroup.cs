@@ -1,13 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections;
+
 namespace TypeAgent.KnowPro;
 
-public class SearchTermGroup : ISearchTerm
+public class SearchTermGroup : ISearchTerm, IEnumerable<ISearchTerm>
 {
     public SearchTermGroup(SearchTermBooleanOp booleanOp, IList<ISearchTerm>? terms = null)
     {
         ArgumentVerify.ThrowIfNull(booleanOp, nameof(booleanOp));
+
         BooleanOp = booleanOp;
         Terms = terms ?? [];
     }
@@ -18,14 +21,30 @@ public class SearchTermGroup : ISearchTerm
 
     public bool IsEmpty => Terms.IsNullOrEmpty();
 
+    public void Add(ISearchTerm searchTerm)
+    {
+        ArgumentVerify.ThrowIfNull(searchTerm, nameof(searchTerm));
+        Terms.Add(searchTerm);
+    }
+
     public void Add(string term, bool exactMatch = false)
     {
-        Terms.Add(new SearchTerm(term, exactMatch));
+        Add(new SearchTerm(term, exactMatch));
+    }
+
+    public void Add(IEnumerable<string> terms, bool exactMatch = false)
+    {
+        ArgumentVerify.ThrowIfNull(terms, nameof(terms));
+
+        foreach (var term in terms)
+        {
+            Add(term, exactMatch);
+        }
     }
 
     public void Add(KnowledgePropertyName propertyName, string value, bool exactMatch = false)
     {
-        Terms.Add(new PropertySearchTerm(propertyName, new SearchTerm(value, exactMatch)));
+        Add(new PropertySearchTerm(propertyName, new SearchTerm(value, exactMatch)));
     }
 
     public void Add(KnowledgePropertyName propertyName, IEnumerable<string> values, bool exactMatch = false)
@@ -34,13 +53,28 @@ public class SearchTermGroup : ISearchTerm
 
         foreach (string value in values)
         {
-            Terms.Add(new PropertySearchTerm(propertyName, new SearchTerm(value, exactMatch)));
+            Add(new PropertySearchTerm(propertyName, new SearchTerm(value, exactMatch)));
         }
+    }
+
+    public void Add(string propertyName, string propertyValue)
+    {
+        Add(new PropertySearchTerm(propertyName, propertyValue));
+    }
+
+    public IEnumerator<ISearchTerm> GetEnumerator()
+    {
+        return this.Terms.GetEnumerator();
     }
 
     public override string ToString()
     {
         return $"{BooleanOp} ({Terms.Join()})";
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return ((IEnumerable)this.Terms).GetEnumerator();
     }
 }
 

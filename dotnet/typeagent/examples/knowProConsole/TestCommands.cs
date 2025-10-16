@@ -38,7 +38,8 @@ public class TestCommands : ICommandModule
         // Hard coded test for now
         SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
         {
-            Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
+            "Children of Time",
+            "book"
         };
         await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
@@ -50,7 +51,8 @@ public class TestCommands : ICommandModule
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
         {
-            Terms = [new SearchTerm("Children of Physics"), new SearchTerm("book")]
+            "Children of Physics",
+            "book"
         };
         await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
     }
@@ -72,10 +74,8 @@ public class TestCommands : ICommandModule
         // Hard coded test for now
         SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
         {
-            Terms = [
-                new PropertySearchTerm("genre", "sci-fi"),
-                new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
-            ]
+            { "genre", "sci-fi" },
+            { KnowledgePropertyName.EntityName, "Children of Time" },
         };
         await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
@@ -99,10 +99,8 @@ public class TestCommands : ICommandModule
         SearchSelectExpr select = new(
             new SearchTermGroup(SearchTermBooleanOp.Or)
             {
-                Terms = [
-                    new PropertySearchTerm("genre", "sci-fi"),
-                    new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
-                ]
+                { "genre", "sci-fi" },
+                { KnowledgePropertyName.EntityName, "Children of Time" }
             }
         );
 
