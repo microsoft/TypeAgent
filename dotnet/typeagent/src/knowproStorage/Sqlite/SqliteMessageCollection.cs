@@ -137,7 +137,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
     public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals) => MessagesTable.GetMessageLengths(_db, messageOrdinals);
 
-    public ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
+    public ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
     {
         IList<int> lengths = [.. GetMessageLengths(messageOrdinals)];
         return ValueTask.FromResult(lengths);
@@ -334,7 +334,7 @@ public class SqliteMessageCollection : IMessageCollection
 
     public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals) => MessagesTable.GetMessageLengths(_db, messageOrdinals);
 
-    public ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
+    public ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
     {
         IList<int> lengths = [.. GetMessageLengths(messageOrdinals)];
         return ValueTask.FromResult(lengths);

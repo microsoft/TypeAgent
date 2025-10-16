@@ -90,17 +90,17 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     }
 
 
-    public ValueTask<SemanticRef> GetAsync(int ordinal, CancellationToken cancellationToken = default)
+    public ValueTask<SemanticRef> GetAsync(int semanticRefId, CancellationToken cancellationToken = default)
     {
-        return ValueTask.FromResult(Get(ordinal));
+        return ValueTask.FromResult(Get(semanticRefId));
     }
 
-    public ValueTask<IList<SemanticRef>> GetAsync(IList<int> ordinals, CancellationToken cancellationToken = default)
+    public ValueTask<IList<SemanticRef>> GetAsync(IList<int> semanticRefIds, CancellationToken cancellationToken = default)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(ordinals, nameof(ordinals));
+        ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
 
-        List<SemanticRef> semanticRefs = new(ordinals.Count);
-        foreach (var batch in ordinals.Batch(SqliteDatabase.MaxBatchSize))
+        List<SemanticRef> semanticRefs = new(semanticRefIds.Count);
+        foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
             var sql = $@"
@@ -131,18 +131,17 @@ FROM SemanticRefs WHERE semref_id = @semref_id",
         );
     }
 
-
-    public ValueTask<TextRange> GetRangeAsync(int ordinal, CancellationToken cancellationToken = default)
+    public ValueTask<TextRange> GetTextRangeAsync(int semanticRefId, CancellationToken cancellationToken = default)
     {
-        return ValueTask.FromResult(GetRange(ordinal));
+        return ValueTask.FromResult(GetRange(semanticRefId));
     }
 
-    public ValueTask<IList<TextRange>> GetRangesAsync(IList<int> ordinals, CancellationToken cancellationToken = default)
+    public ValueTask<IList<TextRange>> GetTextRangeAsync(IList<int> semanticRefIds, CancellationToken cancellationToken = default)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(ordinals, nameof(ordinals));
+        ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
 
-        List<TextRange> ranges = new(ordinals.Count);
-        foreach (var batch in ordinals.Batch(SqliteDatabase.MaxBatchSize))
+        List<TextRange> ranges = new(semanticRefIds.Count);
+        foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
             var sql = $@"
@@ -158,6 +157,46 @@ FROM SemanticRefs WHERE semref_id = @semref_id",
         }
         return ValueTask.FromResult((IList<TextRange>)ranges);
     }
+
+    public KnowledgeType GetKnowledgeType(int semanticRefId)
+    {
+        ArgumentVerify.ThrowIfLessThan(semanticRefId, 0, nameof(semanticRefId));
+
+        return _db.Get(@"
+SELECT knowledge_type
+FROM SemanticRefs WHERE semref_id = @semref_id",
+            (cmd) => cmd.AddParameter("semref_id", semanticRefId),
+            (reader) => reader.GetString(0)
+        );
+    }
+
+    public ValueTask<KnowledgeType> GetKnowledgeTypeAsync(int semanticRefId, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetKnowledgeType(semanticRefId));
+    }
+
+    public ValueTask<IList<KnowledgeType>> GetKnowledgeTypeAsync(IList<int> semanticRefIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
+
+        List<KnowledgeType> ranges = new(semanticRefIds.Count);
+        foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var sql = $@"
+                SELECT knowledge_type
+                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
+                ORDER BY semref_id";
+            var rows = _db.Enumerate(
+                sql,
+                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                (reader) => (KnowledgeType)reader.GetString(0)
+               );
+            ranges.AddRange(rows);
+        }
+        return ValueTask.FromResult((IList<KnowledgeType>)ranges);
+    }
+
 
     public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {

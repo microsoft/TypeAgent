@@ -3,7 +3,19 @@
 Working towards .NET versions of the following TypeAgent libraries:
 * [KnowPro](../../ts/packages/knowPro/README.md)
 
-This sample code is in very early stage experimental developement with **frequent changes**. 
+TypeAgent.NET will incorporate [TypeChat.net](https://github.com/microsoft/typechat.net)
+
+This **sample code** is in early stage experimental developement with **frequent changes**. 
+
+## KnowPro.NET
+KnowPro.NET implements Structured RAG in C# for .NET platforms. 
+
+It will improve on the original Typescript implementation in the following ways:
+* It is fully asynchronous
+* Some operators are reworked for more efficient async operation
+* Asynchronous storage providers with improved Sql schemas
+* Larger index sizes
+
 
 ## Trademarks
 
