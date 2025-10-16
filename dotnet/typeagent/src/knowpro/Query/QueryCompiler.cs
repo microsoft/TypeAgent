@@ -242,9 +242,22 @@ internal class QueryCompiler
 
     private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)
     {
-        
+        if (termGroup is null && filter is null)
+        {
+            return ValueTask.FromResult<GetScopeExpr>(null);
+
+        }
+        var scopeSelectors = new List<IQueryTextRangeSelector>();
+
         // TODO
 
-        return ValueTask.FromResult<GetScopeExpr>(null);
+        if (filter is not null && !filter.TextRangesInScope.IsNullOrEmpty())
+        {
+            scopeSelectors.Add(new TextRangeSelector(filter.TextRangesInScope));
+        }
+        GetScopeExpr? scopeExpr = !scopeSelectors.IsNullOrEmpty()
+            ? new GetScopeExpr(scopeSelectors)
+            : null;
+        return ValueTask.FromResult(scopeExpr);
     }
 }
