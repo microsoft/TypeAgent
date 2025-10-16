@@ -289,6 +289,15 @@ internal class QueryCompiler
                 AddTermsScopeSelector(termGroup, scopeSelectors, new KnowledgeTypePredicate(KnowledgeType.STag));
             }
         }
+        else if (!termGroup.IsNullOrEmpty())
+        {
+            // Treat any actions as inherently scope selecting.
+            var actionTermsGroup = GetActionTermsFromSearchGroup(termGroup);
+            if (actionTermsGroup is not null)
+            {
+                AddTermsScopeSelector(actionTermsGroup, scopeSelectors);
+            }
+        }
 
         GetScopeExpr? scopeExpr = !scopeSelectors.IsNullOrEmpty()
             ? new GetScopeExpr(scopeSelectors)
@@ -314,7 +323,7 @@ internal class QueryCompiler
         {
             if (term is PropertySearchTerm pst && pst.IsActionPropertyTerm())
             {
-                actionGroup = new SearchTermGroup(SearchTermBooleanOp.And);
+                actionGroup ??= new SearchTermGroup(SearchTermBooleanOp.And);
                 actionGroup.Terms.Add(term);
             }
         }
