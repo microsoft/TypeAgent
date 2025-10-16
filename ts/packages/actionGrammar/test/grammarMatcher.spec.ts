@@ -83,7 +83,6 @@ describe("Grammar Matcher", () => {
                 [true],
             );
         });
-
         it("escaped space infix - extra space", () => {
             const g = `@<Start> = hello${escapedSpaces} world -> true`;
             const grammar = loadGrammar("test.grammar", g);
@@ -101,7 +100,6 @@ describe("Grammar Matcher", () => {
                 matchGrammar(grammar, `hello ${spaces} world`),
             ).toStrictEqual([]);
         });
-
         it("escaped space infix - no space", () => {
             const g = `@<Start> = hello${escapedSpaces}world -> true`;
             const grammar = loadGrammar("test.grammar", g);
@@ -164,7 +162,20 @@ describe("Grammar Matcher", () => {
                 45.678e-9,
             ]);
         });
-
+        it("space around variable - string", () => {
+            const g = `@<Start> = hello $(x) world -> $(x)`;
+            const grammar = loadGrammar("test.grammar", g);
+            expect(
+                matchGrammar(grammar, `hello${spaces}value${spaces}world`),
+            ).toStrictEqual(["value"]);
+        });
+        it("space around variable - number", () => {
+            const g = `@<Start> = hello $(x:number) world -> $(x)`;
+            const grammar = loadGrammar("test.grammar", g);
+            expect(
+                matchGrammar(grammar, `hello${spaces}123${spaces}world`),
+            ).toStrictEqual([123]);
+        });
         it("multiple", () => {
             const g = `
                 @<Start> = $(x:number) -> $(x)
