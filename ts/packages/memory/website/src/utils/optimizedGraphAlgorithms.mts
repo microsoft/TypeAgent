@@ -27,11 +27,13 @@ export interface GraphMetrics {
 }
 
 export class OptimizedGraphAlgorithms {
-
     /**
      * Build an adjacency list representation of the graph for efficient algorithms
      */
-    buildGraph(nodes: string[], relationships: Relationship[]): Map<string, GraphNode> {
+    buildGraph(
+        nodes: string[],
+        relationships: Relationship[],
+    ): Map<string, GraphNode> {
         const graph = new Map<string, GraphNode>();
 
         // Initialize nodes
@@ -66,11 +68,10 @@ export class OptimizedGraphAlgorithms {
         graph: Map<string, GraphNode>,
         dampingFactor: number = 0.85,
         maxIterations: number = 20,
-        tolerance: number = 1e-6
+        tolerance: number = 1e-6,
     ): Map<string, number> {
-
         const nodeCount = graph.size;
-        
+
         if (nodeCount === 0) {
             return new Map();
         }
@@ -97,18 +98,27 @@ export class OptimizedGraphAlgorithms {
             // Calculate new PageRank values
             for (const [nodeId, node] of graph) {
                 if (node.outDegree > 0) {
-                    const contribution = (dampingFactor * pageRank.get(nodeId)!) / node.outDegree;
-                    
+                    const contribution =
+                        (dampingFactor * pageRank.get(nodeId)!) /
+                        node.outDegree;
+
                     for (const neighborId of node.neighbors) {
                         const currentValue = newPageRank.get(neighborId) || 0;
-                        newPageRank.set(neighborId, currentValue + contribution);
+                        newPageRank.set(
+                            neighborId,
+                            currentValue + contribution,
+                        );
                     }
                 } else {
                     // Handle dangling nodes (distribute rank equally)
-                    const contribution = (dampingFactor * pageRank.get(nodeId)!) / nodeCount;
+                    const contribution =
+                        (dampingFactor * pageRank.get(nodeId)!) / nodeCount;
                     for (const neighborId of graph.keys()) {
                         const currentValue = newPageRank.get(neighborId) || 0;
-                        newPageRank.set(neighborId, currentValue + contribution);
+                        newPageRank.set(
+                            neighborId,
+                            currentValue + contribution,
+                        );
                     }
                 }
             }
@@ -132,11 +142,7 @@ export class OptimizedGraphAlgorithms {
             iteration++;
         }
 
-
-
-        
         if (converged) {
-
         }
 
         return pageRank;
@@ -146,8 +152,9 @@ export class OptimizedGraphAlgorithms {
      * Optimized betweenness centrality calculation
      * Uses Brandes' algorithm for efficient computation
      */
-    calculateBetweennessCentrality(graph: Map<string, GraphNode>): Map<string, number> {
-
+    calculateBetweennessCentrality(
+        graph: Map<string, GraphNode>,
+    ): Map<string, number> {
         const betweenness = new Map<string, number>();
         const nodeList = Array.from(graph.keys());
 
@@ -158,14 +165,17 @@ export class OptimizedGraphAlgorithms {
 
         // For large graphs, use sampling for approximation
         const useApproximation = nodeList.length > 1000;
-        const sampleSize = useApproximation ? Math.min(200, Math.ceil(nodeList.length * 0.2)) : nodeList.length;
-        const samplesToProcess = useApproximation ? 
-            this.sampleNodes(nodeList, sampleSize) : nodeList;
+        const sampleSize = useApproximation
+            ? Math.min(200, Math.ceil(nodeList.length * 0.2))
+            : nodeList.length;
+        const samplesToProcess = useApproximation
+            ? this.sampleNodes(nodeList, sampleSize)
+            : nodeList;
 
         for (const source of samplesToProcess) {
             const { predecessors, distances, sigma } = this.bfs(graph, source);
             const delta = new Map<string, number>();
-            
+
             // Initialize delta
             for (const nodeId of nodeList) {
                 delta.set(nodeId, 0);
@@ -173,7 +183,7 @@ export class OptimizedGraphAlgorithms {
 
             // Process nodes in order of decreasing distance
             const sortedNodes = nodeList
-                .filter(node => distances.has(node))
+                .filter((node) => distances.has(node))
                 .sort((a, b) => distances.get(b)! - distances.get(a)!);
 
             for (const node of sortedNodes) {
@@ -184,7 +194,8 @@ export class OptimizedGraphAlgorithms {
                     const sigmaNode = sigma.get(node) || 0;
                     const sigmaPred = sigma.get(pred) || 0;
                     if (sigmaPred > 0) {
-                        const deltaContrib = (sigmaPred / sigmaNode) * (1 + delta.get(node)!);
+                        const deltaContrib =
+                            (sigmaPred / sigmaNode) * (1 + delta.get(node)!);
                         delta.set(pred, delta.get(pred)! + deltaContrib);
                     }
                 }
@@ -204,16 +215,16 @@ export class OptimizedGraphAlgorithms {
             }
         }
 
-
-
-
         return betweenness;
     }
 
     /**
      * Breadth-first search for betweenness centrality calculation
      */
-    private bfs(graph: Map<string, GraphNode>, source: string): {
+    private bfs(
+        graph: Map<string, GraphNode>,
+        source: string,
+    ): {
         predecessors: Map<string, string[]>;
         distances: Map<string, number>;
         sigma: Map<string, number>;
@@ -248,7 +259,10 @@ export class OptimizedGraphAlgorithms {
 
                 // Shortest path to neighbor via current
                 if (distances.get(neighbor) === distances.get(current)! + 1) {
-                    sigma.set(neighbor, sigma.get(neighbor)! + sigma.get(current)!);
+                    sigma.set(
+                        neighbor,
+                        sigma.get(neighbor)! + sigma.get(current)!,
+                    );
                     predecessors.get(neighbor)!.push(current);
                 }
             }
@@ -273,7 +287,6 @@ export class OptimizedGraphAlgorithms {
         nodes: string[];
         density: number;
     }> {
-
         const labels = new Map<string, string>();
         const nodeList = Array.from(graph.keys());
 
@@ -301,7 +314,10 @@ export class OptimizedGraphAlgorithms {
                 for (const neighborId of node.neighbors) {
                     const neighborLabel = labels.get(neighborId);
                     if (neighborLabel) {
-                        labelCounts.set(neighborLabel, (labelCounts.get(neighborLabel) || 0) + 1);
+                        labelCounts.set(
+                            neighborLabel,
+                            (labelCounts.get(neighborLabel) || 0) + 1,
+                        );
                     }
                 }
 
@@ -343,7 +359,8 @@ export class OptimizedGraphAlgorithms {
 
         let communityId = 0;
         for (const [, nodes] of communityMap) {
-            if (nodes.length > 1) { // Only include communities with multiple nodes
+            if (nodes.length > 1) {
+                // Only include communities with multiple nodes
                 const density = this.calculateCommunityDensity(nodes, graph);
                 communities.push({
                     id: `community_${communityId++}`,
@@ -353,17 +370,16 @@ export class OptimizedGraphAlgorithms {
             }
         }
 
-
-
-
-
         return communities;
     }
 
     /**
      * Calculate community density
      */
-    private calculateCommunityDensity(nodes: string[], graph: Map<string, GraphNode>): number {
+    private calculateCommunityDensity(
+        nodes: string[],
+        graph: Map<string, GraphNode>,
+    ): number {
         if (nodes.length < 2) return 0;
 
         const nodeSet = new Set(nodes);
@@ -390,11 +406,8 @@ export class OptimizedGraphAlgorithms {
      */
     calculateAllMetrics(
         nodes: string[],
-        relationships: Relationship[]
+        relationships: Relationship[],
     ): GraphMetrics {
-
-
-
         // Build graph representation
         const graph = this.buildGraph(nodes, relationships);
 
@@ -408,13 +421,11 @@ export class OptimizedGraphAlgorithms {
         const pageRank = this.calculatePageRank(graph);
 
         // Calculate betweenness centrality (most expensive)
-        const betweennessCentrality = this.calculateBetweennessCentrality(graph);
+        const betweennessCentrality =
+            this.calculateBetweennessCentrality(graph);
 
         // Detect communities
         const communities = this.detectCommunities(graph);
-
-
-
 
         return {
             pageRank,

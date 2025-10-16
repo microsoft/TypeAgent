@@ -481,12 +481,16 @@ export async function getEntityNeighborhood(
         );
         const bfsTime = performance.now() - bfsStartTime;
         entityTracker.recordBFSTraversal(
-            entityId, 
-            depth, 
-            neighborhoodResult.neighbors.length + 1, 
-            bfsTime
+            entityId,
+            depth,
+            neighborhoodResult.neighbors.length + 1,
+            bfsTime,
         );
-        entityTracker.endOperation("performBFS", neighborhoodResult.neighbors.length, neighborhoodResult.neighbors.length);
+        entityTracker.endOperation(
+            "performBFS",
+            neighborhoodResult.neighbors.length,
+            neighborhoodResult.neighbors.length,
+        );
 
         if (!neighborhoodResult.centerEntity) {
             const searchNeibhbors = await searchByEntities(
@@ -544,8 +548,16 @@ export async function getEntityNeighborhood(
                 context,
             );
             const searchTime = performance.now() - searchStartTime;
-            entityTracker.recordDatabaseQuery("searchByEntities", searchTime, 1);
-            entityTracker.endOperation("searchByEntities", 1, searchResults ? 1 : 0);
+            entityTracker.recordDatabaseQuery(
+                "searchByEntities",
+                searchTime,
+                1,
+            );
+            entityTracker.endOperation(
+                "searchByEntities",
+                1,
+                searchResults ? 1 : 0,
+            );
 
             if (searchResults) {
                 searchData = {
@@ -635,7 +647,7 @@ export async function getEntityNeighborhood(
             maxNodes,
             overallTime,
             optimizedResult.metadata.actualNodes,
-            optimizedResult.metadata.actualEdges
+            optimizedResult.metadata.actualEdges,
         );
 
         return optimizedResult;
@@ -1241,19 +1253,31 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             websiteCollection.hierarchicalTopics?.getTopicHierarchy() || [];
         const queryTime = performance.now() - startTime;
         topicTracker.recordDatabaseQuery("getTopicHierarchy", queryTime);
-        tracker.endOperation("ensureTopicGraphCache.getTopicHierarchy", topics.length, topics.length);
+        tracker.endOperation(
+            "ensureTopicGraphCache.getTopicHierarchy",
+            topics.length,
+            topics.length,
+        );
 
         // Enrich topics with entity references if available - OPTIMIZED
         if (websiteCollection.topicEntityRelations) {
-            tracker.startOperation("ensureTopicGraphCache.enrichTopicsWithEntities");
+            tracker.startOperation(
+                "ensureTopicGraphCache.enrichTopicsWithEntities",
+            );
             const topicIds = topics.map((t: any) => t.topicId);
-            
+
             // OPTIMIZATION: Single batch query instead of N individual queries
             const batchQueryStart = performance.now();
-            const allEntityRelations = websiteCollection.topicEntityRelations.getEntitiesForTopics(topicIds);
+            const allEntityRelations =
+                websiteCollection.topicEntityRelations.getEntitiesForTopics(
+                    topicIds,
+                );
             const batchQueryTime = performance.now() - batchQueryStart;
-            topicTracker.recordDatabaseQuery(`getEntitiesForTopics_batch_${topicIds.length}_topics`, batchQueryTime);
-            
+            topicTracker.recordDatabaseQuery(
+                `getEntitiesForTopics_batch_${topicIds.length}_topics`,
+                batchQueryTime,
+            );
+
             // Group entity relations by topic ID for efficient lookup
             const entityRelationsByTopic = new Map<string, any[]>();
             for (const relation of allEntityRelations) {
@@ -1262,39 +1286,54 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
                 }
                 entityRelationsByTopic.get(relation.topicId)!.push(relation);
             }
-            
+
             // Assign top entities to each topic (limit to 10 for performance)
             for (const topic of topics) {
-                const entityRelations = entityRelationsByTopic.get(topic.topicId) || [];
+                const entityRelations =
+                    entityRelationsByTopic.get(topic.topicId) || [];
                 topic.entityReferences = entityRelations
                     .sort((a: any, b: any) => b.relevance - a.relevance)
                     .slice(0, 10)
                     .map((rel: any) => rel.entityName);
             }
-            
-            tracker.endOperation("ensureTopicGraphCache.enrichTopicsWithEntities", allEntityRelations.length, topics.length);
+
+            tracker.endOperation(
+                "ensureTopicGraphCache.enrichTopicsWithEntities",
+                allEntityRelations.length,
+                topics.length,
+            );
         }
 
         // Build relationships from parent-child structure
         tracker.startOperation("ensureTopicGraphCache.buildTopicRelationships");
         let relationships = buildTopicRelationships(topics);
-        tracker.endOperation("ensureTopicGraphCache.buildTopicRelationships", topics.length, relationships.length);
+        tracker.endOperation(
+            "ensureTopicGraphCache.buildTopicRelationships",
+            topics.length,
+            relationships.length,
+        );
 
         // Add lateral relationships from topic relationships table - SUPER OPTIMIZED
         if (websiteCollection.topicRelationships) {
-            tracker.startOperation("ensureTopicGraphCache.getLateralRelationships");
+            tracker.startOperation(
+                "ensureTopicGraphCache.getLateralRelationships",
+            );
             const topicIds = new Set(topics.map((t: any) => t.topicId));
             const topicIdsArray = Array.from(topicIds);
-            
+
             // SUPER OPTIMIZATION: Use optimized query that filters at database level
             const batchQueryStart = performance.now();
-            const allRels = websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
-                topicIdsArray, 
-                0.3 // Only get relationships with strength >= 0.3 for better performance
-            );
+            const allRels =
+                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
+                    topicIdsArray,
+                    0.3, // Only get relationships with strength >= 0.3 for better performance
+                );
             const batchQueryTime = performance.now() - batchQueryStart;
-            topicTracker.recordDatabaseQuery(`getRelationshipsForTopicsOptimized_batch_${topicIdsArray.length}_topics`, batchQueryTime);
-            
+            topicTracker.recordDatabaseQuery(
+                `getRelationshipsForTopicsOptimized_batch_${topicIdsArray.length}_topics`,
+                batchQueryTime,
+            );
+
             // Convert to our format - no need to filter since DB already filtered
             const lateralRels: any[] = allRels.map((rel: any) => ({
                 from: rel.fromTopic,
@@ -1312,7 +1351,11 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
                     relationships.push(rel);
                 }
             }
-            tracker.endOperation("ensureTopicGraphCache.getLateralRelationships", allRels.length, lateralRels.length);
+            tracker.endOperation(
+                "ensureTopicGraphCache.getLateralRelationships",
+                allRels.length,
+                lateralRels.length,
+            );
         }
 
         // Get entity counts for topics from topic-entity relations
@@ -1322,13 +1365,19 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
         }));
 
         // Calculate topic importance metrics
-        tracker.startOperation("ensureTopicGraphCache.calculateTopicImportance");
+        tracker.startOperation(
+            "ensureTopicGraphCache.calculateTopicImportance",
+        );
         const topicMetrics = calculateTopicImportance(
             topics,
             relationships,
             topicMetricsInput,
         );
-        tracker.endOperation("ensureTopicGraphCache.calculateTopicImportance", topics.length, topicMetrics.length);
+        tracker.endOperation(
+            "ensureTopicGraphCache.calculateTopicImportance",
+            topics.length,
+            topicMetrics.length,
+        );
 
         // Store in cache
         const newCache: TopicGraphCache = {
@@ -1341,7 +1390,11 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
 
         setTopicGraphCache(websiteCollection, newCache);
 
-        tracker.endOperation("ensureTopicGraphCache", topics.length + relationships.length, topics.length);
+        tracker.endOperation(
+            "ensureTopicGraphCache",
+            topics.length + relationships.length,
+            topics.length,
+        );
         tracker.printReport("ensureTopicGraphCache");
     } catch (error) {
         console.error("[Topic Graph] Failed to build cache:", error);
@@ -1381,13 +1434,28 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
                 5000,
             ) || [];
         const queryTime = performance.now() - startTime;
-        
+
         // Validate and clean entity data
-        const entities = entityTracker.validateEntityData(rawEntities, "getTopEntities");
-        
-        entityTracker.recordDatabaseQuery("getTopEntities", queryTime, entities.length);
-        entityTracker.endOperation("getTopEntities", entities.length, entities.length);
-        tracker.endOperation("ensureGraphCache.getTopEntities", entities.length, entities.length);
+        const entities = entityTracker.validateEntityData(
+            rawEntities,
+            "getTopEntities",
+        );
+
+        entityTracker.recordDatabaseQuery(
+            "getTopEntities",
+            queryTime,
+            entities.length,
+        );
+        entityTracker.endOperation(
+            "getTopEntities",
+            entities.length,
+            entities.length,
+        );
+        tracker.endOperation(
+            "ensureGraphCache.getTopEntities",
+            entities.length,
+            entities.length,
+        );
 
         tracker.startOperation("ensureGraphCache.getAllRelationships");
         entityTracker.startOperation("getAllRelationships");
@@ -1395,13 +1463,29 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         const rawRelationships =
             websiteCollection.relationships?.getAllRelationships() || [];
         const relsQueryTime = performance.now() - relsStartTime;
-        
+
         // Validate and clean relationship data
-        const relationships = entityTracker.validateRelationshipData(rawRelationships, "getAllRelationships");
-        
-        entityTracker.recordDatabaseQuery("getAllRelationships", relsQueryTime, undefined, relationships.length);
-        entityTracker.endOperation("getAllRelationships", relationships.length, relationships.length);
-        tracker.endOperation("ensureGraphCache.getAllRelationships", relationships.length, relationships.length);
+        const relationships = entityTracker.validateRelationshipData(
+            rawRelationships,
+            "getAllRelationships",
+        );
+
+        entityTracker.recordDatabaseQuery(
+            "getAllRelationships",
+            relsQueryTime,
+            undefined,
+            relationships.length,
+        );
+        entityTracker.endOperation(
+            "getAllRelationships",
+            relationships.length,
+            relationships.length,
+        );
+        tracker.endOperation(
+            "ensureGraphCache.getAllRelationships",
+            relationships.length,
+            relationships.length,
+        );
 
         tracker.startOperation("ensureGraphCache.getAllCommunities");
         entityTracker.startOperation("getAllCommunities");
@@ -1409,9 +1493,21 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         const communities =
             websiteCollection.communities?.getAllCommunities() || [];
         const commsQueryTime = performance.now() - commsStartTime;
-        entityTracker.recordDatabaseQuery("getAllCommunities", commsQueryTime, communities.length);
-        entityTracker.endOperation("getAllCommunities", communities.length, communities.length);
-        tracker.endOperation("ensureGraphCache.getAllCommunities", communities.length, communities.length);
+        entityTracker.recordDatabaseQuery(
+            "getAllCommunities",
+            commsQueryTime,
+            communities.length,
+        );
+        entityTracker.endOperation(
+            "getAllCommunities",
+            communities.length,
+            communities.length,
+        );
+        tracker.endOperation(
+            "ensureGraphCache.getAllCommunities",
+            communities.length,
+            communities.length,
+        );
 
         // Calculate metrics with instrumentation
         tracker.startOperation("ensureGraphCache.calculateEntityMetrics");
@@ -1423,9 +1519,21 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
             communities,
         );
         const metricsTime = performance.now() - metricsStartTime;
-        entityTracker.recordEntityMetricsCalculation(entities.length, relationships.length, metricsTime);
-        entityTracker.endOperation("calculateEntityMetrics", entities.length, entityMetrics.length);
-        tracker.endOperation("ensureGraphCache.calculateEntityMetrics", entities.length, entityMetrics.length);
+        entityTracker.recordEntityMetricsCalculation(
+            entities.length,
+            relationships.length,
+            metricsTime,
+        );
+        entityTracker.endOperation(
+            "calculateEntityMetrics",
+            entities.length,
+            entityMetrics.length,
+        );
+        tracker.endOperation(
+            "ensureGraphCache.calculateEntityMetrics",
+            entities.length,
+            entityMetrics.length,
+        );
 
         // Store in cache
         const newCache: GraphCache = {
@@ -1443,7 +1551,11 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
             `[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`,
         );
 
-        tracker.endOperation("ensureGraphCache", entities.length + relationships.length + communities.length, entityMetrics.length);
+        tracker.endOperation(
+            "ensureGraphCache",
+            entities.length + relationships.length + communities.length,
+            entityMetrics.length,
+        );
         tracker.printReport("ensureGraphCache");
         entityTracker.printReport();
     } catch (error) {
@@ -1619,7 +1731,11 @@ function calculateEntityMetrics(
         });
         degreeMap.set(entityName, 0);
     });
-    tracker.endOperation("calculateEntityMetrics.buildEntityMap", entities.length, entities.length);
+    tracker.endOperation(
+        "calculateEntityMetrics.buildEntityMap",
+        entities.length,
+        entities.length,
+    );
 
     tracker.startOperation("calculateEntityMetrics.buildCommunityMap");
     communities.forEach((community, index) => {
@@ -1639,7 +1755,11 @@ function calculateEntityMetrics(
             communityMap.set(entityName, community.id || `community_${index}`);
         });
     });
-    tracker.endOperation("calculateEntityMetrics.buildCommunityMap", communities.length, communityMap.size);
+    tracker.endOperation(
+        "calculateEntityMetrics.buildCommunityMap",
+        communities.length,
+        communityMap.size,
+    );
 
     tracker.startOperation("calculateEntityMetrics.calculateDegrees");
     relationships.forEach((rel) => {
@@ -1661,7 +1781,11 @@ function calculateEntityMetrics(
             );
         }
     });
-    tracker.endOperation("calculateEntityMetrics.calculateDegrees", relationships.length, relationships.length);
+    tracker.endOperation(
+        "calculateEntityMetrics.calculateDegrees",
+        relationships.length,
+        relationships.length,
+    );
 
     // Debug: Show degree map statistics
     const degreeValues = Array.from(degreeMap.values());
@@ -1694,9 +1818,17 @@ function calculateEntityMetrics(
             size: Math.max(8, Math.min(40, 8 + Math.sqrt(degree * 3))),
         };
     });
-    tracker.endOperation("calculateEntityMetrics.buildResults", entities.length, results.length);
+    tracker.endOperation(
+        "calculateEntityMetrics.buildResults",
+        entities.length,
+        results.length,
+    );
 
-    tracker.endOperation("calculateEntityMetrics", entities.length + relationships.length + communities.length, results.length);
+    tracker.endOperation(
+        "calculateEntityMetrics",
+        entities.length + relationships.length + communities.length,
+        results.length,
+    );
 
     return results;
 }
@@ -1941,7 +2073,7 @@ export async function getTopicImportanceLayer(
         }
 
         topicTracker.recordCacheHit();
-        
+
         topicTracker.recordProcessing("start");
         const allTopics = cache.topics || [];
         const allRelationships = cache.relationships || [];
@@ -2517,29 +2649,47 @@ export async function getUrlContentBreakdown(
         const tracker = getPerformanceTracker();
         tracker.startOperation("getUrlContentBreakdown");
 
-        const urlStats = new Map<string, {
-            topicCount: number;
-            entityCount: number;
-            semanticRefCount: number;
-            relationshipCount: number;
-        }>();
+        const urlStats = new Map<
+            string,
+            {
+                topicCount: number;
+                entityCount: number;
+                semanticRefCount: number;
+                relationshipCount: number;
+            }
+        >();
 
         // Count topics per URL
         tracker.startOperation("getUrlContentBreakdown.countTopics");
         if (websiteCollection.hierarchicalTopics) {
             try {
-                const topics = websiteCollection.hierarchicalTopics.getTopicHierarchy() || [];
+                const topics =
+                    websiteCollection.hierarchicalTopics.getTopicHierarchy() ||
+                    [];
                 for (const topic of topics) {
                     const url = topic.url;
                     if (!urlStats.has(url)) {
-                        urlStats.set(url, { topicCount: 0, entityCount: 0, semanticRefCount: 0, relationshipCount: 0 });
+                        urlStats.set(url, {
+                            topicCount: 0,
+                            entityCount: 0,
+                            semanticRefCount: 0,
+                            relationshipCount: 0,
+                        });
                     }
                     urlStats.get(url)!.topicCount++;
                 }
-                tracker.endOperation("getUrlContentBreakdown.countTopics", topics.length, urlStats.size);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countTopics",
+                    topics.length,
+                    urlStats.size,
+                );
             } catch (error) {
                 console.warn("Failed to count topics per URL:", error);
-                tracker.endOperation("getUrlContentBreakdown.countTopics", 0, 0);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countTopics",
+                    0,
+                    0,
+                );
             }
         }
 
@@ -2547,49 +2697,93 @@ export async function getUrlContentBreakdown(
         tracker.startOperation("getUrlContentBreakdown.countEntities");
         if (websiteCollection.knowledgeEntities) {
             try {
-                const entities = (websiteCollection.knowledgeEntities as any).getTopEntities(10000) || [];
+                const entities =
+                    (websiteCollection.knowledgeEntities as any).getTopEntities(
+                        10000,
+                    ) || [];
                 for (const entity of entities) {
                     const sources = entity.sources || [];
-                    const sourceUrls = typeof sources === "string" ? JSON.parse(sources) : sources;
+                    const sourceUrls =
+                        typeof sources === "string"
+                            ? JSON.parse(sources)
+                            : sources;
                     for (const url of sourceUrls) {
                         if (!urlStats.has(url)) {
-                            urlStats.set(url, { topicCount: 0, entityCount: 0, semanticRefCount: 0, relationshipCount: 0 });
+                            urlStats.set(url, {
+                                topicCount: 0,
+                                entityCount: 0,
+                                semanticRefCount: 0,
+                                relationshipCount: 0,
+                            });
                         }
                         urlStats.get(url)!.entityCount++;
                     }
                 }
-                tracker.endOperation("getUrlContentBreakdown.countEntities", entities.length, urlStats.size);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countEntities",
+                    entities.length,
+                    urlStats.size,
+                );
             } catch (error) {
                 console.warn("Failed to count entities per URL:", error);
-                tracker.endOperation("getUrlContentBreakdown.countEntities", 0, 0);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countEntities",
+                    0,
+                    0,
+                );
             }
         }
 
         // Count semantic refs per URL - TODO: implement when URL association is available
         tracker.startOperation("getUrlContentBreakdown.countSemanticRefs");
         // SemanticRef interface doesn't directly contain URL info - skip for now
-        const semanticRefCount = websiteCollection.semanticRefs ? websiteCollection.semanticRefs.getAll().length : 0;
-        tracker.endOperation("getUrlContentBreakdown.countSemanticRefs", semanticRefCount, 0);
+        const semanticRefCount = websiteCollection.semanticRefs
+            ? websiteCollection.semanticRefs.getAll().length
+            : 0;
+        tracker.endOperation(
+            "getUrlContentBreakdown.countSemanticRefs",
+            semanticRefCount,
+            0,
+        );
 
         // Count relationships per URL
         tracker.startOperation("getUrlContentBreakdown.countRelationships");
         if (websiteCollection.relationships) {
             try {
-                const relationships = websiteCollection.relationships.getAllRelationships() || [];
+                const relationships =
+                    websiteCollection.relationships.getAllRelationships() || [];
                 for (const rel of relationships) {
                     const sources = rel.sources || [];
-                    const sourceUrls = typeof sources === "string" ? JSON.parse(sources) : Array.isArray(sources) ? sources : [];
+                    const sourceUrls =
+                        typeof sources === "string"
+                            ? JSON.parse(sources)
+                            : Array.isArray(sources)
+                              ? sources
+                              : [];
                     for (const url of sourceUrls) {
                         if (!urlStats.has(url)) {
-                            urlStats.set(url, { topicCount: 0, entityCount: 0, semanticRefCount: 0, relationshipCount: 0 });
+                            urlStats.set(url, {
+                                topicCount: 0,
+                                entityCount: 0,
+                                semanticRefCount: 0,
+                                relationshipCount: 0,
+                            });
                         }
                         urlStats.get(url)!.relationshipCount++;
                     }
                 }
-                tracker.endOperation("getUrlContentBreakdown.countRelationships", relationships.length, urlStats.size);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countRelationships",
+                    relationships.length,
+                    urlStats.size,
+                );
             } catch (error) {
                 console.warn("Failed to count relationships per URL:", error);
-                tracker.endOperation("getUrlContentBreakdown.countRelationships", 0, 0);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countRelationships",
+                    0,
+                    0,
+                );
             }
         }
 
@@ -2601,7 +2795,11 @@ export async function getUrlContentBreakdown(
                 entityCount: stats.entityCount,
                 semanticRefCount: stats.semanticRefCount,
                 relationshipCount: stats.relationshipCount,
-                totalItems: stats.topicCount + stats.entityCount + stats.semanticRefCount + stats.relationshipCount,
+                totalItems:
+                    stats.topicCount +
+                    stats.entityCount +
+                    stats.semanticRefCount +
+                    stats.relationshipCount,
             }))
             .sort((a: any, b: any) => b.totalItems - a.totalItems);
 
@@ -2610,19 +2808,51 @@ export async function getUrlContentBreakdown(
             totalUrls: breakdown.length,
             totalTopics: breakdown.reduce((sum, b) => sum + b.topicCount, 0),
             totalEntities: breakdown.reduce((sum, b) => sum + b.entityCount, 0),
-            totalSemanticRefs: breakdown.reduce((sum, b) => sum + b.semanticRefCount, 0),
-            totalRelationships: breakdown.reduce((sum, b) => sum + b.relationshipCount, 0),
-            avgTopicsPerUrl: breakdown.length > 0 ? breakdown.reduce((sum, b) => sum + b.topicCount, 0) / breakdown.length : 0,
-            avgEntitiesPerUrl: breakdown.length > 0 ? breakdown.reduce((sum, b) => sum + b.entityCount, 0) / breakdown.length : 0,
-            avgSemanticRefsPerUrl: breakdown.length > 0 ? breakdown.reduce((sum, b) => sum + b.semanticRefCount, 0) / breakdown.length : 0,
-            avgRelationshipsPerUrl: breakdown.length > 0 ? breakdown.reduce((sum, b) => sum + b.relationshipCount, 0) / breakdown.length : 0,
+            totalSemanticRefs: breakdown.reduce(
+                (sum, b) => sum + b.semanticRefCount,
+                0,
+            ),
+            totalRelationships: breakdown.reduce(
+                (sum, b) => sum + b.relationshipCount,
+                0,
+            ),
+            avgTopicsPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce((sum, b) => sum + b.topicCount, 0) /
+                      breakdown.length
+                    : 0,
+            avgEntitiesPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce((sum, b) => sum + b.entityCount, 0) /
+                      breakdown.length
+                    : 0,
+            avgSemanticRefsPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce(
+                          (sum, b) => sum + b.semanticRefCount,
+                          0,
+                      ) / breakdown.length
+                    : 0,
+            avgRelationshipsPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce(
+                          (sum, b) => sum + b.relationshipCount,
+                          0,
+                      ) / breakdown.length
+                    : 0,
         };
 
-        tracker.endOperation("getUrlContentBreakdown", urlStats.size, breakdown.length);
+        tracker.endOperation(
+            "getUrlContentBreakdown",
+            urlStats.size,
+            breakdown.length,
+        );
         tracker.printReport("getUrlContentBreakdown");
 
         debug(`[URL Content Breakdown] Analyzed ${summary.totalUrls} URLs`);
-        debug(`[URL Content Breakdown] Total items - Topics: ${summary.totalTopics}, Entities: ${summary.totalEntities}, SemanticRefs: ${summary.totalSemanticRefs}, Relationships: ${summary.totalRelationships}`);
+        debug(
+            `[URL Content Breakdown] Total items - Topics: ${summary.totalTopics}, Entities: ${summary.totalEntities}, SemanticRefs: ${summary.totalSemanticRefs}, Relationships: ${summary.totalRelationships}`,
+        );
 
         return {
             success: true,

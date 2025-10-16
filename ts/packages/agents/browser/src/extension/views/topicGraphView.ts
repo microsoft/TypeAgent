@@ -166,7 +166,7 @@ class TopicGraphView {
     private async loadInitialData(): Promise<void> {
         const tracker = getFrontendTopicGraphTracker();
         tracker.startOperation("loadInitialData");
-        
+
         this.showLoading();
 
         try {
@@ -174,8 +174,8 @@ class TopicGraphView {
             const topicData = await this.fetchGlobalImportanceView();
             tracker.endPhase("dataFetch");
             tracker.recordItemsFetched(
-                topicData?.topics?.length || 0, 
-                topicData?.relationships?.length || 0
+                topicData?.topics?.length || 0,
+                topicData?.relationships?.length || 0,
             );
 
             if (!topicData || topicData.topics.length === 0) {
@@ -188,15 +188,15 @@ class TopicGraphView {
             await this.visualizer?.init(topicData);
             tracker.endPhase("cytoscapeRender");
             tracker.recordItemsRendered(
-                topicData.topics.length, 
-                topicData.relationships.length
+                topicData.topics.length,
+                topicData.relationships.length,
             );
 
             tracker.startPhase("domRender");
             this.updateGraphStats();
             this.hideLoading();
             tracker.endPhase("domRender");
-            
+
             tracker.endOperation();
         } catch (error) {
             console.error("Failed to load topic data:", error);

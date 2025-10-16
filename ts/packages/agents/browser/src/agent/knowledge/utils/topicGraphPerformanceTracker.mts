@@ -75,7 +75,7 @@ export class TopicGraphPerformanceTracker {
         if (!this.currentOperation || !this.metrics) return;
 
         const subOperation = `${this.currentOperation}.dataFetch`;
-        
+
         if (phase === "start") {
             this.baseTracker.startOperation(subOperation);
         } else {
@@ -94,11 +94,15 @@ export class TopicGraphPerformanceTracker {
         if (!this.currentOperation || !this.metrics) return;
 
         const subOperation = `${this.currentOperation}.processing`;
-        
+
         if (phase === "start") {
             this.baseTracker.startOperation(subOperation);
         } else {
-            this.baseTracker.endOperation(subOperation, itemsProcessed, itemsProcessed);
+            this.baseTracker.endOperation(
+                subOperation,
+                itemsProcessed,
+                itemsProcessed,
+            );
             const metric = this.baseTracker.getMetric(subOperation);
             if (metric?.duration) {
                 this.metrics.processingTime += metric.duration;
@@ -135,7 +139,7 @@ export class TopicGraphPerformanceTracker {
 
         this.metrics.databaseMetrics.queriesExecuted++;
         this.metrics.databaseMetrics.totalQueryTime += duration;
-        
+
         if (duration > this.metrics.databaseMetrics.slowestQueryTime) {
             this.metrics.databaseMetrics.slowestQuery = queryName;
             this.metrics.databaseMetrics.slowestQueryTime = duration;
@@ -144,7 +148,9 @@ export class TopicGraphPerformanceTracker {
         // Enhanced profiling: Track slow queries (> 50ms)
         const SLOW_QUERY_THRESHOLD = 50; // milliseconds
         if (duration > SLOW_QUERY_THRESHOLD) {
-            console.warn(`🐌 SLOW QUERY DETECTED: ${queryName} took ${duration.toFixed(2)}ms`);
+            console.warn(
+                `🐌 SLOW QUERY DETECTED: ${queryName} took ${duration.toFixed(2)}ms`,
+            );
         }
 
         // Enhanced profiling: Track batch vs individual query efficiency
@@ -152,7 +158,9 @@ export class TopicGraphPerformanceTracker {
             const batchSize = queryName.split("_batch_")[1]?.split("_")[0];
             if (batchSize) {
                 const efficiencyScore = parseFloat(batchSize) / (duration / 10); // topics per 10ms
-                console.log(`⚡ BATCH EFFICIENCY: ${queryName} processed ${batchSize} items in ${duration.toFixed(2)}ms (efficiency: ${efficiencyScore.toFixed(1)} items/10ms)`);
+                console.log(
+                    `⚡ BATCH EFFICIENCY: ${queryName} processed ${batchSize} items in ${duration.toFixed(2)}ms (efficiency: ${efficiencyScore.toFixed(1)} items/10ms)`,
+                );
             }
         }
     }
@@ -162,7 +170,7 @@ export class TopicGraphPerformanceTracker {
 
         this.baseTracker.endOperation(this.currentOperation);
         const mainMetric = this.baseTracker.getMetric(this.currentOperation);
-        
+
         if (mainMetric?.duration) {
             this.metrics.totalDuration = mainMetric.duration;
         }
@@ -174,17 +182,27 @@ export class TopicGraphPerformanceTracker {
         }
 
         const result = { ...this.metrics };
-        
+
         debug(`[TopicGraph] Completed operation: ${this.currentOperation}`);
-        debug(`[TopicGraph] Total duration: ${result.totalDuration.toFixed(2)}ms`);
+        debug(
+            `[TopicGraph] Total duration: ${result.totalDuration.toFixed(2)}ms`,
+        );
         debug(`[TopicGraph] Data fetch: ${result.dataFetchTime.toFixed(2)}ms`);
         debug(`[TopicGraph] Processing: ${result.processingTime.toFixed(2)}ms`);
-        debug(`[TopicGraph] Items - Topics read: ${result.itemCounts.topicsRead}, processed: ${result.itemCounts.topicsProcessed}`);
-        debug(`[TopicGraph] Cache - Hits: ${result.itemCounts.cacheHits}, Misses: ${result.itemCounts.cacheMisses}`);
-        
+        debug(
+            `[TopicGraph] Items - Topics read: ${result.itemCounts.topicsRead}, processed: ${result.itemCounts.topicsProcessed}`,
+        );
+        debug(
+            `[TopicGraph] Cache - Hits: ${result.itemCounts.cacheHits}, Misses: ${result.itemCounts.cacheMisses}`,
+        );
+
         if (result.databaseMetrics) {
-            debug(`[TopicGraph] DB - Queries: ${result.databaseMetrics.queriesExecuted}, Total time: ${result.databaseMetrics.totalQueryTime.toFixed(2)}ms`);
-            debug(`[TopicGraph] DB - Slowest query: ${result.databaseMetrics.slowestQuery} (${result.databaseMetrics.slowestQueryTime.toFixed(2)}ms)`);
+            debug(
+                `[TopicGraph] DB - Queries: ${result.databaseMetrics.queriesExecuted}, Total time: ${result.databaseMetrics.totalQueryTime.toFixed(2)}ms`,
+            );
+            debug(
+                `[TopicGraph] DB - Slowest query: ${result.databaseMetrics.slowestQuery} (${result.databaseMetrics.slowestQueryTime.toFixed(2)}ms)`,
+            );
         }
 
         // Print detailed report if operation took longer than 1 second
@@ -214,61 +232,106 @@ export class TopicGraphPerformanceTracker {
         console.log(`Operation: ${metrics.operationName}`);
         console.log(`Total Duration: ${metrics.totalDuration.toFixed(2)}ms`);
         console.log(`\nBreakdown:`);
-        console.log(`  Data Fetch: ${metrics.dataFetchTime.toFixed(2)}ms (${((metrics.dataFetchTime / metrics.totalDuration) * 100).toFixed(1)}%)`);
-        console.log(`  Processing: ${metrics.processingTime.toFixed(2)}ms (${((metrics.processingTime / metrics.totalDuration) * 100).toFixed(1)}%)`);
-        console.log(`  Other: ${(metrics.totalDuration - metrics.dataFetchTime - metrics.processingTime).toFixed(2)}ms`);
-        
+        console.log(
+            `  Data Fetch: ${metrics.dataFetchTime.toFixed(2)}ms (${((metrics.dataFetchTime / metrics.totalDuration) * 100).toFixed(1)}%)`,
+        );
+        console.log(
+            `  Processing: ${metrics.processingTime.toFixed(2)}ms (${((metrics.processingTime / metrics.totalDuration) * 100).toFixed(1)}%)`,
+        );
+        console.log(
+            `  Other: ${(metrics.totalDuration - metrics.dataFetchTime - metrics.processingTime).toFixed(2)}ms`,
+        );
+
         console.log(`\nData Volume:`);
         console.log(`  Topics read: ${metrics.itemCounts.topicsRead}`);
-        console.log(`  Topics processed: ${metrics.itemCounts.topicsProcessed}`);
-        console.log(`  Relationships read: ${metrics.itemCounts.relationshipsRead}`);
-        console.log(`  Relationships processed: ${metrics.itemCounts.relationshipsProcessed}`);
-        
+        console.log(
+            `  Topics processed: ${metrics.itemCounts.topicsProcessed}`,
+        );
+        console.log(
+            `  Relationships read: ${metrics.itemCounts.relationshipsRead}`,
+        );
+        console.log(
+            `  Relationships processed: ${metrics.itemCounts.relationshipsProcessed}`,
+        );
+
         console.log(`\nCache Performance:`);
         console.log(`  Cache hits: ${metrics.itemCounts.cacheHits}`);
         console.log(`  Cache misses: ${metrics.itemCounts.cacheMisses}`);
-        
+
         if (metrics.itemCounts.cacheHits + metrics.itemCounts.cacheMisses > 0) {
-            const hitRate = (metrics.itemCounts.cacheHits / (metrics.itemCounts.cacheHits + metrics.itemCounts.cacheMisses)) * 100;
+            const hitRate =
+                (metrics.itemCounts.cacheHits /
+                    (metrics.itemCounts.cacheHits +
+                        metrics.itemCounts.cacheMisses)) *
+                100;
             console.log(`  Cache hit rate: ${hitRate.toFixed(1)}%`);
         }
-        
+
         if (metrics.databaseMetrics) {
             console.log(`\nDatabase Performance:`);
-            console.log(`  Queries executed: ${metrics.databaseMetrics.queriesExecuted}`);
-            console.log(`  Total query time: ${metrics.databaseMetrics.totalQueryTime.toFixed(2)}ms`);
-            console.log(`  Average query time: ${(metrics.databaseMetrics.totalQueryTime / metrics.databaseMetrics.queriesExecuted).toFixed(2)}ms`);
-            console.log(`  Slowest query: ${metrics.databaseMetrics.slowestQuery} (${metrics.databaseMetrics.slowestQueryTime.toFixed(2)}ms)`);
+            console.log(
+                `  Queries executed: ${metrics.databaseMetrics.queriesExecuted}`,
+            );
+            console.log(
+                `  Total query time: ${metrics.databaseMetrics.totalQueryTime.toFixed(2)}ms`,
+            );
+            console.log(
+                `  Average query time: ${(metrics.databaseMetrics.totalQueryTime / metrics.databaseMetrics.queriesExecuted).toFixed(2)}ms`,
+            );
+            console.log(
+                `  Slowest query: ${metrics.databaseMetrics.slowestQuery} (${metrics.databaseMetrics.slowestQueryTime.toFixed(2)}ms)`,
+            );
         }
-        
+
         if (metrics.memoryUsage) {
             console.log(`\nMemory Usage:`);
-            console.log(`  Heap used: ${(metrics.memoryUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-            console.log(`  Heap total: ${(metrics.memoryUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`);
+            console.log(
+                `  Heap used: ${(metrics.memoryUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
+            );
+            console.log(
+                `  Heap total: ${(metrics.memoryUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
+            );
         }
-        
+
         console.log(`\n💡 Performance Recommendations:`);
-        
+
         if (metrics.dataFetchTime > metrics.totalDuration * 0.5) {
-            console.log(`  - Data fetching is the bottleneck (${((metrics.dataFetchTime / metrics.totalDuration) * 100).toFixed(1)}% of time)`);
-            console.log(`  - Consider optimizing database queries or adding indexes`);
+            console.log(
+                `  - Data fetching is the bottleneck (${((metrics.dataFetchTime / metrics.totalDuration) * 100).toFixed(1)}% of time)`,
+            );
+            console.log(
+                `  - Consider optimizing database queries or adding indexes`,
+            );
         }
-        
+
         if (metrics.itemCounts.cacheHits + metrics.itemCounts.cacheMisses > 0) {
-            const hitRate = (metrics.itemCounts.cacheHits / (metrics.itemCounts.cacheHits + metrics.itemCounts.cacheMisses)) * 100;
+            const hitRate =
+                (metrics.itemCounts.cacheHits /
+                    (metrics.itemCounts.cacheHits +
+                        metrics.itemCounts.cacheMisses)) *
+                100;
             if (hitRate < 80) {
-                console.log(`  - Low cache hit rate (${hitRate.toFixed(1)}%) - consider improving caching strategy`);
+                console.log(
+                    `  - Low cache hit rate (${hitRate.toFixed(1)}%) - consider improving caching strategy`,
+                );
             }
         }
-        
+
         if (metrics.itemCounts.topicsRead > 1000) {
-            console.log(`  - Large number of topics (${metrics.itemCounts.topicsRead}) - consider pagination or filtering`);
+            console.log(
+                `  - Large number of topics (${metrics.itemCounts.topicsRead}) - consider pagination or filtering`,
+            );
         }
-        
-        if (metrics.databaseMetrics && metrics.databaseMetrics.queriesExecuted > 10) {
-            console.log(`  - High number of database queries (${metrics.databaseMetrics.queriesExecuted}) - consider batching or using joins`);
+
+        if (
+            metrics.databaseMetrics &&
+            metrics.databaseMetrics.queriesExecuted > 10
+        ) {
+            console.log(
+                `  - High number of database queries (${metrics.databaseMetrics.queriesExecuted}) - consider batching or using joins`,
+            );
         }
-        
+
         console.log(`============================================\n`);
     }
 }

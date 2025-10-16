@@ -28,8 +28,6 @@ export class GraphBuildingCacheManager {
      * Initialize cache from website collection
      */
     async initializeCache(websites: Website[]): Promise<void> {
-
-
         const entitiesByWebsite = new Map<string, string[]>();
         const topicsByWebsite = new Map<string, string[]>();
         const entityToWebsites = new Map<string, string[]>();
@@ -46,7 +44,7 @@ export class GraphBuildingCacheManager {
             if (website.knowledge?.entities) {
                 for (const entity of website.knowledge.entities) {
                     entities.push(entity.name);
-                    
+
                     // Build entity -> websites mapping
                     if (!entityToWebsites.has(entity.name)) {
                         entityToWebsites.set(entity.name, []);
@@ -60,10 +58,11 @@ export class GraphBuildingCacheManager {
             const topics: string[] = [];
             if (website.knowledge?.topics) {
                 for (const topic of website.knowledge.topics) {
-                    const topicName = typeof topic === "string" ? topic : (topic as any).name;
+                    const topicName =
+                        typeof topic === "string" ? topic : (topic as any).name;
                     if (topicName) {
                         topics.push(topicName);
-                        
+
                         // Build topic -> websites mapping
                         if (!topicToWebsites.has(topicName)) {
                             topicToWebsites.set(topicName, []);
@@ -76,7 +75,7 @@ export class GraphBuildingCacheManager {
 
             // Pre-compute entity co-occurrences for this website
             this.computeCooccurrences(entities, entityCooccurrences);
-            
+
             // Pre-compute topic co-occurrences for this website
             this.computeCooccurrences(topics, topicCooccurrences);
         }
@@ -92,13 +91,6 @@ export class GraphBuildingCacheManager {
             strongRelationships: [], // Will be populated separately
             lastUpdated: Date.now(),
         };
-
-
-
-
-
-
-
     }
 
     /**
@@ -107,7 +99,6 @@ export class GraphBuildingCacheManager {
     setStrongRelationships(relationships: Relationship[]): void {
         if (this.cache) {
             this.cache.strongRelationships = relationships;
-
         }
     }
 
@@ -200,7 +191,9 @@ export class GraphBuildingCacheManager {
                 // Get source URLs for this relationship
                 const sourcesA = this.cache.entityToWebsites.get(entityA) || [];
                 const sourcesB = this.cache.entityToWebsites.get(entityB) || [];
-                const commonSources = sourcesA.filter(url => sourcesB.includes(url));
+                const commonSources = sourcesA.filter((url) =>
+                    sourcesB.includes(url),
+                );
 
                 relationships.push({
                     fromEntity: entityA,
@@ -237,7 +230,9 @@ export class GraphBuildingCacheManager {
                 // Get source URLs for this relationship
                 const sourcesA = this.cache.topicToWebsites.get(topicA) || [];
                 const sourcesB = this.cache.topicToWebsites.get(topicB) || [];
-                const commonSources = sourcesA.filter(url => sourcesB.includes(url));
+                const commonSources = sourcesA.filter((url) =>
+                    sourcesB.includes(url),
+                );
 
                 relationships.push({
                     fromTopic: topicA,
@@ -254,12 +249,15 @@ export class GraphBuildingCacheManager {
     /**
      * Get connected entities for community detection
      */
-    getConnectedEntities(entity: string, minCooccurrence: number = 2): string[] {
+    getConnectedEntities(
+        entity: string,
+        minCooccurrence: number = 2,
+    ): string[] {
         if (!this.cache) return [];
 
         const connected: string[] = [];
         const cooccurrences = this.cache.entityCooccurrences.get(entity);
-        
+
         if (cooccurrences) {
             for (const [otherEntity, count] of cooccurrences) {
                 if (count >= minCooccurrence) {
@@ -312,7 +310,6 @@ export class GraphBuildingCacheManager {
      */
     clear(): void {
         this.cache = null;
-
     }
 
     /**
@@ -327,7 +324,7 @@ export class GraphBuildingCacheManager {
      */
     private computeCooccurrences(
         items: string[],
-        cooccurrenceMap: Map<string, Map<string, number>>
+        cooccurrenceMap: Map<string, Map<string, number>>,
     ): void {
         for (let i = 0; i < items.length; i++) {
             for (let j = i + 1; j < items.length; j++) {
@@ -345,7 +342,7 @@ export class GraphBuildingCacheManager {
                 // Increment co-occurrence counts
                 const mapA = cooccurrenceMap.get(itemA)!;
                 const mapB = cooccurrenceMap.get(itemB)!;
-                
+
                 mapA.set(itemB, (mapA.get(itemB) || 0) + 1);
                 mapB.set(itemA, (mapB.get(itemA) || 0) + 1);
             }

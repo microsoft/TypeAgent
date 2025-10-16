@@ -98,7 +98,11 @@ export class PerformanceTracker {
         );
     }
 
-    recordCount(operation: string, type: "read" | "processed", count: number): void {
+    recordCount(
+        operation: string,
+        type: "read" | "processed",
+        count: number,
+    ): void {
         if (!this.enabled) return;
 
         const metric = this.metrics.get(operation);

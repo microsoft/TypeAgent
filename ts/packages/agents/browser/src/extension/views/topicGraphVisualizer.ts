@@ -994,7 +994,8 @@ export class TopicGraphVisualizer {
         this.cy.batch(() => {
             this.cy.nodes().forEach((node: any) => {
                 const isVisible = node.hasClass("visible-at-zoom");
-                const computedImportance = node.data("computedImportance") || 0.5;
+                const computedImportance =
+                    node.data("computedImportance") || 0.5;
                 const level = node.data("level") || 0;
 
                 let textOpacity = 0;
@@ -1009,7 +1010,10 @@ export class TopicGraphVisualizer {
                     } else if (zoom < 2.0) {
                         // Show more labels based on importance and level
                         if (level <= 1) {
-                            textOpacity = Math.min(1.0, computedImportance + 0.2);
+                            textOpacity = Math.min(
+                                1.0,
+                                computedImportance + 0.2,
+                            );
                         } else {
                             textOpacity = computedImportance > 0.5 ? 0.7 : 0;
                         }
@@ -1341,7 +1345,7 @@ export class TopicGraphVisualizer {
 
             // Show labels only for important nodes
             {
-                selector: 'node[?important]',
+                selector: "node[?important]",
                 style: {
                     "text-opacity": 1,
                 },
@@ -1683,7 +1687,7 @@ export class TopicGraphVisualizer {
             this.cy.batch(() => {
                 this.cy.add(newElements);
             });
-            
+
             this.applyLayout();
 
             // Reapply LOD to ensure new nodes respect visibility rules

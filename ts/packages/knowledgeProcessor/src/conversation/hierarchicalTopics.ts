@@ -253,33 +253,37 @@ JSON OUTPUT:`;
             } catch (parseError) {
                 console.warn(
                     "Initial JSON parse failed, attempting to clean and retry:",
-                    parseError instanceof Error ? parseError.message : String(parseError),
+                    parseError instanceof Error
+                        ? parseError.message
+                        : String(parseError),
                 );
                 console.debug("Raw JSON content:", jsonMatch[0]);
-                
+
                 // Attempt to fix common JSON issues
                 let cleanedJson = jsonMatch[0]
-                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
-                    .replace(/\\(?!["\\/bfnrt])/g, '\\\\') // Fix invalid escape sequences
+                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Remove control characters
+                    .replace(/\\(?!["\\/bfnrt])/g, "\\\\") // Fix invalid escape sequences
                     .replace(/(?<!\\)"/g, '\\"') // Escape unescaped quotes in values
                     .replace(/\\"/g, '"') // Fix over-escaped quotes
-                    .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+                    .replace(/,(\s*[}\]])/g, "$1") // Remove trailing commas
                     .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Quote unquoted property names
                     .trim();
 
                 // Ensure the JSON is properly closed
-                if (!cleanedJson.endsWith(']')) {
-                    const openBrackets = (cleanedJson.match(/\[/g) || []).length;
-                    const closeBrackets = (cleanedJson.match(/\]/g) || []).length;
+                if (!cleanedJson.endsWith("]")) {
+                    const openBrackets = (cleanedJson.match(/\[/g) || [])
+                        .length;
+                    const closeBrackets = (cleanedJson.match(/\]/g) || [])
+                        .length;
                     const openBraces = (cleanedJson.match(/\{/g) || []).length;
                     const closeBraces = (cleanedJson.match(/\}/g) || []).length;
-                    
+
                     // Add missing closing braces/brackets
                     for (let i = 0; i < openBraces - closeBraces; i++) {
-                        cleanedJson += '}';
+                        cleanedJson += "}";
                     }
                     for (let i = 0; i < openBrackets - closeBrackets; i++) {
-                        cleanedJson += ']';
+                        cleanedJson += "]";
                     }
                 }
 
@@ -289,10 +293,15 @@ JSON OUTPUT:`;
                 } catch (secondParseError) {
                     console.warn(
                         "JSON cleaning failed, falling back to simple topic hierarchy:",
-                        secondParseError instanceof Error ? secondParseError.message : String(secondParseError),
+                        secondParseError instanceof Error
+                            ? secondParseError.message
+                            : String(secondParseError),
                     );
                     // Fallback to simple flat hierarchy
-                    hierarchyData = createFallbackHierarchy(topics, aggregatedTopics);
+                    hierarchyData = createFallbackHierarchy(
+                        topics,
+                        aggregatedTopics,
+                    );
                 }
             }
 
@@ -359,12 +368,17 @@ JSON OUTPUT:`;
                 }
             }
         } else {
-            console.warn("No JSON array found in LLM response, using fallback hierarchy");
+            console.warn(
+                "No JSON array found in LLM response, using fallback hierarchy",
+            );
             console.debug("LLM response:", response.data);
-            
+
             // Use fallback hierarchy when no JSON is found
-            const hierarchyData = createFallbackHierarchy(topics, aggregatedTopics);
-            
+            const hierarchyData = createFallbackHierarchy(
+                topics,
+                aggregatedTopics,
+            );
+
             // Build hierarchy from fallback data
             for (const rootData of hierarchyData) {
                 const rootTopic: HierarchicalTopic = {
@@ -542,33 +556,37 @@ function calculateKeywordOverlap(
 /**
  * Creates a fallback hierarchy when JSON parsing fails
  */
-function createFallbackHierarchy(topics: string[], aggregatedTopics: string[]): any[] {
+function createFallbackHierarchy(
+    topics: string[],
+    aggregatedTopics: string[],
+): any[] {
     console.log("Creating fallback hierarchy for", topics.length, "topics");
-    
+
     // Group topics by similarity (simple keyword-based grouping)
     const groups = new Map<string, string[]>();
-    
+
     // Use aggregated topics as root categories, or create generic ones
-    const rootCategories = aggregatedTopics.length > 0 
-        ? aggregatedTopics.slice(0, 4) // Limit to 4 root categories
-        : ["General Topics", "Technical", "Concepts", "Other"];
-    
+    const rootCategories =
+        aggregatedTopics.length > 0
+            ? aggregatedTopics.slice(0, 4) // Limit to 4 root categories
+            : ["General Topics", "Technical", "Concepts", "Other"];
+
     // Initialize groups
-    rootCategories.forEach(category => {
+    rootCategories.forEach((category) => {
         groups.set(category, []);
     });
-    
+
     // Simple assignment: split topics evenly across root categories
     topics.forEach((topic, index) => {
         const categoryIndex = index % rootCategories.length;
         const category = rootCategories[categoryIndex];
         groups.get(category)?.push(topic);
     });
-    
+
     // Convert to expected format
     return Array.from(groups.entries()).map(([rootTopic, children]) => ({
         rootTopic,
         children: children.slice(0, 10), // Limit children to avoid overwhelming
-        grandchildren: {} // Keep simple for fallback
+        grandchildren: {}, // Keep simple for fallback
     }));
 }

@@ -1,6 +1,6 @@
 /**
  * Entity Graph Performance Tracker
- * 
+ *
  * Similar to TopicGraphPerformanceTracker but focused on entity graph operations.
  * Tracks database query performance, batch efficiency, and entity-specific bottlenecks.
  */
@@ -37,7 +37,8 @@ export class EntityGraphPerformanceTracker {
 
     static getInstance(): EntityGraphPerformanceTracker {
         if (!EntityGraphPerformanceTracker.instance) {
-            EntityGraphPerformanceTracker.instance = new EntityGraphPerformanceTracker();
+            EntityGraphPerformanceTracker.instance =
+                new EntityGraphPerformanceTracker();
         }
         return EntityGraphPerformanceTracker.instance;
     }
@@ -46,17 +47,17 @@ export class EntityGraphPerformanceTracker {
      * Record database query performance for entity operations
      */
     recordDatabaseQuery(
-        operation: string, 
-        duration: number, 
-        entityCount?: number, 
-        relationshipCount?: number
+        operation: string,
+        duration: number,
+        entityCount?: number,
+        relationshipCount?: number,
     ): void {
         const metric: EntityQueryMetrics = {
             operation,
             duration,
             ...(entityCount !== undefined && { entityCount }),
             ...(relationshipCount !== undefined && { relationshipCount }),
-            timestamp: Date.now()
+            timestamp: Date.now(),
         };
 
         // Add to metrics history
@@ -69,14 +70,18 @@ export class EntityGraphPerformanceTracker {
         if (duration > this.slowQueryThreshold) {
             console.warn(
                 `[Entity Graph Perf] Slow query detected: ${operation} took ${duration.toFixed(1)}ms` +
-                (entityCount ? ` (${entityCount} entities)` : '') +
-                (relationshipCount ? ` (${relationshipCount} relationships)` : '')
+                    (entityCount ? ` (${entityCount} entities)` : "") +
+                    (relationshipCount
+                        ? ` (${relationshipCount} relationships)`
+                        : ""),
             );
         } else {
             console.log(
                 `[Entity Graph Perf] ${operation}: ${duration.toFixed(1)}ms` +
-                (entityCount ? ` (${entityCount} entities)` : '') +
-                (relationshipCount ? ` (${relationshipCount} relationships)` : '')
+                    (entityCount ? ` (${entityCount} entities)` : "") +
+                    (relationshipCount
+                        ? ` (${relationshipCount} relationships)`
+                        : ""),
             );
         }
     }
@@ -85,18 +90,18 @@ export class EntityGraphPerformanceTracker {
      * Record batch operation efficiency for entity operations
      */
     recordBatchEfficiency(
-        operation: string, 
-        batchSize: number, 
-        duration: number
+        operation: string,
+        batchSize: number,
+        duration: number,
     ): void {
         const itemsPerMs = batchSize / Math.max(duration, 1);
-        
+
         const metric: BatchOperationMetrics = {
             operation,
             batchSize,
             duration,
             itemsPerMs,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         };
 
         // Add to metrics history
@@ -107,7 +112,7 @@ export class EntityGraphPerformanceTracker {
 
         console.log(
             `[Entity Graph Perf] Batch ${operation}: ${batchSize} items in ${duration.toFixed(1)}ms ` +
-            `(${itemsPerMs.toFixed(1)} items/ms)`
+                `(${itemsPerMs.toFixed(1)} items/ms)`,
         );
     }
 
@@ -120,20 +125,20 @@ export class EntityGraphPerformanceTracker {
         maxNodes: number,
         duration: number,
         actualNodes: number,
-        actualEdges: number
+        actualEdges: number,
     ): void {
         this.recordDatabaseQuery(
             `neighborhood_search_${entityId}_depth${depth}_max${maxNodes}`,
             duration,
             actualNodes,
-            actualEdges
+            actualEdges,
         );
 
         const efficiency = actualNodes / Math.max(duration, 1);
         console.log(
             `[Entity Graph Perf] Neighborhood search for "${entityId}": ` +
-            `${actualNodes} nodes, ${actualEdges} edges in ${duration.toFixed(1)}ms ` +
-            `(${efficiency.toFixed(2)} nodes/ms)`
+                `${actualNodes} nodes, ${actualEdges} edges in ${duration.toFixed(1)}ms ` +
+                `(${efficiency.toFixed(2)} nodes/ms)`,
         );
     }
 
@@ -143,20 +148,20 @@ export class EntityGraphPerformanceTracker {
     recordEntityMetricsCalculation(
         entityCount: number,
         relationshipCount: number,
-        duration: number
+        duration: number,
     ): void {
         this.recordDatabaseQuery(
             "entity_metrics_calculation",
             duration,
             entityCount,
-            relationshipCount
+            relationshipCount,
         );
 
         const efficiency = entityCount / Math.max(duration, 1);
         console.log(
             `[Entity Graph Perf] Entity metrics calculation: ` +
-            `${entityCount} entities, ${relationshipCount} relationships in ${duration.toFixed(1)}ms ` +
-            `(${efficiency.toFixed(2)} entities/ms)`
+                `${entityCount} entities, ${relationshipCount} relationships in ${duration.toFixed(1)}ms ` +
+                `(${efficiency.toFixed(2)} entities/ms)`,
         );
     }
 
@@ -167,19 +172,19 @@ export class EntityGraphPerformanceTracker {
         startEntity: string,
         depth: number,
         visitedNodes: number,
-        duration: number
+        duration: number,
     ): void {
         this.recordDatabaseQuery(
             `bfs_traversal_${startEntity}_depth${depth}`,
             duration,
-            visitedNodes
+            visitedNodes,
         );
 
         const efficiency = visitedNodes / Math.max(duration, 1);
         console.log(
             `[Entity Graph Perf] BFS traversal from "${startEntity}": ` +
-            `${visitedNodes} nodes visited in ${duration.toFixed(1)}ms ` +
-            `(${efficiency.toFixed(2)} nodes/ms)`
+                `${visitedNodes} nodes visited in ${duration.toFixed(1)}ms ` +
+                `(${efficiency.toFixed(2)} nodes/ms)`,
         );
     }
 
@@ -194,11 +199,15 @@ export class EntityGraphPerformanceTracker {
      * End timing an operation
      */
     endOperation(
-        operationName: string, 
-        itemCount: number = 0, 
-        resultCount: number = 0
+        operationName: string,
+        itemCount: number = 0,
+        resultCount: number = 0,
     ): void {
-        this.baseTracker.endOperation(`entity_graph_${operationName}`, itemCount, resultCount);
+        this.baseTracker.endOperation(
+            `entity_graph_${operationName}`,
+            itemCount,
+            resultCount,
+        );
     }
 
     /**
@@ -213,10 +222,14 @@ export class EntityGraphPerformanceTracker {
             avgItemsPerMs: number;
         }[];
     } {
-        const slowQueries = this.queryMetrics.filter(q => q.duration > this.slowQueryThreshold);
-        const averageQueryTime = this.queryMetrics.length > 0 
-            ? this.queryMetrics.reduce((sum, q) => sum + q.duration, 0) / this.queryMetrics.length
-            : 0;
+        const slowQueries = this.queryMetrics.filter(
+            (q) => q.duration > this.slowQueryThreshold,
+        );
+        const averageQueryTime =
+            this.queryMetrics.length > 0
+                ? this.queryMetrics.reduce((sum, q) => sum + q.duration, 0) /
+                  this.queryMetrics.length
+                : 0;
 
         // Calculate batch efficiency by operation
         const batchEfficiencyMap = new Map<string, number[]>();
@@ -227,16 +240,19 @@ export class EntityGraphPerformanceTracker {
             batchEfficiencyMap.get(metric.operation)!.push(metric.itemsPerMs);
         }
 
-        const batchEfficiency = Array.from(batchEfficiencyMap.entries()).map(([operation, rates]) => ({
-            operation,
-            avgItemsPerMs: rates.reduce((sum, rate) => sum + rate, 0) / rates.length
-        }));
+        const batchEfficiency = Array.from(batchEfficiencyMap.entries()).map(
+            ([operation, rates]) => ({
+                operation,
+                avgItemsPerMs:
+                    rates.reduce((sum, rate) => sum + rate, 0) / rates.length,
+            }),
+        );
 
         return {
             slowQueries,
             averageQueryTime,
             totalQueries: this.queryMetrics.length,
-            batchEfficiency
+            batchEfficiency,
         };
     }
 
@@ -245,23 +261,31 @@ export class EntityGraphPerformanceTracker {
      */
     printReport(): void {
         const summary = this.getPerformanceSummary();
-        
+
         console.log("\n=== Entity Graph Performance Report ===");
         console.log(`Total queries: ${summary.totalQueries}`);
-        console.log(`Average query time: ${summary.averageQueryTime.toFixed(1)}ms`);
-        console.log(`Slow queries (>${this.slowQueryThreshold}ms): ${summary.slowQueries.length}`);
-        
+        console.log(
+            `Average query time: ${summary.averageQueryTime.toFixed(1)}ms`,
+        );
+        console.log(
+            `Slow queries (>${this.slowQueryThreshold}ms): ${summary.slowQueries.length}`,
+        );
+
         if (summary.slowQueries.length > 0) {
             console.log("\nSlow queries:");
-            summary.slowQueries.slice(-5).forEach(query => {
-                console.log(`  - ${query.operation}: ${query.duration.toFixed(1)}ms`);
+            summary.slowQueries.slice(-5).forEach((query) => {
+                console.log(
+                    `  - ${query.operation}: ${query.duration.toFixed(1)}ms`,
+                );
             });
         }
 
         if (summary.batchEfficiency.length > 0) {
             console.log("\nBatch efficiency:");
-            summary.batchEfficiency.forEach(batch => {
-                console.log(`  - ${batch.operation}: ${batch.avgItemsPerMs.toFixed(1)} items/ms`);
+            summary.batchEfficiency.forEach((batch) => {
+                console.log(
+                    `  - ${batch.operation}: ${batch.avgItemsPerMs.toFixed(1)} items/ms`,
+                );
             });
         }
         console.log("=====================================\n");
@@ -274,16 +298,20 @@ export class EntityGraphPerformanceTracker {
         operation: string,
         issueType: string,
         count: number,
-        details?: string
+        details?: string,
     ): void {
         console.warn(
             `[Entity Graph Perf] Data quality issue in ${operation}: ` +
-            `${issueType} (${count} instances)` +
-            (details ? ` - ${details}` : '')
+                `${issueType} (${count} instances)` +
+                (details ? ` - ${details}` : ""),
         );
-        
+
         // Record as a special type of query metric for tracking
-        this.recordDatabaseQuery(`data_quality_${operation}_${issueType}`, 0, count);
+        this.recordDatabaseQuery(
+            `data_quality_${operation}_${issueType}`,
+            0,
+            count,
+        );
     }
 
     /**
@@ -291,23 +319,23 @@ export class EntityGraphPerformanceTracker {
      */
     validateEntityData(entities: any[], operation: string): any[] {
         const originalCount = entities.length;
-        
+
         // Filter out entities with empty or invalid names
-        const validEntities = entities.filter(entity => {
+        const validEntities = entities.filter((entity) => {
             const name = entity.name || entity.entityName;
-            return name && typeof name === 'string' && name.trim() !== '';
+            return name && typeof name === "string" && name.trim() !== "";
         });
-        
+
         const invalidCount = originalCount - validEntities.length;
         if (invalidCount > 0) {
             this.recordDataQualityIssue(
                 operation,
-                'empty_entity_names',
+                "empty_entity_names",
                 invalidCount,
-                `${invalidCount}/${originalCount} entities had empty names`
+                `${invalidCount}/${originalCount} entities had empty names`,
             );
         }
-        
+
         return validEntities;
     }
 
@@ -316,26 +344,32 @@ export class EntityGraphPerformanceTracker {
      */
     validateRelationshipData(relationships: any[], operation: string): any[] {
         const originalCount = relationships.length;
-        
+
         // Filter out relationships with empty entity names
-        const validRelationships = relationships.filter(rel => {
+        const validRelationships = relationships.filter((rel) => {
             const fromEntity = rel.fromEntity || rel.from;
             const toEntity = rel.toEntity || rel.to;
-            
-            return fromEntity && typeof fromEntity === 'string' && fromEntity.trim() !== '' &&
-                   toEntity && typeof toEntity === 'string' && toEntity.trim() !== '';
+
+            return (
+                fromEntity &&
+                typeof fromEntity === "string" &&
+                fromEntity.trim() !== "" &&
+                toEntity &&
+                typeof toEntity === "string" &&
+                toEntity.trim() !== ""
+            );
         });
-        
+
         const invalidCount = originalCount - validRelationships.length;
         if (invalidCount > 0) {
             this.recordDataQualityIssue(
                 operation,
-                'empty_relationship_entities',
+                "empty_relationship_entities",
                 invalidCount,
-                `${invalidCount}/${originalCount} relationships had empty entity names`
+                `${invalidCount}/${originalCount} relationships had empty entity names`,
             );
         }
-        
+
         return validRelationships;
     }
 

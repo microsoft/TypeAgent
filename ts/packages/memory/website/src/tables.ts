@@ -117,7 +117,7 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
         // Ensure performance indexes exist
         KnowledgeEntityTable.ensureIndexes(db);
-        
+
         super(db, "knowledgeEntities", [
             ["url", { type: "string" }],
             ["domain", { type: "string" }],
@@ -131,11 +131,21 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
     private static ensureIndexes(db: sqlite.Database): void {
         try {
             // Add performance indexes for entity queries
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_name ON knowledgeEntities(entityName)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_type ON knowledgeEntities(entityType)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_confidence ON knowledgeEntities(confidence DESC)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_domain ON knowledgeEntities(domain)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_name_confidence ON knowledgeEntities(entityName, confidence DESC)`);
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_entities_name ON knowledgeEntities(entityName)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_entities_type ON knowledgeEntities(entityType)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_entities_confidence ON knowledgeEntities(confidence DESC)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_entities_domain ON knowledgeEntities(domain)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_entities_name_confidence ON knowledgeEntities(entityName, confidence DESC)`,
+            );
         } catch (error) {
             console.warn("Failed to create entity indexes:", error);
         }
@@ -170,11 +180,13 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
      */
     public getEntitiesByNames(entityNames: string[]): KnowledgeEntity[] {
         if (entityNames.length === 0) return [];
-        
+
         // Filter out empty strings from input
-        const validEntityNames = entityNames.filter(name => name && name.trim() !== '');
+        const validEntityNames = entityNames.filter(
+            (name) => name && name.trim() !== "",
+        );
         if (validEntityNames.length === 0) return [];
-        
+
         const placeholders = validEntityNames.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM knowledgeEntities 
@@ -189,13 +201,17 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
      * Batch method to get top entities by names with aggregated counts
      * Useful for entity metrics calculations
      */
-    public getEntityCounts(entityNames: string[]): Array<{ entityName: string; count: number; avgConfidence: number }> {
+    public getEntityCounts(
+        entityNames: string[],
+    ): Array<{ entityName: string; count: number; avgConfidence: number }> {
         if (entityNames.length === 0) return [];
-        
+
         // Filter out empty strings from input
-        const validEntityNames = entityNames.filter(name => name && name.trim() !== '');
+        const validEntityNames = entityNames.filter(
+            (name) => name && name.trim() !== "",
+        );
         if (validEntityNames.length === 0) return [];
-        
+
         const placeholders = validEntityNames.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT entityName, COUNT(*) as count, AVG(confidence) as avgConfidence
@@ -205,7 +221,11 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
             GROUP BY entityName 
             ORDER BY count DESC
         `);
-        return stmt.all(...validEntityNames) as Array<{ entityName: string; count: number; avgConfidence: number }>;
+        return stmt.all(...validEntityNames) as Array<{
+            entityName: string;
+            count: number;
+            avgConfidence: number;
+        }>;
     }
 
     public getEntitiesByType(entityType: string): KnowledgeEntity[] {
@@ -371,7 +391,7 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
         // Ensure performance indexes exist
         RelationshipTable.ensureIndexes(db);
-        
+
         super(db, "relationships", [
             ["fromEntity", { type: "string" }],
             ["toEntity", { type: "string" }],
@@ -386,12 +406,24 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
     private static ensureIndexes(db: sqlite.Database): void {
         try {
             // Add performance indexes for entity relationship queries
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_fromentity ON relationships(fromEntity)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_toentity ON relationships(toEntity)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_confidence ON relationships(confidence DESC)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_from_confidence ON relationships(fromEntity, confidence DESC)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_to_confidence ON relationships(toEntity, confidence DESC)`);
-            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(relationshipType)`);
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_relationships_fromentity ON relationships(fromEntity)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_relationships_toentity ON relationships(toEntity)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_relationships_confidence ON relationships(confidence DESC)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_relationships_from_confidence ON relationships(fromEntity, confidence DESC)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_relationships_to_confidence ON relationships(toEntity, confidence DESC)`,
+            );
+            db.exec(
+                `CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(relationshipType)`,
+            );
         } catch (error) {
             console.warn("Failed to create relationship indexes:", error);
         }
@@ -402,8 +434,8 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
         minConfidence = 0.3,
     ): Relationship[] {
         // Validate input
-        if (!entityName || entityName.trim() === '') return [];
-        
+        if (!entityName || entityName.trim() === "") return [];
+
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
             WHERE (fromEntity = ? OR toEntity = ?) 
@@ -421,11 +453,13 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
 
     public getRelationshipsForEntities(entities: string[]): Relationship[] {
         if (entities.length === 0) return [];
-        
+
         // Filter out empty strings from input
-        const validEntities = entities.filter(entity => entity && entity.trim() !== '');
+        const validEntities = entities.filter(
+            (entity) => entity && entity.trim() !== "",
+        );
         if (validEntities.length === 0) return [];
-        
+
         const placeholders = validEntities.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
@@ -441,13 +475,18 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
      * Optimized batch method to get relationships between specific entities only
      * This is more efficient than getRelationshipsForEntities for neighborhood queries
      */
-    public getRelationshipsBetweenEntities(entities: string[], minConfidence: number = 0.3): Relationship[] {
+    public getRelationshipsBetweenEntities(
+        entities: string[],
+        minConfidence: number = 0.3,
+    ): Relationship[] {
         if (entities.length === 0) return [];
-        
+
         // Filter out empty strings from input
-        const validEntities = entities.filter(entity => entity && entity.trim() !== '');
+        const validEntities = entities.filter(
+            (entity) => entity && entity.trim() !== "",
+        );
         if (validEntities.length === 0) return [];
-        
+
         const placeholders = validEntities.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
@@ -458,20 +497,29 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
             AND fromEntity IS NOT NULL AND toEntity IS NOT NULL
             ORDER BY confidence DESC
         `);
-        return stmt.all(minConfidence, ...validEntities, ...validEntities) as Relationship[];
+        return stmt.all(
+            minConfidence,
+            ...validEntities,
+            ...validEntities,
+        ) as Relationship[];
     }
 
     /**
      * Batch method to get neighbors for multiple entities at once
      * Reduces N queries to 1 for neighborhood operations
      */
-    public getNeighborsForEntities(entityNames: string[], minConfidence: number = 0.3): Relationship[] {
+    public getNeighborsForEntities(
+        entityNames: string[],
+        minConfidence: number = 0.3,
+    ): Relationship[] {
         if (entityNames.length === 0) return [];
-        
+
         // Filter out empty strings from input
-        const validEntityNames = entityNames.filter(entity => entity && entity.trim() !== '');
+        const validEntityNames = entityNames.filter(
+            (entity) => entity && entity.trim() !== "",
+        );
         if (validEntityNames.length === 0) return [];
-        
+
         const placeholders = validEntityNames.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
@@ -481,9 +529,13 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
             AND fromEntity IS NOT NULL AND toEntity IS NOT NULL
             ORDER BY confidence DESC
         `);
-        
+
         // Pass validEntityNames twice (for fromEntity and toEntity) plus minConfidence
-        return stmt.all(...validEntityNames, ...validEntityNames, minConfidence) as Relationship[];
+        return stmt.all(
+            ...validEntityNames,
+            ...validEntityNames,
+            minConfidence,
+        ) as Relationship[];
     }
 
     public getAllRelationships(): Relationship[] {
@@ -708,16 +760,16 @@ export class TopicEntityRelationTable extends ms.sqlite.SqliteDataFrame {
      */
     public getEntitiesForTopics(topicIds: string[]): TopicEntityRelation[] {
         if (topicIds.length === 0) return [];
-        
+
         // Create placeholders for the IN clause
         const placeholders = topicIds.map(() => "?").join(",");
-        
+
         const stmt = this.db.prepare(`
             SELECT * FROM topicEntityRelations
             WHERE topicId IN (${placeholders})
             ORDER BY topicId, relevance DESC
         `);
-        
+
         return stmt.all(...topicIds) as TopicEntityRelation[];
     }
 
@@ -811,13 +863,23 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
                         UNIQUE (fromTopic, toTopic, relationshipType)
                     )
                 `);
-                
+
                 // Add performance indexes for topic relationship queries
-                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_fromtopic ON topicRelationships(fromTopic)`);
-                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_totopic ON topicRelationships(toTopic)`);
-                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_strength ON topicRelationships(strength DESC)`);
-                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_from_strength ON topicRelationships(fromTopic, strength DESC)`);
-                db.exec(`CREATE INDEX IF NOT EXISTS idx_topicrels_to_strength ON topicRelationships(toTopic, strength DESC)`);
+                db.exec(
+                    `CREATE INDEX IF NOT EXISTS idx_topicrels_fromtopic ON topicRelationships(fromTopic)`,
+                );
+                db.exec(
+                    `CREATE INDEX IF NOT EXISTS idx_topicrels_totopic ON topicRelationships(toTopic)`,
+                );
+                db.exec(
+                    `CREATE INDEX IF NOT EXISTS idx_topicrels_strength ON topicRelationships(strength DESC)`,
+                );
+                db.exec(
+                    `CREATE INDEX IF NOT EXISTS idx_topicrels_from_strength ON topicRelationships(fromTopic, strength DESC)`,
+                );
+                db.exec(
+                    `CREATE INDEX IF NOT EXISTS idx_topicrels_to_strength ON topicRelationships(toTopic, strength DESC)`,
+                );
             }
         } catch (error) {}
     }
@@ -849,16 +911,16 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
      */
     public getRelationshipsForTopics(topicIds: string[]): TopicRelationship[] {
         if (topicIds.length === 0) return [];
-        
+
         // Create placeholders for the IN clause
         const placeholders = topicIds.map(() => "?").join(",");
-        
+
         const stmt = this.db.prepare(`
             SELECT * FROM topicRelationships
             WHERE fromTopic IN (${placeholders}) OR toTopic IN (${placeholders})
             ORDER BY strength DESC
         `);
-        
+
         // Pass topicIds twice - once for fromTopic IN, once for toTopic IN
         return stmt.all(...topicIds, ...topicIds) as TopicRelationship[];
     }
@@ -868,14 +930,14 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
      * Only returns relationships between topics in the provided set with minimum strength
      */
     public getRelationshipsForTopicsOptimized(
-        topicIds: string[], 
-        minStrength: number = 0.3
+        topicIds: string[],
+        minStrength: number = 0.3,
     ): TopicRelationship[] {
         if (topicIds.length === 0) return [];
-        
+
         // Create placeholders for the IN clause
         const placeholders = topicIds.map(() => "?").join(",");
-        
+
         const stmt = this.db.prepare(`
             SELECT * FROM topicRelationships
             WHERE strength >= ? 
@@ -883,9 +945,13 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
             AND toTopic IN (${placeholders})
             ORDER BY strength DESC
         `);
-        
+
         // Pass minStrength first, then topicIds twice
-        return stmt.all(minStrength, ...topicIds, ...topicIds) as TopicRelationship[];
+        return stmt.all(
+            minStrength,
+            ...topicIds,
+            ...topicIds,
+        ) as TopicRelationship[];
     }
 
     public upsertRelationship(relationship: TopicRelationship): void {
