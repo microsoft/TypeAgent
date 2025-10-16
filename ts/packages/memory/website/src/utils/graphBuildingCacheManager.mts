@@ -8,7 +8,6 @@
 
 import { Relationship } from "../tables.js";
 import { Website } from "../websiteMeta.js";
-import createDebug from "debug";
 
 export interface GraphBuildingCache {
     websites: Website[];
@@ -24,14 +23,12 @@ export interface GraphBuildingCache {
 
 export class GraphBuildingCacheManager {
     private cache: GraphBuildingCache | null = null;
-    private debug = createDebug("typeagent:memory:website:graphcache");
 
     /**
      * Initialize cache from website collection
      */
     async initializeCache(websites: Website[]): Promise<void> {
-        const startTime = performance.now();
-        this.debug(`[GraphCache] Initializing cache for ${websites.length} websites`);
+
 
         const entitiesByWebsite = new Map<string, string[]>();
         const topicsByWebsite = new Map<string, string[]>();
@@ -96,12 +93,12 @@ export class GraphBuildingCacheManager {
             lastUpdated: Date.now(),
         };
 
-        const duration = performance.now() - startTime;
-        this.debug(`[GraphCache] Cache initialized in ${duration.toFixed(2)}ms`);
-        this.debug(`[GraphCache] - ${entitiesByWebsite.size} websites with entities`);
-        this.debug(`[GraphCache] - ${entityToWebsites.size} unique entities`);
-        this.debug(`[GraphCache] - ${topicToWebsites.size} unique topics`);
-        this.debug(`[GraphCache] - ${entityCooccurrences.size} entity pairs with co-occurrences`);
+
+
+
+
+
+
     }
 
     /**
@@ -110,7 +107,7 @@ export class GraphBuildingCacheManager {
     setStrongRelationships(relationships: Relationship[]): void {
         if (this.cache) {
             this.cache.strongRelationships = relationships;
-            this.debug(`[GraphCache] Cached ${relationships.length} strong relationships`);
+
         }
     }
 
@@ -315,7 +312,7 @@ export class GraphBuildingCacheManager {
      */
     clear(): void {
         this.cache = null;
-        this.debug(`[GraphCache] Cache cleared`);
+
     }
 
     /**

@@ -93,7 +93,6 @@ function calculatePageRank(
         
         if (maxDiff < convergenceThreshold) {
             converged = true;
-            console.log(`[Perf] PageRank converged after ${iter + 1} iterations (threshold: ${maxDiff.toFixed(6)})`);
         }
 
         // Swap arrays
@@ -121,8 +120,6 @@ function calculateBetweenness(
     // OPTIMIZATION: Skip expensive betweenness calculation for large graphs
     // Use degree centrality as approximation instead
     if (nodeCount > 500) {
-        console.log(`[Perf] Skipping betweenness centrality for ${nodeCount} topics (too large). Using degree centrality approximation.`);
-        
         const result = new Map<string, number>();
         const degreeCount = new Map<string, number>();
         
@@ -148,8 +145,6 @@ function calculateBetweenness(
     }
 
     // For smaller graphs, use optimized betweenness calculation
-    console.log(`[Perf] Computing betweenness centrality for ${nodeCount} topics`);
-    
     const nodeMap = new Map<string, number>();
     topics.forEach((topic, index) => {
         nodeMap.set(topic.topicId, index);
@@ -160,7 +155,6 @@ function calculateBetweenness(
 
     // Build adjacency list with only strong relationships for performance
     const strongRelationships = relationships.filter(rel => (rel.strength || 0) >= 0.4);
-    console.log(`[Perf] Using ${strongRelationships.length}/${relationships.length} strong relationships for betweenness`);
     
     const adjacency = new Map<number, Set<number>>();
     for (let i = 0; i < n; i++) {
@@ -184,8 +178,6 @@ function calculateBetweenness(
     const sampleIndices = nodeCount > 100 ? 
         Array.from({length: sampleSize}, () => Math.floor(Math.random() * nodeCount)) :
         Array.from({length: nodeCount}, (_, i) => i);
-    
-    console.log(`[Perf] Sampling ${sampleSize}/${nodeCount} nodes for betweenness calculation`);
 
     for (const source of sampleIndices) {
         // BFS from source
@@ -374,10 +366,6 @@ function sparsifyGraph(
     const compressionRatio = (connectedTopics.length * finalRelationships.length) / 
                            (topics.length * relationships.length);
 
-    console.log(`Graph sparsification: ${topics.length}→${connectedTopics.length} topics, ` +
-                `${relationships.length}→${finalRelationships.length} relationships ` +
-                `(compression: ${(100 * (1 - compressionRatio)).toFixed(1)}%)`);
-
     return {
         sparsifiedTopics: connectedTopics,
         sparsifiedRelationships: finalRelationships,
@@ -440,30 +428,13 @@ export function calculateTopicImportance(
         return [];
     }
 
-    const startTime = performance.now();
-    console.log(`Starting calculateTopicImportance: ${topics.length} topics, ${relationships.length} relationships`);
-
     // OPTIMIZATION: Apply graph sparsification for large graphs
-    const sparsificationStart = performance.now();
     const { sparsifiedTopics, sparsifiedRelationships } = sparsifyGraph(topics, relationships);
-    const sparsificationTime = performance.now() - sparsificationStart;
-    console.log(`Graph sparsification completed in ${sparsificationTime.toFixed(2)}ms`);
 
     // Calculate metrics on sparsified graph for better performance
-    const pageRankStart = performance.now();
     const pageRanks = calculatePageRank(sparsifiedTopics, sparsifiedRelationships);
-    const pageRankTime = performance.now() - pageRankStart;
-    console.log(`PageRank calculation completed in ${pageRankTime.toFixed(2)}ms`);
-
-    const betweennessStart = performance.now();
     const betweenness = calculateBetweenness(sparsifiedTopics, sparsifiedRelationships);
-    const betweennessTime = performance.now() - betweennessStart;
-    console.log(`Betweenness calculation completed in ${betweennessTime.toFixed(2)}ms`);
-
-    const descendantStart = performance.now();
     const descendantCounts = calculateDescendantCounts(sparsifiedTopics);
-    const descendantTime = performance.now() - descendantStart;
-    console.log(`Descendant counts completed in ${descendantTime.toFixed(2)}ms`);
 
     // Get entity counts from topic metrics or data
     const entityCounts = new Map<string, number>();
@@ -523,9 +494,6 @@ export function calculateTopicImportance(
             importance: Math.min(importance, 1.0), // Cap at 1.0
         };
     });
-
-    const totalTime = performance.now() - startTime;
-    console.log(`calculateTopicImportance completed in ${totalTime.toFixed(2)}ms total`);
     
     return results;
 }

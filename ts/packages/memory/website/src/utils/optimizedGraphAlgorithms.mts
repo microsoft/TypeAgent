@@ -7,7 +7,6 @@
  */
 
 import { Relationship } from "../tables.js";
-import createDebug from "debug";
 
 export interface GraphNode {
     id: string;
@@ -28,7 +27,6 @@ export interface GraphMetrics {
 }
 
 export class OptimizedGraphAlgorithms {
-    private debug = createDebug("typeagent:memory:website:graphalgo");
 
     /**
      * Build an adjacency list representation of the graph for efficient algorithms
@@ -70,7 +68,7 @@ export class OptimizedGraphAlgorithms {
         maxIterations: number = 20,
         tolerance: number = 1e-6
     ): Map<string, number> {
-        const startTime = performance.now();
+
         const nodeCount = graph.size;
         
         if (nodeCount === 0) {
@@ -134,11 +132,11 @@ export class OptimizedGraphAlgorithms {
             iteration++;
         }
 
-        const duration = performance.now() - startTime;
-        this.debug(`[GraphAlgo] PageRank completed in ${iteration} iterations (${duration.toFixed(2)}ms)`);
+
+
         
         if (converged) {
-            this.debug(`[GraphAlgo] PageRank converged early at iteration ${iteration}`);
+
         }
 
         return pageRank;
@@ -149,7 +147,7 @@ export class OptimizedGraphAlgorithms {
      * Uses Brandes' algorithm for efficient computation
      */
     calculateBetweennessCentrality(graph: Map<string, GraphNode>): Map<string, number> {
-        const startTime = performance.now();
+
         const betweenness = new Map<string, number>();
         const nodeList = Array.from(graph.keys());
 
@@ -206,8 +204,8 @@ export class OptimizedGraphAlgorithms {
             }
         }
 
-        const duration = performance.now() - startTime;
-        this.debug(`[GraphAlgo] Betweenness centrality completed in ${duration.toFixed(2)}ms${useApproximation ? ' (approximation)' : ''}`);
+
+
 
         return betweenness;
     }
@@ -275,7 +273,7 @@ export class OptimizedGraphAlgorithms {
         nodes: string[];
         density: number;
     }> {
-        const startTime = performance.now();
+
         const labels = new Map<string, string>();
         const nodeList = Array.from(graph.keys());
 
@@ -355,9 +353,9 @@ export class OptimizedGraphAlgorithms {
             }
         }
 
-        const duration = performance.now() - startTime;
-        this.debug(`[GraphAlgo] Community detection completed in ${iteration} iterations (${duration.toFixed(2)}ms)`);
-        this.debug(`[GraphAlgo] Found ${communities.length} communities`);
+
+
+
 
         return communities;
     }
@@ -394,8 +392,8 @@ export class OptimizedGraphAlgorithms {
         nodes: string[],
         relationships: Relationship[]
     ): GraphMetrics {
-        const startTime = performance.now();
-        this.debug(`[GraphAlgo] Starting calculation for ${nodes.length} nodes and ${relationships.length} relationships`);
+
+
 
         // Build graph representation
         const graph = this.buildGraph(nodes, relationships);
@@ -415,8 +413,8 @@ export class OptimizedGraphAlgorithms {
         // Detect communities
         const communities = this.detectCommunities(graph);
 
-        const totalDuration = performance.now() - startTime;
-        this.debug(`[GraphAlgo] All metrics calculated in ${totalDuration.toFixed(2)}ms`);
+
+
 
         return {
             pageRank,
