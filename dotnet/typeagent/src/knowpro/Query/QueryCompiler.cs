@@ -9,11 +9,13 @@ internal class QueryCompiler
 {
     private IConversation _conversation;
     private List<SearchTermGroup> _allSearchTerms;
+    private List<SearchTermGroup> _allScopeSearchTerms;
 
     public QueryCompiler(IConversation conversation)
     {
         _conversation = conversation;
         _allSearchTerms = [];
+        _allScopeSearchTerms = [];
     }
 
     public float EntityTermMatchWeight { get; set; } = 100;
@@ -211,7 +213,7 @@ internal class QueryCompiler
             switch (term.Value)
             {
                 default:
-                    if (propertyTerm.isEntityPropertyTerm())
+                    if (term.Value.IsEntityProperty)
                     {
                         propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
                     }
@@ -253,6 +255,19 @@ internal class QueryCompiler
             scopeSelectors.Add(new TextRangesInDateRangeSelector(filter.DateRange!.Value));
         }
 
+        if (filter is not null && !filter.ScopeDefiningTerms.IsNullOrEmpty())
+        {
+            AddTermsScopeSelector(filter.ScopeDefiningTerms, scopeSelectors);
+        }
+        else if (!termGroup.IsNullOrEmpty())
+        {
+            // Treat any actions as inherently scope selecting.
+            var actionTermsGroup = GetActionTermsFromSearchGroup(termGroup);
+            if (actionTermsGroup is not null)
+            {
+                AddTermsScopeSelector(actionTermsGroup, scopeSelectors);
+            }
+        }
 
         // TODO
 
@@ -264,5 +279,26 @@ internal class QueryCompiler
             ? new GetScopeExpr(scopeSelectors)
             : null;
         return ValueTask.FromResult(scopeExpr);
+    }
+
+    private void AddTermsScopeSelector(SearchTermGroup termGroup, List<IQueryTextRangeSelector> scopeSelectors)
+    {
+        var (searchTermsUsed, selectExpr) = CompileMessageSearchGroup(termGroup, null);
+        scopeSelectors.Add(new TextRangesFromMessagesSelector(selectExpr));
+        _allScopeSearchTerms.AddRange(searchTermsUsed);
+    }
+
+    private SearchTermGroup? GetActionTermsFromSearchGroup(SearchTermGroup searchGroup)
+    {
+        SearchTermGroup? actionGroup = null;
+        foreach (var term in searchGroup.Terms)
+        {
+            if (term is PropertySearchTerm pst && pst.IsActionPropertyTerm())
+            {
+                actionGroup = new SearchTermGroup(SearchTermBooleanOp.And);
+                actionGroup.Terms.Add(term);
+            }
+        }
+        return actionGroup;
     }
 }

@@ -16,6 +16,8 @@ public class SearchTermGroup : ISearchTerm
 
     public IList<ISearchTerm> Terms { get; set; }
 
+    public bool IsEmpty => Terms.IsNullOrEmpty();
+
     public override string ToString()
     {
         return $"{BooleanOp} ({Terms.Join()})";
