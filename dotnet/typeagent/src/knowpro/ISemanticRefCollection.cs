@@ -5,6 +5,8 @@ namespace TypeAgent.KnowPro;
 
 public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 {
+    ValueTask<TextRange> GetRangeAsync(int ordinal, CancellationToken cancellationToken = default);
+    ValueTask<IList<TextRange>> GetRangesAsync(IList<int> ordinals, CancellationToken cancellationToken = default);
 }
 
 public static class SemanticRefCollectionExtensions
