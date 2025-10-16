@@ -1376,11 +1376,15 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         tracker.startOperation("ensureGraphCache.getTopEntities");
         entityTracker.startOperation("getTopEntities");
         const startTime = performance.now();
-        const entities =
+        const rawEntities =
             (websiteCollection.knowledgeEntities as any)?.getTopEntities(
                 5000,
             ) || [];
         const queryTime = performance.now() - startTime;
+        
+        // Validate and clean entity data
+        const entities = entityTracker.validateEntityData(rawEntities, "getTopEntities");
+        
         entityTracker.recordDatabaseQuery("getTopEntities", queryTime, entities.length);
         entityTracker.endOperation("getTopEntities", entities.length, entities.length);
         tracker.endOperation("ensureGraphCache.getTopEntities", entities.length, entities.length);
@@ -1388,9 +1392,13 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         tracker.startOperation("ensureGraphCache.getAllRelationships");
         entityTracker.startOperation("getAllRelationships");
         const relsStartTime = performance.now();
-        const relationships =
+        const rawRelationships =
             websiteCollection.relationships?.getAllRelationships() || [];
         const relsQueryTime = performance.now() - relsStartTime;
+        
+        // Validate and clean relationship data
+        const relationships = entityTracker.validateRelationshipData(rawRelationships, "getAllRelationships");
+        
         entityTracker.recordDatabaseQuery("getAllRelationships", relsQueryTime, undefined, relationships.length);
         entityTracker.endOperation("getAllRelationships", relationships.length, relationships.length);
         tracker.endOperation("ensureGraphCache.getAllRelationships", relationships.length, relationships.length);

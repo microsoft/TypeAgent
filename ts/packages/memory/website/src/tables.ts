@@ -156,6 +156,7 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
         const stmt = this.db.prepare(`
             SELECT entityName, COUNT(*) as count 
             FROM knowledgeEntities 
+            WHERE entityName != '' AND entityName IS NOT NULL
             GROUP BY entityName 
             ORDER BY count DESC 
             LIMIT ?
@@ -170,13 +171,18 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
     public getEntitiesByNames(entityNames: string[]): KnowledgeEntity[] {
         if (entityNames.length === 0) return [];
         
-        const placeholders = entityNames.map(() => "?").join(",");
+        // Filter out empty strings from input
+        const validEntityNames = entityNames.filter(name => name && name.trim() !== '');
+        if (validEntityNames.length === 0) return [];
+        
+        const placeholders = validEntityNames.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM knowledgeEntities 
             WHERE entityName IN (${placeholders})
+            AND entityName != '' AND entityName IS NOT NULL
             ORDER BY confidence DESC
         `);
-        return stmt.all(...entityNames) as KnowledgeEntity[];
+        return stmt.all(...validEntityNames) as KnowledgeEntity[];
     }
 
     /**
@@ -186,15 +192,20 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
     public getEntityCounts(entityNames: string[]): Array<{ entityName: string; count: number; avgConfidence: number }> {
         if (entityNames.length === 0) return [];
         
-        const placeholders = entityNames.map(() => "?").join(",");
+        // Filter out empty strings from input
+        const validEntityNames = entityNames.filter(name => name && name.trim() !== '');
+        if (validEntityNames.length === 0) return [];
+        
+        const placeholders = validEntityNames.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT entityName, COUNT(*) as count, AVG(confidence) as avgConfidence
             FROM knowledgeEntities 
             WHERE entityName IN (${placeholders})
+            AND entityName != '' AND entityName IS NOT NULL
             GROUP BY entityName 
             ORDER BY count DESC
         `);
-        return stmt.all(...entityNames) as Array<{ entityName: string; count: number; avgConfidence: number }>;
+        return stmt.all(...validEntityNames) as Array<{ entityName: string; count: number; avgConfidence: number }>;
     }
 
     public getEntitiesByType(entityType: string): KnowledgeEntity[] {
@@ -390,9 +401,15 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
         entityName: string,
         minConfidence = 0.3,
     ): Relationship[] {
+        // Validate input
+        if (!entityName || entityName.trim() === '') return [];
+        
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
-            WHERE (fromEntity = ? OR toEntity = ?) AND confidence >= ?
+            WHERE (fromEntity = ? OR toEntity = ?) 
+            AND confidence >= ?
+            AND fromEntity != '' AND toEntity != '' 
+            AND fromEntity IS NOT NULL AND toEntity IS NOT NULL
             ORDER BY confidence DESC
         `);
         return stmt.all(
@@ -427,15 +444,21 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
     public getRelationshipsBetweenEntities(entities: string[], minConfidence: number = 0.3): Relationship[] {
         if (entities.length === 0) return [];
         
-        const placeholders = entities.map(() => "?").join(",");
+        // Filter out empty strings from input
+        const validEntities = entities.filter(entity => entity && entity.trim() !== '');
+        if (validEntities.length === 0) return [];
+        
+        const placeholders = validEntities.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
             WHERE confidence >= ?
             AND fromEntity IN (${placeholders}) 
             AND toEntity IN (${placeholders})
+            AND fromEntity != '' AND toEntity != '' 
+            AND fromEntity IS NOT NULL AND toEntity IS NOT NULL
             ORDER BY confidence DESC
         `);
-        return stmt.all(minConfidence, ...entities, ...entities) as Relationship[];
+        return stmt.all(minConfidence, ...validEntities, ...validEntities) as Relationship[];
     }
 
     /**
@@ -445,16 +468,22 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
     public getNeighborsForEntities(entityNames: string[], minConfidence: number = 0.3): Relationship[] {
         if (entityNames.length === 0) return [];
         
-        const placeholders = entityNames.map(() => "?").join(",");
+        // Filter out empty strings from input
+        const validEntityNames = entityNames.filter(entity => entity && entity.trim() !== '');
+        if (validEntityNames.length === 0) return [];
+        
+        const placeholders = validEntityNames.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
             WHERE (fromEntity IN (${placeholders}) OR toEntity IN (${placeholders})) 
             AND confidence >= ?
+            AND fromEntity != '' AND toEntity != '' 
+            AND fromEntity IS NOT NULL AND toEntity IS NOT NULL
             ORDER BY confidence DESC
         `);
         
-        // Pass entityNames twice (for fromEntity and toEntity) plus minConfidence
-        return stmt.all(...entityNames, ...entityNames, minConfidence) as Relationship[];
+        // Pass validEntityNames twice (for fromEntity and toEntity) plus minConfidence
+        return stmt.all(...validEntityNames, ...validEntityNames, minConfidence) as Relationship[];
     }
 
     public getAllRelationships(): Relationship[] {

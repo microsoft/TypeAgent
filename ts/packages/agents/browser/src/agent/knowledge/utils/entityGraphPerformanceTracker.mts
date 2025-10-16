@@ -268,6 +268,78 @@ export class EntityGraphPerformanceTracker {
     }
 
     /**
+     * Record data quality issues for monitoring
+     */
+    recordDataQualityIssue(
+        operation: string,
+        issueType: string,
+        count: number,
+        details?: string
+    ): void {
+        console.warn(
+            `[Entity Graph Perf] Data quality issue in ${operation}: ` +
+            `${issueType} (${count} instances)` +
+            (details ? ` - ${details}` : '')
+        );
+        
+        // Record as a special type of query metric for tracking
+        this.recordDatabaseQuery(`data_quality_${operation}_${issueType}`, 0, count);
+    }
+
+    /**
+     * Validate and clean entity data, reporting issues
+     */
+    validateEntityData(entities: any[], operation: string): any[] {
+        const originalCount = entities.length;
+        
+        // Filter out entities with empty or invalid names
+        const validEntities = entities.filter(entity => {
+            const name = entity.name || entity.entityName;
+            return name && typeof name === 'string' && name.trim() !== '';
+        });
+        
+        const invalidCount = originalCount - validEntities.length;
+        if (invalidCount > 0) {
+            this.recordDataQualityIssue(
+                operation,
+                'empty_entity_names',
+                invalidCount,
+                `${invalidCount}/${originalCount} entities had empty names`
+            );
+        }
+        
+        return validEntities;
+    }
+
+    /**
+     * Validate and clean relationship data, reporting issues
+     */
+    validateRelationshipData(relationships: any[], operation: string): any[] {
+        const originalCount = relationships.length;
+        
+        // Filter out relationships with empty entity names
+        const validRelationships = relationships.filter(rel => {
+            const fromEntity = rel.fromEntity || rel.from;
+            const toEntity = rel.toEntity || rel.to;
+            
+            return fromEntity && typeof fromEntity === 'string' && fromEntity.trim() !== '' &&
+                   toEntity && typeof toEntity === 'string' && toEntity.trim() !== '';
+        });
+        
+        const invalidCount = originalCount - validRelationships.length;
+        if (invalidCount > 0) {
+            this.recordDataQualityIssue(
+                operation,
+                'empty_relationship_entities',
+                invalidCount,
+                `${invalidCount}/${originalCount} relationships had empty entity names`
+            );
+        }
+        
+        return validRelationships;
+    }
+
+    /**
      * Reset metrics (useful for testing)
      */
     reset(): void {
