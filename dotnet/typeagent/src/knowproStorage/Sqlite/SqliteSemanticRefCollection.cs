@@ -3,6 +3,8 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
+// TODO: update methods to not use readers directly
+
 public class SqliteSemanticRefCollection : ISemanticRefCollection
 {
     SqliteDatabase _db;
@@ -93,12 +95,12 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
         return ValueTask.FromResult(Get(ordinal));
     }
 
-    public ValueTask<IList<SemanticRef>> GetAsync(IList<int> ids, CancellationToken cancellationToken = default)
+    public ValueTask<IList<SemanticRef>> GetAsync(IList<int> ordinals, CancellationToken cancellationToken = default)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(ids, nameof(ids));
+        ArgumentVerify.ThrowIfNullOrEmpty(ordinals, nameof(ordinals));
 
-        List<SemanticRef> semanticRefs = new(ids.Count);
-        foreach (var batch in ids.Batch(SqliteDatabase.MaxBatchSize))
+        List<SemanticRef> semanticRefs = new(ordinals.Count);
+        foreach (var batch in ordinals.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
             var sql = $@"
@@ -115,6 +117,46 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
             }
         }
         return ValueTask.FromResult((IList<SemanticRef>)semanticRefs);
+    }
+
+    public TextRange GetRange(int semanticRefId)
+    {
+        ArgumentVerify.ThrowIfLessThan(semanticRefId, 0, nameof(semanticRefId));
+
+        return _db.Get(@"
+SELECT range_json
+FROM SemanticRefs WHERE semref_id = @semref_id",
+            (cmd) => cmd.AddParameter("semref_id", semanticRefId),
+            (reader) => StorageSerializer.FromJson<TextRange>(reader.GetString(0))
+        );
+    }
+
+
+    public ValueTask<TextRange> GetRangeAsync(int ordinal, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetRange(ordinal));
+    }
+
+    public ValueTask<IList<TextRange>> GetRangesAsync(IList<int> ordinals, CancellationToken cancellationToken = default)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(ordinals, nameof(ordinals));
+
+        List<TextRange> ranges = new(ordinals.Count);
+        foreach (var batch in ordinals.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var sql = $@"
+                SELECT range_json
+                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
+                ORDER BY semref_id";
+            var rows = _db.Enumerate(
+                sql,
+                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                (reader) => StorageSerializer.FromJson<TextRange>(reader.GetString(0))
+               );
+            ranges.AddRange(rows);
+        }
+        return ValueTask.FromResult((IList<TextRange>)ranges);
     }
 
     public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)

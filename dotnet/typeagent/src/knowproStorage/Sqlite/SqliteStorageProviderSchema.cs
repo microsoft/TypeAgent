@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS Messages(
     -- Messages can store chunks directly in JSON or reference external storage via URI
     chunks JSON NULL,             -- JSON array of text chunks, or NULL if using chunk_uri
     chunk_uri TEXT NULL,          -- URI for external chunk storage, or NULL if using chunks
+    message_length INTEGER,       -- Message length, if provided
     start_timestamp TEXT NULL,    -- ISO format with Z timezone
     tags JSON NULL,               -- JSON array of tags
     metadata JSON NULL,           -- Message metadata(source, dest, etc.)

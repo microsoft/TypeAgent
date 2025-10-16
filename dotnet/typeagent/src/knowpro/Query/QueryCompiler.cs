@@ -127,7 +127,6 @@ internal class QueryCompiler
                     break;
 
                 case PropertySearchTerm propertyTerm:
-                    // FIX: Cast propertyExpr to QueryOpExpr<IMessageOrdinalSource?>
                     var propertyExpr = CompileMatchFilter(
                         CompilePropertyTerm(propertyTerm),
                         matchFilter
@@ -141,7 +140,6 @@ internal class QueryCompiler
                     break;
 
                 case SearchTermGroup subGroup:
-                    // FIX: Cast groupExpr to QueryOpExpr<IMessageOrdinalSource?>
                     var (nestedTerms, groupExpr) = CompileSearchGroup(
                         subGroup,
                         null,  // Apply scopes on the outermost expression only
@@ -152,7 +150,6 @@ internal class QueryCompiler
                     break;
 
                 case SearchTerm searchTerm:
-                    // FIX: Cast searchTermExpr to QueryOpExpr<IMessageOrdinalSource?>
                     var searchTermExpr = CompileMatchFilter(
                         CompileSearchTerm(searchTerm),
                         matchFilter
@@ -160,7 +157,6 @@ internal class QueryCompiler
                     termExpressions.Add(searchTermExpr);
                     compiledTerms[0].Terms.Add(searchTerm);
                     break;
-
             }
         }
 

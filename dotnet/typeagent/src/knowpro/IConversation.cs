@@ -39,9 +39,9 @@ public static class ConversationExtensions
 {
     public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
         this IConversation conversation,
-        SearchTermGroup searchTermGroup,
-        WhenFilter? whenFilter = null,
-        SearchOptions? options = null,
+        SearchSelectExpr select,
+        SearchOptions? options,
+        IConversationCache? cache = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -49,29 +49,30 @@ public static class ConversationExtensions
         options ??= SearchOptions.CreateDefault();
 
         var queryExpr = await compiler.CompileKnowledgeQueryAsync(
-            searchTermGroup,
-            whenFilter,
+            select.SearchTermGroup,
+            select.When,
             options
         ).ConfigureAwait(false);
 
-        QueryEvalContext context = new QueryEvalContext(conversation, cancellationToken);
+        QueryEvalContext context = new QueryEvalContext(conversation, cache, cancellationToken);
         return await queryExpr.EvalAsync(context).ConfigureAwait(false);
     }
 
     public static ValueTask<ConversationSearchResult?> SearchConversationAsync(
         this IConversation conversation,
-        SearchTermGroup searchTermGroup,
+        SearchSelectExpr select,
+        SearchOptions? options = null,
         CancellationToken cancellationToken = default
     )
     {
-        return conversation.SearchConversationAsync(searchTermGroup, null, null, null, cancellationToken);
+        return conversation.SearchConversationAsync(select, options, null, null, cancellationToken);
     }
 
     public static async ValueTask<ConversationSearchResult?> SearchConversationAsync(
         this IConversation conversation,
-        SearchTermGroup searchTermGroup,
-        WhenFilter? whenFilter = null,
+        SearchSelectExpr select,
         SearchOptions? options = null,
+        IConversationCache? conversationCache = null,
         string? rawSearchQuery = null,
         CancellationToken cancellationToken = default
     )
@@ -80,8 +81,8 @@ public static class ConversationExtensions
         QueryCompiler compiler = new QueryCompiler(conversation);
 
         var knowledgeQueryExpr = await compiler.CompileKnowledgeQueryAsync(
-            searchTermGroup,
-            whenFilter,
+            select.SearchTermGroup,
+            select.When,
             options
         ).ConfigureAwait(false);
 
@@ -91,7 +92,7 @@ public static class ConversationExtensions
             rawSearchQuery
         ).ConfigureAwait(false);
 
-        QueryEvalContext context = new QueryEvalContext(conversation, cancellationToken);
+        QueryEvalContext context = new QueryEvalContext(conversation, conversationCache, cancellationToken);
         var messageOrdinals = await messageQueryExpr.EvalAsync(context).ConfigureAwait(false);
         return new ConversationSearchResult()
         {

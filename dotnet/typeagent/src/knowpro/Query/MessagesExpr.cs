@@ -79,10 +79,11 @@ internal class SelectMessagesInCharBudget : QueryOpExpr<MessageAccumulator>
 
         var scoredMatches = matches.GetSortedByScore();
         var sortedOrdinals = scoredMatches.Map((m) => m.Value);
-        var messageCountInBudget = await context.Messages.GetCountInCharBudgetAsync(
+        var messageCountInBudget = await context.Conversation.Messages.GetCountInCharBudgetAsync(
             sortedOrdinals,
             MaxCharsInBudget
         ).ConfigureAwait(false);
+
         matches.Clear();
         if (messageCountInBudget > 0)
         {
