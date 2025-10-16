@@ -115,6 +115,9 @@ export interface KnowledgeEntity {
 
 export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
+        // Ensure performance indexes exist
+        KnowledgeEntityTable.ensureIndexes(db);
+        
         super(db, "knowledgeEntities", [
             ["url", { type: "string" }],
             ["domain", { type: "string" }],
@@ -123,6 +126,19 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
             ["confidence", { type: "number" }],
             ["extractionDate", { type: "string" }],
         ]);
+    }
+
+    private static ensureIndexes(db: sqlite.Database): void {
+        try {
+            // Add performance indexes for entity queries
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_name ON knowledgeEntities(entityName)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_type ON knowledgeEntities(entityType)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_confidence ON knowledgeEntities(confidence DESC)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_domain ON knowledgeEntities(domain)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_entities_name_confidence ON knowledgeEntities(entityName, confidence DESC)`);
+        } catch (error) {
+            console.warn("Failed to create entity indexes:", error);
+        }
     }
 
     public getEntitiesByDomain(domain: string): KnowledgeEntity[] {
@@ -145,6 +161,40 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
             LIMIT ?
         `);
         return stmt.all(limit) as Array<{ entityName: string; count: number }>;
+    }
+
+    /**
+     * Batch method to get entities by multiple names at once
+     * Reduces N queries to 1 for entity lookups
+     */
+    public getEntitiesByNames(entityNames: string[]): KnowledgeEntity[] {
+        if (entityNames.length === 0) return [];
+        
+        const placeholders = entityNames.map(() => "?").join(",");
+        const stmt = this.db.prepare(`
+            SELECT * FROM knowledgeEntities 
+            WHERE entityName IN (${placeholders})
+            ORDER BY confidence DESC
+        `);
+        return stmt.all(...entityNames) as KnowledgeEntity[];
+    }
+
+    /**
+     * Batch method to get top entities by names with aggregated counts
+     * Useful for entity metrics calculations
+     */
+    public getEntityCounts(entityNames: string[]): Array<{ entityName: string; count: number; avgConfidence: number }> {
+        if (entityNames.length === 0) return [];
+        
+        const placeholders = entityNames.map(() => "?").join(",");
+        const stmt = this.db.prepare(`
+            SELECT entityName, COUNT(*) as count, AVG(confidence) as avgConfidence
+            FROM knowledgeEntities 
+            WHERE entityName IN (${placeholders})
+            GROUP BY entityName 
+            ORDER BY count DESC
+        `);
+        return stmt.all(...entityNames) as Array<{ entityName: string; count: number; avgConfidence: number }>;
     }
 
     public getEntitiesByType(entityType: string): KnowledgeEntity[] {
@@ -308,6 +358,9 @@ export interface Relationship {
 
 export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
+        // Ensure performance indexes exist
+        RelationshipTable.ensureIndexes(db);
+        
         super(db, "relationships", [
             ["fromEntity", { type: "string" }],
             ["toEntity", { type: "string" }],
@@ -317,6 +370,20 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
             ["count", { type: "number" }],
             ["updated", { type: "string" }],
         ]);
+    }
+
+    private static ensureIndexes(db: sqlite.Database): void {
+        try {
+            // Add performance indexes for entity relationship queries
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_fromentity ON relationships(fromEntity)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_toentity ON relationships(toEntity)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_confidence ON relationships(confidence DESC)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_from_confidence ON relationships(fromEntity, confidence DESC)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_to_confidence ON relationships(toEntity, confidence DESC)`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(relationshipType)`);
+        } catch (error) {
+            console.warn("Failed to create relationship indexes:", error);
+        }
     }
 
     public getNeighbors(
@@ -336,18 +403,65 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
     }
 
     public getRelationshipsForEntities(entities: string[]): Relationship[] {
+        if (entities.length === 0) return [];
+        
+        // Filter out empty strings from input
+        const validEntities = entities.filter(entity => entity && entity.trim() !== '');
+        if (validEntities.length === 0) return [];
+        
+        const placeholders = validEntities.map(() => "?").join(",");
+        const stmt = this.db.prepare(`
+            SELECT * FROM relationships 
+            WHERE (fromEntity IN (${placeholders}) OR toEntity IN (${placeholders}))
+            AND fromEntity != '' AND toEntity != '' 
+            AND fromEntity IS NOT NULL AND toEntity IS NOT NULL
+            ORDER BY confidence DESC
+        `);
+        return stmt.all(...validEntities, ...validEntities) as Relationship[];
+    }
+
+    /**
+     * Optimized batch method to get relationships between specific entities only
+     * This is more efficient than getRelationshipsForEntities for neighborhood queries
+     */
+    public getRelationshipsBetweenEntities(entities: string[], minConfidence: number = 0.3): Relationship[] {
+        if (entities.length === 0) return [];
+        
         const placeholders = entities.map(() => "?").join(",");
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
-            WHERE fromEntity IN (${placeholders}) OR toEntity IN (${placeholders})
+            WHERE confidence >= ?
+            AND fromEntity IN (${placeholders}) 
+            AND toEntity IN (${placeholders})
             ORDER BY confidence DESC
         `);
-        return stmt.all(...entities, ...entities) as Relationship[];
+        return stmt.all(minConfidence, ...entities, ...entities) as Relationship[];
+    }
+
+    /**
+     * Batch method to get neighbors for multiple entities at once
+     * Reduces N queries to 1 for neighborhood operations
+     */
+    public getNeighborsForEntities(entityNames: string[], minConfidence: number = 0.3): Relationship[] {
+        if (entityNames.length === 0) return [];
+        
+        const placeholders = entityNames.map(() => "?").join(",");
+        const stmt = this.db.prepare(`
+            SELECT * FROM relationships 
+            WHERE (fromEntity IN (${placeholders}) OR toEntity IN (${placeholders})) 
+            AND confidence >= ?
+            ORDER BY confidence DESC
+        `);
+        
+        // Pass entityNames twice (for fromEntity and toEntity) plus minConfidence
+        return stmt.all(...entityNames, ...entityNames, minConfidence) as Relationship[];
     }
 
     public getAllRelationships(): Relationship[] {
         const stmt = this.db.prepare(`
             SELECT * FROM relationships 
+            WHERE fromEntity != '' AND toEntity != '' 
+            AND fromEntity IS NOT NULL AND toEntity IS NOT NULL
             ORDER BY confidence DESC
         `);
         return stmt.all() as Relationship[];
