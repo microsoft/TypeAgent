@@ -22,6 +22,22 @@ public struct TextLocation
         return this.MessageOrdinal <= other.MessageOrdinal && this.ChunkOrdinal < other.ChunkOrdinal;
     }
 
+    public readonly bool IsValid() => MessageOrdinal >= 0 && ChunkOrdinal >= 0;
+
+    /// <summary>
+    // 0 if locations are equal
+    // < 0 if x is less than y
+    // > 0 if x is greater than y
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
+    public static int Compare(TextLocation x, TextLocation y)
+    {
+        var cmp = x.MessageOrdinal - y.MessageOrdinal;
+        return cmp != 0 ? cmp : x.ChunkOrdinal - y.ChunkOrdinal;
+    }
+
     public override readonly string ToString()
     {
         return $"{MessageOrdinal}:{ChunkOrdinal}";

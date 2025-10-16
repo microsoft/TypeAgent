@@ -242,7 +242,9 @@ internal class QueryCompiler
 
     private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)
     {
+        
         // TODO
+
         return ValueTask.FromResult<GetScopeExpr>(null);
     }
 }

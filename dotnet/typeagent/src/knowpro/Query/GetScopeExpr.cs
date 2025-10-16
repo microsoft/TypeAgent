@@ -5,14 +5,14 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class GetScopeExpr : QueryOpExpr<TextRangesInScope>
 {
-    public GetScopeExpr(IList<IQueryTextRangeSelector> rangeSelectors)
+    public GetScopeExpr(IList<TextRangeSelector> rangeSelectors)
         : base()
     {
         ArgumentVerify.ThrowIfNull(rangeSelectors, nameof(rangeSelectors));
         RangeSelectors = rangeSelectors;
     }
 
-    public IList<IQueryTextRangeSelector> RangeSelectors { get; }
+    public IList<TextRangeSelector> RangeSelectors { get; }
 
     public override async ValueTask<TextRangesInScope> EvalAsync(QueryEvalContext context)
     {

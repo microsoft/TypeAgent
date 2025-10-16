@@ -75,6 +75,8 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         return intersection;
     }
 
+    // TODO: does this filter have to look at the entire SemanticRef?
+    // Can TextRanges be used directly?
     public async ValueTask<IList<Match<int>>> GetFilteredMatchesAsync(
         QueryEvalContext context,
         Func<QueryEvalContext, SemanticRef, bool> predicate

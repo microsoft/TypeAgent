@@ -76,4 +76,31 @@ public static class ListExtensions
             }
         }
     }
+
+    public static int BinarySearchFirst<T, TSearchValue>(
+        this IList<T> list,
+        TSearchValue value,
+        Func<T, TSearchValue, int> compareFn,
+        int startAt = 0
+    )
+    {
+        int lo = startAt;
+        int hi = list.Count - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            int cmp = compareFn(list[mid], value);
+            if (cmp < 0)
+            {
+                lo = mid + 1;
+            }
+            else
+            {
+                hi = mid - 1;
+            }
+        }
+
+        return lo;
+    }
+
 }

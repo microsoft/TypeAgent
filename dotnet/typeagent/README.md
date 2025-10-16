@@ -10,9 +10,9 @@ This **sample code** is in early stage experimental developement with **frequent
 ## KnowPro.NET
 KnowPro.NET implements Structured RAG in C# for .NET platforms. 
 
-It will improve on the original Typescript implementation in the following ways:
+It will improve on the Typescript implementation in the following ways:
 * It is fully asynchronous
-* Some operators are reworked for more efficient async operation
+* Operators are/will be reworked for more efficient async operation
 * Asynchronous storage providers with improved Sql schemas
 * Larger index sizes
 
