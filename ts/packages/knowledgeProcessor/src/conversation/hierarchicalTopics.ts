@@ -216,12 +216,15 @@ Create a topic hierarchy with:
 2. Group related topics under each root as children (level 1)
 3. If topics are very specific, create sub-children (level 2)
 
-Output a JSON array where each item has:
-- rootTopic: string (the root category name)
-- children: array of child topic names
+IMPORTANT: Output ONLY a valid JSON array. Do not include any text before or after the JSON.
+Each JSON object must have:
+- rootTopic: string (the root category name, properly escaped)
+- children: array of child topic names (properly escaped strings)
 - grandchildren: object mapping child names to arrays of grandchild names (optional)
 
-Example:
+Escape all special characters in strings. Use double quotes for all strings.
+
+Example format:
 [
   {
     "rootTopic": "Machine Learning",
@@ -230,7 +233,9 @@ Example:
       "Deep Learning": ["CNNs", "RNNs", "Transformers"]
     }
   }
-]`;
+]
+
+JSON OUTPUT:`;
 
     try {
         const response = await model.complete(prompt);
@@ -242,7 +247,54 @@ Example:
         const jsonMatch = response.data.match(/\[[\s\S]*\]/);
 
         if (jsonMatch) {
-            const hierarchyData = JSON.parse(jsonMatch[0]);
+            let hierarchyData;
+            try {
+                hierarchyData = JSON.parse(jsonMatch[0]);
+            } catch (parseError) {
+                console.warn(
+                    "Initial JSON parse failed, attempting to clean and retry:",
+                    parseError instanceof Error ? parseError.message : String(parseError),
+                );
+                console.debug("Raw JSON content:", jsonMatch[0]);
+                
+                // Attempt to fix common JSON issues
+                let cleanedJson = jsonMatch[0]
+                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+                    .replace(/\\(?!["\\/bfnrt])/g, '\\\\') // Fix invalid escape sequences
+                    .replace(/(?<!\\)"/g, '\\"') // Escape unescaped quotes in values
+                    .replace(/\\"/g, '"') // Fix over-escaped quotes
+                    .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+                    .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Quote unquoted property names
+                    .trim();
+
+                // Ensure the JSON is properly closed
+                if (!cleanedJson.endsWith(']')) {
+                    const openBrackets = (cleanedJson.match(/\[/g) || []).length;
+                    const closeBrackets = (cleanedJson.match(/\]/g) || []).length;
+                    const openBraces = (cleanedJson.match(/\{/g) || []).length;
+                    const closeBraces = (cleanedJson.match(/\}/g) || []).length;
+                    
+                    // Add missing closing braces/brackets
+                    for (let i = 0; i < openBraces - closeBraces; i++) {
+                        cleanedJson += '}';
+                    }
+                    for (let i = 0; i < openBrackets - closeBrackets; i++) {
+                        cleanedJson += ']';
+                    }
+                }
+
+                try {
+                    hierarchyData = JSON.parse(cleanedJson);
+                    console.log("Successfully parsed cleaned JSON");
+                } catch (secondParseError) {
+                    console.warn(
+                        "JSON cleaning failed, falling back to simple topic hierarchy:",
+                        secondParseError instanceof Error ? secondParseError.message : String(secondParseError),
+                    );
+                    // Fallback to simple flat hierarchy
+                    hierarchyData = createFallbackHierarchy(topics, aggregatedTopics);
+                }
+            }
 
             // Build hierarchy from LLM response
             for (const rootData of hierarchyData) {
@@ -304,6 +356,52 @@ Example:
                         childTopic.childIds.push(grandchildTopic.id);
                         maxDepth = Math.max(maxDepth, 2);
                     }
+                }
+            }
+        } else {
+            console.warn("No JSON array found in LLM response, using fallback hierarchy");
+            console.debug("LLM response:", response.data);
+            
+            // Use fallback hierarchy when no JSON is found
+            const hierarchyData = createFallbackHierarchy(topics, aggregatedTopics);
+            
+            // Build hierarchy from fallback data
+            for (const rootData of hierarchyData) {
+                const rootTopic: HierarchicalTopic = {
+                    id: generateTopicId(rootData.rootTopic, 0),
+                    name: rootData.rootTopic,
+                    level: 0,
+                    childIds: [],
+                    sourceFragments: [],
+                    confidence: 0.6, // Lower confidence for fallback
+                    keywords: [rootData.rootTopic],
+                    entityReferences: [],
+                    timestamp: new Date().toISOString(),
+                    domain: context.domain || undefined,
+                };
+
+                topicMap.set(rootTopic.id, rootTopic);
+                rootTopics.push(rootTopic);
+
+                // Add children from fallback
+                for (const childName of rootData.children || []) {
+                    const childTopic: HierarchicalTopic = {
+                        id: generateTopicId(childName, 1),
+                        name: childName,
+                        level: 1,
+                        parentId: rootTopic.id,
+                        childIds: [],
+                        sourceFragments: [],
+                        confidence: 0.5, // Lower confidence for fallback
+                        keywords: [childName],
+                        entityReferences: [],
+                        timestamp: new Date().toISOString(),
+                        domain: context.domain || undefined,
+                    };
+
+                    topicMap.set(childTopic.id, childTopic);
+                    rootTopic.childIds.push(childTopic.id);
+                    maxDepth = Math.max(maxDepth, 1);
                 }
             }
         }
@@ -439,4 +537,38 @@ function calculateKeywordOverlap(
     const union = new Set([...set1, ...set2]);
 
     return intersection.size / union.size;
+}
+
+/**
+ * Creates a fallback hierarchy when JSON parsing fails
+ */
+function createFallbackHierarchy(topics: string[], aggregatedTopics: string[]): any[] {
+    console.log("Creating fallback hierarchy for", topics.length, "topics");
+    
+    // Group topics by similarity (simple keyword-based grouping)
+    const groups = new Map<string, string[]>();
+    
+    // Use aggregated topics as root categories, or create generic ones
+    const rootCategories = aggregatedTopics.length > 0 
+        ? aggregatedTopics.slice(0, 4) // Limit to 4 root categories
+        : ["General Topics", "Technical", "Concepts", "Other"];
+    
+    // Initialize groups
+    rootCategories.forEach(category => {
+        groups.set(category, []);
+    });
+    
+    // Simple assignment: split topics evenly across root categories
+    topics.forEach((topic, index) => {
+        const categoryIndex = index % rootCategories.length;
+        const category = rootCategories[categoryIndex];
+        groups.get(category)?.push(topic);
+    });
+    
+    // Convert to expected format
+    return Array.from(groups.entries()).map(([rootTopic, children]) => ({
+        rootTopic,
+        children: children.slice(0, 10), // Limit children to avoid overwhelming
+        grandchildren: {} // Keep simple for fallback
+    }));
 }
