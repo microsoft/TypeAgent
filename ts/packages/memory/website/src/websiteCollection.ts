@@ -1567,30 +1567,57 @@ export class WebsiteCollection
         debug(
             `[Knowledge Graph] Starting graph build${isMinimalMode ? ` (minimal mode: ${urlLimit} URLs)` : " (full mode)"}`,
         );
+
+        // Initialize graph building utilities
+        const { GraphBuildingCacheManager } = await import(
+            "./utils/graphBuildingCacheManager.mjs"
+        );
+        const { OptimizedGraphAlgorithms } = await import(
+            "./utils/optimizedGraphAlgorithms.mjs"
+        );
+
+        const cacheManager = new GraphBuildingCacheManager();
+        const algorithms = new OptimizedGraphAlgorithms();
+
         const startTime = Date.now();
 
-        // Extract entities from websites (limited in minimal mode)
-        const entities = await this.extractEntities(urlLimit);
+        // Get websites to process (limited in minimal mode)
+        const websites = this.getWebsites();
+        const websitesToProcess = urlLimit
+            ? websites.slice(0, urlLimit)
+            : websites;
+
+        // Initialize cache with all website data for efficient processing
+        await cacheManager.initializeCache(websitesToProcess);
+        debug(
+            `[Knowledge Graph] Initialized cache for ${websitesToProcess.length} websites`,
+        );
+
+        // Extract entities from cache (much faster than iterating websites)
+        const entities = cacheManager.getAllEntities();
         debug(
             `[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - startTime}ms`,
         );
 
         // Store entities in knowledge entities table
-        await this.storeEntitiesInDatabase(entities, urlLimit);
+        await this.storeEntitiesInDatabase(cacheManager, websitesToProcess);
         debug(`[Knowledge Graph] Stored entities in database`);
 
-        // Build relationships between entities
+        // Build relationships between entities using cache-based approach
         const relationshipStartTime = Date.now();
-        await this.buildRelationships(entities, urlLimit);
+        await this.buildRelationships(cacheManager);
+        const relationshipCount =
+            cacheManager.getAllEntityRelationships().length;
         debug(
-            `[Knowledge Graph] Built relationships in ${Date.now() - relationshipStartTime}ms`,
+            `[Knowledge Graph] Built ${relationshipCount} relationships in ${Date.now() - relationshipStartTime}ms`,
         );
 
-        // Detect communities
+        // Detect communities using algorithms
         const communityStartTime = Date.now();
-        await this.detectCommunities(entities);
+        await this.detectCommunities(entities, algorithms);
+        const communities = (await this.communities?.getAllCommunities()) || [];
         debug(
-            `[Knowledge Graph] Detected communities in ${Date.now() - communityStartTime}ms`,
+            `[Knowledge Graph] Detected ${communities.length} communities in ${Date.now() - communityStartTime}ms`,
         );
 
         // Build hierarchical topics from flat topics
@@ -1600,60 +1627,19 @@ export class WebsiteCollection
             `[Knowledge Graph] Built hierarchical topics in ${Date.now() - topicStartTime}ms`,
         );
 
-        // Build topic relationships and metrics
+        // Build topic relationships and metrics using batch operations
         const topicRelationshipsStart = Date.now();
-        const websites = this.getWebsites();
-        const websitesToProcess = urlLimit
-            ? websites.slice(0, urlLimit)
-            : websites;
-
+        await this.buildTopicRelationships(cacheManager);
         debug(
-            `[Knowledge Graph] Processing topic co-occurrences for ${websitesToProcess.length} websites`,
-        );
-        for (const website of websitesToProcess) {
-            await this.updateTopicCooccurrences(website);
-            await this.storeTopicCorrelations(website);
-        }
-        debug(
-            `[Knowledge Graph] Completed topic co-occurrences in ${Date.now() - topicRelationshipsStart}ms`,
+            `[Knowledge Graph] Completed topic relationships in ${Date.now() - topicRelationshipsStart}ms`,
         );
 
+        // Calculate topic metrics using batch operations
         const topicMetricsStart = Date.now();
-        const allTopics = this.hierarchicalTopics?.getTopicHierarchy();
-        if (allTopics) {
-            const uniqueTopics = new Set(allTopics.map((t) => t.topicId));
-            debug(
-                `[Knowledge Graph] Updating metrics for ${uniqueTopics.size} unique topics`,
-            );
-
-            // Build topic-to-websites index once for all topics (major optimization)
-            const topicToWebsites = new Map<string, Website[]>();
-            for (const website of websitesToProcess) {
-                const hierarchy = (website.knowledge as any)?.topicHierarchy;
-                if (hierarchy) {
-                    const topics = this.flattenTopicHierarchy(hierarchy);
-                    for (const topic of topics) {
-                        if (!topicToWebsites.has(topic.id)) {
-                            topicToWebsites.set(topic.id, []);
-                        }
-                        topicToWebsites.get(topic.id)!.push(website);
-                    }
-                }
-            }
-            debug(
-                `[Knowledge Graph] Built topic-to-website index with ${topicToWebsites.size} topics`,
-            );
-
-            for (const topicId of uniqueTopics) {
-                await this.updateTopicMetrics(
-                    topicId,
-                    topicToWebsites.get(topicId) || [],
-                );
-            }
-            debug(
-                `[Knowledge Graph] Completed topic metrics in ${Date.now() - topicMetricsStart}ms`,
-            );
-        }
+        await this.calculateTopicMetrics(cacheManager);
+        debug(
+            `[Knowledge Graph] Completed topic metrics in ${Date.now() - topicMetricsStart}ms`,
+        );
 
         const totalTime = Date.now() - startTime;
         debug(
@@ -1721,395 +1707,6 @@ export class WebsiteCollection
 
         debug(`[Knowledge Graph] Found ${entities.size} unique entities`);
         return Array.from(entities);
-    }
-
-    /**
-     * Store entities and topics in database tables
-     */
-    private async storeEntitiesInDatabase(
-        entities: string[],
-        urlLimit?: number,
-    ): Promise<void> {
-        debug(`[Knowledge Graph] Storing entities and topics in database...`);
-
-        // Get websites to process (same limitation as entity extraction)
-        const websites = this.getWebsites();
-        const websitesToProcess = urlLimit
-            ? websites.slice(0, urlLimit)
-            : websites;
-
-        const extractionDate = new Date().toISOString();
-        let entityCount = 0;
-        let topicCount = 0;
-
-        for (const website of websitesToProcess) {
-            if (!website.knowledge) continue;
-
-            // Store entities
-            if (website.knowledge.entities) {
-                for (const entity of website.knowledge.entities) {
-                    const sourceRef = {
-                        range: {
-                            start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                            end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                        },
-                    };
-
-                    const entityRow = {
-                        sourceRef,
-                        record: {
-                            url: website.metadata.url,
-                            domain: website.metadata.domain,
-                            entityName: entity.name,
-                            entityType: Array.isArray(entity.type)
-                                ? entity.type.join(",")
-                                : entity.type || "unknown",
-                            confidence: 0.8, // Use default confidence since entity.confidence doesn't exist
-                            extractionDate,
-                        },
-                    };
-
-                    await this.knowledgeEntities.addRows(entityRow);
-                    entityCount++;
-                }
-            }
-
-            // Store topics
-            if (website.knowledge.topics) {
-                for (const topic of website.knowledge.topics) {
-                    const topicName =
-                        typeof topic === "string" ? topic : (topic as any).name;
-                    const relevance =
-                        typeof topic === "string"
-                            ? 0.8
-                            : (topic as any).relevance || 0.8;
-
-                    if (topicName) {
-                        const sourceRef = {
-                            range: {
-                                start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                                end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                            },
-                        };
-
-                        const topicRow = {
-                            sourceRef,
-                            record: {
-                                url: website.metadata.url,
-                                domain: website.metadata.domain,
-                                topic: topicName,
-                                relevance,
-                                extractionDate,
-                            },
-                        };
-
-                        await this.knowledgeTopics.addRows(topicRow);
-                        topicCount++;
-                    }
-                }
-            }
-        }
-
-        debug(
-            `[Knowledge Graph] Stored ${entityCount} entity records and ${topicCount} topic records`,
-        );
-    }
-
-    /**
-     * Build entity relationships based on co-occurrence
-     */
-    private async buildRelationships(
-        entities: string[],
-        urlLimit?: number,
-    ): Promise<void> {
-        const relationships = new Map<string, Relationship>();
-
-        // Get websites to process (limited in minimal mode)
-        const websites = this.getWebsites();
-        const websitesToProcess = urlLimit
-            ? websites.slice(0, urlLimit)
-            : websites;
-
-        debug(
-            `[Knowledge Graph] Building relationships from ${websitesToProcess.length} websites`,
-        );
-
-        let processedCount = 0;
-        let relationshipCount = 0;
-
-        // Find entity co-occurrences in websites
-        for (const website of websitesToProcess) {
-            processedCount++;
-            if (
-                processedCount % 20 === 0 ||
-                processedCount === websitesToProcess.length
-            ) {
-                debug(
-                    `[Knowledge Graph] Relationship building progress: ${processedCount}/${websitesToProcess.length} websites, ${relationshipCount} relationships found`,
-                );
-            }
-            if (!website.knowledge?.entities) continue;
-
-            const websiteEntities = website.knowledge.entities.map(
-                (e) => e.name,
-            );
-
-            // Build pairs of co-occurring entities
-            for (let i = 0; i < websiteEntities.length; i++) {
-                for (let j = i + 1; j < websiteEntities.length; j++) {
-                    const entityA = websiteEntities[i];
-                    const entityB = websiteEntities[j];
-                    const key = `${entityA}|${entityB}`;
-
-                    if (!relationships.has(key)) {
-                        relationships.set(key, {
-                            fromEntity: entityA,
-                            toEntity: entityB,
-                            relationshipType: "co_occurs",
-                            confidence: 0,
-                            sources: JSON.stringify([]),
-                            count: 0,
-                            updated: new Date().toISOString(),
-                        });
-                        relationshipCount++;
-                    }
-
-                    const rel = relationships.get(key)!;
-                    rel.count++;
-                    const existingSources = new Set(
-                        JSON.parse(rel.sources || "[]"),
-                    );
-                    existingSources.add(website.metadata.url);
-                    rel.sources = JSON.stringify(Array.from(existingSources));
-                }
-            }
-        }
-
-        debug(
-            `[Knowledge Graph] Found ${relationships.size} unique relationships from ${processedCount} websites`,
-        );
-
-        // Calculate confidence scores and store relationships
-        debug(`[Knowledge Graph] Storing relationships in database...`);
-        let storedCount = 0;
-        for (const [, rel] of relationships) {
-            rel.confidence = Math.min(rel.count / 10, 1.0); // Normalize to 0-1
-            storedCount++;
-
-            const sourceRef: dataFrame.RowSourceRef = {
-                range: {
-                    start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                },
-            };
-            const relationshipRow: dataFrame.DataFrameRow = {
-                sourceRef,
-                record: rel as any,
-            };
-            await this.relationships.addRows(relationshipRow);
-
-            if (storedCount % 100 === 0 || storedCount === relationships.size) {
-                debug(
-                    `[Knowledge Graph] Stored ${storedCount}/${relationships.size} relationships`,
-                );
-            }
-        }
-        debug(
-            `[Knowledge Graph] Finished storing ${storedCount} relationships`,
-        );
-    }
-
-    /**
-     * Detect and store communities using simple clustering
-     */
-    private async detectCommunities(entities: string[]): Promise<void> {
-        debug(
-            `[Knowledge Graph] Starting community detection for ${entities.length} entities`,
-        );
-
-        // Simple community detection based on relationship density
-        // For now, group entities that appear together frequently
-        const communities = await this.runCommunityDetection(entities);
-
-        debug(`[Knowledge Graph] Detected ${communities.length} communities`);
-
-        let storedCount = 0;
-        for (const community of communities) {
-            storedCount++;
-            const sourceRef: dataFrame.RowSourceRef = {
-                range: {
-                    start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                },
-            };
-            const communityRow: dataFrame.DataFrameRow = {
-                sourceRef,
-                record: {
-                    id: community.id,
-                    entities: JSON.stringify(community.entities),
-                    topics: JSON.stringify(community.topics),
-                    size: community.entities.length,
-                    density: community.density,
-                    updated: new Date().toISOString(),
-                } as any,
-            };
-            await this.communities.addRows(communityRow);
-
-            if (storedCount % 10 === 0 || storedCount === communities.length) {
-                debug(
-                    `[Knowledge Graph] Stored ${storedCount}/${communities.length} communities`,
-                );
-            }
-        }
-        debug(`[Knowledge Graph] Finished storing ${storedCount} communities`);
-    }
-
-    /**
-     * Simple community detection algorithm
-     */
-    private async runCommunityDetection(entities: string[]): Promise<
-        Array<{
-            id: string;
-            entities: string[];
-            topics: string[];
-            density: number;
-        }>
-    > {
-        debug(`[Knowledge Graph] Running community detection algorithm...`);
-
-        // For now, implement a simple clustering based on co-occurrence strength
-        const communities: Array<{
-            id: string;
-            entities: string[];
-            topics: string[];
-            density: number;
-        }> = [];
-
-        // Group entities that have strong relationships (confidence > 0.5)
-        const strongRelationships = await this.getStrongRelationships();
-        debug(
-            `[Knowledge Graph] Found ${strongRelationships.length} strong relationships for clustering`,
-        );
-
-        const processed = new Set<string>();
-        let communityId = 0;
-
-        for (const entity of entities) {
-            if (processed.has(entity)) continue;
-
-            const community = {
-                id: `community_${communityId++}`,
-                entities: [entity],
-                topics: await this.getTopicsForEntity(entity),
-                density: 0,
-            };
-
-            // Find strongly connected entities
-            const connected = this.findConnectedEntities(
-                entity,
-                strongRelationships,
-            );
-            for (const connectedEntity of connected) {
-                if (!processed.has(connectedEntity)) {
-                    community.entities.push(connectedEntity);
-                    processed.add(connectedEntity);
-                }
-            }
-
-            processed.add(entity);
-            community.density = this.calculateCommunityDensity(
-                community.entities,
-                strongRelationships,
-            );
-
-            if (community.entities.length > 1) {
-                // Only add communities with multiple entities
-                communities.push(community);
-            }
-        }
-
-        return communities;
-    }
-
-    /**
-     * Get relationships with high confidence scores
-     */
-    private async getStrongRelationships(): Promise<Relationship[]> {
-        const stmt = this.db!.prepare(`
-            SELECT * FROM relationships 
-            WHERE confidence > 0.5
-            ORDER BY confidence DESC
-        `);
-        return stmt.all() as Relationship[];
-    }
-
-    /**
-     * Find entities connected to a given entity
-     */
-    private findConnectedEntities(
-        entity: string,
-        relationships: Relationship[],
-    ): string[] {
-        const connected = new Set<string>();
-
-        for (const rel of relationships) {
-            if (rel.fromEntity === entity) {
-                connected.add(rel.toEntity);
-            } else if (rel.toEntity === entity) {
-                connected.add(rel.fromEntity);
-            }
-        }
-
-        return Array.from(connected);
-    }
-
-    /**
-     * Calculate community density
-     */
-    private calculateCommunityDensity(
-        entities: string[],
-        relationships: Relationship[],
-    ): number {
-        if (entities.length < 2) return 0;
-
-        const maxPossibleEdges = (entities.length * (entities.length - 1)) / 2;
-        let actualEdges = 0;
-
-        for (const rel of relationships) {
-            if (
-                entities.includes(rel.fromEntity) &&
-                entities.includes(rel.toEntity)
-            ) {
-                actualEdges++;
-            }
-        }
-
-        return actualEdges / maxPossibleEdges;
-    }
-
-    /**
-     * Get topics associated with an entity
-     */
-    private async getTopicsForEntity(entity: string): Promise<string[]> {
-        const topics = new Set<string>();
-
-        for (const website of this.getWebsites()) {
-            if (website.knowledge?.entities?.some((e) => e.name === entity)) {
-                if (website.knowledge.topics) {
-                    for (const topic of website.knowledge.topics) {
-                        const topicName =
-                            typeof topic === "string"
-                                ? topic
-                                : (topic as any).name;
-                        if (topicName) {
-                            topics.add(topicName);
-                        }
-                    }
-                }
-            }
-        }
-
-        return Array.from(topics);
     }
 
     /**
@@ -2229,7 +1826,14 @@ export class WebsiteCollection
 
         // Rebuild communities
         const entities = await this.extractEntities(undefined);
-        await this.detectCommunities(entities);
+
+        // Initialize algorithms for community detection
+        const { OptimizedGraphAlgorithms } = await import(
+            "./utils/optimizedGraphAlgorithms.mjs"
+        );
+        const algorithms = new OptimizedGraphAlgorithms();
+
+        await this.detectCommunities(entities, algorithms);
     }
 
     /**
@@ -2914,184 +2518,363 @@ export class WebsiteCollection
         return `topic_${cleanName}_${level}_${Date.now()}`;
     }
 
-    private flattenTopicHierarchy(
-        hierarchy: any,
-    ): { id: string; name: string }[] {
-        const topics: { id: string; name: string }[] = [];
-        const topicMap =
-            hierarchy.topicMap instanceof Map
-                ? hierarchy.topicMap
-                : new Map(Object.entries(hierarchy.topicMap));
+    /**
+     * Store entities and topics in database using cache manager
+     */
+    private async storeEntitiesInDatabase(
+        cacheManager: any,
+        websitesToProcess: Website[],
+    ): Promise<void> {
+        debug(`[Knowledge Graph] Storing entities and topics in database...`);
 
-        for (const [id, topic] of topicMap) {
-            topics.push({ id, name: topic.name });
+        const extractionDate = new Date().toISOString();
+        let entityCount = 0;
+        let topicCount = 0;
+
+        // Use cache manager for efficient access to entities and topics
+        for (const website of websitesToProcess) {
+            if (!website.knowledge) continue;
+            const url = website.metadata.url;
+
+            // Get entities from cache
+            const entities = cacheManager.getEntitiesForWebsite(url);
+            for (const entityName of entities) {
+                const sourceRef = {
+                    range: {
+                        start: { messageOrdinal: 0, chunkOrdinal: 0 },
+                        end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                    },
+                };
+
+                const entityRow = {
+                    sourceRef,
+                    record: {
+                        url,
+                        domain: website.metadata.domain,
+                        entityName,
+                        entityType: "unknown", // Will be determined from original entity data if needed
+                        confidence: 0.8,
+                        extractionDate,
+                    },
+                };
+
+                await this.knowledgeEntities.addRows(entityRow);
+                entityCount++;
+            }
+
+            // Get topics from cache
+            const topics = cacheManager.getTopicsForWebsite(url);
+            for (const topicName of topics) {
+                const sourceRef = {
+                    range: {
+                        start: { messageOrdinal: 0, chunkOrdinal: 0 },
+                        end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                    },
+                };
+
+                const topicRow = {
+                    sourceRef,
+                    record: {
+                        url,
+                        domain: website.metadata.domain,
+                        topic: topicName,
+                        relevance: 0.8,
+                        extractionDate,
+                    },
+                };
+
+                await this.knowledgeTopics.addRows(topicRow);
+                topicCount++;
+            }
         }
-        return topics;
+
+        debug(
+            `[Knowledge Graph] Stored ${entityCount} entity records and ${topicCount} topic records`,
+        );
     }
 
-    private async updateTopicCooccurrences(newWebsite: Website): Promise<void> {
-        const hierarchy = (newWebsite.knowledge as any)?.topicHierarchy;
-        if (!hierarchy || !hierarchy.topicMap) return;
+    /**
+     * Build entity relationships using cache manager
+     */
+    private async buildRelationships(cacheManager: any): Promise<void> {
+        debug(`[Knowledge Graph] Building relationships using cache approach`);
 
-        const topics = this.flattenTopicHierarchy(hierarchy);
+        // Get all relationships from cache manager (pre-computed co-occurrences)
+        const cachedRelationships = cacheManager.getAllEntityRelationships();
+        debug(
+            `[Knowledge Graph] Found ${cachedRelationships.length} cached relationships`,
+        );
+
+        let storedCount = 0;
+        for (const cachedRel of cachedRelationships) {
+            const confidence = Math.min(cachedRel.count / 10, 1.0); // Normalize to 0-1
+
+            const relationship = {
+                fromEntity: cachedRel.fromEntity,
+                toEntity: cachedRel.toEntity,
+                relationshipType: "co_occurs",
+                confidence,
+                sources: JSON.stringify(cachedRel.sources),
+                count: cachedRel.count,
+                updated: new Date().toISOString(),
+            };
+
+            const sourceRef = {
+                range: {
+                    start: { messageOrdinal: 0, chunkOrdinal: 0 },
+                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                },
+            };
+
+            const relationshipRow = {
+                sourceRef,
+                record: relationship,
+            };
+
+            await this.relationships.addRows(relationshipRow);
+            storedCount++;
+
+            if (
+                storedCount % 100 === 0 ||
+                storedCount === cachedRelationships.length
+            ) {
+                debug(
+                    `[Knowledge Graph] Stored ${storedCount}/${cachedRelationships.length} relationships`,
+                );
+            }
+        }
+
+        debug(
+            `[Knowledge Graph] Finished storing ${storedCount} relationships`,
+        );
+    }
+
+    /**
+     * Community detection using advanced algorithms
+     */
+    private async detectCommunities(
+        entities: string[],
+        algorithms: any,
+    ): Promise<void> {
+        debug(
+            `[Knowledge Graph] Starting community detection for ${entities.length} entities`,
+        );
+
+        // Get relationships for algorithm input
+        const relationships =
+            (await this.relationships?.getAllRelationships()) || [];
+
+        // Use graph algorithms for community detection
+        const graphMetrics = algorithms.calculateAllMetrics(
+            entities,
+            relationships,
+        );
+        const communities = graphMetrics.communities;
+
+        debug(
+            `[Knowledge Graph] Detected ${communities.length} communities using algorithms`,
+        );
+
+        let storedCount = 0;
+        for (const community of communities) {
+            const sourceRef = {
+                range: {
+                    start: { messageOrdinal: 0, chunkOrdinal: 0 },
+                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
+                },
+            };
+
+            const communityRow = {
+                sourceRef,
+                record: {
+                    id: community.id,
+                    entities: JSON.stringify(community.nodes),
+                    topics: JSON.stringify([]), // Will be filled later if needed
+                    size: community.nodes.length,
+                    density: community.density,
+                    updated: new Date().toISOString(),
+                },
+            };
+
+            await this.communities.addRows(communityRow);
+            storedCount++;
+
+            if (storedCount % 10 === 0 || storedCount === communities.length) {
+                debug(
+                    `[Knowledge Graph] Stored ${storedCount}/${communities.length} communities`,
+                );
+            }
+        }
+
+        debug(`[Knowledge Graph] Finished storing ${storedCount} communities`);
+    }
+
+    /**
+     * Build topic relationships using batch operations
+     */
+    private async buildTopicRelationships(cacheManager: any): Promise<void> {
+        debug(
+            `[Knowledge Graph] Building topic relationships using batch approach`,
+        );
+
+        // Get all topic relationships from cache manager (pre-computed co-occurrences)
+        const cachedRelationships = cacheManager.getAllTopicRelationships();
+        debug(
+            `[Knowledge Graph] Found ${cachedRelationships.length} cached topic relationships`,
+        );
+
         const now = new Date().toISOString();
 
-        for (let i = 0; i < topics.length; i++) {
-            for (let j = i + 1; j < topics.length; j++) {
-                const existing = this.topicRelationships
-                    ?.getRelationshipsForTopic(topics[i].id)
-                    .find(
-                        (r) =>
-                            (r.fromTopic === topics[j].id ||
-                                r.toTopic === topics[j].id) &&
-                            r.relationshipType === "co_occurs",
-                    );
+        for (const cachedRel of cachedRelationships) {
+            if (cachedRel.count < 2) continue; // Filter weak relationships
 
-                const sourceUrls = existing?.sourceUrls
-                    ? JSON.parse(existing.sourceUrls)
-                    : [];
-                sourceUrls.push(newWebsite.metadata.url);
+            const strength = Math.min(cachedRel.count / 10, 1.0);
 
-                const cooccurrenceCount =
-                    (existing?.cooccurrenceCount || 0) + 1;
-                const strength = Math.min(cooccurrenceCount / 10, 1.0);
+            // Use hierarchical topics to get topic IDs
+            const fromTopicId = this.findTopicIdByNameInHierarchy(
+                cachedRel.fromTopic,
+            );
+            const toTopicId = this.findTopicIdByNameInHierarchy(
+                cachedRel.toTopic,
+            );
 
+            if (fromTopicId && toTopicId) {
                 this.topicRelationships?.upsertRelationship({
-                    fromTopic: topics[i].id,
-                    toTopic: topics[j].id,
+                    fromTopic: fromTopicId,
+                    toTopic: toTopicId,
                     relationshipType: "co_occurs",
                     strength,
-                    sourceUrls: JSON.stringify(sourceUrls),
-                    cooccurrenceCount,
-                    firstSeen: existing?.firstSeen || now,
+                    sourceUrls: JSON.stringify(cachedRel.sources),
+                    cooccurrenceCount: cachedRel.count,
+                    firstSeen: now,
                     lastSeen: now,
                     updated: now,
                 });
             }
         }
+
+        debug(`[Knowledge Graph] Completed topic relationships`);
     }
 
-    private async storeTopicCorrelations(website: Website): Promise<void> {
-        const correlations = (website.metadata as any).topicCorrelations;
-        if (!correlations || correlations.length === 0) return;
+    /**
+     * Calculate topic metrics using batch operations
+     */
+    private async calculateTopicMetrics(cacheManager: any): Promise<void> {
+        debug(
+            `[Knowledge Graph] Calculating topic metrics using batch approach`,
+        );
 
-        const hierarchy = (website.knowledge as any)?.topicHierarchy;
-        if (!hierarchy) return;
+        const allTopics = this.hierarchicalTopics?.getTopicHierarchy();
+        if (!allTopics || allTopics.length === 0) return;
 
-        const now = new Date().toISOString();
+        const uniqueTopics = new Set(allTopics.map((t) => t.topicId));
+        const topicIds = Array.from(uniqueTopics);
 
-        for (const correlation of correlations) {
-            const fromTopicId = this.findTopicIdByName(
-                hierarchy,
-                correlation.topic,
+        // MAJOR OPTIMIZATION: Use batch queries instead of individual queries
+        // Get all relationships for all topics in one query
+        const startTime = performance.now();
+        const allRelationships =
+            this.topicRelationships?.getRelationshipsForTopics?.(topicIds) ||
+            [];
+        const relationshipQueryTime = performance.now() - startTime;
+        debug(
+            `[Knowledge Graph] Batch fetched ${allRelationships.length} topic relationships in ${relationshipQueryTime.toFixed(2)}ms`,
+        );
+
+        // Get all entity relations for all topics in one query
+        const entityStartTime = performance.now();
+        const allEntityRelations =
+            this.topicEntityRelations?.getEntitiesForTopics?.(topicIds) || [];
+        const entityQueryTime = performance.now() - entityStartTime;
+        debug(
+            `[Knowledge Graph] Batch fetched ${allEntityRelations.length} topic-entity relations in ${entityQueryTime.toFixed(2)}ms`,
+        );
+
+        // Group results by topic ID for efficient lookup
+        const relationshipsByTopic = new Map<string, any[]>();
+        const entityRelationsByTopic = new Map<string, any[]>();
+
+        for (const rel of allRelationships) {
+            if (!relationshipsByTopic.has(rel.fromTopic)) {
+                relationshipsByTopic.set(rel.fromTopic, []);
+            }
+            if (!relationshipsByTopic.has(rel.toTopic)) {
+                relationshipsByTopic.set(rel.toTopic, []);
+            }
+            relationshipsByTopic.get(rel.fromTopic)!.push(rel);
+            relationshipsByTopic.get(rel.toTopic)!.push(rel);
+        }
+
+        for (const rel of allEntityRelations) {
+            if (!entityRelationsByTopic.has(rel.topicId)) {
+                entityRelationsByTopic.set(rel.topicId, []);
+            }
+            entityRelationsByTopic.get(rel.topicId)!.push(rel);
+        }
+
+        // Calculate metrics for each topic using pre-fetched data
+        for (const topicId of uniqueTopics) {
+            const topic = this.hierarchicalTopics?.getTopicById(topicId);
+            if (!topic) continue;
+
+            // Get data from cache manager
+            const documentsWithTopic = cacheManager.getWebsitesForTopic(
+                topic.topicName,
             );
+            const domains = new Set(
+                documentsWithTopic.map((url: string) => {
+                    // Extract domain from URL or use a default approach
+                    try {
+                        return new URL(url).hostname;
+                    } catch {
+                        return url.split("/")[0];
+                    }
+                }),
+            ).size;
 
-            for (const relatedTopic of correlation.relatedTopics) {
-                const toTopicId = this.findTopicIdByName(
-                    hierarchy,
-                    relatedTopic,
-                );
+            // Use pre-fetched data instead of individual queries
+            const relationships = relationshipsByTopic.get(topicId) || [];
+            const strongRelationships = relationships.filter(
+                (r) => r.strength > 0.7,
+            ).length;
+            const entityRelations = entityRelationsByTopic.get(topicId) || [];
 
-                if (fromTopicId && toTopicId) {
-                    this.topicRelationships?.upsertRelationship({
-                        fromTopic: fromTopicId,
-                        toTopic: toTopicId,
-                        relationshipType: "correlated",
-                        strength: correlation.strength || 0.7,
-                        metadata: JSON.stringify({
-                            context: correlation.context,
-                        }),
-                        sourceUrls: JSON.stringify([website.metadata.url]),
-                        firstSeen: now,
-                        lastSeen: now,
-                        updated: now,
-                    });
-                }
-            }
+            const topEntities = entityRelations
+                .sort((a, b) => b.relevance - a.relevance)
+                .slice(0, 10)
+                .map((r) => r.entityName);
+
+            const metricsData = {
+                topicId,
+                topicName: topic.topicName,
+                documentCount: documentsWithTopic.length,
+                domainCount: domains,
+                degreeCentrality: relationships.length,
+                betweennessCentrality: 0, // Could be calculated using graph algorithms if needed
+                activityPeriod: 0, // Simplified for now
+                avgConfidence: topic.confidence,
+                maxConfidence: topic.confidence,
+                totalRelationships: relationships.length,
+                strongRelationships,
+                entityCount: entityRelations.length,
+                topEntities: JSON.stringify(topEntities),
+                updated: new Date().toISOString(),
+            };
+
+            this.topicMetrics?.upsertMetrics(metricsData);
         }
+
+        debug(
+            `[Knowledge Graph] Completed topic metrics calculation for ${topicIds.length} topics`,
+        );
     }
 
-    private findTopicIdByName(
-        hierarchy: any,
-        topicName: string,
-    ): string | null {
-        const topicMap =
-            hierarchy.topicMap instanceof Map
-                ? hierarchy.topicMap
-                : new Map(Object.entries(hierarchy.topicMap));
-
-        for (const [id, topic] of topicMap) {
-            if (topic.name === topicName) {
-                return id;
-            }
-        }
-        return null;
-    }
-
-    private async updateTopicMetrics(
-        topicId: string,
-        documentsWithTopic: Website[],
-    ): Promise<void> {
-        const topic = this.hierarchicalTopics?.getTopicById(topicId);
-        if (!topic) return;
-
-        const domains = new Set(
-            documentsWithTopic.map((w) => w.metadata.domain),
-        ).size;
-        const relationships =
-            this.topicRelationships?.getRelationshipsForTopic(topicId) || [];
-        const strongRelationships = relationships.filter(
-            (r) => r.strength > 0.7,
-        ).length;
-
-        const entityRelations =
-            this.topicEntityRelations?.getEntitiesForTopic(topicId) || [];
-        const topEntities = entityRelations
-            .sort((a, b) => b.relevance - a.relevance)
-            .slice(0, 10)
-            .map((r) => r.entityName);
-
-        const dates = documentsWithTopic
-            .map(
-                (d) =>
-                    new Date(
-                        d.metadata.visitDate ||
-                            d.metadata.bookmarkDate ||
-                            new Date(),
-                    ),
-            )
-            .sort();
-
-        const activityPeriod =
-            dates.length > 1
-                ? Math.floor(
-                      (dates[dates.length - 1].getTime() - dates[0].getTime()) /
-                          (1000 * 60 * 60 * 24),
-                  )
-                : 0;
-
-        const metricsData: any = {
-            topicId,
-            topicName: topic.topicName,
-            documentCount: documentsWithTopic.length,
-            domainCount: domains,
-            degreeCentrality: relationships.length,
-            betweennessCentrality: 0,
-            activityPeriod,
-            avgConfidence: topic.confidence,
-            maxConfidence: topic.confidence,
-            totalRelationships: relationships.length,
-            strongRelationships,
-            entityCount: entityRelations.length,
-            topEntities: JSON.stringify(topEntities),
-            updated: new Date().toISOString(),
-        };
-
-        if (dates.length > 0) {
-            metricsData.firstSeen = dates[0].toISOString();
-            metricsData.lastSeen = dates[dates.length - 1].toISOString();
-        }
-
-        this.topicMetrics?.upsertMetrics(metricsData);
+    /**
+     * Helper method to find topic ID by name in hierarchical topics
+     */
+    private findTopicIdByNameInHierarchy(topicName: string): string | null {
+        const allTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
+        const topic = allTopics.find((t) => t.topicName === topicName);
+        return topic?.topicId || null;
     }
 }
