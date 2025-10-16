@@ -212,25 +212,37 @@ export function setContent(
         // use the same stylesheets as the main page
         let css: string = "";
         const links = document.head.getElementsByTagName("link");
+        let promises: Promise<void>[] = [];
         for (let i = 0; i < links.length; i++) {
             if (links[i].rel.toLowerCase() == "stylesheet") {
                 if (links[i].href.startsWith("./")) {
                     const l = links[i].cloneNode(true) as HTMLLinkElement;
                     l.href = window.location.origin + "/" + l.href;
                     css += l.outerHTML;
+                } else if (links[i].href.startsWith("file:")) {
+                    // Download the CSS
+                    promises.push(
+                        fetch(links[i].href)
+                            .then((response) => response.text())
+                            .then((text) => {
+                                css += `<style>${text}</style>`;
+                                console.log(text);
+                            }),
+                    );
                 } else {
                     css += links[i].outerHTML;
                 }
             }
         }
 
-        iframe.srcdoc = `<html>
-        <head>
-        ${css}
-        </head>
-        <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
-
-        // give the iframe the same stylesheet as the host page
+        // after all stylesheets have been loaded craft the iframe source document
+        Promise.all(promises).then(() => {
+            iframe.srcdoc = `<html>
+            <head>
+            ${css}
+            </head>
+            <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
+        });
 
         contentElm.appendChild(iframe);
     } else {

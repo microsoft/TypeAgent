@@ -164,7 +164,7 @@ function createVideoPlaceHolder(
                 statusData = await statusResponse.json();
                 console.log("Waiting..." + JSON.stringify(statusData, null, 2));
                 status = statusData.status;
-                container.previousElementSibling.children[1].innerText = "JobID - " + jobId + "<br> Status: " + status + " " + (i++) * 5  + " seconds elapsed";
+                container.previousElementSibling.children[1].innerHTML = "JobID - " + jobId + " Status: " + status + " " + (i++) * 5  + " seconds elapsed";
             }
 
             // hide the generating graphic
@@ -183,10 +183,11 @@ function createVideoPlaceHolder(
 
                         // Create and configure video element
                         const videoElement = document.createElement("video");
+                        videoElement.className = "ai-video";
                         videoElement.src = videoObjectURL;
                         videoElement.controls = true;
-                        videoElement.width = "100%";
-                        videoElement.height = "100%";
+                        videoElement.width = 640;
+                        videoElement.height = 360;
                         videoElement.autoplay = true;
 
                         // Append to container
