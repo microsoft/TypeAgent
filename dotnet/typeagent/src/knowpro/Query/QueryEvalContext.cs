@@ -15,8 +15,6 @@ internal class QueryEvalContext
         CancellationToken cancellationToken = default
     )
     {
-        ArgumentVerify.ThrowIfNull(cache, nameof(cache));
-
         CancellationToken = cancellationToken;
 
         Conversation = conversation;
