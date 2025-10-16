@@ -7,8 +7,6 @@ import { searchByEntities } from "../../searchWebMemories.mjs";
 import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
-import { getTopicGraphPerformanceTracker } from "../utils/topicGraphPerformanceTracker.mjs";
-import { getEntityGraphPerformanceTracker } from "../utils/entityGraphPerformanceTracker.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:knowledge:graph");
@@ -449,8 +447,6 @@ export async function getEntityNeighborhood(
         }
 
         const { entityId, depth = 2, maxNodes = 100 } = parameters;
-        const entityTracker = getEntityGraphPerformanceTracker();
-        const overallStartTime = performance.now();
 
         // Ensure cache is populated
         await ensureGraphCache(websiteCollection);
@@ -469,27 +465,13 @@ export async function getEntityNeighborhood(
             `[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
         );
 
-        // Perform BFS to find neighborhood with performance tracking
-        entityTracker.startOperation("performBFS");
-        const bfsStartTime = performance.now();
+        // Perform BFS to find neighborhood
         const neighborhoodResult = performBFS(
             entityId,
             cache.entityMetrics,
             cache.relationships,
             depth,
             maxNodes,
-        );
-        const bfsTime = performance.now() - bfsStartTime;
-        entityTracker.recordBFSTraversal(
-            entityId,
-            depth,
-            neighborhoodResult.neighbors.length + 1,
-            bfsTime,
-        );
-        entityTracker.endOperation(
-            "performBFS",
-            neighborhoodResult.neighbors.length,
-            neighborhoodResult.neighbors.length,
         );
 
         if (!neighborhoodResult.centerEntity) {
@@ -541,22 +523,9 @@ export async function getEntityNeighborhood(
         // Get search enrichment for topics and related entities
         let searchData: any = null;
         try {
-            entityTracker.startOperation("searchByEntities");
-            const searchStartTime = performance.now();
             const searchResults = await searchByEntities(
                 { entities: [entityId], maxResults: 20 },
                 context,
-            );
-            const searchTime = performance.now() - searchStartTime;
-            entityTracker.recordDatabaseQuery(
-                "searchByEntities",
-                searchTime,
-                1,
-            );
-            entityTracker.endOperation(
-                "searchByEntities",
-                1,
-                searchResults ? 1 : 0,
             );
 
             if (searchResults) {
@@ -638,17 +607,6 @@ export async function getEntityNeighborhood(
                 },
             },
         };
-
-        // Record overall neighborhood search performance
-        const overallTime = performance.now() - overallStartTime;
-        entityTracker.recordNeighborhoodSearch(
-            entityId,
-            depth,
-            maxNodes,
-            overallTime,
-            optimizedResult.metadata.actualNodes,
-            optimizedResult.metadata.actualEdges,
-        );
 
         return optimizedResult;
     } catch (error) {
@@ -1242,17 +1200,13 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
     }
 
     const tracker = getPerformanceTracker();
-    const topicTracker = getTopicGraphPerformanceTracker();
     tracker.startOperation("ensureTopicGraphCache");
 
     try {
         // Fetch all topics from database
         tracker.startOperation("ensureTopicGraphCache.getTopicHierarchy");
-        const startTime = performance.now();
         const topics =
             websiteCollection.hierarchicalTopics?.getTopicHierarchy() || [];
-        const queryTime = performance.now() - startTime;
-        topicTracker.recordDatabaseQuery("getTopicHierarchy", queryTime);
         tracker.endOperation(
             "ensureTopicGraphCache.getTopicHierarchy",
             topics.length,
@@ -1267,16 +1221,10 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             const topicIds = topics.map((t: any) => t.topicId);
 
             // OPTIMIZATION: Single batch query instead of N individual queries
-            const batchQueryStart = performance.now();
             const allEntityRelations =
                 websiteCollection.topicEntityRelations.getEntitiesForTopics(
                     topicIds,
                 );
-            const batchQueryTime = performance.now() - batchQueryStart;
-            topicTracker.recordDatabaseQuery(
-                `getEntitiesForTopics_batch_${topicIds.length}_topics`,
-                batchQueryTime,
-            );
 
             // Group entity relations by topic ID for efficient lookup
             const entityRelationsByTopic = new Map<string, any[]>();
@@ -1322,17 +1270,11 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             const topicIdsArray = Array.from(topicIds);
 
             // SUPER OPTIMIZATION: Use optimized query that filters at database level
-            const batchQueryStart = performance.now();
             const allRels =
                 websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
                     topicIdsArray,
                     0.3, // Only get relationships with strength >= 0.3 for better performance
                 );
-            const batchQueryTime = performance.now() - batchQueryStart;
-            topicTracker.recordDatabaseQuery(
-                `getRelationshipsForTopicsOptimized_batch_${topicIdsArray.length}_topics`,
-                batchQueryTime,
-            );
 
             // Convert to our format - no need to filter since DB already filtered
             const lateralRels: any[] = allRels.map((rel: any) => ({
@@ -1421,36 +1363,18 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
     debug("[Knowledge Graph] Building in-memory cache for graph data");
 
     const tracker = getPerformanceTracker();
-    const entityTracker = getEntityGraphPerformanceTracker();
     tracker.startOperation("ensureGraphCache");
 
     try {
         // Fetch raw data with instrumentation and batch optimization
         tracker.startOperation("ensureGraphCache.getTopEntities");
-        entityTracker.startOperation("getTopEntities");
-        const startTime = performance.now();
         const rawEntities =
             (websiteCollection.knowledgeEntities as any)?.getTopEntities(
                 5000,
             ) || [];
-        const queryTime = performance.now() - startTime;
-
         // Validate and clean entity data
-        const entities = entityTracker.validateEntityData(
-            rawEntities,
-            "getTopEntities",
-        );
+        const entities = rawEntities;
 
-        entityTracker.recordDatabaseQuery(
-            "getTopEntities",
-            queryTime,
-            entities.length,
-        );
-        entityTracker.endOperation(
-            "getTopEntities",
-            entities.length,
-            entities.length,
-        );
         tracker.endOperation(
             "ensureGraphCache.getTopEntities",
             entities.length,
@@ -1458,29 +1382,12 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         );
 
         tracker.startOperation("ensureGraphCache.getAllRelationships");
-        entityTracker.startOperation("getAllRelationships");
-        const relsStartTime = performance.now();
         const rawRelationships =
             websiteCollection.relationships?.getAllRelationships() || [];
-        const relsQueryTime = performance.now() - relsStartTime;
 
         // Validate and clean relationship data
-        const relationships = entityTracker.validateRelationshipData(
-            rawRelationships,
-            "getAllRelationships",
-        );
+        const relationships = rawRelationships;
 
-        entityTracker.recordDatabaseQuery(
-            "getAllRelationships",
-            relsQueryTime,
-            undefined,
-            relationships.length,
-        );
-        entityTracker.endOperation(
-            "getAllRelationships",
-            relationships.length,
-            relationships.length,
-        );
         tracker.endOperation(
             "ensureGraphCache.getAllRelationships",
             relationships.length,
@@ -1488,21 +1395,8 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         );
 
         tracker.startOperation("ensureGraphCache.getAllCommunities");
-        entityTracker.startOperation("getAllCommunities");
-        const commsStartTime = performance.now();
         const communities =
             websiteCollection.communities?.getAllCommunities() || [];
-        const commsQueryTime = performance.now() - commsStartTime;
-        entityTracker.recordDatabaseQuery(
-            "getAllCommunities",
-            commsQueryTime,
-            communities.length,
-        );
-        entityTracker.endOperation(
-            "getAllCommunities",
-            communities.length,
-            communities.length,
-        );
         tracker.endOperation(
             "ensureGraphCache.getAllCommunities",
             communities.length,
@@ -1511,23 +1405,10 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
 
         // Calculate metrics with instrumentation
         tracker.startOperation("ensureGraphCache.calculateEntityMetrics");
-        entityTracker.startOperation("calculateEntityMetrics");
-        const metricsStartTime = performance.now();
         const entityMetrics = calculateEntityMetrics(
             entities,
             relationships,
             communities,
-        );
-        const metricsTime = performance.now() - metricsStartTime;
-        entityTracker.recordEntityMetricsCalculation(
-            entities.length,
-            relationships.length,
-            metricsTime,
-        );
-        entityTracker.endOperation(
-            "calculateEntityMetrics",
-            entities.length,
-            entityMetrics.length,
         );
         tracker.endOperation(
             "ensureGraphCache.calculateEntityMetrics",
@@ -1557,7 +1438,6 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
             entityMetrics.length,
         );
         tracker.printReport("ensureGraphCache");
-        entityTracker.printReport();
     } catch (error) {
         console.error("[Knowledge Graph] Failed to build cache:", error);
         tracker.endOperation("ensureGraphCache", 0, 0);
@@ -2021,14 +1901,10 @@ export async function getTopicImportanceLayer(
     relationships: any[];
     metadata: any;
 }> {
-    const topicTracker = getTopicGraphPerformanceTracker();
-    topicTracker.startTopicGraphOperation("getTopicImportanceLayer");
-
     try {
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {
-            topicTracker.endTopicGraphOperation();
             return {
                 topics: [],
                 relationships: [],
@@ -2043,7 +1919,6 @@ export async function getTopicImportanceLayer(
         }
 
         if (!websiteCollection.hierarchicalTopics) {
-            topicTracker.endTopicGraphOperation();
             return {
                 topics: [],
                 relationships: [],
@@ -2054,14 +1929,10 @@ export async function getTopicImportanceLayer(
             };
         }
 
-        topicTracker.recordDataFetch("start");
         await ensureTopicGraphCache(websiteCollection);
-        topicTracker.recordDataFetch("end");
 
         const cache = getTopicGraphCache(websiteCollection);
         if (!cache || !cache.isValid) {
-            topicTracker.recordCacheMiss();
-            topicTracker.endTopicGraphOperation();
             return {
                 topics: [],
                 relationships: [],
@@ -2072,16 +1943,11 @@ export async function getTopicImportanceLayer(
             };
         }
 
-        topicTracker.recordCacheHit();
-
-        topicTracker.recordProcessing("start");
         const allTopics = cache.topics || [];
         const allRelationships = cache.relationships || [];
         const topicMetrics = cache.topicMetrics || [];
 
         if (allTopics.length === 0) {
-            topicTracker.recordProcessing("end", 0);
-            topicTracker.endTopicGraphOperation();
             return {
                 topics: [],
                 relationships: [],
@@ -2288,9 +2154,6 @@ export async function getTopicImportanceLayer(
             layer: "topic_importance",
         };
 
-        topicTracker.recordProcessing("end", selectedTopics.length);
-        topicTracker.endTopicGraphOperation();
-
         return {
             topics: topicsWithMetrics,
             relationships: selectedRelationships,
@@ -2298,7 +2161,6 @@ export async function getTopicImportanceLayer(
         };
     } catch (error) {
         console.error("Error getting topic importance layer:", error);
-        topicTracker.endTopicGraphOperation();
         return {
             topics: [],
             relationships: [],
