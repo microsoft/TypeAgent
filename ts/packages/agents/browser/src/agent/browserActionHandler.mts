@@ -110,6 +110,7 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
+import { generatePageQuestions, generateGraphQuestions } from "./pageQnAActions.mjs";
 import {
     BrowserControl,
     defaultSearchProviders,
@@ -1584,6 +1585,10 @@ async function executeBrowserAction(
                         },
                     });
                 }
+                case "generatePageQuestions":
+                    return generatePageQuestions(action.parameters, context.sessionContext);
+                case "generateGraphQuestions":
+                    return generateGraphQuestions(action.parameters, context.sessionContext);
                 default:
                     // Should never happen.
                     throw new Error(

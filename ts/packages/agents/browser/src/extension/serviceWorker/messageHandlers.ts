@@ -458,6 +458,37 @@ export async function handleMessage(
             }
         }
 
+        case "generatePageQuestions": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "generatePageQuestions",
+                    parameters: {
+                        url: message.parameters.url,
+                        pageKnowledge: message.parameters.pageKnowledge,
+                    },
+                });
+            } catch (error) {
+                console.error("Error generating page questions:", error);
+                return { error: "Failed to generate page questions" };
+            }
+        }
+
+        case "generateGraphQuestions": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "generateGraphQuestions",
+                    parameters: {
+                        url: message.parameters.url,
+                        relatedEntities: message.parameters.relatedEntities,
+                        relatedTopics: message.parameters.relatedTopics,
+                    },
+                });
+            } catch (error) {
+                console.error("Error generating graph questions:", error);
+                return { error: "Failed to generate graph questions" };
+            }
+        }
+
         case "searchWebMemories": {
             return await handleSearchWebMemories(message);
         }

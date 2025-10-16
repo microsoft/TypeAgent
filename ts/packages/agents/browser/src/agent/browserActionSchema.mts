@@ -23,7 +23,9 @@ export type BrowserActions =
     | GetWebsiteStats
     | OpenSearchResult
     | ChangeSearchProvider
-    | SearchImageAction;
+    | SearchImageAction
+    | GeneratePageQuestions
+    | GenerateGraphQuestions;
 
 export type WebSearchResult = string;
 export type BrowserEntities = WebPageMoniker | WebSearchResult;
@@ -235,5 +237,49 @@ export type SearchImageAction = {
         searchTerm: string;
         // the number of images to show the user
         numImages: number;
+    };
+};
+
+// Generate suggested questions based on page content for chat interface
+export type GeneratePageQuestions = {
+    actionName: "generatePageQuestions";
+    parameters: {
+        // URL of the page to generate questions for
+        url: string;
+        // Extracted knowledge from the page
+        pageKnowledge: {
+            entities: Array<{
+                name: string;
+                type: string;
+                confidence: number;
+            }>;
+            keyTopics: string[];
+            summary: string;
+            contentMetrics?: {
+                readingTime: number;
+                wordCount: number;
+            };
+        };
+    };
+};
+
+// Generate broader questions based on knowledge graph connections
+export type GenerateGraphQuestions = {
+    actionName: "generateGraphQuestions";
+    parameters: {
+        // URL of the current page
+        url: string;
+        // Related entities from knowledge graph
+        relatedEntities: Array<{
+            name: string;
+            type?: string;
+            importance?: number;
+        }>;
+        // Related topics from knowledge graph
+        relatedTopics: Array<{
+            topicName?: string;
+            name?: string;
+            importance?: number;
+        }>;
     };
 };
