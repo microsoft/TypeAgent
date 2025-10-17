@@ -1074,20 +1074,24 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         }
 
         // send it
-        const result = await fetch(settings.endpoint, {
-            method: "POST",
-            headers: headerResult.data,
-            body: formData,
-        });
+        try {
+            const result = await fetch(settings.endpoint, {
+                method: "POST",
+                headers: headerResult.data,
+                body: formData,
+            });
 
-        if (!result.ok) {
-            return error(`Error ${result.status}: ${await result.text()}`);
+            if (!result.ok) {
+                return error(`Error ${result.status}: ${await result.text()}`);
+            }
+
+            return success({
+                endpoint: new URL(settings.endpoint),
+                headers: headerResult.data,
+                ...((await result.json()) as VideoGenerationJob),
+            });
+        } catch (err) {
+            return error(`Error: ${err}`);
         }
-
-        return success({
-            endpoint: new URL(settings.endpoint),
-            headers: headerResult.data,
-            ...((await result.json()) as VideoGenerationJob),
-        });
     }
 }
