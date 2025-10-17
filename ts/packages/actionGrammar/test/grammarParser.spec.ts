@@ -124,6 +124,19 @@ describe("Grammar Parser", () => {
             });
         });
 
+        it("variable expressions - optional", () => {
+            const grammar = "@<rule> = $(item:<ItemType>)?";
+            const result = parseGrammar("test.grammar", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "variable",
+                name: "item",
+                typeName: "ItemType",
+                ruleReference: true,
+                optional: true,
+            });
+        });
+
         it("group expressions", () => {
             const grammar = "@<rule> = (hello | hi) world";
             const result = parseGrammar("test.grammar", grammar);

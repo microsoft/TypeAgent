@@ -128,7 +128,7 @@ function writeExpression(
                             : expr.typeName,
                     );
                 }
-                result.push(")");
+                result.push(expr.optional ? ")?" : ")");
                 break;
         }
     }
