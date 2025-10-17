@@ -95,6 +95,15 @@ public class TestCommands : ICommandModule
     {
         IConversation conversation = EnsureConversation();
 
+        var lengths = await conversation.Messages.GetMessageLengthAsync([34], cancellationToken);
+        KnowProWriter.WriteJson(lengths);
+
+        var message = await conversation.Messages.GetAsync(34, cancellationToken);
+        KnowProWriter.WriteMessage(message);
+
+        var length = await conversation.Messages.GetMessageLengthAsync(34, cancellationToken);
+        KnowProWriter.WriteJson(length);
+
         // Hard coded test for now
         SearchSelectExpr select = new(
             new SearchTermGroup(SearchTermBooleanOp.Or)
@@ -109,7 +118,7 @@ public class TestCommands : ICommandModule
             null,
             cancellationToken
         );
-        KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
+        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults);
 
         DateRange? conversationDateRange = await conversation.GetDateRangeAsync();
         if (conversationDateRange is not null)
@@ -123,7 +132,6 @@ public class TestCommands : ICommandModule
             };
 
         }
-
         searchResults = await conversation.SearchConversationAsync(
             select,
             new SearchOptions()
@@ -133,7 +141,7 @@ public class TestCommands : ICommandModule
             },
             cancellationToken
         );
-        KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
+        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults, true);
     }
 
 

@@ -115,7 +115,7 @@ public static class ConversationExtensions
         var messageCount = await conversation.Messages.GetCountAsync();
         if (messageCount > 0)
         {
-            var start = await conversation.Messages.GetMessageTimestampAsync(0).ConfigureAwait(false);
+            var start = await conversation.Messages.GetMessageTimestampAsync(1).ConfigureAwait(false);
             var end = await conversation.Messages.GetMessageTimestampAsync(messageCount - 1).ConfigureAwait(false);
             if (start is not null)
             {

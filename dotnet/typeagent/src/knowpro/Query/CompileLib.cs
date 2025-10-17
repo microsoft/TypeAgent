@@ -7,6 +7,6 @@ internal static class CompileExtensions
 {
     public static bool IsNullOrEmpty(this SearchTermGroup searchTermGroup)
     {
-        return searchTermGroup is not null && !searchTermGroup.IsEmpty;
+        return searchTermGroup is null || searchTermGroup.IsEmpty;
     }
 }

@@ -73,7 +73,11 @@ public static void WriteEntity(ConcreteEntity? entity)
         }
     }
 
-    public static void WriteConversationSearchResults(IConversation conversation, ConversationSearchResult? searchResult)
+    public async static Task WriteConversationSearchResultsAsync(
+        IConversation conversation,
+        ConversationSearchResult? searchResult,
+        bool verbose = false
+    )
     {
         if (searchResult is null)
         {
@@ -83,8 +87,21 @@ public static void WriteEntity(ConcreteEntity? entity)
 
         if (!searchResult.MessageMatches.IsNullOrEmpty())
         {
-            WriteLineHeading("Message Ordinals");
-            WriteScoredMessagesAsync(conversation, searchResult.MessageMatches);
+            if (verbose)
+            {
+                foreach (var match in searchResult.MessageMatches)
+                {
+                    var message = await conversation.Messages.GetAsync(match.MessageOrdinal);
+                    WriteNameValue("MessageOrdinal", match.MessageOrdinal);
+                    WriteMessage(message);
+                    WriteLine();
+                }
+            }
+            else
+            {
+                WriteLineHeading("Message Ordinals");
+                WriteScoredMessageOrdinals(conversation, searchResult.MessageMatches);
+            }
         }
         if (!searchResult.KnowledgeMatches.IsNullOrEmpty())
         {
@@ -93,7 +110,10 @@ public static void WriteEntity(ConcreteEntity? entity)
         }
     }
 
-    public static void WriteScoredMessagesAsync(IConversation conversation, IList<ScoredMessageOrdinal> messageOrdinals)
+    public static void WriteScoredMessageOrdinals(
+        IConversation conversation,
+        IList<ScoredMessageOrdinal> messageOrdinals
+    )
     {
         WriteLine($"{messageOrdinals.Count} matches");
         WriteJson(messageOrdinals);

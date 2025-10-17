@@ -48,7 +48,9 @@ public class SqliteDatabase : IDisposable
             addParams(cmd);
         }
         using var reader = cmd.ExecuteReader();
-        return rowDeserializer(reader);
+        return !reader.Read()
+            ? throw new KnowProException(KnowProException.ErrorCode.StorageProviderDataNotFound, cmd.ToLogString())
+            : rowDeserializer(reader);
     }
 
     public object? GetOne(string commandText)

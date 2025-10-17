@@ -20,6 +20,16 @@ internal static class SqliteEx
         cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value);
     }
 
+    public static void AddParameter(this SqliteCommand cmd, string name, string value)
+    {
+        cmd.Parameters.AddWithValue(name, value);
+    }
+
+    public static void AddParameter(this SqliteCommand cmd, string name, int value)
+    {
+        cmd.Parameters.AddWithValue(name, value);
+    }
+
     public static void AddIdParameters(this SqliteCommand cmd, string[] placeHolders, IList<int> ids)
     {
         ArgumentVerify.ThrowIfNotEqual(placeHolders.Length, ids.Count, nameof(ids));
@@ -38,5 +48,22 @@ internal static class SqliteEx
             list.Add(cb(reader));
         }
         return list;
+    }
+
+    public static string ToLogString(this SqliteCommand cmd)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Sql:");
+        sb.AppendLine(cmd.CommandText);
+
+        if (cmd.Parameters.Count > 0)
+        {
+            sb.AppendLine("Parameters:");
+            foreach (SqliteParameter param in cmd.Parameters)
+            {
+                sb.AppendLine($"{param.ParameterName} = {param.Value ?? "null"}");
+            }
+        }
+        return sb.ToString();
     }
 }

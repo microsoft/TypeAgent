@@ -218,7 +218,7 @@ public class ConsoleWriter
         if (!string.IsNullOrEmpty(title))
         {
             Write(" ");
-            Write(title);
+            WriteLine(title);
         }
         Write('#', title.Length);
         WriteLine();

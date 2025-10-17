@@ -93,14 +93,6 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
 
-        /*
-        // TODO: Bulk operations
-        IList<TMessage> messages = [];
-        foreach (int msgId in messageIds)
-        {
-            messages.Add(Get(msgId));
-        }
-        */
         List<TMessage> messages = new List<TMessage>(messageIds.Count);
         foreach (var messageRow in MessagesTable.GetMessages(_db, messageIds))
         {
@@ -360,12 +352,7 @@ FROM Messages WHERE msg_id = @msg_id",
         {
             cmd.AddParameter("@msg_id", msgId);
         },
-        (reader) =>
-        {
-            return reader.Read() ?
-                   ReadMessageRow(reader) :
-                   throw new ArgumentException($"No message at ordinal {msgId}");
-        }
+        ReadMessageRow
         );
     }
 
