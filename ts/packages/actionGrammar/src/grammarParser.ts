@@ -13,7 +13,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   <Expression> ::= ( <StringExpr> | <VariableExpr> | <RuleRefExpr> | <GroupExpr> )+
  *   <StringExpr> ::= [^$()|-+*[]{}?]+*
- *   <VariableExpr> ::= "$(" <VariableSpecifier> ")"
+ *   <VariableExpr> ::= "$(" <VariableSpecifier> ( ")" | ")?" )
  *
  *    // TODO: Support nested instead of just Rule Ref
  *   <VariableSpecifier> ::= <VarName> (":" (<TypeName> | <RuleName>))?
@@ -30,7 +30,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <BooleanValue> = "true" | "false"
  *   <NumberValue> = <NumberLiteral>
  *   <StringValue> = <StringLiteral>>
- *   <VarReference> = "$(" <VarName> ")"*
+ *   <VarReference> = "$(" <VarName> ")"
  *
  *   <VarName> = <Identifier>
  *   <TypeName> = <Identifier>
@@ -80,6 +80,7 @@ type VarDefExpr = {
     name: string;
     typeName: string;
     ruleReference: boolean;
+    optional?: boolean;
 };
 
 // Value
@@ -353,6 +354,11 @@ class CacheGrammarParser {
                 this.skipWhitespace(2);
                 const v = this.parseVariableSpecifier();
                 expNodes.push(v);
+                if (this.isAt(")?")) {
+                    v.optional = true;
+                    this.skipWhitespace(2);
+                    continue;
+                }
                 this.consume(")", "at end of variable");
                 continue;
             }
@@ -368,14 +374,8 @@ class CacheGrammarParser {
                     this.skipWhitespace(2);
                     continue;
                 }
-                if (this.isAt(")")) {
-                    this.skipWhitespace(1);
-                    continue;
-                }
-
-                this.throwUnexpectedCharError(
-                    `')' expected to close expression.`,
-                );
+                this.consume(")", "to close expression");
+                continue;
             }
 
             const s = this.parseStrExpr();
