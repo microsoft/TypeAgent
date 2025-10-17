@@ -11,7 +11,8 @@ public class KnowProWriter : ConsoleWriter
     {
         await foreach (var message in conversation.Messages)
         {
-            WriteMetadata(message);
+            WriteMessage(message);
+            WriteLine();
         }
     }
 
