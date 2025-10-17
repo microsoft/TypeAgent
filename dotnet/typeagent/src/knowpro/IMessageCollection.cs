@@ -7,13 +7,14 @@ public interface IMessageCollection<TMessage> : IAsyncCollection<TMessage>
     where TMessage : IMessage
 {
     ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default);
-    ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
+    ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
 }
 
 public interface IMessageCollection : IReadOnlyAsyncCollection<IMessage>
 {
     ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default);
-    ValueTask<IList<int>> GetMessageLengthsAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
+    ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
+    ValueTask<string?> GetMessageTimestampAsync(int messageOrdinal, CancellationToken cancellationToken = default);
 }
 
 public static class MessageCollectionExtensions
@@ -26,7 +27,7 @@ public static class MessageCollectionExtensions
     {
 
         int messageCount = messageOrdinals.Count;
-        var messageLengths = await messages.GetMessageLengthsAsync(messageOrdinals).ConfigureAwait(false);
+        var messageLengths = await messages.GetMessageLengthAsync(messageOrdinals).ConfigureAwait(false);
         int totalCharCount = 0;
         for (int i = 0; i < messageCount; ++i)
         {

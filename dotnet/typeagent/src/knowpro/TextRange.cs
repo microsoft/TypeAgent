@@ -3,7 +3,11 @@
 
 namespace TypeAgent.KnowPro;
 
-public class TextRange
+/// <summary>
+/// A text range within a conversation
+/// If 'end' is undefined, the text range represents a point location, identified by 'start'
+/// </summary>
+public class TextRange : IComparable<TextRange>
 {
     public TextRange(int messageOrdinal)
     {
@@ -56,5 +60,43 @@ public class TextRange
     private TextLocation AsEnd()
     {
         return new TextLocation(Start.MessageOrdinal, Start.ChunkOrdinal + 1);
+    }
+
+    public static int Compare(TextRange x, TextRange y)
+    {
+        int cmp = TextLocation.Compare(x.Start, y.Start);
+        if (cmp != 0)
+        {
+            return cmp;
+        }
+        if (x.End is null && y.End is null)
+        {
+            return cmp;
+        }
+        cmp = TextLocation.Compare(x.End ?? x.Start, y.End ?? y.Start);
+        return cmp;
+    }
+
+    public static bool IsInTextRange(TextRange outerRange, TextRange innerRange)
+    {
+        // outer start must be <= inner start
+        // inner end must be < outerEnd (which is exclusive)
+        int cmpStart = TextLocation.Compare(outerRange.Start, innerRange.Start);
+        if (outerRange.End is null && innerRange.End is null) {
+            // Since both ends are undefined, we have an point location, not a range.
+            // Points must be equal
+            return cmpStart == 0;
+        }
+        int cmpEnd = TextLocation.Compare(
+            // innerRange.end must be < outerRange end
+            innerRange.End ?? innerRange.Start,
+            outerRange.End ?? outerRange.Start
+        );
+        return cmpStart <= 0 && cmpEnd < 0;
+    }
+
+    public int CompareTo(TextRange? other)
+    {
+        return other is null ? 1 : Compare(this, other);
     }
 }

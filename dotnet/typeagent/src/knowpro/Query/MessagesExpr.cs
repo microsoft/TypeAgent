@@ -35,8 +35,9 @@ internal class MessagesFromKnowledgeExpr : QueryOpExpr<MessageAccumulator>
             if (!knowledgeMatches.SemanticRefMatches.IsNullOrEmpty())
             {
                 knowledgeTypeHitCount++;
+                // TODO: This can retrieve TextRanges only, not entire SemanticRefs. 
                 var semanticRefs = await context.SemanticRefs.GetAsync(
-                    knowledgeMatches.SemanticRefMatches.ToOrdinals()
+                    knowledgeMatches.SemanticRefMatches
                 ).ConfigureAwait(false);
                 int count = semanticRefs.Count;
                 for (int i = 0; i < count; ++i)

@@ -48,9 +48,6 @@ internal static class LookupExtensions
         return filtered ?? scoredOrdinals;
     }
 
-    // TODO:
-    // Use the pre-shredded ranges here and a direct query for them
-    //
     public static async ValueTask<IList<ScoredSemanticRefOrdinal>?> FilterAsync(
         QueryEvalContext context,
         IList<ScoredSemanticRefOrdinal> scoredOrdinals,

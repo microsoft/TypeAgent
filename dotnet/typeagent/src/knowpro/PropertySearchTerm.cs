@@ -54,19 +54,13 @@ public class PropertySearchTerm : ISearchTerm
 
     internal bool isEntityPropertyTerm()
     {
-        if (PropertyName is KnowledgePropertyNameSearchTerm st)
-        {
-            switch (st.Value) {
-                default:
-                    break;
-                case "name":
-                case "type":
-                    return true;
-            }
-        }
-        return false;
+        return (PropertyName is KnowledgePropertyNameSearchTerm term) && term.Value.IsEntityProperty;
     }
 
+    internal bool IsActionPropertyTerm()
+    {
+        return (PropertyName is KnowledgePropertyNameSearchTerm term) && term.Value.IsActionProperty;
+    }
 }
 
 public interface IPropertyNameSearchTerm { }

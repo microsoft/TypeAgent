@@ -8,6 +8,20 @@ internal interface IQuerySemanticRefPredicate
     bool Eval(QueryEvalContext context, SemanticRef semanticRef);
 }
 
+internal class KnowledgeTypePredicate : IQuerySemanticRefPredicate
+{
+    public KnowledgeTypePredicate(KnowledgeType type)
+    {
+        Type = type;
+    }
+
+    public KnowledgeType Type { get; }
+
+    public bool Eval(QueryEvalContext context, SemanticRef semanticRef)
+    {
+        return semanticRef.KnowledgeType == Type;
+    }
+}
 
 internal class FilterMatchTermExpr : QueryOpExpr<SemanticRefAccumulator?>
 {
@@ -34,10 +48,18 @@ internal class FilterMatchTermExpr : QueryOpExpr<SemanticRefAccumulator?>
         {
             return accumulator;
         }
+        var semanticRefs = await context.SemanticRefs.GetAsync(accumulator.ToOrdinals()).ConfigureAwait(false);
+
         var filtered = new SemanticRefAccumulator(accumulator.SearchTermMatches);
-        filtered.SetMatches(
-            await accumulator.GetFilteredMatchesAsync(context, Filter.Eval).ConfigureAwait(false)
-        );
+        int i = 0;
+        foreach (var match in accumulator.GetMatches())
+        {
+            if (Filter.Eval(context, semanticRefs[i]))
+            {
+                filtered.SetMatch(match);
+            }
+            ++i;
+        }
         return filtered;
     }
 }

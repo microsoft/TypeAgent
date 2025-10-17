@@ -18,8 +18,7 @@ internal class QueryEvalContext
         CancellationToken = cancellationToken;
 
         Conversation = conversation;
-
-        _cache = cache ?? new ConversationCache(conversation);
+        _cache = cache;
 
         MatchedTerms = new TermSet();
         MatchedPropertyTerms = new PropertyTermSet();
@@ -27,13 +26,24 @@ internal class QueryEvalContext
 
     public IConversation Conversation { get; }
 
-    public IAsyncCollectionReader<SemanticRef> SemanticRefs => _cache.SemanticRefs;
+    public IConversationCache Cache
+    {
+        get
+        {
+            _cache ??= new ConversationCache(Conversation);
+            return _cache;
+        }
+    }
 
-    public IAsyncCollectionReader<IMessage> Messages => _cache.Messages;
+    public IAsyncCollectionReader<SemanticRef> SemanticRefs => Cache.SemanticRefs;
+
+    public IAsyncCollectionReader<IMessage> Messages => Cache.Messages;
 
     public ITermToSemanticRefIndex SemanticRefIndex => Conversation.SemanticRefIndex;
 
     public IPropertyToSemanticRefIndex PropertyIndex => Conversation.SecondaryIndexes.PropertyToSemanticRefIndex;
+
+    public ITimestampToTextRangeIndex TimestampIndex => Conversation.SecondaryIndexes.TimestampIndex;
 
     public TermSet MatchedTerms { get; private set; }
 

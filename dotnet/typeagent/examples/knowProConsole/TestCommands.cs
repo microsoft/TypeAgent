@@ -38,7 +38,8 @@ public class TestCommands : ICommandModule
         // Hard coded test for now
         SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
         {
-            Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
+            "Children of Time",
+            "book"
         };
         await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
@@ -50,7 +51,8 @@ public class TestCommands : ICommandModule
 
         searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
         {
-            Terms = [new SearchTerm("Children of Physics"), new SearchTerm("book")]
+            "Children of Physics",
+            "book"
         };
         await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
     }
@@ -72,10 +74,8 @@ public class TestCommands : ICommandModule
         // Hard coded test for now
         SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
         {
-            Terms = [
-                new PropertySearchTerm("genre", "sci-fi"),
-                new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
-            ]
+            { "genre", "sci-fi" },
+            { KnowledgePropertyName.EntityName, "Children of Time" },
         };
         await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
@@ -95,14 +95,21 @@ public class TestCommands : ICommandModule
     {
         IConversation conversation = EnsureConversation();
 
+        var lengths = await conversation.Messages.GetMessageLengthAsync([34], cancellationToken);
+        KnowProWriter.WriteJson(lengths);
+
+        var message = await conversation.Messages.GetAsync(34, cancellationToken);
+        KnowProWriter.WriteMessage(message);
+
+        var length = await conversation.Messages.GetMessageLengthAsync(34, cancellationToken);
+        KnowProWriter.WriteJson(length);
+
         // Hard coded test for now
         SearchSelectExpr select = new(
             new SearchTermGroup(SearchTermBooleanOp.Or)
             {
-                Terms = [
-                    new PropertySearchTerm("genre", "sci-fi"),
-                    new PropertySearchTerm(KnowledgePropertyName.EntityName, "Children of Time"),
-                ]
+                { "genre", "sci-fi" },
+                { KnowledgePropertyName.EntityName, "Children of Time" }
             }
         );
 
@@ -111,8 +118,20 @@ public class TestCommands : ICommandModule
             null,
             cancellationToken
         );
-        KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
+        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults);
 
+        DateRange? conversationDateRange = await conversation.GetDateRangeAsync();
+        if (conversationDateRange is not null)
+        {
+            select.When = new WhenFilter()
+            {
+                DateRange = new() {
+                    Start = conversationDateRange.Value.Start,
+                    End = conversationDateRange.Value.Start.AddMinutes(10)
+                }
+            };
+
+        }
         searchResults = await conversation.SearchConversationAsync(
             select,
             new SearchOptions()
@@ -122,7 +141,7 @@ public class TestCommands : ICommandModule
             },
             cancellationToken
         );
-        KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
+        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults, true);
     }
 
 

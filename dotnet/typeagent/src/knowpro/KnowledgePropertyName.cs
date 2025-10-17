@@ -5,46 +5,56 @@ namespace TypeAgent.KnowPro;
 
 public class KnowledgePropertyName
 {
+    enum NameType
+    {
+        Other,
+        Entity,
+        Action,
+        Facet
+    }
     /// <summary>
     /// The name of an entity
     /// </summary>
-    public static readonly KnowledgePropertyName EntityName = new("name");
+    public static readonly KnowledgePropertyName EntityName = new("name", NameType.Entity);
     /// <summary>
     /// the type of an entity
     /// </summary>
-    public static readonly KnowledgePropertyName EntityType = new("type");
+    public static readonly KnowledgePropertyName EntityType = new("type", NameType.Entity);
 
-    public static readonly KnowledgePropertyName FacetName = new("facet.name");
-    public static readonly KnowledgePropertyName FacetValue = new("facet.value");
+    public static readonly KnowledgePropertyName FacetName = new("facet.name", NameType.Facet);
+    public static readonly KnowledgePropertyName FacetValue = new("facet.value", NameType.Facet);
 
     /// <summary>
     /// the verb of an action
     /// </summary>
-    public static readonly KnowledgePropertyName Verb = new("verb");
+    public static readonly KnowledgePropertyName Verb = new("verb", NameType.Action);
     /// <summary>
     /// the subject of an action
     /// </summary>
-    public static readonly KnowledgePropertyName Subject = new("subject");
+    public static readonly KnowledgePropertyName Subject = new("subject", NameType.Action);
     /// <summary>
     /// the object of an action
     /// </summary>
-    public static readonly KnowledgePropertyName Object = new("object");
+    public static readonly KnowledgePropertyName Object = new("object", NameType.Action);
     /// <summary>
     /// The indirectObject of an action
     /// </summary>
-    public static readonly KnowledgePropertyName IndirectObject = new("indirectObject");
+    public static readonly KnowledgePropertyName IndirectObject = new("indirectObject", NameType.Action);
     /// <summary>
     /// Tag
     /// </summary>
-    public static readonly KnowledgePropertyName Tag = new("tag");
+    public static readonly KnowledgePropertyName Tag = new("tag", NameType.Other);
     /// <summary>
     /// Topic
     /// </summary>
-    public static readonly KnowledgePropertyName Topic = new("topic");
+    public static readonly KnowledgePropertyName Topic = new("topic", NameType.Other);
 
-    private KnowledgePropertyName(string value)
+    private NameType _nameType;
+
+    private KnowledgePropertyName(string value, NameType nameType)
     {
         Value = value;
+        _nameType = nameType;
     }
 
     public string Value { get; }
@@ -55,4 +65,8 @@ public class KnowledgePropertyName
     {
         return propertyName.Value;
     }
+
+    internal bool IsEntityProperty => _nameType == NameType.Entity;
+
+    internal bool IsActionProperty => _nameType == NameType.Action;
 }

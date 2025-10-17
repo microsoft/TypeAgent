@@ -5,6 +5,19 @@ namespace TypeAgent.KnowPro;
 
 public struct DateRange
 {
+    public DateRange()
+    {
+    }
+
+    public DateRange(TimestampRange tr)
+    {
+        Start = DateTimeOffset.Parse(tr.StartTimestamp);
+        if (!string.IsNullOrEmpty(tr.EndTimestamp))
+        {
+            End = DateTimeOffset.Parse(tr.EndTimestamp);
+        }
+    }
+
     /// <summary>
     /// The start date of the range (inclusive).
     /// </summary>
@@ -16,5 +29,6 @@ public struct DateRange
 
     [JsonIgnore]
     public readonly bool HasEnd => End is not null;
+
 }
 

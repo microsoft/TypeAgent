@@ -9,11 +9,13 @@ internal class QueryCompiler
 {
     private IConversation _conversation;
     private List<SearchTermGroup> _allSearchTerms;
+    private List<SearchTermGroup> _allScopeSearchTerms;
 
     public QueryCompiler(IConversation conversation)
     {
         _conversation = conversation;
         _allSearchTerms = [];
+        _allScopeSearchTerms = [];
     }
 
     public float EntityTermMatchWeight { get; set; } = 100;
@@ -211,7 +213,7 @@ internal class QueryCompiler
             switch (term.Value)
             {
                 default:
-                    if (propertyTerm.isEntityPropertyTerm())
+                    if (term.Value.IsEntityProperty)
                     {
                         propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
                     }
@@ -242,7 +244,89 @@ internal class QueryCompiler
 
     private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)
     {
-        // TODO
-        return ValueTask.FromResult<GetScopeExpr>(null);
+        if (termGroup is null && filter is null)
+        {
+            return ValueTask.FromResult<GetScopeExpr>(null);
+
+        }
+        var scopeSelectors = new List<IQueryTextRangeSelector>();
+
+        if (filter is not null)
+        {
+            if (filter.DateRange is not null)
+            {
+                scopeSelectors.Add(new TextRangesInDateRangeSelector(filter.DateRange.Value));
+            }
+
+            if (!filter.ScopeDefiningTerms.IsNullOrEmpty())
+            {
+                AddTermsScopeSelector(filter.ScopeDefiningTerms, scopeSelectors);
+            }
+            else if (!termGroup.IsNullOrEmpty())
+            {
+                // Treat any actions as inherently scope selecting.
+                var actionTermsGroup = GetActionTermsFromSearchGroup(termGroup);
+                if (actionTermsGroup is not null)
+                {
+                    AddTermsScopeSelector(actionTermsGroup, scopeSelectors);
+                }
+            }
+
+            if (!filter.TextRangesInScope.IsNullOrEmpty())
+            {
+                scopeSelectors.Add(new QueryTextRangeSelector(filter.TextRangesInScope));
+            }
+
+            if (!filter.Tags.IsNullOrEmpty())
+            {
+                var tagGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax);
+                tagGroup.Add(KnowledgePropertyName.Tag, filter.Tags, true);
+                AddTermsScopeSelector(tagGroup, scopeSelectors);
+            }
+
+            if (!filter.TagMatchingTerms.IsNullOrEmpty())
+            {
+                AddTermsScopeSelector(termGroup, scopeSelectors, new KnowledgeTypePredicate(KnowledgeType.STag));
+            }
+        }
+        else if (!termGroup.IsNullOrEmpty())
+        {
+            // Treat any actions as inherently scope selecting.
+            var actionTermsGroup = GetActionTermsFromSearchGroup(termGroup);
+            if (actionTermsGroup is not null)
+            {
+                AddTermsScopeSelector(actionTermsGroup, scopeSelectors);
+            }
+        }
+
+        GetScopeExpr? scopeExpr = !scopeSelectors.IsNullOrEmpty()
+            ? new GetScopeExpr(scopeSelectors)
+            : null;
+        return ValueTask.FromResult(scopeExpr);
+    }
+
+    private void AddTermsScopeSelector(
+        SearchTermGroup termGroup,
+        List<IQueryTextRangeSelector> scopeSelectors,
+        IQuerySemanticRefPredicate? predicate = null
+    )
+    {
+        var (searchTermsUsed, selectExpr) = CompileMessageSearchGroup(termGroup, predicate);
+        scopeSelectors.Add(new TextRangesFromMessagesSelector(selectExpr));
+        _allScopeSearchTerms.AddRange(searchTermsUsed);
+    }
+
+    private SearchTermGroup? GetActionTermsFromSearchGroup(SearchTermGroup searchGroup)
+    {
+        SearchTermGroup? actionGroup = null;
+        foreach (var term in searchGroup.Terms)
+        {
+            if (term is PropertySearchTerm pst && pst.IsActionPropertyTerm())
+            {
+                actionGroup ??= new SearchTermGroup(SearchTermBooleanOp.And);
+                actionGroup.Terms.Add(term);
+            }
+        }
+        return actionGroup;
     }
 }
