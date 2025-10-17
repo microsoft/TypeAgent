@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 global using System.ComponentModel.DataAnnotations;
 global using System.Net;
 global using System.Net.Http.Headers;
