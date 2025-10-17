@@ -111,6 +111,19 @@ public class TestCommands : ICommandModule
         );
         KnowProWriter.WriteConversationSearchResults(conversation, searchResults);
 
+        DateRange? conversationDateRange = await conversation.GetDateRangeAsync();
+        if (conversationDateRange is not null)
+        {
+            select.When = new WhenFilter()
+            {
+                DateRange = new() {
+                    Start = conversationDateRange.Value.Start,
+                    End = conversationDateRange.Value.Start.AddMinutes(10)
+                }
+            };
+
+        }
+
         searchResults = await conversation.SearchConversationAsync(
             select,
             new SearchOptions()

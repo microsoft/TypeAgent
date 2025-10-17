@@ -96,6 +96,38 @@ public class ConsoleWriter
         PopColor();
     }
 
+
+    public static void WriteNameValue(string name, string? value, int paddedNameLength = -1, string? indent = null)
+    {
+        if (!string.IsNullOrEmpty(indent))
+        {
+            Write(indent);
+        }
+        if (paddedNameLength > 0)
+        {
+            name = name.PadRight(paddedNameLength);
+        }
+        if (!string.IsNullOrEmpty(value))
+        {
+            WriteLine($"{name}  {value}");
+        }
+        else
+        {
+            WriteLine(name);
+        }
+    }
+
+    public static void WriteNameValue<T>(string name, T value, int paddedNameLength = -1, string? indent = null)
+    {
+        WriteNameValue(name, value is not null ? value.ToString() : string.Empty, paddedNameLength, indent);
+    }
+
+    public static void WriteNameValue<T>(string name, IEnumerable<T> values, int paddedNameLength = -1, string? indent = null)
+    {
+        string value = string.Join("; ", values);
+        WriteNameValue<string>(name, value, paddedNameLength, indent);
+    }
+
     public static void WriteJson(object value)
     {
         WriteLine(Json.Stringify(value, true));

@@ -14,7 +14,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
     where TMessage : class, IMessage, new()
     where TMeta : IMessageMetadata
 {
-    SqliteDatabase _db;
+    private SqliteDatabase _db;
     private int _count = -1;
 
     public SqliteMessageCollection(SqliteDatabase db)
@@ -272,13 +272,6 @@ public class SqliteMessageCollection : IMessageCollection
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageIds, nameof(messageIds));
 
-        /*
-        IList<IMessage> messages = [];
-        foreach (int msgId in messageIds)
-        {
-            messages.Add(Get(msgId));
-        }
-        */
         List<IMessage> messages = new List<IMessage>(messageIds.Count);
         foreach (var messageRow in MessagesTable.GetMessages(_db, messageIds))
         {
@@ -307,6 +300,28 @@ public class SqliteMessageCollection : IMessageCollection
         return ValueTask.FromResult(messageList);
     }
 
+    public int GetMessageLength(int messageOrdinal) => MessagesTable.GetMessageLength(_db, messageOrdinal);
+
+    public ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetMessageLength(messageOrdinal));
+    }
+
+    public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals) => MessagesTable.GetMessageLengths(_db, messageOrdinals);
+
+    public ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
+    {
+        IList<int> lengths = [.. GetMessageLengths(messageOrdinals)];
+        return ValueTask.FromResult(lengths);
+    }
+
+    public string? GetMessageTimestamp(int messageOrdinal) => MessagesTable.GetMessageTimestamp(_db, messageOrdinal);
+
+    public ValueTask<string?> GetMessageTimestampAsync(int messageOrdinal, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetMessageTimestamp(messageOrdinal));
+    }
+
     IMessage FromMessageRow(MessageRow messageRow)
     {
         IMessage message = (IMessage)Activator.CreateInstance(_messageType);
@@ -324,21 +339,6 @@ public class SqliteMessageCollection : IMessageCollection
 
         return message;
     }
-
-    public int GetMessageLength(int messageOrdinal) => MessagesTable.GetMessageLength(_db, messageOrdinal);
-
-    public ValueTask<int> GetMessageLengthAsync(int messageOrdinal, CancellationToken cancellationToken = default)
-    {
-        return ValueTask.FromResult(GetMessageLength(messageOrdinal));
-    }
-
-    public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals) => MessagesTable.GetMessageLengths(_db, messageOrdinals);
-
-    public ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
-    {
-        IList<int> lengths = [.. GetMessageLengths(messageOrdinals)];
-        return ValueTask.FromResult(lengths);
-    }
 }
 
 
@@ -354,7 +354,7 @@ internal static class MessagesTable
         KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
 
         return db.Get(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id = @msg_id",
         (cmd) =>
         {
@@ -377,7 +377,7 @@ FROM Messages WHERE msg_id = @msg_id",
 
             var rows = db.Enumerate(
                 $@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id IN ({string.Join(", ", placeholderIds)})
 ORDER BY msg_id",
                 (cmd) => cmd.AddIdParameters(placeholderIds, batch),
@@ -426,10 +426,25 @@ ORDER BY msg_id",
         }
     }
 
+    public static string? GetMessageTimestamp(SqliteDatabase db, int msgId)
+    {
+        KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
+
+        return db.Get(@"
+SELECT start_timestamp
+FROM Messages WHERE msg_id = @msg_id",
+            (cmd) =>
+            {
+                cmd.AddParameter("@msg_id", msgId);
+            },
+            (reader) => reader.GetStringOrNull(0)
+        );
+    }
+
     public static IAsyncEnumerable<MessageRow> GetAllMessagesAsync(SqliteDatabase db, CancellationToken cancellation = default)
     {
         return db.EnumerateAsync<MessageRow>(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages ORDER BY msg_id",
             ReadMessageRow,
             cancellation
@@ -443,7 +458,7 @@ FROM Messages ORDER BY msg_id",
         ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
 
         return db.Enumerate(@"
-SELECT chunks, chunk_uri, start_timestamp, tags, metadata, extra
+SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
 ORDER BY msg_id",
             (cmd) =>

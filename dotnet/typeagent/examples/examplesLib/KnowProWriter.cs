@@ -11,7 +11,7 @@ public class KnowProWriter : ConsoleWriter
     {
         await foreach (var message in conversation.Messages)
         {
-            WriteJson(message);
+            WriteMetadata(message);
         }
     }
 
@@ -31,7 +31,34 @@ public class KnowProWriter : ConsoleWriter
         }
     }
 
-    public static void WriteEntity(ConcreteEntity? entity)
+    public static void WriteMessage(IMessage message)
+    {
+        PushColor(ConsoleColor.Cyan);
+        WriteNameValue("Timestamp", message.Timestamp);
+        if (!message.Tags.IsNullOrEmpty())
+        {
+            // TODO:write tag
+        }
+        WriteMetadata(message);
+        PopColor();
+
+        foreach (var chunk in message.TextChunks)
+        {
+            Write(chunk);
+        }
+        WriteLine();
+    }
+
+    public static void WriteMetadata(IMessage message)
+    {
+        if (message.Metadata is not null)
+        {
+            Write("Metadata: ");
+            WriteJson(message.Metadata);
+        }
+    }
+
+public static void WriteEntity(ConcreteEntity? entity)
     {
         if (entity is not null)
         {
