@@ -2690,6 +2690,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      action-grammar:
+        specifier: workspace:*
+        version: link:../actionGrammar
       action-schema:
         specifier: workspace:*
         version: link:../actionSchema

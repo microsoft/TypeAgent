@@ -32,6 +32,10 @@ import {
     AppAgentStateConfig,
     appAgentStateKeys,
 } from "./appAgentStateConfig.js";
+import { GrammarStore } from "../../../cache/dist/cache/types.js";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import fs from "node:fs";
+import { Grammar, grammarFromJson } from "action-grammar";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
@@ -90,6 +94,32 @@ export const alwaysEnabledAgents = {
     actions: [DispatcherName],
     commands: ["system"],
 };
+
+function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
+    if (actionConfig.grammarFile === undefined) {
+        return undefined;
+    }
+
+    let source: string;
+    if (typeof actionConfig.grammarFile === "string") {
+        const fullPath = getPackageFilePath(actionConfig.grammarFile);
+        source = fs.readFileSync(fullPath, "utf-8");
+        const isActionGrammar = actionConfig.grammarFile.endsWith(".ag.json");
+        if (!isActionGrammar) {
+            throw new Error(
+                `Unsupported grammar file extension: ${actionConfig.grammarFile}`,
+            );
+        }
+    } else {
+        if (actionConfig.grammarFile.format !== "ag") {
+            throw new Error(
+                `Unsupported grammar file extension: ${actionConfig.grammarFile}`,
+            );
+        }
+        source = actionConfig.grammarFile.content;
+    }
+    return grammarFromJson(JSON.parse(source));
+}
 
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
@@ -237,6 +267,7 @@ export class AppAgentManager implements ActionConfigProvider {
 
     public async addProvider(
         provider: AppAgentProvider,
+        actionGrammarStore: GrammarStore | undefined,
         actionEmbeddingCache?: EmbeddingCache,
     ) {
         const semanticMapP: Promise<void>[] = [];
@@ -246,6 +277,8 @@ export class AppAgentManager implements ActionConfigProvider {
                 name,
                 manifest,
                 semanticMapP,
+
+                actionGrammarStore,
                 provider,
                 actionEmbeddingCache,
             );
@@ -259,6 +292,7 @@ export class AppAgentManager implements ActionConfigProvider {
         appAgentName: string,
         manifest: AppAgentManifest,
         semanticMapP: Promise<void>[],
+        actionGrammarStore: GrammarStore | undefined,
         provider?: AppAgentProvider,
         actionEmbeddingCache?: EmbeddingCache,
     ) {
@@ -288,6 +322,17 @@ export class AppAgentManager implements ActionConfigProvider {
                             actionEmbeddingCache,
                         ),
                     );
+                }
+
+                if (actionGrammarStore) {
+                    try {
+                        const g = loadGrammar(config);
+                        if (g) {
+                            actionGrammarStore.addGrammar(schemaName, g);
+                        }
+                    } catch {
+                        // REVIEW: Ignore errors for now.
+                    }
                 }
             } catch (e: any) {
                 schemaErrors.set(schemaName, e);
@@ -321,6 +366,7 @@ export class AppAgentManager implements ActionConfigProvider {
         appAgentName: string,
         manifest: AppAgentManifest,
         appAgent: AppAgent,
+        actionGrammarStore?: GrammarStore,
     ) {
         if (this.agents.has(appAgentName)) {
             throw new Error(`App agent '${appAgentName}' already exists`);
@@ -332,6 +378,7 @@ export class AppAgentManager implements ActionConfigProvider {
             appAgentName,
             manifest,
             semanticMapP,
+            actionGrammarStore,
         );
         record.appAgent = appAgent;
 
@@ -340,7 +387,7 @@ export class AppAgentManager implements ActionConfigProvider {
         debug("Finish action embeddings");
     }
 
-    private cleanupAgent(appAgentName: string) {
+    private cleanupAgent(appAgentName: string, grammarStore?: GrammarStore) {
         for (const [schemaName, config] of this.actionConfigs) {
             if (getAppAgentName(schemaName) !== appAgentName) {
                 continue;
@@ -351,13 +398,19 @@ export class AppAgentManager implements ActionConfigProvider {
             if (config.transient) {
                 delete this.transientAgents[schemaName];
             }
+            if (grammarStore) {
+                grammarStore.removeGrammar(schemaName);
+            }
         }
     }
 
-    public async removeAgent(appAgentName: string) {
+    public async removeAgent(
+        appAgentName: string,
+        grammarStore?: GrammarStore,
+    ) {
         const record = this.getRecord(appAgentName);
         this.agents.delete(appAgentName);
-        this.cleanupAgent(appAgentName);
+        this.cleanupAgent(appAgentName, grammarStore);
 
         await this.closeSessionContext(record);
         if (record.appAgent !== undefined) {

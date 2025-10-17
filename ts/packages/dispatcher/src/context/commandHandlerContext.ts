@@ -319,11 +319,19 @@ async function addAppAgentProviders(
         }
 
         const inlineAppProvider = createBuiltinAppAgentProvider(context);
-        await context.agents.addProvider(inlineAppProvider, embeddingCache);
+        await context.agents.addProvider(
+            inlineAppProvider,
+            context.agentCache.grammarStore,
+            embeddingCache,
+        );
 
         if (appAgentProviders) {
             for (const provider of appAgentProviders) {
-                await context.agents.addProvider(provider, embeddingCache);
+                await context.agents.addProvider(
+                    provider,
+                    context.agentCache.grammarStore,
+                    embeddingCache,
+                );
             }
         }
         if (embeddingCachePath) {
@@ -361,7 +369,7 @@ export async function installAppProvider(
     provider: AppAgentProvider,
 ) {
     // Don't use embedding cache for a new agent.
-    await context.agents.addProvider(provider);
+    await context.agents.addProvider(provider, context.agentCache.grammarStore);
 
     await setAppAgentStates(context);
 

@@ -16,4 +16,5 @@ export type MatchResult = {
 
 export interface GrammarStore {
     addGrammar(namespace: string, grammar: any): void;
+    removeGrammar(namespace: string): void;
 }

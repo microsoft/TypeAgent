@@ -4,11 +4,29 @@
 import { Grammar, matchGrammar } from "action-grammar";
 import { MatchOptions } from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "../cache/types.js";
+import { getSchemaNamespaceKey } from "../cache/cache.js";
+import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 
 export class GrammarStoreImpl implements GrammarStore {
     private readonly grammars: Map<string, any> = new Map();
-    public addGrammar(namespace: string, grammar: Grammar): void {
-        this.grammars.set(namespace, grammar);
+    public constructor(
+        private readonly schemaInfoProvider: SchemaInfoProvider | undefined,
+    ) {}
+    public addGrammar(schemaName: string, grammar: Grammar): void {
+        const namespaceKey = getSchemaNamespaceKey(
+            schemaName,
+            undefined,
+            this.schemaInfoProvider,
+        );
+        this.grammars.set(namespaceKey, grammar);
+    }
+    public removeGrammar(schemaName: string): void {
+        const namespaceKey = getSchemaNamespaceKey(
+            schemaName,
+            undefined,
+            this.schemaInfoProvider,
+        );
+        this.grammars.delete(namespaceKey);
     }
     public match(request: string, options?: MatchOptions): MatchResult[] {
         const namespaceKeys = options?.namespaceKeys;

@@ -58,6 +58,15 @@ function getFailedResult(message: string): ProcessRequestActionResult {
         },
     };
 }
+
+export function getSchemaNamespaceKey(
+    name: string,
+    activityName: string | undefined,
+    schemaInfoProvider: SchemaInfoProvider | undefined,
+) {
+    return `${name},${schemaInfoProvider?.getActionSchemaFileHash(name) ?? ""},${activityName ?? ""}`;
+}
+
 // Namespace policy. Combines schema name, file hash, and activity name to indicate enabling/disabling of matching.
 export function getSchemaNamespaceKeys(
     schemaNames: string[],
@@ -65,9 +74,8 @@ export function getSchemaNamespaceKeys(
     schemaInfoProvider: SchemaInfoProvider | undefined,
 ) {
     // Current namespace keys policy is just combining schema name its file hash
-    return schemaNames.map(
-        (name) =>
-            `${name},${schemaInfoProvider?.getActionSchemaFileHash(name) ?? ""},${activityName ?? ""}`,
+    return schemaNames.map((name) =>
+        getSchemaNamespaceKey(name, activityName, schemaInfoProvider),
     );
 }
 
@@ -99,7 +107,7 @@ export class AgentCache {
         cacheOptions?: CacheOptions,
         logger?: Telemetry.Logger,
     ) {
-        this._grammarStore = new GrammarStoreImpl();
+        this._grammarStore = new GrammarStoreImpl(schemaInfoProvider);
         this._constructionStore = new ConstructionStoreImpl(
             explainerName,
             cacheOptions,
@@ -129,7 +137,6 @@ export class AgentCache {
     public get grammarStore(): GrammarStore {
         return this._grammarStore;
     }
-
     public get constructionStore(): ConstructionStore {
         return this._constructionStore;
     }
