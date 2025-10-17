@@ -39,6 +39,7 @@ import {
     getTopicViewportNeighborhood,
     getTopicMetrics,
     getUrlContentBreakdown,
+    getTopicTimelines,
 } from "./graphActions.mjs";
 import {
     checkAIModelStatus,
@@ -111,6 +112,8 @@ export async function handleKnowledgeAction(
             return await getTopicMetrics(parameters, context);
         case "getUrlContentBreakdown":
             return await getUrlContentBreakdown(parameters, context);
+        case "getTopicTimelines":
+            return await getTopicTimelines(parameters, context);
 
         // Query Actions
         case "getRecentKnowledgeItems":

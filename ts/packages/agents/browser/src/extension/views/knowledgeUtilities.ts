@@ -1203,6 +1203,16 @@ export interface AnalyticsServices {
 
 export interface SearchServices {
     performSearch(query: string, filters?: any): Promise<SearchResult>;
+    getTopicTimelines(parameters: {
+        topicNames: string[];
+        maxTimelineEntries?: number;
+        timeRange?: {
+            startDate?: string;
+            endDate?: string;
+        };
+        includeRelatedTopics?: boolean;
+        neighborhoodDepth?: number;
+    }): Promise<any>;
 }
 
 export interface DiscoveryServices {
@@ -1328,6 +1338,19 @@ export class DefaultSearchServices implements SearchServices {
             );
             throw error; // Re-throw so the panel can handle the error
         }
+    }
+
+    async getTopicTimelines(parameters: {
+        topicNames: string[];
+        maxTimelineEntries?: number;
+        timeRange?: {
+            startDate?: string;
+            endDate?: string;
+        };
+        includeRelatedTopics?: boolean;
+        neighborhoodDepth?: number;
+    }): Promise<any> {
+        return this.chromeService.getTopicTimelines(parameters);
     }
 }
 

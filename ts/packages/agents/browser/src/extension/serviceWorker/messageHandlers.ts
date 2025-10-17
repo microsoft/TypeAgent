@@ -533,6 +533,34 @@ export async function handleMessage(
             return await handleGetTopicMetrics(message);
         }
 
+        case "getTopicTimelines": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getTopicTimelines",
+                    parameters: {
+                        topicNames: message.parameters.topicNames,
+                        maxTimelineEntries: message.parameters.maxTimelineEntries,
+                        timeRange: message.parameters.timeRange,
+                        includeRelatedTopics: message.parameters.includeRelatedTopics,
+                        neighborhoodDepth: message.parameters.neighborhoodDepth,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting topic timelines:", error);
+                return {
+                    success: false,
+                    timelines: [],
+                    metadata: {
+                        totalEntries: 0,
+                        timeRange: { earliest: "", latest: "" },
+                        topicsWithActivity: 0,
+                    },
+                    error: error instanceof Error ? error.message : "Unknown error",
+                };
+            }
+        }
+
         case "hybridSearch": {
             return await handleHybridSearch(message);
         }

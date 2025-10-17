@@ -523,6 +523,22 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async getTopicTimelines(parameters: {
+        topicNames: string[];
+        maxTimelineEntries?: number;
+        timeRange?: {
+            startDate?: string;
+            endDate?: string;
+        };
+        includeRelatedTopics?: boolean;
+        neighborhoodDepth?: number;
+    }): Promise<any> {
+        return this.sendMessage({
+            type: "getTopicTimelines",
+            parameters,
+        });
+    }
+
     async notifyAutoIndexSettingChanged(enabled: boolean): Promise<void> {
         await this.sendMessage({
             type: "notifyAutoIndexSettingChanged",

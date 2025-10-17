@@ -568,6 +568,380 @@ export class KnowledgeSearchPanel {
         return div.innerHTML;
     }
 
+    private async loadTopicTimelinePreviews(topics: string[]): Promise<void> {
+        try {
+            // Call new backend function to get timeline data
+            const response = await this.services.getTopicTimelines({
+                topicNames: topics,
+                maxTimelineEntries: 5, // Just preview data
+                includeRelatedTopics: true,
+                neighborhoodDepth: 1
+            });
+
+            if (response.success) {
+                // Render timeline previews for each topic
+                response.timelines.forEach((timeline: any) => {
+                    this.renderTimelinePreview(timeline);
+                });
+            }
+        } catch (error) {
+            console.error("Failed to load topic timeline previews:", error);
+        }
+    }
+
+    private renderTimelinePreview(timeline: any): void {
+        const previewElement = document.getElementById(`timeline-preview-${timeline.topicName}`);
+        if (!previewElement) return;
+
+        const recentActivities = timeline.activities.slice(0, 3);
+        
+        const previewHtml = `
+            <div class="timeline-stats">
+                <span class="activity-count">${timeline.totalActivity} activities</span>
+                <div class="activity-types">
+                    ${timeline.activityDistribution.bookmarks > 0 ? 
+                        `<span class="activity-type bookmarks">${timeline.activityDistribution.bookmarks} bookmarks</span>` : ''}
+                    ${timeline.activityDistribution.visits > 0 ? 
+                        `<span class="activity-type visits">${timeline.activityDistribution.visits} visits</span>` : ''}
+                    ${timeline.activityDistribution.extractions > 0 ? 
+                        `<span class="activity-type extractions">${timeline.activityDistribution.extractions} extractions</span>` : ''}
+                </div>
+            </div>
+            <div class="timeline-preview-items">
+                ${recentActivities.map((activity: any) => `
+                    <div class="timeline-item-preview">
+                        <div class="activity-icon ${activity.activityType}">
+                            <i class="bi bi-${this.getActivityIcon(activity.activityType)}"></i>
+                        </div>
+                        <div class="activity-details">
+                            <div class="activity-title">${this.escapeHtml(activity.title)}</div>
+                            <div class="activity-meta">
+                                <span class="activity-date">${this.formatDate(activity.timestamp)}</span>
+                                <span class="activity-domain">${activity.domain}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="timeline-actions">
+                <button class="btn btn-sm btn-outline-primary view-full-timeline" 
+                        data-topic="${this.escapeHtml(timeline.topicName)}">
+                    View Full Timeline
+                </button>
+            </div>
+        `;
+        
+        previewElement.innerHTML = previewHtml;
+    }
+
+    private getActivityIcon(activityType: string): string {
+        switch (activityType) {
+            case 'bookmark': return 'bookmark-fill';
+            case 'visit': return 'eye-fill';
+            case 'extraction': return 'cpu-fill';
+            default: return 'circle-fill';
+        }
+    }
+
+    private setupTopicEventListeners(topicsContent: HTMLElement): void {
+        // Add click event listeners to topic tags
+        topicsContent
+            .querySelectorAll(".topic-search-btn")
+            .forEach((searchBtn) => {
+                searchBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicElement = (e.currentTarget as HTMLElement).closest(
+                        ".clickable-topic",
+                    ) as HTMLElement;
+                    const topicName = topicElement?.dataset.topic;
+                    if (topicName) {
+                        this.performSearchWithQuery(topicName);
+                    }
+                });
+            });
+
+        topicsContent
+            .querySelectorAll(".topic-graph-btn")
+            .forEach((graphBtn) => {
+                graphBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicElement = (e.currentTarget as HTMLElement).closest(
+                        ".clickable-topic",
+                    ) as HTMLElement;
+                    const topicName = topicElement?.dataset.topic;
+                    if (topicName) {
+                        // Navigate to topic graph view for hierarchical topic exploration
+                        window.location.href = `topicGraphView.html?topic=${encodeURIComponent(topicName)}`;
+                    }
+                });
+            });
+
+        // Add timeline button listeners
+        topicsContent
+            .querySelectorAll(".topic-timeline-btn")
+            .forEach((timelineBtn) => {
+                timelineBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicElement = (e.currentTarget as HTMLElement).closest(
+                        ".clickable-topic",
+                    ) as HTMLElement;
+                    const topicName = topicElement?.dataset.topic;
+                    if (topicName) {
+                        this.showFullTimeline(topicName);
+                    }
+                });
+            });
+
+        // Add view full timeline button listeners
+        topicsContent
+            .querySelectorAll(".view-full-timeline")
+            .forEach((viewBtn) => {
+                viewBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicName = (e.currentTarget as HTMLElement).dataset.topic;
+                    if (topicName) {
+                        this.showFullTimeline(topicName);
+                    }
+                });
+            });
+
+        // Default click behavior (search)
+        topicsContent
+            .querySelectorAll(".clickable-topic")
+            .forEach((topicElement) => {
+                topicElement.addEventListener("click", (e) => {
+                    // Only handle if not clicking on buttons
+                    if (
+                        !(e.target as HTMLElement).closest(".topic-actions")
+                    ) {
+                        const topicName = (e.currentTarget as HTMLElement)
+                            .dataset.topic;
+                        if (topicName) {
+                            this.performSearchWithQuery(topicName);
+                        }
+                    }
+                });
+            });
+    }
+
+    private async showFullTimeline(topicName: string): Promise<void> {
+        const modal = document.getElementById("topic-timeline-modal");
+        if (!modal) return;
+
+        // Show loading state
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Timeline for "${topicName}"</h5>
+                    <button class="btn-close modal-close-btn" title="Close timeline">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center">
+                        <i class="bi bi-hourglass-split"></i>
+                        Loading full timeline...
+                    </div>
+                </div>
+            </div>
+        `;
+        modal.style.display = "block";
+
+        // Add close button event listener
+        const loadingCloseBtn = modal.querySelector('.btn-close');
+        if (loadingCloseBtn) {
+            loadingCloseBtn.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+        }
+
+        try {
+            // Get full timeline data
+            const response = await this.services.getTopicTimelines({
+                topicNames: [topicName],
+                maxTimelineEntries: 100,
+                includeRelatedTopics: true,
+                neighborhoodDepth: 2
+            });
+
+            if (response.success && response.timelines.length > 0) {
+                const timeline = response.timelines.find((t: any) => t.topicName === topicName);
+                if (timeline) {
+                    this.renderFullTimeline(timeline, modal);
+                } else {
+                    this.showTimelineError(modal, `No timeline data available for "${topicName}"`);
+                }
+            } else {
+                this.showTimelineError(modal, "No timeline data available");
+            }
+        } catch (error) {
+            this.showTimelineError(modal, "Failed to load timeline data");
+        }
+    }
+
+    private renderFullTimeline(timeline: any, modal: HTMLElement): void {
+        const modalContent = `
+            <div class="modal-content timeline-modal">
+                <div class="modal-header">
+                    <div class="modal-header-content">
+                        <h5>Timeline for "${timeline.topicName}"</h5>
+                        <div class="timeline-summary">
+                            <span class="total-activities">${timeline.totalActivity} total activities</span>
+                            <span class="time-range">${this.getTimeRangeText(timeline.activities)}</span>
+                        </div>
+                    </div>
+                    <button class="btn-close modal-close-btn" title="Close timeline">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="timeline-filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="bookmark">Bookmarks (${timeline.activityDistribution.bookmarks})</button>
+                        <button class="filter-btn" data-filter="visit">Visits (${timeline.activityDistribution.visits})</button>
+                        <button class="filter-btn" data-filter="extraction">Extractions (${timeline.activityDistribution.extractions})</button>
+                    </div>
+                    <div class="timeline-container">
+                        ${this.renderTimelineItems(timeline.activities)}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary modal-close-footer-btn">Close</button>
+                </div>
+            </div>
+        `;
+
+        modal.innerHTML = modalContent;
+
+        // Add close button event listeners
+        const closeButtons = modal.querySelectorAll('.modal-close-btn, .modal-close-footer-btn');
+        closeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+        });
+
+        // Add filter event listeners
+        modal.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const filter = (e.target as HTMLElement).dataset.filter;
+                this.filterTimelineItems(filter, modal);
+            });
+        });
+    }
+
+    private renderTimelineItems(activities: any[]): string {
+        return `
+            <div class="timeline">
+                ${activities.map((activity, index) => `
+                    <div class="timeline-item" data-activity-type="${activity.activityType}">
+                        <div class="timeline-content">
+                            <div class="timeline-header">
+                                <h6 class="activity-title">
+                                    <a href="${activity.url}" target="_blank">${this.escapeHtml(activity.title)}</a>
+                                </h6>
+                                <span class="activity-time">${this.formatTimestamp(activity.timestamp)}</span>
+                            </div>
+                            <div class="timeline-details">
+                                <div class="activity-meta">
+                                    <span class="domain-badge">${activity.domain}</span>
+                                    <span class="relevance-badge">Relevance: ${Math.round(activity.relevance * 100)}%</span>
+                                    <span class="activity-type-badge ${activity.activityType}">
+                                        <i class="bi bi-${this.getActivityIcon(activity.activityType)}"></i>
+                                        ${activity.activityType}
+                                    </span>
+                                </div>
+                                ${activity.snippet && activity.snippet !== 'undefined' ? `
+                                    <div class="activity-snippet">
+                                        <p>${this.escapeHtml(activity.snippet)}</p>
+                                    </div>
+                                ` : ''}
+                                ${activity.knowledgeChunk && activity.knowledgeChunk !== 'undefined' ? `
+                                    <div class="knowledge-chunk">
+                                        <h6>Related Knowledge:</h6>
+                                        <p>${this.escapeHtml(activity.knowledgeChunk)}</p>
+                                    </div>
+                                ` : ''}
+                                ${activity.metadata ? `
+                                    <div class="activity-metadata">
+                                        ${activity.metadata.visitCount ? `<span>Visits: ${activity.metadata.visitCount}</span>` : ''}
+                                        ${activity.metadata.confidence ? `<span>Confidence: ${Math.round(activity.metadata.confidence * 100)}%</span>` : ''}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    private getTimeRangeText(activities: any[]): string {
+        if (activities.length === 0) return 'No activities';
+        
+        const dates = activities.map(a => new Date(a.timestamp));
+        const earliest = new Date(Math.min(...dates.map(d => d.getTime())));
+        const latest = new Date(Math.max(...dates.map(d => d.getTime())));
+        
+        return `${earliest.toLocaleDateString()} - ${latest.toLocaleDateString()}`;
+    }
+
+    private formatTimestamp(timestamp: string): string {
+        const date = new Date(timestamp);
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+
+    private filterTimelineItems(filter: string | null | undefined, modal: HTMLElement): void {
+        const timelineItems = modal.querySelectorAll('.timeline-item');
+        const filterBtns = modal.querySelectorAll('.filter-btn');
+        
+        // Update active filter button
+        filterBtns.forEach(btn => btn.classList.remove('active'));
+        const activeBtn = modal.querySelector(`[data-filter="${filter}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+        
+        // Show/hide timeline items
+        timelineItems.forEach(item => {
+            const itemElement = item as HTMLElement;
+            if (filter === 'all' || !filter) {
+                itemElement.style.display = 'block';
+            } else {
+                const activityType = itemElement.dataset.activityType;
+                itemElement.style.display = activityType === filter ? 'block' : 'none';
+            }
+        });
+    }
+
+    private showTimelineError(modal: HTMLElement, errorMessage: string): void {
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Timeline Error</h5>
+                    <button class="btn-close modal-close-btn" title="Close">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center text-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <p>${errorMessage}</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary modal-close-footer-btn">Close</button>
+                </div>
+            </div>
+        `;
+
+        // Add close button event listeners
+        const closeButtons = modal.querySelectorAll('.modal-close-btn, .modal-close-footer-btn');
+        closeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+        });
+    }
+
     setConnectionStatus(isConnected: boolean): void {
         // Update search functionality based on connection status
         const searchInput = document.getElementById(
@@ -828,18 +1202,29 @@ export class KnowledgeSearchPanel {
         const topicsContent = document.getElementById("topTopicsContent");
 
         if (topicsSection && topicsContent && topics.length > 0) {
+            // Create enhanced topic display with timeline preview
             const topicTagsHtml = topics
                 .map(
                     (topic) => `
-                    <div class="topic-tag clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Left-click to search, right-click to view topic hierarchy">
-                        <span>${this.escapeHtml(topic)}</span>
-                        <div class="topic-actions">
-                            <button class="btn btn-sm topic-search-btn" title="Search for topic">
-                                <i class="bi bi-search"></i>
-                            </button>
-                            <button class="btn btn-sm topic-graph-btn" title="View topic hierarchy">
-                                <i class="bi bi-diagram-3"></i>
-                            </button>
+                    <div class="topic-tag-enhanced clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Left-click to search, right-click to view topic hierarchy">
+                        <div class="topic-header">
+                            <span class="topic-name">${this.escapeHtml(topic)}</span>
+                            <div class="topic-actions">
+                                <button class="btn btn-sm topic-search-btn" title="Search for topic">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                                <button class="btn btn-sm topic-graph-btn" title="View topic hierarchy">
+                                    <i class="bi bi-diagram-3"></i>
+                                </button>
+                                <button class="btn btn-sm topic-timeline-btn" title="View topic timeline">
+                                    <i class="bi bi-clock-history"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="topic-timeline-preview" id="timeline-preview-${this.escapeHtml(topic)}">
+                            <div class="timeline-loading">
+                                <i class="bi bi-hourglass-split"></i> Loading timeline...
+                            </div>
                         </div>
                     </div>
                 `,
@@ -847,60 +1232,19 @@ export class KnowledgeSearchPanel {
                 .join("");
 
             topicsContent.innerHTML = `
-                <div class="topic-tags">
+                <div class="topic-tags-enhanced">
                     ${topicTagsHtml}
+                </div>
+                <div id="topic-timeline-modal" class="modal">
+                    <!-- Timeline modal content will be inserted here -->
                 </div>
             `;
 
-            // Add click event listeners to topic tags
-            topicsContent
-                .querySelectorAll(".topic-search-btn")
-                .forEach((searchBtn) => {
-                    searchBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        const topicElement = (e.target as HTMLElement).closest(
-                            ".clickable-topic",
-                        ) as HTMLElement;
-                        const topicName = topicElement?.dataset.topic;
-                        if (topicName) {
-                            this.performSearchWithQuery(topicName);
-                        }
-                    });
-                });
-
-            topicsContent
-                .querySelectorAll(".topic-graph-btn")
-                .forEach((graphBtn) => {
-                    graphBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        const topicElement = (e.target as HTMLElement).closest(
-                            ".clickable-topic",
-                        ) as HTMLElement;
-                        const topicName = topicElement?.dataset.topic;
-                        if (topicName) {
-                            // Navigate to topic graph view for hierarchical topic exploration
-                            window.location.href = `topicGraphView.html?topic=${encodeURIComponent(topicName)}`;
-                        }
-                    });
-                });
-
-            // Default click behavior (search)
-            topicsContent
-                .querySelectorAll(".clickable-topic")
-                .forEach((topicElement) => {
-                    topicElement.addEventListener("click", (e) => {
-                        // Only handle if not clicking on buttons
-                        if (
-                            !(e.target as HTMLElement).closest(".topic-actions")
-                        ) {
-                            const topicName = (e.currentTarget as HTMLElement)
-                                .dataset.topic;
-                            if (topicName) {
-                                this.performSearchWithQuery(topicName);
-                            }
-                        }
-                    });
-                });
+            // Load timeline previews for top 4 topics
+            this.loadTopicTimelinePreviews(topics.slice(0, 4));
+            
+            // Add event listeners
+            this.setupTopicEventListeners(topicsContent);
 
             topicsSection.style.display = "block";
         } else if (topicsSection) {
