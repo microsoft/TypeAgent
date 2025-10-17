@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { compileGrammar, Grammar } from "./grammarCompiler.js";
-import { parseGrammar } from "./grammarParser.js";
+import { compileGrammar } from "./grammarCompiler.js";
+import { parseGrammarRules } from "./grammarRuleParser.js";
+import { Grammar } from "./grammarTypes.js";
 
-export function loadGrammar(fileName: string, content: string): Grammar {
-    const definitions = parseGrammar(fileName, content);
+export function loadGrammarRules(fileName: string, content: string): Grammar {
+    const definitions = parseGrammarRules(fileName, content);
     const grammar = compileGrammar(definitions);
     return grammar;
 }

@@ -47,11 +47,11 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <SingleLineComment> ::= "//" [^\n]* "\n"
  *   <MultiLineComment> ::= "/*" .* "*\/"
  */
-export function parseGrammar(
+export function parseGrammarRules(
     fileName: string,
     content: string,
 ): RuleDefinition[] {
-    const parser = new CacheGrammarParser(fileName, content);
+    const parser = new GrammarRuleParser(fileName, content);
     const definitions = parser.parse();
     debugParse(JSON.stringify(definitions, undefined, 2));
     return definitions;
@@ -147,7 +147,7 @@ export function isExpressionSpecialChar(char: string) {
     return expressionsSpecialChar.includes(char);
 }
 
-class CacheGrammarParser {
+class GrammarRuleParser {
     private curr: number = 0;
     constructor(
         private readonly fileName: string,

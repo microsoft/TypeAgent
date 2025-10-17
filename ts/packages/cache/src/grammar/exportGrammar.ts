@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Expr, Rule, RuleDefinition, writeGrammar } from "action-grammar/rules";
+import {
+    Expr,
+    Rule,
+    RuleDefinition,
+    writeGrammarRules,
+    ValueNode,
+} from "action-grammar/rules";
 import {
     Construction,
     getDefaultMatchValueTranslator,
@@ -13,8 +19,7 @@ import {
     MatchSet,
     TransformInfo,
 } from "../constructions/matchPart.js";
-import { loadConstructionCacheFile } from "../cache/store.js";
-import { ValueNode } from "../../../actionGrammar/dist/grammarParser.js";
+import { loadConstructionCacheFile } from "../cache/constructionStore.js";
 import { setObjectProperty } from "common-utils";
 import { MatchedValueTranslator } from "../constructions/constructionValue.js";
 
@@ -47,7 +52,7 @@ export async function convertConstructionFileToGrammar(fileName: string) {
         }
         convertConstructions(state, constructions.constructions);
     }
-    return writeGrammar(Array.from(state.definitions));
+    return writeGrammarRules(Array.from(state.definitions));
 }
 
 export function convertConstructionsToGrammar(constructions: Construction[]) {
@@ -57,7 +62,7 @@ export function convertConstructionsToGrammar(constructions: Construction[]) {
         ruleNameNextIds: new Map(),
     };
     convertConstructions(state, constructions);
-    return writeGrammar(Array.from(state.definitions));
+    return writeGrammarRules(Array.from(state.definitions));
 }
 
 function convertConstructions(state: State, constructions: Construction[]) {

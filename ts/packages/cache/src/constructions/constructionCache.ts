@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { HistoryContext } from "../explanation/requestAction.js";
-import { Construction, MatchResult } from "./constructions.js";
+import { Construction, ConstructionMatchResult } from "./constructions.js";
 import { MatchPart, MatchSet, isMatchPart } from "./matchPart.js";
 import { Transforms } from "./transforms.js";
 
@@ -233,7 +233,7 @@ export class ConstructionCache {
         request: string,
         matchConfig: MatchConfig,
         constructionNamespace: Constructions,
-    ): MatchResult[] {
+    ): ConstructionMatchResult[] {
         return constructionNamespace.constructions.flatMap((construction) => {
             return construction.match(request, matchConfig);
         });
@@ -287,7 +287,10 @@ export class ConstructionCache {
     }
 
     // For matching
-    public match(request: string, options?: MatchOptions): MatchResult[] {
+    public match(
+        request: string,
+        options?: MatchOptions,
+    ): ConstructionMatchResult[] {
         const namespaceKeys = options?.namespaceKeys;
         if (namespaceKeys?.length === 0) {
             return [];
@@ -304,7 +307,7 @@ export class ConstructionCache {
 
         // If the useTranslators is undefined use all the translators
         // otherwise filter the translators based on the useTranslators
-        const matches: MatchResult[] = [];
+        const matches: ConstructionMatchResult[] = [];
         const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
         for (const [
             name,

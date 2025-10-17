@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ValueNode } from "./grammarParser.js";
+import { ValueNode } from "./grammarRuleParser.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
-import { Grammar, GrammarRule } from "./grammarCompiler.js";
+import { Grammar, GrammarRule } from "./grammarTypes.js";
 
 const debugMatch = registerDebug("typeagent:grammar:match");
 

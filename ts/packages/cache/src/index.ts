@@ -11,7 +11,7 @@ export type {
     PromptEntity,
 } from "./explanation/requestAction.js";
 
-export type { ConstructionStore } from "./cache/store.js";
+export type { ConstructionStore } from "./cache/constructionStore.js";
 export type { MatchOptions } from "./constructions/constructionCache.js";
 export type {
     GenericExplanationResult,
@@ -50,7 +50,8 @@ export {
     getPropertyInfo,
 } from "./explanation/requestAction.js";
 export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
-export { MatchResult, WildcardMode } from "./constructions/constructions.js";
+export { MatchResult } from "./cache/types.js";
+export { WildcardMode } from "./constructions/constructions.js";
 
 // Testing
 export { getNamespaceForCache } from "./explanation/schemaInfoProvider.js";

@@ -15,14 +15,22 @@ import {
     doCacheAction,
     isValidActionSchemaFileHash,
 } from "../explanation/schemaInfoProvider.js";
-import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
+import {
+    ConstructionStore,
+    ConstructionStoreImpl,
+} from "./constructionStore.js";
 import { ExplainerFactory } from "./factory.js";
-import { NamespaceKeyFilter } from "../constructions/constructionCache.js";
+import {
+    MatchOptions,
+    NamespaceKeyFilter,
+} from "../constructions/constructionCache.js";
 import {
     ExplainWorkQueue,
     ExplanationOptions,
     ProcessExplanationResult,
 } from "./explainWorkQueue.js";
+import { GrammarStoreImpl } from "../grammar/grammarStore.js";
+import { GrammarStore, MatchResult } from "./types.js";
 
 export type ProcessRequestActionResult = {
     explanationResult: ProcessExplanationResult;
@@ -50,8 +58,7 @@ function getFailedResult(message: string): ProcessRequestActionResult {
         },
     };
 }
-
-// Construction namespace policy
+// Namespace policy. Combines schema name, file hash, and activity name to indicate enabling/disabling of matching.
 export function getSchemaNamespaceKeys(
     schemaNames: string[],
     activityName: string | undefined,
@@ -79,6 +86,7 @@ function splitSchemaNamespaceKey(namespaceKey: string): {
 
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
+    private _grammarStore: GrammarStoreImpl;
     private readonly explainWorkQueue: ExplainWorkQueue;
     // Function to return whether the namespace key matches to the current schema file's hash.
     private readonly namespaceKeyFilter?: NamespaceKeyFilter;
@@ -91,6 +99,7 @@ export class AgentCache {
         cacheOptions?: CacheOptions,
         logger?: Telemetry.Logger,
     ) {
+        this._grammarStore = new GrammarStoreImpl();
         this._constructionStore = new ConstructionStoreImpl(
             explainerName,
             cacheOptions,
@@ -115,6 +124,10 @@ export class AgentCache {
                 );
             };
         }
+    }
+
+    public get grammarStore(): GrammarStore {
+        return this._grammarStore;
     }
 
     public get constructionStore(): ConstructionStore {
@@ -170,27 +183,24 @@ export class AgentCache {
                 options?.namespaceSuffix,
             );
 
-            const store = this._constructionStore;
-            if (store.isEnabled()) {
-                // Make sure that we don't already have a construction that will match (but reject because of options)
-                const matchResult = store.match(requestAction.request, {
-                    rejectReferences: false,
-                    history: requestAction.history,
-                    namespaceKeys,
-                });
+            // Make sure that we don't already have match (but rejected because of options)
+            const matchResult = this.match(requestAction.request, {
+                rejectReferences: false,
+                history: requestAction.history,
+                namespaceKeys,
+            });
 
-                const actions = executableActions.map((e) => e.action);
-                for (const match of matchResult) {
-                    if (
-                        equalNormalizedObject(
-                            match.match.actions.map((e) => e.action),
-                            actions,
-                        )
-                    ) {
-                        return getFailedResult(
-                            `Existing construction matches the request but rejected.`,
-                        );
-                    }
+            const actions = executableActions.map((e) => e.action);
+            for (const match of matchResult) {
+                if (
+                    equalNormalizedObject(
+                        match.match.actions.map((e) => e.action),
+                        actions,
+                    )
+                ) {
+                    return getFailedResult(
+                        `Existing construction matches the request but rejected.`,
+                    );
                 }
             }
 
@@ -216,6 +226,7 @@ export class AgentCache {
                 elapsedMs,
             });
 
+            const store = this._constructionStore;
             const generateConstruction = cache && store.isEnabled();
             if (generateConstruction && explanation.success) {
                 const construction = explanation.construction;
@@ -284,5 +295,46 @@ export class AgentCache {
             this.schemaInfoProvider,
             ignoreSourceHash,
         );
+    }
+
+    public match(request: string, options?: MatchOptions): MatchResult[] {
+        const allMatches: MatchResult[] = [];
+        allMatches.push(...this._grammarStore.match(request, options));
+        const store = this._constructionStore;
+        if (store.isEnabled()) {
+            allMatches.push(...store.match(request, options));
+        }
+        return allMatches.sort((a, b) => {
+            // REVIEW: temporary heuristics to get better result with wildcards
+
+            // Prefer non-wildcard matches
+            if (a.wildcardCharCount === 0) {
+                if (b.wildcardCharCount !== 0) {
+                    return -1;
+                }
+            } else {
+                if (b.wildcardCharCount === 0) {
+                    return 1;
+                }
+            }
+
+            // Prefer less implicit parameters
+            if (a.implicitParameterCount !== b.implicitParameterCount) {
+                return a.implicitParameterCount - b.implicitParameterCount;
+            }
+
+            // Prefer more non-optional parts
+            if (b.nonOptionalCount !== a.nonOptionalCount) {
+                return b.nonOptionalCount - a.nonOptionalCount;
+            }
+
+            // Prefer more matched parts
+            if (b.matchedCount !== a.matchedCount) {
+                return b.matchedCount - a.matchedCount;
+            }
+
+            // Prefer less wildcard characters
+            return a.wildcardCharCount - b.wildcardCharCount;
+        });
     }
 }

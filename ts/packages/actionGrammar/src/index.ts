@@ -1,5 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { loadGrammar } from "./grammarLoader.js";
+export type { GrammarJson, Grammar } from "./grammarTypes.js";
+export { grammarFromJson } from "./grammarDeserializer.js";
+export { grammarToJson } from "./grammarSerializer.js";
+export { loadGrammarRules } from "./grammarLoader.js";
 export { matchGrammar } from "./grammarMatcher.js";

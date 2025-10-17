@@ -3,8 +3,19 @@
 
 import fs from "node:fs";
 import { Args, Command } from "@oclif/core";
-import { loadGrammar, matchGrammar } from "action-grammar";
+import {
+    grammarFromJson,
+    loadGrammarRules,
+    matchGrammar,
+} from "action-grammar";
 
+async function load(fileName: string) {
+    const content = await fs.promises.readFile(fileName, "utf-8");
+
+    return content === "{"
+        ? grammarFromJson(JSON.parse(content))
+        : loadGrammarRules(fileName, content);
+}
 export default class MatchCommand extends Command {
     static description = "Match input against a grammar";
 
@@ -19,12 +30,7 @@ export default class MatchCommand extends Command {
     async run(): Promise<void> {
         const { args } = await this.parse(MatchCommand);
 
-        const grammarContent = await fs.promises.readFile(
-            args.grammar,
-            "utf-8",
-        );
-        const grammar = loadGrammar(args.grammar, grammarContent);
-
+        const grammar = await load(args.grammar);
         const result = matchGrammar(grammar, args.input);
         if (result) {
             console.log("Matched:");
