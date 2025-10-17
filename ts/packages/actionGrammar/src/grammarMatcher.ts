@@ -13,12 +13,13 @@ const debugMatch = registerDebug("typeagent:grammar:match");
 const separatorRegExpStr = "\\s\\p{P}";
 const separatorRegExp = new RegExp(`[${separatorRegExpStr}]+`, "yu");
 
+const separatedRegExp = /[^\s\p{P}][\s\p{P}]|[\s\p{P}]./uy;
 function isSeparated(request: string, index: number) {
     if (index === 0 || index === request.length) {
         return true;
     }
-    separatorRegExp.lastIndex = index;
-    return separatorRegExp.test(request);
+    separatedRegExp.lastIndex = index - 1;
+    return separatedRegExp.test(request);
 }
 
 type MatchedValue =
@@ -402,7 +403,8 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                     `  Checking number expr at ${curr} with${state.pendingWildcard ? "" : "out"} wildcard`,
                 );
                 if (state.pendingWildcard !== undefined) {
-                    const regexp = /[\s\p{P}]*?([0-9a-fxbo\+\-\.]+)/giu;
+                    const regexp =
+                        /[\s\p{P}]*?(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/giu;
                     regexp.lastIndex = curr;
                     while (true) {
                         const match = regexp.exec(request);
@@ -416,9 +418,6 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
 
                         const wildcardEnd = match.index;
                         const newIndex = wildcardEnd + match[0].length;
-                        if (!isSeparated(request, newIndex)) {
-                            continue;
-                        }
                         debugMatch(
                             `  Matched number at ${wildcardEnd} to ${newIndex}`,
                         );
@@ -435,7 +434,8 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         // continue to look for possible longer matches
                     }
                 } else {
-                    const regexp = /[\s\p{P}]*?([0-9a-fxbo\+\-\.]+)/iuy;
+                    const regexp =
+                        /[\s\p{P}]*?(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/iuy;
                     regexp.lastIndex = curr;
                     const m = regexp.exec(request);
                     if (m === null) {
@@ -446,10 +446,6 @@ function matchRules(grammar: Grammar, request: string): MatchResult[] {
                         continue;
                     }
                     const newIndex = curr + m[0].length;
-                    if (!isSeparated(request, newIndex)) {
-                        continue;
-                    }
-
                     debugMatch(`  Matched number at ${curr} to ${newIndex}`);
                     state.index = newIndex;
                     addValue(state, part.variable, n);
