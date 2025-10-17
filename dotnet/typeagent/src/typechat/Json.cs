@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace TypeAgent.Common;
+namespace Microsoft.TypeChat;
 
 /// <summary>
 /// Json makes the idiomatic Javascript Json.Stringify and Json.Parse APIs available to .NET by
@@ -9,25 +9,13 @@ namespace TypeAgent.Common;
 /// </summary>
 public class Json
 {
-    public const string EmptyObject = "{}";
-    public const string EmptyArray = "[]";
     /// <summary>
-    /// Create default serialization options used by the validator
+    /// Create default Json serialization options
     /// </summary>
     /// <returns></returns>
     public static JsonSerializerOptions DefaultOptions()
     {
-        var options = new JsonSerializerOptions
-        {
-            IncludeFields = true,
-            IgnoreReadOnlyFields = true,
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        };
-
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
+        return JsonSerializerTypeValidator.DefaultOptions();
     }
 
     private static readonly Json s_default = new Json();
@@ -40,8 +28,6 @@ public class Json
         _options = DefaultOptions();
         _options.WriteIndented = indented;
     }
-
-    public JsonSerializerOptions Options => _options;
 
     /// <summary>
     /// Turn the given object into a JSON string
@@ -82,6 +68,17 @@ public class Json
     }
 
     /// <summary>
+    /// Parse Json into an object of the given type
+    /// </summary>
+    /// <typeparam name="T">destination type</typeparam>
+    /// <param name="json">json string</param>
+    /// <returns></returns>
+    public static T Parse<T>(string json)
+    {
+        return (T)Parse(json, typeof(T));
+    }
+
+    /// <summary>
     /// Parse Json from a stream into an object of the given type
     /// </summary>
     /// <typeparam name="T">destination type</typeparam>
@@ -90,22 +87,6 @@ public class Json
     public static T Parse<T>(Stream jsonStream)
     {
         return (T)s_default.Deserialize(jsonStream, typeof(T));
-    }
-
-    public static T? ParseFile<T>(string filePath)
-    {
-        return s_default.DeserializeFile<T>(filePath);
-    }
-
-    /// <summary>
-    /// Parse Json into an object of the given type
-    /// </summary>
-    /// <typeparam name="T">destination type</typeparam>
-    /// <param name="json">json string</param>
-    /// <returns></returns>
-    public static T? Parse<T>(string json)
-    {
-        return (T?)Parse(json, typeof(T));
     }
 
     private string Serialize<T>(T value)
@@ -123,15 +104,7 @@ public class Json
         return JsonSerializer.Deserialize(jsonStream, type, _options);
     }
 
-    public T? DeserializeFile<T>(string filePath)
-    {
-        ArgumentVerify.ThrowIfNullOrEmpty(filePath, nameof(filePath));
-        using Stream stream = System.IO.File.OpenRead(filePath);
-        var value = Deserialize(stream, typeof(T));
-        return value is not null ? (T)value : default;
-    }
-
-    public static StringContent ToJsonMessage<T>(T value)
+    internal static StringContent ToJsonMessage<T>(T value)
     {
         string jsonContent = Json.Stringify(value, false);
         return new StringContent(jsonContent, UnicodeEncoding.UTF8, "application/json");
