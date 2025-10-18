@@ -33,6 +33,8 @@ export type {
     Website,
     SourceReference,
     EntityMatch,
+    TopicInsight,
+    EntityInsight,
 } from "./extensionServiceBase";
 
 // ===================================================================

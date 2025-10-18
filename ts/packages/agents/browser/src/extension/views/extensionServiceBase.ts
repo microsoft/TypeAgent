@@ -69,6 +69,20 @@ export interface SearchResult {
     answerEnhancement?: AnswerEnhancement;
 }
 
+export interface TopicInsight {
+    name: string;
+    relevance: number;
+    occurrences: number;
+    type: 'primary' | 'secondary' | 'related';
+}
+
+export interface EntityInsight {
+    name: string;
+    type: string;
+    confidence: number;
+    mentions: number;
+}
+
 export interface Website {
     url: string;
     title: string;
@@ -79,6 +93,11 @@ export interface Website {
     score?: number;
     snippet?: string;
     knowledge?: KnowledgeStatus;
+    insights?: {
+        topics: TopicInsight[];
+        entities: EntityInsight[];
+        relevanceScore: number;
+    };
 }
 
 export interface SourceReference {
