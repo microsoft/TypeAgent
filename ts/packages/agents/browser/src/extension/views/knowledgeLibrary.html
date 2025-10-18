@@ -68,28 +68,74 @@
     </header>
 
     <!-- Main Container -->
-    <div class="main-container">
-      <!-- Sidebar Navigation -->
-      <aside class="sidebar">
-        <!-- Main Navigation -->
-        <nav class="main-nav">
-          <button class="nav-item active" data-page="search">
-            <i class="bi bi-search"></i>
-            <span>Search</span>
+    <div class="main-wrapper">
+      <!-- Icon Rail Sidebar -->
+      <aside class="icon-rail-sidebar" id="iconRailSidebar">
+        <div class="sidebar-toggle-wrapper">
+          <button
+            class="sidebar-toggle"
+            id="sidebarToggle"
+            aria-label="Toggle sidebar"
+          >
+            <i class="bi bi-chevron-right"></i>
           </button>
-          <button class="nav-item" data-page="discover">
-            <i class="bi bi-lightbulb"></i>
-            <span>Discover</span>
-          </button>
-          <button class="nav-item" data-page="analytics">
-            <i class="bi bi-graph-up"></i>
-            <span>Analytics</span>
-          </button>
+        </div>
+
+        <nav class="sidebar-nav">
+          <div
+            class="nav-item active"
+            data-page="search"
+            data-tooltip="Search Library"
+          >
+            <i class="nav-icon bi bi-search"></i>
+            <span class="nav-label">Search</span>
+          </div>
+
+          <div
+            class="nav-item"
+            data-page="discover"
+            data-tooltip="Discover Insights"
+          >
+            <i class="nav-icon bi bi-lightbulb"></i>
+            <span class="nav-label">Discover</span>
+          </div>
+
+          <div
+            class="nav-item"
+            data-page="analytics"
+            data-tooltip="View Analytics"
+          >
+            <i class="nav-icon bi bi-graph-up"></i>
+            <span class="nav-label">Analytics</span>
+          </div>
+
+          <div class="nav-divider"></div>
+
+          <div
+            class="nav-item"
+            data-page="topic-graph"
+            data-tooltip="Topic Graph"
+          >
+            <i class="nav-icon bi bi-diagram-3"></i>
+            <span class="nav-label">Topic Graph</span>
+          </div>
+
+          <div
+            class="nav-item"
+            data-page="entity-graph"
+            data-tooltip="Entity Graph"
+          >
+            <i class="nav-icon bi bi-diagram-2"></i>
+            <span class="nav-label">Entity Graph</span>
+          </div>
         </nav>
       </aside>
 
+      <!-- Sidebar Overlay for Mobile -->
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
       <!-- Main Content Area -->
-      <main class="content-area">
+      <main class="content-area" id="contentArea">
         <!-- Search Page -->
         <div id="search-page" class="page-content active">
           <div class="page-header">
