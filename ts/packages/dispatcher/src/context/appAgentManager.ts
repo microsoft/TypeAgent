@@ -32,7 +32,7 @@ import {
     AppAgentStateConfig,
     appAgentStateKeys,
 } from "./appAgentStateConfig.js";
-import { GrammarStore } from "../../../cache/dist/cache/types.js";
+import { GrammarStore } from "agent-cache";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import fs from "node:fs";
 import { Grammar, grammarFromJson } from "action-grammar";

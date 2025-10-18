@@ -50,7 +50,7 @@ export {
     getPropertyInfo,
 } from "./explanation/requestAction.js";
 export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
-export { MatchResult } from "./cache/types.js";
+export type { MatchResult, GrammarStore } from "./cache/types.js";
 export { WildcardMode } from "./constructions/constructions.js";
 
 // Testing
