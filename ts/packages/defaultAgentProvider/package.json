@@ -36,6 +36,7 @@
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@modelcontextprotocol/server-filesystem": "2025.8.21",
     "@typeagent/agent-sdk": "workspace:*",
+    "action-grammar": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
@@ -69,6 +70,7 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
+    "video-agent": "workspace:*",
     "ws": "^8.17.1",
     "zod": "^3.24.1"
   },

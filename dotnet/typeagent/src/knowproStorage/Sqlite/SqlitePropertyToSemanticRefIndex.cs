@@ -19,9 +19,9 @@ public class SqlitePropertyToSemanticRefIndex : IPropertyToSemanticRefIndex
         return _db.GetCount(SqliteStorageProviderSchema.PropertyIndexTable);
     }
 
-    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
+    public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(GetCount());
+        return ValueTask.FromResult(GetCount());
     }
 
     public void AddProperty(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal)
@@ -45,22 +45,22 @@ VALUES (@propertyName, @value, @score, @semrefId)
         cmd.ExecuteNonQuery();
     }
 
-    public Task AddPropertyAync(
+    public ValueTask AddPropertyAync(
         string propertyName,
         string value,
         ScoredSemanticRefOrdinal scoredOrdinal,
         CancellationToken cancellationToken = default)
     {
         AddProperty(propertyName, value, scoredOrdinal);
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.PropertyIndexTable);
 
-    public Task ClearAsync(CancellationToken cancellationToken = default)
+    public ValueTask ClearAsync(CancellationToken cancellationToken = default)
     {
         Clear();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     public IList<string> GetValues()
@@ -71,9 +71,9 @@ VALUES (@propertyName, @value, @score, @semrefId)
         });
     }
 
-    public Task<IList<string>> GetValuesAsync(CancellationToken cancellationToken = default)
+    public ValueTask<IList<string>> GetValuesAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(GetValues());
+        return ValueTask.FromResult(GetValues());
     }
 
     public IList<ScoredSemanticRefOrdinal> LookupProperty(string propertyName, string value)
@@ -103,9 +103,9 @@ SELECT semref_id, score FROM PropertyIndex WHERE prop_name = @propertyName AND v
         });
     }
 
-    public Task<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default)
+    public ValueTask<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(LookupProperty(propertyName, value));
+        return ValueTask.FromResult(LookupProperty(propertyName, value));
     }
 
     private string PreparePropertyName(string propertyName)

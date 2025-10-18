@@ -1,5 +1,7 @@
 # TypeAgent
 
+**NOTE: For the Python port see [microsoft/typeagent-py](https://github.com/microsoft/typeagent-py/blob/main/README.md).**
+
 **TypeAgent** is **sample code** that explores an architecture for building a _single personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
 The goal of the TypeAgent team is to explore how to get work done by safely and efficiently combining stochastic systems like language models with traditional software components.  Three principles have emerged during this investigation.  They are listed below along with examples of how the principles apply to actions, memory and plans.

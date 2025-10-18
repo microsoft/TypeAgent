@@ -26,13 +26,28 @@ public class ConsoleWriter
         }
     }
 
-    public static void Write(int value) => Console.Write(value);
-    public static void Write(string value)
+    public static void Write(string value) => Console.Write(value);
+
+    public static void Write<T>(T value)
     {
-        if (!string.IsNullOrEmpty(value))
+        if (value is not null)
         {
-            Console.Write(value);
+            Console.Write(value.ToString());
         }
+    }
+
+    public static void Write<T>(ConsoleColor color, string value)
+    {
+        PushColor(color);
+        Write(value);
+        PopColor();
+    }
+
+    public static void Write<T>(ConsoleColor color, T value)
+    {
+        PushColor(color);
+        Write(value);
+        PopColor();
     }
 
     public static void Write(char ch, int count)
@@ -43,19 +58,86 @@ public class ConsoleWriter
         }
     }
 
+    public static void InColor(ConsoleColor color, System.Action writer)
+    {
+        PushColor(color);
+        try
+        {
+            writer();
+        }
+        finally
+        {
+            PopColor();
+        }
+    }
+
     public static void WriteLine() => Console.WriteLine();
-    public static void WriteLine(int value) => Console.WriteLine(value);
     public static void WriteLine(string value) => Console.WriteLine(value);
-    public static void WriteLine(ConsoleColor color, string value)
+
+    public static void WriteLine<T>(T value)
+    {
+        if (value is not null)
+        {
+            Console.WriteLine(value.ToString());
+        }
+    }
+
+    public static void WriteLine<T>(ConsoleColor color, string value)
     {
         PushColor(color);
         WriteLine(value);
         PopColor();
     }
 
+    public static void WriteLine<T>(ConsoleColor color, T value)
+    {
+        PushColor(color);
+        WriteLine(value);
+        PopColor();
+    }
+
+
+    public static void WriteNameValue(string name, string? value, int paddedNameLength = -1, string? indent = null)
+    {
+        if (!string.IsNullOrEmpty(indent))
+        {
+            Write(indent);
+        }
+        if (paddedNameLength > 0)
+        {
+            name = name.PadRight(paddedNameLength);
+        }
+        if (!string.IsNullOrEmpty(value))
+        {
+            WriteLine($"{name}  {value}");
+        }
+        else
+        {
+            WriteLine(name);
+        }
+    }
+
+    public static void WriteNameValue<T>(string name, T value, int paddedNameLength = -1, string? indent = null)
+    {
+        WriteNameValue(name, value is not null ? value.ToString() : string.Empty, paddedNameLength, indent);
+    }
+
+    public static void WriteNameValue<T>(string name, IEnumerable<T> values, int paddedNameLength = -1, string? indent = null)
+    {
+        string value = string.Join("; ", values);
+        WriteNameValue<string>(name, value, paddedNameLength, indent);
+    }
+
     public static void WriteJson(object value)
     {
         WriteLine(Json.Stringify(value, true));
+    }
+
+    public static void WriteJson(ConsoleColor color, object value)
+    {
+        PushColor(color);
+        WriteLine(Json.Stringify(value, true));
+        PopColor();
     }
 
     public static void WriteJson(Array values)
@@ -66,28 +148,29 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteList(IEnumerable<string> list)
+    public static void WriteList(IEnumerable<string> list, string title, ListType type = ListType.Ul)
     {
-        WriteList(list, new() { Type = ListType.Plain });
-    }
-
-    public static void WriteList(IEnumerable<string> list, ListOptions options)
-    {
-        var isInline = options.Type == ListType.Plain || options.Type == ListType.Csv;
-        if (!string.IsNullOrEmpty(options.Title))
+        if (!string.IsNullOrEmpty(title))
         {
+            var isInline = type == ListType.Plain || type == ListType.Csv;
             if (isInline)
             {
-                Write(options.Title + ": ");
+                Write(title + ": ");
             }
             else
             {
-                WriteLine(options.Title);
+                WriteLine(title);
             }
         }
+        WriteList(list, type);
+    }
+
+    public static void WriteList(IEnumerable<string> list, ListType type = ListType.Ul)
+    {
+        var isInline = type == ListType.Plain || type == ListType.Csv;
         if (isInline)
         {
-            var sep = options.Type == ListType.Plain ? " " : ", ";
+            var sep = type == ListType.Plain ? " " : ", ";
             foreach (var (i, item) in list.Enumerate())
             {
                 if (i > 0)
@@ -102,23 +185,23 @@ public class ConsoleWriter
         {
             foreach (var (i, item) in list.Enumerate())
             {
-                WriteListItem(i, item, options);
+                WriteListItem(i + 1, item, type);
             }
         }
 
     }
 
-    private static void WriteListItem(int i, string item, ListOptions options)
+    private static void WriteListItem(int i, string item, ListType type)
     {
         if (!string.IsNullOrEmpty(item))
         {
-            switch (options.Type)
+            switch (type)
             {
                 default:
                     WriteLine(item);
                     break;
                 case ListType.Ol:
-                    WriteLine($"{i}. ${item}");
+                    WriteLine($"{i}. {item}");
                     break;
                 case ListType.Ul:
                     WriteLine("• " + item);
@@ -128,14 +211,16 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteLineHeading(string title, int level = 1)
+    public static void WriteLineHeading(string title)
     {
-        Write('#', level);
+        Write('#', title.Length);
+        WriteLine();
         if (!string.IsNullOrEmpty(title))
         {
             Write(" ");
-            Write(title);
+            WriteLine(title);
         }
+        Write('#', title.Length);
         WriteLine();
     }
 
@@ -151,6 +236,43 @@ public class ConsoleWriter
     {
         WriteError(ex.Message);
     }
+
+    public static void WriteBold(string text)
+    {
+        Write(ConsoleStyle.Bold(text));
+    }
+
+    public static void WriteLineBold(string text)
+    {
+        WriteBold(text);
+        WriteLine();
+    }
+
+    public static void WriteUnderline(string text)
+    {
+        Write(ConsoleStyle.Underline(text));
+    }
+
+    public static void WriteLineUnderline(string text)
+    {
+        WriteUnderline(text);
+        WriteLine();
+    }
+
+    public static void WriteTiming(Stopwatch clock, string? label = null)
+    {
+        WriteTiming(ConsoleColor.Gray, clock, label);
+    }
+
+    public static void WriteTiming(ConsoleColor color, Stopwatch clock, string? label = null)
+    {
+        var timing = !string.IsNullOrEmpty(label)
+            ? $"{label}: { clock.ElapsedMilliseconds} ms"
+            : $"{clock.ElapsedMilliseconds} ms";
+
+        WriteLine(color, timing);
+    }
+
 }
 
 public enum ListType
@@ -160,10 +282,3 @@ public enum ListType
     Plain,
     Csv // List in csv format
 }
-
-public struct ListOptions
-{
-    public string? Title { get; set; }
-
-    public ListType Type { get; set; }
-};

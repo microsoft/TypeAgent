@@ -31,26 +31,11 @@ public class MemoryCommands : ICommandModule
         return cmd;
     }
 
-    private async Task SearchTermsAsync(ParseResult result, CancellationToken cancellationToken)
+    private Task SearchTermsAsync(ParseResult result, CancellationToken cancellationToken)
     {
         IConversation conversation = EnsureConversation();
-
-        // Hard coded test for now
-        SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
-        {
-            Terms = [new SearchTerm("Children of Time"), new SearchTerm("book")]
-        };
-        var results = await conversation.SearchKnowledgeAsync(searchGroup, null, null, cancellationToken);
-        if (results is null)
-        {
-            KnowProWriter.WriteError("No results");
-            return;
-        }
-        foreach (var kType in results.Keys)
-        {
-            KnowProWriter.WriteLine($"{kType} {results[kType].SemanticRefMatches.Count} matches");
-        }
-
+        KnowProWriter.WriteError("Not impl");
+        return Task.CompletedTask;
     }
 
     private Command MessagesDef()

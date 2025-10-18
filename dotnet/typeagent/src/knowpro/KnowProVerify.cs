@@ -35,7 +35,14 @@ public class KnowProVerify
     public static void ThrowIfInvalid(IMessage? message)
     {
         ArgumentVerify.ThrowIfNull(message, nameof(message));
+        // Currently we require Text Chunks
         ArgumentVerify.ThrowIfNullOrEmpty(message!.TextChunks, nameof(message.TextChunks));
+
+        int count = message.TextChunks.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            ArgumentVerify.ThrowIfNullOrEmpty(message.TextChunks[i], nameof(message.TextChunks));
+        }
     }
 
     public static void ThrowIfInvalid(SemanticRef? semanticRef)

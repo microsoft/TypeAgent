@@ -35,8 +35,8 @@ internal static class Ranker
             {
                 return totalScore;
             }
-            double avg = totalScore / hitCount;
-            double smoothAvg = Math.Log(hitCount + 1) * avg;
+            double avgScore = totalScore / hitCount;
+            double smoothAvg = Math.Log(hitCount + 1) * avgScore;
             return smoothAvg;
         }
 
@@ -61,8 +61,7 @@ internal static class Ranker
         float boostWeight
     )
     {
-        ConcreteEntity? entity = semanticRef.AsEntity();
-        if (entity is not null)
+        if (semanticRef.IsEntity)
         {
             scoredOrdinal = new ScoredSemanticRefOrdinal()
             {

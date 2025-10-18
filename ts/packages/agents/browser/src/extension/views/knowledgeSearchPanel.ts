@@ -364,6 +364,26 @@ export class KnowledgeSearchPanel {
         }
 
         resultsContent.innerHTML = `<div class="results-content">${html}</div>`;
+
+        // Setup event listeners for inline insights
+        this.setupInsightEventListeners();
+
+        // Load timeline previews for topic cards in timeline view
+        if (
+            this.currentViewMode === "timeline" &&
+            this.currentResults.topTopics &&
+            this.currentResults.topTopics.length > 0
+        ) {
+            const topTopics = this.currentResults.topTopics.slice(0, 3);
+            this.loadTopicTimelinePreviewsInline(topTopics);
+
+            // Setup event listeners for inline topic cards
+            const resultsContentElement =
+                document.getElementById("resultsContainer");
+            if (resultsContentElement) {
+                this.setupTopicEventListeners(resultsContentElement);
+            }
+        }
     }
 
     private renderListView(): string {
@@ -408,6 +428,18 @@ export class KnowledgeSearchPanel {
     private renderTimelineView(): string {
         if (!this.currentResults) return "";
 
+        let html = "";
+
+        // Add top 3 topic timeline cards if available
+        if (
+            this.currentResults.topTopics &&
+            this.currentResults.topTopics.length > 0
+        ) {
+            const topTopics = this.currentResults.topTopics.slice(0, 3);
+            html += this.renderTopicTimelinesSection(topTopics);
+        }
+
+        // Group search results by date
         const grouped = this.currentResults.websites.reduce(
             (acc: Record<string, Website[]>, result: Website) => {
                 const date = result.lastVisited
@@ -420,7 +452,8 @@ export class KnowledgeSearchPanel {
             {},
         );
 
-        return Object.entries(grouped)
+        // Add search results timeline
+        html += Object.entries(grouped)
             .map(
                 ([date, results]: [string, Website[]]) => `
                 <div class="timeline-item">
@@ -430,6 +463,45 @@ export class KnowledgeSearchPanel {
             `,
             )
             .join("");
+
+        return html;
+    }
+
+    private renderTopicTimelinesSection(topics: string[]): string {
+        const topicCardsHtml = topics
+            .map(
+                (topic) => `
+                <div class="topic-timeline-card" data-topic="${this.escapeHtml(topic)}">
+                    <div class="topic-card-header">
+                        <h5 class="topic-card-title">${this.escapeHtml(topic)}</h5>
+                        <div class="topic-card-actions">
+                            <button class="btn btn-sm topic-search-btn" title="Search for topic">
+                                <i class="bi bi-search"></i>
+                            </button>
+                            <button class="btn btn-sm topic-graph-btn" title="View topic hierarchy">
+                                <i class="bi bi-diagram-3"></i>
+                            </button>
+                            <button class="btn btn-sm topic-timeline-btn" title="View full timeline">
+                                <i class="bi bi-clock-history"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="topic-timeline-preview-inline" id="timeline-inline-${this.escapeHtml(topic)}">
+                        <div class="timeline-loading">
+                            <i class="bi bi-hourglass-split"></i> Loading timeline...
+                        </div>
+                    </div>
+                </div>
+            `,
+            )
+            .join("");
+
+        return `
+            <div class="topic-timelines-section">
+                <h4 class="section-title">Topic Timelines</h4>
+                ${topicCardsHtml}
+            </div>
+        `;
     }
 
     private renderDomainView(): string {
@@ -476,34 +548,147 @@ export class KnowledgeSearchPanel {
     }
 
     private renderSearchResultItem(result: Website): string {
+        const insightBar = this.renderInsightBar(result);
+
         return `
             <div class="search-result-item">
-                <div class="d-flex align-items-start">
-                    <img src="https://www.google.com/s2/favicons?domain=${result.domain}" 
-                         class="result-favicon me-2" alt="Favicon">
-                    <div class="flex-grow-1">
-                        <h6 class="mb-1">
-                            <a href="${result.url}" target="_blank" class="text-decoration-none">
-                                ${this.escapeHtml(result.title)}
-                            </a>
-                        </h6>
-                        <div class="result-domain text-muted mb-1">${this.escapeHtml(result.domain)}</div>
-                        ${result.snippet ? `<p class="mb-2 text-muted small">${this.escapeHtml(result.snippet)}</p>` : ""}
-                        
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div class="knowledge-badges">
-                                ${this.renderKnowledgeBadges(result.knowledge)}
-                            </div>
-                            <div class="d-flex align-items-center gap-2">
-                                ${result.knowledge?.confidence ? this.renderConfidenceIndicator(result.knowledge.confidence) : ""}
-                                ${result.score ? `<span class="result-score">${Math.round(result.score * 100)}%</span>` : ""}
-                                <span class="result-date">${this.formatDate(result.lastVisited)}</span>
+                <div class="result-main">
+                    <div class="d-flex align-items-start">
+                        <img src="https://www.google.com/s2/favicons?domain=${result.domain}"
+                             class="result-favicon me-2" alt="Favicon">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">
+                                <a href="${result.url}" target="_blank" class="text-decoration-none">
+                                    ${this.escapeHtml(result.title)}
+                                </a>
+                            </h6>
+                            <div class="result-domain text-muted mb-1">${this.escapeHtml(result.domain)}</div>
+                            ${result.snippet ? `<p class="mb-2 text-muted small">${this.escapeHtml(result.snippet)}</p>` : ""}
+
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="knowledge-badges">
+                                    ${this.renderKnowledgeBadges(result.knowledge)}
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    ${result.knowledge?.confidence ? this.renderConfidenceIndicator(result.knowledge.confidence) : ""}
+                                    ${result.score ? `<span class="result-score">${Math.round(result.score * 100)}%</span>` : ""}
+                                    <span class="result-date">${this.formatDate(result.lastVisited)}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
+                ${insightBar}
             </div>
         `;
+    }
+
+    private renderInsightBar(result: Website): string {
+        if (!result.insights) return "";
+
+        const { topics, entities, relevanceScore } = result.insights;
+
+        if (topics.length === 0 && entities.length === 0) return "";
+
+        const topicsHtml = this.renderTopicInsights(topics);
+        const entitiesHtml = this.renderEntityInsights(entities);
+        const metaHtml = this.renderInsightMeta(result.insights);
+
+        return `
+            <div class="insight-bar">
+                <div class="insight-content">
+                    ${topicsHtml}
+                    ${entitiesHtml}
+                </div>
+                ${metaHtml}
+            </div>
+        `;
+    }
+
+    private renderTopicInsights(topics: any[]): string {
+        if (topics.length === 0) return "";
+
+        const topicChips = topics
+            .map(
+                (topic) => `
+            <div class="insight-chip topic-chip ${topic.type}"
+                 data-topic="${this.escapeHtml(topic.name)}"
+                 data-relevance="${topic.relevance}"
+                 title="Topic: ${this.escapeHtml(topic.name)} (${topic.type}, ${topic.occurrences} occurrences)">
+                <i class="bi bi-bookmark"></i>
+                <span class="chip-name">${this.escapeHtml(topic.name)}</span>
+                <span class="chip-count">${topic.occurrences}</span>
+            </div>
+        `,
+            )
+            .join("");
+
+        return `
+            <div class="insight-section topics">
+                <div class="insight-chips">
+                    ${topicChips}
+                </div>
+            </div>
+        `;
+    }
+
+    private renderEntityInsights(entities: any[]): string {
+        if (entities.length === 0) return "";
+
+        const entityChips = entities
+            .map(
+                (entity) => `
+            <div class="insight-chip entity-chip"
+                 data-entity="${this.escapeHtml(entity.name)}"
+                 data-entity-type="${this.escapeHtml(entity.type)}"
+                 data-confidence="${entity.confidence}"
+                 title="Entity: ${this.escapeHtml(entity.name)} (${this.escapeHtml(entity.type)}, ${Math.round(entity.confidence * 100)}% confidence)">
+                <i class="bi bi-${this.getEntityIcon(entity.type)}"></i>
+                <span class="chip-name">${this.escapeHtml(entity.name)}</span>
+                <span class="chip-meta">${this.escapeHtml(entity.type)}</span>
+            </div>
+        `,
+            )
+            .join("");
+
+        return `
+            <div class="insight-section entities">
+                <div class="insight-chips">
+                    ${entityChips}
+                </div>
+            </div>
+        `;
+    }
+
+    private renderInsightMeta(insights: any): string {
+        const relevancePercent = Math.round(insights.relevanceScore * 100);
+        const totalInsights = insights.topics.length + insights.entities.length;
+
+        return `
+            <div class="insight-meta">
+                <span class="insight-count">${totalInsights} insight${totalInsights !== 1 ? "s" : ""}</span>
+                <span class="insight-relevance" title="Overall relevance score">
+                    <i class="bi bi-graph-up"></i>
+                    ${relevancePercent}%
+                </span>
+            </div>
+        `;
+    }
+
+    private getEntityIcon(entityType: string): string {
+        const iconMap: Record<string, string> = {
+            person: "person-fill",
+            organization: "building",
+            location: "geo-alt-fill",
+            product: "box",
+            technology: "cpu",
+            event: "calendar-event",
+            concept: "lightbulb",
+            default: "tag-fill",
+        };
+
+        const normalizedType = entityType.toLowerCase();
+        return iconMap[normalizedType] || iconMap["default"];
     }
 
     private renderSearchError(): void {
@@ -566,6 +751,544 @@ export class KnowledgeSearchPanel {
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    private async loadTopicTimelinePreviews(topics: string[]): Promise<void> {
+        try {
+            // Call new backend function to get timeline data
+            const response = await this.services.getTopicTimelines({
+                topicNames: topics,
+                maxTimelineEntries: 5, // Just preview data
+                includeRelatedTopics: true,
+                neighborhoodDepth: 1,
+            });
+
+            if (response.success) {
+                // Render timeline previews for each topic
+                response.timelines.forEach((timeline: any) => {
+                    this.renderTimelinePreview(timeline);
+                });
+            }
+        } catch (error) {
+            console.error("Failed to load topic timeline previews:", error);
+        }
+    }
+
+    private async loadTopicTimelinePreviewsInline(
+        topics: string[],
+    ): Promise<void> {
+        try {
+            // Call backend to get timeline data for inline cards
+            const response = await this.services.getTopicTimelines({
+                topicNames: topics,
+                maxTimelineEntries: 5,
+                includeRelatedTopics: true,
+                neighborhoodDepth: 1,
+            });
+
+            if (response.success) {
+                // Render timeline previews for inline topic cards
+                response.timelines.forEach((timeline: any) => {
+                    this.renderTimelinePreviewInline(timeline);
+                });
+            }
+        } catch (error) {
+            console.error(
+                "Failed to load inline topic timeline previews:",
+                error,
+            );
+        }
+    }
+
+    private renderTimelinePreviewInline(timeline: any): void {
+        const previewElement = document.getElementById(
+            `timeline-inline-${timeline.topicName}`,
+        );
+        if (!previewElement) return;
+
+        const recentActivities = timeline.activities.slice(0, 3);
+
+        const previewHtml = `
+            <div class="timeline-stats">
+                <span class="activity-count">${timeline.totalActivity} activities</span>
+                <div class="activity-types">
+                    ${
+                        timeline.activityDistribution.bookmarks > 0
+                            ? `<span class="activity-type bookmarks">${timeline.activityDistribution.bookmarks} bookmarks</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.visits > 0
+                            ? `<span class="activity-type visits">${timeline.activityDistribution.visits} visits</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.extractions > 0
+                            ? `<span class="activity-type extractions">${timeline.activityDistribution.extractions} extractions</span>`
+                            : ""
+                    }
+                </div>
+            </div>
+            <div class="timeline-preview-items">
+                ${recentActivities
+                    .map(
+                        (activity: any) => `
+                    <div class="timeline-item-preview">
+                        <div class="activity-icon ${activity.activityType}">
+                            <i class="bi bi-${this.getActivityIcon(activity.activityType)}"></i>
+                        </div>
+                        <div class="activity-details">
+                            <div class="activity-title">${this.escapeHtml(activity.title)}</div>
+                            <div class="activity-meta">
+                                <span class="activity-date">${this.formatDate(activity.timestamp)}</span>
+                                <span class="activity-domain">${activity.domain}</span>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                    )
+                    .join("")}
+            </div>
+        `;
+
+        previewElement.innerHTML = previewHtml;
+    }
+
+    private renderTimelinePreview(timeline: any): void {
+        const previewElement = document.getElementById(
+            `timeline-preview-${timeline.topicName}`,
+        );
+        if (!previewElement) return;
+
+        const recentActivities = timeline.activities.slice(0, 3);
+
+        const previewHtml = `
+            <div class="timeline-stats">
+                <span class="activity-count">${timeline.totalActivity} activities</span>
+                <div class="activity-types">
+                    ${
+                        timeline.activityDistribution.bookmarks > 0
+                            ? `<span class="activity-type bookmarks">${timeline.activityDistribution.bookmarks} bookmarks</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.visits > 0
+                            ? `<span class="activity-type visits">${timeline.activityDistribution.visits} visits</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.extractions > 0
+                            ? `<span class="activity-type extractions">${timeline.activityDistribution.extractions} extractions</span>`
+                            : ""
+                    }
+                </div>
+            </div>
+            <div class="timeline-preview-items">
+                ${recentActivities
+                    .map(
+                        (activity: any) => `
+                    <div class="timeline-item-preview">
+                        <div class="activity-icon ${activity.activityType}">
+                            <i class="bi bi-${this.getActivityIcon(activity.activityType)}"></i>
+                        </div>
+                        <div class="activity-details">
+                            <div class="activity-title">${this.escapeHtml(activity.title)}</div>
+                            <div class="activity-meta">
+                                <span class="activity-date">${this.formatDate(activity.timestamp)}</span>
+                                <span class="activity-domain">${activity.domain}</span>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                    )
+                    .join("")}
+            </div>
+            <div class="timeline-actions">
+                <button class="btn btn-sm btn-outline-primary view-full-timeline" 
+                        data-topic="${this.escapeHtml(timeline.topicName)}">
+                    View Full Timeline
+                </button>
+            </div>
+        `;
+
+        previewElement.innerHTML = previewHtml;
+    }
+
+    private getActivityIcon(activityType: string): string {
+        switch (activityType) {
+            case "bookmark":
+                return "bookmark-fill";
+            case "visit":
+                return "eye-fill";
+            case "extraction":
+                return "cpu-fill";
+            default:
+                return "circle-fill";
+        }
+    }
+
+    private setupTopicEventListeners(topicsContent: HTMLElement): void {
+        // Add click event listeners to topic tags
+        topicsContent
+            .querySelectorAll(".topic-search-btn")
+            .forEach((searchBtn) => {
+                searchBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicElement = (
+                        e.currentTarget as HTMLElement
+                    ).closest(
+                        ".clickable-topic, .topic-timeline-card",
+                    ) as HTMLElement;
+                    const topicName = topicElement?.dataset.topic;
+                    if (topicName) {
+                        this.performSearchWithQuery(topicName);
+                    }
+                });
+            });
+
+        topicsContent
+            .querySelectorAll(".topic-graph-btn")
+            .forEach((graphBtn) => {
+                graphBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicElement = (
+                        e.currentTarget as HTMLElement
+                    ).closest(
+                        ".clickable-topic, .topic-timeline-card",
+                    ) as HTMLElement;
+                    const topicName = topicElement?.dataset.topic;
+                    if (topicName) {
+                        // Navigate to topic graph view for hierarchical topic exploration
+                        window.location.href = `topicGraphView.html?topic=${encodeURIComponent(topicName)}`;
+                    }
+                });
+            });
+
+        // Add timeline button listeners
+        topicsContent
+            .querySelectorAll(".topic-timeline-btn")
+            .forEach((timelineBtn) => {
+                timelineBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicElement = (
+                        e.currentTarget as HTMLElement
+                    ).closest(
+                        ".clickable-topic, .topic-timeline-card",
+                    ) as HTMLElement;
+                    const topicName = topicElement?.dataset.topic;
+                    if (topicName) {
+                        this.showFullTimeline(topicName);
+                    }
+                });
+            });
+
+        // Add view full timeline button listeners
+        topicsContent
+            .querySelectorAll(".view-full-timeline")
+            .forEach((viewBtn) => {
+                viewBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const topicName = (e.currentTarget as HTMLElement).dataset
+                        .topic;
+                    if (topicName) {
+                        this.showFullTimeline(topicName);
+                    }
+                });
+            });
+
+        // Default click behavior (search)
+        topicsContent
+            .querySelectorAll(".clickable-topic")
+            .forEach((topicElement) => {
+                topicElement.addEventListener("click", (e) => {
+                    // Only handle if not clicking on buttons
+                    if (!(e.target as HTMLElement).closest(".topic-actions")) {
+                        const topicName = (e.currentTarget as HTMLElement)
+                            .dataset.topic;
+                        if (topicName) {
+                            this.performSearchWithQuery(topicName);
+                        }
+                    }
+                });
+            });
+    }
+
+    private setupInsightEventListeners(): void {
+        const resultsContainer = document.getElementById("resultsContainer");
+        if (!resultsContainer) return;
+
+        resultsContainer.querySelectorAll(".topic-chip").forEach((chip) => {
+            chip.addEventListener("click", (e) => {
+                const topicName = (e.currentTarget as HTMLElement).dataset
+                    .topic;
+                if (topicName) {
+                    this.performSearchWithQuery(topicName);
+                }
+            });
+        });
+
+        resultsContainer.querySelectorAll(".entity-chip").forEach((chip) => {
+            chip.addEventListener("click", (e) => {
+                const entityName = (e.currentTarget as HTMLElement).dataset
+                    .entity;
+                if (entityName) {
+                    this.navigateToEntityGraph(entityName);
+                }
+            });
+        });
+    }
+
+    private async showFullTimeline(topicName: string): Promise<void> {
+        const modal = document.getElementById("topic-timeline-modal");
+        if (!modal) return;
+
+        // Show loading state
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Timeline for "${topicName}"</h5>
+                    <button class="btn-close modal-close-btn" title="Close timeline">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center">
+                        <i class="bi bi-hourglass-split"></i>
+                        Loading full timeline...
+                    </div>
+                </div>
+            </div>
+        `;
+        modal.style.display = "block";
+
+        // Add close button event listener
+        const loadingCloseBtn = modal.querySelector(".btn-close");
+        if (loadingCloseBtn) {
+            loadingCloseBtn.addEventListener("click", () => {
+                modal.style.display = "none";
+            });
+        }
+
+        try {
+            // Get full timeline data
+            const response = await this.services.getTopicTimelines({
+                topicNames: [topicName],
+                maxTimelineEntries: 100,
+                includeRelatedTopics: true,
+                neighborhoodDepth: 2,
+            });
+
+            if (response.success && response.timelines.length > 0) {
+                const timeline = response.timelines.find(
+                    (t: any) => t.topicName === topicName,
+                );
+                if (timeline) {
+                    this.renderFullTimeline(timeline, modal);
+                } else {
+                    this.showTimelineError(
+                        modal,
+                        `No timeline data available for "${topicName}"`,
+                    );
+                }
+            } else {
+                this.showTimelineError(modal, "No timeline data available");
+            }
+        } catch (error) {
+            this.showTimelineError(modal, "Failed to load timeline data");
+        }
+    }
+
+    private renderFullTimeline(timeline: any, modal: HTMLElement): void {
+        const modalContent = `
+            <div class="modal-content timeline-modal">
+                <div class="modal-header">
+                    <div class="modal-header-content">
+                        <h5>Timeline for "${timeline.topicName}"</h5>
+                        <div class="timeline-summary">
+                            <span class="total-activities">${timeline.totalActivity} total activities</span>
+                            <span class="time-range">${this.getTimeRangeText(timeline.activities)}</span>
+                        </div>
+                    </div>
+                    <button class="btn-close modal-close-btn" title="Close timeline">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="timeline-filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="bookmark">Bookmarks (${timeline.activityDistribution.bookmarks})</button>
+                        <button class="filter-btn" data-filter="visit">Visits (${timeline.activityDistribution.visits})</button>
+                        <button class="filter-btn" data-filter="extraction">Extractions (${timeline.activityDistribution.extractions})</button>
+                    </div>
+                    <div class="timeline-container">
+                        ${this.renderTimelineItems(timeline.activities)}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary modal-close-footer-btn">Close</button>
+                </div>
+            </div>
+        `;
+
+        modal.innerHTML = modalContent;
+
+        // Add close button event listeners
+        const closeButtons = modal.querySelectorAll(
+            ".modal-close-btn, .modal-close-footer-btn",
+        );
+        closeButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                modal.style.display = "none";
+            });
+        });
+
+        // Add filter event listeners
+        modal.querySelectorAll(".filter-btn").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+                const filter = (e.target as HTMLElement).dataset.filter;
+                this.filterTimelineItems(filter, modal);
+            });
+        });
+    }
+
+    private renderTimelineItems(activities: any[]): string {
+        return `
+            <div class="timeline">
+                ${activities
+                    .map(
+                        (activity, index) => `
+                    <div class="timeline-item" data-activity-type="${activity.activityType}">
+                        <div class="timeline-content">
+                            <div class="timeline-header">
+                                <h6 class="activity-title">
+                                    <a href="${activity.url}" target="_blank">${this.escapeHtml(activity.title)}</a>
+                                </h6>
+                                <span class="activity-time">${this.formatTimestamp(activity.timestamp)}</span>
+                            </div>
+                            <div class="timeline-details">
+                                <div class="activity-meta">
+                                    <span class="domain-badge">${activity.domain}</span>
+                                    <span class="relevance-badge">Relevance: ${Math.round(activity.relevance * 100)}%</span>
+                                    <span class="activity-type-badge ${activity.activityType}">
+                                        <i class="bi bi-${this.getActivityIcon(activity.activityType)}"></i>
+                                        ${activity.activityType}
+                                    </span>
+                                </div>
+                                ${
+                                    activity.snippet &&
+                                    activity.snippet !== "undefined"
+                                        ? `
+                                    <div class="activity-snippet">
+                                        <p>${this.escapeHtml(activity.snippet)}</p>
+                                    </div>
+                                `
+                                        : ""
+                                }
+                                ${
+                                    activity.knowledgeChunk &&
+                                    activity.knowledgeChunk !== "undefined"
+                                        ? `
+                                    <div class="knowledge-chunk">
+                                        <h6>Related Knowledge:</h6>
+                                        <p>${this.escapeHtml(activity.knowledgeChunk)}</p>
+                                    </div>
+                                `
+                                        : ""
+                                }
+                                ${
+                                    activity.metadata
+                                        ? `
+                                    <div class="activity-metadata">
+                                        ${activity.metadata.visitCount ? `<span>Visits: ${activity.metadata.visitCount}</span>` : ""}
+                                        ${activity.metadata.confidence ? `<span>Confidence: ${Math.round(activity.metadata.confidence * 100)}%</span>` : ""}
+                                    </div>
+                                `
+                                        : ""
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `,
+                    )
+                    .join("")}
+            </div>
+        `;
+    }
+
+    private getTimeRangeText(activities: any[]): string {
+        if (activities.length === 0) return "No activities";
+
+        const dates = activities.map((a) => new Date(a.timestamp));
+        const earliest = new Date(Math.min(...dates.map((d) => d.getTime())));
+        const latest = new Date(Math.max(...dates.map((d) => d.getTime())));
+
+        return `${earliest.toLocaleDateString()} - ${latest.toLocaleDateString()}`;
+    }
+
+    private formatTimestamp(timestamp: string): string {
+        const date = new Date(timestamp);
+        return (
+            date.toLocaleDateString() +
+            " " +
+            date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        );
+    }
+
+    private filterTimelineItems(
+        filter: string | null | undefined,
+        modal: HTMLElement,
+    ): void {
+        const timelineItems = modal.querySelectorAll(".timeline-item");
+        const filterBtns = modal.querySelectorAll(".filter-btn");
+
+        // Update active filter button
+        filterBtns.forEach((btn) => btn.classList.remove("active"));
+        const activeBtn = modal.querySelector(`[data-filter="${filter}"]`);
+        if (activeBtn) activeBtn.classList.add("active");
+
+        // Show/hide timeline items
+        timelineItems.forEach((item) => {
+            const itemElement = item as HTMLElement;
+            if (filter === "all" || !filter) {
+                itemElement.style.display = "block";
+            } else {
+                const activityType = itemElement.dataset.activityType;
+                itemElement.style.display =
+                    activityType === filter ? "block" : "none";
+            }
+        });
+    }
+
+    private showTimelineError(modal: HTMLElement, errorMessage: string): void {
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Timeline Error</h5>
+                    <button class="btn-close modal-close-btn" title="Close">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center text-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <p>${errorMessage}</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary modal-close-footer-btn">Close</button>
+                </div>
+            </div>
+        `;
+
+        // Add close button event listeners
+        const closeButtons = modal.querySelectorAll(
+            ".modal-close-btn, .modal-close-footer-btn",
+        );
+        closeButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                modal.style.display = "none";
+            });
+        });
     }
 
     setConnectionStatus(isConnected: boolean): void {
@@ -828,79 +1551,122 @@ export class KnowledgeSearchPanel {
         const topicsContent = document.getElementById("topTopicsContent");
 
         if (topicsSection && topicsContent && topics.length > 0) {
-            const topicTagsHtml = topics
-                .map(
-                    (topic) => `
-                    <div class="topic-tag clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Left-click to search, right-click to view topic hierarchy">
-                        <span>${this.escapeHtml(topic)}</span>
-                        <div class="topic-actions">
-                            <button class="btn btn-sm topic-search-btn" title="Search for topic">
-                                <i class="bi bi-search"></i>
-                            </button>
-                            <button class="btn btn-sm topic-graph-btn" title="View topic hierarchy">
-                                <i class="bi bi-diagram-3"></i>
-                            </button>
+            let contentHtml = "";
+
+            // In timeline view, show all topics as pills to avoid duplication with timeline cards
+            if (this.currentViewMode === "timeline") {
+                const pillsHtml = `
+                    <div class="topic-pills-section">
+                        <div class="topic-pills">
+                            ${topics
+                                .map(
+                                    (topic) => `
+                                <div class="topic-pill clickable-topic" data-topic="${this.escapeHtml(topic)}">
+                                    <span class="pill-name">${this.escapeHtml(topic)}</span>
+                                    <div class="pill-actions">
+                                        <button class="btn btn-xs topic-search-btn" title="Search">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                        <button class="btn btn-xs topic-graph-btn" title="Topic hierarchy">
+                                            <i class="bi bi-diagram-3"></i>
+                                        </button>
+                                        <button class="btn btn-xs topic-timeline-btn" title="Timeline">
+                                            <i class="bi bi-clock-history"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `,
+                                )
+                                .join("")}
                         </div>
                     </div>
-                `,
-                )
-                .join("");
+                `;
+
+                contentHtml = pillsHtml;
+            } else {
+                // In other views, show first 3 topics as enhanced cards with timeline preview
+                const expandedTopics = topics.slice(0, 3);
+                const expandedTopicsHtml = expandedTopics
+                    .map(
+                        (topic) => `
+                        <div class="topic-tag-enhanced clickable-topic" data-topic="${this.escapeHtml(topic)}" title="Left-click to search, right-click to view topic hierarchy">
+                            <div class="topic-header">
+                                <span class="topic-name">${this.escapeHtml(topic)}</span>
+                                <div class="topic-actions">
+                                    <button class="btn btn-sm topic-search-btn" title="Search for topic">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                    <button class="btn btn-sm topic-graph-btn" title="View topic hierarchy">
+                                        <i class="bi bi-diagram-3"></i>
+                                    </button>
+                                    <button class="btn btn-sm topic-timeline-btn" title="View topic timeline">
+                                        <i class="bi bi-clock-history"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="topic-timeline-preview" id="timeline-preview-${this.escapeHtml(topic)}">
+                                <div class="timeline-loading">
+                                    <i class="bi bi-hourglass-split"></i> Loading timeline...
+                                </div>
+                            </div>
+                        </div>
+                    `,
+                    )
+                    .join("");
+
+                // Remaining topics (4-10): Simple pills
+                const remainingTopics = topics.slice(3);
+                const pillsHtml =
+                    remainingTopics.length > 0
+                        ? `
+                    <div class="topic-pills-section">
+                        <div class="section-label">More Topics:</div>
+                        <div class="topic-pills">
+                            ${remainingTopics
+                                .map(
+                                    (topic) => `
+                                <div class="topic-pill clickable-topic" data-topic="${this.escapeHtml(topic)}">
+                                    <span class="pill-name">${this.escapeHtml(topic)}</span>
+                                    <div class="pill-actions">
+                                        <button class="btn btn-xs topic-search-btn" title="Search">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                        <button class="btn btn-xs topic-graph-btn" title="Topic hierarchy">
+                                            <i class="bi bi-diagram-3"></i>
+                                        </button>
+                                        <button class="btn btn-xs topic-timeline-btn" title="Timeline">
+                                            <i class="bi bi-clock-history"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `,
+                                )
+                                .join("")}
+                        </div>
+                    </div>
+                `
+                        : "";
+
+                contentHtml = `
+                    <div class="topic-tags-enhanced">
+                        ${expandedTopicsHtml}
+                    </div>
+                    ${pillsHtml}
+                `;
+
+                // Load timeline previews for top 3 topics in non-timeline views
+                this.loadTopicTimelinePreviews(expandedTopics);
+            }
 
             topicsContent.innerHTML = `
-                <div class="topic-tags">
-                    ${topicTagsHtml}
+                ${contentHtml}
+                <div id="topic-timeline-modal" class="modal">
+                    <!-- Timeline modal content will be inserted here -->
                 </div>
             `;
 
-            // Add click event listeners to topic tags
-            topicsContent
-                .querySelectorAll(".topic-search-btn")
-                .forEach((searchBtn) => {
-                    searchBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        const topicElement = (e.target as HTMLElement).closest(
-                            ".clickable-topic",
-                        ) as HTMLElement;
-                        const topicName = topicElement?.dataset.topic;
-                        if (topicName) {
-                            this.performSearchWithQuery(topicName);
-                        }
-                    });
-                });
-
-            topicsContent
-                .querySelectorAll(".topic-graph-btn")
-                .forEach((graphBtn) => {
-                    graphBtn.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        const topicElement = (e.target as HTMLElement).closest(
-                            ".clickable-topic",
-                        ) as HTMLElement;
-                        const topicName = topicElement?.dataset.topic;
-                        if (topicName) {
-                            // Navigate to topic graph view for hierarchical topic exploration
-                            window.location.href = `topicGraphView.html?topic=${encodeURIComponent(topicName)}`;
-                        }
-                    });
-                });
-
-            // Default click behavior (search)
-            topicsContent
-                .querySelectorAll(".clickable-topic")
-                .forEach((topicElement) => {
-                    topicElement.addEventListener("click", (e) => {
-                        // Only handle if not clicking on buttons
-                        if (
-                            !(e.target as HTMLElement).closest(".topic-actions")
-                        ) {
-                            const topicName = (e.currentTarget as HTMLElement)
-                                .dataset.topic;
-                            if (topicName) {
-                                this.performSearchWithQuery(topicName);
-                            }
-                        }
-                    });
-                });
+            // Add event listeners
+            this.setupTopicEventListeners(topicsContent);
 
             topicsSection.style.display = "block";
         } else if (topicsSection) {

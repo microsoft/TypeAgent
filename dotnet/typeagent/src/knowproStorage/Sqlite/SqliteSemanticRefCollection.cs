@@ -3,6 +3,8 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
+// TODO: update methods to not use readers directly
+
 public class SqliteSemanticRefCollection : ISemanticRefCollection
 {
     SqliteDatabase _db;
@@ -26,9 +28,9 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         return _count;
     }
 
-    public Task<int> GetCountAsync(CancellationToken cancellationToken = default)
+    public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(GetCount());
+        return ValueTask.FromResult(GetCount());
     }
 
     public void Append(SemanticRef semanticRef)
@@ -49,13 +51,13 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         }
     }
 
-    public Task AppendAsync(SemanticRef semanticRef, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(SemanticRef semanticRef, CancellationToken cancellationToken = default)
     {
         Append(semanticRef);
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
-    public Task AppendAsync(IEnumerable<SemanticRef> items, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(IEnumerable<SemanticRef> items, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(items, nameof(items));
 
@@ -64,7 +66,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         {
             Append(sr);
         }
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     public SemanticRef Get(int semanticRefId)
@@ -88,23 +90,113 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     }
 
 
-    public Task<SemanticRef> GetAsync(int ordinal, CancellationToken cancellationToken = default)
+    public ValueTask<SemanticRef> GetAsync(int semanticRefId, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(Get(ordinal));
+        return ValueTask.FromResult(Get(semanticRefId));
     }
 
-    public Task<IList<SemanticRef>> GetAsync(IList<int> ids, CancellationToken cancellationToken = default)
+    public ValueTask<IList<SemanticRef>> GetAsync(IList<int> semanticRefIds, CancellationToken cancellationToken = default)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(ids, nameof(ids));
+        ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
 
-        // TODO: Bulk operations
-        IList<SemanticRef> semanticRefs = [];
-        foreach (int semrefId in ids)
+        List<SemanticRef> semanticRefs = new(semanticRefIds.Count);
+        foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
-            semanticRefs.Add(Get(semrefId));
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var sql = $@"
+                SELECT semref_id, range_json, knowledge_type, knowledge_json
+                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
+                ORDER BY semref_id";
+            var rows = _db.Enumerate(
+                sql,
+                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                ReadSemanticRefRow);
+            foreach (var row in rows)
+            {
+                semanticRefs.Add(FromSemanticRefRow(row));
+            }
         }
-        return Task.FromResult(semanticRefs);
+        return ValueTask.FromResult((IList<SemanticRef>)semanticRefs);
     }
+
+    public TextRange GetRange(int semanticRefId)
+    {
+        ArgumentVerify.ThrowIfLessThan(semanticRefId, 0, nameof(semanticRefId));
+
+        return _db.Get(@"
+SELECT range_json
+FROM SemanticRefs WHERE semref_id = @semref_id",
+            (cmd) => cmd.AddParameter("semref_id", semanticRefId),
+            (reader) => StorageSerializer.FromJson<TextRange>(reader.GetString(0))
+        );
+    }
+
+    public ValueTask<TextRange> GetTextRangeAsync(int semanticRefId, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetRange(semanticRefId));
+    }
+
+    public ValueTask<IList<TextRange>> GetTextRangeAsync(IList<int> semanticRefIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
+
+        List<TextRange> ranges = new(semanticRefIds.Count);
+        foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var sql = $@"
+                SELECT range_json
+                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
+                ORDER BY semref_id";
+            var rows = _db.Enumerate(
+                sql,
+                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                (reader) => StorageSerializer.FromJson<TextRange>(reader.GetString(0))
+               );
+            ranges.AddRange(rows);
+        }
+        return ValueTask.FromResult((IList<TextRange>)ranges);
+    }
+
+    public KnowledgeType GetKnowledgeType(int semanticRefId)
+    {
+        ArgumentVerify.ThrowIfLessThan(semanticRefId, 0, nameof(semanticRefId));
+
+        return _db.Get(@"
+SELECT knowledge_type
+FROM SemanticRefs WHERE semref_id = @semref_id",
+            (cmd) => cmd.AddParameter("semref_id", semanticRefId),
+            (reader) => reader.GetString(0)
+        );
+    }
+
+    public ValueTask<KnowledgeType> GetKnowledgeTypeAsync(int semanticRefId, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetKnowledgeType(semanticRefId));
+    }
+
+    public ValueTask<IList<KnowledgeType>> GetKnowledgeTypeAsync(IList<int> semanticRefIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
+
+        List<KnowledgeType> ranges = new(semanticRefIds.Count);
+        foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var sql = $@"
+                SELECT knowledge_type
+                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
+                ORDER BY semref_id";
+            var rows = _db.Enumerate(
+                sql,
+                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                (reader) => (KnowledgeType)reader.GetString(0)
+               );
+            ranges.AddRange(rows);
+        }
+        return ValueTask.FromResult((IList<KnowledgeType>)ranges);
+    }
+
 
     public async IAsyncEnumerator<SemanticRef> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
@@ -122,7 +214,7 @@ ORDER BY semref_id
 
     }
 
-    public Task<IList<SemanticRef>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    public ValueTask<IList<SemanticRef>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
 
@@ -135,7 +227,7 @@ ORDER BY semref_id");
 
         using var reader = cmd.ExecuteReader();
         var semanticRefList = reader.GetList(ReadSemanticRef);
-        return Task.FromResult(semanticRefList);
+        return ValueTask.FromResult(semanticRefList);
     }
 
     int GetNextSemanicRefId()

@@ -5,10 +5,10 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class SemanticRefAccumulator : MatchAccumulator<int>
 {
-    public SemanticRefAccumulator()
+    public SemanticRefAccumulator(HashSet<string>? searchTermMatches = null)
         : base()
     {
-        SearchTermMatches = [];
+        SearchTermMatches = searchTermMatches ?? [];
     }
 
     public HashSet<string> SearchTermMatches { get; set; }
@@ -57,7 +57,27 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
         this.SearchTermMatches.Add(term.Text);
     }
 
-    public IList<ScoredSemanticRefOrdinal> ToScoredSemanticRefs()
+    public void AddUnion(SemanticRefAccumulator other)
+    {
+        base.AddUnion(other);
+        this.SearchTermMatches.AddRange(other.SearchTermMatches);
+    }
+
+    public SemanticRefAccumulator Intersect(SemanticRefAccumulator other)
+    {
+        var intersection = new SemanticRefAccumulator();
+        Intersect(other, intersection);
+        if (intersection.Count > 0)
+        {
+            intersection.SearchTermMatches.AddRange(SearchTermMatches);
+            intersection.SearchTermMatches.AddRange(other.SearchTermMatches);
+        }
+        return intersection;
+    }
+
+    public IList<int> ToOrdinals() => ToValues();
+
+    public IList<ScoredSemanticRefOrdinal> ToScoredOrdinals()
     {
         return GetSortedByScore(0).Map((m) =>
         {
@@ -68,5 +88,4 @@ internal class SemanticRefAccumulator : MatchAccumulator<int>
             };
         });
     }
-
 }

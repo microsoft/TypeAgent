@@ -29,7 +29,7 @@ public class PodcastMessage : Message<PodcastMessageMeta>
         entities.Add(EntityFactory.Person(metadata.Speaker));
         if (!metadata.Listeners.IsNullOrEmpty())
         {
-            foreach(var listener in metadata.Listeners)
+            foreach (var listener in metadata.Listeners)
             {
                 entities.Add(EntityFactory.Person(listener));
             }

@@ -11,16 +11,16 @@ internal class QueryOpExpr
     }
 }
 
-internal class QueryOpExpr<T> : QueryOpExpr
+internal class QueryOpExpr<TRetVal> : QueryOpExpr
 {
     public bool IsAsync => true;
 
     public override async ValueTask<object> GetResultAsync(QueryEvalContext context)
     {
-        return await EvalAsync(context);
+        return await EvalAsync(context).ConfigureAwait(false);
     }
 
-    public virtual ValueTask<T> EvalAsync(QueryEvalContext context)
+    public virtual ValueTask<TRetVal> EvalAsync(QueryEvalContext context)
     {
         throw new NotImplementedException();
     }

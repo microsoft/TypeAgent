@@ -1,0 +1,9 @@
+{
+  "emojiChar": "📹",
+  "description": "Agent to create AI videos",
+  "schema": {
+    "description": "Video agent that creates videos using AI text to video modes.",
+    "schemaFile": "./videoActionSchema.ts",
+    "schemaType": "VideoAction"
+  }
+}

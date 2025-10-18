@@ -28,10 +28,7 @@ const defaultConfig: CacheConfig = {
     cacheConflicts: false,
 };
 
-async function loadConstructionCache(
-    constructionFilePath: string,
-    explainerName: string,
-) {
+export async function loadConstructionCacheFile(constructionFilePath: string) {
     if (!fs.existsSync(constructionFilePath)) {
         throw new Error(`File '${constructionFilePath}' does not exist.`);
     }
@@ -39,9 +36,20 @@ async function loadConstructionCache(
     const data = await fs.promises.readFile(constructionFilePath, "utf8");
     if (data === "") {
         // empty file to indicate an new/empty cache.
+        return undefined;
+    }
+    return ConstructionCache.fromJSON(JSON.parse(data));
+}
+
+async function loadConstructionCache(
+    constructionFilePath: string,
+    explainerName: string,
+) {
+    const cache = await loadConstructionCacheFile(constructionFilePath);
+    if (cache === undefined) {
+        // empty file to indicate an new/empty cache.
         return new ConstructionCache(explainerName);
     }
-    const cache = ConstructionCache.fromJSON(JSON.parse(data));
     if (cache.explainerName !== explainerName) {
         throw new Error(
             `Construction cache '${constructionFilePath}' is for explainer '${cache.explainerName}', not '${explainerName}'`,

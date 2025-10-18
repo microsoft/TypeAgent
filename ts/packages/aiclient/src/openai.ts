@@ -10,6 +10,9 @@ import {
     ImageGeneration,
     CompletionJsonSchema,
     CompleteUsageStatsCallback,
+    VideoModel,
+    VideoGenerationJob,
+    ImageInPaintItem,
 } from "./models.js";
 import { callApi, callJsonApi, FetchThrottler } from "./restClient.js";
 import { getEnvSetting } from "./common.js";
@@ -46,6 +49,7 @@ export enum ModelType {
     Chat = "chat",
     Embedding = "embedding",
     Image = "image",
+    Video = "video",
 }
 
 export type ModelInfo<T> = {
@@ -105,6 +109,8 @@ export enum EnvVars {
 
     AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
     AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
+    AZURE_OPENAI_API_KEY_SORA = "AZURE_OPENAI_API_KEY_SORA",
+    AZURE_OPENAI_ENDPOINT_SORA = "AZURE_OPENAI_ENDPOINT_SORA",
 
     OLLAMA_ENDPOINT = "OLLAMA_ENDPOINT",
 
@@ -997,4 +1003,95 @@ function getPromptLength(prompt: string | PromptSection[]) {
         length += section.content.length;
     }
     return length;
+}
+
+/**
+ * Create a client for the OpenAI sora model
+ * @param apiSettings: settings to use to create the client
+ */
+export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
+    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Video);
+    const defaultParams =
+        settings.provider === "azure"
+            ? {}
+            : {
+                  model: settings.modelName,
+              };
+    const model: VideoModel = {
+        generateVideo,
+    };
+    return model;
+
+    async function generateVideo(
+        prompt: string,
+        numVariants: number = 1,
+        durationInSeconds: number = 5,
+        width: number = 1280,
+        height: number = 720,
+        inpaintItems?: ImageInPaintItem[],
+    ): Promise<Result<VideoGenerationJob>> {
+        const headerResult = await createApiHeaders(settings);
+        if (!headerResult.success) {
+            return headerResult;
+        }
+        if (numVariants < 0 || numVariants > 2) {
+            throw Error("n MUST equal 1"); // as of 10.09.2025 API will only accept n<2
+        }
+        const params: VideoGenerationJob = {
+            ...defaultParams,
+            prompt,
+            n_variants: numVariants,
+            n_seconds: durationInSeconds,
+            height: height,
+            width: width,
+            model: "sora",
+            inpaint_items: [],
+        };
+
+        // file parameters
+        const formData = new FormData();
+        if (inpaintItems) {
+            inpaintItems.forEach((item) => {
+                // add the file contents to the form data
+                const buffer = Buffer.from(item.contents!, "base64");
+                const blob = new Blob([buffer], { type: item.mime_type! });
+
+                formData.append("files", blob, item.file_name);
+
+                // remove contents and mime type from the item, since we are sending the file
+                delete item.contents;
+                delete item.mime_type;
+
+                // add the inpaint item to the form data
+                params.inpaint_items?.push(item);
+            });
+        }
+
+        // simple parameters
+        for (const [k, v] of Object.entries(params)) {
+            if (typeof v === "object") formData.append(k, JSON.stringify(v));
+            else formData.append(k, v);
+        }
+
+        // send it
+        try {
+            const result = await fetch(settings.endpoint, {
+                method: "POST",
+                headers: headerResult.data,
+                body: formData,
+            });
+
+            if (!result.ok) {
+                return error(`Error ${result.status}: ${await result.text()}`);
+            }
+
+            return success({
+                endpoint: new URL(settings.endpoint),
+                headers: headerResult.data,
+                ...((await result.json()) as VideoGenerationJob),
+            });
+        } catch (err) {
+            return error(`Error: ${err}`);
+        }
+    }
 }

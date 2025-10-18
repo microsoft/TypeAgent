@@ -5,6 +5,19 @@ namespace TypeAgent.KnowPro.Query;
 
 internal class Match<T>
 {
+    public Match()
+    {
+    }
+
+    public Match(T value, double score, int hitCount)
+    {
+        Value = value;
+        Score = score;
+        HitCount = hitCount;
+        RelatedHitCount = 0;
+        RelatedScore = 0;
+    }
+
     public T Value { get; set; }
 
     public double Score { get; set; } // Overall cumulative score.

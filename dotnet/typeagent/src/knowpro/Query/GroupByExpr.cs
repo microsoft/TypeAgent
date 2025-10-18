@@ -16,14 +16,17 @@ internal class GroupByKnowledgeTypeExpr : QueryOpExpr<IDictionary<KnowledgeType,
 
     public override async ValueTask<IDictionary<KnowledgeType, SemanticRefAccumulator>> EvalAsync(QueryEvalContext context)
     {
-        SemanticRefAccumulator semanticRefMatches = await Matches.EvalAsync(context);
+        SemanticRefAccumulator semanticRefMatches = await Matches.EvalAsync(context).ConfigureAwait(false);
+
         var groups = new Dictionary<KnowledgeType, SemanticRefAccumulator>();
         //
         // TODO: parallelize
         //
         foreach (var match in semanticRefMatches.GetMatches())
         {
-            var semanticRef = await context.GetSemanticRefAsync(match.Value);
+            // TODO: SemanticRefs are cached during processing.
+            // But we could also just get knowledgeTypes directly from the storage provider
+            var semanticRef = await context.SemanticRefs.GetAsync(match.Value);
             var group = groups.GetValueOrDefault(semanticRef.KnowledgeType);
             if (group is null)
             {
@@ -42,7 +45,8 @@ internal class SelectTopNKnowledgeGroupExpr : QueryOpExpr<IDictionary<KnowledgeT
     public SelectTopNKnowledgeGroupExpr(QueryOpExpr<IDictionary<KnowledgeType, SemanticRefAccumulator>> srcExpr,
         int maxMatches = -1,
         int minHitCount = -1
-    ) {
+    )
+    {
         ArgumentVerify.ThrowIfNull(srcExpr, nameof(srcExpr));
 
         SrcExpr = srcExpr;
@@ -56,8 +60,8 @@ internal class SelectTopNKnowledgeGroupExpr : QueryOpExpr<IDictionary<KnowledgeT
 
     public override async ValueTask<IDictionary<KnowledgeType, SemanticRefAccumulator>> EvalAsync(QueryEvalContext context)
     {
-        var groupsAccumulators = await SrcExpr.EvalAsync(context);
-        foreach(var group in groupsAccumulators.Values)
+        var groupsAccumulators = await SrcExpr.EvalAsync(context).ConfigureAwait(false);
+        foreach (var group in groupsAccumulators.Values)
         {
             group.SelectTopNScoring(MaxMatches, MinHitCount);
         }
@@ -78,7 +82,7 @@ internal class GroupSearchResultsExpr : QueryOpExpr<IDictionary<KnowledgeType, S
 
     public override async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>> EvalAsync(QueryEvalContext context)
     {
-        var evalResults = await SrcExpr.EvalAsync(context);
+        var evalResults = await SrcExpr.EvalAsync(context).ConfigureAwait(false);
 
         var semanticRefMatches = new Dictionary<KnowledgeType, SemanticRefSearchResult>();
         foreach (var kv in evalResults)
@@ -91,7 +95,7 @@ internal class GroupSearchResultsExpr : QueryOpExpr<IDictionary<KnowledgeType, S
                     new SemanticRefSearchResult()
                     {
                         TermMatches = accumulator.SearchTermMatches,
-                        SemanticRefMatches = accumulator.ToScoredSemanticRefs(),
+                        SemanticRefMatches = accumulator.ToScoredOrdinals(),
                     }
                 );
             }
