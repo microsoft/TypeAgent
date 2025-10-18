@@ -7,7 +7,7 @@ import { Grammar } from "../src/grammarTypes.js";
 import { escapedSpaces, spaces } from "./testUtils.js";
 
 function testMatchGrammar(grammar: Grammar, request: string) {
-    return matchGrammar(grammar, request).map((m) => m.match);
+    return matchGrammar(grammar, request)?.map((m) => m.match);
 }
 describe("Grammar Matcher", () => {
     describe("Basic Matched Values", () => {
@@ -151,17 +151,17 @@ describe("Grammar Matcher", () => {
         it("simple variable - octal", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "0o123")).toStrictEqual([0o123]);
+            expect(testMatchGrammar(grammar, "0o123")).toStrictEqual([0o123]);
         });
         it("simple variable - binary", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "0b0101")).toStrictEqual([0b101]);
+            expect(testMatchGrammar(grammar, "0b0101")).toStrictEqual([0b101]);
         });
         it("simple variable - hex", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "0x123")).toStrictEqual([0x123]);
+            expect(testMatchGrammar(grammar, "0x123")).toStrictEqual([0x123]);
         });
         it("simple variable - float", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
@@ -186,27 +186,29 @@ describe("Grammar Matcher", () => {
         it("simple variable - optional", () => {
             const g = `@<Start> = hello $(x:number)? -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "hello")).toStrictEqual([undefined]);
+            expect(testMatchGrammar(grammar, "hello")).toStrictEqual([
+                undefined,
+            ]);
         });
         it("space around variable - string", () => {
             const g = `@<Start> = hello $(x) world -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(
-                matchGrammar(grammar, `hello${spaces}value${spaces}world`),
+                testMatchGrammar(grammar, `hello${spaces}value${spaces}world`),
             ).toStrictEqual(["value"]);
         });
         it("space around variable - number", () => {
             const g = `@<Start> = hello $(x:number) world -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(
-                matchGrammar(grammar, `hello${spaces}123${spaces}world`),
+                testMatchGrammar(grammar, `hello${spaces}123${spaces}world`),
             ).toStrictEqual([123]);
         });
 
         it("no space around variable - number and string not separated", () => {
             const g = `@<Start> = $(x:number) $(y: string)-> { n: $(x), s: $(y) }`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "1234b")).toStrictEqual([
+            expect(testMatchGrammar(grammar, "1234b")).toStrictEqual([
                 { n: 1234, s: "b" },
             ]);
         });
@@ -214,7 +216,7 @@ describe("Grammar Matcher", () => {
         it("no space around variable - number and term not separated", () => {
             const g = `@<Start> = $(x:number)\\-$(y:number)pm -> { a: $(x), b: $(y) }`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "1-2pm")).toStrictEqual([
+            expect(testMatchGrammar(grammar, "1-2pm")).toStrictEqual([
                 { a: 1, b: 2 },
             ]);
         });
@@ -335,34 +337,34 @@ describe("Grammar Matcher", () => {
         it("number variable - minus octal", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "-0o123")).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "-0o123")).toStrictEqual([]);
         });
         it("number variable - plus octal", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "+0o123")).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "+0o123")).toStrictEqual([]);
         });
 
         it("number variable - minus binary", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "-0b101")).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "-0b101")).toStrictEqual([]);
         });
         it("number variable - plus binary", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "+0b0101")).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "+0b0101")).toStrictEqual([]);
         });
 
         it("number variable - minus octal", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "-0x123")).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "-0x123")).toStrictEqual([]);
         });
         it("number variable - plus octal", () => {
             const g = `@<Start> = $(x:number) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(matchGrammar(grammar, "+0x123")).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "+0x123")).toStrictEqual([]);
         });
     });
 });

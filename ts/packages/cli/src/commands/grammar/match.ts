@@ -32,7 +32,7 @@ export default class MatchCommand extends Command {
 
         const grammar = await load(args.grammar);
         const result = matchGrammar(grammar, args.input);
-        if (result) {
+        if (result.length > 0) {
             console.log("Matched:");
             console.log(result);
         } else {
