@@ -35,6 +35,8 @@ internal class MatchAccumulator<T>
 
     public IEnumerable<T> GetMatchedValues() => _matches.Keys;
 
+    public List<T> ToValues() => _matches.Values.Map((m) => m.Value);
+
     public void SetMatches(IEnumerable<Match<T>> matches, bool clear = false)
     {
         ArgumentVerify.ThrowIfNull(matches, nameof(matches));
@@ -140,6 +142,9 @@ internal class MatchAccumulator<T>
 
     public MatchAccumulator<T> Intersect(MatchAccumulator<T> other, MatchAccumulator<T> intersection)
     {
+        ArgumentVerify.ThrowIfNull(other, nameof(other));
+        ArgumentVerify.ThrowIfNull(intersection, nameof(intersection));
+
         foreach (var thisMatch in GetMatches())
         {
             var otherMatch = other[thisMatch.Value];
@@ -161,7 +166,19 @@ internal class MatchAccumulator<T>
         }
     }
 
-    public IList<Match<T>> GetSortedByScore(int minHitCount)
+    public void SmoothScores()
+    {
+        // Normalize the score relative to # of hits.
+        foreach (var match in GetMatches())
+        {
+            if (match.HitCount > 0)
+            {
+                match.Score = Ranker.GetSmoothScore(match.Score, match.HitCount);
+            }
+        }
+    }
+
+    public List<Match<T>> GetSortedByScore(int minHitCount = -1)
     {
         if (_matches.Count == 0)
         {
@@ -172,7 +189,7 @@ internal class MatchAccumulator<T>
         return matches;
     }
 
-    public IList<Match<T>> GetTopNScoring(int maxMatches = -1, int minHitCount = -1)
+    public List<Match<T>> GetTopNScoring(int maxMatches = -1, int minHitCount = -1)
     {
         if (Count == 0)
         {
@@ -202,6 +219,20 @@ internal class MatchAccumulator<T>
         return topN.Count;
     }
 
+    public List<Match<T>> GetWithHitCount(int minHitCount)
+    {
+        return [.. MatchesWithMinHitCount(minHitCount)];
+    }
+
+    /// <summary>
+    /// Selects and retains only items with hitCount >= minHitCount.
+    /// </summary>
+    public int SelectWithHitCount(int minHitCount)
+    {
+        var matches = GetWithHitCount(minHitCount);
+        SetMatches(matches, true);
+        return matches.Count;
+    }
 
     private void CombineMatches(Match<T> target, Match<T> source)
     {
@@ -213,7 +244,7 @@ internal class MatchAccumulator<T>
 
     private IEnumerable<Match<T>> MatchesWithMinHitCount(int minHitCount)
     {
-        return minHitCount > 0
+        return minHitCount > 1
             ? GetMatches((m) => m.HitCount >= minHitCount)
             : GetMatches();
     }

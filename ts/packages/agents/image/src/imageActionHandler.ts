@@ -81,6 +81,12 @@ async function handlePhotoAction(
                 }
             }
 
+            // clear the generating display
+            photoContext.actionIO.setDisplay({
+                type: "html",
+                content: ``,
+            });
+
             if (images.length == 0) {
                 result = createActionResult(
                     `Failed to generate the requested image. ${lastError}`,

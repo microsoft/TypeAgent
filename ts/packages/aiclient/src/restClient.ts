@@ -230,7 +230,7 @@ async function getErrorMessage(
             }
         }
     } catch (e) {}
-    return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}${retries !== undefined ? `Quitting after ${retries} retries` : ""}${timeTaken !== undefined ? ` in ${timeTaken}ms` : ""}`;
+    return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}${retries !== undefined ? ` Quitting after ${retries} retries` : ""}${timeTaken !== undefined ? ` in ${timeTaken}ms` : ""}`;
 }
 
 /**
@@ -266,7 +266,7 @@ export async function fetchWithRetry(
             }
             debugHeader(result.status, result.statusText);
             debugHeader(result.headers);
-            if (result.status === 200) {
+            if (result.status === 200 || result.status === 201) {
                 return success(result);
             }
             if (

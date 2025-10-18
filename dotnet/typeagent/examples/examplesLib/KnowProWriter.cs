@@ -11,7 +11,8 @@ public class KnowProWriter : ConsoleWriter
     {
         await foreach (var message in conversation.Messages)
         {
-            KnowProWriter.WriteJson(message);
+            WriteMessage(message);
+            WriteLine();
         }
     }
 
@@ -21,28 +22,135 @@ public class KnowProWriter : ConsoleWriter
         {
             if (sr.KnowledgeType == KnowledgeType.Entity)
             {
-                WriteLine(sr.Knowledge as ConcreteEntity);
+                WriteEntity(sr.Knowledge as ConcreteEntity);
             }
             else
             {
-                KnowProWriter.WriteJson(sr);
+                WriteJson(sr);
             }
             WriteLine();
         }
     }
 
-    public static void WriteLine(ConcreteEntity? entity)
+    public static void WriteMessage(IMessage message)
+    {
+        PushColor(ConsoleColor.Cyan);
+        WriteNameValue("Timestamp", message.Timestamp);
+        if (!message.Tags.IsNullOrEmpty())
+        {
+            // TODO:write tag
+        }
+        WriteMetadata(message);
+        PopColor();
+
+        foreach (var chunk in message.TextChunks)
+        {
+            Write(chunk);
+        }
+        WriteLine();
+    }
+
+    public static void WriteMetadata(IMessage message)
+    {
+        if (message.Metadata is not null)
+        {
+            Write("Metadata: ");
+            WriteJson(message.Metadata);
+        }
+    }
+
+public static void WriteEntity(ConcreteEntity? entity)
     {
         if (entity is not null)
         {
             WriteLine(entity.Name.ToUpper());
-            WriteList(entity.Type, new ListOptions() { Type = ListType.Csv });
+            WriteList(entity.Type, ListType.Csv);
             if (!entity.Facets.IsNullOrEmpty())
             {
                 var facetList = entity.Facets!.Map((f) => f.ToString());
-                WriteList(facetList, new ListOptions() { Type = ListType.Ul });
+                WriteList(facetList, ListType.Ul);
             }
         }
+    }
+
+    public async static Task WriteConversationSearchResultsAsync(
+        IConversation conversation,
+        ConversationSearchResult? searchResult,
+        bool verbose = false
+    )
+    {
+        if (searchResult is null)
+        {
+            WriteError("No conversation search results");
+            return;
+        }
+
+        if (!searchResult.MessageMatches.IsNullOrEmpty())
+        {
+            if (verbose)
+            {
+                foreach (var match in searchResult.MessageMatches)
+                {
+                    var message = await conversation.Messages.GetAsync(match.MessageOrdinal);
+                    WriteNameValue("MessageOrdinal", match.MessageOrdinal);
+                    WriteMessage(message);
+                    WriteLine();
+                }
+            }
+            else
+            {
+                WriteLineHeading("Message Ordinals");
+                WriteScoredMessageOrdinals(conversation, searchResult.MessageMatches);
+            }
+        }
+        if (!searchResult.KnowledgeMatches.IsNullOrEmpty())
+        {
+            WriteLineHeading("Knowledge");
+            WriteKnowledgeSearchResults(conversation, searchResult.KnowledgeMatches);
+        }
+    }
+
+    public static void WriteScoredMessageOrdinals(
+        IConversation conversation,
+        IList<ScoredMessageOrdinal> messageOrdinals
+    )
+    {
+        WriteLine($"{messageOrdinals.Count} matches");
+        WriteJson(messageOrdinals);
+    }
+
+    public static void WriteKnowledgeSearchResults(
+        IConversation conversation,
+        IDictionary<KnowledgeType, SemanticRefSearchResult>? results
+    )
+    {
+        if (results.IsNullOrEmpty())
+        {
+            WriteError("No knowledge results");
+            return;
+        }
+
+        foreach (var kv in results!)
+        {
+            WriteKnowledgeSearchResult(conversation, kv.Key, kv.Value);
+            WriteLine();
+        }
+    }
+
+    public static void WriteKnowledgeSearchResult(
+        IConversation conversation,
+        KnowledgeType kType,
+        SemanticRefSearchResult result
+    )
+    {
+        WriteLineUnderline(kType.ToString().ToUpper());
+        InColor(ConsoleColor.Cyan, () => WriteList(
+            result.TermMatches,
+            "Matched terms",
+            ListType.Ol)
+        );
+        WriteLine($"{result.SemanticRefMatches.Count} matches");
+        WriteJson(result.SemanticRefMatches);
     }
 
     public static void WriteDataFileStats<TMessage>(ConversationData<TMessage> data)

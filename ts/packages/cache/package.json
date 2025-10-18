@@ -15,7 +15,8 @@
     ".": {
       "node": "./dist/index.js",
       "default": "./dist/indexBrowser.js"
-    }
+    },
+    "./grammar": "./dist/indexGrammar.js"
   },
   "files": [
     "dist",
@@ -33,12 +34,14 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "action-grammar": "workspace:*",
     "action-schema": "workspace:*",
     "aiclient": "workspace:*",
     "async": "^3.2.5",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
+    "regexp.escape": "^2.0.1",
     "telemetry": "workspace:*",
     "typechat": "^0.1.1"
   },
@@ -46,6 +49,7 @@
     "@types/async": "^3.2.24",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
+    "@types/regexp.escape": "^2.0.0",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",

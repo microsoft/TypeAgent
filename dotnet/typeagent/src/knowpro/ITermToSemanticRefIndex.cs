@@ -5,15 +5,15 @@ namespace TypeAgent.KnowPro;
 
 public interface ITermToSemanticRefIndex
 {
-    Task<int> GetCountAsync(CancellationToken cancellationToken = default);
+    ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
-    Task<IList<string>> GetTermsAsync(CancellationToken cancellationToken = default);
+    ValueTask<IList<string>> GetTermsAsync(CancellationToken cancellationToken = default);
 
-    Task<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
+    ValueTask<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
 
-    Task RemoveTermAsync(string term, int semanticRefOrdinal, CancellationToken cancellationToken = default);
+    ValueTask RemoveTermAsync(string term, int semanticRefOrdinal, CancellationToken cancellationToken = default);
 
-    Task ClearAsync(CancellationToken cancellationToken = default);
+    ValueTask ClearAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Looks up a term and retrieves its associated scored semantic reference ordinals.
@@ -24,17 +24,17 @@ public interface ITermToSemanticRefIndex
     /// If term found: A list of scored semantic ref ordinals
     /// If term not found: null
     /// </returns>
-    Task<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(string term, CancellationToken cancellationToken = default);
+    ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(string term, CancellationToken cancellationToken = default);
 }
 
-public static class TermToSemanticRefIndexEx
+public static class TermToSemanticRefIndexExtensions
 {
-    public static Task<string> AddTermAsync(this ITermToSemanticRefIndex index, string term, int semanticRefOrdinal, CancellationToken cancellationToken = default)
+    public static ValueTask<string> AddTermAsync(this ITermToSemanticRefIndex index, string term, int semanticRefOrdinal, CancellationToken cancellationToken = default)
     {
         return index.AddTermAsync(term, ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken);
     }
 
-    public static async Task AddEntriesAsync(this ITermToSemanticRefIndex index, string term, ScoredSemanticRefOrdinal[] entries, CancellationToken cancellationToken = default)
+    public static async ValueTask AddEntriesAsync(this ITermToSemanticRefIndex index, string term, ScoredSemanticRefOrdinal[] entries, CancellationToken cancellationToken = default)
     {
         // TODO: Bulk operations
         foreach (var entry in entries)

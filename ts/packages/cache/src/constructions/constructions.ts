@@ -56,7 +56,9 @@ export type ConstructionPart = {
     getPropertyNames(): string[] | undefined;
 };
 
-function getDefaultTranslator(transformNamespaces: Map<string, Transforms>) {
+export function getDefaultMatchValueTranslator(
+    transformNamespaces: Map<string, Transforms>,
+) {
     return {
         transform(
             transformInfo: TransformInfo,
@@ -125,7 +127,7 @@ export class Construction {
             request,
             this.parts,
             config,
-            getDefaultTranslator(this.transformNamespaces),
+            getDefaultMatchValueTranslator(this.transformNamespaces),
         );
 
         if (matchedValues === undefined) {

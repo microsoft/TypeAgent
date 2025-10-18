@@ -54,12 +54,21 @@ public class TopNCollection<T>
         UpHeap(_count);
     }
 
+    public void Add(IEnumerable<ScoredItem<T>> items)
+    {
+        ArgumentVerify.ThrowIfNull(items, nameof(items));
+        foreach(var item in items)
+        {
+            Add(item.Item, item.Score);
+        }
+    }
+
     /// <summary>
     /// Sorts the colletion by Rank
     /// Returns the sorted buffer, and clears the collection
     /// </summary>
     /// <returns></returns>
-    public IList<ScoredItem<T>> ByRankAndClear()
+    public List<ScoredItem<T>> ByRankAndClear()
     {
         VerifyNotEmpty();
 

@@ -7,6 +7,7 @@ import { searchByEntities } from "../../searchWebMemories.mjs";
 import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
+import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
 import registerDebug from "debug";
 
 // ============================================================================
@@ -1264,7 +1265,7 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             );
             const topicIds = topics.map((t: any) => t.topicId);
 
-            // OPTIMIZATION: Single batch query instead of N individual queries
+            // Single batch query instead of N individual queries
             const allEntityRelations =
                 websiteCollection.topicEntityRelations.getEntitiesForTopics(
                     topicIds,
@@ -1313,7 +1314,7 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             const topicIds = new Set(topics.map((t: any) => t.topicId));
             const topicIdsArray = Array.from(topicIds);
 
-            // SUPER OPTIMIZATION: Use optimized query that filters at database level
+            // Use optimized query that filters at database level
             const allRels =
                 websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
                     topicIdsArray,

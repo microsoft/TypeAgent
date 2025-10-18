@@ -14,6 +14,11 @@ public interface ICache<TKey, TValue>
     void Add(TKey key, TValue value);
 }
 
+/// <summary>
+/// Cache that implements LRU Cache policy
+/// </summary>
+/// <typeparam name="TKey"></typeparam>
+/// <typeparam name="TValue"></typeparam>
 public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
 {
     private readonly Dictionary<TKey, LinkedListNode<KeyValuePair<TKey, TValue>>> _index;
@@ -147,9 +152,14 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
     }
 }
 
-public class DictionaryCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey, TValue>
+/// <summary>
+/// Vanilla cache with no cache replacement policy
+/// </summary>
+/// <typeparam name="TKey"></typeparam>
+/// <typeparam name="TValue"></typeparam>
+public class KeyValueCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey, TValue>
 {
-    public DictionaryCache(IEqualityComparer<TKey> comparer = null)
+    public KeyValueCache(IEqualityComparer<TKey> comparer = null)
         : base(comparer)
     {
     }
@@ -161,10 +171,11 @@ public class DictionaryCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TK
 
 public static class CacheExtensions
 {
+    // If item is found in cache, return it, else load
     public static async ValueTask<TValue> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         TKey key,
-        Func<TKey, CancellationToken, Task<TValue>> loader,
+        Func<TKey, CancellationToken, ValueTask<TValue>> loader,
         CancellationToken cancellationToken = default
     )
         where TValue : class
@@ -177,10 +188,12 @@ public static class CacheExtensions
         return value;
     }
 
+    // Finds keys that don't have available values in the cache and loads only their values
+    // Keys that have values present in the cache are returned as i
     public static async ValueTask<IList<TValue>> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
-        Func<IList<TKey>, CancellationToken, Task<IList<TValue>>> loader,
+        Func<IList<TKey>, CancellationToken, ValueTask<IList<TValue>>> loader,
         CancellationToken cancellationToken = default
     )
         where TValue : class
@@ -203,7 +216,7 @@ public static class CacheExtensions
         return values;
     }
 
-    private static (IList<TValue> values, IList<TKey>? pending) ResolveKeys<TKey, TValue>(
+    private static (TValue[] values, List<TKey>? pending) ResolveKeys<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys
     )
@@ -211,7 +224,7 @@ public static class CacheExtensions
         //
         // Fill items from cache
         //
-        List<TValue> values = new List<TValue>(keys.Count);
+        TValue[] values = new TValue[keys.Count];
         List<TKey> pending = null;
         for (int i = 0; i < keys.Count; ++i)
         {
@@ -222,24 +235,25 @@ public static class CacheExtensions
             }
             else
             {
+                values[i] = default;
                 pending ??= [];
                 pending.Add(key);
             }
         }
-        return (values, keys);
+        return (values, pending);
     }
 
     private static void MergePendingResults<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys,
-        IList<TValue> values,
+        TValue[] values,
         IList<TValue> pendingValues
     )
         where TValue : class
     {
         // Merge the batch into results
         int iPending = 0;
-        for (int i = 0; i < values.Count; ++i)
+        for (int i = 0; i < values.Length; ++i)
         {
             if (values[i] is null)
             {

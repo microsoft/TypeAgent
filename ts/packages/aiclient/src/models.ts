@@ -143,3 +143,53 @@ export function modelMetadata_ada002(): EmbeddingModelMetadata {
         embeddingSize: 1536,
     };
 }
+
+export interface VideoModel {
+    generateVideo(
+        prompt: string,
+        numVariants: number,
+        durationInSeconds: number,
+        width: number,
+        height: number,
+        inpaintItems?: ImageInPaintItem[],
+    ): Promise<Result<VideoGenerationJob>>;
+}
+
+export type VideoGenerationJob = {
+    object?: string;
+    id?: string;
+    status?: string;
+    created_at?: number;
+    finished_at?: number;
+    exipres_at?: number;
+    generations?: Array<any>;
+    prompt: string;
+    model: string;
+    n_variants: number;
+    n_seconds: number;
+    height: number;
+    width: number;
+    inpaint_items?: ImageInPaintItem[]; // TODO: add support for videos
+    failure_reason?: string;
+    endpoint?: URL;
+    headers?: Record<string, string>;
+};
+
+export type GeneratedVideo = {
+    revised_prompt: string;
+    video_url: string;
+};
+
+export type ImageInPaintItem = {
+    frame_index: number;
+    type: "image";
+    file_name: string;
+    crop_bounds: {
+        left_fraction: number;
+        top_fraction: number;
+        right_fraction: number;
+        bottom_fraction: number;
+    };
+    contents?: string | undefined; // base64 encoded image contents
+    mime_type?: string;
+};
