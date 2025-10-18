@@ -44,11 +44,8 @@ public class TypeAgentException<TError> : Exception
 
     private static string MakeMessage(TError error, string message)
     {
-        if (message != null)
-        {
-            return string.Format("{0}\n{1}", error, message);
-        }
-
-        return error.ToString();
+        return message != null
+            ? string.Format("{0}\n{1}", error, message)
+            : error.ToString();
     }
 }

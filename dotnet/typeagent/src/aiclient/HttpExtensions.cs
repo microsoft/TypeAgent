@@ -13,8 +13,6 @@ public class HttpRequestSettings
 
     public int MaxRetryPauseMs { get; set; } = -1;
 
-    public int TimeoutMs { get; set; } = 0;
-
     public double JitterRange { get; set; } = 0.5;
 
     internal static readonly HttpRequestSettings Default = new();
@@ -69,12 +67,6 @@ public static class HttpEx
                     httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
                 }
 
-                if (settings.TimeoutMs > 0)
-                {
-                    var timeOutCancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    timeOutCancel.CancelAfter(settings.TimeoutMs);
-                    cancellationToken = timeOutCancel.Token;
-                }
 
                 HttpResponseMessage response = await client.SendAsync(httpRequest,cancellationToken).ConfigureAwait(false);
                 if (response.StatusCode == HttpStatusCode.OK)
