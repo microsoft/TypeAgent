@@ -132,18 +132,90 @@ class WebsiteLibraryPanelFullPage {
     }
 
     private setupNavigation() {
+        // Setup icon rail sidebar toggle
+        this.setupIconRailSidebar();
+
+        // Setup navigation items
         const navItems = document.querySelectorAll(".nav-item");
         navItems.forEach((item) => {
             item.addEventListener("click", (e) => {
                 const target = e.currentTarget as HTMLElement;
-                const page = target.getAttribute("data-page") as
-                    | "search"
-                    | "discover"
-                    | "analytics";
-                if (page) {
+                const page = target.getAttribute("data-page");
+
+                // Handle special graph pages
+                if (page === "topic-graph") {
+                    window.open("topicGraphView.html", "_blank");
+                    return;
+                }
+                if (page === "entity-graph") {
+                    window.open("entityGraphView.html", "_blank");
+                    return;
+                }
+
+                // Handle regular pages
+                if (page === "search" || page === "discover" || page === "analytics") {
                     this.navigateToPage(page).catch(console.error);
                 }
             });
+        });
+    }
+
+    private setupIconRailSidebar() {
+        const sidebar = document.getElementById("iconRailSidebar");
+        const toggleButton = document.getElementById("sidebarToggle");
+        const overlay = document.getElementById("sidebarOverlay");
+
+        if (!sidebar || !toggleButton) return;
+
+        // Load saved state, default to collapsed
+        const savedState = localStorage.getItem("sidebar-collapsed-state");
+        if(savedState !== null && savedState === "false") {
+            sidebar.classList.add("expanded");
+        }
+
+        // Toggle button click
+        toggleButton.addEventListener("click", () => {
+            sidebar.classList.toggle("expanded");
+            const isExpanded = sidebar.classList.contains("expanded");
+            localStorage.setItem("sidebar-collapsed-state", (!isExpanded).toString());
+        });
+
+        // Overlay click (mobile)
+        overlay?.addEventListener("click", () => {
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove("expanded");
+                localStorage.setItem("sidebar-collapsed-state", "true");
+            }
+        });
+
+        // Keyboard shortcut: Ctrl/Cmd + B
+        document.addEventListener("keydown", (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+                e.preventDefault();
+                sidebar.classList.toggle("expanded");
+                const isExpanded = sidebar.classList.contains("expanded");
+                localStorage.setItem("sidebar-collapsed-state", (!isExpanded).toString());
+            }
+
+            // Escape to collapse on mobile
+            if (e.key === "Escape" && window.innerWidth <= 768) {
+                sidebar.classList.remove("expanded");
+                localStorage.setItem("sidebar-collapsed-state", "true");
+            }
+        });
+
+        // Auto-collapse on mobile
+        const handleResize = () => {
+            if (window.innerWidth <= 768 && sidebar.classList.contains("expanded")) {
+                sidebar.classList.remove("expanded");
+                localStorage.setItem("sidebar-collapsed-state", "true");
+            }
+        };
+
+        let resizeTimer: number;
+        window.addEventListener("resize", () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = window.setTimeout(handleResize, 250);
         });
     }
 

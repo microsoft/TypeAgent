@@ -7,7 +7,6 @@ import { searchByEntities } from "../../searchWebMemories.mjs";
 import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
-import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
 import registerDebug from "debug";
 
 // ============================================================================
