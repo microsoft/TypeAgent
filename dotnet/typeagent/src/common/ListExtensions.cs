@@ -103,4 +103,11 @@ public static class ListExtensions
         return lo;
     }
 
+    public static List<ScoredItem<T>> GetTopK<T>(this IEnumerable<ScoredItem<T>> items, int topK)
+    {
+        var topNList = new TopNCollection<T>(topK);
+        topNList.Add(items);
+        return topNList.ByRankAndClear();
+    }
+
 }
