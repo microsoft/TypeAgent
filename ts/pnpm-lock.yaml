@@ -845,6 +845,25 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/actionGrammarCompiler:
+    dependencies:
+      '@oclif/core':
+        specifier: ^4.2.10
+        version: 4.5.2
+      '@oclif/plugin-help':
+        specifier: ^6
+        version: 6.2.26
+      action-grammar:
+        specifier: workspace:*
+        version: link:../actionGrammar
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/actionSchema:
     dependencies:
       debug:
@@ -1866,6 +1885,9 @@ importers:
       '@types/spotify-api':
         specifier: ^0.0.25
         version: 0.0.25
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       action-schema-compiler:
         specifier: workspace:*
         version: link:../../actionSchemaCompiler

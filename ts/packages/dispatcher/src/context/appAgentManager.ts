@@ -328,10 +328,14 @@ export class AppAgentManager implements ActionConfigProvider {
                     try {
                         const g = loadGrammar(config);
                         if (g) {
+                            debug(`Adding grammar for schema: ${schemaName}`);
                             actionGrammarStore.addGrammar(schemaName, g);
                         }
-                    } catch {
+                    } catch (e) {
                         // REVIEW: Ignore errors for now.
+                        debugError(
+                            `Failed to load grammar for schema: ${schemaName}\n${e}`,
+                        );
                     }
                 }
             } catch (e: any) {

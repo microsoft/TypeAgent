@@ -29,7 +29,7 @@ import {
     ExplanationOptions,
     ProcessExplanationResult,
 } from "./explainWorkQueue.js";
-import { GrammarStoreImpl } from "../grammar/grammarStore.js";
+import { GrammarStoreImpl } from "./grammarStore.js";
 import { GrammarStore, MatchResult } from "./types.js";
 
 export type ProcessRequestActionResult = {
@@ -79,7 +79,7 @@ export function getSchemaNamespaceKeys(
     );
 }
 
-function splitSchemaNamespaceKey(namespaceKey: string): {
+export function splitSchemaNamespaceKey(namespaceKey: string): {
     schemaName: string;
     hash: string | undefined;
     activityName: string | undefined;
@@ -304,44 +304,29 @@ export class AgentCache {
         );
     }
 
+    public isEnabled(): boolean {
+        return (
+            this._grammarStore.isEnabled() ||
+            this._constructionStore.isEnabled()
+        );
+    }
+
     public match(request: string, options?: MatchOptions): MatchResult[] {
-        const allMatches: MatchResult[] = [];
-        allMatches.push(...this._grammarStore.match(request, options));
         const store = this._constructionStore;
         if (store.isEnabled()) {
-            allMatches.push(...store.match(request, options));
+            const constructionMatches = store.match(request, options);
+            if (constructionMatches.length > 0) {
+                // TODO: Move this in the construction store
+                return constructionMatches.map((m) => {
+                    const { construction, ...rest } = m;
+                    return rest;
+                });
+            }
         }
-        return allMatches.sort((a, b) => {
-            // REVIEW: temporary heuristics to get better result with wildcards
-
-            // Prefer non-wildcard matches
-            if (a.wildcardCharCount === 0) {
-                if (b.wildcardCharCount !== 0) {
-                    return -1;
-                }
-            } else {
-                if (b.wildcardCharCount === 0) {
-                    return 1;
-                }
-            }
-
-            // Prefer less implicit parameters
-            if (a.implicitParameterCount !== b.implicitParameterCount) {
-                return a.implicitParameterCount - b.implicitParameterCount;
-            }
-
-            // Prefer more non-optional parts
-            if (b.nonOptionalCount !== a.nonOptionalCount) {
-                return b.nonOptionalCount - a.nonOptionalCount;
-            }
-
-            // Prefer more matched parts
-            if (b.matchedCount !== a.matchedCount) {
-                return b.matchedCount - a.matchedCount;
-            }
-
-            // Prefer less wildcard characters
-            return a.wildcardCharCount - b.wildcardCharCount;
-        });
+        const grammarStore = this._grammarStore;
+        if (grammarStore.isEnabled()) {
+            return this._grammarStore.match(request, options);
+        }
+        throw new Error("AgentCache is disabled");
     }
 }

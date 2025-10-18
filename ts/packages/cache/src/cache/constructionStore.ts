@@ -23,6 +23,7 @@ import {
     PrintOptions,
     printConstructionCache,
 } from "../constructions/constructionPrint.js";
+import { sortMatches } from "./sortMatches.js";
 
 const debugConstMatch = registerDebug("typeagent:const:match");
 
@@ -373,12 +374,13 @@ export class ConstructionStoreImpl implements ConstructionStore {
         if (matches.length === 0 && this.builtInCache !== undefined) {
             matches = this.builtInCache.match(request, options);
         }
+        const sortedMatches = sortMatches(matches);
         if (debugConstMatch.enabled) {
             debugConstMatch(
-                `Found ${matches.length} construction(s) for '${request}':`,
+                `Found ${sortedMatches.length} construction(s) for '${request}':`,
             );
-            for (let i = 0; i < matches.length; i++) {
-                const match = matches[i];
+            for (let i = 0; i < sortedMatches.length; i++) {
+                const match = sortedMatches[i];
                 const actionStr = chalk.green(match.match.actions);
                 const constructionStr = chalk.grey(`(${match.construction})`);
                 const message = [
@@ -392,7 +394,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
                 debugConstMatch(message.join("\n"));
             }
         }
-        return matches;
+        return sortedMatches;
     }
 
     public async prune(filter: (namespaceKey: string) => boolean) {

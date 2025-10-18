@@ -9,7 +9,7 @@ describe("Grammar Serialization", () => {
     it("Round trip", () => {
         const grammarText = `
             @<Start> = hello <nested> $(x:number) <nested> -> { greeting: $(x) }
-            @<nested> = one | two | three | $(y:string} | maybe <nested>
+            @<nested> = one | two | three | $(y:string) | maybe <nested>
         `;
         const grammar = loadGrammarRules("test", grammarText);
         const serialized = grammarToJson(grammar);

@@ -145,6 +145,7 @@ export class Construction {
         );
         return [
             {
+                type: "construction",
                 construction: this,
                 match: new RequestAction(
                     request,

@@ -31,6 +31,7 @@ type MatchedValue =
 type MatchedValueNode = {
     valueId: number;
     value: MatchedValue;
+    wildcard: boolean;
     prev: MatchedValueNode | undefined;
 };
 
@@ -69,22 +70,35 @@ type MatchState = {
         | undefined;
 };
 
-function getMatchedValue(
-    valueId: ValueIdNode,
+function getMatchedValueNode(
+    valueId: number,
     values: MatchedValueNode | undefined,
-): MatchedValue | undefined {
+): MatchedValueNode {
     let v: MatchedValueNode | undefined = values;
-    while (v !== undefined && v.valueId !== valueId.valueId) {
+    while (v !== undefined && v.valueId !== valueId) {
         v = v.prev;
     }
-    return v?.value;
+    if (v === undefined) {
+        throw new Error(`Internal error: Missing value for ${valueId}`);
+    }
+    return v;
 }
 
+type GrammarMatchStat = {
+    matchedValueCount: number;
+    wildcardCharCount: number;
+    entityWildcardPropertyNames: string[];
+};
+export type GrammarMatchResult = GrammarMatchStat & {
+    match: unknown;
+};
+
 function createValue(
+    stat: GrammarMatchStat,
     node: ValueNode | undefined,
     valueIds: ValueIdNode | undefined,
     values: MatchedValueNode | undefined,
-): any {
+): unknown {
     if (node === undefined) {
         if (valueIds === undefined) {
             throw new Error("Internal error: default matched values");
@@ -94,9 +108,10 @@ function createValue(
                 `Internal error: No value definitions for multiple values`,
             );
         }
-        const value = getMatchedValue(valueIds, values);
+        const valueNode = getMatchedValueNode(valueIds.valueId, values);
+        const value = valueNode.value;
         if (typeof value === "object") {
-            return createValue(value.node, value.valueIds, values);
+            return createValue(stat, value.node, value.valueIds, values);
         }
         return value;
     }
@@ -108,14 +123,14 @@ function createValue(
             const obj: Record<string, any> = {};
 
             for (const [k, v] of Object.entries(node.value)) {
-                obj[k] = createValue(v, valueIds, values);
+                obj[k] = createValue(stat, v, valueIds, values);
             }
             return obj;
         }
         case "array": {
             const arr: any[] = [];
             for (const v of node.value) {
-                arr.push(createValue(v, valueIds, values));
+                arr.push(createValue(stat, v, valueIds, values));
             }
             return arr;
         }
@@ -129,10 +144,26 @@ function createValue(
                     `Internal error: No value for variable '${node.name}. Values: ${JSON.stringify(valueIds)}'`,
                 );
             }
-            const value = getMatchedValue(v, values);
+            const valueNode = getMatchedValueNode(v.valueId, values);
+            const value = valueNode.value;
             if (typeof value === "object") {
-                return createValue(value.node, value.valueIds, values);
+                return createValue(stat, value.node, value.valueIds, values);
             }
+
+            // undefined means optional, don't count
+            if (value !== undefined) {
+                stat.matchedValueCount++;
+            }
+
+            if (valueNode.wildcard) {
+                if (typeof value !== "string") {
+                    throw new Error(
+                        `Internal error: Wildcard has non-string value for variable '${node.name}'`,
+                    );
+                }
+                stat.wildcardCharCount += value.length;
+            }
+
             return value;
         }
     }
@@ -162,14 +193,14 @@ function createCaptureWildcardState(
     newIndex: number,
 ) {
     const { start: wildcardStart, valueId } = state.pendingWildcard!;
-    const wildcard = captureWildcard(request, wildcardStart, wildcardEnd);
-    if (wildcard === undefined) {
+    const wildcardStr = captureWildcard(request, wildcardStart, wildcardEnd);
+    if (wildcardStr === undefined) {
         return undefined;
     }
     const newState = { ...state };
     newState.index = newIndex;
     newState.pendingWildcard = undefined;
-    addValueWithId(newState, valueId, wildcard);
+    addValueWithId(newState, valueId, wildcardStr, true);
     return newState;
 }
 
@@ -183,10 +214,12 @@ function addValueWithId(
     state: MatchState,
     valueId: number,
     matchedValue: MatchedValue,
+    wildcard: boolean,
 ) {
     state.values = {
         valueId,
         value: matchedValue,
+        wildcard,
         prev: state.values,
     };
 }
@@ -197,13 +230,13 @@ function addValue(
     matchedValue: MatchedValue,
 ) {
     const valueId = addValueId(state, name);
-    addValueWithId(state, valueId, matchedValue);
+    addValueWithId(state, valueId, matchedValue, false);
 }
 
 function finalizeRule(
     state: MatchState,
     request: string,
-    results: any[],
+    results: GrammarMatchResult[],
     pending: MatchState[],
 ) {
     const nested = state.nested;
@@ -245,7 +278,7 @@ function finalizeRule(
             return;
         }
         state.index = request.length;
-        addValueWithId(state, state.pendingWildcard.valueId, value);
+        addValueWithId(state, state.pendingWildcard.valueId, value, true);
     }
     if (state.index < request.length) {
         // Detect trailing separators
@@ -267,19 +300,35 @@ function finalizeRule(
     debugMatch(
         `Matched at end of input. Matched ids: ${JSON.stringify(state.valueIds)}, values: ${JSON.stringify(state.values)}'`,
     );
-    results.push(createValue(state.rule.value, state.valueIds, state.values));
+
+    const matchResult: GrammarMatchResult = {
+        match: undefined,
+        matchedValueCount: 0,
+        wildcardCharCount: 0,
+        entityWildcardPropertyNames: [],
+    };
+    matchResult.match = createValue(
+        matchResult,
+        state.rule.value,
+        state.valueIds,
+        state.values,
+    );
+    results.push(matchResult);
 }
 
-type MatchResult = any;
-function matchRules(grammar: Grammar, request: string): MatchResult[] {
+function matchRules(grammar: Grammar, request: string): GrammarMatchResult[] {
     const pending: MatchState[] = grammar.rules.map((r, i) => ({
         name: `<Start>[${i}]`,
         rule: r,
         partIndex: 0,
         index: 0,
         nextValueId: 0,
+        matchedCount: 0,
+        wildcardCharCount: 0,
+        nonOptionalCount: 0,
+        implicitParameterCount: 0,
     }));
-    const results: MatchResult[] = [];
+    const results: GrammarMatchResult[] = [];
     while (pending.length > 0) {
         const state = pending.shift()!;
         const { rule, partIndex } = state;

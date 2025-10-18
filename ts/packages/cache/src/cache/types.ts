@@ -4,6 +4,7 @@
 import { ParamValueType, RequestAction } from "../explanation/requestAction.js";
 
 export type MatchResult = {
+    type: "grammar" | "construction";
     match: RequestAction;
     matchedCount: number;
     wildcardCharCount: number;

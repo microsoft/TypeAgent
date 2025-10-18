@@ -32,7 +32,7 @@ export interface IAgentMessage {
 
 export type NotifyExplainedData = {
     error?: string | undefined;
-    fromCache: boolean;
+    fromCache: "construction" | "grammar" | false;
     fromUser: boolean;
     time: string;
 };

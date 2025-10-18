@@ -1,0 +1,8 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+@ <Start> = <Pause>
+          | <Resume>
+
+@ <Pause> = pause ((the)? music)?   ->  { actionName: "pause" }
+@ <Resume> = resume ((the)? music)?   ->  { actionName: "resume" }
