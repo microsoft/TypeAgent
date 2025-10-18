@@ -83,7 +83,7 @@ export interface WebsiteResult {
             name: string;
             relevance: number;
             occurrences: number;
-            type: 'primary' | 'secondary' | 'related';
+            type: "primary" | "secondary" | "related";
         }>;
         entities: Array<{
             name: string;
@@ -350,7 +350,7 @@ export async function searchWebMemories(
                 websiteResults,
                 limitedWebsites,
                 knowledgeResult.topicMap,
-                knowledgeResult.entityMap
+                knowledgeResult.entityMap,
             );
         }
 
@@ -659,7 +659,8 @@ function calculateSimplePageRank(
 
         for (let i = 0; i < n; i++) {
             if (outDegree[i] > 0) {
-                const contribution = (dampingFactor * pageRank[i]) / outDegree[i];
+                const contribution =
+                    (dampingFactor * pageRank[i]) / outDegree[i];
                 for (const neighbor of adjacency.get(i)!) {
                     newPageRank[neighbor] += contribution;
                 }
@@ -799,7 +800,8 @@ function rankEntitiesWithPageRank(
         const pageRank = pageRanks.get(key) || 0;
         const normalizedCount = entry.count / Math.max(1, entityMap.size);
         const avgConfidence = entry.totalConfidence / entry.count;
-        const combinedScore = pageRank * 0.5 + normalizedCount * 0.3 + avgConfidence * 0.2;
+        const combinedScore =
+            pageRank * 0.5 + normalizedCount * 0.3 + avgConfidence * 0.2;
 
         return {
             entity: entry.entity,
@@ -824,7 +826,24 @@ function rankEntitiesWithPageRank(
 
 async function extractKnowledgeFromResults(
     results: website.Website[],
-): Promise<{ entities: Entity[]; topics: string[]; topicMap: Map<string, { topic: string; count: number; sites: string[]; pageRank?: number }>; entityMap: Map<string, { entity: any; count: number; totalConfidence: number; sites: string[]; pageRank?: number }> }> {
+): Promise<{
+    entities: Entity[];
+    topics: string[];
+    topicMap: Map<
+        string,
+        { topic: string; count: number; sites: string[]; pageRank?: number }
+    >;
+    entityMap: Map<
+        string,
+        {
+            entity: any;
+            count: number;
+            totalConfidence: number;
+            sites: string[];
+            pageRank?: number;
+        }
+    >;
+}> {
     // Entity aggregation with count tracking
     const entityMap = new Map<
         string,
@@ -944,7 +963,10 @@ async function extractKnowledgeFromResults(
     // Calculate PageRank and store in maps
     const topicNodes = Array.from(topicMap.keys());
     const topicRelationships = buildTopicRelationships(topicMap);
-    const topicPageRanks = calculateSimplePageRank(topicNodes, topicRelationships);
+    const topicPageRanks = calculateSimplePageRank(
+        topicNodes,
+        topicRelationships,
+    );
     topicPageRanks.forEach((rank, topic) => {
         const entry = topicMap.get(topic);
         if (entry) entry.pageRank = rank;
@@ -952,7 +974,10 @@ async function extractKnowledgeFromResults(
 
     const entityNodes = Array.from(entityMap.keys());
     const entityRelationships = buildEntityRelationships(entityMap);
-    const entityPageRanks = calculateSimplePageRank(entityNodes, entityRelationships);
+    const entityPageRanks = calculateSimplePageRank(
+        entityNodes,
+        entityRelationships,
+    );
     entityPageRanks.forEach((rank, entity) => {
         const entry = entityMap.get(entity);
         if (entry) entry.pageRank = rank;
@@ -973,7 +998,7 @@ async function extractKnowledgeFromResults(
 }
 
 function buildTopicRelationships(
-    topicMap: Map<string, { topic: string; count: number; sites: string[] }>
+    topicMap: Map<string, { topic: string; count: number; sites: string[] }>,
 ): Map<string, Set<string>> {
     const relationships = new Map<string, Set<string>>();
     const topicsBySite = new Map<string, Set<string>>();
@@ -1009,7 +1034,10 @@ function buildTopicRelationships(
 }
 
 function buildEntityRelationships(
-    entityMap: Map<string, { entity: any; count: number; totalConfidence: number; sites: string[] }>
+    entityMap: Map<
+        string,
+        { entity: any; count: number; totalConfidence: number; sites: string[] }
+    >,
 ): Map<string, Set<string>> {
     const relationships = new Map<string, Set<string>>();
     const entitiesBySite = new Map<string, Set<string>>();
@@ -1047,10 +1075,23 @@ function buildEntityRelationships(
 function extractInsightsForWebsite(
     websiteResult: WebsiteResult,
     websiteSite: website.Website,
-    topicMap: Map<string, { topic: string; count: number; sites: string[]; pageRank?: number }>,
-    entityMap: Map<string, { entity: any; count: number; totalConfidence: number; sites: string[]; pageRank?: number }>
+    topicMap: Map<
+        string,
+        { topic: string; count: number; sites: string[]; pageRank?: number }
+    >,
+    entityMap: Map<
+        string,
+        {
+            entity: any;
+            count: number;
+            totalConfidence: number;
+            sites: string[];
+            pageRank?: number;
+        }
+    >,
 ): { topics: any[]; entities: any[]; relevanceScore: number } {
-    const websiteText = `${websiteResult.title} ${websiteResult.snippet || ""} ${websiteResult.domain}`.toLowerCase();
+    const websiteText =
+        `${websiteResult.title} ${websiteResult.snippet || ""} ${websiteResult.domain}`.toLowerCase();
     const knowledge = websiteSite.getKnowledge();
 
     const topics: any[] = [];
@@ -1059,7 +1100,10 @@ function extractInsightsForWebsite(
     // Extract topics from this website's knowledge
     if (knowledge?.topics) {
         for (const topic of knowledge.topics) {
-            const topicName = typeof topic === "string" ? topic : (topic as any).name || (topic as any).topic || topic;
+            const topicName =
+                typeof topic === "string"
+                    ? topic
+                    : (topic as any).name || (topic as any).topic || topic;
             if (!topicName) continue;
 
             const topicKey = topicName.toLowerCase();
@@ -1068,14 +1112,20 @@ function extractInsightsForWebsite(
             if (topicInfo) {
                 const occurrences = countOccurrences(websiteText, topicKey);
                 const pageRank = topicInfo.pageRank || 0;
-                const normalizedCount = topicInfo.count / Math.max(1, topicMap.size);
-                const relevance = (pageRank * 0.6) + (normalizedCount * 0.4);
+                const normalizedCount =
+                    topicInfo.count / Math.max(1, topicMap.size);
+                const relevance = pageRank * 0.6 + normalizedCount * 0.4;
 
                 topics.push({
                     name: topicInfo.topic,
                     relevance,
                     occurrences: Math.max(occurrences, 1),
-                    type: relevance > 0.7 ? 'primary' : relevance > 0.4 ? 'secondary' : 'related'
+                    type:
+                        relevance > 0.7
+                            ? "primary"
+                            : relevance > 0.4
+                              ? "secondary"
+                              : "related",
                 });
             }
         }
@@ -1091,13 +1141,14 @@ function extractInsightsForWebsite(
 
             if (entityInfo) {
                 const mentions = countOccurrences(websiteText, entityKey);
-                const avgConfidence = entityInfo.totalConfidence / entityInfo.count;
+                const avgConfidence =
+                    entityInfo.totalConfidence / entityInfo.count;
 
                 entities.push({
                     name: entityInfo.entity.name,
                     type: entityInfo.entity.type,
                     confidence: avgConfidence,
-                    mentions: Math.max(mentions, 1)
+                    mentions: Math.max(mentions, 1),
                 });
             }
         }
@@ -1111,21 +1162,29 @@ function extractInsightsForWebsite(
     const topEntities = entities.slice(0, 3);
 
     // Calculate overall relevance score
-    const topicScore = topTopics.reduce((sum, t) => sum + t.relevance, 0) / Math.max(topTopics.length, 1);
-    const entityScore = topEntities.reduce((sum, e) => sum + e.confidence, 0) / Math.max(topEntities.length, 1);
-    const relevanceScore = topTopics.length > 0 || topEntities.length > 0
-        ? (topicScore + entityScore) / 2
-        : 0;
+    const topicScore =
+        topTopics.reduce((sum, t) => sum + t.relevance, 0) /
+        Math.max(topTopics.length, 1);
+    const entityScore =
+        topEntities.reduce((sum, e) => sum + e.confidence, 0) /
+        Math.max(topEntities.length, 1);
+    const relevanceScore =
+        topTopics.length > 0 || topEntities.length > 0
+            ? (topicScore + entityScore) / 2
+            : 0;
 
     return {
         topics: topTopics,
         entities: topEntities,
-        relevanceScore
+        relevanceScore,
     };
 }
 
 function countOccurrences(text: string, searchTerm: string): number {
-    const regex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const regex = new RegExp(
+        searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "gi",
+    );
     const matches = text.match(regex);
     return matches ? matches.length : 0;
 }
@@ -1133,19 +1192,36 @@ function countOccurrences(text: string, searchTerm: string): number {
 function associateInsightsWithResults(
     websiteResults: WebsiteResult[],
     websites: website.Website[],
-    topicMap: Map<string, { topic: string; count: number; sites: string[]; pageRank?: number }>,
-    entityMap: Map<string, { entity: any; count: number; totalConfidence: number; sites: string[]; pageRank?: number }>
+    topicMap: Map<
+        string,
+        { topic: string; count: number; sites: string[]; pageRank?: number }
+    >,
+    entityMap: Map<
+        string,
+        {
+            entity: any;
+            count: number;
+            totalConfidence: number;
+            sites: string[];
+            pageRank?: number;
+        }
+    >,
 ): WebsiteResult[] {
     return websiteResults.map((result, index) => {
         const websiteSite = websites[index];
         if (!websiteSite) return result;
 
-        const insights = extractInsightsForWebsite(result, websiteSite, topicMap, entityMap);
+        const insights = extractInsightsForWebsite(
+            result,
+            websiteSite,
+            topicMap,
+            entityMap,
+        );
 
         if (insights.topics.length > 0 || insights.entities.length > 0) {
             return {
                 ...result,
-                insights
+                insights,
             };
         }
 
@@ -1261,7 +1337,7 @@ export async function searchByEntities(
             websiteResults,
             websites,
             knowledgeResult.topicMap,
-            knowledgeResult.entityMap
+            knowledgeResult.entityMap,
         );
 
         return {
@@ -1352,7 +1428,7 @@ export async function searchByTopics(
             websiteResults,
             websites,
             knowledgeResult.topicMap,
-            knowledgeResult.entityMap
+            knowledgeResult.entityMap,
         );
 
         return {

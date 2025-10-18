@@ -15,7 +15,7 @@ import registerDebug from "debug";
 
 export interface TopicActivity {
     timestamp: string;
-    activityType: 'bookmark' | 'visit' | 'extraction';
+    activityType: "bookmark" | "visit" | "extraction";
     url: string;
     title: string;
     domain: string;
@@ -2793,73 +2793,110 @@ export async function getTopicTimelines(
 ): Promise<TopicTimelineResponse> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return {
                 success: false,
                 timelines: [],
-                metadata: { totalEntries: 0, timeRange: { earliest: '', latest: '' }, topicsWithActivity: 0 },
-                error: "Website collection not available"
+                metadata: {
+                    totalEntries: 0,
+                    timeRange: { earliest: "", latest: "" },
+                    topicsWithActivity: 0,
+                },
+                error: "Website collection not available",
             };
         }
 
-        debug(`[Topic Timelines] Processing ${parameters.topicNames.length} topics`);
+        debug(
+            `[Topic Timelines] Processing ${parameters.topicNames.length} topics`,
+        );
 
         // 1. Expand topic list with neighborhood exploration
         let allTopics = [...parameters.topicNames];
-        
+
         if (parameters.includeRelatedTopics) {
             allTopics = await expandTopicNeighborhood(
-                parameters.topicNames, 
+                parameters.topicNames,
                 parameters.neighborhoodDepth || 1,
-                websiteCollection
+                websiteCollection,
             );
-            debug(`[Topic Timelines] Expanded to ${allTopics.length} topics including neighbors`);
+            debug(
+                `[Topic Timelines] Expanded to ${allTopics.length} topics including neighbors`,
+            );
         }
 
         // 2. Get timeline data for each topic
         const timelines: TopicTimeline[] = [];
-        
+
         for (const topicName of allTopics) {
-            const timeline = await buildTopicTimeline(topicName, websiteCollection, parameters);
+            const timeline = await buildTopicTimeline(
+                topicName,
+                websiteCollection,
+                parameters,
+            );
             if (timeline.activities.length > 0) {
                 timelines.push(timeline);
             }
         }
 
-        debug(`[Topic Timelines] Built ${timelines.length} timelines with activity`);
+        debug(
+            `[Topic Timelines] Built ${timelines.length} timelines with activity`,
+        );
 
         // 3. Ensure requested topics are always included, then add up to 4 neighbor topics
-        const requestedTimelines = timelines.filter(t => parameters.topicNames.includes(t.topicName));
-        const neighborTimelines = timelines.filter(t => !parameters.topicNames.includes(t.topicName));
+        const requestedTimelines = timelines.filter((t) =>
+            parameters.topicNames.includes(t.topicName),
+        );
+        const neighborTimelines = timelines.filter(
+            (t) => !parameters.topicNames.includes(t.topicName),
+        );
 
         // Sort neighbors by activity
-        const sortedNeighbors = neighborTimelines.sort((a, b) => b.totalActivity - a.totalActivity);
+        const sortedNeighbors = neighborTimelines.sort(
+            (a, b) => b.totalActivity - a.totalActivity,
+        );
 
         // Combine: all requested topics + up to 4 neighbors
-        const combinedTimelines = [...requestedTimelines, ...sortedNeighbors.slice(0, 4)];
+        const combinedTimelines = [
+            ...requestedTimelines,
+            ...sortedNeighbors.slice(0, 4),
+        ];
 
         // Sort final result by activity level
-        const sortedTimelines = combinedTimelines.sort((a, b) => b.totalActivity - a.totalActivity);
+        const sortedTimelines = combinedTimelines.sort(
+            (a, b) => b.totalActivity - a.totalActivity,
+        );
 
         // 4. Calculate metadata
-        const allActivities = sortedTimelines.flatMap(t => t.activities);
-        const dates = allActivities.map(a => new Date(a.timestamp));
-        
+        const allActivities = sortedTimelines.flatMap((t) => t.activities);
+        const dates = allActivities.map((a) => new Date(a.timestamp));
+
         const response: TopicTimelineResponse = {
             success: true,
             timelines: sortedTimelines,
             metadata: {
                 totalEntries: allActivities.length,
                 timeRange: {
-                    earliest: dates.length > 0 ? new Date(Math.min(...dates.map(d => d.getTime()))).toISOString() : '',
-                    latest: dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))).toISOString() : ''
+                    earliest:
+                        dates.length > 0
+                            ? new Date(
+                                  Math.min(...dates.map((d) => d.getTime())),
+                              ).toISOString()
+                            : "",
+                    latest:
+                        dates.length > 0
+                            ? new Date(
+                                  Math.max(...dates.map((d) => d.getTime())),
+                              ).toISOString()
+                            : "",
                 },
-                topicsWithActivity: sortedTimelines.length
-            }
+                topicsWithActivity: sortedTimelines.length,
+            },
         };
 
-        debug(`[Topic Timelines] Returning ${response.timelines.length} timelines with ${response.metadata.totalEntries} total activities`);
+        debug(
+            `[Topic Timelines] Returning ${response.timelines.length} timelines with ${response.metadata.totalEntries} total activities`,
+        );
 
         return response;
     } catch (error) {
@@ -2867,8 +2904,12 @@ export async function getTopicTimelines(
         return {
             success: false,
             timelines: [],
-            metadata: { totalEntries: 0, timeRange: { earliest: '', latest: '' }, topicsWithActivity: 0 },
-            error: error instanceof Error ? error.message : "Unknown error"
+            metadata: {
+                totalEntries: 0,
+                timeRange: { earliest: "", latest: "" },
+                topicsWithActivity: 0,
+            },
+            error: error instanceof Error ? error.message : "Unknown error",
         };
     }
 }
@@ -2876,17 +2917,24 @@ export async function getTopicTimelines(
 async function expandTopicNeighborhood(
     seedTopics: string[],
     depth: number,
-    websiteCollection: any
+    websiteCollection: any,
 ): Promise<string[]> {
     const allTopics = new Set(seedTopics);
-    
+
     try {
         // Use existing topic relationship functionality to find connected topics
         for (const seedTopic of seedTopics) {
             // Get related topics from knowledge topics table
-            if (websiteCollection.knowledgeTopics && websiteCollection.knowledgeTopics.getRelatedTopics) {
-                const relatedTopics = websiteCollection.knowledgeTopics.getRelatedTopics(seedTopic, 10) || [];
-                
+            if (
+                websiteCollection.knowledgeTopics &&
+                websiteCollection.knowledgeTopics.getRelatedTopics
+            ) {
+                const relatedTopics =
+                    websiteCollection.knowledgeTopics.getRelatedTopics(
+                        seedTopic,
+                        10,
+                    ) || [];
+
                 relatedTopics.forEach((topicEntry: any) => {
                     if (topicEntry.topic && topicEntry.topic !== seedTopic) {
                         allTopics.add(topicEntry.topic);
@@ -2894,28 +2942,30 @@ async function expandTopicNeighborhood(
                 });
             }
         }
-        
-        debug(`[Topic Neighborhood] Expanded ${seedTopics.length} seed topics to ${allTopics.size} total topics`);
+
+        debug(
+            `[Topic Neighborhood] Expanded ${seedTopics.length} seed topics to ${allTopics.size} total topics`,
+        );
     } catch (error) {
         debug(`[Topic Neighborhood] Error expanding topics: ${error}`);
         // Return original topics if expansion fails
         return seedTopics;
     }
-    
+
     return Array.from(allTopics);
 }
 
 async function buildTopicTimeline(
     topicName: string,
     websiteCollection: any,
-    parameters: any
+    parameters: any,
 ): Promise<TopicTimeline> {
     const activities: TopicActivity[] = [];
-    
+
     try {
         // 1. Get all URLs associated with this topic from knowledgeTopics table
         let topicEntries: any[] = [];
-        
+
         if (websiteCollection.knowledgeTopics) {
             // Query the database directly for topics matching the name
             const stmt = websiteCollection.knowledgeTopics.db.prepare(`
@@ -2925,75 +2975,93 @@ async function buildTopicTimeline(
             `);
             topicEntries = stmt.all(`%${topicName}%`) || [];
         }
-        
-        debug(`[Topic Timeline] Found ${topicEntries.length} topic entries for "${topicName}"`);
-        
+
+        debug(
+            `[Topic Timeline] Found ${topicEntries.length} topic entries for "${topicName}"`,
+        );
+
         // 2. For each URL, get temporal engagement data from website collection
         const websites = websiteCollection.getWebsiteDocParts() || [];
         const urlToWebsiteMap = new Map();
-        
+
         websites.forEach((website: any) => {
             if (website.url) {
                 urlToWebsiteMap.set(website.url, website);
             }
         });
-        
+
         for (const topicEntry of topicEntries) {
             const websiteData = urlToWebsiteMap.get(topicEntry.url);
-            
+
             if (websiteData && websiteData.metadata) {
                 const metadata = websiteData.metadata;
-                const title = metadata.title || websiteData.title || 'Unknown Title';
-                const snippet = metadata.description || metadata.contentSummary || websiteData.snippet;
-                
+                const title =
+                    metadata.title || websiteData.title || "Unknown Title";
+                const snippet =
+                    metadata.description ||
+                    metadata.contentSummary ||
+                    websiteData.snippet;
+
                 // Add bookmark activity
                 if (metadata.bookmarkDate) {
                     activities.push({
                         timestamp: metadata.bookmarkDate,
-                        activityType: 'bookmark',
+                        activityType: "bookmark",
                         url: topicEntry.url,
                         title: title,
-                        domain: topicEntry.domain || metadata.domain || extractDomainFromUrl(topicEntry.url),
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
                         relevance: topicEntry.relevance || 0,
                         snippet: snippet,
                         metadata: {
-                            extractionDate: topicEntry.extractionDate
-                        }
+                            extractionDate: topicEntry.extractionDate,
+                        },
                     });
                 }
-                
+
                 // Add visit activity
                 if (metadata.visitDate) {
                     activities.push({
                         timestamp: metadata.visitDate,
-                        activityType: 'visit',
+                        activityType: "visit",
                         url: topicEntry.url,
                         title: title,
-                        domain: topicEntry.domain || metadata.domain || extractDomainFromUrl(topicEntry.url),
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
                         relevance: topicEntry.relevance || 0,
                         snippet: snippet,
                         metadata: {
                             visitCount: metadata.visitCount,
-                            extractionDate: topicEntry.extractionDate
-                        }
+                            extractionDate: topicEntry.extractionDate,
+                        },
                     });
                 }
-                
+
                 // Add knowledge extraction activity
                 if (topicEntry.extractionDate) {
-                    const knowledgeChunk = await getKnowledgeChunkForTopic(websiteData, topicName);
-                    
+                    const knowledgeChunk = await getKnowledgeChunkForTopic(
+                        websiteData,
+                        topicName,
+                    );
+
                     activities.push({
                         timestamp: topicEntry.extractionDate,
-                        activityType: 'extraction',
+                        activityType: "extraction",
                         url: topicEntry.url,
                         title: title,
-                        domain: topicEntry.domain || metadata.domain || extractDomainFromUrl(topicEntry.url),
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
                         relevance: topicEntry.relevance || 0,
                         knowledgeChunk: knowledgeChunk,
                         metadata: {
-                            confidence: topicEntry.relevance
-                        }
+                            confidence: topicEntry.relevance,
+                        },
                     });
                 }
             }
@@ -3002,9 +3070,9 @@ async function buildTopicTimeline(
         // Deduplicate activities with same URL and timestamp
         // Priority: bookmark > visit > extraction
         const activityPriority: Record<string, number> = {
-            'bookmark': 3,
-            'visit': 2,
-            'extraction': 1
+            bookmark: 3,
+            visit: 2,
+            extraction: 1,
         };
 
         const dedupeMap = new Map<string, TopicActivity>();
@@ -3017,8 +3085,10 @@ async function buildTopicTimeline(
                 dedupeMap.set(key, activity);
             } else {
                 // Keep the activity with higher priority
-                const existingPriority = activityPriority[existing.activityType] || 0;
-                const newPriority = activityPriority[activity.activityType] || 0;
+                const existingPriority =
+                    activityPriority[existing.activityType] || 0;
+                const newPriority =
+                    activityPriority[activity.activityType] || 0;
 
                 if (newPriority > existingPriority) {
                     dedupeMap.set(key, activity);
@@ -3029,73 +3099,97 @@ async function buildTopicTimeline(
         // Convert deduplicated map back to array
         const deduplicatedActivities = Array.from(dedupeMap.values());
 
-        debug(`[Topic Timeline] Deduplicated ${activities.length} activities to ${deduplicatedActivities.length} unique entries`);
+        debug(
+            `[Topic Timeline] Deduplicated ${activities.length} activities to ${deduplicatedActivities.length} unique entries`,
+        );
 
         // Sort activities by timestamp (most recent first)
-        deduplicatedActivities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        deduplicatedActivities.sort(
+            (a, b) =>
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime(),
+        );
 
         // Limit activities if specified
         const maxEntries = parameters.maxTimelineEntries || 50;
         const limitedActivities = deduplicatedActivities.slice(0, maxEntries);
-        
+
         // Calculate activity distribution based on deduplicated activities
         const activityDistribution = {
-            bookmarks: deduplicatedActivities.filter(a => a.activityType === 'bookmark').length,
-            visits: deduplicatedActivities.filter(a => a.activityType === 'visit').length,
-            extractions: deduplicatedActivities.filter(a => a.activityType === 'extraction').length
+            bookmarks: deduplicatedActivities.filter(
+                (a) => a.activityType === "bookmark",
+            ).length,
+            visits: deduplicatedActivities.filter(
+                (a) => a.activityType === "visit",
+            ).length,
+            extractions: deduplicatedActivities.filter(
+                (a) => a.activityType === "extraction",
+            ).length,
         };
 
-        debug(`[Topic Timeline] Built timeline for "${topicName}" with ${deduplicatedActivities.length} activities (${limitedActivities.length} limited)`);
+        debug(
+            `[Topic Timeline] Built timeline for "${topicName}" with ${deduplicatedActivities.length} activities (${limitedActivities.length} limited)`,
+        );
 
         return {
             topicName,
             totalActivity: deduplicatedActivities.length,
             activities: limitedActivities,
             relatedTopics: [], // Could be populated from topic relationships
-            activityDistribution
+            activityDistribution,
         };
-        
     } catch (error) {
-        debug(`[Topic Timeline] Error building timeline for "${topicName}": ${error}`);
+        debug(
+            `[Topic Timeline] Error building timeline for "${topicName}": ${error}`,
+        );
         return {
             topicName,
             totalActivity: 0,
             activities: [],
             relatedTopics: [],
-            activityDistribution: { bookmarks: 0, visits: 0, extractions: 0 }
+            activityDistribution: { bookmarks: 0, visits: 0, extractions: 0 },
         };
     }
 }
 
 async function getKnowledgeChunkForTopic(
     websiteData: any,
-    topicName: string
+    topicName: string,
 ): Promise<string | undefined> {
     try {
         // Try to find text chunks that mention this topic
-        if (websiteData.text && typeof websiteData.text === 'string') {
+        if (websiteData.text && typeof websiteData.text === "string") {
             const text = websiteData.text.toLowerCase();
             const topicLower = topicName.toLowerCase();
-            
+
             if (text.includes(topicLower)) {
                 // Find the sentence or paragraph containing the topic
                 const sentences = websiteData.text.split(/[.!?]+/);
                 for (const sentence of sentences) {
                     if (sentence.toLowerCase().includes(topicLower)) {
-                        return sentence.trim().substring(0, 200) + (sentence.length > 200 ? '...' : '');
+                        return (
+                            sentence.trim().substring(0, 200) +
+                            (sentence.length > 200 ? "..." : "")
+                        );
                     }
                 }
             }
         }
-        
+
         // Fallback to content summary or description
         if (websiteData.metadata) {
-            return websiteData.metadata.contentSummary?.substring(0, 200) + 
-                   (websiteData.metadata.contentSummary?.length > 200 ? '...' : '') ||
-                   websiteData.metadata.description?.substring(0, 200) + 
-                   (websiteData.metadata.description?.length > 200 ? '...' : '');
+            return (
+                websiteData.metadata.contentSummary?.substring(0, 200) +
+                    (websiteData.metadata.contentSummary?.length > 200
+                        ? "..."
+                        : "") ||
+                websiteData.metadata.description?.substring(0, 200) +
+                    (websiteData.metadata.description?.length > 200
+                        ? "..."
+                        : "")
+            );
         }
-        
+
         return undefined;
     } catch (error) {
         debug(`[Knowledge Chunk] Error extracting chunk: ${error}`);

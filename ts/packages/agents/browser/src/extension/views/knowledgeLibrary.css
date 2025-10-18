@@ -4816,8 +4816,12 @@ body {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Topic Pills Section */
@@ -5280,7 +5284,7 @@ body {
 }
 
 .timeline::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 20px;
   top: 0;
@@ -5495,89 +5499,89 @@ body {
     align-items: flex-start;
     gap: var(--spacing-sm);
   }
-  
+
   .topic-actions {
     align-self: stretch;
     justify-content: space-between;
   }
-  
+
   .timeline-stats {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--spacing-sm);
   }
-  
+
   .activity-types {
     justify-content: flex-start;
   }
-  
+
   .timeline-item-preview {
     padding: 0.75rem 0;
   }
-  
+
   .activity-title {
     font-size: 0.8rem;
   }
-  
+
   .activity-meta {
     flex-direction: column;
     gap: 0.25rem;
   }
-  
+
   .modal-content {
     margin: 1rem;
     width: calc(100% - 2rem);
     max-height: calc(100vh - 2rem);
   }
-  
+
   .modal-header {
     padding: var(--spacing-md);
   }
-  
+
   .timeline-summary {
     margin-left: 0;
     margin-top: var(--spacing-sm);
   }
-  
+
   .timeline-filters {
     justify-content: flex-start;
     overflow-x: auto;
     padding-bottom: var(--spacing-md);
   }
-  
+
   .timeline {
     padding-left: 30px;
   }
-  
+
   .timeline::before {
     left: 15px;
   }
-  
+
   .timeline-marker {
     left: -21px;
     width: 20px;
     height: 20px;
     font-size: 0.7rem;
   }
-  
+
   .timeline-header {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--spacing-sm);
   }
-  
+
   .activity-title {
     font-size: 0.9rem;
   }
-  
+
   .activity-time {
     font-size: 0.8rem;
   }
-  
+
   .activity-meta {
     gap: var(--spacing-xs);
   }
-  
+
   .activity-metadata {
     flex-direction: column;
     gap: var(--spacing-xs);
@@ -5588,40 +5592,40 @@ body {
   .topic-timeline-preview {
     padding: var(--spacing-sm);
   }
-  
+
   .timeline-stats {
     font-size: 0.8rem;
   }
-  
+
   .activity-type {
     font-size: 0.7rem;
     padding: 0.2rem 0.4rem;
   }
-  
+
   .activity-icon {
     width: 20px;
     height: 20px;
     font-size: 0.7rem;
     margin-right: var(--spacing-sm);
   }
-  
+
   .activity-title {
     font-size: 0.75rem;
   }
-  
+
   .activity-meta {
     font-size: 0.7rem;
   }
-  
+
   .view-full-timeline {
     padding: var(--spacing-xs) var(--spacing-sm);
     font-size: 0.8rem;
   }
-  
+
   .modal-body {
     padding: var(--spacing-md);
   }
-  
+
   .filter-btn {
     padding: 0.4rem 0.8rem;
     font-size: 0.8rem;
@@ -5634,254 +5638,258 @@ body {
 
 /* CSS Variables for Icon Rail */
 :root {
-    --sidebar-collapsed-width: 60px;
-    --sidebar-expanded-width: 220px;
-    --sidebar-transition-duration: 0.3s;
-    --sidebar-transition-easing: cubic-bezier(0.4, 0, 0.2, 1);
-    --sidebar-toggle-size: 24px;
-    --nav-item-height: 48px;
+  --sidebar-collapsed-width: 60px;
+  --sidebar-expanded-width: 220px;
+  --sidebar-transition-duration: 0.3s;
+  --sidebar-transition-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --sidebar-toggle-size: 24px;
+  --nav-item-height: 48px;
 }
 
 /* Main Wrapper - Adjusted for new sidebar */
 .main-wrapper {
-    display: flex;
-    height: calc(100vh - 60px);
-    margin-top: 60px;
-    position: relative;
+  display: flex;
+  height: calc(100vh - 60px);
+  margin-top: 60px;
+  position: relative;
 }
 
 /* Icon Rail Sidebar Container */
 .icon-rail-sidebar {
-    width: var(--sidebar-collapsed-width);
-    background: white;
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    transition: width var(--sidebar-transition-duration) var(--sidebar-transition-easing);
-    position: relative;
-    z-index: 100;
-    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  width: var(--sidebar-collapsed-width);
+  background: white;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  transition: width var(--sidebar-transition-duration)
+    var(--sidebar-transition-easing);
+  position: relative;
+  z-index: 100;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 /* Expanded State */
 .icon-rail-sidebar.expanded {
-    width: var(--sidebar-expanded-width);
+  width: var(--sidebar-expanded-width);
 }
 
 /* Toggle Button */
 .sidebar-toggle-wrapper {
-    position: absolute;
-    right: calc(var(--sidebar-toggle-size) / -2);
-    top: 20px;
-    z-index: 101;
+  position: absolute;
+  right: calc(var(--sidebar-toggle-size) / -2);
+  top: 20px;
+  z-index: 101;
 }
 
 .sidebar-toggle {
-    width: var(--sidebar-toggle-size);
-    height: var(--sidebar-toggle-size);
-    background: white;
-    border: 1px solid var(--border-color);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  width: var(--sidebar-toggle-size);
+  height: var(--sidebar-toggle-size);
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .sidebar-toggle:hover {
-    background: var(--accent-color);
-    transform: scale(1.1);
+  background: var(--accent-color);
+  transform: scale(1.1);
 }
 
 .sidebar-toggle i {
-    font-size: 12px;
-    transition: transform var(--sidebar-transition-duration) ease;
+  font-size: 12px;
+  transition: transform var(--sidebar-transition-duration) ease;
 }
 
 .icon-rail-sidebar.expanded .sidebar-toggle i {
-    transform: rotate(180deg);
+  transform: rotate(180deg);
 }
 
 /* Navigation Container */
 .sidebar-nav {
-    flex: 1;
-    padding: var(--spacing-sm) 0;
-    overflow-y: auto;
-    overflow-x: hidden;
+  flex: 1;
+  padding: var(--spacing-sm) 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Navigation Items */
 .nav-item {
-    display: flex;
-    align-items: center;
-    height: var(--nav-item-height);
-    padding: 0 12px;
-    margin: 2px 8px;
-    border-radius: var(--border-radius-sm);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    position: relative;
-    color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  height: var(--nav-item-height);
+  padding: 0 12px;
+  margin: 2px 8px;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  color: var(--text-secondary);
 }
 
 .nav-item:hover {
-    background: var(--accent-color);
-    color: var(--primary-color);
+  background: var(--accent-color);
+  color: var(--primary-color);
 }
 
 .nav-item.active {
-    background: linear-gradient(135deg, 
-        rgba(102, 126, 234, 0.1) 0%, 
-        rgba(118, 75, 162, 0.1) 100%);
-    color: var(--primary-color);
+  background: linear-gradient(
+    135deg,
+    rgba(102, 126, 234, 0.1) 0%,
+    rgba(118, 75, 162, 0.1) 100%
+  );
+  color: var(--primary-color);
 }
 
 /* Active Indicator Bar */
 .nav-item.active::before {
-    content: ;
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 20px;
-    background: var(--primary-color);
-    border-radius: 0 3px 3px 0;
+  content:;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--primary-color);
+  border-radius: 0 3px 3px 0;
 }
 
 /* Navigation Icons */
 .nav-icon {
-    min-width: 24px;
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  min-width: 24px;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Navigation Labels */
 .nav-label {
-    margin-left: var(--spacing-md);
-    font-size: 14px;
-    font-weight: 500;
-    white-space: nowrap;
-    opacity: 0;
-    width: 0;
-    overflow: hidden;
-    transition: all var(--sidebar-transition-duration) ease;
+  margin-left: var(--spacing-md);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transition: all var(--sidebar-transition-duration) ease;
 }
 
 .icon-rail-sidebar.expanded .nav-label {
-    opacity: 1;
-    width: auto;
+  opacity: 1;
+  width: auto;
 }
 
 /* Tooltip for Collapsed State */
 .icon-rail-sidebar:not(.expanded) .nav-item::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    left: calc(100% + 12px);
-    top: 50%;
-    transform: translateY(-50%);
-    background: var(--text-primary);
-    color: white;
-    padding: 6px 12px;
-    border-radius: var(--border-radius-sm);
-    font-size: 12px;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
-    z-index: 1000;
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--text-primary);
+  color: white;
+  padding: 6px 12px;
+  border-radius: var(--border-radius-sm);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
 }
 
 /* Tooltip Arrow */
 .icon-rail-sidebar:not(.expanded) .nav-item::before {
-    content: ;
-    position: absolute;
-    left: calc(100% + 8px);
-    top: 50%;
-    transform: translateY(-50%);
-    border: 4px solid transparent;
-    border-right-color: var(--text-primary);
-    opacity: 0;
-    transition: opacity 0.2s ease;
+  content:;
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-right-color: var(--text-primary);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 /* Show Tooltip on Hover (only when collapsed) */
 .icon-rail-sidebar:not(.expanded) .nav-item:hover::after,
 .icon-rail-sidebar:not(.expanded) .nav-item:hover::before {
-    opacity: 1;
+  opacity: 1;
 }
 
 /* Hide tooltip for active item to avoid conflict with active bar */
 .icon-rail-sidebar .nav-item.active::before {
-    content: ;
-    border: none;
+  content:;
+  border: none;
 }
 
 /* Navigation Divider */
 .nav-divider {
-    height: 1px;
-    background: var(--border-color);
-    margin: var(--spacing-sm) 16px;
+  height: 1px;
+  background: var(--border-color);
+  margin: var(--spacing-sm) 16px;
 }
 
 /* Sidebar Overlay for Mobile */
 .sidebar-overlay {
-    display: none;
-    position: fixed;
-    top: 60px;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.3);
-    z-index: 99;
+  display: none;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 99;
 }
 
 /* Content Area Adjustments */
 .content-area {
-    flex: 1;
-    padding: var(--spacing-lg);
-    overflow-y: auto;
-    transition: margin-left var(--sidebar-transition-duration) var(--sidebar-transition-easing);
+  flex: 1;
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  transition: margin-left var(--sidebar-transition-duration)
+    var(--sidebar-transition-easing);
 }
 
 /* Responsive Adjustments */
 @media (max-width: 768px) {
-    /* Auto-collapse on mobile */
-    .icon-rail-sidebar {
-        width: var(--sidebar-collapsed-width);
-    }
-    
-    .icon-rail-sidebar.expanded {
-        position: absolute;
-        z-index: 200;
-        box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
-        height: calc(100vh - 60px);
-    }
-    
-    /* Show overlay when sidebar is expanded on mobile */
-    .icon-rail-sidebar.expanded ~ .sidebar-overlay {
-        display: block;
-    }
+  /* Auto-collapse on mobile */
+  .icon-rail-sidebar {
+    width: var(--sidebar-collapsed-width);
+  }
+
+  .icon-rail-sidebar.expanded {
+    position: absolute;
+    z-index: 200;
+    box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
+    height: calc(100vh - 60px);
+  }
+
+  /* Show overlay when sidebar is expanded on mobile */
+  .icon-rail-sidebar.expanded ~ .sidebar-overlay {
+    display: block;
+  }
 }
 
 /* Accessibility - Focus Styles */
 .sidebar-toggle:focus,
 .nav-item:focus {
-    outline: 2px solid var(--primary-color);
-    outline-offset: 2px;
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
-    .icon-rail-sidebar,
-    .nav-item,
-    .nav-label,
-    .sidebar-toggle i,
-    .content-area {
-        transition-duration: 0.01ms !important;
-    }
+  .icon-rail-sidebar,
+  .nav-item,
+  .nav-label,
+  .sidebar-toggle i,
+  .content-area {
+    transition-duration: 0.01ms !important;
+  }
 }

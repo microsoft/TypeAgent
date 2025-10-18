@@ -73,7 +73,7 @@ export interface TopicInsight {
     name: string;
     relevance: number;
     occurrences: number;
-    type: 'primary' | 'secondary' | 'related';
+    type: "primary" | "secondary" | "related";
 }
 
 export interface EntityInsight {

@@ -1585,7 +1585,7 @@ async function executeBrowserAction(
                         },
                     });
                 }
-                
+
                 default:
                     // Should never happen.
                     throw new Error(

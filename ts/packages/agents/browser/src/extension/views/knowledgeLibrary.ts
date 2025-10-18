@@ -153,7 +153,11 @@ class WebsiteLibraryPanelFullPage {
                 }
 
                 // Handle regular pages
-                if (page === "search" || page === "discover" || page === "analytics") {
+                if (
+                    page === "search" ||
+                    page === "discover" ||
+                    page === "analytics"
+                ) {
                     this.navigateToPage(page).catch(console.error);
                 }
             });
@@ -169,7 +173,7 @@ class WebsiteLibraryPanelFullPage {
 
         // Load saved state, default to collapsed
         const savedState = localStorage.getItem("sidebar-collapsed-state");
-        if(savedState !== null && savedState === "false") {
+        if (savedState !== null && savedState === "false") {
             sidebar.classList.add("expanded");
         }
 
@@ -177,7 +181,10 @@ class WebsiteLibraryPanelFullPage {
         toggleButton.addEventListener("click", () => {
             sidebar.classList.toggle("expanded");
             const isExpanded = sidebar.classList.contains("expanded");
-            localStorage.setItem("sidebar-collapsed-state", (!isExpanded).toString());
+            localStorage.setItem(
+                "sidebar-collapsed-state",
+                (!isExpanded).toString(),
+            );
         });
 
         // Overlay click (mobile)
@@ -194,7 +201,10 @@ class WebsiteLibraryPanelFullPage {
                 e.preventDefault();
                 sidebar.classList.toggle("expanded");
                 const isExpanded = sidebar.classList.contains("expanded");
-                localStorage.setItem("sidebar-collapsed-state", (!isExpanded).toString());
+                localStorage.setItem(
+                    "sidebar-collapsed-state",
+                    (!isExpanded).toString(),
+                );
             }
 
             // Escape to collapse on mobile
@@ -206,7 +216,10 @@ class WebsiteLibraryPanelFullPage {
 
         // Auto-collapse on mobile
         const handleResize = () => {
-            if (window.innerWidth <= 768 && sidebar.classList.contains("expanded")) {
+            if (
+                window.innerWidth <= 768 &&
+                sidebar.classList.contains("expanded")
+            ) {
                 sidebar.classList.remove("expanded");
                 localStorage.setItem("sidebar-collapsed-state", "true");
             }

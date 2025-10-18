@@ -369,12 +369,17 @@ export class KnowledgeSearchPanel {
         this.setupInsightEventListeners();
 
         // Load timeline previews for topic cards in timeline view
-        if (this.currentViewMode === "timeline" && this.currentResults.topTopics && this.currentResults.topTopics.length > 0) {
+        if (
+            this.currentViewMode === "timeline" &&
+            this.currentResults.topTopics &&
+            this.currentResults.topTopics.length > 0
+        ) {
             const topTopics = this.currentResults.topTopics.slice(0, 3);
             this.loadTopicTimelinePreviewsInline(topTopics);
 
             // Setup event listeners for inline topic cards
-            const resultsContentElement = document.getElementById("resultsContainer");
+            const resultsContentElement =
+                document.getElementById("resultsContainer");
             if (resultsContentElement) {
                 this.setupTopicEventListeners(resultsContentElement);
             }
@@ -426,7 +431,10 @@ export class KnowledgeSearchPanel {
         let html = "";
 
         // Add top 3 topic timeline cards if available
-        if (this.currentResults.topTopics && this.currentResults.topTopics.length > 0) {
+        if (
+            this.currentResults.topTopics &&
+            this.currentResults.topTopics.length > 0
+        ) {
             const topTopics = this.currentResults.topTopics.slice(0, 3);
             html += this.renderTopicTimelinesSection(topTopics);
         }
@@ -600,7 +608,9 @@ export class KnowledgeSearchPanel {
     private renderTopicInsights(topics: any[]): string {
         if (topics.length === 0) return "";
 
-        const topicChips = topics.map(topic => `
+        const topicChips = topics
+            .map(
+                (topic) => `
             <div class="insight-chip topic-chip ${topic.type}"
                  data-topic="${this.escapeHtml(topic.name)}"
                  data-relevance="${topic.relevance}"
@@ -609,7 +619,9 @@ export class KnowledgeSearchPanel {
                 <span class="chip-name">${this.escapeHtml(topic.name)}</span>
                 <span class="chip-count">${topic.occurrences}</span>
             </div>
-        `).join("");
+        `,
+            )
+            .join("");
 
         return `
             <div class="insight-section topics">
@@ -623,7 +635,9 @@ export class KnowledgeSearchPanel {
     private renderEntityInsights(entities: any[]): string {
         if (entities.length === 0) return "";
 
-        const entityChips = entities.map(entity => `
+        const entityChips = entities
+            .map(
+                (entity) => `
             <div class="insight-chip entity-chip"
                  data-entity="${this.escapeHtml(entity.name)}"
                  data-entity-type="${this.escapeHtml(entity.type)}"
@@ -633,7 +647,9 @@ export class KnowledgeSearchPanel {
                 <span class="chip-name">${this.escapeHtml(entity.name)}</span>
                 <span class="chip-meta">${this.escapeHtml(entity.type)}</span>
             </div>
-        `).join("");
+        `,
+            )
+            .join("");
 
         return `
             <div class="insight-section entities">
@@ -650,7 +666,7 @@ export class KnowledgeSearchPanel {
 
         return `
             <div class="insight-meta">
-                <span class="insight-count">${totalInsights} insight${totalInsights !== 1 ? 's' : ''}</span>
+                <span class="insight-count">${totalInsights} insight${totalInsights !== 1 ? "s" : ""}</span>
                 <span class="insight-relevance" title="Overall relevance score">
                     <i class="bi bi-graph-up"></i>
                     ${relevancePercent}%
@@ -661,18 +677,18 @@ export class KnowledgeSearchPanel {
 
     private getEntityIcon(entityType: string): string {
         const iconMap: Record<string, string> = {
-            'person': 'person-fill',
-            'organization': 'building',
-            'location': 'geo-alt-fill',
-            'product': 'box',
-            'technology': 'cpu',
-            'event': 'calendar-event',
-            'concept': 'lightbulb',
-            'default': 'tag-fill'
+            person: "person-fill",
+            organization: "building",
+            location: "geo-alt-fill",
+            product: "box",
+            technology: "cpu",
+            event: "calendar-event",
+            concept: "lightbulb",
+            default: "tag-fill",
         };
 
         const normalizedType = entityType.toLowerCase();
-        return iconMap[normalizedType] || iconMap['default'];
+        return iconMap[normalizedType] || iconMap["default"];
     }
 
     private renderSearchError(): void {
@@ -744,7 +760,7 @@ export class KnowledgeSearchPanel {
                 topicNames: topics,
                 maxTimelineEntries: 5, // Just preview data
                 includeRelatedTopics: true,
-                neighborhoodDepth: 1
+                neighborhoodDepth: 1,
             });
 
             if (response.success) {
@@ -758,14 +774,16 @@ export class KnowledgeSearchPanel {
         }
     }
 
-    private async loadTopicTimelinePreviewsInline(topics: string[]): Promise<void> {
+    private async loadTopicTimelinePreviewsInline(
+        topics: string[],
+    ): Promise<void> {
         try {
             // Call backend to get timeline data for inline cards
             const response = await this.services.getTopicTimelines({
                 topicNames: topics,
                 maxTimelineEntries: 5,
                 includeRelatedTopics: true,
-                neighborhoodDepth: 1
+                neighborhoodDepth: 1,
             });
 
             if (response.success) {
@@ -775,12 +793,17 @@ export class KnowledgeSearchPanel {
                 });
             }
         } catch (error) {
-            console.error("Failed to load inline topic timeline previews:", error);
+            console.error(
+                "Failed to load inline topic timeline previews:",
+                error,
+            );
         }
     }
 
     private renderTimelinePreviewInline(timeline: any): void {
-        const previewElement = document.getElementById(`timeline-inline-${timeline.topicName}`);
+        const previewElement = document.getElementById(
+            `timeline-inline-${timeline.topicName}`,
+        );
         if (!previewElement) return;
 
         const recentActivities = timeline.activities.slice(0, 3);
@@ -789,16 +812,27 @@ export class KnowledgeSearchPanel {
             <div class="timeline-stats">
                 <span class="activity-count">${timeline.totalActivity} activities</span>
                 <div class="activity-types">
-                    ${timeline.activityDistribution.bookmarks > 0 ?
-                        `<span class="activity-type bookmarks">${timeline.activityDistribution.bookmarks} bookmarks</span>` : ''}
-                    ${timeline.activityDistribution.visits > 0 ?
-                        `<span class="activity-type visits">${timeline.activityDistribution.visits} visits</span>` : ''}
-                    ${timeline.activityDistribution.extractions > 0 ?
-                        `<span class="activity-type extractions">${timeline.activityDistribution.extractions} extractions</span>` : ''}
+                    ${
+                        timeline.activityDistribution.bookmarks > 0
+                            ? `<span class="activity-type bookmarks">${timeline.activityDistribution.bookmarks} bookmarks</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.visits > 0
+                            ? `<span class="activity-type visits">${timeline.activityDistribution.visits} visits</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.extractions > 0
+                            ? `<span class="activity-type extractions">${timeline.activityDistribution.extractions} extractions</span>`
+                            : ""
+                    }
                 </div>
             </div>
             <div class="timeline-preview-items">
-                ${recentActivities.map((activity: any) => `
+                ${recentActivities
+                    .map(
+                        (activity: any) => `
                     <div class="timeline-item-preview">
                         <div class="activity-icon ${activity.activityType}">
                             <i class="bi bi-${this.getActivityIcon(activity.activityType)}"></i>
@@ -811,7 +845,9 @@ export class KnowledgeSearchPanel {
                             </div>
                         </div>
                     </div>
-                `).join('')}
+                `,
+                    )
+                    .join("")}
             </div>
         `;
 
@@ -819,25 +855,38 @@ export class KnowledgeSearchPanel {
     }
 
     private renderTimelinePreview(timeline: any): void {
-        const previewElement = document.getElementById(`timeline-preview-${timeline.topicName}`);
+        const previewElement = document.getElementById(
+            `timeline-preview-${timeline.topicName}`,
+        );
         if (!previewElement) return;
 
         const recentActivities = timeline.activities.slice(0, 3);
-        
+
         const previewHtml = `
             <div class="timeline-stats">
                 <span class="activity-count">${timeline.totalActivity} activities</span>
                 <div class="activity-types">
-                    ${timeline.activityDistribution.bookmarks > 0 ? 
-                        `<span class="activity-type bookmarks">${timeline.activityDistribution.bookmarks} bookmarks</span>` : ''}
-                    ${timeline.activityDistribution.visits > 0 ? 
-                        `<span class="activity-type visits">${timeline.activityDistribution.visits} visits</span>` : ''}
-                    ${timeline.activityDistribution.extractions > 0 ? 
-                        `<span class="activity-type extractions">${timeline.activityDistribution.extractions} extractions</span>` : ''}
+                    ${
+                        timeline.activityDistribution.bookmarks > 0
+                            ? `<span class="activity-type bookmarks">${timeline.activityDistribution.bookmarks} bookmarks</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.visits > 0
+                            ? `<span class="activity-type visits">${timeline.activityDistribution.visits} visits</span>`
+                            : ""
+                    }
+                    ${
+                        timeline.activityDistribution.extractions > 0
+                            ? `<span class="activity-type extractions">${timeline.activityDistribution.extractions} extractions</span>`
+                            : ""
+                    }
                 </div>
             </div>
             <div class="timeline-preview-items">
-                ${recentActivities.map((activity: any) => `
+                ${recentActivities
+                    .map(
+                        (activity: any) => `
                     <div class="timeline-item-preview">
                         <div class="activity-icon ${activity.activityType}">
                             <i class="bi bi-${this.getActivityIcon(activity.activityType)}"></i>
@@ -850,7 +899,9 @@ export class KnowledgeSearchPanel {
                             </div>
                         </div>
                     </div>
-                `).join('')}
+                `,
+                    )
+                    .join("")}
             </div>
             <div class="timeline-actions">
                 <button class="btn btn-sm btn-outline-primary view-full-timeline" 
@@ -859,16 +910,20 @@ export class KnowledgeSearchPanel {
                 </button>
             </div>
         `;
-        
+
         previewElement.innerHTML = previewHtml;
     }
 
     private getActivityIcon(activityType: string): string {
         switch (activityType) {
-            case 'bookmark': return 'bookmark-fill';
-            case 'visit': return 'eye-fill';
-            case 'extraction': return 'cpu-fill';
-            default: return 'circle-fill';
+            case "bookmark":
+                return "bookmark-fill";
+            case "visit":
+                return "eye-fill";
+            case "extraction":
+                return "cpu-fill";
+            default:
+                return "circle-fill";
         }
     }
 
@@ -879,7 +934,9 @@ export class KnowledgeSearchPanel {
             .forEach((searchBtn) => {
                 searchBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    const topicElement = (e.currentTarget as HTMLElement).closest(
+                    const topicElement = (
+                        e.currentTarget as HTMLElement
+                    ).closest(
                         ".clickable-topic, .topic-timeline-card",
                     ) as HTMLElement;
                     const topicName = topicElement?.dataset.topic;
@@ -894,7 +951,9 @@ export class KnowledgeSearchPanel {
             .forEach((graphBtn) => {
                 graphBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    const topicElement = (e.currentTarget as HTMLElement).closest(
+                    const topicElement = (
+                        e.currentTarget as HTMLElement
+                    ).closest(
                         ".clickable-topic, .topic-timeline-card",
                     ) as HTMLElement;
                     const topicName = topicElement?.dataset.topic;
@@ -911,7 +970,9 @@ export class KnowledgeSearchPanel {
             .forEach((timelineBtn) => {
                 timelineBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    const topicElement = (e.currentTarget as HTMLElement).closest(
+                    const topicElement = (
+                        e.currentTarget as HTMLElement
+                    ).closest(
                         ".clickable-topic, .topic-timeline-card",
                     ) as HTMLElement;
                     const topicName = topicElement?.dataset.topic;
@@ -927,7 +988,8 @@ export class KnowledgeSearchPanel {
             .forEach((viewBtn) => {
                 viewBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    const topicName = (e.currentTarget as HTMLElement).dataset.topic;
+                    const topicName = (e.currentTarget as HTMLElement).dataset
+                        .topic;
                     if (topicName) {
                         this.showFullTimeline(topicName);
                     }
@@ -940,9 +1002,7 @@ export class KnowledgeSearchPanel {
             .forEach((topicElement) => {
                 topicElement.addEventListener("click", (e) => {
                     // Only handle if not clicking on buttons
-                    if (
-                        !(e.target as HTMLElement).closest(".topic-actions")
-                    ) {
+                    if (!(e.target as HTMLElement).closest(".topic-actions")) {
                         const topicName = (e.currentTarget as HTMLElement)
                             .dataset.topic;
                         if (topicName) {
@@ -959,7 +1019,8 @@ export class KnowledgeSearchPanel {
 
         resultsContainer.querySelectorAll(".topic-chip").forEach((chip) => {
             chip.addEventListener("click", (e) => {
-                const topicName = (e.currentTarget as HTMLElement).dataset.topic;
+                const topicName = (e.currentTarget as HTMLElement).dataset
+                    .topic;
                 if (topicName) {
                     this.performSearchWithQuery(topicName);
                 }
@@ -968,7 +1029,8 @@ export class KnowledgeSearchPanel {
 
         resultsContainer.querySelectorAll(".entity-chip").forEach((chip) => {
             chip.addEventListener("click", (e) => {
-                const entityName = (e.currentTarget as HTMLElement).dataset.entity;
+                const entityName = (e.currentTarget as HTMLElement).dataset
+                    .entity;
                 if (entityName) {
                     this.navigateToEntityGraph(entityName);
                 }
@@ -1000,10 +1062,10 @@ export class KnowledgeSearchPanel {
         modal.style.display = "block";
 
         // Add close button event listener
-        const loadingCloseBtn = modal.querySelector('.btn-close');
+        const loadingCloseBtn = modal.querySelector(".btn-close");
         if (loadingCloseBtn) {
-            loadingCloseBtn.addEventListener('click', () => {
-                modal.style.display = 'none';
+            loadingCloseBtn.addEventListener("click", () => {
+                modal.style.display = "none";
             });
         }
 
@@ -1013,15 +1075,20 @@ export class KnowledgeSearchPanel {
                 topicNames: [topicName],
                 maxTimelineEntries: 100,
                 includeRelatedTopics: true,
-                neighborhoodDepth: 2
+                neighborhoodDepth: 2,
             });
 
             if (response.success && response.timelines.length > 0) {
-                const timeline = response.timelines.find((t: any) => t.topicName === topicName);
+                const timeline = response.timelines.find(
+                    (t: any) => t.topicName === topicName,
+                );
                 if (timeline) {
                     this.renderFullTimeline(timeline, modal);
                 } else {
-                    this.showTimelineError(modal, `No timeline data available for "${topicName}"`);
+                    this.showTimelineError(
+                        modal,
+                        `No timeline data available for "${topicName}"`,
+                    );
                 }
             } else {
                 this.showTimelineError(modal, "No timeline data available");
@@ -1066,16 +1133,18 @@ export class KnowledgeSearchPanel {
         modal.innerHTML = modalContent;
 
         // Add close button event listeners
-        const closeButtons = modal.querySelectorAll('.modal-close-btn, .modal-close-footer-btn');
-        closeButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                modal.style.display = 'none';
+        const closeButtons = modal.querySelectorAll(
+            ".modal-close-btn, .modal-close-footer-btn",
+        );
+        closeButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                modal.style.display = "none";
             });
         });
 
         // Add filter event listeners
-        modal.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+        modal.querySelectorAll(".filter-btn").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
                 const filter = (e.target as HTMLElement).dataset.filter;
                 this.filterTimelineItems(filter, modal);
             });
@@ -1085,7 +1154,9 @@ export class KnowledgeSearchPanel {
     private renderTimelineItems(activities: any[]): string {
         return `
             <div class="timeline">
-                ${activities.map((activity, index) => `
+                ${activities
+                    .map(
+                        (activity, index) => `
                     <div class="timeline-item" data-activity-type="${activity.activityType}">
                         <div class="timeline-content">
                             <div class="timeline-header">
@@ -1103,63 +1174,87 @@ export class KnowledgeSearchPanel {
                                         ${activity.activityType}
                                     </span>
                                 </div>
-                                ${activity.snippet && activity.snippet !== 'undefined' ? `
+                                ${
+                                    activity.snippet &&
+                                    activity.snippet !== "undefined"
+                                        ? `
                                     <div class="activity-snippet">
                                         <p>${this.escapeHtml(activity.snippet)}</p>
                                     </div>
-                                ` : ''}
-                                ${activity.knowledgeChunk && activity.knowledgeChunk !== 'undefined' ? `
+                                `
+                                        : ""
+                                }
+                                ${
+                                    activity.knowledgeChunk &&
+                                    activity.knowledgeChunk !== "undefined"
+                                        ? `
                                     <div class="knowledge-chunk">
                                         <h6>Related Knowledge:</h6>
                                         <p>${this.escapeHtml(activity.knowledgeChunk)}</p>
                                     </div>
-                                ` : ''}
-                                ${activity.metadata ? `
+                                `
+                                        : ""
+                                }
+                                ${
+                                    activity.metadata
+                                        ? `
                                     <div class="activity-metadata">
-                                        ${activity.metadata.visitCount ? `<span>Visits: ${activity.metadata.visitCount}</span>` : ''}
-                                        ${activity.metadata.confidence ? `<span>Confidence: ${Math.round(activity.metadata.confidence * 100)}%</span>` : ''}
+                                        ${activity.metadata.visitCount ? `<span>Visits: ${activity.metadata.visitCount}</span>` : ""}
+                                        ${activity.metadata.confidence ? `<span>Confidence: ${Math.round(activity.metadata.confidence * 100)}%</span>` : ""}
                                     </div>
-                                ` : ''}
+                                `
+                                        : ""
+                                }
                             </div>
                         </div>
                     </div>
-                `).join('')}
+                `,
+                    )
+                    .join("")}
             </div>
         `;
     }
 
     private getTimeRangeText(activities: any[]): string {
-        if (activities.length === 0) return 'No activities';
-        
-        const dates = activities.map(a => new Date(a.timestamp));
-        const earliest = new Date(Math.min(...dates.map(d => d.getTime())));
-        const latest = new Date(Math.max(...dates.map(d => d.getTime())));
-        
+        if (activities.length === 0) return "No activities";
+
+        const dates = activities.map((a) => new Date(a.timestamp));
+        const earliest = new Date(Math.min(...dates.map((d) => d.getTime())));
+        const latest = new Date(Math.max(...dates.map((d) => d.getTime())));
+
         return `${earliest.toLocaleDateString()} - ${latest.toLocaleDateString()}`;
     }
 
     private formatTimestamp(timestamp: string): string {
         const date = new Date(timestamp);
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        return (
+            date.toLocaleDateString() +
+            " " +
+            date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        );
     }
 
-    private filterTimelineItems(filter: string | null | undefined, modal: HTMLElement): void {
-        const timelineItems = modal.querySelectorAll('.timeline-item');
-        const filterBtns = modal.querySelectorAll('.filter-btn');
-        
+    private filterTimelineItems(
+        filter: string | null | undefined,
+        modal: HTMLElement,
+    ): void {
+        const timelineItems = modal.querySelectorAll(".timeline-item");
+        const filterBtns = modal.querySelectorAll(".filter-btn");
+
         // Update active filter button
-        filterBtns.forEach(btn => btn.classList.remove('active'));
+        filterBtns.forEach((btn) => btn.classList.remove("active"));
         const activeBtn = modal.querySelector(`[data-filter="${filter}"]`);
-        if (activeBtn) activeBtn.classList.add('active');
-        
+        if (activeBtn) activeBtn.classList.add("active");
+
         // Show/hide timeline items
-        timelineItems.forEach(item => {
+        timelineItems.forEach((item) => {
             const itemElement = item as HTMLElement;
-            if (filter === 'all' || !filter) {
-                itemElement.style.display = 'block';
+            if (filter === "all" || !filter) {
+                itemElement.style.display = "block";
             } else {
                 const activityType = itemElement.dataset.activityType;
-                itemElement.style.display = activityType === filter ? 'block' : 'none';
+                itemElement.style.display =
+                    activityType === filter ? "block" : "none";
             }
         });
     }
@@ -1186,10 +1281,12 @@ export class KnowledgeSearchPanel {
         `;
 
         // Add close button event listeners
-        const closeButtons = modal.querySelectorAll('.modal-close-btn, .modal-close-footer-btn');
-        closeButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                modal.style.display = 'none';
+        const closeButtons = modal.querySelectorAll(
+            ".modal-close-btn, .modal-close-footer-btn",
+        );
+        closeButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                modal.style.display = "none";
             });
         });
     }
@@ -1454,14 +1551,16 @@ export class KnowledgeSearchPanel {
         const topicsContent = document.getElementById("topTopicsContent");
 
         if (topicsSection && topicsContent && topics.length > 0) {
-            let contentHtml = '';
+            let contentHtml = "";
 
             // In timeline view, show all topics as pills to avoid duplication with timeline cards
             if (this.currentViewMode === "timeline") {
                 const pillsHtml = `
                     <div class="topic-pills-section">
                         <div class="topic-pills">
-                            ${topics.map(topic => `
+                            ${topics
+                                .map(
+                                    (topic) => `
                                 <div class="topic-pill clickable-topic" data-topic="${this.escapeHtml(topic)}">
                                     <span class="pill-name">${this.escapeHtml(topic)}</span>
                                     <div class="pill-actions">
@@ -1476,7 +1575,9 @@ export class KnowledgeSearchPanel {
                                         </button>
                                     </div>
                                 </div>
-                            `).join('')}
+                            `,
+                                )
+                                .join("")}
                         </div>
                     </div>
                 `;
@@ -1515,11 +1616,15 @@ export class KnowledgeSearchPanel {
 
                 // Remaining topics (4-10): Simple pills
                 const remainingTopics = topics.slice(3);
-                const pillsHtml = remainingTopics.length > 0 ? `
+                const pillsHtml =
+                    remainingTopics.length > 0
+                        ? `
                     <div class="topic-pills-section">
                         <div class="section-label">More Topics:</div>
                         <div class="topic-pills">
-                            ${remainingTopics.map(topic => `
+                            ${remainingTopics
+                                .map(
+                                    (topic) => `
                                 <div class="topic-pill clickable-topic" data-topic="${this.escapeHtml(topic)}">
                                     <span class="pill-name">${this.escapeHtml(topic)}</span>
                                     <div class="pill-actions">
@@ -1534,10 +1639,13 @@ export class KnowledgeSearchPanel {
                                         </button>
                                     </div>
                                 </div>
-                            `).join('')}
+                            `,
+                                )
+                                .join("")}
                         </div>
                     </div>
-                ` : '';
+                `
+                        : "";
 
                 contentHtml = `
                     <div class="topic-tags-enhanced">

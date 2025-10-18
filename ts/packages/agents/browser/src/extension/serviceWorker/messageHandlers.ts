@@ -539,9 +539,11 @@ export async function handleMessage(
                     actionName: "getTopicTimelines",
                     parameters: {
                         topicNames: message.parameters.topicNames,
-                        maxTimelineEntries: message.parameters.maxTimelineEntries,
+                        maxTimelineEntries:
+                            message.parameters.maxTimelineEntries,
                         timeRange: message.parameters.timeRange,
-                        includeRelatedTopics: message.parameters.includeRelatedTopics,
+                        includeRelatedTopics:
+                            message.parameters.includeRelatedTopics,
                         neighborhoodDepth: message.parameters.neighborhoodDepth,
                     },
                 });
@@ -556,7 +558,10 @@ export async function handleMessage(
                         timeRange: { earliest: "", latest: "" },
                         topicsWithActivity: 0,
                     },
-                    error: error instanceof Error ? error.message : "Unknown error",
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
                 };
             }
         }
