@@ -323,10 +323,6 @@ function matchRules(grammar: Grammar, request: string): GrammarMatchResult[] {
         partIndex: 0,
         index: 0,
         nextValueId: 0,
-        matchedCount: 0,
-        wildcardCharCount: 0,
-        nonOptionalCount: 0,
-        implicitParameterCount: 0,
     }));
     const results: GrammarMatchResult[] = [];
     while (pending.length > 0) {

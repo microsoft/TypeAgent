@@ -713,5 +713,9 @@ export async function changeContextConfig(
         }
     }
 
+    if (changed.cache?.grammar !== undefined) {
+        agentCache.grammarStore.setEnabled(changed.cache.grammar);
+    }
+
     return changed;
 }
