@@ -168,8 +168,8 @@ export async function matchRequest(
     activeSchemas?: string[],
 ): Promise<TranslationResult | undefined> {
     const systemContext = context.sessionContext.agentContext;
-    const constructionStore = systemContext.agentCache.constructionStore;
-    if (!constructionStore.isEnabled()) {
+    const agentCache = systemContext.agentCache;
+    if (!agentCache.isEnabled()) {
         return undefined;
     }
     const startTime = performance.now();
@@ -191,7 +191,7 @@ export async function matchRequest(
         entityWildcard: config.cache.matchEntityWildcard,
         rejectReferences: config.explainer.filter.reference.list,
     };
-    const matches = constructionStore.match(request, {
+    const matches = agentCache.match(request, {
         ...matchConfig,
         namespaceKeys: systemContext.agentCache.getNamespaceKeys(
             activeSchemaNames,
@@ -208,15 +208,16 @@ export async function matchRequest(
     }
 
     return {
-        type: "match",
+        type: match.type,
         requestAction: match.match,
         elapsedMs,
         config: {
             ...matchConfig,
             explainerName: systemContext.agentCache.explainerName,
         },
+        // For logging
         allMatches: matches.map((m) => {
-            const { construction: _, match, ...rest } = m;
+            const { match, ...rest } = m;
             return { action: match.actions, ...rest };
         }),
     };

@@ -82,7 +82,10 @@ export class UninstallCommandHandler implements CommandHandler {
         const name = params.args.name;
         installer.uninstall(name);
 
-        await systemContext.agents.removeAgent(name);
+        await systemContext.agents.removeAgent(
+            name,
+            systemContext.agentCache.grammarStore,
+        );
 
         displayResult(`Agent '${name}' uninstalled.`, context);
     }

@@ -9,6 +9,7 @@ import {
     getPropertyType,
     resolveTypeReference,
     resolveUnionType,
+    ActionSchemaEntityTypeDefinition,
 } from "action-schema";
 import {
     ExecutableAction,
@@ -38,7 +39,6 @@ import { SearchSelectExpr } from "knowpro";
 import { conversation as kp } from "knowledge-processor";
 import { getObjectProperty } from "common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
-import { ActionSchemaEntityTypeDefinition } from "../../../actionSchema/dist/type.js";
 import { getActionParametersType } from "../translation/actionSchemaUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
 

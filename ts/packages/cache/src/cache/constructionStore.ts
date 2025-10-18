@@ -5,7 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
 import registerDebug from "debug";
-import { Construction, MatchResult } from "../constructions/constructions.js";
+import {
+    Construction,
+    ConstructionMatchResult,
+} from "../constructions/constructions.js";
 import { ExplanationData } from "../explanation/explanationData.js";
 import { importConstructions } from "../constructions/importConstructions.js";
 import { CacheConfig, CacheOptions } from "./cache.js";
@@ -20,6 +23,7 @@ import {
     PrintOptions,
     printConstructionCache,
 } from "../constructions/constructionPrint.js";
+import { sortMatches } from "./sortMatches.js";
 
 const debugConstMatch = registerDebug("typeagent:const:match");
 
@@ -94,7 +98,7 @@ export interface ConstructionStore {
     delete(schemaName: string, id: number): Promise<void>;
 
     // Usage
-    match(request: string, options?: MatchOptions): MatchResult[];
+    match(request: string, options?: MatchOptions): ConstructionMatchResult[];
 
     // Completion
     getPrefix(namespaceKeys?: string[]): string[];
@@ -370,12 +374,13 @@ export class ConstructionStoreImpl implements ConstructionStore {
         if (matches.length === 0 && this.builtInCache !== undefined) {
             matches = this.builtInCache.match(request, options);
         }
+        const sortedMatches = sortMatches(matches);
         if (debugConstMatch.enabled) {
             debugConstMatch(
-                `Found ${matches.length} construction(s) for '${request}':`,
+                `Found ${sortedMatches.length} construction(s) for '${request}':`,
             );
-            for (let i = 0; i < matches.length; i++) {
-                const match = matches[i];
+            for (let i = 0; i < sortedMatches.length; i++) {
+                const match = sortedMatches[i];
                 const actionStr = chalk.green(match.match.actions);
                 const constructionStr = chalk.grey(`(${match.construction})`);
                 const message = [
@@ -389,7 +394,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
                 debugConstMatch(message.join("\n"));
             }
         }
-        return matches;
+        return sortedMatches;
     }
 
     public async prune(filter: (namespaceKey: string) => boolean) {

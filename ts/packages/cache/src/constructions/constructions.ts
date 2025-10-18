@@ -26,6 +26,7 @@ import {
     ConstructionPartJSON,
     ParsePartJSON,
 } from "./constructionJSONTypes.js";
+import { MatchResult } from "../cache/types.js";
 
 export type ImplicitParameter = {
     paramName: string;
@@ -122,7 +123,10 @@ export class Construction {
         return this.implicitParameters ? this.implicitParameters.length : 0;
     }
 
-    public match(request: string, config: MatchConfig): MatchResult[] {
+    public match(
+        request: string,
+        config: MatchConfig,
+    ): ConstructionMatchResult[] {
         const matchedValues = matchParts(
             request,
             this.parts,
@@ -141,6 +145,7 @@ export class Construction {
         );
         return [
             {
+                type: "construction",
                 construction: this,
                 match: new RequestAction(
                     request,
@@ -153,6 +158,7 @@ export class Construction {
                 matchedCount: matchedValues.matchedCount,
                 wildcardCharCount: matchedValues.wildcardCharCount,
                 nonOptionalCount: this.parts.filter((p) => !p.optional).length,
+                implicitParameterCount: this.implicitParameterCount,
                 partialPartCount: matchedValues.partialPartCount,
             },
         ];
@@ -329,13 +335,6 @@ function isParsePartJSON(part: ConstructionPartJSON): part is ParsePartJSON {
     return (part as any).parserName !== undefined;
 }
 
-export type MatchResult = {
+export type ConstructionMatchResult = MatchResult & {
     construction: Construction;
-    match: RequestAction;
-    matchedCount: number;
-    wildcardCharCount: number;
-    nonOptionalCount: number;
-    entityWildcardPropertyNames: string[];
-    conflictValues?: [string, ParamValueType[]][] | undefined;
-    partialPartCount?: number | undefined; // Only used for partial match
 };

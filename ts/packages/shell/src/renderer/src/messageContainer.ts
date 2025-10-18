@@ -617,7 +617,7 @@ export class MessageContainer {
         const fromCache = data.fromCache;
         const timestamp = data.time;
         const cachePart = fromCache
-            ? "Translated by cache match"
+            ? `Translated by ${fromCache}`
             : "Translated by model";
         let message: string;
         let color: string;

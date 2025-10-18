@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { ValueNode, Expr, Rule, RuleDefinition } from "./grammarParser.js";
-export { writeGrammar } from "./grammarWriter.js";
+export { ValueNode, Expr, Rule, RuleDefinition } from "./grammarRuleParser.js";
+export { writeGrammarRules } from "./grammarRuleWriter.js";

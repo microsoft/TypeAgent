@@ -13,7 +13,7 @@ import {
 import { fromJsonActions, RequestAction, toJsonActions } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
-import { loadGrammar, matchGrammar } from "action-grammar";
+import { loadGrammarRules, matchGrammar } from "action-grammar";
 import { convertConstructionsToGrammar } from "agent-cache/grammar";
 
 const dataFiles = ["test/data/explanations/**/v5/*.json"];
@@ -87,7 +87,7 @@ describe("Grammar", () => {
                 continue;
             }
             it(testName, async () => {
-                const g = loadGrammar("test", grammar);
+                const g = loadGrammarRules("test", grammar);
                 const matched = matchGrammar(g, requestAction.request);
 
                 // TODO: once MatchPart allow matches ignoring diacritical marks,

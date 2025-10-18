@@ -153,6 +153,7 @@ export type DispatcherConfig = {
     // Cache behaviors
     cache: CacheConfig & {
         enabled: boolean;
+        grammar: boolean;
         autoSave: boolean;
         builtInCache: boolean;
         matchWildcard: boolean;
@@ -235,6 +236,7 @@ const defaultSessionConfig: SessionConfig = {
     },
     cache: {
         enabled: true,
+        grammar: true,
         autoSave: true,
         mergeMatchSets: true, // the session default is different then the default in the cache
         cacheConflicts: true, // the session default is different then the default in the cache
@@ -601,6 +603,8 @@ export async function setupAgentCache(
         );
     }
     await agentCache.constructionStore.setAutoSave(config.cache.autoSave);
+
+    agentCache.grammarStore.setEnabled(config.cache.grammar);
 }
 
 export async function setupBuiltInCache(

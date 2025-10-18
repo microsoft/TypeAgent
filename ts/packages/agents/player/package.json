@@ -17,8 +17,9 @@
     "./agent/handlers": "./dist/agent/playerHandlers.js"
   },
   "scripts": {
+    "agc": "agc -i ./src/agent/playerGrammar.agr -o ./dist/agent/playerGrammar.ag.json",
     "asc": "asc -i ./src/agent/playerSchema.ts -o ./dist/agent/playerSchema.pas.json -t PlayerActions -e PlayerEntities",
-    "build": "concurrently npm:tsc npm:asc",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "tsc": "tsc -p src"
   },
@@ -36,6 +37,7 @@
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/spotify-api": "^0.0.25",
+    "action-grammar-compiler": "workspace:*",
     "action-schema-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "rimraf": "^6.0.1",
@@ -43,6 +45,19 @@
   },
   "fluidBuild": {
     "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/agent/playerGrammar.agr"
+          ],
+          "outputGlobs": [
+            "dist/agent/playerGrammar.ag.json"
+          ]
+        }
+      },
       "asc": {
         "dependsOn": [
           "action-schema-compiler#tsc"

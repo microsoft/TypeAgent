@@ -22,11 +22,20 @@ export type NpmAppAgentInfo = {
 };
 
 function patchPaths(manifest: ActionManifest, dir: string) {
-    if (manifest.schema && typeof manifest.schema.schemaFile === "string") {
-        manifest.schema.schemaFile = path.resolve(
-            dir,
-            manifest.schema.schemaFile,
-        );
+    if (manifest.schema) {
+        if (typeof manifest.schema.schemaFile === "string") {
+            manifest.schema.schemaFile = path.resolve(
+                dir,
+                manifest.schema.schemaFile,
+            );
+        }
+
+        if (typeof manifest.schema.grammarFile === "string") {
+            manifest.schema.grammarFile = path.resolve(
+                dir,
+                manifest.schema.grammarFile,
+            );
+        }
     }
     if (manifest.subActionManifests) {
         for (const subManifest of Object.values(manifest.subActionManifests)) {

@@ -48,10 +48,13 @@ export type SchemaTypeNames = {
 };
 
 export type SchemaFormat = "ts" | "pas";
+export type GrammarFormat = "ag";
+
 export type SchemaManifest = {
     description: string;
     schemaType: string | SchemaTypeNames; // string if there are only action schemas
     schemaFile: string | { format: SchemaFormat; content: string };
+    grammarFile?: string | { format: GrammarFormat; content: string };
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];

@@ -15,14 +15,22 @@ import {
     doCacheAction,
     isValidActionSchemaFileHash,
 } from "../explanation/schemaInfoProvider.js";
-import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
+import {
+    ConstructionStore,
+    ConstructionStoreImpl,
+} from "./constructionStore.js";
 import { ExplainerFactory } from "./factory.js";
-import { NamespaceKeyFilter } from "../constructions/constructionCache.js";
+import {
+    MatchOptions,
+    NamespaceKeyFilter,
+} from "../constructions/constructionCache.js";
 import {
     ExplainWorkQueue,
     ExplanationOptions,
     ProcessExplanationResult,
 } from "./explainWorkQueue.js";
+import { GrammarStoreImpl } from "./grammarStore.js";
+import { GrammarStore, MatchResult } from "./types.js";
 
 export type ProcessRequestActionResult = {
     explanationResult: ProcessExplanationResult;
@@ -51,20 +59,27 @@ function getFailedResult(message: string): ProcessRequestActionResult {
     };
 }
 
-// Construction namespace policy
+export function getSchemaNamespaceKey(
+    name: string,
+    activityName: string | undefined,
+    schemaInfoProvider: SchemaInfoProvider | undefined,
+) {
+    return `${name},${schemaInfoProvider?.getActionSchemaFileHash(name) ?? ""},${activityName ?? ""}`;
+}
+
+// Namespace policy. Combines schema name, file hash, and activity name to indicate enabling/disabling of matching.
 export function getSchemaNamespaceKeys(
     schemaNames: string[],
     activityName: string | undefined,
     schemaInfoProvider: SchemaInfoProvider | undefined,
 ) {
     // Current namespace keys policy is just combining schema name its file hash
-    return schemaNames.map(
-        (name) =>
-            `${name},${schemaInfoProvider?.getActionSchemaFileHash(name) ?? ""},${activityName ?? ""}`,
+    return schemaNames.map((name) =>
+        getSchemaNamespaceKey(name, activityName, schemaInfoProvider),
     );
 }
 
-function splitSchemaNamespaceKey(namespaceKey: string): {
+export function splitSchemaNamespaceKey(namespaceKey: string): {
     schemaName: string;
     hash: string | undefined;
     activityName: string | undefined;
@@ -79,6 +94,7 @@ function splitSchemaNamespaceKey(namespaceKey: string): {
 
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
+    private _grammarStore: GrammarStoreImpl;
     private readonly explainWorkQueue: ExplainWorkQueue;
     // Function to return whether the namespace key matches to the current schema file's hash.
     private readonly namespaceKeyFilter?: NamespaceKeyFilter;
@@ -91,6 +107,7 @@ export class AgentCache {
         cacheOptions?: CacheOptions,
         logger?: Telemetry.Logger,
     ) {
+        this._grammarStore = new GrammarStoreImpl(schemaInfoProvider);
         this._constructionStore = new ConstructionStoreImpl(
             explainerName,
             cacheOptions,
@@ -117,6 +134,9 @@ export class AgentCache {
         }
     }
 
+    public get grammarStore(): GrammarStore {
+        return this._grammarStore;
+    }
     public get constructionStore(): ConstructionStore {
         return this._constructionStore;
     }
@@ -170,27 +190,24 @@ export class AgentCache {
                 options?.namespaceSuffix,
             );
 
-            const store = this._constructionStore;
-            if (store.isEnabled()) {
-                // Make sure that we don't already have a construction that will match (but reject because of options)
-                const matchResult = store.match(requestAction.request, {
-                    rejectReferences: false,
-                    history: requestAction.history,
-                    namespaceKeys,
-                });
+            // Make sure that we don't already have match (but rejected because of options)
+            const matchResult = this.match(requestAction.request, {
+                rejectReferences: false,
+                history: requestAction.history,
+                namespaceKeys,
+            });
 
-                const actions = executableActions.map((e) => e.action);
-                for (const match of matchResult) {
-                    if (
-                        equalNormalizedObject(
-                            match.match.actions.map((e) => e.action),
-                            actions,
-                        )
-                    ) {
-                        return getFailedResult(
-                            `Existing construction matches the request but rejected.`,
-                        );
-                    }
+            const actions = executableActions.map((e) => e.action);
+            for (const match of matchResult) {
+                if (
+                    equalNormalizedObject(
+                        match.match.actions.map((e) => e.action),
+                        actions,
+                    )
+                ) {
+                    return getFailedResult(
+                        `Existing construction matches the request but rejected.`,
+                    );
                 }
             }
 
@@ -216,6 +233,7 @@ export class AgentCache {
                 elapsedMs,
             });
 
+            const store = this._constructionStore;
             const generateConstruction = cache && store.isEnabled();
             if (generateConstruction && explanation.success) {
                 const construction = explanation.construction;
@@ -284,5 +302,31 @@ export class AgentCache {
             this.schemaInfoProvider,
             ignoreSourceHash,
         );
+    }
+
+    public isEnabled(): boolean {
+        return (
+            this._grammarStore.isEnabled() ||
+            this._constructionStore.isEnabled()
+        );
+    }
+
+    public match(request: string, options?: MatchOptions): MatchResult[] {
+        const store = this._constructionStore;
+        if (store.isEnabled()) {
+            const constructionMatches = store.match(request, options);
+            if (constructionMatches.length > 0) {
+                // TODO: Move this in the construction store
+                return constructionMatches.map((m) => {
+                    const { construction, ...rest } = m;
+                    return rest;
+                });
+            }
+        }
+        const grammarStore = this._grammarStore;
+        if (grammarStore.isEnabled()) {
+            return this._grammarStore.match(request, options);
+        }
+        throw new Error("AgentCache is disabled");
     }
 }

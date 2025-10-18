@@ -61,7 +61,7 @@ export type InterpretResult = {
     requestAction: RequestAction;
     elapsedMs: number;
     fromUser: boolean;
-    fromCache: boolean;
+    fromCache: "construction" | "grammar" | false;
     tokenUsage?: ai.CompletionUsageStats | undefined;
 };
 
@@ -256,7 +256,7 @@ export async function interpretRequest(
 
     const { requestAction, replacedAction } = await confirmTranslation(
         translateResult.elapsedMs,
-        translateResult.type === "match"
+        translateResult.type !== "translate"
             ? unicodeChar.constructionSign
             : DispatcherEmoji,
         translateResult.requestAction,
@@ -286,7 +286,8 @@ export async function interpretRequest(
         elapsedMs: translateResult.elapsedMs,
         requestAction,
         fromUser: replacedAction !== undefined,
-        fromCache: translateResult.type === "match",
+        fromCache:
+            translateResult.type === "translate" ? false : translateResult.type,
         tokenUsage,
     };
 }

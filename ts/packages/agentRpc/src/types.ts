@@ -21,8 +21,8 @@ import {
     TemplateSchema,
     TypeAgentAction,
     CompletionGroup,
+    ResolveEntityResult,
 } from "@typeagent/agent-sdk";
-import { ResolveEntityResult } from "../../agentSdk/dist/agentInterface.js";
 import { AgentInterfaceFunctionName } from "./server.js";
 
 export type AgentContextCallFunctions = {
