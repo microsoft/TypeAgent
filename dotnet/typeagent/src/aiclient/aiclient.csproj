@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\typechat\TypeChat.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
+
 namespace TypeAgent.AIClient;
 
 /// <summary>
@@ -8,7 +10,14 @@ namespace TypeAgent.AIClient;
 /// </summary>
 public static class HttpEx
 {
-    internal static async Task<Response> GetJsonResponseAsync<Request, Response>(this HttpClient client, string endpoint, Request request, int maxRetries, int retryPauseMs, string? apiToken = null)
+    internal static async Task<Response> GetJsonResponseAsync<Request, Response>(
+        this HttpClient client,
+        string endpoint,
+        Request request,
+        int maxRetries,
+        int retryPauseMs,
+        string? apiToken = null
+    )
     {
         var requestMessage = Json.ToJsonMessage(request);
         int retryCount = 0;
@@ -36,9 +45,14 @@ public static class HttpEx
                     response.EnsureSuccessStatusCode();
                     break;
                 }
-                if (retryPauseMs > 0)
+                int pauseMs = retryPauseMs;
+                if (response.StatusCode == (HttpStatusCode)429) // Too Many Requests
                 {
-                    await Task.Delay(retryPauseMs).ConfigureAwait(false);
+                    pauseMs = GetRetryAfterMs(response, retryPauseMs);
+                }
+                if (pauseMs > 0)
+                {
+                    await Task.Delay(pauseMs).ConfigureAwait(false);
                 }
                 retryCount++;
             }
@@ -66,5 +80,45 @@ public static class HttpEx
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// When servers return a 429, they can include a Retry-After header that says how long the caller
+    /// should wait before retrying.
+    /// </summary>
+    /// <param name="response">The HttpResponseMessage to inspect.</param>
+    /// <param name="defaultValue">Default pause in milliseconds if header is missing or invalid.</param>
+    /// <returns>Milliseconds to pause before retrying.</returns>
+    internal static int GetRetryAfterMs(HttpResponseMessage response, int defaultValue)
+    {
+        int pauseMs = defaultValue;
+        try
+        {
+            if (response.Headers.TryGetValues("Retry-After", out var values))
+            {
+                var pauseHeader = values.FirstOrDefault()?.Trim();
+                if (!string.IsNullOrEmpty(pauseHeader))
+                {
+                    if (int.TryParse(pauseHeader, out int seconds))
+                    {
+                        pauseMs = seconds * 1000;
+                    }
+                    else if (DateTimeOffset.TryParse(pauseHeader, out var retryDate))
+                    {
+                        pauseMs = (int)(retryDate - DateTimeOffset.UtcNow).TotalMilliseconds;
+                    }
+                    if (pauseMs <= 0)
+                    {
+                        pauseMs = defaultValue;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to parse Retry-After header: {ex}");
+            pauseMs = defaultValue;
+        }
+        return pauseMs;
     }
 }

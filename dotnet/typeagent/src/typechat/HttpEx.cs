@@ -1,12 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 namespace Microsoft.TypeChat;
-
-using System.Net.Http;
 
 /// <summary>
 /// Extension methods for working with Http 

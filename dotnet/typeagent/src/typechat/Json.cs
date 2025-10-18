@@ -1,16 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 namespace Microsoft.TypeChat;
 
 /// <summary>
 /// Json makes the idiomatic Javascript Json.Stringify and Json.Parse APIs available to .NET by
 /// wrapping the .NET System.Text.Json serialization
 /// </summary>
-public class Json
+internal class Json
 {
     /// <summary>
     /// Create default Json serialization options

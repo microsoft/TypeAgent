@@ -3,6 +3,6 @@
 
 namespace TypeAgent.AIClient;
 
-public interface IChatModel
+public interface IChatModel : ILanguageModel
 {
 }
