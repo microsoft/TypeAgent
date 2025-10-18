@@ -98,10 +98,7 @@ public class OpenAIConfig
     /// </summary>
     public IApiTokenProvider ApiTokenProvider { get; set; }
 
-    public bool HasTokenProvider
-    {
-        get { return this.ApiTokenProvider is not null; }
-    }
+    public bool HasTokenProvider => this.ApiTokenProvider is not null;
 
     /// <summary>
     /// Validate the configuration

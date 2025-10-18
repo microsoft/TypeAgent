@@ -5,6 +5,39 @@ using System.Diagnostics;
 
 namespace TypeAgent.AIClient;
 
+public class HttpRequestSettings
+{
+    public int MaxRetries { get; set; } = 3;
+
+    public int RetryPauseMs { get; set; } = 1000;
+
+    public int MaxRetryPauseMs { get; set; } = -1;
+
+    public int TimeoutMs { get; set; } = 0;
+
+    public double JitterRange { get; set; } = 0.5;
+
+    internal static readonly HttpRequestSettings Default = new();
+
+    public int AdjustRetryPauseMs(int retryPauseMs)
+    {
+        if (JitterRange > 0 && JitterRange <= 1)
+        {
+            double jitterOffset = JitterRange / 2;
+            double jitter = 1.0 - jitterOffset + (Random.Shared.NextDouble() * JitterRange);
+
+            retryPauseMs = (int)(retryPauseMs * jitter);
+
+        }
+        if (MaxRetryPauseMs > 0)
+        {
+            retryPauseMs = Math.Min(retryPauseMs, MaxRetryPauseMs);
+        }
+        return retryPauseMs;
+    }
+
+}
+
 /// <summary>
 /// Extension methods for working with Http 
 /// </summary>
@@ -14,11 +47,13 @@ public static class HttpEx
         this HttpClient client,
         string endpoint,
         Request request,
-        int maxRetries,
-        int retryPauseMs,
-        string? apiToken = null
+        string? apiToken = null,
+        HttpRequestSettings? settings = null,
+        CancellationToken cancellationToken = default
     )
     {
+        settings ??= HttpRequestSettings.Default;
+
         var requestMessage = Json.ToJsonMessage(request);
         int retryCount = 0;
         while (true)
@@ -33,35 +68,50 @@ public static class HttpEx
                 {
                     httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
                 }
-                HttpResponseMessage response = await client.SendAsync(httpRequest).ConfigureAwait(false);
+
+                if (settings.TimeoutMs > 0)
+                {
+                    var timeOutCancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeOutCancel.CancelAfter(settings.TimeoutMs);
+                    cancellationToken = timeOutCancel.Token;
+                }
+
+                HttpResponseMessage response = await client.SendAsync(httpRequest,cancellationToken).ConfigureAwait(false);
                 if (response.StatusCode == HttpStatusCode.OK)
                 {
-                    using Stream stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                    using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                     return Json.Parse<Response>(stream);
                 }
-                if (!response.StatusCode.IsTransientError() || retryCount >= maxRetries)
+
+                if (!response.StatusCode.IsTransientError() || retryCount >= settings.MaxRetries)
                 {
                     // Let HttpClient throw an exception
                     response.EnsureSuccessStatusCode();
                     break;
                 }
-                int pauseMs = retryPauseMs;
+
+                retryCount++;
+
+                int pauseMs = settings.RetryPauseMs > 0
+                            ? settings.RetryPauseMs * (1 << retryCount) // Exponential backoff
+                            : 0;
+
                 if (response.StatusCode == (HttpStatusCode)429) // Too Many Requests
                 {
-                    pauseMs = GetRetryAfterMs(response, retryPauseMs);
+                    pauseMs = GetRetryAfterMs(response, pauseMs);
                 }
                 if (pauseMs > 0)
                 {
-                    await Task.Delay(pauseMs).ConfigureAwait(false);
+                    pauseMs = settings.AdjustRetryPauseMs(pauseMs);
+                    await Task.Delay(pauseMs, cancellationToken).ConfigureAwait(false);
                 }
-                retryCount++;
             }
             finally
             {
                 httpRequest.Dispose();
             }
         }
-        return default;
+        throw new TypeAgentException("GetJsonResponse");
     }
 
     internal static bool IsTransientError(this HttpStatusCode status)
