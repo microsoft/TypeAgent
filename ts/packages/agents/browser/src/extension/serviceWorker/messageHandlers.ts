@@ -463,8 +463,8 @@ export async function handleMessage(
                 return await sendActionToAgent({
                     actionName: "generatePageQuestions",
                     parameters: {
-                        url: message.parameters.url,
-                        pageKnowledge: message.parameters.pageKnowledge,
+                        url: message.url,
+                        pageKnowledge: message.pageKnowledge,
                     },
                 });
             } catch (error) {
@@ -478,9 +478,9 @@ export async function handleMessage(
                 return await sendActionToAgent({
                     actionName: "generateGraphQuestions",
                     parameters: {
-                        url: message.parameters.url,
-                        relatedEntities: message.parameters.relatedEntities,
-                        relatedTopics: message.parameters.relatedTopics,
+                        url: message.url,
+                        relatedEntities: message.relatedEntities,
+                        relatedTopics: message.relatedTopics,
                     },
                 });
             } catch (error) {

@@ -227,7 +227,7 @@ class PageQnAPanel {
     private async loadPageKnowledge() {
         try {
             // Load existing knowledge for the page
-            const knowledge = await extensionService.getPageKnowledge(this.currentUrl);
+            const knowledge = await extensionService.getPageIndexedKnowledge(this.currentUrl);
             if (knowledge) {
                 this.knowledgeData = knowledge;
             }
@@ -383,24 +383,24 @@ class PageQnAPanel {
 
         try {
             // Generate page-specific questions
-            const pageQuestionResponse = await extensionService.generatePageQuestions({
-                url: this.currentUrl,
-                pageKnowledge: this.knowledgeData
-            });
+            const pageQuestionResponse = await extensionService.generatePageQuestions(
+                this.currentUrl,
+                this.knowledgeData
+            );
 
             if (pageQuestionResponse?.questions) {
-                this.pageQuestions = pageQuestionResponse.questions.filter(q => q.scope === "page");
+                this.pageQuestions = pageQuestionResponse.questions.filter((q: SuggestedQuestion) => q.scope === "page");
                 this.renderQuestions("pageQuestionsList", this.pageQuestions);
             }
 
             // Generate graph-based questions (broader scope)
-            const graphQuestionResponse = await extensionService.generateGraphQuestions({
-                url: this.currentUrl,
-                pageKnowledge: this.knowledgeData
-            });
+            const graphQuestionResponse = await extensionService.generateGraphQuestions(
+                this.currentUrl,
+                this.knowledgeData
+            );
 
             if (graphQuestionResponse?.questions) {
-                this.graphQuestions = graphQuestionResponse.questions.filter(q => q.scope === "broader");
+                this.graphQuestions = graphQuestionResponse.questions.filter((q: SuggestedQuestion) => q.scope === "broader");
                 this.renderQuestions("graphQuestionsList", this.graphQuestions);
             }
 
@@ -442,8 +442,9 @@ class PageQnAPanel {
                 }
             });
 
-            item.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+            item.addEventListener('keypress', (e: Event) => {
+                const keyEvent = e as KeyboardEvent;
+                if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
                     const question = item.getAttribute('data-question');
                     if (question) {
                         this.askQuestion(question);

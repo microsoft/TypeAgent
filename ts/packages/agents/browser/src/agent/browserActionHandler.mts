@@ -669,6 +669,28 @@ async function processBrowserAgentMessage(
             break;
         }
 
+        case "generatePageQuestions": {
+            const pageQuestionsResult = await generatePageQuestions(data.params, context);
+            client.socket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: pageQuestionsResult,
+                }),
+            );
+            break;
+        }
+
+        case "generateGraphQuestions": {
+            const graphQuestionsResult = await generateGraphQuestions(data.params, context);
+            client.socket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: graphQuestionsResult,
+                }),
+            );
+            break;
+        }
+
         case "importWebsiteData":
         case "importWebsiteDataWithProgress":
         case "importHtmlFolder":
@@ -1586,10 +1608,7 @@ async function executeBrowserAction(
                         },
                     });
                 }
-                case "generatePageQuestions":
-                    return generatePageQuestions(action.parameters, context.sessionContext);
-                case "generateGraphQuestions":
-                    return generateGraphQuestions(action.parameters, context.sessionContext);
+                
                 default:
                     // Should never happen.
                     throw new Error(

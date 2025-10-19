@@ -16,10 +16,10 @@
   <body>
     <div class="container-fluid p-3 h-100 d-flex flex-column">
       <!-- Header Section -->
-      <div class="chat-header rounded">
+      <div class="knowledge-header rounded">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <h4 class="mb-1"><i class="bi bi-chat-dots"></i> Learn More</h4>
+            <h4 class="mb-1"><i class="bi bi-chat-dots"></i> Page Q&A</h4>
             <small id="connectionStatus">
               <span class="status-indicator status-connected"></span>
               Connected to TypeAgent
@@ -35,7 +35,7 @@
       </div>
 
       <!-- Current Page Info -->
-      <div class="chat-card card">
+      <div class="knowledge-card card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <h6 class="mb-0"><i class="bi bi-globe"></i> Current Page</h6>
         </div>
@@ -50,7 +50,7 @@
       </div>
 
       <!-- Knowledge Extraction Progress (Hidden by default) -->
-      <div id="extractionProgress" class="chat-card card d-none">
+      <div id="extractionProgress" class="knowledge-card card d-none">
         <div class="card-header">
           <h6 class="mb-0"><i class="bi bi-gear"></i> Extracting Knowledge</h6>
         </div>
@@ -78,7 +78,7 @@
       </div>
 
       <!-- Suggested Questions Section -->
-      <div id="suggestedQuestionsSection" class="chat-card card d-none">
+      <div id="suggestedQuestionsSection" class="knowledge-card card d-none">
         <div class="card-header">
           <h6 class="mb-0"><i class="bi bi-lightbulb"></i> Suggested Questions</h6>
         </div>
@@ -99,7 +99,7 @@
       </div>
 
       <!-- Chat Section -->
-      <div id="chatSection" class="chat-card card flex-grow-1 d-flex flex-column d-none">
+      <div id="chatSection" class="knowledge-card card flex-grow-1 d-flex flex-column d-none">
         <div class="card-header">
           <h6 class="mb-0"><i class="bi bi-chat-text"></i> Ask Questions</h6>
         </div>
@@ -138,7 +138,7 @@
       </div>
 
       <!-- Error Section -->
-      <div id="errorSection" class="chat-card card d-none">
+      <div id="errorSection" class="knowledge-card card d-none">
         <div class="card-header bg-danger text-white">
           <h6 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Error</h6>
         </div>

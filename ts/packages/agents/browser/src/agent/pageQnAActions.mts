@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "../browserActions.mjs";
+import { BrowserActionContext } from "./browserActions.mjs";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
@@ -76,7 +76,7 @@ export class QuestionGenerator {
             }
 
             const pageQuestions = response.data.questions.filter(
-                q => q.scope === "page"
+                (q: SuggestedQuestion) => q.scope === "page"
             );
 
             debug(`Generated ${pageQuestions.length} page-specific questions`);
@@ -123,7 +123,7 @@ export class QuestionGenerator {
             }
 
             const graphQuestions = response.data.questions.filter(
-                q => q.scope === "broader"
+                (q: SuggestedQuestion) => q.scope === "broader"
             );
 
             debug(`Generated ${graphQuestions.length} graph-based questions`);

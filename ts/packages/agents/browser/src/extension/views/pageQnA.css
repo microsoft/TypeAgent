@@ -7,24 +7,27 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
+  font-size: 0.875rem;
+  background-color: #f8f9fa;
 }
 
-.chat-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+.knowledge-header {
+  background: white;
+  color: #333;
   padding: 1rem;
   margin-bottom: 1rem;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border-bottom: 1px solid #e9ecef;
 }
 
-.chat-card {
+.knowledge-card {
   margin-bottom: 1rem;
   border: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   border-radius: 8px;
 }
 
-.chat-card .card-header {
+.knowledge-card .card-header {
   background-color: #f8f9fa;
   border-bottom: 1px solid #e9ecef;
   border-radius: 8px 8px 0 0 !important;
@@ -298,15 +301,15 @@ html, body {
   .container-fluid {
     padding: 0.5rem !important;
   }
-  
-  .chat-header {
+
+  .knowledge-header {
     padding: 0.75rem;
   }
-  
+
   .message-bubble {
     max-width: 90%;
   }
-  
+
   .question-item {
     padding: 0.5rem;
   }
@@ -348,17 +351,17 @@ html, body {
 
 /* Dark mode support (if needed) */
 @media (prefers-color-scheme: dark) {
-  .chat-card {
+  .knowledge-card {
     background-color: #2d3748;
     color: #e2e8f0;
   }
-  
+
   .question-item {
     background-color: #4a5568;
     border-color: #2d3748;
     color: #e2e8f0;
   }
-  
+
   .question-item:hover {
     background-color: #2d3748;
   }
