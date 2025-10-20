@@ -99,7 +99,7 @@ describe("Grammar", () => {
 
                 // Able to match roundtrip
                 expect(matched.length).not.toEqual(0);
-                expect(matched[0]).toEqual(
+                expect(matched[0].match).toEqual(
                     toJsonActions(requestAction.actions),
                 );
 
