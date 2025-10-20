@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "./browserActions.mjs";
+import { BrowserActionContext } from "../../browserActions.mjs";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
 import {
     PageQuestionResponse,
     SuggestedQuestion,
-} from "./schema/pageQuestionSchema.mjs";
+} from "../schema/pageQuestionSchema.mjs";
 import registerDebug from "debug";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -18,11 +18,15 @@ import fs from "fs";
 const debug = registerDebug("typeagent:browser:page-qna");
 
 function getSchemaFileContents(fileName: string): string {
-    const packageRoot = path.join("..", "..");
+    const packageRoot = path.join("..", "..", "..", "..");
     return fs.readFileSync(
         fileURLToPath(
             new URL(
-                path.join(packageRoot, "./src/agent/schema", fileName),
+                path.join(
+                    packageRoot,
+                    "./src/agent/knowledge/schema",
+                    fileName,
+                ),
                 import.meta.url,
             ),
         ),

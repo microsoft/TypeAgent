@@ -113,7 +113,7 @@ import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import {
     generatePageQuestions,
     generateGraphQuestions,
-} from "./pageQnAActions.mjs";
+} from "./knowledge/actions/pageQnAActions.mjs";
 import {
     BrowserControl,
     defaultSearchProviders,
