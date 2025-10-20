@@ -444,7 +444,7 @@ export async function handleMessage(
         case "queryKnowledge": {
             try {
                 return await sendActionToAgent({
-                    actionName: "queryWebKnowledge",
+                    actionName: "searchWebMemories",
                     parameters: {
                         query: message.parameters.query,
                         url: message.parameters.url,

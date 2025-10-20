@@ -167,6 +167,7 @@ export class QuestionGenerator {
                     `\`\`\`\n${this.schemaText}\`\`\`\n` +
                     `The following is page content and context:\n` +
                     `"""\n${request}\n"""\n` +
+                    `IMPORTANT: The questions generated should be answerable from the information in the page content above.\n` +
                     `The following is the suggested questions response as a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
                 );
             };
