@@ -444,7 +444,7 @@ export async function handleMessage(
         case "queryKnowledge": {
             try {
                 return await sendActionToAgent({
-                    actionName: "queryWebKnowledge",
+                    actionName: "searchWebMemories",
                     parameters: {
                         query: message.parameters.query,
                         url: message.parameters.url,
@@ -455,6 +455,37 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error querying knowledge:", error);
                 return { error: "Failed to query knowledge" };
+            }
+        }
+
+        case "generatePageQuestions": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "generatePageQuestions",
+                    parameters: {
+                        url: message.url,
+                        pageKnowledge: message.pageKnowledge,
+                    },
+                });
+            } catch (error) {
+                console.error("Error generating page questions:", error);
+                return { error: "Failed to generate page questions" };
+            }
+        }
+
+        case "generateGraphQuestions": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "generateGraphQuestions",
+                    parameters: {
+                        url: message.url,
+                        relatedEntities: message.relatedEntities,
+                        relatedTopics: message.relatedTopics,
+                    },
+                });
+            } catch (error) {
+                console.error("Error generating graph questions:", error);
+                return { error: "Failed to generate graph questions" };
             }
         }
 

@@ -17,6 +17,7 @@ import type {
     KnowledgeProgressCallback,
     KnowledgeExtractionResult,
 } from "../interfaces/knowledgeExtraction.types";
+import { url } from "inspector/promises";
 
 // ===================================================================
 // INTERFACE DEFINITIONS
@@ -326,6 +327,25 @@ export abstract class ExtensionServiceBase {
         return this.sendMessage({
             type: "getPageIndexedKnowledge",
             url,
+        });
+    }
+
+    async generatePageQuestions(url: string, pageKnowledge: any): Promise<any> {
+        return this.sendMessage({
+            type: "generatePageQuestions",
+            url,
+            pageKnowledge,
+        });
+    }
+
+    async generateGraphQuestions(
+        url: string,
+        pageKnowledge: any,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "generateGraphQuestions",
+            url,
+            pageKnowledge,
         });
     }
 
