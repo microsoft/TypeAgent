@@ -115,9 +115,6 @@ export interface KnowledgeEntity {
 
 export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
-        // Ensure performance indexes exist
-        KnowledgeEntityTable.ensureIndexes(db);
-
         super(db, "knowledgeEntities", [
             ["url", { type: "string" }],
             ["domain", { type: "string" }],
@@ -126,6 +123,8 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
             ["confidence", { type: "number" }],
             ["extractionDate", { type: "string" }],
         ]);
+
+        KnowledgeEntityTable.ensureIndexes(db);
     }
 
     private static ensureIndexes(db: sqlite.Database): void {
@@ -389,9 +388,6 @@ export interface Relationship {
 
 export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
-        // Ensure performance indexes exist
-        RelationshipTable.ensureIndexes(db);
-
         super(db, "relationships", [
             ["fromEntity", { type: "string" }],
             ["toEntity", { type: "string" }],
@@ -401,6 +397,8 @@ export class RelationshipTable extends ms.sqlite.SqliteDataFrame {
             ["count", { type: "number" }],
             ["updated", { type: "string" }],
         ]);
+
+        RelationshipTable.ensureIndexes(db);
     }
 
     private static ensureIndexes(db: sqlite.Database): void {

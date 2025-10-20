@@ -21,7 +21,11 @@ import {
     Entity,
     Relationship,
 } from "../schema/knowledgeExtraction.mjs";
-import { ExtractionMode, ExtractionInput } from "website-memory";
+import {
+    ExtractionMode,
+    ExtractionInput,
+    EXTRACTION_MODE_CONFIGS,
+} from "website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
 import { docPartsFromHtml } from "conversation-memory";
 import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
@@ -67,9 +71,8 @@ export function createExtractionInputsFromFragments(
             let htmlContent = "";
             let docParts: any[] | undefined;
 
-            if (fragment.text && fragment.text.trim().length > 0) {
-                textContent = fragment.text.trim();
-            } else if (fragment.content && fragment.content.trim().length > 0) {
+            // Process HTML content first to create docParts (needed for AI extraction)
+            if (fragment.content && fragment.content.trim().length > 0) {
                 htmlContent = fragment.content;
 
                 try {
@@ -84,6 +87,13 @@ export function createExtractionInputsFromFragments(
                         textContent = docParts
                             .map((p: any) => p.textChunks)
                             .join("\n\n");
+                        console.log(
+                            `✅ Created ${docParts.length} docParts for ${url}#iframe-${fragment.frameId || index}`,
+                        );
+                    } else {
+                        console.warn(
+                            `⚠️ docPartsFromHtml returned empty array for ${url}#iframe-${fragment.frameId || index}`,
+                        );
                     }
                 } catch (error) {
                     console.warn(
@@ -94,6 +104,18 @@ export function createExtractionInputsFromFragments(
                         .replace(/<[^>]*>/g, "")
                         .trim();
                 }
+            }
+
+            // Fall back to fragment.text if no HTML content or docParts creation failed
+            if (
+                !textContent &&
+                fragment.text &&
+                fragment.text.trim().length > 0
+            ) {
+                textContent = fragment.text.trim();
+                console.log(
+                    `📝 Using fragment.text for ${url}#iframe-${fragment.frameId || index} (no HTML content)`,
+                );
             }
 
             const input: ExtractionInput = {
@@ -417,7 +439,7 @@ export async function extractKnowledgeFromPageStreaming(
     let processedItems = 0;
     const startTime = Date.now();
 
-    const sendProgressUpdate = (
+    const sendProgressUpdate = async (
         phase: KnowledgeExtractionProgress["phase"],
         currentItem?: string,
         incrementalData?: Partial<any>,
@@ -441,10 +463,13 @@ export async function extractKnowledgeFromPageStreaming(
         };
         knowledgeProgressEvents.emitProgress(progressEvent);
 
-        debug("Knowledge extraction progress:", {
-            extractionId,
-            progress: JSON.stringify(progress),
-        });
+        debug(
+            `📊 Progress Update [${extractionId}]: phase=${phase}, item=${currentItem || "N/A"}, ` +
+                `entities=${incrementalData?.entities?.length || 0}, ` +
+                `topics=${incrementalData?.keyTopics?.length || 0}, ` +
+                `relationships=${incrementalData?.relationships?.length || 0}, ` +
+                `processed=${processedItems}/${totalItems}`,
+        );
     };
 
     try {
@@ -472,16 +497,32 @@ export async function extractKnowledgeFromPageStreaming(
         }
 
         // Phase 1: Content retrieval feedback
-        sendProgressUpdate("content", "Analyzing page structure and content", {
-            contentMetrics: extractContentMetrics(extractionInputs),
-            url,
-            title: parameters.title,
-        });
+        await sendProgressUpdate(
+            "content",
+            "Analyzing page structure and content",
+            {
+                contentMetrics: extractContentMetrics(extractionInputs),
+                url,
+                title: parameters.title,
+            },
+        );
 
         const extractor = new BrowserKnowledgeExtractor(context);
 
+        // Verify AI model is available for the requested mode
+        const modeConfig = EXTRACTION_MODE_CONFIGS[extractionMode];
+        if (
+            modeConfig &&
+            modeConfig.usesAI &&
+            !extractor.isConfiguredForMode(extractionMode)
+        ) {
+            debug(
+                `⚠️ AI model not available for ${extractionMode} mode, falling back to basic extraction`,
+            );
+        }
+
         // Phase 2: Basic extraction
-        sendProgressUpdate("basic", "Processing basic page information");
+        await sendProgressUpdate("basic", "Processing basic page information");
 
         let aggregatedResults: any = {
             title: parameters.title,
@@ -535,7 +576,7 @@ export async function extractKnowledgeFromPageStreaming(
             aggregatedResults = aggregateExtractionResults(basicResults);
             aggregatedResults.title = parameters.title;
 
-            sendProgressUpdate(
+            await sendProgressUpdate(
                 "basic",
                 "Basic analysis complete",
                 aggregatedResults,
@@ -544,7 +585,7 @@ export async function extractKnowledgeFromPageStreaming(
 
         // Phase 3: Summary mode (if enabled)
         if (shouldIncludeMode("summary", extractionMode)) {
-            sendProgressUpdate("summary", "Generating content summary");
+            await sendProgressUpdate("summary", "Generating content summary");
 
             const summaryResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
@@ -561,7 +602,7 @@ export async function extractKnowledgeFromPageStreaming(
                         totalItems = progress.total;
                         processedItems = progress.processed;
 
-                        sendProgressUpdate(
+                        await sendProgressUpdate(
                             "summary",
                             `Summarizing: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
@@ -594,7 +635,7 @@ export async function extractKnowledgeFromPageStreaming(
                 aggregatedResults.relationships = summaryData.relationships;
             }
 
-            sendProgressUpdate(
+            await sendProgressUpdate(
                 "summary",
                 "Summary analysis complete",
                 aggregatedResults, // Send the full aggregated results, not just summary/topics
@@ -603,7 +644,10 @@ export async function extractKnowledgeFromPageStreaming(
 
         // Phase 4: Content analysis (if enabled)
         if (shouldIncludeMode("content", extractionMode)) {
-            sendProgressUpdate("analyzing", "Discovering entities and topics");
+            await sendProgressUpdate(
+                "analyzing",
+                "Discovering entities and topics",
+            );
 
             const contentResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
@@ -619,7 +663,7 @@ export async function extractKnowledgeFromPageStreaming(
                         );
                         totalItems = progress.total;
                         processedItems = progress.processed;
-                        sendProgressUpdate(
+                        await sendProgressUpdate(
                             "analyzing",
                             `Analyzing content: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
@@ -663,7 +707,7 @@ export async function extractKnowledgeFromPageStreaming(
                 ];
             }
 
-            sendProgressUpdate(
+            await sendProgressUpdate(
                 "analyzing",
                 "Discovered entities and topics",
                 aggregatedResults, // Send full accumulated results
@@ -672,7 +716,10 @@ export async function extractKnowledgeFromPageStreaming(
 
         // Phase 5: Full extraction with relationships (if enabled)
         if (shouldIncludeMode("full", extractionMode)) {
-            sendProgressUpdate("extracting", "Analyzing entity relationships");
+            await sendProgressUpdate(
+                "extracting",
+                "Analyzing entity relationships",
+            );
 
             const fullResults = await extractor.extractBatchWithEvents(
                 extractionInputs,
@@ -688,7 +735,7 @@ export async function extractKnowledgeFromPageStreaming(
                         );
                         totalItems = progress.total;
                         processedItems = progress.processed;
-                        sendProgressUpdate(
+                        await sendProgressUpdate(
                             "extracting",
                             `Extracting relationships: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
@@ -723,7 +770,7 @@ export async function extractKnowledgeFromPageStreaming(
                 ];
             }
 
-            sendProgressUpdate(
+            await sendProgressUpdate(
                 "extracting",
                 "Analyzed entity relationships",
                 aggregatedResults, // Send full accumulated results
@@ -731,7 +778,7 @@ export async function extractKnowledgeFromPageStreaming(
         }
 
         // Final completion
-        sendProgressUpdate(
+        await sendProgressUpdate(
             "complete",
             "Knowledge extraction completed successfully",
             aggregatedResults,

@@ -371,7 +371,7 @@ export async function handleMessage(
                         targetTab,
                         CompressionMode.KnowledgeExtraction,
                         false,
-                        true,
+                        false,
                         false, // useTimestampIds
                         true, // filterToReadingView - use reading view for knowledge extraction
                         true, // keepMetaTags - preserve metadata for context
