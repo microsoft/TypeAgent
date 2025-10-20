@@ -601,8 +601,37 @@ export class ContentExtractor {
 
                         return { success: true, result, chunkIndex };
                     })
-                    .catch((error) => {
+                    .catch(async (error) => {
+                        const errorMessage =
+                            error instanceof Error
+                                ? error.message
+                                : String(error);
+                        const errorStack =
+                            error instanceof Error ? error.stack : "";
+
+                        console.error(
+                            `❌ Chunk ${chunkIndex + 1}/${docParts.length} extraction failed for ${itemUrl}:`,
+                            errorMessage,
+                        );
+                        if (errorStack) {
+                            console.error("Stack trace:", errorStack);
+                        }
                         debug(`Chunk ${chunkIndex} extraction failed:`, error);
+
+                        // Call progress callback even on failure so UI gets updates
+                        if (chunkProgressCallback) {
+                            await chunkProgressCallback({
+                                itemUrl,
+                                itemIndex: 0,
+                                chunkIndex,
+                                totalChunksInItem: docParts.length,
+                                globalChunkIndex: 0,
+                                totalChunksGlobal: 1,
+                                chunkContent: chunkText.substring(0, 100),
+                                chunkResult: undefined, // No result on failure
+                            });
+                        }
+
                         return { success: false, error, chunkIndex };
                     });
             });

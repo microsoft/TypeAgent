@@ -108,6 +108,11 @@ export class BatchProcessor extends EventEmitter {
                         timestamp: new Date().toISOString(),
                     };
 
+                    console.error(
+                        `❌ Batch item extraction failed [${mode}] for ${item.url}:`,
+                        batchError.error.message,
+                    );
+
                     this.errors.push(batchError);
 
                     return {
@@ -253,6 +258,11 @@ export class BatchProcessor extends EventEmitter {
                             itemProcessedChunks++;
                             globalProcessedChunks++;
 
+                            console.log(
+                                `🔄 Chunk progress [${mode}]: chunk ${chunkInfo.chunkIndex + 1}/${chunkInfo.totalChunksInItem} ` +
+                                    `for item ${item.url} (global: ${globalProcessedChunks}/${globalTotalChunks})`,
+                            );
+
                             if (chunkInfo.chunkResult) {
                                 if (!partialResults.has(itemIndex)) {
                                     partialResults.set(itemIndex, []);
@@ -352,6 +362,11 @@ export class BatchProcessor extends EventEmitter {
                                 : new Error(String(outcome.error)),
                         timestamp: new Date().toISOString(),
                     };
+
+                    console.error(
+                        `❌ Item extraction failed [${mode}] for ${outcome.item.url}:`,
+                        batchError.error.message,
+                    );
 
                     this.errors.push(batchError);
 
