@@ -3,7 +3,8 @@
 
 /* Page Q&A Specific Styles */
 
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -16,14 +17,14 @@ html, body {
   color: #333;
   padding: 1rem;
   margin-bottom: 1rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border-bottom: 1px solid #e9ecef;
 }
 
 .knowledge-card {
   margin-bottom: 1rem;
   border: none;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border-radius: 8px;
   background-color: #fff;
 }
@@ -62,9 +63,15 @@ html, body {
 }
 
 @keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.5; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* Question Lists */
@@ -87,7 +94,7 @@ html, body {
   background-color: #f8f9fa;
   border-color: #007bff;
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.1);
 }
 
 .question-item.page-question {
@@ -121,11 +128,26 @@ html, body {
   margin-left: auto;
 }
 
-.question-type.factual { background-color: #cce5ff; color: #0056b3; }
-.question-type.analytical { background-color: #e1f5fe; color: #01579b; }
-.question-type.comparative { background-color: #f3e5f5; color: #4a148c; }
-.question-type.exploratory { background-color: #e8f5e8; color: #1b5e20; }
-.question-type.practical { background-color: #fff3e0; color: #e65100; }
+.question-type.factual {
+  background-color: #cce5ff;
+  color: #0056b3;
+}
+.question-type.analytical {
+  background-color: #e1f5fe;
+  color: #01579b;
+}
+.question-type.comparative {
+  background-color: #f3e5f5;
+  color: #4a148c;
+}
+.question-type.exploratory {
+  background-color: #e8f5e8;
+  color: #1b5e20;
+}
+.question-type.practical {
+  background-color: #fff3e0;
+  color: #e65100;
+}
 
 /* Chat Interface */
 .chat-history {
@@ -231,7 +253,7 @@ html, body {
 }
 
 .chat-input-container .input-group {
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   border-radius: 25px;
   overflow: hidden;
 }
@@ -288,8 +310,14 @@ html, body {
 }
 
 @keyframes thinking {
-  0%, 80%, 100% { opacity: 0.3; }
-  40% { opacity: 1; }
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
 }
 
 /* Progress Animation */
@@ -298,8 +326,13 @@ html, body {
 }
 
 @keyframes progress-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 /* Responsive Design */
@@ -339,8 +372,12 @@ html, body {
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 /* Accessibility */

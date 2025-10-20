@@ -59,7 +59,12 @@ interface Relationship {
 
 interface SuggestedQuestion {
     question: string;
-    type: "factual" | "analytical" | "comparative" | "exploratory" | "practical";
+    type:
+        | "factual"
+        | "analytical"
+        | "comparative"
+        | "exploratory"
+        | "practical";
     scope: "page" | "related" | "broader";
     reasoning: string;
     confidence: number;
@@ -92,7 +97,7 @@ class PageQnAPanel {
     private knowledgeStatus: KnowledgeStatus = {
         hasKnowledge: false,
         isExtracting: false,
-        isIndexed: false
+        isIndexed: false,
     };
     private pageQuestions: SuggestedQuestion[] = [];
     private graphQuestions: SuggestedQuestion[] = [];
@@ -121,8 +126,12 @@ class PageQnAPanel {
 
     private setupEventListeners() {
         // Chat input handlers
-        const chatInput = document.getElementById("chatInput") as HTMLInputElement;
-        const sendButton = document.getElementById("sendButton") as HTMLButtonElement;
+        const chatInput = document.getElementById(
+            "chatInput",
+        ) as HTMLInputElement;
+        const sendButton = document.getElementById(
+            "sendButton",
+        ) as HTMLButtonElement;
 
         if (chatInput && sendButton) {
             chatInput.addEventListener("keypress", (e) => {
@@ -183,8 +192,9 @@ class PageQnAPanel {
     }
 
     private createPageInfo(title: string, domain: string): string {
-        const truncatedTitle = title.length > 50 ? title.substring(0, 50) + "..." : title;
-        
+        const truncatedTitle =
+            title.length > 50 ? title.substring(0, 50) + "..." : title;
+
         return `
             <div class="d-flex align-items-start">
                 <div class="flex-grow-1">
@@ -199,14 +209,16 @@ class PageQnAPanel {
         try {
             this.updateKnowledgeStatus("Checking page knowledge...");
 
-            const status = await extensionService.getPageIndexStatus(this.currentUrl);
+            const status = await extensionService.getPageIndexStatus(
+                this.currentUrl,
+            );
 
             this.knowledgeStatus = {
                 hasKnowledge: status.isIndexed,
                 isExtracting: false,
                 isIndexed: status.isIndexed,
                 entityCount: status.entityCount,
-                lastIndexed: status.lastIndexed
+                lastIndexed: status.lastIndexed,
             };
 
             if (status.isIndexed) {
@@ -227,7 +239,9 @@ class PageQnAPanel {
     private async loadPageKnowledge() {
         try {
             // Load existing knowledge for the page
-            const knowledge = await extensionService.getPageIndexedKnowledge(this.currentUrl);
+            const knowledge = await extensionService.getPageIndexedKnowledge(
+                this.currentUrl,
+            );
             if (knowledge) {
                 this.knowledgeData = knowledge;
             }
@@ -258,13 +272,14 @@ class PageQnAPanel {
                 },
             };
 
-            const response = await extensionService.extractPageKnowledgeStreaming(
-                this.currentUrl,
-                "content", // Default extraction mode
-                { mode: "content" },
-                true,
-                extractionId,
-            );
+            const response =
+                await extensionService.extractPageKnowledgeStreaming(
+                    this.currentUrl,
+                    "content", // Default extraction mode
+                    { mode: "content" },
+                    true,
+                    extractionId,
+                );
 
             if (!response) {
                 throw new Error("Failed to start knowledge extraction");
@@ -277,11 +292,14 @@ class PageQnAPanel {
 
     private showExtractionProgress() {
         const progressSection = document.getElementById("extractionProgress");
-        const suggestedQuestionsSection = document.getElementById("suggestedQuestionsSection");
+        const suggestedQuestionsSection = document.getElementById(
+            "suggestedQuestionsSection",
+        );
         const chatSection = document.getElementById("chatSection");
 
         if (progressSection) progressSection.classList.remove("d-none");
-        if (suggestedQuestionsSection) suggestedQuestionsSection.classList.add("d-none");
+        if (suggestedQuestionsSection)
+            suggestedQuestionsSection.classList.add("d-none");
         if (chatSection) chatSection.classList.add("d-none");
     }
 
@@ -290,13 +308,20 @@ class PageQnAPanel {
         if (progressSection) progressSection.classList.add("d-none");
     }
 
-    private updateExtractionProgress(progress: KnowledgeExtractionProgress): void {
-        if (!this.streamingState || this.currentExtractionId !== progress.extractionId) {
+    private updateExtractionProgress(
+        progress: KnowledgeExtractionProgress,
+    ): void {
+        if (
+            !this.streamingState ||
+            this.currentExtractionId !== progress.extractionId
+        ) {
             return;
         }
 
         // Update progress UI
-        const progressBar = document.getElementById("knowledgeProgressBar") as HTMLElement;
+        const progressBar = document.getElementById(
+            "knowledgeProgressBar",
+        ) as HTMLElement;
         const statusElement = document.getElementById("knowledgeStatusMessage");
         const progressText = document.getElementById("knowledgeProgressText");
 
@@ -311,11 +336,14 @@ class PageQnAPanel {
                 error: "Extraction failed",
             };
 
-            statusElement.textContent = phaseMessages[progress.phase] || progress.phase;
+            statusElement.textContent =
+                phaseMessages[progress.phase] || progress.phase;
         }
 
         if (progressBar && progress.totalItems > 0) {
-            const percentage = Math.round((progress.processedItems / progress.totalItems) * 100);
+            const percentage = Math.round(
+                (progress.processedItems / progress.totalItems) * 100,
+            );
             progressBar.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
             progressBar.setAttribute("aria-valuenow", percentage.toString());
         }
@@ -340,7 +368,8 @@ class PageQnAPanel {
 
             // Update relationships (replace entirely with latest aggregated results)
             if (data.relationships && Array.isArray(data.relationships)) {
-                this.streamingState.currentData.relationships = data.relationships;
+                this.streamingState.currentData.relationships =
+                    data.relationships;
             }
 
             // Update summary if provided
@@ -350,14 +379,16 @@ class PageQnAPanel {
 
             // Update content metrics if provided
             if (data.contentMetrics) {
-                this.streamingState.currentData.contentMetrics = data.contentMetrics;
+                this.streamingState.currentData.contentMetrics =
+                    data.contentMetrics;
             }
 
             // Log progress for debugging
             console.log(`Knowledge extraction progress [${progress.phase}]:`, {
                 entities: this.streamingState.currentData.entities.length,
                 topics: this.streamingState.currentData.keyTopics.length,
-                relationships: this.streamingState.currentData.relationships.length
+                relationships:
+                    this.streamingState.currentData.relationships.length,
             });
         }
 
@@ -365,26 +396,27 @@ class PageQnAPanel {
         if (progress.phase === "complete") {
             this.handleExtractionComplete({
                 success: true,
-                data: this.streamingState.currentData
+                data: this.streamingState.currentData,
             });
         } else if (progress.phase === "error") {
             this.handleExtractionComplete({
                 success: false,
-                error: progress.errors?.join(", ") || "Unknown error"
+                error: progress.errors?.join(", ") || "Unknown error",
             });
         }
     }
 
     private async handleExtractionComplete(result: any) {
         this.hideExtractionProgress();
-        
+
         if (result.success) {
-            this.knowledgeData = result.data || this.streamingState?.currentData || null;
+            this.knowledgeData =
+                result.data || this.streamingState?.currentData || null;
             this.knowledgeStatus.hasKnowledge = true;
             this.knowledgeStatus.isExtracting = false;
-            
+
             this.updateKnowledgeStatus("Knowledge extracted successfully");
-            
+
             await this.enableChatInterface();
             await this.generateSuggestedQuestions();
         } else {
@@ -398,8 +430,12 @@ class PageQnAPanel {
 
     private async enableChatInterface() {
         const chatSection = document.getElementById("chatSection");
-        const chatInput = document.getElementById("chatInput") as HTMLInputElement;
-        const sendButton = document.getElementById("sendButton") as HTMLButtonElement;
+        const chatInput = document.getElementById(
+            "chatInput",
+        ) as HTMLInputElement;
+        const sendButton = document.getElementById(
+            "sendButton",
+        ) as HTMLButtonElement;
 
         if (chatSection) chatSection.classList.remove("d-none");
         if (chatInput) {
@@ -412,35 +448,43 @@ class PageQnAPanel {
     private async generateSuggestedQuestions() {
         if (!this.knowledgeData) return;
 
-        const suggestedQuestionsSection = document.getElementById("suggestedQuestionsSection");
+        const suggestedQuestionsSection = document.getElementById(
+            "suggestedQuestionsSection",
+        );
         const questionsLoading = document.getElementById("questionsLoading");
 
-        if (suggestedQuestionsSection) suggestedQuestionsSection.classList.remove("d-none");
+        if (suggestedQuestionsSection)
+            suggestedQuestionsSection.classList.remove("d-none");
         if (questionsLoading) questionsLoading.style.display = "block";
 
         try {
             // Generate page-specific questions
-            const pageQuestionResponse = await extensionService.generatePageQuestions(
-                this.currentUrl,
-                this.knowledgeData
-            );
+            const pageQuestionResponse =
+                await extensionService.generatePageQuestions(
+                    this.currentUrl,
+                    this.knowledgeData,
+                );
 
             if (pageQuestionResponse?.questions) {
-                this.pageQuestions = pageQuestionResponse.questions.filter((q: SuggestedQuestion) => q.scope === "page");
+                this.pageQuestions = pageQuestionResponse.questions.filter(
+                    (q: SuggestedQuestion) => q.scope === "page",
+                );
                 this.renderQuestions("pageQuestionsList", this.pageQuestions);
             }
 
             // Generate graph-based questions (broader scope)
-            const graphQuestionResponse = await extensionService.generateGraphQuestions(
-                this.currentUrl,
-                this.knowledgeData
-            );
+            const graphQuestionResponse =
+                await extensionService.generateGraphQuestions(
+                    this.currentUrl,
+                    this.knowledgeData,
+                );
 
             if (graphQuestionResponse?.questions) {
-                this.graphQuestions = graphQuestionResponse.questions.filter((q: SuggestedQuestion) => q.scope === "broader");
+                this.graphQuestions = graphQuestionResponse.questions.filter(
+                    (q: SuggestedQuestion) => q.scope === "broader",
+                );
                 this.renderQuestions("graphQuestionsList", this.graphQuestions);
             }
-
         } catch (error) {
             console.error("Error generating questions:", error);
         } finally {
@@ -448,7 +492,10 @@ class PageQnAPanel {
         }
     }
 
-    private renderQuestions(containerId: string, questions: SuggestedQuestion[]) {
+    private renderQuestions(
+        containerId: string,
+        questions: SuggestedQuestion[],
+    ) {
         const container = document.getElementById(containerId);
         if (!container) return;
 
@@ -457,8 +504,10 @@ class PageQnAPanel {
             return;
         }
 
-        container.innerHTML = questions.map(q => `
-            <div class="question-item ${q.scope === 'page' ? 'page-question' : 'graph-question'}" 
+        container.innerHTML = questions
+            .map(
+                (q) => `
+            <div class="question-item ${q.scope === "page" ? "page-question" : "graph-question"}" 
                  data-question="${this.escapeHtml(q.question)}" 
                  tabindex="0" 
                  role="button">
@@ -468,21 +517,23 @@ class PageQnAPanel {
                     <span class="question-type ${q.type}">${q.type}</span>
                 </div>
             </div>
-        `).join("");
+        `,
+            )
+            .join("");
 
         // Add click handlers
-        container.querySelectorAll('.question-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const question = item.getAttribute('data-question');
+        container.querySelectorAll(".question-item").forEach((item) => {
+            item.addEventListener("click", () => {
+                const question = item.getAttribute("data-question");
                 if (question) {
                     this.askQuestion(question);
                 }
             });
 
-            item.addEventListener('keypress', (e: Event) => {
+            item.addEventListener("keypress", (e: Event) => {
                 const keyEvent = e as KeyboardEvent;
-                if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
-                    const question = item.getAttribute('data-question');
+                if (keyEvent.key === "Enter" || keyEvent.key === " ") {
+                    const question = item.getAttribute("data-question");
                     if (question) {
                         this.askQuestion(question);
                     }
@@ -492,7 +543,9 @@ class PageQnAPanel {
     }
 
     private askQuestion(question: string) {
-        const chatInput = document.getElementById("chatInput") as HTMLInputElement;
+        const chatInput = document.getElementById(
+            "chatInput",
+        ) as HTMLInputElement;
         if (chatInput) {
             chatInput.value = question;
             this.sendMessage();
@@ -500,7 +553,9 @@ class PageQnAPanel {
     }
 
     private async sendMessage() {
-        const chatInput = document.getElementById("chatInput") as HTMLInputElement;
+        const chatInput = document.getElementById(
+            "chatInput",
+        ) as HTMLInputElement;
         if (!chatInput || !chatInput.value.trim()) return;
 
         const question = chatInput.value.trim();
@@ -512,7 +567,7 @@ class PageQnAPanel {
             id: Date.now().toString(),
             type: "user",
             content: question,
-            timestamp: new Date()
+            timestamp: new Date(),
         };
 
         this.chatHistory.push(userMessage);
@@ -527,30 +582,32 @@ class PageQnAPanel {
                 searchScope: this.detectSearchScope(question),
                 generateAnswer: true,
                 includeRelatedEntities: true,
-                limit: 10
+                limit: 10,
             });
 
             // Add assistant response to chat
             const assistantMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
                 type: "assistant",
-                content: response.answer || "I couldn't generate an answer for that question.",
+                content:
+                    response.answer ||
+                    "I couldn't generate an answer for that question.",
                 timestamp: new Date(),
-                sources: response.sources || []
+                sources: response.sources || [],
             };
 
             this.chatHistory.push(assistantMessage);
             this.hideThinking();
             this.renderChatHistory();
-
         } catch (error) {
             console.error("Error processing question:", error);
-            
+
             const errorMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
                 type: "assistant",
-                content: "Sorry, I encountered an error while processing your question. Please try again.",
-                timestamp: new Date()
+                content:
+                    "Sorry, I encountered an error while processing your question. Please try again.",
+                timestamp: new Date(),
             };
 
             this.chatHistory.push(errorMessage);
@@ -562,20 +619,36 @@ class PageQnAPanel {
         }
     }
 
-    private detectSearchScope(question: string): "current_page" | "all_indexed" {
-        const pageKeywords = ['this page', 'here', 'this article', 'this content', 'above', 'mentioned'];
-        const globalKeywords = ['compare', 'other', 'similar', 'elsewhere', 'generally', 'across'];
-        
+    private detectSearchScope(
+        question: string,
+    ): "current_page" | "all_indexed" {
+        const pageKeywords = [
+            "this page",
+            "here",
+            "this article",
+            "this content",
+            "above",
+            "mentioned",
+        ];
+        const globalKeywords = [
+            "compare",
+            "other",
+            "similar",
+            "elsewhere",
+            "generally",
+            "across",
+        ];
+
         const questionLower = question.toLowerCase();
-        
-        if (pageKeywords.some(keyword => questionLower.includes(keyword))) {
+
+        if (pageKeywords.some((keyword) => questionLower.includes(keyword))) {
             return "current_page";
         }
-        
-        if (globalKeywords.some(keyword => questionLower.includes(keyword))) {
+
+        if (globalKeywords.some((keyword) => questionLower.includes(keyword))) {
             return "all_indexed";
         }
-        
+
         // Default to current page for ambiguous queries
         return "current_page";
     }
@@ -584,9 +657,9 @@ class PageQnAPanel {
         const chatHistory = document.getElementById("chatHistory");
         if (!chatHistory) return;
 
-        const thinkingDiv = document.createElement('div');
-        thinkingDiv.id = 'thinking-indicator';
-        thinkingDiv.className = 'thinking-indicator';
+        const thinkingDiv = document.createElement("div");
+        thinkingDiv.id = "thinking-indicator";
+        thinkingDiv.className = "thinking-indicator";
         thinkingDiv.innerHTML = `
             <span>Thinking</span>
             <div class="thinking-dots">
@@ -601,7 +674,7 @@ class PageQnAPanel {
     }
 
     private hideThinking() {
-        const thinkingIndicator = document.getElementById('thinking-indicator');
+        const thinkingIndicator = document.getElementById("thinking-indicator");
         if (thinkingIndicator) {
             thinkingIndicator.remove();
         }
@@ -612,30 +685,34 @@ class PageQnAPanel {
         if (!chatHistory) return;
 
         // Remove welcome message and thinking indicator
-        const welcome = chatHistory.querySelector('.chat-welcome');
+        const welcome = chatHistory.querySelector(".chat-welcome");
         if (welcome) welcome.remove();
-        
-        const thinking = document.getElementById('thinking-indicator');
+
+        const thinking = document.getElementById("thinking-indicator");
         if (thinking) thinking.remove();
 
         // Clear and rebuild chat history
         chatHistory.innerHTML = "";
 
-        this.chatHistory.forEach(message => {
-            const messageDiv = document.createElement('div');
+        this.chatHistory.forEach((message) => {
+            const messageDiv = document.createElement("div");
             messageDiv.className = `chat-message ${message.type}`;
-            
+
             let sourcesHtml = "";
             if (message.sources && message.sources.length > 0) {
                 sourcesHtml = `
                     <div class="sources-section">
                         <div class="sources-title">Supporting Sources:</div>
-                        ${message.sources.map(source => `
+                        ${message.sources
+                            .map(
+                                (source) => `
                             <div class="source-item">
                                 <a href="${source.url}" target="_blank" class="source-link">${this.escapeHtml(source.title)}</a>
                                 <span class="source-relevance">${Math.round(source.relevance * 100)}% relevant</span>
                             </div>
-                        `).join('')}
+                        `,
+                            )
+                            .join("")}
                     </div>
                 `;
             }
@@ -667,15 +744,15 @@ class PageQnAPanel {
         const errorSection = document.getElementById("errorSection");
         const errorMessage = document.getElementById("errorMessage");
         const otherSections = [
-            "extractionProgress", 
-            "suggestedQuestionsSection", 
-            "chatSection"
+            "extractionProgress",
+            "suggestedQuestionsSection",
+            "chatSection",
         ];
 
         if (errorMessage) errorMessage.textContent = message;
         if (errorSection) errorSection.classList.remove("d-none");
 
-        otherSections.forEach(id => {
+        otherSections.forEach((id) => {
             const section = document.getElementById(id);
             if (section) section.classList.add("d-none");
         });
@@ -725,7 +802,9 @@ class PageQnAPanel {
             this.updateConnectionStatus();
         };
 
-        extensionService.onConnectionStatusChange(this.connectionStatusCallback);
+        extensionService.onConnectionStatusChange(
+            this.connectionStatusCallback,
+        );
     }
 
     private async onTabChange() {
@@ -734,7 +813,7 @@ class PageQnAPanel {
         this.pageQuestions = [];
         this.graphQuestions = [];
         this.knowledgeData = null;
-        
+
         await this.loadCurrentPageInfo();
         await this.checkKnowledgeStatus();
     }

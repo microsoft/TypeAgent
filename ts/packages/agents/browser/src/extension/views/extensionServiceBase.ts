@@ -330,10 +330,7 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async generatePageQuestions(
-        url: string,
-        pageKnowledge: any,
-    ): Promise<any> {
+    async generatePageQuestions(url: string, pageKnowledge: any): Promise<any> {
         return this.sendMessage({
             type: "generatePageQuestions",
             url,

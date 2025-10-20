@@ -6,7 +6,10 @@ import { BrowserActionContext } from "./browserActions.mjs";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
-import { PageQuestionResponse, SuggestedQuestion } from "./schema/pageQuestionSchema.mjs";
+import {
+    PageQuestionResponse,
+    SuggestedQuestion,
+} from "./schema/pageQuestionSchema.mjs";
 import registerDebug from "debug";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -32,7 +35,8 @@ function getSchemaFileContents(fileName: string): string {
  * following TypeChat patterns used throughout the project
  */
 export class QuestionGenerator {
-    private questionTranslator: TypeChatJsonTranslator<PageQuestionResponse> | null = null;
+    private questionTranslator: TypeChatJsonTranslator<PageQuestionResponse> | null =
+        null;
     private isInitialized: boolean = false;
     private schemaText: string;
 
@@ -51,7 +55,9 @@ export class QuestionGenerator {
             await this.ensureInitialized();
 
             if (!this.questionTranslator) {
-                debug("Question translator not available, returning empty array");
+                debug(
+                    "Question translator not available, returning empty array",
+                );
                 return [];
             }
 
@@ -67,7 +73,7 @@ export class QuestionGenerator {
             };
 
             const response = await this.questionTranslator.translate(
-                JSON.stringify(requestData, null, 2)
+                JSON.stringify(requestData, null, 2),
             );
 
             if (!response.success) {
@@ -76,12 +82,11 @@ export class QuestionGenerator {
             }
 
             const pageQuestions = response.data.questions.filter(
-                (q: SuggestedQuestion) => q.scope === "page"
+                (q: SuggestedQuestion) => q.scope === "page",
             );
 
             debug(`Generated ${pageQuestions.length} page-specific questions`);
             return pageQuestions;
-
         } catch (error) {
             debug(`Error generating page questions: ${error}`);
             return [];
@@ -100,7 +105,9 @@ export class QuestionGenerator {
             await this.ensureInitialized();
 
             if (!this.questionTranslator) {
-                debug("Question translator not available, returning empty array");
+                debug(
+                    "Question translator not available, returning empty array",
+                );
                 return [];
             }
 
@@ -114,7 +121,7 @@ export class QuestionGenerator {
             };
 
             const response = await this.questionTranslator.translate(
-                JSON.stringify(requestData, null, 2)
+                JSON.stringify(requestData, null, 2),
             );
 
             if (!response.success) {
@@ -123,12 +130,11 @@ export class QuestionGenerator {
             }
 
             const graphQuestions = response.data.questions.filter(
-                (q: SuggestedQuestion) => q.scope === "broader"
+                (q: SuggestedQuestion) => q.scope === "broader",
             );
 
             debug(`Generated ${graphQuestions.length} graph-based questions`);
             return graphQuestions;
-
         } catch (error) {
             debug(`Error generating graph questions: ${error}`);
             return [];
@@ -146,10 +152,11 @@ export class QuestionGenerator {
                 ["pageQuestionGeneration"],
             );
 
-            const validator = createTypeScriptJsonValidator<PageQuestionResponse>(
-                this.schemaText,
-                "PageQuestionResponse",
-            );
+            const validator =
+                createTypeScriptJsonValidator<PageQuestionResponse>(
+                    this.schemaText,
+                    "PageQuestionResponse",
+                );
 
             this.questionTranslator = createJsonTranslator(model, validator);
 
@@ -166,7 +173,6 @@ export class QuestionGenerator {
 
             this.isInitialized = true;
             debug("QuestionGenerator initialized successfully");
-
         } catch (error) {
             debug(`Failed to initialize QuestionGenerator: ${error}`);
             throw error;
@@ -211,21 +217,24 @@ export async function generatePageQuestions(
             questions: questions,
             contentSummary: parameters.pageKnowledge.summary || "",
             primaryTopics: parameters.pageKnowledge.keyTopics || [],
-            primaryEntities: parameters.pageKnowledge.entities?.map((e: any) => e.name) || [],
+            primaryEntities:
+                parameters.pageKnowledge.entities?.map((e: any) => e.name) ||
+                [],
         };
 
         debug(`Successfully generated ${questions.length} page questions`);
         return response;
-
     } catch (error) {
         debug(`Error in generatePageQuestions action: ${error}`);
-        
+
         // Return fallback response
         return {
             questions: [],
             contentSummary: parameters.pageKnowledge.summary || "",
             primaryTopics: parameters.pageKnowledge.keyTopics || [],
-            primaryEntities: parameters.pageKnowledge.entities?.map((e: any) => e.name) || [],
+            primaryEntities:
+                parameters.pageKnowledge.entities?.map((e: any) => e.name) ||
+                [],
         };
     }
 }
@@ -254,13 +263,16 @@ export async function generateGraphQuestions(
         const response: PageQuestionResponse = {
             questions: questions,
             contentSummary: `Related content from knowledge graph`,
-            primaryTopics: (parameters.relatedTopics || []).map((t: any) => t.topicName || t.name).slice(0, 5),
-            primaryEntities: (parameters.relatedEntities || []).map((e: any) => e.name).slice(0, 5),
+            primaryTopics: (parameters.relatedTopics || [])
+                .map((t: any) => t.topicName || t.name)
+                .slice(0, 5),
+            primaryEntities: (parameters.relatedEntities || [])
+                .map((e: any) => e.name)
+                .slice(0, 5),
         };
 
         debug(`Successfully generated ${questions.length} graph questions`);
         return response;
-
     } catch (error) {
         debug(`Error in generateGraphQuestions action: ${error}`);
 
@@ -268,8 +280,12 @@ export async function generateGraphQuestions(
         return {
             questions: [],
             contentSummary: "Failed to generate graph-based questions",
-            primaryTopics: (parameters.relatedTopics || []).map((t: any) => t.topicName || t.name).slice(0, 5),
-            primaryEntities: (parameters.relatedEntities || []).map((e: any) => e.name).slice(0, 5),
+            primaryTopics: (parameters.relatedTopics || [])
+                .map((t: any) => t.topicName || t.name)
+                .slice(0, 5),
+            primaryEntities: (parameters.relatedEntities || [])
+                .map((e: any) => e.name)
+                .slice(0, 5),
         };
     }
 }

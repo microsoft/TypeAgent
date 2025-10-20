@@ -110,7 +110,10 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { generatePageQuestions, generateGraphQuestions } from "./pageQnAActions.mjs";
+import {
+    generatePageQuestions,
+    generateGraphQuestions,
+} from "./pageQnAActions.mjs";
 import {
     BrowserControl,
     defaultSearchProviders,
@@ -670,7 +673,10 @@ async function processBrowserAgentMessage(
         }
 
         case "generatePageQuestions": {
-            const pageQuestionsResult = await generatePageQuestions(data.params, context);
+            const pageQuestionsResult = await generatePageQuestions(
+                data.params,
+                context,
+            );
             client.socket.send(
                 JSON.stringify({
                     id: data.id,
@@ -681,7 +687,10 @@ async function processBrowserAgentMessage(
         }
 
         case "generateGraphQuestions": {
-            const graphQuestionsResult = await generateGraphQuestions(data.params, context);
+            const graphQuestionsResult = await generateGraphQuestions(
+                data.params,
+                context,
+            );
             client.socket.send(
                 JSON.stringify({
                     id: data.id,
@@ -1608,7 +1617,7 @@ async function executeBrowserAction(
                         },
                     });
                 }
-                
+
                 default:
                     // Should never happen.
                     throw new Error(
