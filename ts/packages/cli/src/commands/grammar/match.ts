@@ -34,7 +34,13 @@ export default class MatchCommand extends Command {
         const result = matchGrammar(grammar, args.input);
         if (result.length > 0) {
             console.log("Matched:");
-            console.log(result);
+            console.log(
+                JSON.stringify(
+                    result.map((r) => r.match),
+                    null,
+                    2,
+                ),
+            );
         } else {
             console.log("No match");
         }
