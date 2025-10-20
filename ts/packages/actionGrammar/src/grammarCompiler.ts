@@ -1,52 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Rule, RuleDefinition, ValueNode } from "./grammarParser.js";
-
-type StringPart = {
-    type: "string";
-
-    value: string[];
-
-    /* TODO: cache the regexp?
-    regexp?: RegExp;
-    regexpWithPendingWildcards?: RegExp;
-    */
-};
-
-type VarStringPart = {
-    type: "wildcard";
-    variable: string;
-    optional?: boolean | undefined;
-
-    typeName: string; // Do we need this?
-};
-
-type VarNumberPart = {
-    type: "number";
-    variable: string;
-    optional?: boolean | undefined;
-};
-
-type RulesPart = {
-    type: "rules";
-
-    rules: GrammarRule[];
-    name?: string; // Do we need this?
-
-    variable?: string;
-    optional?: boolean | undefined;
-};
-
-type GrammarPart = StringPart | VarStringPart | VarNumberPart | RulesPart;
-export type GrammarRule = {
-    parts: GrammarPart[];
-    value?: ValueNode | undefined;
-};
-
-export type Grammar = {
-    rules: GrammarRule[];
-};
+import {
+    Grammar,
+    GrammarPart,
+    GrammarRule,
+    StringPart,
+} from "./grammarTypes.js";
+import { Rule, RuleDefinition } from "./grammarRuleParser.js";
 
 type DefinitionMap = Map<
     string,
