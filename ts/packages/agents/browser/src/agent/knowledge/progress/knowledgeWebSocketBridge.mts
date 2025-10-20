@@ -40,8 +40,11 @@ export class KnowledgeWebSocketBridge {
             incrementalData: progress.incrementalData,
         };
 
+        const agentServer = this.context.agentContext.agentWebSocketServer;
+        const client = agentServer?.getActiveClient() ?? undefined;
+
         sendKnowledgeExtractionProgressViaWebSocket(
-            this.context.agentContext.currentClient,
+            client,
             progress.extractionId,
             websocketProgress,
         );

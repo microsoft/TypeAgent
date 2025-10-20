@@ -47,14 +47,14 @@ interface Entity {
     name: string;
     type: string;
     description?: string;
-    confidence: number;
+    confidence?: number;
 }
 
 interface Relationship {
     from: string;
     relationship: string;
     to: string;
-    confidence: number;
+    confidence?: number;
 }
 
 interface SuggestedQuestion {
@@ -322,6 +322,43 @@ class PageQnAPanel {
 
         if (progressText && progress.totalItems > 0) {
             progressText.textContent = `${progress.processedItems} of ${progress.totalItems} items processed`;
+        }
+
+        // Accumulate incremental knowledge data as it arrives
+        if (progress.incrementalData) {
+            const data = progress.incrementalData;
+
+            // Update entities (replace entirely with latest aggregated results)
+            if (data.entities && Array.isArray(data.entities)) {
+                this.streamingState.currentData.entities = data.entities;
+            }
+
+            // Update topics (replace entirely with latest aggregated results)
+            if (data.keyTopics && Array.isArray(data.keyTopics)) {
+                this.streamingState.currentData.keyTopics = data.keyTopics;
+            }
+
+            // Update relationships (replace entirely with latest aggregated results)
+            if (data.relationships && Array.isArray(data.relationships)) {
+                this.streamingState.currentData.relationships = data.relationships;
+            }
+
+            // Update summary if provided
+            if (data.summary) {
+                this.streamingState.currentData.summary = data.summary;
+            }
+
+            // Update content metrics if provided
+            if (data.contentMetrics) {
+                this.streamingState.currentData.contentMetrics = data.contentMetrics;
+            }
+
+            // Log progress for debugging
+            console.log(`Knowledge extraction progress [${progress.phase}]:`, {
+                entities: this.streamingState.currentData.entities.length,
+                topics: this.streamingState.currentData.keyTopics.length,
+                relationships: this.streamingState.currentData.relationships.length
+            });
         }
 
         // Handle completion

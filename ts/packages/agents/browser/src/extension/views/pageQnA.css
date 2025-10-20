@@ -25,12 +25,18 @@ html, body {
   border: none;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   border-radius: 8px;
+  background-color: #fff;
 }
 
 .knowledge-card .card-header {
   background-color: #f8f9fa;
   border-bottom: 1px solid #e9ecef;
   border-radius: 8px 8px 0 0 !important;
+}
+
+.knowledge-card .card-body {
+  background-color: #fff;
+  color: #212529;
 }
 
 /* Status Indicators */
@@ -349,20 +355,4 @@ html, body {
   outline-offset: 2px;
 }
 
-/* Dark mode support (if needed) */
-@media (prefers-color-scheme: dark) {
-  .knowledge-card {
-    background-color: #2d3748;
-    color: #e2e8f0;
-  }
-
-  .question-item {
-    background-color: #4a5568;
-    border-color: #2d3748;
-    color: #e2e8f0;
-  }
-
-  .question-item:hover {
-    background-color: #2d3748;
-  }
-}
+/* Dark mode support removed - causing contrast issues */

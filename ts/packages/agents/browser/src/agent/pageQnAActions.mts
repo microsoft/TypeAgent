@@ -15,7 +15,7 @@ import fs from "fs";
 const debug = registerDebug("typeagent:browser:page-qna");
 
 function getSchemaFileContents(fileName: string): string {
-    const packageRoot = path.join("..", "..", "..");
+    const packageRoot = path.join("..", "..");
     return fs.readFileSync(
         fileURLToPath(
             new URL(
@@ -37,7 +37,7 @@ export class QuestionGenerator {
     private schemaText: string;
 
     constructor() {
-        this.schemaText = getSchemaFileContents("pageQuestionSchema.ts");
+        this.schemaText = getSchemaFileContents("pageQuestionSchema.mts");
     }
 
     /**
@@ -108,8 +108,8 @@ export class QuestionGenerator {
 
             const requestData = {
                 url: url,
-                relatedEntities: relatedEntities.slice(0, 10), // Limit for performance
-                relatedTopics: relatedTopics.slice(0, 10),
+                relatedEntities: (relatedEntities || []).slice(0, 10), // Limit for performance
+                relatedTopics: (relatedTopics || []).slice(0, 10),
                 scope: "broader",
             };
 
@@ -236,8 +236,8 @@ export async function generatePageQuestions(
 export async function generateGraphQuestions(
     parameters: {
         url: string;
-        relatedEntities: any[];
-        relatedTopics: any[];
+        relatedEntities?: any[];
+        relatedTopics?: any[];
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<PageQuestionResponse> {
@@ -246,16 +246,16 @@ export async function generateGraphQuestions(
 
         const generator = getQuestionGenerator();
         const questions = await generator.generateGraphQuestions(
-            parameters.relatedEntities,
-            parameters.relatedTopics,
+            parameters.relatedEntities || [],
+            parameters.relatedTopics || [],
             parameters.url,
         );
 
         const response: PageQuestionResponse = {
             questions: questions,
             contentSummary: `Related content from knowledge graph`,
-            primaryTopics: parameters.relatedTopics.map((t: any) => t.topicName || t.name).slice(0, 5),
-            primaryEntities: parameters.relatedEntities.map((e: any) => e.name).slice(0, 5),
+            primaryTopics: (parameters.relatedTopics || []).map((t: any) => t.topicName || t.name).slice(0, 5),
+            primaryEntities: (parameters.relatedEntities || []).map((e: any) => e.name).slice(0, 5),
         };
 
         debug(`Successfully generated ${questions.length} graph questions`);
@@ -263,13 +263,13 @@ export async function generateGraphQuestions(
 
     } catch (error) {
         debug(`Error in generateGraphQuestions action: ${error}`);
-        
+
         // Return fallback response
         return {
             questions: [],
             contentSummary: "Failed to generate graph-based questions",
-            primaryTopics: parameters.relatedTopics.map((t: any) => t.topicName || t.name).slice(0, 5),
-            primaryEntities: parameters.relatedEntities.map((e: any) => e.name).slice(0, 5),
+            primaryTopics: (parameters.relatedTopics || []).map((t: any) => t.topicName || t.name).slice(0, 5),
+            primaryEntities: (parameters.relatedEntities || []).map((e: any) => e.name).slice(0, 5),
         };
     }
 }
