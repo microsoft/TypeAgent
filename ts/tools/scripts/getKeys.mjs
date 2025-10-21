@@ -46,6 +46,31 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
             console.log(chalk.green("Elevation successful."));
             console.warn(chalk.yellowBright("Waiting 5 seconds..."));
             await new Promise((res) => setTimeout(res, 5000));
+
+            return await keyVaultClient.getSecrets(vaultName);
+        } catch (e) {
+            console.warn(
+                chalk.yellow(
+                    "Elevation to key vault admin failed...attempting to get secrets as key vault reader.",
+                ),
+            );
+        }
+
+        try {
+            console.warn(chalk.yellowBright("Elevating to get secrets..."));
+            const pimClient = await getPIMClient();
+            await pimClient.elevate({
+                requestType: "SelfActivate",
+                roleName: "Key Vault Secrets User",
+                expirationType: "AfterDuration",
+                expirationDuration: "PT5M", // activate for 5 minutes
+                continueOnFailure: true,
+            });
+
+            // Wait for the role to be activated
+            console.log(chalk.green("Elevation successful."));
+            console.warn(chalk.yellowBright("Waiting 5 seconds..."));
+            await new Promise((res) => setTimeout(res, 5000));
         } catch (e) {
             console.warn(
                 chalk.yellow(
@@ -53,6 +78,7 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
                 ),
             );
         }
+
         return await keyVaultClient.getSecrets(vaultName);
     }
 }
