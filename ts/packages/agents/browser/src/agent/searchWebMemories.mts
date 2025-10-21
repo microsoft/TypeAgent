@@ -181,42 +181,6 @@ function convertSearchResultsToWebsites(
     return websites;
 }
 
-function detectSearchScope(query: string): "current_page" | "all_indexed" {
-    const pageKeywords = [
-        "this page",
-        "here",
-        "this article",
-        "this content",
-        "above",
-        "mentioned",
-        "this document",
-        "on this page",
-    ];
-    const globalKeywords = [
-        "compare",
-        "other",
-        "similar",
-        "elsewhere",
-        "generally",
-        "across",
-        "all pages",
-        "everything",
-    ];
-
-    const queryLower = query.toLowerCase();
-
-    if (pageKeywords.some((keyword) => queryLower.includes(keyword))) {
-        return "current_page";
-    }
-
-    if (globalKeywords.some((keyword) => queryLower.includes(keyword))) {
-        return "all_indexed";
-    }
-
-    // Default to current_page for ambiguous queries
-    return "current_page";
-}
-
 /**
  * Unified website search function that replaces both queryWebKnowledge and searchWebsites
  * while incorporating advanced search capabilities
@@ -258,27 +222,7 @@ export async function searchWebMemories(
 
         debug(`Starting unified search for query: "${request.query}"`);
 
-        // Diagnostic logging for search scope
-        console.log(`🔍 searchWebMemories - Query: "${request.query}"`);
-        console.log(
-            `📋 Search scope passed in: ${request.searchScope || "undefined (will auto-detect)"}`,
-        );
-        console.log(
-            `📊 Total indexed pages: ${websiteCollection.messages.length}`,
-        );
-
         const currentPageUrl = request.metadata?.url || request.url;
-        // Check if request URL is in the index
-        if (currentPageUrl) {
-            const allWebsites = websiteCollection.messages.getAll();
-            const currentPageInIndex = allWebsites.some(
-                (site: any) => site.metadata?.url === currentPageUrl,
-            );
-            console.log(`🌐 Current page URL from request: ${currentPageUrl}`);
-            console.log(
-                `${currentPageInIndex ? "✅" : "❌"} Current page in index: ${currentPageInIndex}`,
-            );
-        }
 
         // Parse property filters from query (website-specific)
         const { searchText, propertyFilters } = parsePropertySearch(
@@ -320,10 +264,7 @@ export async function searchWebMemories(
         timing.parsing = Date.now() - parseStart;
 
         // Determine search scope BEFORE searching to enable pre-filtering
-        const effectiveScope =
-            request.searchScope || detectSearchScope(searchText);
-        console.log(`🎯 Effective search scope: ${effectiveScope}`);
-        console.log(`📍 Current page URL from request: ${currentPageUrl}`);
+        const effectiveScope = request.searchScope || "all_indexed";
 
         // Create filtered conversation for scoped searches
         let conversationToSearch = websiteCollection;
@@ -344,10 +285,6 @@ export async function searchWebMemories(
                 }
             }
 
-            console.log(
-                `🎯 URL scoping: Found ${filteredMessages.length} messages for ${targetUrl}`,
-            );
-
             if (filteredMessages.length > 0) {
                 // Create new message collection with filtered messages
                 const filteredMessageCollection = new kp.MessageCollection(
@@ -362,9 +299,6 @@ export async function searchWebMemories(
                 } as any;
 
                 const filterTime = Date.now() - filterStart;
-                console.log(
-                    `🔍 Pre-filtered to ${filteredMessages.length} messages (${filterTime}ms)`,
-                );
                 debug(`Pre-filter took ${filterTime}ms`);
             } else {
                 // No messages found for this URL
@@ -374,14 +308,6 @@ export async function searchWebMemories(
                     request.debug ? debugContext : undefined,
                 );
             }
-        } else {
-            const reason =
-                effectiveScope !== "current_page"
-                    ? `scope is "${effectiveScope}" (not "current_page")`
-                    : "no URL in request";
-            console.log(
-                `🌐 No pre-filter applied - searching all indexed pages (${reason})`,
-            );
         }
 
         const searchStart = Date.now();
@@ -454,96 +380,6 @@ export async function searchWebMemories(
 
         // Apply limit
         const limitedWebsites = websites.slice(0, request.limit || 20);
-        console.log(
-            `\n📊 SEARCH RESULTS - Found ${limitedWebsites.length} websites after all filtering`,
-        );
-        if (limitedWebsites.length > 0) {
-            console.log(`\n🔍 Detailed Search Results:`);
-            limitedWebsites.forEach((site, idx) => {
-                const knowledge = site.getKnowledge();
-                console.log(`\n   Result ${idx + 1}:`);
-                console.log(
-                    `   ├─ Title: ${site.metadata.title || "Untitled"}`,
-                );
-                console.log(`   ├─ URL: ${site.metadata.url}`);
-                console.log(
-                    `   ├─ Source: ${site.metadata.websiteSource || "unknown"}`,
-                );
-                console.log(
-                    `   ├─ Last visited: ${site.metadata.visitDate || site.metadata.lastVisitTime || "unknown"}`,
-                );
-
-                if (knowledge) {
-                    console.log(`   ├─ Knowledge extracted:`);
-
-                    const entitiesArray = knowledge.entities
-                        ? Array.from(knowledge.entities)
-                        : [];
-                    console.log(`   │  ├─ Entities (${entitiesArray.length}):`);
-                    if (entitiesArray.length > 0) {
-                        entitiesArray.slice(0, 5).forEach((entity: any) => {
-                            const entityName =
-                                entity.name || (entity[1] && entity[1].name);
-                            const entityType =
-                                entity.type || (entity[1] && entity[1].type);
-                            console.log(
-                                `   │  │  • ${entityName} (${Array.isArray(entityType) ? entityType.join(", ") : entityType})`,
-                            );
-                        });
-                        if (entitiesArray.length > 5) {
-                            console.log(
-                                `   │  │  ... and ${entitiesArray.length - 5} more`,
-                            );
-                        }
-                    }
-
-                    const topicsArray = knowledge.topics
-                        ? Array.from(knowledge.topics)
-                        : [];
-                    console.log(`   │  ├─ Topics (${topicsArray.length}):`);
-                    if (topicsArray.length > 0) {
-                        const topicsList = topicsArray
-                            .slice(0, 5)
-                            .map((t: any) =>
-                                typeof t === "string"
-                                    ? t
-                                    : t[1] || t.name || t.topic || t,
-                            )
-                            .join(", ");
-                        console.log(`   │  │  ${topicsList}`);
-                        if (topicsArray.length > 5) {
-                            console.log(
-                                `   │  │  ... and ${topicsArray.length - 5} more`,
-                            );
-                        }
-                    }
-
-                    const actionsArray = knowledge.actions
-                        ? Array.isArray(knowledge.actions)
-                            ? knowledge.actions
-                            : Array.from(knowledge.actions)
-                        : [];
-                    console.log(
-                        `   │  └─ Actions/Relationships: ${actionsArray.length}`,
-                    );
-                }
-
-                console.log(`   └─ Content:`);
-                const totalChars = site.textChunks?.join("").length || 0;
-                console.log(
-                    `      ├─ Text chunks: ${site.textChunks?.length || 0}`,
-                );
-                console.log(`      ├─ Total characters: ${totalChars}`);
-                if (site.textChunks && site.textChunks.length > 0) {
-                    const preview = site.textChunks[0]
-                        .substring(0, 150)
-                        .replace(/\n/g, " ");
-                    console.log(`      └─ Preview: "${preview}..."`);
-                }
-            });
-        } else {
-            console.log(`   ⚠️ No results found after filtering`);
-        }
 
         // Convert to website results format
         let websiteResults = convertToWebsiteResults(limitedWebsites);
@@ -560,33 +396,6 @@ export async function searchWebMemories(
                 await extractKnowledgeFromResults(limitedWebsites);
             relatedEntities = knowledgeResult.entities;
             topTopics = knowledgeResult.topics;
-
-            console.log(`\n🧠 Knowledge extracted from results:`);
-            console.log(
-                `   ├─ Related entities extracted: ${relatedEntities?.length || 0}`,
-            );
-            if (relatedEntities && relatedEntities.length > 0) {
-                console.log(`   │  Top entities:`);
-                relatedEntities.slice(0, 5).forEach((entity, idx) => {
-                    console.log(
-                        `   │  ${idx + 1}. ${entity.name} (${entity.type})`,
-                    );
-                });
-                if (relatedEntities.length > 5) {
-                    console.log(
-                        `   │  ... and ${relatedEntities.length - 5} more`,
-                    );
-                }
-            }
-            console.log(
-                `   └─ Top topics extracted: ${topTopics?.length || 0}`,
-            );
-            if (topTopics && topTopics.length > 0) {
-                const topicsPreview = topTopics.slice(0, 5).join(", ");
-                console.log(
-                    `      ${topicsPreview}${topTopics.length > 5 ? ` ... and ${topTopics.length - 5} more` : ""}`,
-                );
-            }
 
             // Associate insights with individual results
             websiteResults = associateInsightsWithResults(
@@ -607,63 +416,6 @@ export async function searchWebMemories(
             const answerStart = Date.now();
             debug(`Generating answer for query: "${searchText}"`);
 
-            // Log answer context being passed to the model
-            console.log(`\n📝 ANSWER GENERATION - Preparing context for model`);
-            console.log(`   Query: "${searchText}"`);
-            console.log(
-                `   ConversationSearchResult items: ${langResult.data.length}`,
-            );
-            console.log(
-                `   Website results to process: ${limitedWebsites.length}`,
-            );
-
-            // Log the conversation search results structure
-            console.log(
-                `\n🔍 Conversation Search Results being passed to answer generator:`,
-            );
-            langResult.data.forEach((searchResult, idx) => {
-                console.log(`\n   Search Result ${idx + 1}:`);
-
-                // knowledgeMatches is a Map, not an array
-                const knowledgeMatchCount = searchResult.knowledgeMatches
-                    ? searchResult.knowledgeMatches.size
-                    : 0;
-                console.log(`   ├─ Knowledge matches: ${knowledgeMatchCount}`);
-                if (
-                    searchResult.knowledgeMatches &&
-                    searchResult.knowledgeMatches.size > 0
-                ) {
-                    console.log(`   │  Knowledge match types:`);
-                    let kmIdx = 0;
-                    for (const [
-                        knowledgeType,
-                    ] of searchResult.knowledgeMatches.entries()) {
-                        if (kmIdx >= 3) break;
-                        console.log(`   │  ${kmIdx + 1}. ${knowledgeType}`);
-                        kmIdx++;
-                    }
-                }
-
-                console.log(
-                    `   └─ Message matches: ${searchResult.messageMatches?.length || 0}`,
-                );
-                if (
-                    searchResult.messageMatches &&
-                    searchResult.messageMatches.length > 0
-                ) {
-                    searchResult.messageMatches.forEach((mm, mmIdx) => {
-                        const msg = websiteCollection.messages.get(
-                            mm.messageOrdinal,
-                        );
-                        if (msg && msg.metadata) {
-                            console.log(
-                                `      ${mmIdx + 1}. Message #${mm.messageOrdinal}: ${(msg.metadata as any).title || "Untitled"}`,
-                            );
-                        }
-                    });
-                }
-            });
-
             try {
                 const answerGenerator = new kp.AnswerGenerator(
                     kp.createAnswerGeneratorSettings(),
@@ -676,38 +428,8 @@ export async function searchWebMemories(
                     chunking: request.chunking ?? true,
                 };
 
-                console.log(`\n⚙️ Answer Context Options:`);
-                console.log(
-                    `   ├─ Top entities to include: ${contextOptions.entitiesTopK}`,
-                );
-                console.log(
-                    `   ├─ Top topics to include: ${contextOptions.topicsTopK}`,
-                );
-                console.log(
-                    `   ├─ Top messages to include: ${contextOptions.messagesTopK}`,
-                );
-                console.log(
-                    `   └─ Chunking enabled: ${contextOptions.chunking}`,
-                );
-
-                // Log the actual LLM prompt and context
-                console.log(`\n📋 LLM PROMPT DETAILS:`);
-                console.log(`\n==== QUESTION ====`);
-                console.log(searchText);
-
-                console.log(`\n==== ANSWER PROMPT (sent to LLM) ====`);
-                const promptText =
-                    `The following is a user question about a conversation:\n${searchText}\n\n` +
-                    `The included CONVERSATION HISTORY contains information that MAY be relevant to answering the question.\n` +
-                    `Answer the question using only relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n` +
-                    `Use the name and type of the provided entities to select those highly relevant to answering the question.\n` +
-                    `Entities and topics are case-insensitive.\n` +
-                    `List ALL entities if query intent implies that.\n` +
-                    `Your answer is readable and complete, with suitable formatting (line breaks, bullet points etc).`;
-                console.log(promptText);
-
-                console.log(
-                    `\n==== CONVERSATION HISTORY (ANSWER CONTEXT sent to LLM) ====`,
+                debug(
+                    `Answer context options - entities: ${contextOptions.entitiesTopK}, topics: ${contextOptions.topicsTopK}, messages: ${contextOptions.messagesTopK}`,
                 );
 
                 // Build the actual context that will be sent to the LLM

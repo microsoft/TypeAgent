@@ -593,130 +593,6 @@ class KnowledgePanel {
         }
     }
 
-    private enableSaveButton() {
-        const saveButton = document.getElementById(
-            "saveKnowledge",
-        ) as HTMLButtonElement;
-        saveButton.disabled = false;
-        saveButton.classList.remove("btn-outline-secondary");
-        saveButton.classList.add("btn-outline-success");
-        saveButton.title = "Save extracted knowledge to index";
-
-        saveButton.classList.add("pulse-animation");
-        setTimeout(() => {
-            saveButton.classList.remove("pulse-animation");
-        }, 2000);
-    }
-
-    private disableSaveButton() {
-        const saveButton = document.getElementById(
-            "saveKnowledge",
-        ) as HTMLButtonElement;
-        saveButton.disabled = true;
-        saveButton.classList.remove("btn-outline-success", "btn-success");
-        saveButton.classList.add("btn-outline-secondary");
-        saveButton.title = "Extract knowledge first";
-    }
-
-    private async saveExtractedKnowledge() {
-        if (!this.extractedKnowledgeData) {
-            notificationManager.showWarning("Please extract knowledge first");
-            return;
-        }
-
-        const saveButton = document.getElementById(
-            "saveKnowledge",
-        ) as HTMLButtonElement;
-        const originalContent = saveButton.innerHTML;
-
-        saveButton.innerHTML =
-            '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm"></i>';
-        saveButton.disabled = true;
-        saveButton.classList.add("btn-warning");
-        saveButton.classList.remove("btn-outline-success");
-
-        try {
-            const startTime = Date.now();
-
-            const response = await extensionService.indexPageContent(
-                this.currentUrl,
-                this.extractionSettings.mode,
-                this.extractedKnowledgeData,
-            );
-
-            const processingTime = Date.now() - startTime;
-
-            saveButton.innerHTML = '<i class="bi bi-check-circle"></i>';
-            saveButton.classList.remove("btn-warning");
-            saveButton.classList.add("btn-success");
-
-            let actualEntityCount = await this.waitForIndexCompletion();
-
-            notificationManager.showEnhancedNotification(
-                "success",
-                "Knowledge Saved Successfully!",
-                `Saved ${actualEntityCount} entities to your knowledge index in ${Math.round(processingTime / 1000)}s`,
-                "bi-database-check",
-            );
-
-            await this.refreshPageStatusAfterIndexing();
-
-            this.extractedKnowledgeData = null;
-
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-
-            this.disableSaveButton();
-            saveButton.innerHTML = originalContent;
-        } catch (error) {
-            console.error("Error saving knowledge:", error);
-
-            saveButton.innerHTML = '<i class="bi bi-exclamation-triangle"></i>';
-            saveButton.classList.remove("btn-warning");
-            saveButton.classList.add("btn-danger");
-
-            notificationManager.showEnhancedNotification(
-                "danger",
-                "Save Failed",
-                (error as Error).message || "Failed to save knowledge to index",
-                "bi-exclamation-triangle",
-            );
-
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-
-            saveButton.innerHTML = originalContent;
-            saveButton.disabled = false;
-            saveButton.classList.remove("btn-warning", "btn-danger");
-            saveButton.classList.add("btn-outline-success");
-        }
-    }
-
-    private async waitForIndexCompletion(): Promise<number> {
-        let actualEntityCount = 0;
-        let attempts = 0;
-        const maxAttempts = 10;
-
-        while (attempts < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            try {
-                const status = await extensionService.getPageIndexStatus(
-                    this.currentUrl,
-                );
-                if (status.isIndexed && status.entityCount !== undefined) {
-                    actualEntityCount = status.entityCount;
-                    break;
-                }
-            } catch (error) {
-                console.warn(
-                    "Error checking index status during entity count polling:",
-                    error,
-                );
-            }
-            attempts++;
-        }
-
-        return actualEntityCount;
-    }
-
     private async submitQuery() {
         const queryInput = document.getElementById(
             "knowledgeQuery",
@@ -1206,7 +1082,6 @@ class KnowledgePanel {
         await this.loadFreshKnowledge();
 
         this.extractedKnowledgeData = null;
-        this.disableSaveButton();
     }
 
     private async loadFreshKnowledge() {
@@ -1217,10 +1092,8 @@ class KnowledgePanel {
 
             if (indexStatus.isIndexed) {
                 await this.loadIndexedKnowledge();
-                this.disableSaveButton();
             } else {
                 this.showNotIndexedState();
-                this.disableSaveButton();
 
                 // Auto-start extraction if no saved knowledge exists
                 this.extractKnowledge();

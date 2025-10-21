@@ -11,6 +11,8 @@ import {
     aggregateExtractionResults,
 } from "./extractionActions.mjs";
 import registerDebug from "debug";
+import fs from "node:fs";
+
 const debug = registerDebug("typeagent:browser:knowledge");
 
 // Helper function to get actions from aggregated results
@@ -229,6 +231,11 @@ export async function indexWebPageContent(
 
             try {
                 if (context.agentContext.index?.path) {
+                    // Ensure the directory exists before writing
+                    fs.mkdirSync(context.agentContext.index.path, {
+                        recursive: true,
+                    });
+
                     await context.agentContext.websiteCollection.writeToFile(
                         context.agentContext.index.path,
                         "index",

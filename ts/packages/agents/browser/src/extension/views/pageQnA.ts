@@ -611,9 +611,7 @@ class PageQnAPanel {
 
         try {
             // Detect and log search scope
-            const detectedScope = this.detectSearchScope(question);
             console.log(`🔍 Page QnA Search - Question: "${question}"`);
-            console.log(`📍 Detected scope: ${detectedScope}`);
             console.log(`🌐 Current page URL: ${this.currentUrl}`);
             console.log(`📚 Page indexed: ${this.knowledgeStatus.isIndexed}`);
 
@@ -621,7 +619,7 @@ class PageQnAPanel {
             const response = await extensionService.queryKnowledge({
                 query: question,
                 url: this.currentUrl,
-                searchScope: detectedScope,
+                searchScope: "current_page",
                 generateAnswer: true,
                 includeRelatedEntities: true,
                 limit: 10,
@@ -659,40 +657,6 @@ class PageQnAPanel {
             chatInput.disabled = false;
             chatInput.focus();
         }
-    }
-
-    private detectSearchScope(
-        question: string,
-    ): "current_page" | "all_indexed" {
-        const pageKeywords = [
-            "this page",
-            "here",
-            "this article",
-            "this content",
-            "above",
-            "mentioned",
-        ];
-        const globalKeywords = [
-            "compare",
-            "other",
-            "similar",
-            "elsewhere",
-            "generally",
-            "across",
-        ];
-
-        const questionLower = question.toLowerCase();
-
-        if (pageKeywords.some((keyword) => questionLower.includes(keyword))) {
-            return "current_page";
-        }
-
-        if (globalKeywords.some((keyword) => questionLower.includes(keyword))) {
-            return "all_indexed";
-        }
-
-        // Default to current page for ambiguous queries
-        return "current_page";
     }
 
     private showThinking() {
