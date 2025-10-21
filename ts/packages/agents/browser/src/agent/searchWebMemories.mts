@@ -45,6 +45,7 @@ export interface SearchWebMemoriesRequest {
     choices?: string | undefined; // Multiple choice (semicolon separated)
     maxCharsInBudget?: number | undefined; // Character budget for context windows
     debug?: boolean | undefined;
+
     // Internal metadata for query enhancement
     metadata?: any;
 }
@@ -266,9 +267,10 @@ export async function searchWebMemories(
             `📊 Total indexed pages: ${websiteCollection.messages.length}`,
         );
 
+        const currentPageUrl = request.metadata?.url || request.url;
         // Check if request URL is in the index
-        if (request.metadata?.url) {
-            const currentPageUrl = request.metadata.url;
+        if (currentPageUrl) {
+
             const allWebsites = websiteCollection.messages.getAll();
             const currentPageInIndex = allWebsites.some(
                 (site: any) => site.metadata?.url === currentPageUrl,
@@ -318,10 +320,73 @@ export async function searchWebMemories(
 
         timing.parsing = Date.now() - parseStart;
 
+        // Determine search scope BEFORE searching to enable pre-filtering
+        const effectiveScope =
+            request.searchScope || detectSearchScope(searchText);
+        console.log(`🎯 Effective search scope: ${effectiveScope}`);
+        console.log(`📍 Current page URL from request: ${currentPageUrl}`);
+
+        // Create filtered conversation for scoped searches
+        let conversationToSearch = websiteCollection;
+
+        if (effectiveScope === "current_page" && currentPageUrl) {
+            const targetUrl = currentPageUrl;
+            const filterStart = Date.now();
+
+            // Get all messages and filter by target URL
+            const allMessages = websiteCollection.messages.getAll();
+            const filteredMessages: any[] = [];
+
+            for (let ordinal = 0; ordinal < allMessages.length; ordinal++) {
+                const msg = allMessages[ordinal];
+                const metadata = msg.metadata as any;
+                if (metadata.url === targetUrl) {
+                    filteredMessages.push(msg);
+                }
+            }
+
+            console.log(
+                `🎯 URL scoping: Found ${filteredMessages.length} messages for ${targetUrl}`,
+            );
+
+            if (filteredMessages.length > 0) {
+                // Create new message collection with filtered messages
+                const filteredMessageCollection = new kp.MessageCollection(filteredMessages);
+
+                // Create filtered conversation with only target URL messages
+                // Note: This reduces search scope before embedding lookups
+                conversationToSearch = {
+                    ...websiteCollection,
+                    messages: filteredMessageCollection
+                } as any;
+
+                const filterTime = Date.now() - filterStart;
+                console.log(
+                    `🔍 Pre-filtered to ${filteredMessages.length} messages (${filterTime}ms)`,
+                );
+                debug(`Pre-filter took ${filterTime}ms`);
+            } else {
+                // No messages found for this URL
+                return createEmptyResponse(
+                    `No indexed content found for the current page: ${targetUrl}`,
+                    startTime,
+                    request.debug ? debugContext : undefined,
+                );
+            }
+        } else {
+            const reason =
+                effectiveScope !== "current_page"
+                    ? `scope is "${effectiveScope}" (not "current_page")`
+                    : "no URL in request";
+            console.log(
+                `🌐 No pre-filter applied - searching all indexed pages (${reason})`,
+            );
+        }
+
         const searchStart = Date.now();
         const langDebugContext: kp.LanguageSearchDebugContext = {};
         const langResult = await kp.searchConversationWithLanguage(
-            websiteCollection,
+            conversationToSearch,
             searchText,
             queryTranslator,
             langOptions,
@@ -356,36 +421,8 @@ export async function searchWebMemories(
         const processingStart = Date.now();
         let websites = convertSearchResultsToWebsites(
             langResult.data,
-            websiteCollection,
+            conversationToSearch,
         );
-
-        // Apply search scope filtering
-        const effectiveScope =
-            request.searchScope || detectSearchScope(searchText);
-        console.log(`🎯 Effective search scope: ${effectiveScope}`);
-        console.log(`📍 Current page URL from request: ${request.url}`);
-
-        if (effectiveScope === "current_page" && request.url) {
-            const currentPageUrl = request.url;
-            const beforeScopeFilter = websites.length;
-            websites = websites.filter(
-                (website) => website.metadata.url === currentPageUrl,
-            );
-            console.log(
-                `🔍 Scope filter applied: ${beforeScopeFilter} results → ${websites.length} results (filtered to current page: ${currentPageUrl})`,
-            );
-            debug(
-                `Search scope filter: ${beforeScopeFilter} results filtered to ${websites.length} for current page`,
-            );
-        } else {
-            const reason =
-                effectiveScope !== "current_page"
-                    ? `scope is "${effectiveScope}" (not "current_page")`
-                    : "no URL in request";
-            console.log(
-                `🌐 No scope filter applied - searching all ${websites.length} indexed pages (${reason})`,
-            );
-        }
 
         // Apply property filters (website-specific post-processing)
         if (Object.keys(propertyFilters).length > 0) {
@@ -437,41 +474,48 @@ export async function searchWebMemories(
 
                 if (knowledge) {
                     console.log(`   ├─ Knowledge extracted:`);
+
+                    const entitiesArray = knowledge.entities ? Array.from(knowledge.entities) : [];
                     console.log(
-                        `   │  ├─ Entities (${knowledge.entities?.length || 0}):`,
+                        `   │  ├─ Entities (${entitiesArray.length}):`,
                     );
-                    if (knowledge.entities && knowledge.entities.length > 0) {
-                        knowledge.entities
+                    if (entitiesArray.length > 0) {
+                        entitiesArray
                             .slice(0, 5)
                             .forEach((entity: any) => {
+                                const entityName = entity.name || (entity[1] && entity[1].name);
+                                const entityType = entity.type || (entity[1] && entity[1].type);
                                 console.log(
-                                    `   │  │  • ${entity.name} (${Array.isArray(entity.type) ? entity.type.join(", ") : entity.type})`,
+                                    `   │  │  • ${entityName} (${Array.isArray(entityType) ? entityType.join(", ") : entityType})`,
                                 );
                             });
-                        if (knowledge.entities.length > 5) {
+                        if (entitiesArray.length > 5) {
                             console.log(
-                                `   │  │  ... and ${knowledge.entities.length - 5} more`,
+                                `   │  │  ... and ${entitiesArray.length - 5} more`,
                             );
                         }
                     }
 
+                    const topicsArray = knowledge.topics ? Array.from(knowledge.topics) : [];
                     console.log(
-                        `   │  ├─ Topics (${knowledge.topics?.length || 0}):`,
+                        `   │  ├─ Topics (${topicsArray.length}):`,
                     );
-                    if (knowledge.topics && knowledge.topics.length > 0) {
-                        const topicsList = knowledge.topics
+                    if (topicsArray.length > 0) {
+                        const topicsList = topicsArray
                             .slice(0, 5)
+                            .map((t: any) => typeof t === "string" ? t : (t[1] || t.name || t.topic || t))
                             .join(", ");
                         console.log(`   │  │  ${topicsList}`);
-                        if (knowledge.topics.length > 5) {
+                        if (topicsArray.length > 5) {
                             console.log(
-                                `   │  │  ... and ${knowledge.topics.length - 5} more`,
+                                `   │  │  ... and ${topicsArray.length - 5} more`,
                             );
                         }
                     }
 
+                    const actionsArray = knowledge.actions ? (Array.isArray(knowledge.actions) ? knowledge.actions : Array.from(knowledge.actions)) : [];
                     console.log(
-                        `   │  └─ Actions/Relationships: ${knowledge.actions?.length || 0}`,
+                        `   │  └─ Actions/Relationships: ${actionsArray.length}`,
                     );
                 }
 
@@ -743,10 +787,39 @@ export async function searchWebMemories(
                     console.log(`   ${knowledgeType}: ${dedupeMap.size} unique refs`);
                 });
 
+                // Filter semantic refs by score threshold
+                const semanticRefScoreThreshold = request.minScore || 1.0;
+                console.log(`\n🎯 Filtering semantic refs by score threshold: ${semanticRefScoreThreshold}`);
+
+                const filteredSemanticRefMatches = new Map<
+                    kp.KnowledgeType,
+                    Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>
+                >();
+
+                combinedSemanticRefMatches.forEach((dedupeMap, knowledgeType) => {
+                    const beforeCount = dedupeMap.size;
+                    const filtered = new Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>();
+
+                    dedupeMap.forEach((scoredRef, ordinal) => {
+                        if (scoredRef.score >= semanticRefScoreThreshold) {
+                            filtered.set(ordinal, scoredRef);
+                        }
+                    });
+
+                    filteredSemanticRefMatches.set(knowledgeType, filtered);
+
+                    const afterCount = filtered.size;
+                    const removed = beforeCount - afterCount;
+                    console.log(`   ${knowledgeType}: ${beforeCount} → ${afterCount} refs (removed ${removed} below threshold)`);
+                });
+
+                // Use filtered refs for the rest of processing
+                const refsToUse = filteredSemanticRefMatches;
+
                 // Use KnowPro helper functions to extract entities and topics from semantic refs
-                if (combinedSemanticRefMatches.has("entity")) {
+                if (refsToUse.has("entity")) {
                     const entitySemanticRefs =
-                        combinedSemanticRefMatches.get("entity")!;
+                        refsToUse.get("entity")!;
                     const entitySearchResult: kp.SemanticRefSearchResult = {
                         termMatches: new Set(),
                         semanticRefMatches: Array.from(
@@ -776,9 +849,9 @@ export async function searchWebMemories(
                     );
                 }
 
-                if (combinedSemanticRefMatches.has("topic")) {
+                if (refsToUse.has("topic")) {
                     const topicSemanticRefs =
-                        combinedSemanticRefMatches.get("topic")!;
+                        refsToUse.get("topic")!;
                     const topicSearchResult: kp.SemanticRefSearchResult = {
                         termMatches: new Set(),
                         semanticRefMatches: Array.from(
@@ -808,20 +881,24 @@ export async function searchWebMemories(
                     );
                 }
 
-                // Extract text blocks from semantic reference ranges
-                const textBlocksFromSemanticRefs: Array<{
-                    text: string;
-                    messageOrdinal: kp.MessageOrdinal;
-                    knowledgeType: kp.KnowledgeType;
-                    score: number;
-                }> = [];
+                // Extract text chunks from semantic reference ranges (deduplicated)
+                // Use a map per message to collect unique chunks referenced by semantic refs
+                const messageChunksMap = new Map<kp.MessageOrdinal, Map<number, string>>();
+                const messageScoresMap = new Map<kp.MessageOrdinal, number[]>();
 
-                combinedSemanticRefMatches.forEach((dedupeMap, knowledgeType) => {
+                let loggedFirstRef = false;
+                refsToUse.forEach((dedupeMap, knowledgeType) => {
                     dedupeMap.forEach((scoredRef) => {
                         if (websiteCollection.semanticRefs) {
                             const semanticRef = websiteCollection.semanticRefs.get(
                                 scoredRef.semanticRefOrdinal,
                             );
+
+                            if (!loggedFirstRef) {
+                                console.log(`\n🔍 Semantic Ref Structure (first ref):`,JSON.stringify(semanticRef, null, 2));
+                                loggedFirstRef = true;
+                            }
+
                             const messageOrdinal =
                                 semanticRef.range.start.messageOrdinal;
                             const msg =
@@ -834,80 +911,147 @@ export async function searchWebMemories(
                                     semanticRef.range.end?.chunkOrdinal ||
                                     msg.textChunks.length - 1;
 
-                                const textChunks = msg.textChunks.slice(
-                                    startChunk,
-                                    endChunk + 1,
-                                );
-                                const text = textChunks.join(" ");
+                                // Initialize maps for this message if needed
+                                if (!messageChunksMap.has(messageOrdinal)) {
+                                    messageChunksMap.set(messageOrdinal, new Map<number, string>());
+                                    messageScoresMap.set(messageOrdinal, []);
+                                }
 
-                                textBlocksFromSemanticRefs.push({
-                                    text,
-                                    messageOrdinal,
-                                    knowledgeType,
-                                    score: scoredRef.score,
-                                });
+                                const chunksMap = messageChunksMap.get(messageOrdinal)!;
+                                const scores = messageScoresMap.get(messageOrdinal)!;
+
+                                // Add all chunks in the range to the map (deduplicates automatically)
+                                for (let chunkOrdinal = startChunk; chunkOrdinal <= endChunk; chunkOrdinal++) {
+                                    if (chunkOrdinal < msg.textChunks.length) {
+                                        chunksMap.set(chunkOrdinal, msg.textChunks[chunkOrdinal]);
+                                    }
+                                }
+
+                                // Track score for averaging
+                                scores.push(scoredRef.score);
                             }
                         }
                     });
                 });
 
-                console.log(
-                    `\n📝 Extracted ${textBlocksFromSemanticRefs.length} text blocks from semantic references`,
-                );
+                // Log relevance scores by knowledge type (AFTER filtering)
+                console.log(`\n📊 Semantic Ref Relevance Scores by Type (after filtering):`);
+                refsToUse.forEach((dedupeMap, knowledgeType) => {
+                    if (dedupeMap.size > 0) {
+                        const scores = Array.from(dedupeMap.values()).map(ref => ref.score);
+                        const avgScore = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+                        const minScore = Math.min(...scores);
+                        const maxScore = Math.max(...scores);
 
-                // Populate messages - use ONLY matched chunks, not all page content
-                // Build filtered message context from messageMatches
+                        console.log(`   ${knowledgeType}:`);
+                        console.log(`      Count: ${dedupeMap.size}`);
+                        console.log(`      Score range: ${minScore.toFixed(3)} - ${maxScore.toFixed(3)}`);
+                        console.log(`      Average score: ${avgScore.toFixed(3)}`);
+
+                        // Show top 5 by score
+                        const topRefs = Array.from(dedupeMap.values())
+                            .sort((a, b) => b.score - a.score)
+                            .slice(0, 5);
+                        console.log(`      Top ${Math.min(5, topRefs.length)} by score:`);
+                        topRefs.forEach((ref, idx) => {
+                            console.log(`         ${idx + 1}. Score: ${ref.score.toFixed(3)} (ref #${ref.semanticRefOrdinal})`);
+                        });
+                    }
+                });
+
+                // Log semantic ref coverage analysis
+                console.log(`\n📊 Semantic Ref Chunk Coverage Analysis:`);
+                let totalSemanticRefs = 0;
+                refsToUse.forEach((dedupeMap, knowledgeType) => {
+                    totalSemanticRefs += dedupeMap.size;
+                });
+                console.log(`   Total semantic refs after filtering: ${totalSemanticRefs}`);
+
+                // Analyze which chunks are referenced with scores
+                const chunkStats = new Map<number, { count: number; totalScore: number; scores: number[] }>();
+                refsToUse.forEach((dedupeMap, knowledgeType) => {
+                    dedupeMap.forEach((scoredRef) => {
+                        if (websiteCollection.semanticRefs) {
+                            const semanticRef = websiteCollection.semanticRefs.get(
+                                scoredRef.semanticRefOrdinal,
+                            );
+                            const startChunk = semanticRef.range.start.chunkOrdinal || 0;
+                            const endChunk = semanticRef.range.end?.chunkOrdinal || startChunk;
+
+                            for (let c = startChunk; c <= endChunk; c++) {
+                                if (!chunkStats.has(c)) {
+                                    chunkStats.set(c, { count: 0, totalScore: 0, scores: [] });
+                                }
+                                const stats = chunkStats.get(c)!;
+                                stats.count++;
+                                stats.totalScore += scoredRef.score;
+                                stats.scores.push(scoredRef.score);
+                            }
+                        }
+                    });
+                });
+
+                console.log(`   Chunk reference distribution (with scores):`);
+                const sortedChunkStats = Array.from(chunkStats.entries()).sort((a, b) => a[0] - b[0]);
+                sortedChunkStats.forEach(([chunkOrdinal, stats]) => {
+                    const avgScore = stats.totalScore / stats.count;
+                    console.log(`      Chunk ${chunkOrdinal}: ${stats.count} refs, avg score: ${avgScore.toFixed(2)}, total: ${stats.totalScore.toFixed(2)}`);
+                });
+
+                console.log(`\n📝 Collected chunks from ${messageChunksMap.size} messages:`);
+                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
+                    const chunkOrdinals = Array.from(chunksMap.keys()).sort((a, b) => a - b);
+                    console.log(`   Message ${messageOrdinal}: ${chunksMap.size} unique chunks [${chunkOrdinals.join(', ')}]`);
+                });
+
+                // Build messages from deduplicated chunks
                 const matchedMessages: Array<{
                     timestamp: string;
                     value: string;
                     score: number;
                     title?: string;
                     url?: string;
+                    chunkCount: number;
                 }> = [];
 
-                const scoreThreshold = request.minScore || 0.7;
+                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
+                    const msg = websiteCollection.messages.get(messageOrdinal);
+                    if (!msg) return;
 
-                langResult.data.forEach((searchResult, resultIdx) => {
-                    if (
-                        searchResult.messageMatches &&
-                        searchResult.messageMatches.length > 0
-                    ) {
-                        searchResult.messageMatches.forEach((match) => {
-                            const msg = websiteCollection.messages.get(
-                                match.messageOrdinal,
-                            );
-                            if (
-                                msg &&
-                                match.score &&
-                                match.score >= scoreThreshold
-                            ) {
-                                const metadata = msg.metadata as any;
-                                // Get text content from the matched message
-                                const textContent = msg.textChunks.join("\n");
-                                const currMessage = {
-                                    timestamp:
-                                        metadata.lastVisitTime ||
-                                        metadata.visitDate ||
-                                        metadata.bookmarkDate ||
-                                        new Date().toISOString(),
-                                    value: textContent,
-                                    score: match.score,
-                                    title: metadata.title,
-                                    url: metadata.url,
-                                };
+                    const metadata = msg.metadata as any;
+                    const scores = messageScoresMap.get(messageOrdinal)!;
 
-                                if (
-                                    effectiveScope === "current_page" &&
-                                    request.url
-                                ) {
-                                    if (metadata.url === request.url) {
-                                        matchedMessages.push(currMessage);
-                                    }
-                                } else {
-                                    matchedMessages.push(currMessage);
-                                }
-                            }
-                        });
+                    // Calculate average score
+                    const avgScore = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+
+                    // Sort chunks by ordinal for coherence
+                    const sortedChunks = Array.from(chunksMap.entries())
+                        .sort((a, b) => a[0] - b[0])
+                        .map(([_, chunkText]) => chunkText);
+
+                    // Combine chunks (maintaining order)
+                    const combinedText = sortedChunks.join("\n\n");
+
+                    const currMessage = {
+                        timestamp:
+                            metadata.lastVisitTime ||
+                            metadata.visitDate ||
+                            metadata.bookmarkDate ||
+                            new Date().toISOString(),
+                        value: combinedText,
+                        score: avgScore,
+                        title: metadata.title,
+                        url: metadata.url,
+                        chunkCount: chunksMap.size,
+                    };
+
+                    // Apply scope filtering
+                    if (effectiveScope === "current_page" && request.url) {
+                        if (metadata.url === request.url) {
+                            matchedMessages.push(currMessage);
+                        }
+                    } else {
+                        matchedMessages.push(currMessage);
                     }
                 });
 
@@ -918,28 +1062,22 @@ export async function searchWebMemories(
                     contextOptions.messagesTopK,
                 );
 
-                console.log(`\n📊 Message Filtering Results:`);
-                console.log(
-                    `   ├─ Total message matches found: ${matchedMessages.length}`,
-                );
-                console.log(`   ├─ Score threshold: ${scoreThreshold}`);
-                console.log(
-                    `   ├─ After filtering by score: ${matchedMessages.length}`,
-                );
-                console.log(
-                    `   └─ Taking top ${contextOptions.messagesTopK}: ${topMatchedMessages.length} messages`,
-                );
+                console.log(`\n📊 Message Context from Deduplicated Chunks:`);
+                console.log(`   ├─ Messages with chunks: ${messageChunksMap.size}`);
+                console.log(`   ├─ After scope filtering: ${matchedMessages.length}`);
+                console.log(`   └─ Taking top ${contextOptions.messagesTopK}: ${topMatchedMessages.length} messages`);
 
                 if (topMatchedMessages.length > 0) {
-                    console.log(`\n   Top matched message chunks:`);
+                    console.log(`\n   📝 Deduplicated message content:`);
                     topMatchedMessages.slice(0, 5).forEach((msg, idx) => {
                         const preview = msg.value
                             .substring(0, 100)
                             .replace(/\s+/g, " ");
                         console.log(
-                            `   ${idx + 1}. Score: ${msg.score.toFixed(3)} | ${msg.title || "Untitled"}`,
+                            `   ${idx + 1}. ${msg.chunkCount} unique chunks, avg score: ${msg.score.toFixed(3)} | ${msg.title || "Untitled"}`,
                         );
                         console.log(`      "${preview}..."`);
+                        console.log(`      Total chars: ${msg.value.length}`);
                     });
                 }
 
@@ -1014,7 +1152,7 @@ export async function searchWebMemories(
                     console.log(
                         `   - Messages before filtering: ${matchedMessages.length}`,
                     );
-                    console.log(`   - Score threshold: ${scoreThreshold}`);
+                    console.log(`   - Score threshold: ${request.minScore || 0.7}`);
                 }
 
                 console.log(`\n==== END CONVERSATION HISTORY ====\n`);
@@ -1024,11 +1162,11 @@ export async function searchWebMemories(
 
                 // Add entities extracted from semantic refs
                 if (
-                    combinedSemanticRefMatches.has("entity") &&
+                    refsToUse.has("entity") &&
                     actualContext.entities.values.length > 0
                 ) {
                     const entitySemanticRefs =
-                        combinedSemanticRefMatches.get("entity")!;
+                        refsToUse.get("entity")!;
                     const entitySearchResult: kp.SemanticRefSearchResult = {
                         termMatches: new Set(),
                         semanticRefMatches: Array.from(
@@ -1045,11 +1183,11 @@ export async function searchWebMemories(
 
                 // Add topics extracted from semantic refs
                 if (
-                    combinedSemanticRefMatches.has("topic") &&
+                    refsToUse.has("topic") &&
                     actualContext.topics.values.length > 0
                 ) {
                     const topicSemanticRefs =
-                        combinedSemanticRefMatches.get("topic")!;
+                        refsToUse.get("topic")!;
                     const topicSearchResult: kp.SemanticRefSearchResult = {
                         termMatches: new Set(),
                         semanticRefMatches: Array.from(
@@ -1063,51 +1201,40 @@ export async function searchWebMemories(
                     );
                 }
 
-                // Build messages from text blocks extracted from semantic refs
-                // Group text blocks by messageOrdinal and combine them
-                const messageTextMap = new Map<
-                    kp.MessageOrdinal,
-                    {
-                        textBlocks: string[];
-                        scores: number[];
-                        metadata: any;
-                    }
-                >();
+                // Build messages from deduplicated chunks
+                const filteredMessageEntries: Array<{
+                    messageOrdinal: kp.MessageOrdinal;
+                    text: string;
+                    metadata: any;
+                    score: number;
+                }> = [];
 
-                textBlocksFromSemanticRefs.forEach((textBlock) => {
-                    if (!messageTextMap.has(textBlock.messageOrdinal)) {
-                        const msg = websiteCollection.messages.get(
-                            textBlock.messageOrdinal,
-                        );
-                        const metadata = msg ? (msg.metadata as any) : {};
-                        messageTextMap.set(textBlock.messageOrdinal, {
-                            textBlocks: [],
-                            scores: [],
-                            metadata,
-                        });
-                    }
-                    const entry = messageTextMap.get(textBlock.messageOrdinal)!;
-                    entry.textBlocks.push(textBlock.text);
-                    entry.scores.push(textBlock.score);
+                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
+                    const msg = websiteCollection.messages.get(messageOrdinal);
+                    if (!msg) return;
+
+                    const metadata = msg.metadata as any;
+                    const scores = messageScoresMap.get(messageOrdinal)!;
+                    const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+
+                    // Sort chunks by ordinal for coherence
+                    const sortedChunks = Array.from(chunksMap.entries())
+                        .sort((a, b) => a[0] - b[0])
+                        .map(([_, chunkText]) => chunkText);
+
+                    filteredMessageEntries.push({
+                        messageOrdinal,
+                        text: sortedChunks.join("\n\n"),
+                        metadata,
+                        score: avgScore,
+                    });
                 });
 
-                // Convert to RelevantMessage format with top K by average score
-                const messageEntries = Array.from(messageTextMap.entries())
-                    .map(([messageOrdinal, data]) => {
-                        const avgScore =
-                            data.scores.reduce((a, b) => a + b, 0) /
-                            data.scores.length;
-                        return {
-                            messageOrdinal,
-                            text: data.textBlocks.join("\n\n"),
-                            metadata: data.metadata,
-                            score: avgScore,
-                        };
-                    })
-                    .sort((a, b) => b.score - a.score)
-                    .slice(0, contextOptions.messagesTopK);
+                // Sort by score and take top K
+                filteredMessageEntries.sort((a, b) => b.score - a.score);
+                const topFilteredEntries = filteredMessageEntries.slice(0, contextOptions.messagesTopK);
 
-                filteredAnswerContext.messages = messageEntries.map((entry) => ({
+                filteredAnswerContext.messages = topFilteredEntries.map((entry) => ({
                     timestamp:
                         entry.metadata.lastVisitTime ||
                         entry.metadata.visitDate ||
