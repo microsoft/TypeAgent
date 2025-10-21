@@ -88,7 +88,7 @@
     "run-script-os": "^1.1.6",
     "type-fest": "^4.39.1",
     "typescript": "~5.4.5",
-    "vite": "^6.3.6"
+    "vite": "^6.4.1"
   },
   "fluidBuild": {
     "tasks": {
