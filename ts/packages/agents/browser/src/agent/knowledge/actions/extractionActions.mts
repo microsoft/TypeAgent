@@ -461,29 +461,22 @@ async function saveExtractedKnowledgeWithChunks(
         const allTextChunks: string[] = [];
         let totalDocParts = 0;
 
-        console.log(`📦 EXTRACTION SAVE: Processing ${extractionInputs.length} extraction inputs`);
-
         extractionInputs.forEach((input, idx) => {
             if (input.docParts && input.docParts.length > 0) {
                 totalDocParts += input.docParts.length;
-                console.log(`📦 Input ${idx}: ${input.docParts.length} docParts`);
 
                 input.docParts.forEach((docPart, dpIdx) => {
                     if (Array.isArray(docPart.textChunks)) {
-                        console.log(`  📄 DocPart ${dpIdx}: ${docPart.textChunks.length} chunks (array)`);
                         allTextChunks.push(...docPart.textChunks);
                     } else if (typeof docPart.textChunks === "string") {
-                        console.log(`  📄 DocPart ${dpIdx}: 1 chunk (string)`);
                         allTextChunks.push(docPart.textChunks);
                     }
                 });
             } else if (input.textContent) {
-                console.log(`📦 Input ${idx}: No docParts, using textContent fallback (1 chunk)`);
                 allTextChunks.push(input.textContent);
             }
         });
 
-        console.log(`📦 TOTAL: ${totalDocParts} docParts -> ${allTextChunks.length} text chunks`);
         debug(
             `Extracted ${allTextChunks.length} text chunks from ${extractionInputs.length} extraction inputs with ${totalDocParts} docParts`,
         );
@@ -539,9 +532,6 @@ async function saveExtractedKnowledgeWithChunks(
         // Save to index
         if (isNewPage) {
             const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
-            console.log(`💾 SAVING TO INDEX (NEW): ${url}`);
-            console.log(`💾 WebsiteDocPart textChunks count: ${docPart.textChunks.length}`);
-
             const result =
                 await context.agentContext.websiteCollection.addWebsiteToIndex(
                     docPart,
@@ -558,8 +548,6 @@ async function saveExtractedKnowledgeWithChunks(
             debug(`Saved new page to index: ${url}`);
         } else {
             const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
-            console.log(`💾 SAVING TO INDEX (UPDATE): ${url}`);
-            console.log(`💾 WebsiteDocPart textChunks count: ${docPart.textChunks.length}`);
 
             const result =
                 await context.agentContext.websiteCollection.updateWebsiteInIndex(
@@ -584,7 +572,6 @@ async function saveExtractedKnowledgeWithChunks(
                     context.agentContext.index.path,
                     "index",
                 );
-                console.log(`💾 Persisted updated index to disk: ${context.agentContext.index.path}`);
                 debug(`Saved updated website collection to ${context.agentContext.index.path}`);
             } else {
                 console.warn(
@@ -595,7 +582,6 @@ async function saveExtractedKnowledgeWithChunks(
             console.error("Error persisting website collection:", error);
         }
 
-        console.log(`✅ Knowledge saved successfully for ${url} with ${allTextChunks.length} text chunks`);
         debug(`Knowledge saved successfully for ${url} with ${allTextChunks.length} text chunks`);
     } catch (error) {
         console.error("Error saving knowledge to index:", error);

@@ -725,27 +725,15 @@ export async function searchWebMemories(
                     Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>
                 >();
 
-                console.log(
-                    `\n🔍 Collecting semantic references from ${langResult.data.length} search results:`,
-                );
-
                 langResult.data.forEach((searchResult, idx) => {
                     if (
                         searchResult.knowledgeMatches &&
                         searchResult.knowledgeMatches.size > 0
                     ) {
-                        console.log(
-                            `   Search Result ${idx + 1}: ${searchResult.knowledgeMatches.size} knowledge types`,
-                        );
-
                         for (const [
                             knowledgeType,
                             semanticRefSearchResult,
                         ] of searchResult.knowledgeMatches.entries()) {
-                            console.log(
-                                `      ${knowledgeType}: ${semanticRefSearchResult.semanticRefMatches.length} semantic refs`,
-                            );
-
                             if (
                                 !combinedSemanticRefMatches.has(knowledgeType)
                             ) {
@@ -780,24 +768,14 @@ export async function searchWebMemories(
                     }
                 });
 
-                console.log(
-                    `\n📊 De-duplicated semantic references by knowledge type:`,
-                );
-                combinedSemanticRefMatches.forEach((dedupeMap, knowledgeType) => {
-                    console.log(`   ${knowledgeType}: ${dedupeMap.size} unique refs`);
-                });
-
                 // Filter semantic refs by score threshold
                 const semanticRefScoreThreshold = request.minScore || 1.0;
-                console.log(`\n🎯 Filtering semantic refs by score threshold: ${semanticRefScoreThreshold}`);
-
                 const filteredSemanticRefMatches = new Map<
                     kp.KnowledgeType,
                     Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>
                 >();
 
                 combinedSemanticRefMatches.forEach((dedupeMap, knowledgeType) => {
-                    const beforeCount = dedupeMap.size;
                     const filtered = new Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>();
 
                     dedupeMap.forEach((scoredRef, ordinal) => {
@@ -807,10 +785,6 @@ export async function searchWebMemories(
                     });
 
                     filteredSemanticRefMatches.set(knowledgeType, filtered);
-
-                    const afterCount = filtered.size;
-                    const removed = beforeCount - afterCount;
-                    console.log(`   ${knowledgeType}: ${beforeCount} → ${afterCount} refs (removed ${removed} below threshold)`);
                 });
 
                 // Use filtered refs for the rest of processing
@@ -827,10 +801,6 @@ export async function searchWebMemories(
                         ),
                     };
 
-                    console.log(
-                        `\n🏷️ Extracting entities from ${entitySearchResult.semanticRefMatches.length} semantic refs`,
-                    );
-
                     const relevantEntities = kp.getRelevantEntitiesForAnswer(
                         websiteCollection as any,
                         entitySearchResult,
@@ -843,10 +813,6 @@ export async function searchWebMemories(
                     if (relevantEntities.length > 0 && relevantEntities[0].timeRange) {
                         actualContext.entities.timeRanges = [relevantEntities[0].timeRange];
                     }
-
-                    console.log(
-                        `   Extracted ${actualContext.entities.values.length} entities`,
-                    );
                 }
 
                 if (refsToUse.has("topic")) {
@@ -858,10 +824,6 @@ export async function searchWebMemories(
                             topicSemanticRefs.values(),
                         ),
                     };
-
-                    console.log(
-                        `\n📚 Extracting topics from ${topicSearchResult.semanticRefMatches.length} semantic refs`,
-                    );
 
                     const relevantTopics = kp.getRelevantTopicsForAnswer(
                         websiteCollection as any,
@@ -875,10 +837,6 @@ export async function searchWebMemories(
                     if (relevantTopics.length > 0 && relevantTopics[0].timeRange) {
                         actualContext.topics.timeRanges = [relevantTopics[0].timeRange];
                     }
-
-                    console.log(
-                        `   Extracted ${actualContext.topics.values.length} topics`,
-                    );
                 }
 
                 // Extract text chunks from semantic reference ranges (deduplicated)
@@ -886,18 +844,12 @@ export async function searchWebMemories(
                 const messageChunksMap = new Map<kp.MessageOrdinal, Map<number, string>>();
                 const messageScoresMap = new Map<kp.MessageOrdinal, number[]>();
 
-                let loggedFirstRef = false;
                 refsToUse.forEach((dedupeMap, knowledgeType) => {
                     dedupeMap.forEach((scoredRef) => {
                         if (websiteCollection.semanticRefs) {
                             const semanticRef = websiteCollection.semanticRefs.get(
                                 scoredRef.semanticRefOrdinal,
                             );
-
-                            if (!loggedFirstRef) {
-                                console.log(`\n🔍 Semantic Ref Structure (first ref):`,JSON.stringify(semanticRef, null, 2));
-                                loggedFirstRef = true;
-                            }
 
                             const messageOrdinal =
                                 semanticRef.range.start.messageOrdinal;
@@ -932,76 +884,6 @@ export async function searchWebMemories(
                             }
                         }
                     });
-                });
-
-                // Log relevance scores by knowledge type (AFTER filtering)
-                console.log(`\n📊 Semantic Ref Relevance Scores by Type (after filtering):`);
-                refsToUse.forEach((dedupeMap, knowledgeType) => {
-                    if (dedupeMap.size > 0) {
-                        const scores = Array.from(dedupeMap.values()).map(ref => ref.score);
-                        const avgScore = scores.reduce((sum, s) => sum + s, 0) / scores.length;
-                        const minScore = Math.min(...scores);
-                        const maxScore = Math.max(...scores);
-
-                        console.log(`   ${knowledgeType}:`);
-                        console.log(`      Count: ${dedupeMap.size}`);
-                        console.log(`      Score range: ${minScore.toFixed(3)} - ${maxScore.toFixed(3)}`);
-                        console.log(`      Average score: ${avgScore.toFixed(3)}`);
-
-                        // Show top 5 by score
-                        const topRefs = Array.from(dedupeMap.values())
-                            .sort((a, b) => b.score - a.score)
-                            .slice(0, 5);
-                        console.log(`      Top ${Math.min(5, topRefs.length)} by score:`);
-                        topRefs.forEach((ref, idx) => {
-                            console.log(`         ${idx + 1}. Score: ${ref.score.toFixed(3)} (ref #${ref.semanticRefOrdinal})`);
-                        });
-                    }
-                });
-
-                // Log semantic ref coverage analysis
-                console.log(`\n📊 Semantic Ref Chunk Coverage Analysis:`);
-                let totalSemanticRefs = 0;
-                refsToUse.forEach((dedupeMap, knowledgeType) => {
-                    totalSemanticRefs += dedupeMap.size;
-                });
-                console.log(`   Total semantic refs after filtering: ${totalSemanticRefs}`);
-
-                // Analyze which chunks are referenced with scores
-                const chunkStats = new Map<number, { count: number; totalScore: number; scores: number[] }>();
-                refsToUse.forEach((dedupeMap, knowledgeType) => {
-                    dedupeMap.forEach((scoredRef) => {
-                        if (websiteCollection.semanticRefs) {
-                            const semanticRef = websiteCollection.semanticRefs.get(
-                                scoredRef.semanticRefOrdinal,
-                            );
-                            const startChunk = semanticRef.range.start.chunkOrdinal || 0;
-                            const endChunk = semanticRef.range.end?.chunkOrdinal || startChunk;
-
-                            for (let c = startChunk; c <= endChunk; c++) {
-                                if (!chunkStats.has(c)) {
-                                    chunkStats.set(c, { count: 0, totalScore: 0, scores: [] });
-                                }
-                                const stats = chunkStats.get(c)!;
-                                stats.count++;
-                                stats.totalScore += scoredRef.score;
-                                stats.scores.push(scoredRef.score);
-                            }
-                        }
-                    });
-                });
-
-                console.log(`   Chunk reference distribution (with scores):`);
-                const sortedChunkStats = Array.from(chunkStats.entries()).sort((a, b) => a[0] - b[0]);
-                sortedChunkStats.forEach(([chunkOrdinal, stats]) => {
-                    const avgScore = stats.totalScore / stats.count;
-                    console.log(`      Chunk ${chunkOrdinal}: ${stats.count} refs, avg score: ${avgScore.toFixed(2)}, total: ${stats.totalScore.toFixed(2)}`);
-                });
-
-                console.log(`\n📝 Collected chunks from ${messageChunksMap.size} messages:`);
-                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
-                    const chunkOrdinals = Array.from(chunksMap.keys()).sort((a, b) => a - b);
-                    console.log(`   Message ${messageOrdinal}: ${chunksMap.size} unique chunks [${chunkOrdinals.join(', ')}]`);
                 });
 
                 // Build messages from deduplicated chunks
@@ -1062,100 +944,19 @@ export async function searchWebMemories(
                     contextOptions.messagesTopK,
                 );
 
-                console.log(`\n📊 Message Context from Deduplicated Chunks:`);
-                console.log(`   ├─ Messages with chunks: ${messageChunksMap.size}`);
-                console.log(`   ├─ After scope filtering: ${matchedMessages.length}`);
-                console.log(`   └─ Taking top ${contextOptions.messagesTopK}: ${topMatchedMessages.length} messages`);
-
-                if (topMatchedMessages.length > 0) {
-                    console.log(`\n   📝 Deduplicated message content:`);
-                    topMatchedMessages.slice(0, 5).forEach((msg, idx) => {
-                        const preview = msg.value
-                            .substring(0, 100)
-                            .replace(/\s+/g, " ");
-                        console.log(
-                            `   ${idx + 1}. ${msg.chunkCount} unique chunks, avg score: ${msg.score.toFixed(3)} | ${msg.title || "Untitled"}`,
-                        );
-                        console.log(`      "${preview}..."`);
-                        console.log(`      Total chars: ${msg.value.length}`);
-                    });
-                }
-
                 // Map to the format expected by AnswerContext
                 actualContext.messages = topMatchedMessages.map((msg) => ({
                     timestamp: msg.timestamp,
                     value: msg.value,
                 }));
 
-                // Log the actual JSON that will be sent
-                const contextJson = JSON.stringify(actualContext, null, 2);
-                console.log(`\n🔍 ACTUAL JSON CONTEXT (sent to LLM):`);
-                console.log(contextJson);
-                console.log(
-                    `\n📊 Context size: ${contextJson.length} characters`,
-                );
-
-                console.log(`\nPreview of entities that will be in context:`);
-                const uniqueEntities = actualContext.entities.values;
-                console.log(
-                    `  Total unique entities (limited to top ${contextOptions.entitiesTopK}):`,
-                );
-                uniqueEntities.forEach((entity: any) => {
-                    console.log(
-                        `    - ${entity.name} (type: ${Array.isArray(entity.type) ? entity.type.join(", ") : entity.type})`,
-                    );
-                });
-
-                console.log(`\nPreview of topics that will be in context:`);
-                const uniqueTopics = actualContext.topics.values;
-                console.log(
-                    `  Total unique topics (limited to top ${contextOptions.topicsTopK}):`,
-                );
-                uniqueTopics.forEach((topic: string) => {
-                    console.log(`    - ${topic}`);
-                });
-
-                console.log(`\nPreview of messages that will be in context:`);
-                console.log(
-                    `  Total matched messages: ${topMatchedMessages.length} (filtered from ${matchedMessages.length} total matches)`,
-                );
-                topMatchedMessages
-                    .slice(0, Math.min(5, contextOptions.messagesTopK || 20))
-                    .forEach((msg, idx) => {
-                        console.log(
-                            `  Message ${idx + 1}: ${msg.title || "Untitled"} (score: ${msg.score.toFixed(3)})`,
-                        );
-                        const textPreview = msg.value
-                            .substring(0, 300)
-                            .replace(/\s+/g, " ");
-                        console.log(
-                            `    Content preview (${msg.value.length} chars total): "${textPreview}..."`,
-                        );
-                    });
-
                 if (
-                    uniqueEntities.length === 0 &&
-                    uniqueTopics.length === 0 &&
+                    actualContext.entities.values.length === 0 &&
+                    actualContext.topics.values.length === 0 &&
                     topMatchedMessages.length === 0
                 ) {
-                    console.log(`\n⚠️ WARNING: ANSWER CONTEXT IS EMPTY!`);
-                    console.log(
-                        `   No entities, topics, or messages will be sent to the LLM.`,
-                    );
-                    console.log(
-                        `   This is why "ANSWER CONTEXT is empty" error occurs.`,
-                    );
-                    console.log(`   Debug info:`);
-                    console.log(
-                        `   - Total search results: ${langResult.data.length}`,
-                    );
-                    console.log(
-                        `   - Messages before filtering: ${matchedMessages.length}`,
-                    );
-                    console.log(`   - Score threshold: ${request.minScore || 0.7}`);
+                    debug(`Warning: Answer context is empty - no entities, topics, or messages matched`);
                 }
-
-                console.log(`\n==== END CONVERSATION HISTORY ====\n`);
 
                 // Build filtered AnswerContext from semantic refs
                 const filteredAnswerContext: any = {};
@@ -1243,42 +1044,11 @@ export async function searchWebMemories(
                     value: entry.text,
                 }));
 
-                console.log(`\n📦 Filtered Answer Context Summary:`);
-                console.log(
-                    `   Entities: ${filteredAnswerContext.entities?.length || 0}`,
-                );
-                console.log(
-                    `   Topics: ${filteredAnswerContext.topics?.length || 0}`,
-                );
-                console.log(
-                    `   Messages (from semantic ref text blocks): ${filteredAnswerContext.messages?.length || 0}`,
-                );
-
                 // Call generator directly with filtered context
                 const answerResult = await answerGenerator.generateAnswer(
                     searchText,
                     filteredAnswerContext,
                 );
-
-                console.log(`\n📤 Answer Generation Result:`);
-                console.log(`   Success: ${answerResult.success}`);
-                if (answerResult.success) {
-                    console.log(`   Type: ${answerResult.data.type}`);
-                    if (answerResult.data.type === "Answered") {
-                        console.log(
-                            `   Answer length: ${answerResult.data.answer?.length || 0} chars`,
-                        );
-                        console.log(
-                            `   Answer preview: ${answerResult.data.answer?.substring(0, 100)}...`,
-                        );
-                    } else {
-                        console.log(
-                            `   Why no answer: ${answerResult.data.whyNoAnswer}`,
-                        );
-                    }
-                } else {
-                    console.log(`   Error: ${answerResult.message}`);
-                }
 
                 if (answerResult.success) {
                     const answerResponse = answerResult.data;
