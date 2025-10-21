@@ -1258,6 +1258,20 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             command: new AgentToggleCommandHandler(AgentToggle.Command),
             agent: new AgentToggleCommandHandler(AgentToggle.Agent),
             request: new ConfigRequestCommandHandler(),
+            match: {
+                description: "Configure match behavior",
+                commands: {
+                    grammar: getToggleHandlerTable(
+                        "grammar cache usage",
+                        async (context, enable: boolean) => {
+                            await changeContextConfig(
+                                { cache: { grammar: enable } },
+                                context,
+                            );
+                        },
+                    ),
+                },
+            },
             translation: configTranslationCommandHandlers,
             explainer: configExplainerCommandHandlers,
             execution: configExecutionCommandHandlers,

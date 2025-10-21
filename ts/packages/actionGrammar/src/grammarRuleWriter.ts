@@ -8,9 +8,9 @@ import {
     Rule,
     RuleDefinition,
     ValueNode,
-} from "./grammarParser.js";
+} from "./grammarRuleParser.js";
 
-export function writeGrammar(grammar: RuleDefinition[]): string {
+export function writeGrammarRules(grammar: RuleDefinition[]): string {
     const result: string[] = [];
     for (const def of grammar) {
         writeRuleDefinition(result, def);
@@ -128,7 +128,7 @@ function writeExpression(
                             : expr.typeName,
                     );
                 }
-                result.push(")");
+                result.push(expr.optional ? ")?" : ")");
                 break;
         }
     }

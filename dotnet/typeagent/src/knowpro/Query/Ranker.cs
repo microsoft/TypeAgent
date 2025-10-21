@@ -61,8 +61,7 @@ internal static class Ranker
         float boostWeight
     )
     {
-        ConcreteEntity? entity = semanticRef.AsEntity();
-        if (entity is not null)
+        if (semanticRef.IsEntity)
         {
             scoredOrdinal = new ScoredSemanticRefOrdinal()
             {

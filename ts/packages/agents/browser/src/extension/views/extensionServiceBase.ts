@@ -17,6 +17,7 @@ import type {
     KnowledgeProgressCallback,
     KnowledgeExtractionResult,
 } from "../interfaces/knowledgeExtraction.types";
+import { url } from "inspector/promises";
 
 // ===================================================================
 // INTERFACE DEFINITIONS
@@ -69,6 +70,20 @@ export interface SearchResult {
     answerEnhancement?: AnswerEnhancement;
 }
 
+export interface TopicInsight {
+    name: string;
+    relevance: number;
+    occurrences: number;
+    type: "primary" | "secondary" | "related";
+}
+
+export interface EntityInsight {
+    name: string;
+    type: string;
+    confidence: number;
+    mentions: number;
+}
+
 export interface Website {
     url: string;
     title: string;
@@ -79,6 +94,11 @@ export interface Website {
     score?: number;
     snippet?: string;
     knowledge?: KnowledgeStatus;
+    insights?: {
+        topics: TopicInsight[];
+        entities: EntityInsight[];
+        relevanceScore: number;
+    };
 }
 
 export interface SourceReference {
@@ -310,6 +330,25 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async generatePageQuestions(url: string, pageKnowledge: any): Promise<any> {
+        return this.sendMessage({
+            type: "generatePageQuestions",
+            url,
+            pageKnowledge,
+        });
+    }
+
+    async generateGraphQuestions(
+        url: string,
+        pageKnowledge: any,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "generateGraphQuestions",
+            url,
+            pageKnowledge,
+        });
+    }
+
     async discoverRelationships(
         url: string,
         knowledge: any,
@@ -520,6 +559,22 @@ export abstract class ExtensionServiceBase {
         return this.sendMessage({
             type: "getTopicMetrics",
             parameters: { topicId },
+        });
+    }
+
+    async getTopicTimelines(parameters: {
+        topicNames: string[];
+        maxTimelineEntries?: number;
+        timeRange?: {
+            startDate?: string;
+            endDate?: string;
+        };
+        includeRelatedTopics?: boolean;
+        neighborhoodDepth?: number;
+    }): Promise<any> {
+        return this.sendMessage({
+            type: "getTopicTimelines",
+            parameters,
         });
     }
 

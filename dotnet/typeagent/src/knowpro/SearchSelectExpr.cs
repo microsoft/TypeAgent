@@ -20,5 +20,5 @@ public class SearchSelectExpr
 
     public SearchTermGroup SearchTermGroup { get; }
 
-    public WhenFilter? When { get; }
+    public WhenFilter? When { get; set; }
 }

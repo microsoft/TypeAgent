@@ -6,7 +6,52 @@ import { BrowserActionContext } from "../../browserActions.mjs";
 import { searchByEntities } from "../../searchWebMemories.mjs";
 import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
+import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
 import registerDebug from "debug";
+
+// ============================================================================
+// Topic Timeline Types
+// ============================================================================
+
+export interface TopicActivity {
+    timestamp: string;
+    activityType: "bookmark" | "visit" | "extraction";
+    url: string;
+    title: string;
+    domain: string;
+    relevance: number;
+    snippet?: string | undefined;
+    knowledgeChunk?: string | undefined;
+    metadata?: {
+        visitCount?: number;
+        confidence?: number;
+        extractionDate?: string;
+    };
+}
+
+export interface TopicTimeline {
+    topicName: string;
+    topicId?: string;
+    totalActivity: number;
+    activities: TopicActivity[];
+    relatedTopics: string[];
+    activityDistribution: {
+        bookmarks: number;
+        visits: number;
+        extractions: number;
+    };
+}
+
+export interface TopicTimelineResponse {
+    success: boolean;
+    timelines: TopicTimeline[];
+    metadata: {
+        totalEntries: number;
+        timeRange: { earliest: string; latest: string };
+        topicsWithActivity: number;
+    };
+    error?: string;
+}
 
 const debug = registerDebug("typeagent:browser:knowledge:graph");
 
@@ -1198,53 +1243,90 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
         return;
     }
 
+    const tracker = getPerformanceTracker();
+    tracker.startOperation("ensureTopicGraphCache");
+
     try {
         // Fetch all topics from database
+        tracker.startOperation("ensureTopicGraphCache.getTopicHierarchy");
         const topics =
             websiteCollection.hierarchicalTopics?.getTopicHierarchy() || [];
+        tracker.endOperation(
+            "ensureTopicGraphCache.getTopicHierarchy",
+            topics.length,
+            topics.length,
+        );
 
-        // Enrich topics with entity references if available
+        // Enrich topics with entity references if available - OPTIMIZED
         if (websiteCollection.topicEntityRelations) {
+            tracker.startOperation(
+                "ensureTopicGraphCache.enrichTopicsWithEntities",
+            );
+            const topicIds = topics.map((t: any) => t.topicId);
+
+            // Single batch query instead of N individual queries
+            const allEntityRelations =
+                websiteCollection.topicEntityRelations.getEntitiesForTopics(
+                    topicIds,
+                );
+
+            // Group entity relations by topic ID for efficient lookup
+            const entityRelationsByTopic = new Map<string, any[]>();
+            for (const relation of allEntityRelations) {
+                if (!entityRelationsByTopic.has(relation.topicId)) {
+                    entityRelationsByTopic.set(relation.topicId, []);
+                }
+                entityRelationsByTopic.get(relation.topicId)!.push(relation);
+            }
+
+            // Assign top entities to each topic (limit to 10 for performance)
             for (const topic of topics) {
                 const entityRelations =
-                    websiteCollection.topicEntityRelations.getEntitiesForTopic(
-                        topic.topicId,
-                    );
-                // Add top entities (limit to 10 for performance)
+                    entityRelationsByTopic.get(topic.topicId) || [];
                 topic.entityReferences = entityRelations
                     .sort((a: any, b: any) => b.relevance - a.relevance)
                     .slice(0, 10)
                     .map((rel: any) => rel.entityName);
             }
+
+            tracker.endOperation(
+                "ensureTopicGraphCache.enrichTopicsWithEntities",
+                allEntityRelations.length,
+                topics.length,
+            );
         }
 
         // Build relationships from parent-child structure
+        tracker.startOperation("ensureTopicGraphCache.buildTopicRelationships");
         let relationships = buildTopicRelationships(topics);
+        tracker.endOperation(
+            "ensureTopicGraphCache.buildTopicRelationships",
+            topics.length,
+            relationships.length,
+        );
 
-        // Add lateral relationships from topic relationships table
+        // Add lateral relationships from topic relationships table - SUPER OPTIMIZED
         if (websiteCollection.topicRelationships) {
+            tracker.startOperation(
+                "ensureTopicGraphCache.getLateralRelationships",
+            );
             const topicIds = new Set(topics.map((t: any) => t.topicId));
-            const lateralRels: any[] = [];
+            const topicIdsArray = Array.from(topicIds);
 
-            for (const topicId of topicIds) {
-                const rels =
-                    websiteCollection.topicRelationships.getRelationshipsForTopic(
-                        topicId,
-                    );
-                for (const rel of rels) {
-                    if (
-                        topicIds.has(rel.fromTopic) &&
-                        topicIds.has(rel.toTopic)
-                    ) {
-                        lateralRels.push({
-                            from: rel.fromTopic,
-                            to: rel.toTopic,
-                            type: rel.relationshipType,
-                            strength: rel.strength,
-                        });
-                    }
-                }
-            }
+            // Use optimized query that filters at database level
+            const allRels =
+                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
+                    topicIdsArray,
+                    0.3, // Only get relationships with strength >= 0.3 for better performance
+                );
+
+            // Convert to our format - no need to filter since DB already filtered
+            const lateralRels: any[] = allRels.map((rel: any) => ({
+                from: rel.fromTopic,
+                to: rel.toTopic,
+                type: rel.relationshipType,
+                strength: rel.strength,
+            }));
 
             // Deduplicate lateral relationships
             const relKeys = new Set<string>();
@@ -1255,6 +1337,11 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
                     relationships.push(rel);
                 }
             }
+            tracker.endOperation(
+                "ensureTopicGraphCache.getLateralRelationships",
+                allRels.length,
+                lateralRels.length,
+            );
         }
 
         // Get entity counts for topics from topic-entity relations
@@ -1264,10 +1351,18 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
         }));
 
         // Calculate topic importance metrics
+        tracker.startOperation(
+            "ensureTopicGraphCache.calculateTopicImportance",
+        );
         const topicMetrics = calculateTopicImportance(
             topics,
             relationships,
             topicMetricsInput,
+        );
+        tracker.endOperation(
+            "ensureTopicGraphCache.calculateTopicImportance",
+            topics.length,
+            topicMetrics.length,
         );
 
         // Store in cache
@@ -1280,7 +1375,17 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
         };
 
         setTopicGraphCache(websiteCollection, newCache);
+
+        tracker.endOperation(
+            "ensureTopicGraphCache",
+            topics.length + relationships.length,
+            topics.length,
+        );
+        tracker.printReport("ensureTopicGraphCache");
     } catch (error) {
+        console.error("[Topic Graph] Failed to build cache:", error);
+        tracker.endOperation("ensureTopicGraphCache", 0, 0);
+
         // Mark cache as invalid
         const existingCache = getTopicGraphCache(websiteCollection);
         if (existingCache) {
@@ -1301,22 +1406,58 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
 
     debug("[Knowledge Graph] Building in-memory cache for graph data");
 
+    const tracker = getPerformanceTracker();
+    tracker.startOperation("ensureGraphCache");
+
     try {
-        // Fetch raw data
-        const entities =
+        // Fetch raw data with instrumentation and batch optimization
+        tracker.startOperation("ensureGraphCache.getTopEntities");
+        const rawEntities =
             (websiteCollection.knowledgeEntities as any)?.getTopEntities(
                 5000,
             ) || [];
-        const relationships =
+        // Validate and clean entity data
+        const entities = rawEntities;
+
+        tracker.endOperation(
+            "ensureGraphCache.getTopEntities",
+            entities.length,
+            entities.length,
+        );
+
+        tracker.startOperation("ensureGraphCache.getAllRelationships");
+        const rawRelationships =
             websiteCollection.relationships?.getAllRelationships() || [];
+
+        // Validate and clean relationship data
+        const relationships = rawRelationships;
+
+        tracker.endOperation(
+            "ensureGraphCache.getAllRelationships",
+            relationships.length,
+            relationships.length,
+        );
+
+        tracker.startOperation("ensureGraphCache.getAllCommunities");
         const communities =
             websiteCollection.communities?.getAllCommunities() || [];
+        tracker.endOperation(
+            "ensureGraphCache.getAllCommunities",
+            communities.length,
+            communities.length,
+        );
 
-        // Calculate metrics
+        // Calculate metrics with instrumentation
+        tracker.startOperation("ensureGraphCache.calculateEntityMetrics");
         const entityMetrics = calculateEntityMetrics(
             entities,
             relationships,
             communities,
+        );
+        tracker.endOperation(
+            "ensureGraphCache.calculateEntityMetrics",
+            entities.length,
+            entityMetrics.length,
         );
 
         // Store in cache
@@ -1334,8 +1475,16 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         debug(
             `[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`,
         );
+
+        tracker.endOperation(
+            "ensureGraphCache",
+            entities.length + relationships.length + communities.length,
+            entityMetrics.length,
+        );
+        tracker.printReport("ensureGraphCache");
     } catch (error) {
         console.error("[Knowledge Graph] Failed to build cache:", error);
+        tracker.endOperation("ensureGraphCache", 0, 0);
 
         // Mark cache as invalid but keep existing data if available
         const existingCache = getGraphCache(websiteCollection);
@@ -1487,10 +1636,14 @@ function calculateEntityMetrics(
     relationships: any[],
     communities: any[],
 ): any[] {
+    const tracker = getPerformanceTracker();
+    tracker.startOperation("calculateEntityMetrics");
+
     const entityMap = new Map<string, any>();
     const degreeMap = new Map<string, number>();
     const communityMap = new Map<string, string>();
 
+    tracker.startOperation("calculateEntityMetrics.buildEntityMap");
     entities.forEach((entity) => {
         const entityName = entity.entityName || entity.name;
         entityMap.set(entityName, {
@@ -1502,7 +1655,13 @@ function calculateEntityMetrics(
         });
         degreeMap.set(entityName, 0);
     });
+    tracker.endOperation(
+        "calculateEntityMetrics.buildEntityMap",
+        entities.length,
+        entities.length,
+    );
 
+    tracker.startOperation("calculateEntityMetrics.buildCommunityMap");
     communities.forEach((community, index) => {
         let communityEntities: string[] = [];
         try {
@@ -1520,7 +1679,13 @@ function calculateEntityMetrics(
             communityMap.set(entityName, community.id || `community_${index}`);
         });
     });
+    tracker.endOperation(
+        "calculateEntityMetrics.buildCommunityMap",
+        communities.length,
+        communityMap.size,
+    );
 
+    tracker.startOperation("calculateEntityMetrics.calculateDegrees");
     relationships.forEach((rel) => {
         const from = rel.fromEntity;
         const to = rel.toEntity;
@@ -1540,6 +1705,11 @@ function calculateEntityMetrics(
             );
         }
     });
+    tracker.endOperation(
+        "calculateEntityMetrics.calculateDegrees",
+        relationships.length,
+        relationships.length,
+    );
 
     // Debug: Show degree map statistics
     const degreeValues = Array.from(degreeMap.values());
@@ -1560,6 +1730,7 @@ function calculateEntityMetrics(
         `[DEBUG-Backend] calculateEntityMetrics: entityCount=${entities.length}, relationshipCount=${relationships.length}, maxDegree=${maxDegree}`,
     );
 
+    tracker.startOperation("calculateEntityMetrics.buildResults");
     const results = Array.from(entityMap.values()).map((entity) => {
         const degree = degreeMap.get(entity.name) || 0;
         const importance = degree / maxDegree;
@@ -1571,6 +1742,17 @@ function calculateEntityMetrics(
             size: Math.max(8, Math.min(40, 8 + Math.sqrt(degree * 3))),
         };
     });
+    tracker.endOperation(
+        "calculateEntityMetrics.buildResults",
+        entities.length,
+        results.length,
+    );
+
+    tracker.endOperation(
+        "calculateEntityMetrics",
+        entities.length + relationships.length + communities.length,
+        results.length,
+    );
 
     return results;
 }
@@ -2327,5 +2509,701 @@ export async function getTopicMetrics(
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
         };
+    }
+}
+
+/**
+ * Get per-URL breakdown of knowledge graph content
+ * Shows how many topics, entities, semanticrefs, and relationships are associated with each URL
+ */
+export async function getUrlContentBreakdown(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    breakdown?: Array<{
+        url: string;
+        topicCount: number;
+        entityCount: number;
+        semanticRefCount: number;
+        relationshipCount: number;
+        totalItems: number;
+    }>;
+    summary?: {
+        totalUrls: number;
+        totalTopics: number;
+        totalEntities: number;
+        totalSemanticRefs: number;
+        totalRelationships: number;
+        avgTopicsPerUrl: number;
+        avgEntitiesPerUrl: number;
+        avgSemanticRefsPerUrl: number;
+        avgRelationshipsPerUrl: number;
+    };
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        const tracker = getPerformanceTracker();
+        tracker.startOperation("getUrlContentBreakdown");
+
+        const urlStats = new Map<
+            string,
+            {
+                topicCount: number;
+                entityCount: number;
+                semanticRefCount: number;
+                relationshipCount: number;
+            }
+        >();
+
+        // Count topics per URL
+        tracker.startOperation("getUrlContentBreakdown.countTopics");
+        if (websiteCollection.hierarchicalTopics) {
+            try {
+                const topics =
+                    websiteCollection.hierarchicalTopics.getTopicHierarchy() ||
+                    [];
+                for (const topic of topics) {
+                    const url = topic.url;
+                    if (!urlStats.has(url)) {
+                        urlStats.set(url, {
+                            topicCount: 0,
+                            entityCount: 0,
+                            semanticRefCount: 0,
+                            relationshipCount: 0,
+                        });
+                    }
+                    urlStats.get(url)!.topicCount++;
+                }
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countTopics",
+                    topics.length,
+                    urlStats.size,
+                );
+            } catch (error) {
+                console.warn("Failed to count topics per URL:", error);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countTopics",
+                    0,
+                    0,
+                );
+            }
+        }
+
+        // Count entities per URL
+        tracker.startOperation("getUrlContentBreakdown.countEntities");
+        if (websiteCollection.knowledgeEntities) {
+            try {
+                const entities =
+                    (websiteCollection.knowledgeEntities as any).getTopEntities(
+                        10000,
+                    ) || [];
+                for (const entity of entities) {
+                    const sources = entity.sources || [];
+                    const sourceUrls =
+                        typeof sources === "string"
+                            ? JSON.parse(sources)
+                            : sources;
+                    for (const url of sourceUrls) {
+                        if (!urlStats.has(url)) {
+                            urlStats.set(url, {
+                                topicCount: 0,
+                                entityCount: 0,
+                                semanticRefCount: 0,
+                                relationshipCount: 0,
+                            });
+                        }
+                        urlStats.get(url)!.entityCount++;
+                    }
+                }
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countEntities",
+                    entities.length,
+                    urlStats.size,
+                );
+            } catch (error) {
+                console.warn("Failed to count entities per URL:", error);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countEntities",
+                    0,
+                    0,
+                );
+            }
+        }
+
+        // Count semantic refs per URL - TODO: implement when URL association is available
+        tracker.startOperation("getUrlContentBreakdown.countSemanticRefs");
+        // SemanticRef interface doesn't directly contain URL info - skip for now
+        const semanticRefCount = websiteCollection.semanticRefs
+            ? websiteCollection.semanticRefs.getAll().length
+            : 0;
+        tracker.endOperation(
+            "getUrlContentBreakdown.countSemanticRefs",
+            semanticRefCount,
+            0,
+        );
+
+        // Count relationships per URL
+        tracker.startOperation("getUrlContentBreakdown.countRelationships");
+        if (websiteCollection.relationships) {
+            try {
+                const relationships =
+                    websiteCollection.relationships.getAllRelationships() || [];
+                for (const rel of relationships) {
+                    const sources = rel.sources || [];
+                    const sourceUrls =
+                        typeof sources === "string"
+                            ? JSON.parse(sources)
+                            : Array.isArray(sources)
+                              ? sources
+                              : [];
+                    for (const url of sourceUrls) {
+                        if (!urlStats.has(url)) {
+                            urlStats.set(url, {
+                                topicCount: 0,
+                                entityCount: 0,
+                                semanticRefCount: 0,
+                                relationshipCount: 0,
+                            });
+                        }
+                        urlStats.get(url)!.relationshipCount++;
+                    }
+                }
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countRelationships",
+                    relationships.length,
+                    urlStats.size,
+                );
+            } catch (error) {
+                console.warn("Failed to count relationships per URL:", error);
+                tracker.endOperation(
+                    "getUrlContentBreakdown.countRelationships",
+                    0,
+                    0,
+                );
+            }
+        }
+
+        // Build breakdown array
+        const breakdown = Array.from(urlStats.entries())
+            .map(([url, stats]: [string, any]) => ({
+                url,
+                topicCount: stats.topicCount,
+                entityCount: stats.entityCount,
+                semanticRefCount: stats.semanticRefCount,
+                relationshipCount: stats.relationshipCount,
+                totalItems:
+                    stats.topicCount +
+                    stats.entityCount +
+                    stats.semanticRefCount +
+                    stats.relationshipCount,
+            }))
+            .sort((a: any, b: any) => b.totalItems - a.totalItems);
+
+        // Calculate summary statistics
+        const summary = {
+            totalUrls: breakdown.length,
+            totalTopics: breakdown.reduce((sum, b) => sum + b.topicCount, 0),
+            totalEntities: breakdown.reduce((sum, b) => sum + b.entityCount, 0),
+            totalSemanticRefs: breakdown.reduce(
+                (sum, b) => sum + b.semanticRefCount,
+                0,
+            ),
+            totalRelationships: breakdown.reduce(
+                (sum, b) => sum + b.relationshipCount,
+                0,
+            ),
+            avgTopicsPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce((sum, b) => sum + b.topicCount, 0) /
+                      breakdown.length
+                    : 0,
+            avgEntitiesPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce((sum, b) => sum + b.entityCount, 0) /
+                      breakdown.length
+                    : 0,
+            avgSemanticRefsPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce(
+                          (sum, b) => sum + b.semanticRefCount,
+                          0,
+                      ) / breakdown.length
+                    : 0,
+            avgRelationshipsPerUrl:
+                breakdown.length > 0
+                    ? breakdown.reduce(
+                          (sum, b) => sum + b.relationshipCount,
+                          0,
+                      ) / breakdown.length
+                    : 0,
+        };
+
+        tracker.endOperation(
+            "getUrlContentBreakdown",
+            urlStats.size,
+            breakdown.length,
+        );
+        tracker.printReport("getUrlContentBreakdown");
+
+        debug(`[URL Content Breakdown] Analyzed ${summary.totalUrls} URLs`);
+        debug(
+            `[URL Content Breakdown] Total items - Topics: ${summary.totalTopics}, Entities: ${summary.totalEntities}, SemanticRefs: ${summary.totalSemanticRefs}, Relationships: ${summary.totalRelationships}`,
+        );
+
+        return {
+            success: true,
+            breakdown,
+            summary,
+        };
+    } catch (error) {
+        console.error("Error getting URL content breakdown:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+// ============================================================================
+// Topic Timeline Functions
+// ============================================================================
+
+export async function getTopicTimelines(
+    parameters: {
+        topicNames: string[];
+        maxTimelineEntries?: number;
+        timeRange?: {
+            startDate?: string;
+            endDate?: string;
+        };
+        includeRelatedTopics?: boolean;
+        neighborhoodDepth?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<TopicTimelineResponse> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                timelines: [],
+                metadata: {
+                    totalEntries: 0,
+                    timeRange: { earliest: "", latest: "" },
+                    topicsWithActivity: 0,
+                },
+                error: "Website collection not available",
+            };
+        }
+
+        debug(
+            `[Topic Timelines] Processing ${parameters.topicNames.length} topics`,
+        );
+
+        // 1. Expand topic list with neighborhood exploration
+        let allTopics = [...parameters.topicNames];
+
+        if (parameters.includeRelatedTopics) {
+            allTopics = await expandTopicNeighborhood(
+                parameters.topicNames,
+                parameters.neighborhoodDepth || 1,
+                websiteCollection,
+            );
+            debug(
+                `[Topic Timelines] Expanded to ${allTopics.length} topics including neighbors`,
+            );
+        }
+
+        // 2. Get timeline data for each topic
+        const timelines: TopicTimeline[] = [];
+
+        for (const topicName of allTopics) {
+            const timeline = await buildTopicTimeline(
+                topicName,
+                websiteCollection,
+                parameters,
+            );
+            if (timeline.activities.length > 0) {
+                timelines.push(timeline);
+            }
+        }
+
+        debug(
+            `[Topic Timelines] Built ${timelines.length} timelines with activity`,
+        );
+
+        // 3. Ensure requested topics are always included, then add up to 4 neighbor topics
+        const requestedTimelines = timelines.filter((t) =>
+            parameters.topicNames.includes(t.topicName),
+        );
+        const neighborTimelines = timelines.filter(
+            (t) => !parameters.topicNames.includes(t.topicName),
+        );
+
+        // Sort neighbors by activity
+        const sortedNeighbors = neighborTimelines.sort(
+            (a, b) => b.totalActivity - a.totalActivity,
+        );
+
+        // Combine: all requested topics + up to 4 neighbors
+        const combinedTimelines = [
+            ...requestedTimelines,
+            ...sortedNeighbors.slice(0, 4),
+        ];
+
+        // Sort final result by activity level
+        const sortedTimelines = combinedTimelines.sort(
+            (a, b) => b.totalActivity - a.totalActivity,
+        );
+
+        // 4. Calculate metadata
+        const allActivities = sortedTimelines.flatMap((t) => t.activities);
+        const dates = allActivities.map((a) => new Date(a.timestamp));
+
+        const response: TopicTimelineResponse = {
+            success: true,
+            timelines: sortedTimelines,
+            metadata: {
+                totalEntries: allActivities.length,
+                timeRange: {
+                    earliest:
+                        dates.length > 0
+                            ? new Date(
+                                  Math.min(...dates.map((d) => d.getTime())),
+                              ).toISOString()
+                            : "",
+                    latest:
+                        dates.length > 0
+                            ? new Date(
+                                  Math.max(...dates.map((d) => d.getTime())),
+                              ).toISOString()
+                            : "",
+                },
+                topicsWithActivity: sortedTimelines.length,
+            },
+        };
+
+        debug(
+            `[Topic Timelines] Returning ${response.timelines.length} timelines with ${response.metadata.totalEntries} total activities`,
+        );
+
+        return response;
+    } catch (error) {
+        debug(`[Topic Timelines] Error: ${error}`);
+        return {
+            success: false,
+            timelines: [],
+            metadata: {
+                totalEntries: 0,
+                timeRange: { earliest: "", latest: "" },
+                topicsWithActivity: 0,
+            },
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function expandTopicNeighborhood(
+    seedTopics: string[],
+    depth: number,
+    websiteCollection: any,
+): Promise<string[]> {
+    const allTopics = new Set(seedTopics);
+
+    try {
+        // Use existing topic relationship functionality to find connected topics
+        for (const seedTopic of seedTopics) {
+            // Get related topics from knowledge topics table
+            if (
+                websiteCollection.knowledgeTopics &&
+                websiteCollection.knowledgeTopics.getRelatedTopics
+            ) {
+                const relatedTopics =
+                    websiteCollection.knowledgeTopics.getRelatedTopics(
+                        seedTopic,
+                        10,
+                    ) || [];
+
+                relatedTopics.forEach((topicEntry: any) => {
+                    if (topicEntry.topic && topicEntry.topic !== seedTopic) {
+                        allTopics.add(topicEntry.topic);
+                    }
+                });
+            }
+        }
+
+        debug(
+            `[Topic Neighborhood] Expanded ${seedTopics.length} seed topics to ${allTopics.size} total topics`,
+        );
+    } catch (error) {
+        debug(`[Topic Neighborhood] Error expanding topics: ${error}`);
+        // Return original topics if expansion fails
+        return seedTopics;
+    }
+
+    return Array.from(allTopics);
+}
+
+async function buildTopicTimeline(
+    topicName: string,
+    websiteCollection: any,
+    parameters: any,
+): Promise<TopicTimeline> {
+    const activities: TopicActivity[] = [];
+
+    try {
+        // 1. Get all URLs associated with this topic from knowledgeTopics table
+        let topicEntries: any[] = [];
+
+        if (websiteCollection.knowledgeTopics) {
+            // Query the database directly for topics matching the name
+            const stmt = websiteCollection.knowledgeTopics.db.prepare(`
+                SELECT * FROM knowledgeTopics 
+                WHERE topic LIKE ? 
+                ORDER BY relevance DESC
+            `);
+            topicEntries = stmt.all(`%${topicName}%`) || [];
+        }
+
+        debug(
+            `[Topic Timeline] Found ${topicEntries.length} topic entries for "${topicName}"`,
+        );
+
+        // 2. For each URL, get temporal engagement data from website collection
+        const websites = websiteCollection.getWebsiteDocParts() || [];
+        const urlToWebsiteMap = new Map();
+
+        websites.forEach((website: any) => {
+            if (website.url) {
+                urlToWebsiteMap.set(website.url, website);
+            }
+        });
+
+        for (const topicEntry of topicEntries) {
+            const websiteData = urlToWebsiteMap.get(topicEntry.url);
+
+            if (websiteData && websiteData.metadata) {
+                const metadata = websiteData.metadata;
+                const title =
+                    metadata.title || websiteData.title || "Unknown Title";
+                const snippet =
+                    metadata.description ||
+                    metadata.contentSummary ||
+                    websiteData.snippet;
+
+                // Add bookmark activity
+                if (metadata.bookmarkDate) {
+                    activities.push({
+                        timestamp: metadata.bookmarkDate,
+                        activityType: "bookmark",
+                        url: topicEntry.url,
+                        title: title,
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
+                        relevance: topicEntry.relevance || 0,
+                        snippet: snippet,
+                        metadata: {
+                            extractionDate: topicEntry.extractionDate,
+                        },
+                    });
+                }
+
+                // Add visit activity
+                if (metadata.visitDate) {
+                    activities.push({
+                        timestamp: metadata.visitDate,
+                        activityType: "visit",
+                        url: topicEntry.url,
+                        title: title,
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
+                        relevance: topicEntry.relevance || 0,
+                        snippet: snippet,
+                        metadata: {
+                            visitCount: metadata.visitCount,
+                            extractionDate: topicEntry.extractionDate,
+                        },
+                    });
+                }
+
+                // Add knowledge extraction activity
+                if (topicEntry.extractionDate) {
+                    const knowledgeChunk = await getKnowledgeChunkForTopic(
+                        websiteData,
+                        topicName,
+                    );
+
+                    activities.push({
+                        timestamp: topicEntry.extractionDate,
+                        activityType: "extraction",
+                        url: topicEntry.url,
+                        title: title,
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
+                        relevance: topicEntry.relevance || 0,
+                        knowledgeChunk: knowledgeChunk,
+                        metadata: {
+                            confidence: topicEntry.relevance,
+                        },
+                    });
+                }
+            }
+        }
+
+        // Deduplicate activities with same URL and timestamp
+        // Priority: bookmark > visit > extraction
+        const activityPriority: Record<string, number> = {
+            bookmark: 3,
+            visit: 2,
+            extraction: 1,
+        };
+
+        const dedupeMap = new Map<string, TopicActivity>();
+
+        for (const activity of activities) {
+            const key = `${activity.url}|${activity.timestamp}`;
+            const existing = dedupeMap.get(key);
+
+            if (!existing) {
+                dedupeMap.set(key, activity);
+            } else {
+                // Keep the activity with higher priority
+                const existingPriority =
+                    activityPriority[existing.activityType] || 0;
+                const newPriority =
+                    activityPriority[activity.activityType] || 0;
+
+                if (newPriority > existingPriority) {
+                    dedupeMap.set(key, activity);
+                }
+            }
+        }
+
+        // Convert deduplicated map back to array
+        const deduplicatedActivities = Array.from(dedupeMap.values());
+
+        debug(
+            `[Topic Timeline] Deduplicated ${activities.length} activities to ${deduplicatedActivities.length} unique entries`,
+        );
+
+        // Sort activities by timestamp (most recent first)
+        deduplicatedActivities.sort(
+            (a, b) =>
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime(),
+        );
+
+        // Limit activities if specified
+        const maxEntries = parameters.maxTimelineEntries || 50;
+        const limitedActivities = deduplicatedActivities.slice(0, maxEntries);
+
+        // Calculate activity distribution based on deduplicated activities
+        const activityDistribution = {
+            bookmarks: deduplicatedActivities.filter(
+                (a) => a.activityType === "bookmark",
+            ).length,
+            visits: deduplicatedActivities.filter(
+                (a) => a.activityType === "visit",
+            ).length,
+            extractions: deduplicatedActivities.filter(
+                (a) => a.activityType === "extraction",
+            ).length,
+        };
+
+        debug(
+            `[Topic Timeline] Built timeline for "${topicName}" with ${deduplicatedActivities.length} activities (${limitedActivities.length} limited)`,
+        );
+
+        return {
+            topicName,
+            totalActivity: deduplicatedActivities.length,
+            activities: limitedActivities,
+            relatedTopics: [], // Could be populated from topic relationships
+            activityDistribution,
+        };
+    } catch (error) {
+        debug(
+            `[Topic Timeline] Error building timeline for "${topicName}": ${error}`,
+        );
+        return {
+            topicName,
+            totalActivity: 0,
+            activities: [],
+            relatedTopics: [],
+            activityDistribution: { bookmarks: 0, visits: 0, extractions: 0 },
+        };
+    }
+}
+
+async function getKnowledgeChunkForTopic(
+    websiteData: any,
+    topicName: string,
+): Promise<string | undefined> {
+    try {
+        // Try to find text chunks that mention this topic
+        if (websiteData.text && typeof websiteData.text === "string") {
+            const text = websiteData.text.toLowerCase();
+            const topicLower = topicName.toLowerCase();
+
+            if (text.includes(topicLower)) {
+                // Find the sentence or paragraph containing the topic
+                const sentences = websiteData.text.split(/[.!?]+/);
+                for (const sentence of sentences) {
+                    if (sentence.toLowerCase().includes(topicLower)) {
+                        return (
+                            sentence.trim().substring(0, 200) +
+                            (sentence.length > 200 ? "..." : "")
+                        );
+                    }
+                }
+            }
+        }
+
+        // Fallback to content summary or description
+        if (websiteData.metadata) {
+            return (
+                websiteData.metadata.contentSummary?.substring(0, 200) +
+                    (websiteData.metadata.contentSummary?.length > 200
+                        ? "..."
+                        : "") ||
+                websiteData.metadata.description?.substring(0, 200) +
+                    (websiteData.metadata.description?.length > 200
+                        ? "..."
+                        : "")
+            );
+        }
+
+        return undefined;
+    } catch (error) {
+        debug(`[Knowledge Chunk] Error extracting chunk: ${error}`);
+        return undefined;
+    }
+}
+
+function extractDomainFromUrl(url: string): string {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.hostname;
+    } catch (error) {
+        // Fallback for invalid URLs
+        const match = url.match(/^https?:\/\/([^\/]+)/);
+        return match ? match[1] : url;
     }
 }

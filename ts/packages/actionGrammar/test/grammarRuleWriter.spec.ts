@@ -1,18 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseGrammar, expressionsSpecialChar } from "../src/grammarParser.js";
-import { writeGrammar } from "../src/grammarWriter.js";
+import {
+    parseGrammarRules,
+    expressionsSpecialChar,
+} from "../src/grammarRuleParser.js";
+import { writeGrammarRules } from "../src/grammarRuleWriter.js";
 import { escapedSpaces, spaces } from "./testUtils.js";
 
 function validateRoundTrip(grammar: string) {
-    const rules = parseGrammar("orig", grammar);
-    const str = writeGrammar(rules);
-    const parsed = parseGrammar("test", str);
+    const rules = parseGrammarRules("orig", grammar);
+    const str = writeGrammarRules(rules);
+    const parsed = parseGrammarRules("test", str);
     expect(parsed).toStrictEqual(rules);
 }
 
-describe("Grammar Writer", () => {
+describe("Grammar Rule Writer", () => {
     it("simple", () => {
         validateRoundTrip(`@<test> = hello world`);
     });
@@ -68,12 +71,12 @@ describe("Grammar Writer", () => {
         validateRoundTrip(
             `@<test> = hello -> { b: true, n: 12, s: "string", a: [1, 2, { o: "z" }], o: { x: [] } }`,
         );
-    }),
-        it("with variable", () => {
-            validateRoundTrip(
-                `@<test> = hello $(x) world -> { "type": "test", "var": $(x) }`,
-            );
-        });
+    });
+    it("with variable", () => {
+        validateRoundTrip(
+            `@<test> = hello $(x) world -> { "type": "test", "var": $(x) }`,
+        );
+    });
     it("with number variable", () => {
         validateRoundTrip(
             `@<test> = hello $(x: number) world -> { "type": "test", "var": $(x) }`,
@@ -82,5 +85,10 @@ describe("Grammar Writer", () => {
     it("with rules reference variable", () => {
         validateRoundTrip(`@<test> = hello $(x:<other>) world -> { "type": "test", "var": $(x) }
             @<other> = one -> 1 | two ->2 | three -> 3`);
+    });
+    it("with optional variable", () => {
+        validateRoundTrip(
+            `@<test> = hello $(x: number)? world -> { "type": "test", "var": $(x) }`,
+        );
     });
 });

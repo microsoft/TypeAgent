@@ -11,6 +11,7 @@ public class KnowProException : TypeAgentException<KnowProException.ErrorCode>
         DeserializeIsNull,
         InvalidKnowledgeType,
         KnowledgeTypeMismatch,
+        StorageProviderDataNotFound
     }
 
     public KnowProException(ErrorCode errorCode)

@@ -371,7 +371,7 @@ export async function handleMessage(
                         targetTab,
                         CompressionMode.KnowledgeExtraction,
                         false,
-                        true,
+                        false,
                         false, // useTimestampIds
                         true, // filterToReadingView - use reading view for knowledge extraction
                         true, // keepMetaTags - preserve metadata for context
@@ -444,7 +444,7 @@ export async function handleMessage(
         case "queryKnowledge": {
             try {
                 return await sendActionToAgent({
-                    actionName: "queryWebKnowledge",
+                    actionName: "searchWebMemories",
                     parameters: {
                         query: message.parameters.query,
                         url: message.parameters.url,
@@ -455,6 +455,37 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error querying knowledge:", error);
                 return { error: "Failed to query knowledge" };
+            }
+        }
+
+        case "generatePageQuestions": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "generatePageQuestions",
+                    parameters: {
+                        url: message.url,
+                        pageKnowledge: message.pageKnowledge,
+                    },
+                });
+            } catch (error) {
+                console.error("Error generating page questions:", error);
+                return { error: "Failed to generate page questions" };
+            }
+        }
+
+        case "generateGraphQuestions": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "generateGraphQuestions",
+                    parameters: {
+                        url: message.url,
+                        relatedEntities: message.relatedEntities,
+                        relatedTopics: message.relatedTopics,
+                    },
+                });
+            } catch (error) {
+                console.error("Error generating graph questions:", error);
+                return { error: "Failed to generate graph questions" };
             }
         }
 
@@ -531,6 +562,39 @@ export async function handleMessage(
 
         case "getTopicMetrics": {
             return await handleGetTopicMetrics(message);
+        }
+
+        case "getTopicTimelines": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getTopicTimelines",
+                    parameters: {
+                        topicNames: message.parameters.topicNames,
+                        maxTimelineEntries:
+                            message.parameters.maxTimelineEntries,
+                        timeRange: message.parameters.timeRange,
+                        includeRelatedTopics:
+                            message.parameters.includeRelatedTopics,
+                        neighborhoodDepth: message.parameters.neighborhoodDepth,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting topic timelines:", error);
+                return {
+                    success: false,
+                    timelines: [],
+                    metadata: {
+                        totalEntries: 0,
+                        timeRange: { earliest: "", latest: "" },
+                        topicsWithActivity: 0,
+                    },
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
         }
 
         case "hybridSearch": {

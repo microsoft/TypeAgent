@@ -57,6 +57,7 @@ internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
     protected async ValueTask<MessageAccumulator> AccumulateMessagesAsync(QueryEvalContext context, SemanticRefAccumulator semanticRefMatches)
     {
         var messageMatches = new MessageAccumulator();
+        // TODO: This can be done by directly retrieving text ranges from the semantic ref collection
         IList<SemanticRef> semanticRefs = await context.SemanticRefs.GetAsync(
             semanticRefMatches.ToOrdinals()
         ).ConfigureAwait(false);

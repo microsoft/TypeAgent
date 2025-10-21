@@ -11,15 +11,19 @@ public interface ISearchTerm
 public class SearchTerm : ISearchTerm
 {
     public SearchTerm(string term)
-        : this(new Term(term))
+        : this(new Term(term), false)
     {
     }
 
-    public SearchTerm(Term term)
+    public SearchTerm(Term term, bool exactMatch)
     {
         ArgumentVerify.ThrowIfNull(term, nameof(term));
         Term = term;
         RelatedTermsRequired = false;
+        if (exactMatch)
+        {
+            RelatedTerms = Array.Empty<Term>();
+        }
     }
 
     /// <summary>
@@ -31,6 +35,8 @@ public class SearchTerm : ISearchTerm
     ///  Additional terms related to term.
     /// </summary>
     public IList<Term>? RelatedTerms { get; set; }
+
+    public bool IsExactMatch => RelatedTerms is not null && RelatedTerms.Count == 0;
 
     public override string ToString()
     {

@@ -111,6 +111,10 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import {
+    generatePageQuestions,
+    generateGraphQuestions,
+} from "./knowledge/actions/pageQnAActions.mjs";
+import {
     BrowserControl,
     defaultSearchProviders,
 } from "../common/browserControl.mjs";
@@ -645,7 +649,9 @@ async function processBrowserAgentMessage(
         case "getTopicImportanceLayer":
         case "getTopicViewportNeighborhood":
         case "getTopicMetrics":
-        case "getViewportBasedNeighborhood": {
+        case "getTopicTimelines":
+        case "getViewportBasedNeighborhood":
+        case "getUrlContentBreakdown": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,
                 data.params,
@@ -663,6 +669,34 @@ async function processBrowserAgentMessage(
 
         case "handlePageNavigation": {
             await handlePageNavigation(context, data.params);
+            break;
+        }
+
+        case "generatePageQuestions": {
+            const pageQuestionsResult = await generatePageQuestions(
+                data.params,
+                context,
+            );
+            client.socket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: pageQuestionsResult,
+                }),
+            );
+            break;
+        }
+
+        case "generateGraphQuestions": {
+            const graphQuestionsResult = await generateGraphQuestions(
+                data.params,
+                context,
+            );
+            client.socket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: graphQuestionsResult,
+                }),
+            );
             break;
         }
 
@@ -1583,6 +1617,7 @@ async function executeBrowserAction(
                         },
                     });
                 }
+
                 default:
                     // Should never happen.
                     throw new Error(

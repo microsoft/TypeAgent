@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>annotations</Nullable>
+    <AssemblyName>Microsoft.TypeChat.Schema</AssemblyName>
+    <RootNamespace>Microsoft.TypeChat.Schema</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\typechat\ArgumentVerify.cs" Link="ArgumentVerify.cs" />
+    <Compile Include="..\typechat\StringEx.cs" Link="StringEx.cs" />
+    <Compile Include="..\typechat\ListEx.cs" Link="ListEx.cs" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0-2.final" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+    <PackageReference Include="System.Text.Json" Version="10.0.0-rc.2.25502.107" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <Description>TypeChat.Schema generates TypeScript-style schema definitions of simple and complex types.</Description>
+  </PropertyGroup>
+
+</Project>
