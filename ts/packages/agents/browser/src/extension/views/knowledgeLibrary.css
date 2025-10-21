@@ -1401,12 +1401,9 @@ body {
 }
 
 /* Bootstrap Modal Compatibility */
+/* Hide Bootstrap's modal-backdrop since we have our own background layer */
 .modal-backdrop {
-  transition: opacity 0.15s linear;
-}
-
-.modal-backdrop.show {
-  opacity: 0.5;
+  display: none !important;
 }
 /* Enhanced View Mode Switching and Animations */
 .view-modes {

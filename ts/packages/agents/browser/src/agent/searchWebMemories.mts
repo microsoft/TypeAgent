@@ -21,6 +21,7 @@ export interface SearchWebMemoriesRequest {
     originalUserRequest?: string | undefined;
     query: string;
     searchScope?: "current_page" | "all_indexed" | undefined;
+    url?: string | undefined; // Current page URL for scope filtering
 
     // Temporal filters
     dateFrom?: string | undefined;
@@ -44,7 +45,6 @@ export interface SearchWebMemoriesRequest {
     choices?: string | undefined; // Multiple choice (semicolon separated)
     maxCharsInBudget?: number | undefined; // Character budget for context windows
     debug?: boolean | undefined;
-
     // Internal metadata for query enhancement
     metadata?: any;
 }
@@ -165,6 +165,8 @@ function convertSearchResultsToWebsites(
     for (const result of results) {
         for (const msgMatch of result.messageMatches) {
             const msg = websiteCollection.messages.get(msgMatch.messageOrdinal);
+            console.log("Message from search: ", JSON.stringify(msg));
+
             if (msg && msg.metadata) {
                 const url = (msg.metadata as any).url;
                 if (url && !seenUrls.has(url)) {
@@ -176,6 +178,42 @@ function convertSearchResultsToWebsites(
     }
 
     return websites;
+}
+
+function detectSearchScope(query: string): "current_page" | "all_indexed" {
+    const pageKeywords = [
+        "this page",
+        "here",
+        "this article",
+        "this content",
+        "above",
+        "mentioned",
+        "this document",
+        "on this page",
+    ];
+    const globalKeywords = [
+        "compare",
+        "other",
+        "similar",
+        "elsewhere",
+        "generally",
+        "across",
+        "all pages",
+        "everything",
+    ];
+
+    const queryLower = query.toLowerCase();
+
+    if (pageKeywords.some((keyword) => queryLower.includes(keyword))) {
+        return "current_page";
+    }
+
+    if (globalKeywords.some((keyword) => queryLower.includes(keyword))) {
+        return "all_indexed";
+    }
+
+    // Default to current_page for ambiguous queries
+    return "current_page";
 }
 
 /**
@@ -218,6 +256,28 @@ export async function searchWebMemories(
         }
 
         debug(`Starting unified search for query: "${request.query}"`);
+
+        // Diagnostic logging for search scope
+        console.log(`🔍 searchWebMemories - Query: "${request.query}"`);
+        console.log(
+            `📋 Search scope passed in: ${request.searchScope || "undefined (will auto-detect)"}`,
+        );
+        console.log(
+            `📊 Total indexed pages: ${websiteCollection.messages.length}`,
+        );
+
+        // Check if request URL is in the index
+        if (request.metadata?.url) {
+            const currentPageUrl = request.metadata.url;
+            const allWebsites = websiteCollection.messages.getAll();
+            const currentPageInIndex = allWebsites.some(
+                (site: any) => site.metadata?.url === currentPageUrl,
+            );
+            console.log(`🌐 Current page URL from request: ${currentPageUrl}`);
+            console.log(
+                `${currentPageInIndex ? "✅" : "❌"} Current page in index: ${currentPageInIndex}`,
+            );
+        }
 
         // Parse property filters from query (website-specific)
         const { searchText, propertyFilters } = parsePropertySearch(
@@ -299,6 +359,34 @@ export async function searchWebMemories(
             websiteCollection,
         );
 
+        // Apply search scope filtering
+        const effectiveScope =
+            request.searchScope || detectSearchScope(searchText);
+        console.log(`🎯 Effective search scope: ${effectiveScope}`);
+        console.log(`📍 Current page URL from request: ${request.url}`);
+
+        if (effectiveScope === "current_page" && request.url) {
+            const currentPageUrl = request.url;
+            const beforeScopeFilter = websites.length;
+            websites = websites.filter(
+                (website) => website.metadata.url === currentPageUrl,
+            );
+            console.log(
+                `🔍 Scope filter applied: ${beforeScopeFilter} results → ${websites.length} results (filtered to current page: ${currentPageUrl})`,
+            );
+            debug(
+                `Search scope filter: ${beforeScopeFilter} results filtered to ${websites.length} for current page`,
+            );
+        } else {
+            const reason =
+                effectiveScope !== "current_page"
+                    ? `scope is "${effectiveScope}" (not "current_page")`
+                    : "no URL in request";
+            console.log(
+                `🌐 No scope filter applied - searching all ${websites.length} indexed pages (${reason})`,
+            );
+        }
+
         // Apply property filters (website-specific post-processing)
         if (Object.keys(propertyFilters).length > 0) {
             debug(`Applying property filters:`, propertyFilters);
@@ -328,6 +416,81 @@ export async function searchWebMemories(
 
         // Apply limit
         const limitedWebsites = websites.slice(0, request.limit || 20);
+        console.log(
+            `\n📊 SEARCH RESULTS - Found ${limitedWebsites.length} websites after all filtering`,
+        );
+        if (limitedWebsites.length > 0) {
+            console.log(`\n🔍 Detailed Search Results:`);
+            limitedWebsites.forEach((site, idx) => {
+                const knowledge = site.getKnowledge();
+                console.log(`\n   Result ${idx + 1}:`);
+                console.log(
+                    `   ├─ Title: ${site.metadata.title || "Untitled"}`,
+                );
+                console.log(`   ├─ URL: ${site.metadata.url}`);
+                console.log(
+                    `   ├─ Source: ${site.metadata.websiteSource || "unknown"}`,
+                );
+                console.log(
+                    `   ├─ Last visited: ${site.metadata.visitDate || site.metadata.lastVisitTime || "unknown"}`,
+                );
+
+                if (knowledge) {
+                    console.log(`   ├─ Knowledge extracted:`);
+                    console.log(
+                        `   │  ├─ Entities (${knowledge.entities?.length || 0}):`,
+                    );
+                    if (knowledge.entities && knowledge.entities.length > 0) {
+                        knowledge.entities
+                            .slice(0, 5)
+                            .forEach((entity: any) => {
+                                console.log(
+                                    `   │  │  • ${entity.name} (${Array.isArray(entity.type) ? entity.type.join(", ") : entity.type})`,
+                                );
+                            });
+                        if (knowledge.entities.length > 5) {
+                            console.log(
+                                `   │  │  ... and ${knowledge.entities.length - 5} more`,
+                            );
+                        }
+                    }
+
+                    console.log(
+                        `   │  ├─ Topics (${knowledge.topics?.length || 0}):`,
+                    );
+                    if (knowledge.topics && knowledge.topics.length > 0) {
+                        const topicsList = knowledge.topics
+                            .slice(0, 5)
+                            .join(", ");
+                        console.log(`   │  │  ${topicsList}`);
+                        if (knowledge.topics.length > 5) {
+                            console.log(
+                                `   │  │  ... and ${knowledge.topics.length - 5} more`,
+                            );
+                        }
+                    }
+
+                    console.log(
+                        `   │  └─ Actions/Relationships: ${knowledge.actions?.length || 0}`,
+                    );
+                }
+
+                console.log(`   └─ Content:`);
+                const totalChars = site.textChunks?.join("").length || 0;
+                console.log(
+                    `      ├─ Text chunks: ${site.textChunks?.length || 0}`,
+                );
+                console.log(`      ├─ Total characters: ${totalChars}`);
+                if (site.textChunks && site.textChunks.length > 0) {
+                    const preview = site.textChunks[0]
+                        .substring(0, 150)
+                        .replace(/\n/g, " ");
+                    console.log(`      └─ Preview: "${preview}..."`);
+                }
+            });
+        } else {
+            console.log(`   ⚠️ No results found after filtering`);
+        }
 
         // Convert to website results format
         let websiteResults = convertToWebsiteResults(limitedWebsites);
@@ -344,6 +507,33 @@ export async function searchWebMemories(
                 await extractKnowledgeFromResults(limitedWebsites);
             relatedEntities = knowledgeResult.entities;
             topTopics = knowledgeResult.topics;
+
+            console.log(`\n🧠 Knowledge extracted from results:`);
+            console.log(
+                `   ├─ Related entities extracted: ${relatedEntities?.length || 0}`,
+            );
+            if (relatedEntities && relatedEntities.length > 0) {
+                console.log(`   │  Top entities:`);
+                relatedEntities.slice(0, 5).forEach((entity, idx) => {
+                    console.log(
+                        `   │  ${idx + 1}. ${entity.name} (${entity.type})`,
+                    );
+                });
+                if (relatedEntities.length > 5) {
+                    console.log(
+                        `   │  ... and ${relatedEntities.length - 5} more`,
+                    );
+                }
+            }
+            console.log(
+                `   └─ Top topics extracted: ${topTopics?.length || 0}`,
+            );
+            if (topTopics && topTopics.length > 0) {
+                const topicsPreview = topTopics.slice(0, 5).join(", ");
+                console.log(
+                    `      ${topicsPreview}${topTopics.length > 5 ? ` ... and ${topTopics.length - 5} more` : ""}`,
+                );
+            }
 
             // Associate insights with individual results
             websiteResults = associateInsightsWithResults(
@@ -364,6 +554,63 @@ export async function searchWebMemories(
             const answerStart = Date.now();
             debug(`Generating answer for query: "${searchText}"`);
 
+            // Log answer context being passed to the model
+            console.log(`\n📝 ANSWER GENERATION - Preparing context for model`);
+            console.log(`   Query: "${searchText}"`);
+            console.log(
+                `   ConversationSearchResult items: ${langResult.data.length}`,
+            );
+            console.log(
+                `   Website results to process: ${limitedWebsites.length}`,
+            );
+
+            // Log the conversation search results structure
+            console.log(
+                `\n🔍 Conversation Search Results being passed to answer generator:`,
+            );
+            langResult.data.forEach((searchResult, idx) => {
+                console.log(`\n   Search Result ${idx + 1}:`);
+
+                // knowledgeMatches is a Map, not an array
+                const knowledgeMatchCount = searchResult.knowledgeMatches
+                    ? searchResult.knowledgeMatches.size
+                    : 0;
+                console.log(`   ├─ Knowledge matches: ${knowledgeMatchCount}`);
+                if (
+                    searchResult.knowledgeMatches &&
+                    searchResult.knowledgeMatches.size > 0
+                ) {
+                    console.log(`   │  Knowledge match types:`);
+                    let kmIdx = 0;
+                    for (const [
+                        knowledgeType,
+                    ] of searchResult.knowledgeMatches.entries()) {
+                        if (kmIdx >= 3) break;
+                        console.log(`   │  ${kmIdx + 1}. ${knowledgeType}`);
+                        kmIdx++;
+                    }
+                }
+
+                console.log(
+                    `   └─ Message matches: ${searchResult.messageMatches?.length || 0}`,
+                );
+                if (
+                    searchResult.messageMatches &&
+                    searchResult.messageMatches.length > 0
+                ) {
+                    searchResult.messageMatches.forEach((mm, mmIdx) => {
+                        const msg = websiteCollection.messages.get(
+                            mm.messageOrdinal,
+                        );
+                        if (msg && msg.metadata) {
+                            console.log(
+                                `      ${mmIdx + 1}. Message #${mm.messageOrdinal}: ${(msg.metadata as any).title || "Untitled"}`,
+                            );
+                        }
+                    });
+                }
+            });
+
             try {
                 const answerGenerator = new kp.AnswerGenerator(
                     kp.createAnswerGeneratorSettings(),
@@ -376,14 +623,535 @@ export async function searchWebMemories(
                     chunking: request.chunking ?? true,
                 };
 
-                const answerResult = await kp.generateAnswer(
-                    websiteCollection,
-                    answerGenerator,
-                    searchText,
-                    langResult.data,
-                    undefined,
-                    contextOptions,
+                console.log(`\n⚙️ Answer Context Options:`);
+                console.log(
+                    `   ├─ Top entities to include: ${contextOptions.entitiesTopK}`,
                 );
+                console.log(
+                    `   ├─ Top topics to include: ${contextOptions.topicsTopK}`,
+                );
+                console.log(
+                    `   ├─ Top messages to include: ${contextOptions.messagesTopK}`,
+                );
+                console.log(
+                    `   └─ Chunking enabled: ${contextOptions.chunking}`,
+                );
+
+                // Log the actual LLM prompt and context
+                console.log(`\n📋 LLM PROMPT DETAILS:`);
+                console.log(`\n==== QUESTION ====`);
+                console.log(searchText);
+
+                console.log(`\n==== ANSWER PROMPT (sent to LLM) ====`);
+                const promptText =
+                    `The following is a user question about a conversation:\n${searchText}\n\n` +
+                    `The included CONVERSATION HISTORY contains information that MAY be relevant to answering the question.\n` +
+                    `Answer the question using only relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n` +
+                    `Use the name and type of the provided entities to select those highly relevant to answering the question.\n` +
+                    `Entities and topics are case-insensitive.\n` +
+                    `List ALL entities if query intent implies that.\n` +
+                    `Your answer is readable and complete, with suitable formatting (line breaks, bullet points etc).`;
+                console.log(promptText);
+
+                console.log(
+                    `\n==== CONVERSATION HISTORY (ANSWER CONTEXT sent to LLM) ====`,
+                );
+
+                // Build the actual context that will be sent to the LLM
+                const actualContext: any = {
+                    entities: {
+                        timeRanges: [],
+                        values: [],
+                    },
+                    topics: {
+                        timeRanges: [],
+                        values: [],
+                    },
+                    actions: {
+                        timeRanges: [],
+                        values: [],
+                    },
+                    messages: [],
+                };
+
+                // Populate entities and topics from semantic references in search results
+                // Collect all semanticRefMatches from search results, grouped by knowledge type
+                const combinedSemanticRefMatches = new Map<
+                    kp.KnowledgeType,
+                    Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>
+                >();
+
+                console.log(
+                    `\n🔍 Collecting semantic references from ${langResult.data.length} search results:`,
+                );
+
+                langResult.data.forEach((searchResult, idx) => {
+                    if (
+                        searchResult.knowledgeMatches &&
+                        searchResult.knowledgeMatches.size > 0
+                    ) {
+                        console.log(
+                            `   Search Result ${idx + 1}: ${searchResult.knowledgeMatches.size} knowledge types`,
+                        );
+
+                        for (const [
+                            knowledgeType,
+                            semanticRefSearchResult,
+                        ] of searchResult.knowledgeMatches.entries()) {
+                            console.log(
+                                `      ${knowledgeType}: ${semanticRefSearchResult.semanticRefMatches.length} semantic refs`,
+                            );
+
+                            if (
+                                !combinedSemanticRefMatches.has(knowledgeType)
+                            ) {
+                                combinedSemanticRefMatches.set(
+                                    knowledgeType,
+                                    new Map(),
+                                );
+                            }
+
+                            const dedupeMap =
+                                combinedSemanticRefMatches.get(knowledgeType)!;
+
+                            semanticRefSearchResult.semanticRefMatches.forEach(
+                                (scoredRef) => {
+                                    if (
+                                        !dedupeMap.has(
+                                            scoredRef.semanticRefOrdinal,
+                                        ) ||
+                                        scoredRef.score >
+                                            dedupeMap.get(
+                                                scoredRef.semanticRefOrdinal,
+                                            )!.score
+                                    ) {
+                                        dedupeMap.set(
+                                            scoredRef.semanticRefOrdinal,
+                                            scoredRef,
+                                        );
+                                    }
+                                },
+                            );
+                        }
+                    }
+                });
+
+                console.log(
+                    `\n📊 De-duplicated semantic references by knowledge type:`,
+                );
+                combinedSemanticRefMatches.forEach((dedupeMap, knowledgeType) => {
+                    console.log(`   ${knowledgeType}: ${dedupeMap.size} unique refs`);
+                });
+
+                // Use KnowPro helper functions to extract entities and topics from semantic refs
+                if (combinedSemanticRefMatches.has("entity")) {
+                    const entitySemanticRefs =
+                        combinedSemanticRefMatches.get("entity")!;
+                    const entitySearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            entitySemanticRefs.values(),
+                        ),
+                    };
+
+                    console.log(
+                        `\n🏷️ Extracting entities from ${entitySearchResult.semanticRefMatches.length} semantic refs`,
+                    );
+
+                    const relevantEntities = kp.getRelevantEntitiesForAnswer(
+                        websiteCollection as any,
+                        entitySearchResult,
+                        contextOptions.entitiesTopK,
+                    );
+
+                    actualContext.entities.values = relevantEntities.map(
+                        (re) => re.knowledge,
+                    );
+                    if (relevantEntities.length > 0 && relevantEntities[0].timeRange) {
+                        actualContext.entities.timeRanges = [relevantEntities[0].timeRange];
+                    }
+
+                    console.log(
+                        `   Extracted ${actualContext.entities.values.length} entities`,
+                    );
+                }
+
+                if (combinedSemanticRefMatches.has("topic")) {
+                    const topicSemanticRefs =
+                        combinedSemanticRefMatches.get("topic")!;
+                    const topicSearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            topicSemanticRefs.values(),
+                        ),
+                    };
+
+                    console.log(
+                        `\n📚 Extracting topics from ${topicSearchResult.semanticRefMatches.length} semantic refs`,
+                    );
+
+                    const relevantTopics = kp.getRelevantTopicsForAnswer(
+                        websiteCollection as any,
+                        topicSearchResult,
+                        contextOptions.topicsTopK,
+                    );
+
+                    actualContext.topics.values = relevantTopics.map(
+                        (rt) => rt.knowledge,
+                    );
+                    if (relevantTopics.length > 0 && relevantTopics[0].timeRange) {
+                        actualContext.topics.timeRanges = [relevantTopics[0].timeRange];
+                    }
+
+                    console.log(
+                        `   Extracted ${actualContext.topics.values.length} topics`,
+                    );
+                }
+
+                // Extract text blocks from semantic reference ranges
+                const textBlocksFromSemanticRefs: Array<{
+                    text: string;
+                    messageOrdinal: kp.MessageOrdinal;
+                    knowledgeType: kp.KnowledgeType;
+                    score: number;
+                }> = [];
+
+                combinedSemanticRefMatches.forEach((dedupeMap, knowledgeType) => {
+                    dedupeMap.forEach((scoredRef) => {
+                        if (websiteCollection.semanticRefs) {
+                            const semanticRef = websiteCollection.semanticRefs.get(
+                                scoredRef.semanticRefOrdinal,
+                            );
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
+                            const msg =
+                                websiteCollection.messages.get(messageOrdinal);
+
+                            if (msg && msg.textChunks.length > 0) {
+                                const startChunk =
+                                    semanticRef.range.start.chunkOrdinal || 0;
+                                const endChunk =
+                                    semanticRef.range.end?.chunkOrdinal ||
+                                    msg.textChunks.length - 1;
+
+                                const textChunks = msg.textChunks.slice(
+                                    startChunk,
+                                    endChunk + 1,
+                                );
+                                const text = textChunks.join(" ");
+
+                                textBlocksFromSemanticRefs.push({
+                                    text,
+                                    messageOrdinal,
+                                    knowledgeType,
+                                    score: scoredRef.score,
+                                });
+                            }
+                        }
+                    });
+                });
+
+                console.log(
+                    `\n📝 Extracted ${textBlocksFromSemanticRefs.length} text blocks from semantic references`,
+                );
+
+                // Populate messages - use ONLY matched chunks, not all page content
+                // Build filtered message context from messageMatches
+                const matchedMessages: Array<{
+                    timestamp: string;
+                    value: string;
+                    score: number;
+                    title?: string;
+                    url?: string;
+                }> = [];
+
+                const scoreThreshold = request.minScore || 0.7;
+
+                langResult.data.forEach((searchResult, resultIdx) => {
+                    if (
+                        searchResult.messageMatches &&
+                        searchResult.messageMatches.length > 0
+                    ) {
+                        searchResult.messageMatches.forEach((match) => {
+                            const msg = websiteCollection.messages.get(
+                                match.messageOrdinal,
+                            );
+                            if (
+                                msg &&
+                                match.score &&
+                                match.score >= scoreThreshold
+                            ) {
+                                const metadata = msg.metadata as any;
+                                // Get text content from the matched message
+                                const textContent = msg.textChunks.join("\n");
+                                const currMessage = {
+                                    timestamp:
+                                        metadata.lastVisitTime ||
+                                        metadata.visitDate ||
+                                        metadata.bookmarkDate ||
+                                        new Date().toISOString(),
+                                    value: textContent,
+                                    score: match.score,
+                                    title: metadata.title,
+                                    url: metadata.url,
+                                };
+
+                                if (
+                                    effectiveScope === "current_page" &&
+                                    request.url
+                                ) {
+                                    if (metadata.url === request.url) {
+                                        matchedMessages.push(currMessage);
+                                    }
+                                } else {
+                                    matchedMessages.push(currMessage);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // Sort by score (highest first) and take top K
+                matchedMessages.sort((a, b) => b.score - a.score);
+                const topMatchedMessages = matchedMessages.slice(
+                    0,
+                    contextOptions.messagesTopK,
+                );
+
+                console.log(`\n📊 Message Filtering Results:`);
+                console.log(
+                    `   ├─ Total message matches found: ${matchedMessages.length}`,
+                );
+                console.log(`   ├─ Score threshold: ${scoreThreshold}`);
+                console.log(
+                    `   ├─ After filtering by score: ${matchedMessages.length}`,
+                );
+                console.log(
+                    `   └─ Taking top ${contextOptions.messagesTopK}: ${topMatchedMessages.length} messages`,
+                );
+
+                if (topMatchedMessages.length > 0) {
+                    console.log(`\n   Top matched message chunks:`);
+                    topMatchedMessages.slice(0, 5).forEach((msg, idx) => {
+                        const preview = msg.value
+                            .substring(0, 100)
+                            .replace(/\s+/g, " ");
+                        console.log(
+                            `   ${idx + 1}. Score: ${msg.score.toFixed(3)} | ${msg.title || "Untitled"}`,
+                        );
+                        console.log(`      "${preview}..."`);
+                    });
+                }
+
+                // Map to the format expected by AnswerContext
+                actualContext.messages = topMatchedMessages.map((msg) => ({
+                    timestamp: msg.timestamp,
+                    value: msg.value,
+                }));
+
+                // Log the actual JSON that will be sent
+                const contextJson = JSON.stringify(actualContext, null, 2);
+                console.log(`\n🔍 ACTUAL JSON CONTEXT (sent to LLM):`);
+                console.log(contextJson);
+                console.log(
+                    `\n📊 Context size: ${contextJson.length} characters`,
+                );
+
+                console.log(`\nPreview of entities that will be in context:`);
+                const uniqueEntities = actualContext.entities.values;
+                console.log(
+                    `  Total unique entities (limited to top ${contextOptions.entitiesTopK}):`,
+                );
+                uniqueEntities.forEach((entity: any) => {
+                    console.log(
+                        `    - ${entity.name} (type: ${Array.isArray(entity.type) ? entity.type.join(", ") : entity.type})`,
+                    );
+                });
+
+                console.log(`\nPreview of topics that will be in context:`);
+                const uniqueTopics = actualContext.topics.values;
+                console.log(
+                    `  Total unique topics (limited to top ${contextOptions.topicsTopK}):`,
+                );
+                uniqueTopics.forEach((topic: string) => {
+                    console.log(`    - ${topic}`);
+                });
+
+                console.log(`\nPreview of messages that will be in context:`);
+                console.log(
+                    `  Total matched messages: ${topMatchedMessages.length} (filtered from ${matchedMessages.length} total matches)`,
+                );
+                topMatchedMessages
+                    .slice(0, Math.min(5, contextOptions.messagesTopK || 20))
+                    .forEach((msg, idx) => {
+                        console.log(
+                            `  Message ${idx + 1}: ${msg.title || "Untitled"} (score: ${msg.score.toFixed(3)})`,
+                        );
+                        const textPreview = msg.value
+                            .substring(0, 300)
+                            .replace(/\s+/g, " ");
+                        console.log(
+                            `    Content preview (${msg.value.length} chars total): "${textPreview}..."`,
+                        );
+                    });
+
+                if (
+                    uniqueEntities.length === 0 &&
+                    uniqueTopics.length === 0 &&
+                    topMatchedMessages.length === 0
+                ) {
+                    console.log(`\n⚠️ WARNING: ANSWER CONTEXT IS EMPTY!`);
+                    console.log(
+                        `   No entities, topics, or messages will be sent to the LLM.`,
+                    );
+                    console.log(
+                        `   This is why "ANSWER CONTEXT is empty" error occurs.`,
+                    );
+                    console.log(`   Debug info:`);
+                    console.log(
+                        `   - Total search results: ${langResult.data.length}`,
+                    );
+                    console.log(
+                        `   - Messages before filtering: ${matchedMessages.length}`,
+                    );
+                    console.log(`   - Score threshold: ${scoreThreshold}`);
+                }
+
+                console.log(`\n==== END CONVERSATION HISTORY ====\n`);
+
+                // Build filtered AnswerContext from semantic refs
+                const filteredAnswerContext: any = {};
+
+                // Add entities extracted from semantic refs
+                if (
+                    combinedSemanticRefMatches.has("entity") &&
+                    actualContext.entities.values.length > 0
+                ) {
+                    const entitySemanticRefs =
+                        combinedSemanticRefMatches.get("entity")!;
+                    const entitySearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            entitySemanticRefs.values(),
+                        ),
+                    };
+                    filteredAnswerContext.entities =
+                        kp.getRelevantEntitiesForAnswer(
+                            websiteCollection as any,
+                            entitySearchResult,
+                            contextOptions.entitiesTopK,
+                        );
+                }
+
+                // Add topics extracted from semantic refs
+                if (
+                    combinedSemanticRefMatches.has("topic") &&
+                    actualContext.topics.values.length > 0
+                ) {
+                    const topicSemanticRefs =
+                        combinedSemanticRefMatches.get("topic")!;
+                    const topicSearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            topicSemanticRefs.values(),
+                        ),
+                    };
+                    filteredAnswerContext.topics = kp.getRelevantTopicsForAnswer(
+                        websiteCollection as any,
+                        topicSearchResult,
+                        contextOptions.topicsTopK,
+                    );
+                }
+
+                // Build messages from text blocks extracted from semantic refs
+                // Group text blocks by messageOrdinal and combine them
+                const messageTextMap = new Map<
+                    kp.MessageOrdinal,
+                    {
+                        textBlocks: string[];
+                        scores: number[];
+                        metadata: any;
+                    }
+                >();
+
+                textBlocksFromSemanticRefs.forEach((textBlock) => {
+                    if (!messageTextMap.has(textBlock.messageOrdinal)) {
+                        const msg = websiteCollection.messages.get(
+                            textBlock.messageOrdinal,
+                        );
+                        const metadata = msg ? (msg.metadata as any) : {};
+                        messageTextMap.set(textBlock.messageOrdinal, {
+                            textBlocks: [],
+                            scores: [],
+                            metadata,
+                        });
+                    }
+                    const entry = messageTextMap.get(textBlock.messageOrdinal)!;
+                    entry.textBlocks.push(textBlock.text);
+                    entry.scores.push(textBlock.score);
+                });
+
+                // Convert to RelevantMessage format with top K by average score
+                const messageEntries = Array.from(messageTextMap.entries())
+                    .map(([messageOrdinal, data]) => {
+                        const avgScore =
+                            data.scores.reduce((a, b) => a + b, 0) /
+                            data.scores.length;
+                        return {
+                            messageOrdinal,
+                            text: data.textBlocks.join("\n\n"),
+                            metadata: data.metadata,
+                            score: avgScore,
+                        };
+                    })
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, contextOptions.messagesTopK);
+
+                filteredAnswerContext.messages = messageEntries.map((entry) => ({
+                    timestamp:
+                        entry.metadata.lastVisitTime ||
+                        entry.metadata.visitDate ||
+                        entry.metadata.bookmarkDate ||
+                        new Date().toISOString(),
+                    value: entry.text,
+                }));
+
+                console.log(`\n📦 Filtered Answer Context Summary:`);
+                console.log(
+                    `   Entities: ${filteredAnswerContext.entities?.length || 0}`,
+                );
+                console.log(
+                    `   Topics: ${filteredAnswerContext.topics?.length || 0}`,
+                );
+                console.log(
+                    `   Messages (from semantic ref text blocks): ${filteredAnswerContext.messages?.length || 0}`,
+                );
+
+                // Call generator directly with filtered context
+                const answerResult = await answerGenerator.generateAnswer(
+                    searchText,
+                    filteredAnswerContext,
+                );
+
+                console.log(`\n📤 Answer Generation Result:`);
+                console.log(`   Success: ${answerResult.success}`);
+                if (answerResult.success) {
+                    console.log(`   Type: ${answerResult.data.type}`);
+                    if (answerResult.data.type === "Answered") {
+                        console.log(
+                            `   Answer length: ${answerResult.data.answer?.length || 0} chars`,
+                        );
+                        console.log(
+                            `   Answer preview: ${answerResult.data.answer?.substring(0, 100)}...`,
+                        );
+                    } else {
+                        console.log(
+                            `   Why no answer: ${answerResult.data.whyNoAnswer}`,
+                        );
+                    }
+                } else {
+                    console.log(`   Error: ${answerResult.message}`);
+                }
 
                 if (answerResult.success) {
                     const answerResponse = answerResult.data;

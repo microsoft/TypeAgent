@@ -165,12 +165,6 @@ class KnowledgePanel {
                 this.extractKnowledge();
             });
 
-        document
-            .getElementById("saveKnowledge")!
-            .addEventListener("click", () => {
-                this.saveExtractedKnowledge();
-            });
-
         document.getElementById("indexPage")!.addEventListener("click", () => {
             this.indexCurrentPage();
         });
@@ -379,16 +373,12 @@ class KnowledgePanel {
         const button = document.getElementById(
             "extractKnowledge",
         ) as HTMLButtonElement;
-        const saveButton = document.getElementById(
-            "saveKnowledge",
-        ) as HTMLButtonElement;
         const originalContent = button.innerHTML;
 
         // Show extracting state with progress indicator
         button.innerHTML =
             '<i class="bi bi-hourglass-split spinner-grow spinner-grow-sm me-2"></i>Extracting...';
         button.disabled = true;
-        saveButton.disabled = true;
         button.classList.add("btn-warning");
         button.classList.remove("btn-primary");
 
@@ -432,6 +422,9 @@ class KnowledgePanel {
             const extractionId = `extraction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             this.currentExtractionId = extractionId;
 
+            // Auto-save to index for non-basic modes
+            const saveToIndex = this.extractionSettings.mode !== "basic";
+
             const response =
                 await extensionService.extractPageKnowledgeStreaming(
                     this.currentUrl,
@@ -439,6 +432,7 @@ class KnowledgePanel {
                     this.extractionSettings,
                     true,
                     extractionId,
+                    saveToIndex,
                 );
 
             if (!response) {
@@ -1894,10 +1888,7 @@ class KnowledgePanel {
             progressContainer.classList.add("d-none");
         }
 
-        // Enable save button if we have knowledge data
-        if (this.extractedKnowledgeData) {
-            this.enableSaveButton();
-        }
+        // Knowledge is now auto-saved during extraction, no save button needed
     }
 
     private handleExtractionError(errors: any[]): void {

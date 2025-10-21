@@ -286,22 +286,8 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             }
         }
 
-        // Add folder as topic if it's a bookmark
-        if (this.folder && this.websiteSource === "bookmark") {
-            const potentialTopics = [
-                this.folder,
-                `bookmark folder: ${this.folder}`,
-            ];
-
-            // Add only unique topics
-            const existingTopics = new Set(topics);
-            for (const topic of potentialTopics) {
-                if (!existingTopics.has(topic)) {
-                    topics.push(topic);
-                    existingTopics.add(topic);
-                }
-            }
-        }
+        // Note: Bookmark folder is now included in the page content during extraction
+        // and the LLM will determine if it's a significant topic
 
         // Add keywords as topics
         if (this.keywords) {
