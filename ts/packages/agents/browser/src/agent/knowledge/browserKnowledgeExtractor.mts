@@ -192,7 +192,10 @@ export class BrowserKnowledgeExtractor {
                 try {
                     // Add content summaries for content/full modes
                     if (mode === "content" || mode === "full") {
-                        await this.enhanceWithContentSummaries(results, contents);
+                        await this.enhanceWithContentSummaries(
+                            results,
+                            contents,
+                        );
                     }
 
                     if (mode === "full") {
@@ -317,7 +320,9 @@ export class BrowserKnowledgeExtractor {
             );
 
             if (!this.contentSummaryAdapter.isAvailable()) {
-                console.warn("Content summary adapter not available, skipping summary generation");
+                console.warn(
+                    "Content summary adapter not available, skipping summary generation",
+                );
                 return;
             }
 
@@ -332,30 +337,41 @@ export class BrowserKnowledgeExtractor {
                 const targetContent = contents[i];
 
                 // Generate summary from text content
-                if (targetContent.textContent && targetContent.textContent.length > 100) {
+                if (
+                    targetContent.textContent &&
+                    targetContent.textContent.length > 100
+                ) {
                     try {
-                        const summaryResult = await this.contentSummaryAdapter.enhanceWithSummary(
-                            targetContent.textContent,
-                            "summary", // Use summary mode to actually generate summaries
+                        const summaryResult =
+                            await this.contentSummaryAdapter.enhanceWithSummary(
+                                targetContent.textContent,
+                                "summary", // Use summary mode to actually generate summaries
+                                {
+                                    maxInputLength: 8000,
+                                    url: targetContent.url,
+                                    title: targetContent.title,
+                                },
+                            );
+
+                        console.log(
+                            `📝 Summary adapter returned for result ${i + 1}:`,
                             {
-                                maxInputLength: 8000,
-                                url: targetContent.url,
-                                title: targetContent.title,
-                            }
+                                hasSummaryData: !!summaryResult.summaryData,
+                                summaryText: summaryResult.summaryData?.summary,
+                                summaryLength:
+                                    summaryResult.summaryData?.summary?.length,
+                                processingTime: summaryResult.processingTime,
+                            },
                         );
 
-                        console.log(`📝 Summary adapter returned for result ${i + 1}:`, {
-                            hasSummaryData: !!summaryResult.summaryData,
-                            summaryText: summaryResult.summaryData?.summary,
-                            summaryLength: summaryResult.summaryData?.summary?.length,
-                            processingTime: summaryResult.processingTime
-                        });
-
                         // Extract summary text from the result
-                        const summary = summaryResult.summaryData?.summary
-                            || targetContent.textContent.substring(0, 200) + "...";
+                        const summary =
+                            summaryResult.summaryData?.summary ||
+                            targetContent.textContent.substring(0, 200) + "...";
 
-                        console.log(`📄 Using summary text (${summary.length} chars): "${summary}"`);
+                        console.log(
+                            `📄 Using summary text (${summary.length} chars): "${summary}"`,
+                        );
 
                         // Add summary to the knowledge response
                         if (result.knowledge) {
@@ -363,16 +379,24 @@ export class BrowserKnowledgeExtractor {
                             console.log(`✅ Summary added to result.knowledge`);
                         } else if (result.partialKnowledge) {
                             result.partialKnowledge.summary = summary;
-                            console.log(`✅ Summary added to result.partialKnowledge`);
+                            console.log(
+                                `✅ Summary added to result.partialKnowledge`,
+                            );
                         } else {
-                            console.warn(`⚠️ No knowledge or partialKnowledge field found in result`);
+                            console.warn(
+                                `⚠️ No knowledge or partialKnowledge field found in result`,
+                            );
                         }
 
                         console.log(`Added content summary to result ${i + 1}`);
                     } catch (summaryError) {
-                        console.warn(`Failed to generate summary for result ${i + 1}:`, summaryError);
+                        console.warn(
+                            `Failed to generate summary for result ${i + 1}:`,
+                            summaryError,
+                        );
                         // Set a fallback summary based on first 200 chars
-                        const fallbackSummary = targetContent.textContent.substring(0, 200) + "...";
+                        const fallbackSummary =
+                            targetContent.textContent.substring(0, 200) + "...";
                         if (result.knowledge) {
                             result.knowledge.summary = fallbackSummary;
                         } else if (result.partialKnowledge) {
@@ -380,8 +404,11 @@ export class BrowserKnowledgeExtractor {
                         }
                     }
                 } else {
-                    console.log(`Insufficient content for summary in result ${i + 1}`);
-                    const fallbackSummary = "Content summary not available (insufficient text).";
+                    console.log(
+                        `Insufficient content for summary in result ${i + 1}`,
+                    );
+                    const fallbackSummary =
+                        "Content summary not available (insufficient text).";
                     if (result.knowledge) {
                         result.knowledge.summary = fallbackSummary;
                     } else if (result.partialKnowledge) {

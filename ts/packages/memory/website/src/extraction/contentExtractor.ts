@@ -578,9 +578,7 @@ export class ContentExtractor {
                         contextParts.push(`Page Title: ${pageTitle}`);
                     }
                     if (bookmarkFolder) {
-                        contextParts.push(
-                            `Bookmark Folder: ${bookmarkFolder}`,
-                        );
+                        contextParts.push(`Bookmark Folder: ${bookmarkFolder}`);
                     }
                     if (contextParts.length > 0) {
                         chunkText =

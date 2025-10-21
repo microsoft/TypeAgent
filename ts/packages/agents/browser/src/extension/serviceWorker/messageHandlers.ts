@@ -730,20 +730,25 @@ export async function handleMessage(
 
         case "indexExtractedKnowledge": {
             try {
-                console.log(`📥 Indexing extracted knowledge for ${message.url}`);
+                console.log(
+                    `📥 Indexing extracted knowledge for ${message.url}`,
+                );
                 const result = await sendActionToAgent({
                     actionName: "indexWebPageContent",
                     parameters: {
                         url: message.url,
                         title: message.title,
                         extractKnowledge: false, // Knowledge already extracted
-                        timestamp: message.timestamp || new Date().toISOString(),
+                        timestamp:
+                            message.timestamp || new Date().toISOString(),
                         mode: message.mode || "content",
                         extractedKnowledge: message.extractedKnowledge,
                     },
                 });
 
-                console.log(`✅ Knowledge indexed for ${message.url}: ${result.entityCount} entities`);
+                console.log(
+                    `✅ Knowledge indexed for ${message.url}: ${result.entityCount} entities`,
+                );
                 return {
                     success: result.indexed,
                     entityCount: result.entityCount,

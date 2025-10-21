@@ -424,20 +424,27 @@ class PageQnAPanel {
                     console.log("💾 Saving extracted knowledge to index...");
                     const tab = await extensionService.getCurrentTab();
                     if (tab && tab.url) {
-                        const indexResult = await extensionService.indexExtractedKnowledge(
-                            tab.url,
-                            tab.title || "Untitled",
-                            this.knowledgeData,
-                            "content",
-                            new Date().toISOString(),
-                        );
+                        const indexResult =
+                            await extensionService.indexExtractedKnowledge(
+                                tab.url,
+                                tab.title || "Untitled",
+                                this.knowledgeData,
+                                "content",
+                                new Date().toISOString(),
+                            );
 
                         if (indexResult.success) {
-                            console.log(`✅ Knowledge saved to index: ${indexResult.entityCount} entities`);
+                            console.log(
+                                `✅ Knowledge saved to index: ${indexResult.entityCount} entities`,
+                            );
                             this.knowledgeStatus.isIndexed = true;
-                            this.knowledgeStatus.entityCount = indexResult.entityCount;
+                            this.knowledgeStatus.entityCount =
+                                indexResult.entityCount;
                         } else {
-                            console.warn("Failed to save knowledge to index:", indexResult.error);
+                            console.warn(
+                                "Failed to save knowledge to index:",
+                                indexResult.error,
+                            );
                         }
                     }
                 } catch (error) {

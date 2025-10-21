@@ -377,7 +377,7 @@ export function aggregateExtractionResults(results: any[]): {
         finalSummary = summaries[0];
     } else {
         // Generate a basic summary from entities and topics if no explicit summary exists
-        const topEntities = uniqueEntities.slice(0, 5).map(e => e.name);
+        const topEntities = uniqueEntities.slice(0, 5).map((e) => e.name);
         const topTopics = uniqueTopics.slice(0, 5);
 
         if (topEntities.length > 0 || topTopics.length > 0) {
@@ -497,14 +497,19 @@ async function saveExtractedKnowledgeWithChunks(
             [],
             aggregatedResults.entities && aggregatedResults.entities.length > 0
                 ? {
-                      entities: aggregatedResults.entities.map((entity: any) => ({
-                          ...entity,
-                          type: Array.isArray(entity.type)
-                              ? entity.type
-                              : [entity.type],
-                      })),
-                      topics: aggregatedResults.keyTopics || aggregatedResults.topics,
-                      actions: getActionsFromAggregatedResults(aggregatedResults),
+                      entities: aggregatedResults.entities.map(
+                          (entity: any) => ({
+                              ...entity,
+                              type: Array.isArray(entity.type)
+                                  ? entity.type
+                                  : [entity.type],
+                          }),
+                      ),
+                      topics:
+                          aggregatedResults.keyTopics ||
+                          aggregatedResults.topics,
+                      actions:
+                          getActionsFromAggregatedResults(aggregatedResults),
                       inverseActions: [],
                   }
                 : undefined,
@@ -572,7 +577,9 @@ async function saveExtractedKnowledgeWithChunks(
                     context.agentContext.index.path,
                     "index",
                 );
-                debug(`Saved updated website collection to ${context.agentContext.index.path}`);
+                debug(
+                    `Saved updated website collection to ${context.agentContext.index.path}`,
+                );
             } else {
                 console.warn(
                     "No index path available, indexed page data not persisted to disk",
@@ -582,7 +589,9 @@ async function saveExtractedKnowledgeWithChunks(
             console.error("Error persisting website collection:", error);
         }
 
-        debug(`Knowledge saved successfully for ${url} with ${allTextChunks.length} text chunks`);
+        debug(
+            `Knowledge saved successfully for ${url} with ${allTextChunks.length} text chunks`,
+        );
     } catch (error) {
         console.error("Error saving knowledge to index:", error);
         throw error; // Re-throw so caller knows save failed
