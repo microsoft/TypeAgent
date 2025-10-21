@@ -272,6 +272,7 @@ export abstract class ExtensionServiceBase {
         extractionSettings: any,
         streamingEnabled: boolean = true,
         extractionId: string,
+        saveToIndex: boolean = false,
     ): Promise<any> {
         try {
             const response = await this.sendMessage({
@@ -281,6 +282,7 @@ export abstract class ExtensionServiceBase {
                 extractionSettings,
                 streamingEnabled,
                 extractionId,
+                saveToIndex,
             });
 
             if (!response) {
@@ -327,6 +329,23 @@ export abstract class ExtensionServiceBase {
         return this.sendMessage({
             type: "getPageIndexedKnowledge",
             url,
+        });
+    }
+
+    async indexExtractedKnowledge(
+        url: string,
+        title: string,
+        extractedKnowledge: any,
+        mode?: string,
+        timestamp?: string,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "indexExtractedKnowledge",
+            url,
+            title,
+            extractedKnowledge,
+            mode,
+            timestamp,
         });
     }
 

@@ -387,6 +387,7 @@ export async function handleMessage(
                             extractionId: extractionId,
                             htmlFragments: htmlFragments,
                             extractionSettings: message.extractionSettings,
+                            saveToIndex: message.saveToIndex || false,
                         },
                     });
 
@@ -447,9 +448,11 @@ export async function handleMessage(
                     actionName: "searchWebMemories",
                     parameters: {
                         query: message.parameters.query,
-                        url: message.parameters.url,
                         searchScope:
                             message.parameters.searchScope || "current_page",
+                        metadata: {
+                            url: message.parameters.url,
+                        },
                     },
                 });
             } catch (error) {
@@ -721,6 +724,42 @@ export async function handleMessage(
                     isIndexed: false,
                     knowledge: null,
                     error: "Failed to retrieve indexed knowledge",
+                };
+            }
+        }
+
+        case "indexExtractedKnowledge": {
+            try {
+                console.log(
+                    `📥 Indexing extracted knowledge for ${message.url}`,
+                );
+                const result = await sendActionToAgent({
+                    actionName: "indexWebPageContent",
+                    parameters: {
+                        url: message.url,
+                        title: message.title,
+                        extractKnowledge: false, // Knowledge already extracted
+                        timestamp:
+                            message.timestamp || new Date().toISOString(),
+                        mode: message.mode || "content",
+                        extractedKnowledge: message.extractedKnowledge,
+                    },
+                });
+
+                console.log(
+                    `✅ Knowledge indexed for ${message.url}: ${result.entityCount} entities`,
+                );
+                return {
+                    success: result.indexed,
+                    entityCount: result.entityCount,
+                    error: result.indexed ? null : "Failed to index knowledge",
+                };
+            } catch (error) {
+                console.error("Error indexing extracted knowledge:", error);
+                return {
+                    success: false,
+                    entityCount: 0,
+                    error: "Failed to index extracted knowledge",
                 };
             }
         }

@@ -21,6 +21,7 @@ export interface SearchWebMemoriesRequest {
     originalUserRequest?: string | undefined;
     query: string;
     searchScope?: "current_page" | "all_indexed" | undefined;
+    url?: string | undefined; // Current page URL for scope filtering
 
     // Temporal filters
     dateFrom?: string | undefined;
@@ -165,6 +166,8 @@ function convertSearchResultsToWebsites(
     for (const result of results) {
         for (const msgMatch of result.messageMatches) {
             const msg = websiteCollection.messages.get(msgMatch.messageOrdinal);
+            console.log("Message from search: ", JSON.stringify(msg));
+
             if (msg && msg.metadata) {
                 const url = (msg.metadata as any).url;
                 if (url && !seenUrls.has(url)) {
@@ -219,6 +222,8 @@ export async function searchWebMemories(
 
         debug(`Starting unified search for query: "${request.query}"`);
 
+        const currentPageUrl = request.metadata?.url || request.url;
+
         // Parse property filters from query (website-specific)
         const { searchText, propertyFilters } = parsePropertySearch(
             request.query,
@@ -258,10 +263,57 @@ export async function searchWebMemories(
 
         timing.parsing = Date.now() - parseStart;
 
+        // Determine search scope BEFORE searching to enable pre-filtering
+        const effectiveScope = request.searchScope || "all_indexed";
+
+        // Create filtered conversation for scoped searches
+        let conversationToSearch = websiteCollection;
+
+        if (effectiveScope === "current_page" && currentPageUrl) {
+            const targetUrl = currentPageUrl;
+            const filterStart = Date.now();
+
+            // Get all messages and filter by target URL
+            const allMessages = websiteCollection.messages.getAll();
+            const filteredMessages: any[] = [];
+
+            for (let ordinal = 0; ordinal < allMessages.length; ordinal++) {
+                const msg = allMessages[ordinal];
+                const metadata = msg.metadata as any;
+                if (metadata.url === targetUrl) {
+                    filteredMessages.push(msg);
+                }
+            }
+
+            if (filteredMessages.length > 0) {
+                // Create new message collection with filtered messages
+                const filteredMessageCollection = new kp.MessageCollection(
+                    filteredMessages,
+                );
+
+                // Create filtered conversation with only target URL messages
+                // Note: This reduces search scope before embedding lookups
+                conversationToSearch = {
+                    ...websiteCollection,
+                    messages: filteredMessageCollection,
+                } as any;
+
+                const filterTime = Date.now() - filterStart;
+                debug(`Pre-filter took ${filterTime}ms`);
+            } else {
+                // No messages found for this URL
+                return createEmptyResponse(
+                    `No indexed content found for the current page: ${targetUrl}`,
+                    startTime,
+                    request.debug ? debugContext : undefined,
+                );
+            }
+        }
+
         const searchStart = Date.now();
         const langDebugContext: kp.LanguageSearchDebugContext = {};
         const langResult = await kp.searchConversationWithLanguage(
-            websiteCollection,
+            conversationToSearch,
             searchText,
             queryTranslator,
             langOptions,
@@ -296,7 +348,7 @@ export async function searchWebMemories(
         const processingStart = Date.now();
         let websites = convertSearchResultsToWebsites(
             langResult.data,
-            websiteCollection,
+            conversationToSearch,
         );
 
         // Apply property filters (website-specific post-processing)
@@ -376,13 +428,394 @@ export async function searchWebMemories(
                     chunking: request.chunking ?? true,
                 };
 
-                const answerResult = await kp.generateAnswer(
-                    websiteCollection,
-                    answerGenerator,
+                debug(
+                    `Answer context options - entities: ${contextOptions.entitiesTopK}, topics: ${contextOptions.topicsTopK}, messages: ${contextOptions.messagesTopK}`,
+                );
+
+                // Build the actual context that will be sent to the LLM
+                const actualContext: any = {
+                    entities: {
+                        timeRanges: [],
+                        values: [],
+                    },
+                    topics: {
+                        timeRanges: [],
+                        values: [],
+                    },
+                    actions: {
+                        timeRanges: [],
+                        values: [],
+                    },
+                    messages: [],
+                };
+
+                // Populate entities and topics from semantic references in search results
+                // Collect all semanticRefMatches from search results, grouped by knowledge type
+                const combinedSemanticRefMatches = new Map<
+                    kp.KnowledgeType,
+                    Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>
+                >();
+
+                langResult.data.forEach((searchResult, idx) => {
+                    if (
+                        searchResult.knowledgeMatches &&
+                        searchResult.knowledgeMatches.size > 0
+                    ) {
+                        for (const [
+                            knowledgeType,
+                            semanticRefSearchResult,
+                        ] of searchResult.knowledgeMatches.entries()) {
+                            if (
+                                !combinedSemanticRefMatches.has(knowledgeType)
+                            ) {
+                                combinedSemanticRefMatches.set(
+                                    knowledgeType,
+                                    new Map(),
+                                );
+                            }
+
+                            const dedupeMap =
+                                combinedSemanticRefMatches.get(knowledgeType)!;
+
+                            semanticRefSearchResult.semanticRefMatches.forEach(
+                                (scoredRef) => {
+                                    if (
+                                        !dedupeMap.has(
+                                            scoredRef.semanticRefOrdinal,
+                                        ) ||
+                                        scoredRef.score >
+                                            dedupeMap.get(
+                                                scoredRef.semanticRefOrdinal,
+                                            )!.score
+                                    ) {
+                                        dedupeMap.set(
+                                            scoredRef.semanticRefOrdinal,
+                                            scoredRef,
+                                        );
+                                    }
+                                },
+                            );
+                        }
+                    }
+                });
+
+                // Filter semantic refs by score threshold
+                const semanticRefScoreThreshold = request.minScore || 1.0;
+                const filteredSemanticRefMatches = new Map<
+                    kp.KnowledgeType,
+                    Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>
+                >();
+
+                combinedSemanticRefMatches.forEach(
+                    (dedupeMap, knowledgeType) => {
+                        const filtered = new Map<
+                            kp.SemanticRefOrdinal,
+                            kp.ScoredSemanticRefOrdinal
+                        >();
+
+                        dedupeMap.forEach((scoredRef, ordinal) => {
+                            if (scoredRef.score >= semanticRefScoreThreshold) {
+                                filtered.set(ordinal, scoredRef);
+                            }
+                        });
+
+                        filteredSemanticRefMatches.set(knowledgeType, filtered);
+                    },
+                );
+
+                // Use filtered refs for the rest of processing
+                const refsToUse = filteredSemanticRefMatches;
+
+                // Use KnowPro helper functions to extract entities and topics from semantic refs
+                if (refsToUse.has("entity")) {
+                    const entitySemanticRefs = refsToUse.get("entity")!;
+                    const entitySearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            entitySemanticRefs.values(),
+                        ),
+                    };
+
+                    const relevantEntities = kp.getRelevantEntitiesForAnswer(
+                        websiteCollection as any,
+                        entitySearchResult,
+                        contextOptions.entitiesTopK,
+                    );
+
+                    actualContext.entities.values = relevantEntities.map(
+                        (re) => re.knowledge,
+                    );
+                    if (
+                        relevantEntities.length > 0 &&
+                        relevantEntities[0].timeRange
+                    ) {
+                        actualContext.entities.timeRanges = [
+                            relevantEntities[0].timeRange,
+                        ];
+                    }
+                }
+
+                if (refsToUse.has("topic")) {
+                    const topicSemanticRefs = refsToUse.get("topic")!;
+                    const topicSearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            topicSemanticRefs.values(),
+                        ),
+                    };
+
+                    const relevantTopics = kp.getRelevantTopicsForAnswer(
+                        websiteCollection as any,
+                        topicSearchResult,
+                        contextOptions.topicsTopK,
+                    );
+
+                    actualContext.topics.values = relevantTopics.map(
+                        (rt) => rt.knowledge,
+                    );
+                    if (
+                        relevantTopics.length > 0 &&
+                        relevantTopics[0].timeRange
+                    ) {
+                        actualContext.topics.timeRanges = [
+                            relevantTopics[0].timeRange,
+                        ];
+                    }
+                }
+
+                // Extract text chunks from semantic reference ranges (deduplicated)
+                // Use a map per message to collect unique chunks referenced by semantic refs
+                const messageChunksMap = new Map<
+                    kp.MessageOrdinal,
+                    Map<number, string>
+                >();
+                const messageScoresMap = new Map<kp.MessageOrdinal, number[]>();
+
+                refsToUse.forEach((dedupeMap, knowledgeType) => {
+                    dedupeMap.forEach((scoredRef) => {
+                        if (websiteCollection.semanticRefs) {
+                            const semanticRef =
+                                websiteCollection.semanticRefs.get(
+                                    scoredRef.semanticRefOrdinal,
+                                );
+
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
+                            const msg =
+                                websiteCollection.messages.get(messageOrdinal);
+
+                            if (msg && msg.textChunks.length > 0) {
+                                const startChunk =
+                                    semanticRef.range.start.chunkOrdinal || 0;
+                                const endChunk =
+                                    semanticRef.range.end?.chunkOrdinal ||
+                                    msg.textChunks.length - 1;
+
+                                // Initialize maps for this message if needed
+                                if (!messageChunksMap.has(messageOrdinal)) {
+                                    messageChunksMap.set(
+                                        messageOrdinal,
+                                        new Map<number, string>(),
+                                    );
+                                    messageScoresMap.set(messageOrdinal, []);
+                                }
+
+                                const chunksMap =
+                                    messageChunksMap.get(messageOrdinal)!;
+                                const scores =
+                                    messageScoresMap.get(messageOrdinal)!;
+
+                                // Add all chunks in the range to the map (deduplicates automatically)
+                                for (
+                                    let chunkOrdinal = startChunk;
+                                    chunkOrdinal <= endChunk;
+                                    chunkOrdinal++
+                                ) {
+                                    if (chunkOrdinal < msg.textChunks.length) {
+                                        chunksMap.set(
+                                            chunkOrdinal,
+                                            msg.textChunks[chunkOrdinal],
+                                        );
+                                    }
+                                }
+
+                                // Track score for averaging
+                                scores.push(scoredRef.score);
+                            }
+                        }
+                    });
+                });
+
+                // Build messages from deduplicated chunks
+                const matchedMessages: Array<{
+                    timestamp: string;
+                    value: string;
+                    score: number;
+                    title?: string;
+                    url?: string;
+                    chunkCount: number;
+                }> = [];
+
+                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
+                    const msg = websiteCollection.messages.get(messageOrdinal);
+                    if (!msg) return;
+
+                    const metadata = msg.metadata as any;
+                    const scores = messageScoresMap.get(messageOrdinal)!;
+
+                    // Calculate average score
+                    const avgScore =
+                        scores.reduce((sum, s) => sum + s, 0) / scores.length;
+
+                    // Sort chunks by ordinal for coherence
+                    const sortedChunks = Array.from(chunksMap.entries())
+                        .sort((a, b) => a[0] - b[0])
+                        .map(([_, chunkText]) => chunkText);
+
+                    // Combine chunks (maintaining order)
+                    const combinedText = sortedChunks.join("\n\n");
+
+                    const currMessage = {
+                        timestamp:
+                            metadata.lastVisitTime ||
+                            metadata.visitDate ||
+                            metadata.bookmarkDate ||
+                            new Date().toISOString(),
+                        value: combinedText,
+                        score: avgScore,
+                        title: metadata.title,
+                        url: metadata.url,
+                        chunkCount: chunksMap.size,
+                    };
+
+                    // Apply scope filtering
+                    if (effectiveScope === "current_page" && request.url) {
+                        if (metadata.url === request.url) {
+                            matchedMessages.push(currMessage);
+                        }
+                    } else {
+                        matchedMessages.push(currMessage);
+                    }
+                });
+
+                // Sort by score (highest first) and take top K
+                matchedMessages.sort((a, b) => b.score - a.score);
+                const topMatchedMessages = matchedMessages.slice(
+                    0,
+                    contextOptions.messagesTopK,
+                );
+
+                // Map to the format expected by AnswerContext
+                actualContext.messages = topMatchedMessages.map((msg) => ({
+                    timestamp: msg.timestamp,
+                    value: msg.value,
+                }));
+
+                if (
+                    actualContext.entities.values.length === 0 &&
+                    actualContext.topics.values.length === 0 &&
+                    topMatchedMessages.length === 0
+                ) {
+                    debug(
+                        `Warning: Answer context is empty - no entities, topics, or messages matched`,
+                    );
+                }
+
+                // Build filtered AnswerContext from semantic refs
+                const filteredAnswerContext: any = {};
+
+                // Add entities extracted from semantic refs
+                if (
+                    refsToUse.has("entity") &&
+                    actualContext.entities.values.length > 0
+                ) {
+                    const entitySemanticRefs = refsToUse.get("entity")!;
+                    const entitySearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            entitySemanticRefs.values(),
+                        ),
+                    };
+                    filteredAnswerContext.entities =
+                        kp.getRelevantEntitiesForAnswer(
+                            websiteCollection as any,
+                            entitySearchResult,
+                            contextOptions.entitiesTopK,
+                        );
+                }
+
+                // Add topics extracted from semantic refs
+                if (
+                    refsToUse.has("topic") &&
+                    actualContext.topics.values.length > 0
+                ) {
+                    const topicSemanticRefs = refsToUse.get("topic")!;
+                    const topicSearchResult: kp.SemanticRefSearchResult = {
+                        termMatches: new Set(),
+                        semanticRefMatches: Array.from(
+                            topicSemanticRefs.values(),
+                        ),
+                    };
+                    filteredAnswerContext.topics =
+                        kp.getRelevantTopicsForAnswer(
+                            websiteCollection as any,
+                            topicSearchResult,
+                            contextOptions.topicsTopK,
+                        );
+                }
+
+                // Build messages from deduplicated chunks
+                const filteredMessageEntries: Array<{
+                    messageOrdinal: kp.MessageOrdinal;
+                    text: string;
+                    metadata: any;
+                    score: number;
+                }> = [];
+
+                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
+                    const msg = websiteCollection.messages.get(messageOrdinal);
+                    if (!msg) return;
+
+                    const metadata = msg.metadata as any;
+                    const scores = messageScoresMap.get(messageOrdinal)!;
+                    const avgScore =
+                        scores.reduce((a, b) => a + b, 0) / scores.length;
+
+                    // Sort chunks by ordinal for coherence
+                    const sortedChunks = Array.from(chunksMap.entries())
+                        .sort((a, b) => a[0] - b[0])
+                        .map(([_, chunkText]) => chunkText);
+
+                    filteredMessageEntries.push({
+                        messageOrdinal,
+                        text: sortedChunks.join("\n\n"),
+                        metadata,
+                        score: avgScore,
+                    });
+                });
+
+                // Sort by score and take top K
+                filteredMessageEntries.sort((a, b) => b.score - a.score);
+                const topFilteredEntries = filteredMessageEntries.slice(
+                    0,
+                    contextOptions.messagesTopK,
+                );
+
+                filteredAnswerContext.messages = topFilteredEntries.map(
+                    (entry) => ({
+                        timestamp:
+                            entry.metadata.lastVisitTime ||
+                            entry.metadata.visitDate ||
+                            entry.metadata.bookmarkDate ||
+                            new Date().toISOString(),
+                        value: entry.text,
+                    }),
+                );
+
+                // Call generator directly with filtered context
+                const answerResult = await answerGenerator.generateAnswer(
                     searchText,
-                    langResult.data,
-                    undefined,
-                    contextOptions,
+                    filteredAnswerContext,
                 );
 
                 if (answerResult.success) {

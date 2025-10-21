@@ -224,6 +224,8 @@ export class ContentExtractor {
             mode,
             chunkProgressCallback,
             content.url,
+            content.title,
+            (content as any).folder,
         );
     }
 
@@ -542,6 +544,8 @@ export class ContentExtractor {
         mode: ExtractionMode,
         chunkProgressCallback?: (chunkInfo: ChunkProgressInfo) => Promise<void>,
         itemUrl: string = "",
+        pageTitle?: string,
+        bookmarkFolder?: string,
     ): Promise<kpLib.KnowledgeResponse> {
         if (!this.knowledgeExtractor) {
             throw new Error("Knowledge extractor not available");
@@ -562,10 +566,25 @@ export class ContentExtractor {
 
             const batchPromises = batch.map((part, batchIndex) => {
                 const chunkIndex = i + batchIndex;
-                const chunkText =
+                let chunkText =
                     typeof part.textChunks === "string"
                         ? part.textChunks
                         : part.textChunks.join("\n\n");
+
+                // Prepend page title and bookmark folder context to the first chunk
+                if (chunkIndex === 0) {
+                    const contextParts = [];
+                    if (pageTitle) {
+                        contextParts.push(`Page Title: ${pageTitle}`);
+                    }
+                    if (bookmarkFolder) {
+                        contextParts.push(`Bookmark Folder: ${bookmarkFolder}`);
+                    }
+                    if (contextParts.length > 0) {
+                        chunkText =
+                            contextParts.join("\n") + "\n\n" + chunkText;
+                    }
+                }
 
                 return this.knowledgeExtractor!.extract(chunkText)
                     .then(async (result) => {

@@ -279,6 +279,7 @@ class PageQnAPanel {
                     { mode: "content" },
                     true,
                     extractionId,
+                    true, // Auto-save to index after extraction
                 );
 
             if (!response) {
@@ -416,6 +417,40 @@ class PageQnAPanel {
             this.knowledgeStatus.isExtracting = false;
 
             this.updateKnowledgeStatus("Knowledge extracted successfully");
+
+            // Save extracted knowledge to index
+            if (this.knowledgeData) {
+                try {
+                    console.log("💾 Saving extracted knowledge to index...");
+                    const tab = await extensionService.getCurrentTab();
+                    if (tab && tab.url) {
+                        const indexResult =
+                            await extensionService.indexExtractedKnowledge(
+                                tab.url,
+                                tab.title || "Untitled",
+                                this.knowledgeData,
+                                "content",
+                                new Date().toISOString(),
+                            );
+
+                        if (indexResult.success) {
+                            console.log(
+                                `✅ Knowledge saved to index: ${indexResult.entityCount} entities`,
+                            );
+                            this.knowledgeStatus.isIndexed = true;
+                            this.knowledgeStatus.entityCount =
+                                indexResult.entityCount;
+                        } else {
+                            console.warn(
+                                "Failed to save knowledge to index:",
+                                indexResult.error,
+                            );
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error saving knowledge to index:", error);
+                }
+            }
 
             await this.enableChatInterface();
             await this.generateSuggestedQuestions();
@@ -575,11 +610,16 @@ class PageQnAPanel {
         this.showThinking();
 
         try {
+            // Detect and log search scope
+            console.log(`🔍 Page QnA Search - Question: "${question}"`);
+            console.log(`🌐 Current page URL: ${this.currentUrl}`);
+            console.log(`📚 Page indexed: ${this.knowledgeStatus.isIndexed}`);
+
             // Send question to backend
             const response = await extensionService.queryKnowledge({
                 query: question,
                 url: this.currentUrl,
-                searchScope: this.detectSearchScope(question),
+                searchScope: "current_page",
                 generateAnswer: true,
                 includeRelatedEntities: true,
                 limit: 10,
@@ -617,40 +657,6 @@ class PageQnAPanel {
             chatInput.disabled = false;
             chatInput.focus();
         }
-    }
-
-    private detectSearchScope(
-        question: string,
-    ): "current_page" | "all_indexed" {
-        const pageKeywords = [
-            "this page",
-            "here",
-            "this article",
-            "this content",
-            "above",
-            "mentioned",
-        ];
-        const globalKeywords = [
-            "compare",
-            "other",
-            "similar",
-            "elsewhere",
-            "generally",
-            "across",
-        ];
-
-        const questionLower = question.toLowerCase();
-
-        if (pageKeywords.some((keyword) => questionLower.includes(keyword))) {
-            return "current_page";
-        }
-
-        if (globalKeywords.some((keyword) => questionLower.includes(keyword))) {
-            return "all_indexed";
-        }
-
-        // Default to current page for ambiguous queries
-        return "current_page";
     }
 
     private showThinking() {

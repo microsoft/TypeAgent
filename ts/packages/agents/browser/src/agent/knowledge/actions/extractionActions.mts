@@ -26,6 +26,7 @@ import {
     ExtractionInput,
     EXTRACTION_MODE_CONFIGS,
 } from "website-memory";
+import * as website from "website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
 import { docPartsFromHtml } from "conversation-memory";
 import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
@@ -38,6 +39,64 @@ import { updateExtractionTimestamp } from "../cache/extractionCache.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:knowledge");
+
+// Helper function to get actions from aggregated results
+function getActionsFromAggregatedResults(aggregatedResults: any): any[] {
+    // If we have contentActions, use them directly
+    if (
+        aggregatedResults.contentActions &&
+        Array.isArray(aggregatedResults.contentActions) &&
+        aggregatedResults.contentActions.length > 0
+    ) {
+        return aggregatedResults.contentActions;
+    }
+
+    // If we have relationships but no contentActions, convert relationships to actions
+    if (
+        aggregatedResults.relationships &&
+        Array.isArray(aggregatedResults.relationships) &&
+        aggregatedResults.relationships.length > 0
+    ) {
+        return aggregatedResults.relationships.map((relationship: any) => ({
+            verbs: relationship.relationship
+                ? relationship.relationship
+                      .split(/[,\s]+/)
+                      .filter((v: string) => v.trim().length > 0)
+                : ["related to"],
+            verbTense: "present" as "past" | "present" | "future",
+            subjectEntityName: relationship.from || "none",
+            objectEntityName: relationship.to || "none",
+            indirectObjectEntityName: "none",
+            params: [],
+            confidence: relationship.confidence || 0.8,
+        }));
+    }
+
+    return [];
+}
+
+// Helper function to check if a page exists in the index
+function checkPageExistsInIndex(
+    url: string,
+    context: SessionContext<BrowserActionContext>,
+): boolean {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            return false;
+        }
+
+        const websites = websiteCollection.messages.getAll();
+        return websites.some((site: any) => site.metadata.url === url);
+    } catch (error) {
+        console.error("Error checking page existence:", error);
+        return false;
+    }
+}
+
+function hasIndexingErrors(result: any): boolean {
+    return result && result.errors && result.errors.length > 0;
+}
 
 // TODO: Move this to common and use the same schema in extension and agent
 interface KnowledgeExtractionProgress {
@@ -310,15 +369,37 @@ export function aggregateExtractionResults(results: any[]): {
     const uniqueTopics = [...new Set(allTopics)];
     const uniqueQuestions = [...new Set(allQuestions)];
 
+    // Generate summary from available data
+    let finalSummary: string;
+    if (summaries.length > 1) {
+        finalSummary = `Multi-frame content summary:\n${summaries.map((s, i) => `Frame ${i + 1}: ${s}`).join("\n\n")}`;
+    } else if (summaries.length === 1 && summaries[0]) {
+        finalSummary = summaries[0];
+    } else {
+        // Generate a basic summary from entities and topics if no explicit summary exists
+        const topEntities = uniqueEntities.slice(0, 5).map((e) => e.name);
+        const topTopics = uniqueTopics.slice(0, 5);
+
+        if (topEntities.length > 0 || topTopics.length > 0) {
+            const parts = [];
+            if (topTopics.length > 0) {
+                parts.push(`Topics: ${topTopics.join(", ")}`);
+            }
+            if (topEntities.length > 0) {
+                parts.push(`Key entities: ${topEntities.join(", ")}`);
+            }
+            finalSummary = parts.join(". ");
+        } else {
+            finalSummary = "No content summary available.";
+        }
+    }
+
     const aggregatedResult: any = {
         entities: uniqueEntities,
         relationships: uniqueRelationships,
         keyTopics: uniqueTopics,
         suggestedQuestions: uniqueQuestions,
-        summary:
-            summaries.length > 1
-                ? `Multi-frame content summary:\n${summaries.map((s, i) => `Frame ${i + 1}: ${s}`).join("\n\n")}`
-                : summaries[0] || "No content summary available.",
+        summary: finalSummary,
         contentMetrics: {
             wordCount: totalWordCount,
             readingTime: totalReadingTime,
@@ -342,13 +423,7 @@ function shouldIncludeMode(
     checkMode: ExtractionMode,
     actualMode: ExtractionMode,
 ): boolean {
-    /*
-    const modeOrder = ["basic", "summary", "content", "full"];
-    const checkIndex = modeOrder.indexOf(checkMode);
-    const actualIndex = modeOrder.indexOf(actualMode);
-    return actualIndex >= checkIndex;
-    */
-    // for now, only return the selected mode and "basic"
+    // Only return the selected mode and "basic"
     return checkMode === "basic" || checkMode === actualMode;
 }
 
@@ -361,6 +436,166 @@ function extractContentMetrics(extractionInputs: ExtractionInput[]) {
         wordCount: totalWordCount,
         readingTime: Math.ceil(totalWordCount / 200), // 200 words per minute
     };
+}
+
+/**
+ * Save extracted knowledge to index with proper text chunking
+ * This preserves the docParts chunking structure instead of flattening to a single chunk
+ */
+async function saveExtractedKnowledgeWithChunks(
+    url: string,
+    title: string,
+    extractionInputs: ExtractionInput[],
+    aggregatedResults: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<void> {
+    if (!context.agentContext.websiteCollection) {
+        debug("No websiteCollection available, skipping save");
+        return;
+    }
+
+    try {
+        debug(`Saving extracted knowledge to index for URL: ${url}`);
+
+        // Extract text chunks from docParts (preserves chunking structure)
+        const allTextChunks: string[] = [];
+        let totalDocParts = 0;
+
+        extractionInputs.forEach((input, idx) => {
+            if (input.docParts && input.docParts.length > 0) {
+                totalDocParts += input.docParts.length;
+
+                input.docParts.forEach((docPart, dpIdx) => {
+                    if (Array.isArray(docPart.textChunks)) {
+                        allTextChunks.push(...docPart.textChunks);
+                    } else if (typeof docPart.textChunks === "string") {
+                        allTextChunks.push(docPart.textChunks);
+                    }
+                });
+            } else if (input.textContent) {
+                allTextChunks.push(input.textContent);
+            }
+        });
+
+        debug(
+            `Extracted ${allTextChunks.length} text chunks from ${extractionInputs.length} extraction inputs with ${totalDocParts} docParts`,
+        );
+
+        // Create WebsiteMeta
+        const timestamp = new Date().toISOString();
+        const meta = new website.WebsiteMeta({
+            url,
+            title,
+            source: "history",
+            visitDate: timestamp,
+        });
+
+        // Create Website object directly with chunked text
+        const websiteObj = new website.Website(
+            meta,
+            allTextChunks, // Preserves chunking!
+            [],
+            aggregatedResults.entities && aggregatedResults.entities.length > 0
+                ? {
+                      entities: aggregatedResults.entities.map(
+                          (entity: any) => ({
+                              ...entity,
+                              type: Array.isArray(entity.type)
+                                  ? entity.type
+                                  : [entity.type],
+                          }),
+                      ),
+                      topics:
+                          aggregatedResults.keyTopics ||
+                          aggregatedResults.topics,
+                      actions:
+                          getActionsFromAggregatedResults(aggregatedResults),
+                      inverseActions: [],
+                  }
+                : undefined,
+            undefined, // topicHierarchy - will be built during indexing
+            undefined, // deletionInfo
+            true, // isNew
+        );
+
+        // Add metadata
+        if (
+            aggregatedResults.detectedActions ||
+            aggregatedResults.actionSummary
+        ) {
+            websiteObj.metadata.detectedActions =
+                aggregatedResults.detectedActions;
+            websiteObj.metadata.actionSummary = aggregatedResults.actionSummary;
+        }
+        if (aggregatedResults.summary) {
+            websiteObj.metadata.contentSummary = aggregatedResults.summary;
+        }
+
+        // Check if page already exists
+        const isNewPage = !checkPageExistsInIndex(url, context);
+
+        // Save to index
+        if (isNewPage) {
+            const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
+            const result =
+                await context.agentContext.websiteCollection.addWebsiteToIndex(
+                    docPart,
+                );
+            if (hasIndexingErrors(result)) {
+                debug(
+                    "Incremental indexing failed, falling back to full rebuild",
+                );
+                context.agentContext.websiteCollection.addWebsites([
+                    websiteObj,
+                ]);
+                await context.agentContext.websiteCollection.buildIndex();
+            }
+            debug(`Saved new page to index: ${url}`);
+        } else {
+            const docPart = website.WebsiteDocPart.fromWebsite(websiteObj);
+
+            const result =
+                await context.agentContext.websiteCollection.updateWebsiteInIndex(
+                    url,
+                    docPart,
+                );
+            if (hasIndexingErrors(result)) {
+                debug(
+                    "Incremental update failed, falling back to full rebuild",
+                );
+                context.agentContext.websiteCollection.addWebsites([
+                    websiteObj,
+                ]);
+                await context.agentContext.websiteCollection.buildIndex();
+            }
+            debug(`Updated existing page in index: ${url}`);
+        }
+
+        try {
+            if (context.agentContext.index?.path) {
+                await context.agentContext.websiteCollection.writeToFile(
+                    context.agentContext.index.path,
+                    "index",
+                );
+                debug(
+                    `Saved updated website collection to ${context.agentContext.index.path}`,
+                );
+            } else {
+                console.warn(
+                    "No index path available, indexed page data not persisted to disk",
+                );
+            }
+        } catch (error) {
+            console.error("Error persisting website collection:", error);
+        }
+
+        debug(
+            `Knowledge saved successfully for ${url} with ${allTextChunks.length} text chunks`,
+        );
+    } catch (error) {
+        console.error("Error saving knowledge to index:", error);
+        throw error; // Re-throw so caller knows save failed
+    }
 }
 
 export async function extractKnowledgeFromPage(
@@ -429,6 +664,7 @@ export async function extractKnowledgeFromPageStreaming(
         extractionId: string;
         htmlFragments: any[];
         extractionSettings?: any;
+        saveToIndex?: boolean; // Auto-save results to index after extraction
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<EnhancedKnowledgeExtractionResult> {
@@ -443,8 +679,11 @@ export async function extractKnowledgeFromPageStreaming(
         phase: KnowledgeExtractionProgress["phase"],
         currentItem?: string,
         incrementalData?: Partial<any>,
+        incrementCounter: boolean = true,
     ) => {
-        processedItems++;
+        if (incrementCounter) {
+            processedItems++;
+        }
         const progress: KnowledgeExtractionProgress = {
             extractionId,
             phase,
@@ -568,6 +807,7 @@ export async function extractKnowledgeFromPageStreaming(
                             "basic",
                             progressMessage,
                             partialAggregated,
+                            false, // Don't increment - already set from progress.processed
                         );
                     }
                 },
@@ -581,6 +821,17 @@ export async function extractKnowledgeFromPageStreaming(
                 "Basic analysis complete",
                 aggregatedResults,
             );
+
+            // Save to index if basic was the requested mode
+            if (parameters.saveToIndex && extractionMode === "basic") {
+                await saveExtractedKnowledgeWithChunks(
+                    url,
+                    parameters.title,
+                    extractionInputs,
+                    aggregatedResults,
+                    context,
+                );
+            }
         }
 
         // Phase 3: Summary mode (if enabled)
@@ -606,6 +857,7 @@ export async function extractKnowledgeFromPageStreaming(
                             "summary",
                             `Summarizing: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
+                            false, // Don't increment - already set from progress.processed
                         );
                     }
                 },
@@ -640,6 +892,17 @@ export async function extractKnowledgeFromPageStreaming(
                 "Summary analysis complete",
                 aggregatedResults, // Send the full aggregated results, not just summary/topics
             );
+
+            // Save to index if summary was the requested mode
+            if (parameters.saveToIndex && extractionMode === "summary") {
+                await saveExtractedKnowledgeWithChunks(
+                    url,
+                    parameters.title,
+                    extractionInputs,
+                    aggregatedResults,
+                    context,
+                );
+            }
         }
 
         // Phase 4: Content analysis (if enabled)
@@ -667,6 +930,7 @@ export async function extractKnowledgeFromPageStreaming(
                             "analyzing",
                             `Analyzing content: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
+                            false, // Don't increment - already set from progress.processed
                         );
                     }
                 },
@@ -685,6 +949,11 @@ export async function extractKnowledgeFromPageStreaming(
             if (contentData.keyTopics && contentData.keyTopics.length > 0) {
                 // Replace topics entirely with content extraction results
                 aggregatedResults.keyTopics = contentData.keyTopics;
+            }
+
+            // Replace summary with content extraction results (includes AI-generated summaries)
+            if (contentData.summary) {
+                aggregatedResults.summary = contentData.summary;
             }
 
             // Replace relationships with content extraction results
@@ -712,6 +981,17 @@ export async function extractKnowledgeFromPageStreaming(
                 "Discovered entities and topics",
                 aggregatedResults, // Send full accumulated results
             );
+
+            // Save to index if content was the requested mode
+            if (parameters.saveToIndex && extractionMode === "content") {
+                await saveExtractedKnowledgeWithChunks(
+                    url,
+                    parameters.title,
+                    extractionInputs,
+                    aggregatedResults,
+                    context,
+                );
+            }
         }
 
         // Phase 5: Full extraction with relationships (if enabled)
@@ -739,6 +1019,7 @@ export async function extractKnowledgeFromPageStreaming(
                             "extracting",
                             `Extracting relationships: ${progress.processed} of ${progress.total} chunks processed`,
                             partialData,
+                            false, // Don't increment - already set from progress.processed
                         );
                     }
                 },
@@ -762,6 +1043,11 @@ export async function extractKnowledgeFromPageStreaming(
                 aggregatedResults.keyTopics = fullData.keyTopics;
             }
 
+            // If full extraction provides summary, replace previous one
+            if (fullData.summary) {
+                aggregatedResults.summary = fullData.summary;
+            }
+
             // Merge content actions from full extraction if present
             if (fullData.contentActions && fullData.contentActions.length > 0) {
                 aggregatedResults.contentActions = [
@@ -775,6 +1061,17 @@ export async function extractKnowledgeFromPageStreaming(
                 "Analyzed entity relationships",
                 aggregatedResults, // Send full accumulated results
             );
+
+            // Save to index if full was the requested mode
+            if (parameters.saveToIndex && extractionMode === "full") {
+                await saveExtractedKnowledgeWithChunks(
+                    url,
+                    parameters.title,
+                    extractionInputs,
+                    aggregatedResults,
+                    context,
+                );
+            }
         }
 
         // Final completion
