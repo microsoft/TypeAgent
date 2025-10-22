@@ -21,7 +21,9 @@ import {
 } from "./constructionStore.js";
 import { ExplainerFactory } from "./factory.js";
 import {
+    CompletionResult,
     MatchOptions,
+    mergeCompletionResults,
     NamespaceKeyFilter,
 } from "../constructions/constructionCache.js";
 import {
@@ -328,5 +330,16 @@ export class AgentCache {
             return this._grammarStore.match(request, options);
         }
         throw new Error("AgentCache is disabled");
+    }
+
+    public completion(
+        requestPrefix: string | undefined,
+        options?: MatchOptions,
+    ): CompletionResult | undefined {
+        const store = this._constructionStore;
+        const storeCompletion = store.completion(requestPrefix, options);
+        const grammarStore = this._grammarStore;
+        const grammarCompletion = grammarStore.completion(requestPrefix, options);
+        return mergeCompletionResults(storeCompletion, grammarCompletion);
     }
 }

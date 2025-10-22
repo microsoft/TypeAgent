@@ -80,4 +80,11 @@ export class GrammarStoreImpl implements GrammarStore {
         }
         return sortMatches(matches);
     }
+
+    public completion(
+        requestPrefix: string | undefined,
+        options?: MatchOptions,
+    ) {
+        return undefined;
+    }
 }
