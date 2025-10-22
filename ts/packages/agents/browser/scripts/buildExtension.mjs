@@ -61,6 +61,7 @@ const sharedScripts = {
     "views/entityGraphView": "views/entityGraphView.ts",
     "views/topicGraphView": "views/topicGraphView.ts",
     "views/pageKnowledge": "views/pageKnowledge.ts",
+    "views/pageQnA": "views/pageQnA.ts",
     "views/annotationsLibrary": "views/annotationsLibrary.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
     "views/pdfView": "views/pdfView.ts",
@@ -121,6 +122,8 @@ const libraryAssets = [
     "views/pageKnowledge.html",
     "views/pageMacros.css",
     "views/pageMacros.html",
+    "views/pageQnA.css",
+    "views/pageQnA.html",
     "views/pdfView.css",
     "views/pdfView.html",
 ];

@@ -8,6 +8,7 @@ import {
     ActionResult,
     TypeAgentAction,
     AppAgentInitSettings,
+    ResolveEntityResult,
 } from "@typeagent/agent-sdk";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,6 @@ import {
 import registerDebug from "debug";
 import { createSemanticMap } from "typeagent";
 import { openai, TextEmbeddingModel } from "aiclient";
-import { ResolveEntityResult } from "../../../../agentSdk/dist/agentInterface.js";
 
 const debug = registerDebug("typeagent:agent:montage");
 

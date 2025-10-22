@@ -721,7 +721,7 @@ export type TranslationResult = {
     requestAction: RequestAction;
     elapsedMs: number;
 
-    type: "translate" | "match";
+    type: "translate" | "construction" | "grammar";
     config: any;
     allMatches?: any;
 };

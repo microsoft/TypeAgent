@@ -57,6 +57,12 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
+        title: "Learn more from this page",
+        id: "learnMoreFromPage",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
         title: "View Knowledge Library",
         id: "showWebsiteLibrary",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
@@ -170,6 +176,18 @@ export async function handleContextMenuClick(
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
                 path: "views/pageKnowledge.html",
+                enabled: true,
+            });
+
+            break;
+        }
+
+        case "learnMoreFromPage": {
+            await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "views/pageQnA.html",
                 enabled: true,
             });
 

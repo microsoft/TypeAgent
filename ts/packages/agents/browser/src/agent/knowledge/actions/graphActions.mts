@@ -9,6 +9,50 @@ import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
 import registerDebug from "debug";
 
+// ============================================================================
+// Topic Timeline Types
+// ============================================================================
+
+export interface TopicActivity {
+    timestamp: string;
+    activityType: "bookmark" | "visit" | "extraction";
+    url: string;
+    title: string;
+    domain: string;
+    relevance: number;
+    snippet?: string | undefined;
+    knowledgeChunk?: string | undefined;
+    metadata?: {
+        visitCount?: number;
+        confidence?: number;
+        extractionDate?: string;
+    };
+}
+
+export interface TopicTimeline {
+    topicName: string;
+    topicId?: string;
+    totalActivity: number;
+    activities: TopicActivity[];
+    relatedTopics: string[];
+    activityDistribution: {
+        bookmarks: number;
+        visits: number;
+        extractions: number;
+    };
+}
+
+export interface TopicTimelineResponse {
+    success: boolean;
+    timelines: TopicTimeline[];
+    metadata: {
+        totalEntries: number;
+        timeRange: { earliest: string; latest: string };
+        topicsWithActivity: number;
+    };
+    error?: string;
+}
+
 const debug = registerDebug("typeagent:browser:knowledge:graph");
 
 // ============================================================================
@@ -1261,7 +1305,7 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             relationships.length,
         );
 
-        // Add lateral relationships from topic relationships table
+        // Add lateral relationships from topic relationships table - SUPER OPTIMIZED
         if (websiteCollection.topicRelationships) {
             tracker.startOperation(
                 "ensureTopicGraphCache.getLateralRelationships",
@@ -2727,5 +2771,439 @@ export async function getUrlContentBreakdown(
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
         };
+    }
+}
+
+// ============================================================================
+// Topic Timeline Functions
+// ============================================================================
+
+export async function getTopicTimelines(
+    parameters: {
+        topicNames: string[];
+        maxTimelineEntries?: number;
+        timeRange?: {
+            startDate?: string;
+            endDate?: string;
+        };
+        includeRelatedTopics?: boolean;
+        neighborhoodDepth?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<TopicTimelineResponse> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                timelines: [],
+                metadata: {
+                    totalEntries: 0,
+                    timeRange: { earliest: "", latest: "" },
+                    topicsWithActivity: 0,
+                },
+                error: "Website collection not available",
+            };
+        }
+
+        debug(
+            `[Topic Timelines] Processing ${parameters.topicNames.length} topics`,
+        );
+
+        // 1. Expand topic list with neighborhood exploration
+        let allTopics = [...parameters.topicNames];
+
+        if (parameters.includeRelatedTopics) {
+            allTopics = await expandTopicNeighborhood(
+                parameters.topicNames,
+                parameters.neighborhoodDepth || 1,
+                websiteCollection,
+            );
+            debug(
+                `[Topic Timelines] Expanded to ${allTopics.length} topics including neighbors`,
+            );
+        }
+
+        // 2. Get timeline data for each topic
+        const timelines: TopicTimeline[] = [];
+
+        for (const topicName of allTopics) {
+            const timeline = await buildTopicTimeline(
+                topicName,
+                websiteCollection,
+                parameters,
+            );
+            if (timeline.activities.length > 0) {
+                timelines.push(timeline);
+            }
+        }
+
+        debug(
+            `[Topic Timelines] Built ${timelines.length} timelines with activity`,
+        );
+
+        // 3. Ensure requested topics are always included, then add up to 4 neighbor topics
+        const requestedTimelines = timelines.filter((t) =>
+            parameters.topicNames.includes(t.topicName),
+        );
+        const neighborTimelines = timelines.filter(
+            (t) => !parameters.topicNames.includes(t.topicName),
+        );
+
+        // Sort neighbors by activity
+        const sortedNeighbors = neighborTimelines.sort(
+            (a, b) => b.totalActivity - a.totalActivity,
+        );
+
+        // Combine: all requested topics + up to 4 neighbors
+        const combinedTimelines = [
+            ...requestedTimelines,
+            ...sortedNeighbors.slice(0, 4),
+        ];
+
+        // Sort final result by activity level
+        const sortedTimelines = combinedTimelines.sort(
+            (a, b) => b.totalActivity - a.totalActivity,
+        );
+
+        // 4. Calculate metadata
+        const allActivities = sortedTimelines.flatMap((t) => t.activities);
+        const dates = allActivities.map((a) => new Date(a.timestamp));
+
+        const response: TopicTimelineResponse = {
+            success: true,
+            timelines: sortedTimelines,
+            metadata: {
+                totalEntries: allActivities.length,
+                timeRange: {
+                    earliest:
+                        dates.length > 0
+                            ? new Date(
+                                  Math.min(...dates.map((d) => d.getTime())),
+                              ).toISOString()
+                            : "",
+                    latest:
+                        dates.length > 0
+                            ? new Date(
+                                  Math.max(...dates.map((d) => d.getTime())),
+                              ).toISOString()
+                            : "",
+                },
+                topicsWithActivity: sortedTimelines.length,
+            },
+        };
+
+        debug(
+            `[Topic Timelines] Returning ${response.timelines.length} timelines with ${response.metadata.totalEntries} total activities`,
+        );
+
+        return response;
+    } catch (error) {
+        debug(`[Topic Timelines] Error: ${error}`);
+        return {
+            success: false,
+            timelines: [],
+            metadata: {
+                totalEntries: 0,
+                timeRange: { earliest: "", latest: "" },
+                topicsWithActivity: 0,
+            },
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function expandTopicNeighborhood(
+    seedTopics: string[],
+    depth: number,
+    websiteCollection: any,
+): Promise<string[]> {
+    const allTopics = new Set(seedTopics);
+
+    try {
+        // Use existing topic relationship functionality to find connected topics
+        for (const seedTopic of seedTopics) {
+            // Get related topics from knowledge topics table
+            if (
+                websiteCollection.knowledgeTopics &&
+                websiteCollection.knowledgeTopics.getRelatedTopics
+            ) {
+                const relatedTopics =
+                    websiteCollection.knowledgeTopics.getRelatedTopics(
+                        seedTopic,
+                        10,
+                    ) || [];
+
+                relatedTopics.forEach((topicEntry: any) => {
+                    if (topicEntry.topic && topicEntry.topic !== seedTopic) {
+                        allTopics.add(topicEntry.topic);
+                    }
+                });
+            }
+        }
+
+        debug(
+            `[Topic Neighborhood] Expanded ${seedTopics.length} seed topics to ${allTopics.size} total topics`,
+        );
+    } catch (error) {
+        debug(`[Topic Neighborhood] Error expanding topics: ${error}`);
+        // Return original topics if expansion fails
+        return seedTopics;
+    }
+
+    return Array.from(allTopics);
+}
+
+async function buildTopicTimeline(
+    topicName: string,
+    websiteCollection: any,
+    parameters: any,
+): Promise<TopicTimeline> {
+    const activities: TopicActivity[] = [];
+
+    try {
+        // 1. Get all URLs associated with this topic from knowledgeTopics table
+        let topicEntries: any[] = [];
+
+        if (websiteCollection.knowledgeTopics) {
+            // Query the database directly for topics matching the name
+            const stmt = websiteCollection.knowledgeTopics.db.prepare(`
+                SELECT * FROM knowledgeTopics 
+                WHERE topic LIKE ? 
+                ORDER BY relevance DESC
+            `);
+            topicEntries = stmt.all(`%${topicName}%`) || [];
+        }
+
+        debug(
+            `[Topic Timeline] Found ${topicEntries.length} topic entries for "${topicName}"`,
+        );
+
+        // 2. For each URL, get temporal engagement data from website collection
+        const websites = websiteCollection.getWebsiteDocParts() || [];
+        const urlToWebsiteMap = new Map();
+
+        websites.forEach((website: any) => {
+            if (website.url) {
+                urlToWebsiteMap.set(website.url, website);
+            }
+        });
+
+        for (const topicEntry of topicEntries) {
+            const websiteData = urlToWebsiteMap.get(topicEntry.url);
+
+            if (websiteData && websiteData.metadata) {
+                const metadata = websiteData.metadata;
+                const title =
+                    metadata.title || websiteData.title || "Unknown Title";
+                const snippet =
+                    metadata.description ||
+                    metadata.contentSummary ||
+                    websiteData.snippet;
+
+                // Add bookmark activity
+                if (metadata.bookmarkDate) {
+                    activities.push({
+                        timestamp: metadata.bookmarkDate,
+                        activityType: "bookmark",
+                        url: topicEntry.url,
+                        title: title,
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
+                        relevance: topicEntry.relevance || 0,
+                        snippet: snippet,
+                        metadata: {
+                            extractionDate: topicEntry.extractionDate,
+                        },
+                    });
+                }
+
+                // Add visit activity
+                if (metadata.visitDate) {
+                    activities.push({
+                        timestamp: metadata.visitDate,
+                        activityType: "visit",
+                        url: topicEntry.url,
+                        title: title,
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
+                        relevance: topicEntry.relevance || 0,
+                        snippet: snippet,
+                        metadata: {
+                            visitCount: metadata.visitCount,
+                            extractionDate: topicEntry.extractionDate,
+                        },
+                    });
+                }
+
+                // Add knowledge extraction activity
+                if (topicEntry.extractionDate) {
+                    const knowledgeChunk = await getKnowledgeChunkForTopic(
+                        websiteData,
+                        topicName,
+                    );
+
+                    activities.push({
+                        timestamp: topicEntry.extractionDate,
+                        activityType: "extraction",
+                        url: topicEntry.url,
+                        title: title,
+                        domain:
+                            topicEntry.domain ||
+                            metadata.domain ||
+                            extractDomainFromUrl(topicEntry.url),
+                        relevance: topicEntry.relevance || 0,
+                        knowledgeChunk: knowledgeChunk,
+                        metadata: {
+                            confidence: topicEntry.relevance,
+                        },
+                    });
+                }
+            }
+        }
+
+        // Deduplicate activities with same URL and timestamp
+        // Priority: bookmark > visit > extraction
+        const activityPriority: Record<string, number> = {
+            bookmark: 3,
+            visit: 2,
+            extraction: 1,
+        };
+
+        const dedupeMap = new Map<string, TopicActivity>();
+
+        for (const activity of activities) {
+            const key = `${activity.url}|${activity.timestamp}`;
+            const existing = dedupeMap.get(key);
+
+            if (!existing) {
+                dedupeMap.set(key, activity);
+            } else {
+                // Keep the activity with higher priority
+                const existingPriority =
+                    activityPriority[existing.activityType] || 0;
+                const newPriority =
+                    activityPriority[activity.activityType] || 0;
+
+                if (newPriority > existingPriority) {
+                    dedupeMap.set(key, activity);
+                }
+            }
+        }
+
+        // Convert deduplicated map back to array
+        const deduplicatedActivities = Array.from(dedupeMap.values());
+
+        debug(
+            `[Topic Timeline] Deduplicated ${activities.length} activities to ${deduplicatedActivities.length} unique entries`,
+        );
+
+        // Sort activities by timestamp (most recent first)
+        deduplicatedActivities.sort(
+            (a, b) =>
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime(),
+        );
+
+        // Limit activities if specified
+        const maxEntries = parameters.maxTimelineEntries || 50;
+        const limitedActivities = deduplicatedActivities.slice(0, maxEntries);
+
+        // Calculate activity distribution based on deduplicated activities
+        const activityDistribution = {
+            bookmarks: deduplicatedActivities.filter(
+                (a) => a.activityType === "bookmark",
+            ).length,
+            visits: deduplicatedActivities.filter(
+                (a) => a.activityType === "visit",
+            ).length,
+            extractions: deduplicatedActivities.filter(
+                (a) => a.activityType === "extraction",
+            ).length,
+        };
+
+        debug(
+            `[Topic Timeline] Built timeline for "${topicName}" with ${deduplicatedActivities.length} activities (${limitedActivities.length} limited)`,
+        );
+
+        return {
+            topicName,
+            totalActivity: deduplicatedActivities.length,
+            activities: limitedActivities,
+            relatedTopics: [], // Could be populated from topic relationships
+            activityDistribution,
+        };
+    } catch (error) {
+        debug(
+            `[Topic Timeline] Error building timeline for "${topicName}": ${error}`,
+        );
+        return {
+            topicName,
+            totalActivity: 0,
+            activities: [],
+            relatedTopics: [],
+            activityDistribution: { bookmarks: 0, visits: 0, extractions: 0 },
+        };
+    }
+}
+
+async function getKnowledgeChunkForTopic(
+    websiteData: any,
+    topicName: string,
+): Promise<string | undefined> {
+    try {
+        // Try to find text chunks that mention this topic
+        if (websiteData.text && typeof websiteData.text === "string") {
+            const text = websiteData.text.toLowerCase();
+            const topicLower = topicName.toLowerCase();
+
+            if (text.includes(topicLower)) {
+                // Find the sentence or paragraph containing the topic
+                const sentences = websiteData.text.split(/[.!?]+/);
+                for (const sentence of sentences) {
+                    if (sentence.toLowerCase().includes(topicLower)) {
+                        return (
+                            sentence.trim().substring(0, 200) +
+                            (sentence.length > 200 ? "..." : "")
+                        );
+                    }
+                }
+            }
+        }
+
+        // Fallback to content summary or description
+        if (websiteData.metadata) {
+            return (
+                websiteData.metadata.contentSummary?.substring(0, 200) +
+                    (websiteData.metadata.contentSummary?.length > 200
+                        ? "..."
+                        : "") ||
+                websiteData.metadata.description?.substring(0, 200) +
+                    (websiteData.metadata.description?.length > 200
+                        ? "..."
+                        : "")
+            );
+        }
+
+        return undefined;
+    } catch (error) {
+        debug(`[Knowledge Chunk] Error extracting chunk: ${error}`);
+        return undefined;
+    }
+}
+
+function extractDomainFromUrl(url: string): string {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.hostname;
+    } catch (error) {
+        // Fallback for invalid URLs
+        const match = url.match(/^https?:\/\/([^\/]+)/);
+        return match ? match[1] : url;
     }
 }

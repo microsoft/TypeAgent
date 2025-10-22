@@ -111,6 +111,10 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import {
+    generatePageQuestions,
+    generateGraphQuestions,
+} from "./knowledge/actions/pageQnAActions.mjs";
+import {
     BrowserControl,
     defaultSearchProviders,
 } from "../common/browserControl.mjs";
@@ -645,6 +649,7 @@ async function processBrowserAgentMessage(
         case "getTopicImportanceLayer":
         case "getTopicViewportNeighborhood":
         case "getTopicMetrics":
+        case "getTopicTimelines":
         case "getViewportBasedNeighborhood":
         case "getUrlContentBreakdown": {
             const knowledgeResult = await handleKnowledgeAction(
@@ -664,6 +669,34 @@ async function processBrowserAgentMessage(
 
         case "handlePageNavigation": {
             await handlePageNavigation(context, data.params);
+            break;
+        }
+
+        case "generatePageQuestions": {
+            const pageQuestionsResult = await generatePageQuestions(
+                data.params,
+                context,
+            );
+            client.socket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: pageQuestionsResult,
+                }),
+            );
+            break;
+        }
+
+        case "generateGraphQuestions": {
+            const graphQuestionsResult = await generateGraphQuestions(
+                data.params,
+                context,
+            );
+            client.socket.send(
+                JSON.stringify({
+                    id: data.id,
+                    result: graphQuestionsResult,
+                }),
+            );
             break;
         }
 
@@ -774,8 +807,12 @@ async function initializeWebsiteIndex(
                         "index",
                     );
 
-                    // Check if the index file exists and try to read it
-                    if (fs.existsSync(indexPath)) {
+                    // Check if the index database file exists and try to read it
+                    const dbFile = path.join(
+                        indexPath,
+                        "index_dataFrames.sqlite",
+                    );
+                    if (fs.existsSync(dbFile)) {
                         try {
                             websiteCollection =
                                 await website.WebsiteCollection.readFromFile(
@@ -807,7 +844,7 @@ async function initializeWebsiteIndex(
                                 );
                             } else {
                                 debug(
-                                    `File exists but collection is empty at ${indexPath}, will create new collection`,
+                                    `Database exists but collection is empty at ${indexPath}, will create new collection`,
                                 );
                                 websiteCollection = undefined;
                             }
@@ -818,9 +855,7 @@ async function initializeWebsiteIndex(
                             websiteCollection = undefined;
                         }
                     } else {
-                        debug(
-                            `No existing collection file found at ${indexPath}`,
-                        );
+                        debug(`No existing database file found at ${dbFile}`);
                     }
                 }
             } catch (pathError) {
@@ -833,29 +868,23 @@ async function initializeWebsiteIndex(
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
 
-                // Set up index if we have a valid path
+                // Set up index metadata if we have a valid path
+                // Directory will be created when writeToFile is called
                 if (indexPath) {
-                    try {
-                        // Ensure directory exists
-                        fs.mkdirSync(indexPath, { recursive: true });
+                    context.agentContext.index = {
+                        source: "website",
+                        name: "website-index",
+                        location: "browser-agent",
+                        size: 0,
+                        path: indexPath,
+                        state: "new",
+                        progress: 0,
+                        sizeOnDisk: 0,
+                    };
 
-                        // Create proper IndexData object
-                        context.agentContext.index = {
-                            source: "website",
-                            name: "website-index",
-                            location: "browser-agent",
-                            size: 0,
-                            path: indexPath,
-                            state: "new",
-                            progress: 0,
-                            sizeOnDisk: 0,
-                        };
-
-                        debug(`Created index structure at ${indexPath}`);
-                    } catch (createError) {
-                        debug(`Error creating index directory: ${createError}`);
-                        context.agentContext.index = undefined;
-                    }
+                    debug(
+                        `Index will be created at ${indexPath} when first page is indexed`,
+                    );
                 } else {
                     context.agentContext.index = undefined;
                     debug(
@@ -1584,6 +1613,7 @@ async function executeBrowserAction(
                         },
                     });
                 }
+
                 default:
                     // Should never happen.
                     throw new Error(

@@ -13,6 +13,7 @@ export {
     ActionSchemaObject,
     ActionSchemaUnion,
     SchemaObjectFields,
+    ActionSchemaEntityTypeDefinition,
 } from "./type.js";
 
 export { parseActionSchemaSource } from "./parser.js";
