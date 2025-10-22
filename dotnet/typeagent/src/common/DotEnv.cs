@@ -30,7 +30,7 @@ public static class Dotenv
                 continue;
             }
             string key = line[..seperatorIndex].Trim();
-            string value = line[(seperatorIndex + 1)..].Trim(); // Fixed: added parentheses and semicolon, fixed range usage, fixed formatting
+            string value = line[(seperatorIndex + 1)..].Trim(); 
 
             if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(value))
             {
