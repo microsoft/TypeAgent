@@ -19,18 +19,13 @@ public class TypeAgentException : Exception
 
 public class TypeAgentException<TError> : Exception
 {
-    public TypeAgentException(TError error)
-        : this(error, null, null)
+    public TypeAgentException(TError error, string? message = null)
+        : this(error, message, null)
     {
     }
 
     public TypeAgentException(TError error, Exception innerEx)
         : this(error, null, innerEx)
-    {
-    }
-
-    public TypeAgentException(TError error, string message)
-        : this(error, message, null)
     {
     }
 

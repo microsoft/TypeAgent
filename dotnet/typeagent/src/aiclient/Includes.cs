@@ -16,3 +16,7 @@ global using System.Net.Http.Headers;
 
 global using TypeAgent.Common;
 global using Microsoft.TypeChat;
+
+global using Azure.Core;
+global using Azure.Identity;
+

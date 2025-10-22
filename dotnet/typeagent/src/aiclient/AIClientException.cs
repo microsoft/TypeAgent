@@ -7,12 +7,12 @@ public class AIClientException : TypeAgentException<AIClientException.ErrorCode>
 {
     public enum ErrorCode
     {
+        MissingApiSetting,
         InvalidEmbeddingResponse
     }
 
-    public AIClientException(ErrorCode error)
-        : base(error)
+    public AIClientException(ErrorCode error, string? message = null)
+        : base(error, message)
     {
-
     }
 }

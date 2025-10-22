@@ -8,21 +8,21 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
 {
     int _dimensions;
 
-    public TextEmbeddingModel(OpenAIConfig config, HttpClient? client = null, int dimensions = 0)
-        : base(config, client)
+    public TextEmbeddingModel(ApiSettings settings, HttpClient? client = null, int dimensions = 0)
+        : base(settings, client)
     {
         _dimensions = dimensions;
     }
 
     public async Task<float[]> GenerateAsync(string input, CancellationToken cancellationToken)
     {
-        Response response = await GetResponseAsync([input], cancellationToken);
+        Response response = await GetResponseAsync([input], cancellationToken).ConfigureAwait(false);
         return response.data[0].embedding;
     }
 
     public async Task<IList<float[]>> GenerateAsync(string[] inputs, CancellationToken cancellationToken)
     {
-        Response response = await GetResponseAsync(inputs, cancellationToken);
+        Response response = await GetResponseAsync(inputs, cancellationToken).ConfigureAwait(false);
         return response.data.Map((m) => m.embedding);
     }
 
@@ -31,12 +31,12 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
         ArgumentVerify.ThrowIfNullOrEmpty(inputs, nameof(inputs));
 
         Request request = CreateRequest(inputs);
-        string? apiToken = Config.HasTokenProvider
-                    ? await Config.ApiTokenProvider.GetAccessTokenAsync(cancellationToken)
+        string? apiToken = Settings.ApiTokenProvider is not null
+                    ? await Settings.ApiTokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false)
                     : null;
 
         Response response = await Client.GetJsonResponseAsync<Request, Response>(
-            Endpoint,
+            Settings.Endpoint,
             request,
             apiToken,
             RequestSettings,
@@ -59,9 +59,9 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
         {
             request.dimensions = _dimensions;
         }
-        if (!Config.Azure)
+        if (!string.IsNullOrEmpty(Settings.Model))
         {
-            request.model = Model.Name;
+            request.model = Settings.Model;
         }
         return request;
     }
