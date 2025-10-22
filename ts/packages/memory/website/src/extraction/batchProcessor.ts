@@ -232,11 +232,9 @@ export class BatchProcessor extends EventEmitter {
                     modeConfig.defaultChunkSize,
                 );
                 itemChunkCounts.push(chunkCount);
-                globalTotalChunks += chunkCount;
             }
         } else {
             itemChunkCounts.fill(1, 0, items.length);
-            globalTotalChunks = items.length;
         }
 
         const batchSize = this.calculateOptimalBatchSize(mode, items.length);
@@ -248,6 +246,7 @@ export class BatchProcessor extends EventEmitter {
                 const itemIndex = i + batchIndex;
                 const itemChunkCount = itemChunkCounts[itemIndex];
                 let itemProcessedChunks = 0;
+                let isTotalCountUpdated = false;
 
                 return this.contentExtractor
                     .extract(item, mode, {
@@ -257,6 +256,12 @@ export class BatchProcessor extends EventEmitter {
                         ) => {
                             itemProcessedChunks++;
                             globalProcessedChunks++;
+
+                            if (!isTotalCountUpdated) {
+                                globalTotalChunks +=
+                                    chunkInfo.totalChunksInItem;
+                                isTotalCountUpdated = true;
+                            }
 
                             console.log(
                                 `🔄 Chunk progress [${mode}]: chunk ${chunkInfo.chunkIndex + 1}/${chunkInfo.totalChunksInItem} ` +
