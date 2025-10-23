@@ -591,14 +591,19 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
     }
 }
 
+function initialMatchState(grammar: Grammar): MatchState[] {
+    return grammar.rules
+        .map((r, i) => ({
+            name: `<Start>[${i}]`,
+            rule: r,
+            partIndex: 0,
+            index: 0,
+            nextValueId: 0,
+        }))
+        .reverse();
+}
 function matchRules(grammar: Grammar, request: string): GrammarMatchResult[] {
-    const pending: MatchState[] = grammar.rules.map((r, i) => ({
-        name: `<Start>[${i}]`,
-        rule: r,
-        partIndex: 0,
-        index: 0,
-        nextValueId: 0,
-    }));
+    const pending = initialMatchState(grammar);
     const results: GrammarMatchResult[] = [];
     while (pending.length > 0) {
         const state = pending.pop()!;
@@ -627,17 +632,10 @@ function partialMatchRules(
     grammar: Grammar,
     request: string,
 ): GrammarCompletionResult {
-    const pending: MatchState[] = grammar.rules.map((r, i) => ({
-        name: `<Start>[${i}]`,
-        rule: r,
-        partIndex: 0,
-        index: 0,
-        nextValueId: 0,
-    }));
+    const pending = initialMatchState(grammar);
     const completions: string[] = [];
-
     while (pending.length > 0) {
-        const state = pending.shift()!;
+        const state = pending.pop()!;
         debugMatch(
             `Start state ${state.name}{${state.partIndex}}: @${state.index}`,
         );
