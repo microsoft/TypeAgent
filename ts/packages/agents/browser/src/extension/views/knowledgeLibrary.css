@@ -5665,9 +5665,9 @@ body {
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
-/* Expanded State */
+/* Force sidebar to always stay collapsed */
 .icon-rail-sidebar.expanded {
-  width: var(--sidebar-expanded-width);
+  width: var(--sidebar-collapsed-width);
 }
 
 /* Toggle Button */
@@ -5802,7 +5802,7 @@ body {
 
 /* Tooltip Arrow */
 .icon-rail-sidebar:not(.expanded) .nav-item::before {
-  content:;
+  content: '';
   position: absolute;
   left: calc(100% + 8px);
   top: 50%;
@@ -5819,9 +5819,9 @@ body {
   opacity: 1;
 }
 
-/* Hide tooltip for active item to avoid conflict with active bar */
+/* Hide tooltip arrow for active item to avoid conflict with active bar */
 .icon-rail-sidebar .nav-item.active::before {
-  content:;
+  content: none;
   border: none;
 }
 

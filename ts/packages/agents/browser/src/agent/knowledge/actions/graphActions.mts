@@ -1305,44 +1305,9 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             relationships.length,
         );
 
-        // Add lateral relationships from topic relationships table - SUPER OPTIMIZED
-        if (websiteCollection.topicRelationships) {
-            tracker.startOperation(
-                "ensureTopicGraphCache.getLateralRelationships",
-            );
-            const topicIds = new Set(topics.map((t: any) => t.topicId));
-            const topicIdsArray = Array.from(topicIds);
-
-            // Use optimized query that filters at database level
-            const allRels =
-                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
-                    topicIdsArray,
-                    0.3, // Only get relationships with strength >= 0.3 for better performance
-                );
-
-            // Convert to our format - no need to filter since DB already filtered
-            const lateralRels: any[] = allRels.map((rel: any) => ({
-                from: rel.fromTopic,
-                to: rel.toTopic,
-                type: rel.relationshipType,
-                strength: rel.strength,
-            }));
-
-            // Deduplicate lateral relationships
-            const relKeys = new Set<string>();
-            for (const rel of lateralRels) {
-                const key = `${rel.from}|${rel.to}|${rel.type}`;
-                if (!relKeys.has(key)) {
-                    relKeys.add(key);
-                    relationships.push(rel);
-                }
-            }
-            tracker.endOperation(
-                "ensureTopicGraphCache.getLateralRelationships",
-                allRels.length,
-                lateralRels.length,
-            );
-        }
+        debug(
+            `[ensureTopicGraphCache] Built ${relationships.length} hierarchical relationships (lateral relationships fetched on-demand)`,
+        );
 
         // Get entity counts for topics from topic-entity relations
         const topicMetricsInput = topics.map((topic: any) => ({
@@ -2170,9 +2135,108 @@ export async function getTopicImportanceLayer(
             selectedTopicIds.has(t.topicId),
         );
 
-        const selectedRelationships = allRelationships.filter(
+        // Debug: Check relationship and topic structure
+        if (allRelationships.length > 0) {
+            const sampleRel = allRelationships[0];
+            debug(
+                `[getTopicImportanceLayer] Sample relationship structure: ${JSON.stringify(sampleRel)}`,
+            );
+        }
+        debug(
+            `[getTopicImportanceLayer] Selected ${selectedTopicIds.size} topics. Sample: ${Array.from(selectedTopicIds).slice(0, 3).join(', ')}`,
+        );
+
+        // Filter hierarchical relationships from cache
+        const hierarchicalRelationships = allRelationships.filter(
             (rel: any) =>
                 selectedTopicIds.has(rel.from) && selectedTopicIds.has(rel.to),
+        );
+
+        debug(
+            `[getTopicImportanceLayer] Filtered hierarchical relationships: ${allRelationships.length} in cache → ${hierarchicalRelationships.length} for selected topics`,
+        );
+
+        // Debug: Check why filtering failed
+        if (hierarchicalRelationships.length === 0 && allRelationships.length > 0) {
+            const sampleRelsWithSelected = allRelationships.slice(0, 5).map((rel: any) => ({
+                from: rel.from,
+                to: rel.to,
+                fromSelected: selectedTopicIds.has(rel.from),
+                toSelected: selectedTopicIds.has(rel.to),
+            }));
+            debug(
+                `[getTopicImportanceLayer] Sample relationships with selection status: ${JSON.stringify(sampleRelsWithSelected)}`,
+            );
+
+            // Include missing endpoints to make edges visible
+            const initialSize = selectedTopicIds.size;
+            for (const rel of allRelationships) {
+                if (selectedTopicIds.has(rel.from) && !selectedTopicIds.has(rel.to)) {
+                    selectedTopicIds.add(rel.to);
+                } else if (selectedTopicIds.has(rel.to) && !selectedTopicIds.has(rel.from)) {
+                    selectedTopicIds.add(rel.from);
+                }
+
+                // Stop if we've added too many
+                if (selectedTopicIds.size > maxNodes * 2) break;
+            }
+
+            debug(
+                `[getTopicImportanceLayer] Added ${selectedTopicIds.size - initialSize} topics to complete edges (${initialSize} → ${selectedTopicIds.size})`,
+            );
+
+            // Re-filter with expanded topic set
+            const expandedTopics = allTopics.filter((t: any) =>
+                selectedTopicIds.has(t.topicId),
+            );
+            const expandedRelationships = allRelationships.filter(
+                (rel: any) =>
+                    selectedTopicIds.has(rel.from) && selectedTopicIds.has(rel.to),
+            );
+
+            debug(
+                `[getTopicImportanceLayer] After expansion: ${expandedTopics.length} topics, ${expandedRelationships.length} hierarchical edges`,
+            );
+
+            // Update selected topics and relationships
+            selectedTopics.length = 0;
+            selectedTopics.push(...expandedTopics);
+            hierarchicalRelationships.length = 0;
+            hierarchicalRelationships.push(...expandedRelationships);
+        }
+
+        // Fetch lateral relationships specifically for selected topics
+        const selectedTopicIdsArray = Array.from(selectedTopicIds);
+        let lateralRelationships: any[] = [];
+
+        if (websiteCollection.topicRelationships) {
+            debug(
+                `[getTopicImportanceLayer] Fetching lateral relationships for ${selectedTopicIdsArray.length} selected topics`,
+            );
+
+            const lateralRels =
+                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
+                    selectedTopicIdsArray,
+                    0.3,
+                );
+
+            debug(
+                `[getTopicImportanceLayer] Fetched ${lateralRels.length} lateral relationships from database`,
+            );
+
+            lateralRelationships = lateralRels.map((rel: any) => ({
+                from: rel.fromTopic,
+                to: rel.toTopic,
+                type: rel.relationshipType,
+                strength: rel.strength,
+            }));
+        }
+
+        // Combine hierarchical and lateral relationships
+        const selectedRelationships = [...hierarchicalRelationships, ...lateralRelationships];
+
+        debug(
+            `[getTopicImportanceLayer] Total relationships: ${hierarchicalRelationships.length} hierarchical + ${lateralRelationships.length} lateral = ${selectedRelationships.length} total`,
         );
 
         const topicsWithMetrics = selectedTopics.map((topic: any) => {
@@ -2197,6 +2261,10 @@ export async function getTopicImportanceLayer(
                 selectedMetrics[selectedMetrics.length - 1]?.importance || 0,
             layer: "topic_importance",
         };
+
+        debug(
+            `[getTopicImportanceLayer] Returning ${topicsWithMetrics.length} topics and ${selectedRelationships.length} edges to client`,
+        );
 
         return {
             topics: topicsWithMetrics,

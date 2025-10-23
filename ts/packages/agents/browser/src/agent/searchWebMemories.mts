@@ -499,32 +499,9 @@ export async function searchWebMemories(
                     }
                 });
 
-                // Filter semantic refs by score threshold
-                const semanticRefScoreThreshold = request.minScore || 1.0;
-                const filteredSemanticRefMatches = new Map<
-                    kp.KnowledgeType,
-                    Map<kp.SemanticRefOrdinal, kp.ScoredSemanticRefOrdinal>
-                >();
-
-                combinedSemanticRefMatches.forEach(
-                    (dedupeMap, knowledgeType) => {
-                        const filtered = new Map<
-                            kp.SemanticRefOrdinal,
-                            kp.ScoredSemanticRefOrdinal
-                        >();
-
-                        dedupeMap.forEach((scoredRef, ordinal) => {
-                            if (scoredRef.score >= semanticRefScoreThreshold) {
-                                filtered.set(ordinal, scoredRef);
-                            }
-                        });
-
-                        filteredSemanticRefMatches.set(knowledgeType, filtered);
-                    },
-                );
-
-                // Use filtered refs for the rest of processing
-                const refsToUse = filteredSemanticRefMatches;
+                // Use ALL semantic refs (no threshold filtering)
+                // Instead, we'll rank chunks by cumulative score and apply a token budget
+                const refsToUse = combinedSemanticRefMatches;
 
                 // Use KnowPro helper functions to extract entities and topics from semantic refs
                 if (refsToUse.has("entity")) {
@@ -583,13 +560,17 @@ export async function searchWebMemories(
                     }
                 }
 
-                // Extract text chunks from semantic reference ranges (deduplicated)
-                // Use a map per message to collect unique chunks referenced by semantic refs
-                const messageChunksMap = new Map<
-                    kp.MessageOrdinal,
-                    Map<number, string>
+                // Calculate cumulative scores for each chunk
+                // Key: "messageOrdinal:chunkOrdinal", Value: {score, text, messageOrdinal, chunkOrdinal}
+                const chunkScores = new Map<
+                    string,
+                    {
+                        cumulativeScore: number;
+                        text: string;
+                        messageOrdinal: kp.MessageOrdinal;
+                        chunkOrdinal: number;
+                    }
                 >();
-                const messageScoresMap = new Map<kp.MessageOrdinal, number[]>();
 
                 refsToUse.forEach((dedupeMap, knowledgeType) => {
                     dedupeMap.forEach((scoredRef) => {
@@ -611,42 +592,78 @@ export async function searchWebMemories(
                                     semanticRef.range.end?.chunkOrdinal ||
                                     msg.textChunks.length - 1;
 
-                                // Initialize maps for this message if needed
-                                if (!messageChunksMap.has(messageOrdinal)) {
-                                    messageChunksMap.set(
-                                        messageOrdinal,
-                                        new Map<number, string>(),
-                                    );
-                                    messageScoresMap.set(messageOrdinal, []);
-                                }
-
-                                const chunksMap =
-                                    messageChunksMap.get(messageOrdinal)!;
-                                const scores =
-                                    messageScoresMap.get(messageOrdinal)!;
-
-                                // Add all chunks in the range to the map (deduplicates automatically)
+                                // Add score to each chunk in the range
                                 for (
                                     let chunkOrdinal = startChunk;
                                     chunkOrdinal <= endChunk;
                                     chunkOrdinal++
                                 ) {
                                     if (chunkOrdinal < msg.textChunks.length) {
-                                        chunksMap.set(
-                                            chunkOrdinal,
-                                            msg.textChunks[chunkOrdinal],
-                                        );
+                                        const chunkKey = `${messageOrdinal}:${chunkOrdinal}`;
+                                        const existing = chunkScores.get(chunkKey);
+
+                                        if (existing) {
+                                            existing.cumulativeScore += scoredRef.score;
+                                        } else {
+                                            chunkScores.set(chunkKey, {
+                                                cumulativeScore: scoredRef.score,
+                                                text: msg.textChunks[chunkOrdinal],
+                                                messageOrdinal,
+                                                chunkOrdinal,
+                                            });
+                                        }
                                     }
                                 }
-
-                                // Track score for averaging
-                                scores.push(scoredRef.score);
                             }
                         }
                     });
                 });
 
-                // Build messages from deduplicated chunks
+                // Rank chunks by cumulative score and select top chunks within token budget
+                const rankedChunks = Array.from(chunkScores.values()).sort(
+                    (a, b) => b.cumulativeScore - a.cumulativeScore,
+                );
+
+                // Token budget: ~16K tokens ≈ 64K characters (using 4 chars/token average)
+                const targetTokens = request.maxCharsInBudget
+                    ? request.maxCharsInBudget / 4
+                    : 16000;
+                const maxChars = targetTokens * 4;
+                const selectedChunks: typeof rankedChunks = [];
+                let totalChars = 0;
+
+                for (const chunk of rankedChunks) {
+                    const chunkLength = chunk.text.length;
+                    if (totalChars + chunkLength <= maxChars) {
+                        selectedChunks.push(chunk);
+                        totalChars += chunkLength;
+                    } else {
+                        break;
+                    }
+                }
+
+                debug(
+                    `Selected ${selectedChunks.length} chunks (${totalChars} chars, ~${Math.round(totalChars / 4)} tokens) from ${rankedChunks.length} total chunks`,
+                );
+
+                // Group selected chunks back by message for coherence
+                const messageChunksMap = new Map<
+                    kp.MessageOrdinal,
+                    Array<{ ordinal: number; text: string; score: number }>
+                >();
+
+                for (const chunk of selectedChunks) {
+                    if (!messageChunksMap.has(chunk.messageOrdinal)) {
+                        messageChunksMap.set(chunk.messageOrdinal, []);
+                    }
+                    messageChunksMap.get(chunk.messageOrdinal)!.push({
+                        ordinal: chunk.chunkOrdinal,
+                        text: chunk.text,
+                        score: chunk.cumulativeScore,
+                    });
+                }
+
+                // Build messages from selected chunks
                 const matchedMessages: Array<{
                     timestamp: string;
                     value: string;
@@ -656,24 +673,21 @@ export async function searchWebMemories(
                     chunkCount: number;
                 }> = [];
 
-                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
+                messageChunksMap.forEach((chunks, messageOrdinal) => {
                     const msg = websiteCollection.messages.get(messageOrdinal);
                     if (!msg) return;
 
                     const metadata = msg.metadata as any;
-                    const scores = messageScoresMap.get(messageOrdinal)!;
-
-                    // Calculate average score
-                    const avgScore =
-                        scores.reduce((sum, s) => sum + s, 0) / scores.length;
 
                     // Sort chunks by ordinal for coherence
-                    const sortedChunks = Array.from(chunksMap.entries())
-                        .sort((a, b) => a[0] - b[0])
-                        .map(([_, chunkText]) => chunkText);
+                    chunks.sort((a, b) => a.ordinal - b.ordinal);
 
                     // Combine chunks (maintaining order)
-                    const combinedText = sortedChunks.join("\n\n");
+                    const combinedText = chunks.map((c) => c.text).join("\n\n");
+
+                    // Calculate average score for this message
+                    const avgScore =
+                        chunks.reduce((sum, c) => sum + c.score, 0) / chunks.length;
 
                     const currMessage = {
                         timestamp:
@@ -685,7 +699,7 @@ export async function searchWebMemories(
                         score: avgScore,
                         title: metadata.title,
                         url: metadata.url,
-                        chunkCount: chunksMap.size,
+                        chunkCount: chunks.length,
                     };
 
                     // Apply scope filtering
@@ -764,51 +778,17 @@ export async function searchWebMemories(
                         );
                 }
 
-                // Build messages from deduplicated chunks
-                const filteredMessageEntries: Array<{
-                    messageOrdinal: kp.MessageOrdinal;
-                    text: string;
-                    metadata: any;
-                    score: number;
-                }> = [];
-
-                messageChunksMap.forEach((chunksMap, messageOrdinal) => {
-                    const msg = websiteCollection.messages.get(messageOrdinal);
-                    if (!msg) return;
-
-                    const metadata = msg.metadata as any;
-                    const scores = messageScoresMap.get(messageOrdinal)!;
-                    const avgScore =
-                        scores.reduce((a, b) => a + b, 0) / scores.length;
-
-                    // Sort chunks by ordinal for coherence
-                    const sortedChunks = Array.from(chunksMap.entries())
-                        .sort((a, b) => a[0] - b[0])
-                        .map(([_, chunkText]) => chunkText);
-
-                    filteredMessageEntries.push({
-                        messageOrdinal,
-                        text: sortedChunks.join("\n\n"),
-                        metadata,
-                        score: avgScore,
-                    });
-                });
-
-                // Sort by score and take top K
-                filteredMessageEntries.sort((a, b) => b.score - a.score);
-                const topFilteredEntries = filteredMessageEntries.slice(
+                // Use the ranked chunks approach for filtered answer context
+                // (matchedMessages are already built from ranked chunks)
+                const topFilteredMessages = matchedMessages.slice(
                     0,
                     contextOptions.messagesTopK,
                 );
 
-                filteredAnswerContext.messages = topFilteredEntries.map(
-                    (entry) => ({
-                        timestamp:
-                            entry.metadata.lastVisitTime ||
-                            entry.metadata.visitDate ||
-                            entry.metadata.bookmarkDate ||
-                            new Date().toISOString(),
-                        value: entry.text,
+                filteredAnswerContext.messages = topFilteredMessages.map(
+                    (msg) => ({
+                        timestamp: msg.timestamp,
+                        value: msg.value,
                     }),
                 );
 
