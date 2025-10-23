@@ -1,0 +1,9 @@
+{
+  "emojiChar": "⚙️",
+  "description": "Agent to manipulate windows system settings",
+  "schema": {
+    "description": "Settings agent that helps the user change system settings on a Windows machine.",
+    "schemaFile": "./settingsActionSchemaV2.ts",
+    "schemaType": "SettingsAction"
+  }
+}

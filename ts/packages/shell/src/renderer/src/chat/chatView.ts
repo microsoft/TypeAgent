@@ -80,7 +80,8 @@ export class ChatView {
             const source = e.data as string;
             if (
                 source.startsWith("slideshow_") ||
-                source.startsWith("aivideo_")
+                source.startsWith("aivideo_") ||
+                source.startsWith("monitorlayout_")
             ) {
                 const temp: string[] = source.split("_");
                 if (temp.length != 3) {

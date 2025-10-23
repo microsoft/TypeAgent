@@ -32,6 +32,7 @@ import {
     createURLResolverCommands,
     createURLValidateCommands,
 } from "./urlCommands.js";
+import { createSettingsSchemaCommands } from "./schemaCommands.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -57,6 +58,7 @@ async function runStudio(): Promise<void> {
         template: createTemplateCommand(studio),
         urlResolver: createURLResolverCommands(studio),
         urlValidate: createURLValidateCommands(studio),
+        generateSettingsSchemas: createSettingsSchemaCommands(studio),
     };
 
     studio.commands = commands;

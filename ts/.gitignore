@@ -13,3 +13,6 @@ coverage/
 
 #interactive apps
 command_history.json
+
+#settings agent
+packages/agents/settings/src/settingsActionSchemaV2.ts
