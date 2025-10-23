@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqlitePropertyToSemanticRefIndex : IPropertyToSemanticRefIndex
@@ -11,6 +10,7 @@ public class SqlitePropertyToSemanticRefIndex : IPropertyToSemanticRefIndex
     public SqlitePropertyToSemanticRefIndex(SqliteDatabase db)
     {
         ArgumentVerify.ThrowIfNull(db, nameof(db));
+
         _db = db;
     }
 
