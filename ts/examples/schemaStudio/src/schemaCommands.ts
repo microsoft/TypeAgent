@@ -18,7 +18,7 @@ export function createSettingsSchemaCommands(studio: SchemaStudio): CommandHandl
             output: {
                 description: "The output schema file to write the generated schemas to",
                 type: "string",
-                defaultValue: "examples/schemaStudio/output/settingsCommandSchemas.ts"
+                defaultValue: "examples/schemaStudio/output/settingsCommandSchemasV2.ts"
             }
         }
     }

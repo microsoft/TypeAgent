@@ -16,3 +16,5 @@ command_history.json
 
 #settings agent
 packages/agents/settings/src/settingsActionSchemaV2.ts
+examples/schemaStudio/data/settingsCommands.csv
+examples/schemaStudio/output/
