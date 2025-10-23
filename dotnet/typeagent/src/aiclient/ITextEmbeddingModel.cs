@@ -3,7 +3,7 @@
 
 namespace TypeAgent.AIClient;
 
-internal interface ITextEmbeddingModel
+public interface ITextEmbeddingModel
 {
     Task<float[]> GenerateAsync(string input, CancellationToken cancellationToken);
 

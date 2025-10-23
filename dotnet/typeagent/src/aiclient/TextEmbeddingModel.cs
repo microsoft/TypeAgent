@@ -4,11 +4,11 @@
 
 namespace TypeAgent.AIClient;
 
-public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
+public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
 {
     int _dimensions;
 
-    public TextEmbeddingModel(ApiSettings settings, HttpClient? client = null, int dimensions = 0)
+    public TextEmbeddingModel(ModelApiSettings settings, HttpClient? client = null, int dimensions = 0)
         : base(settings, client)
     {
         _dimensions = dimensions;
@@ -39,7 +39,7 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
             Settings.Endpoint,
             request,
             apiToken,
-            RequestSettings,
+            Settings.Retry,
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -59,9 +59,9 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
         {
             request.dimensions = _dimensions;
         }
-        if (!string.IsNullOrEmpty(Settings.Model))
+        if (!string.IsNullOrEmpty(Settings.ModelName))
         {
-            request.model = Settings.Model;
+            request.model = Settings.ModelName;
         }
         return request;
     }

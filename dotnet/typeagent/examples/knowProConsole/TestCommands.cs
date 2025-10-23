@@ -125,7 +125,8 @@ public class TestCommands : ICommandModule
         {
             select.When = new WhenFilter()
             {
-                DateRange = new() {
+                DateRange = new()
+                {
                     Start = conversationDateRange.Value.Start,
                     End = conversationDateRange.Value.Start.AddMinutes(10)
                 }
@@ -157,7 +158,7 @@ public class TestCommands : ICommandModule
 
     private async Task TestEmbeddingsAsync(ParseResult args, CancellationToken cancellationToken)
     {
-        var settings = AzureApiSettings.EmbeddingSettingsFromEnv();
+        var settings = AzureModelApiSettings.EmbeddingSettingsFromEnv();
         var model = new TextEmbeddingModel(settings);
         NamedArgs namedArgs = new(args);
         string text = namedArgs.Get("text") ?? "The quick brown fox";
