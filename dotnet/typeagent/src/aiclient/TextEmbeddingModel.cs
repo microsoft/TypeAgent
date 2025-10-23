@@ -8,11 +8,24 @@ public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
 {
     int _dimensions;
 
-    public TextEmbeddingModel(ModelApiSettings settings, HttpClient? client = null, int dimensions = 0)
+    public TextEmbeddingModel(ModelApiSettings settings, int dimensions = 0, int maxBatchSize = 2048)
+        : this(settings, null, dimensions, maxBatchSize)
+    {
+    }
+
+    public TextEmbeddingModel(
+        ModelApiSettings settings,
+        HttpClient? client,
+        int dimensions = 0,
+        int maxBatchSize = 2048
+    )
         : base(settings, client)
     {
         _dimensions = dimensions;
+        MaxBatchSize = maxBatchSize;
     }
+
+    public int MaxBatchSize { get; }
 
     public async Task<float[]> GenerateAsync(string input, CancellationToken cancellationToken)
     {
@@ -20,13 +33,13 @@ public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
         return response.data[0].embedding;
     }
 
-    public async Task<IList<float[]>> GenerateAsync(string[] inputs, CancellationToken cancellationToken)
+    public async Task<IList<float[]>> GenerateAsync(IList<string> inputs, CancellationToken cancellationToken)
     {
         Response response = await GetResponseAsync(inputs, cancellationToken).ConfigureAwait(false);
         return response.data.Map((m) => m.embedding);
     }
 
-    private async Task<Response> GetResponseAsync(string[] inputs, CancellationToken cancellationToken)
+    private async Task<Response> GetResponseAsync(IList<string> inputs, CancellationToken cancellationToken)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(inputs, nameof(inputs));
 
@@ -49,7 +62,7 @@ public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
     }
 
 
-    private Request CreateRequest(string[] input)
+    private Request CreateRequest(IList<string> input)
     {
         var request = new Request
         {
@@ -70,7 +83,7 @@ public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
     {
         public string? model { get; set; }
         public int? dimensions { get; set; }
-        public string[] input { get; set; }
+        public IList<string> input { get; set; }
     }
 
     private struct Response
