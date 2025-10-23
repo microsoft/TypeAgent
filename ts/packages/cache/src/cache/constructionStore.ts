@@ -17,6 +17,7 @@ import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { ConstructionCache } from "../indexBrowser.js";
 import {
     MatchOptions,
+    mergeCompletionResults,
     NamespaceKeyFilter,
 } from "../constructions/constructionCache.js";
 import {
@@ -99,9 +100,6 @@ export interface ConstructionStore {
 
     // Usage
     match(request: string, options?: MatchOptions): ConstructionMatchResult[];
-
-    // Completion
-    getPrefix(namespaceKeys?: string[]): string[];
 }
 
 export class ConstructionStoreImpl implements ConstructionStore {
@@ -397,6 +395,19 @@ export class ConstructionStoreImpl implements ConstructionStore {
         return sortedMatches;
     }
 
+    public completion(
+        requestPrefix: string | undefined,
+        options?: MatchOptions,
+    ) {
+        const cacheCompletion = this.cache?.completion(requestPrefix, options);
+        const builtInCompletion = this.builtInCache?.completion(
+            requestPrefix,
+            options,
+        );
+
+        return mergeCompletionResults(cacheCompletion, builtInCompletion);
+    }
+
     public async prune(filter: (namespaceKey: string) => boolean) {
         if (this.cache === undefined) {
             throw new Error("Construction cache not initialized");
@@ -406,12 +417,5 @@ export class ConstructionStoreImpl implements ConstructionStore {
         this.modified = true;
         await this.doAutoSave();
         return count;
-    }
-
-    public getPrefix(namespaceKeys?: string[]): string[] {
-        if (this.cache === undefined) {
-            throw new Error("Construction cache not initialized");
-        }
-        return this.cache.getPrefix(namespaceKeys);
     }
 }

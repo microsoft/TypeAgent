@@ -8,11 +8,11 @@ import {
     GrammarPartJson,
     GrammarRule,
     GrammarRuleJson,
-    GrammarRules,
+    GrammarRulesJson,
 } from "./grammarTypes.js";
 
 export function grammarToJson(grammar: Grammar): GrammarJson {
-    const json: GrammarRules[] = [];
+    const json: GrammarRulesJson[] = [];
     const rulesToIndex: Map<GrammarRule[], number> = new Map();
     let nextIndex = 1;
 
