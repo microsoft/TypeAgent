@@ -20,4 +20,20 @@ public static class FileExtensions
             throw new FileNotFoundException(path);
         }
     }
+
+    public static IEnumerable<string> ReadBatchLines(string filePath, char commentChar)
+    {
+        // Delete param checking
+        foreach (var line in File.ReadLines(filePath))
+        {
+            var trimmedLine = line.Trim();
+
+            // Skip empty lines and comments
+            if (!string.IsNullOrWhiteSpace(trimmedLine) && !trimmedLine.StartsWith(commentChar))
+            {
+                yield return trimmedLine;
+            }
+
+        }
+    }
 }

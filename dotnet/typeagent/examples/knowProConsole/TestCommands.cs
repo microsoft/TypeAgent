@@ -17,7 +17,8 @@ public class TestCommands : ICommandModule
         return [
             SearchTermsDef(),
             SearchPropertyTermsDef(),
-            SearchMessagesTermsDef()
+            SearchMessagesTermsDef(),
+            TestEmbeddingsDef()
         ];
     }
 
@@ -78,7 +79,6 @@ public class TestCommands : ICommandModule
             { KnowledgePropertyName.EntityName, "Children of Time" },
         };
         await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
-
     }
 
     private Command SearchMessagesTermsDef()
@@ -144,6 +144,27 @@ public class TestCommands : ICommandModule
         await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults, true);
     }
 
+    private Command TestEmbeddingsDef()
+    {
+        Command cmd = new("kpTestEmbeddings")
+        {
+            Options.Arg<string>("text", "text to embed")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.TestEmbeddingsAsync);
+        return cmd;
+    }
+
+    private async Task TestEmbeddingsAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        var settings = AzureApiSettings.EmbeddingSettingsFromEnv();
+        var model = new TextEmbeddingModel(settings);
+        NamedArgs namedArgs = new(args);
+        string text = namedArgs.Get("text") ?? "The quick brown fox";
+
+        var result = await model.GenerateAsync(text, cancellationToken);
+        KnowProWriter.WriteLine(result.Length);
+    }
 
     async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
     {

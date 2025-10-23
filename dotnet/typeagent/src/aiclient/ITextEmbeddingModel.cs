@@ -5,6 +5,7 @@ namespace TypeAgent.AIClient;
 
 internal interface ITextEmbeddingModel
 {
-    Task<float[]> GenerateAsync(string input);
-    Task<IList<float[]>> GenerateAsync(IList<string> inputs);
+    Task<float[]> GenerateAsync(string input, CancellationToken cancellationToken);
+
+    Task<IList<float[]>> GenerateAsync(string[] inputs, CancellationToken cancellationToken);
 }

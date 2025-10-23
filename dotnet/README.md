@@ -1,15 +1,18 @@
-# TypeAgent Dotnet code
+# TypeAgent.NET
 
 ## Overview
 
-**TypeAgent** is **sample code** that explores an architecture for building a *personal agent* with *natural language interfaces* leveraging current advances in LLM technology.
+**[TypeAgent](../README.md)** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
-This directory contain dotnet C# code that support our **TypeAgent** implementation.
+TypeAgent includes [KnowPro.NET](./typeagent/src/knowpro/) explores how to implement memory using [Structured RAG](../ts/packages/knowPro/README.md#structured-rag-overview).
 
-* [AutoShell](./autoShell/)(Windows Only) - Support [Desktop](../ts/packages/agents/desktop/) to control Window functionalities.
-* [email](./email/)(Windows Only) - Sample code for importing emails from Outlook
+## Components
 
+- [TypeAgent.NET](./typeagent/README.md): in-development port of TypeAgent to .NET, written in C#
+- C# code that supports the Typescript **TypeAgent** implementation.
 
+  - [AutoShell](./autoShell/)(Windows Only) - Support [Desktop](../ts/packages/agents/desktop/) to control Window functionalities.
+  - [email](./email/)(Windows Only) - Sample code for importing emails from Outlook
 
 ## Trademarks
 
@@ -18,6 +21,3 @@ trademarks or logos is subject to and must follow
 [Microsoft's Trademark \& Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
 Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
 Any use of third-party trademarks or logos are subject to those third-party's policies.
-
-
-
