@@ -339,7 +339,10 @@ export class AgentCache {
         const store = this._constructionStore;
         const storeCompletion = store.completion(requestPrefix, options);
         const grammarStore = this._grammarStore;
-        const grammarCompletion = grammarStore.completion(requestPrefix, options);
+        const grammarCompletion = grammarStore.completion(
+            requestPrefix,
+            options,
+        );
         return mergeCompletionResults(storeCompletion, grammarCompletion);
     }
 }
