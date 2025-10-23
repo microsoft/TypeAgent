@@ -565,8 +565,10 @@ async function processBrowserAgentMessage(
                 }
 
                 if (context.agentContext.crossWordState) {
-                    const acrossClues = context.agentContext.crossWordState.across?.length || 0;
-                    const downClues = context.agentContext.crossWordState.down?.length || 0;
+                    const acrossClues =
+                        context.agentContext.crossWordState.across?.length || 0;
+                    const downClues =
+                        context.agentContext.crossWordState.down?.length || 0;
                     context.notify(
                         AppAgentEvent.Inline,
                         `Crossword page is ready for interaction with ${acrossClues} across and ${downClues} down clues.`,
