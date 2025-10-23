@@ -14,6 +14,7 @@ import {
 } from "./grammarTypes.js";
 
 const debugMatch = registerDebug("typeagent:grammar:match");
+const debugCompletion = registerDebug("typeagent:grammar:completion");
 
 // Treats spaces and punctuation as word separators
 const separatorRegExpStr = "\\s\\p{P}";
@@ -207,10 +208,7 @@ function captureWildcard(
     state.index = newIndex;
 
     // Queue up longer wildcard match
-    pending.push({
-        ...state,
-        partIndex: state.partIndex - 1,
-    });
+    pending.push({ ...state });
 
     // Update current state
     state.pendingWildcard = undefined;
@@ -247,6 +245,17 @@ function addValue(
     addValueWithId(state, valueId, matchedValue, false);
 }
 
+function nextNonSeparatorIndex(request: string, index: number) {
+    if (request.length <= index) {
+        return request.length;
+    }
+
+    // Detect trailing separators
+    separatorRegExp.lastIndex = index;
+    const match = separatorRegExp.exec(request);
+    return match === null ? index : index + match[0].length;
+}
+
 function finalizeMatch(
     state: MatchState,
     request: string,
@@ -266,19 +275,18 @@ function finalizeMatch(
     }
     if (state.index < request.length) {
         // Detect trailing separators
-        separatorRegExp.lastIndex = state.index;
-        const match = separatorRegExp.exec(request);
-        if (match === null || state.index + match[0].length < request.length) {
-            const trailing = match
-                ? state.index + match[0].length
-                : state.index;
+        const nonSepIndex = nextNonSeparatorIndex(request, state.index);
+        if (nonSepIndex < request.length) {
             debugMatch(
-                `Reject with trailing text at ${trailing}: ${request.slice(trailing)}`,
+                `Reject with trailing non-separator text at ${nonSepIndex}: ${request.slice(
+                    nonSepIndex,
+                )}`,
             );
             return;
         }
+
         debugMatch(
-            `Consume trailing separators at ${state.index} to ${state.index + match[0].length}`,
+            `Consume trailing separators at ${state.index} to ${request.length}}`,
         );
     }
     debugMatch(
@@ -333,31 +341,6 @@ function finalizeNestedRule(state: MatchState) {
     return false;
 }
 
-function queueOptional(
-    pending: MatchState[],
-    state: MatchState,
-    part: VarNumberPart | VarStringPart,
-) {
-    if (part.optional) {
-        const newState = { ...state };
-        addValue(newState, part.variable, undefined);
-        pending.push(newState);
-    }
-}
-
-function matchOptionalVariable(
-    state: MatchState,
-    part: VarNumberPart | VarStringPart,
-    curr: number,
-) {
-    if (part.optional) {
-        debugMatch(`  Skipping optional ${part.type} at ${curr}`);
-        addValue(state, part.variable, undefined);
-        return true;
-    }
-    return false;
-}
-
 function matchStringPartWithWildcard(
     regExpStr: string,
     request: string,
@@ -401,7 +384,7 @@ function matchStringPartWithoutWildcard(
 ) {
     const regExp = new RegExp(regExpStr, "iuy");
     const curr = state.index;
-    regExp.lastIndex = state.index;
+    regExp.lastIndex = curr;
     const match = regExp.exec(request);
     if (match === null) {
         return false;
@@ -450,7 +433,7 @@ function matchVarNumberPartWithWildcard(
     while (true) {
         const match = matchNumberPartWithWildcardRegExp.exec(request);
         if (match === null) {
-            return matchOptionalVariable(state, part, curr);
+            return false;
         }
         const n = Number(match[1]);
         if (isNaN(n)) {
@@ -462,7 +445,7 @@ function matchVarNumberPartWithWildcard(
 
         if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
             debugMatch(`  Matched number at ${wildcardEnd} to ${newIndex}`);
-            queueOptional(pending, state, part);
+
             addValue(state, part.variable, n);
             return true;
         }
@@ -478,22 +461,21 @@ function matchVarNumberPartWithoutWildcard(
     request: string,
     state: MatchState,
     part: VarNumberPart,
-    pending: MatchState[],
 ) {
     const curr = state.index;
     matchNumberPartRegexp.lastIndex = curr;
     const m = matchNumberPartRegexp.exec(request);
     if (m === null) {
-        return matchOptionalVariable(state, part, curr);
+        return false;
     }
     const n = Number(m[1]);
     if (isNaN(n)) {
-        return matchOptionalVariable(state, part, curr);
+        return false;
     }
 
     const newIndex = curr + m[0].length;
     debugMatch(`  Matched number at ${curr} to ${newIndex}`);
-    queueOptional(pending, state, part);
+
     addValue(state, part.variable, n);
     state.index = newIndex;
     return true;
@@ -510,20 +492,15 @@ function matchVarNumberPart(
     );
     return state.pendingWildcard !== undefined
         ? matchVarNumberPartWithWildcard(request, state, part, pending)
-        : matchVarNumberPartWithoutWildcard(request, state, part, pending);
+        : matchVarNumberPartWithoutWildcard(request, state, part);
 }
 
-function matchVarStringPart(
-    state: MatchState,
-    part: VarStringPart,
-    pending: MatchState[],
-) {
+function matchVarStringPart(state: MatchState, part: VarStringPart) {
     // string variable, wildcard
     if (state.pendingWildcard !== undefined) {
-        return matchOptionalVariable(state, part, state.index);
+        return false;
     }
 
-    queueOptional(pending, state, part);
     state.pendingWildcard = {
         valueId: addValueId(state, part.variable),
         start: state.index,
@@ -546,7 +523,16 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
         debugMatch(
             ` State ${state.name}{${partIndex}}: @${state.index}, type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
         );
-        state.partIndex++;
+
+        if (part.optional) {
+            // queue up skipping optional
+            const newState = { ...state, partIndex: state.partIndex + 1 };
+            if (part.variable) {
+                addValue(newState, part.variable, undefined);
+            }
+            pending.push(newState);
+        }
+
         switch (part.type) {
             case "string":
                 if (!matchStringPart(request, state, part, pending)) {
@@ -561,7 +547,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                 break;
             case "wildcard":
                 // string variable, wildcard
-                if (!matchVarStringPart(state, part, pending)) {
+                if (!matchVarStringPart(state, part)) {
                     return false;
                 }
                 break;
@@ -574,34 +560,34 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                     name: state.name,
                     variable: part.variable,
                     rule: state.rule,
-                    partIndex: state.partIndex,
+                    partIndex: state.partIndex + 1,
                     valueIds: state.valueIds,
                     prev: state.nested,
                 };
-                let i = 0;
-                for (const rule of rules) {
+                // Update the current state to consider the first nested rule.
+                state.name = part.name
+                    ? `<${part.name}>[0]`
+                    : `${state.name}{${partIndex}}[0]`;
+                state.rule = rules[0];
+                state.partIndex = 0;
+                state.valueIds = undefined;
+                state.nested = nested;
+
+                // queue up the other rules (backwards to search in the original order)
+                for (let i = rules.length - 1; i > 0; i--) {
                     pending.push({
                         ...state,
                         name: part.name
                             ? `<${part.name}>[${i}]`
                             : `${state.name}{${partIndex}}[${i}]`,
-                        rule,
-                        partIndex: 0,
-                        valueIds: undefined,
-                        nested,
+                        rule: rules[i],
                     });
-                    i++;
                 }
-                if (part.optional) {
-                    // Reuse state
-                    if (part.variable) {
-                        addValue(state, part.variable, undefined);
-                    }
-                    pending.push(state);
-                }
-                return false;
+                // continue the loop (without incrementing partIndex)
+                continue;
             }
         }
+        state.partIndex++;
     }
 }
 
@@ -615,7 +601,7 @@ function matchRules(grammar: Grammar, request: string): GrammarMatchResult[] {
     }));
     const results: GrammarMatchResult[] = [];
     while (pending.length > 0) {
-        const state = pending.shift()!;
+        const state = pending.pop()!;
         debugMatch(
             `Start state ${state.name}{${state.partIndex}}: @${state.index}`,
         );
@@ -627,6 +613,66 @@ function matchRules(grammar: Grammar, request: string): GrammarMatchResult[] {
     return results;
 }
 
+export type GrammarCompletionProperty = {
+    match: unknown;
+    propertyNames: string[];
+};
+
+export type GrammarCompletionResult = {
+    completions: string[];
+    properties?: GrammarCompletionProperty[] | undefined;
+};
+
+function partialMatchRules(
+    grammar: Grammar,
+    request: string,
+): GrammarCompletionResult {
+    const pending: MatchState[] = grammar.rules.map((r, i) => ({
+        name: `<Start>[${i}]`,
+        rule: r,
+        partIndex: 0,
+        index: 0,
+        nextValueId: 0,
+    }));
+    const completions: string[] = [];
+
+    while (pending.length > 0) {
+        const state = pending.shift()!;
+        debugMatch(
+            `Start state ${state.name}{${state.partIndex}}: @${state.index}`,
+        );
+        if (!matchState(state, request, pending)) {
+            const nonSepIndex = nextNonSeparatorIndex(request, state.index);
+            if (nonSepIndex !== request.length) {
+                // There are not matched non-separator characters left
+                debugCompletion(
+                    `  Rejecting completion at ${state.name} with non-separator text at ${nonSepIndex}`,
+                );
+                continue;
+            }
+            const nextPart = state.rule.parts[state.partIndex];
+            switch (nextPart.type) {
+                case "string":
+                    debugCompletion(
+                        `  Completing string part ${state.name}: ${nextPart.value.join(" ")}`,
+                    );
+                    completions.push(...nextPart.value);
+                    break;
+            }
+        }
+    }
+
+    return {
+        completions,
+    };
+}
 export function matchGrammar(grammar: Grammar, request: string) {
     return matchRules(grammar, request);
+}
+
+export function matchGrammarCompletion(
+    grammar: Grammar,
+    requestPrefix: string,
+): GrammarCompletionResult {
+    return partialMatchRules(grammar, requestPrefix);
 }

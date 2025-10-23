@@ -1,8 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Grammar, matchGrammar } from "action-grammar";
-import { MatchOptions } from "../constructions/constructionCache.js";
+import { Grammar, matchGrammar, matchGrammarCompletion } from "action-grammar";
+import {
+    CompletionResult,
+    MatchOptions,
+} from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "./types.js";
 import { getSchemaNamespaceKey, splitSchemaNamespaceKey } from "./cache.js";
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
@@ -84,7 +87,31 @@ export class GrammarStoreImpl implements GrammarStore {
     public completion(
         requestPrefix: string | undefined,
         options?: MatchOptions,
-    ) {
-        return undefined;
+    ): CompletionResult | undefined {
+        if (!this.enabled) {
+            return undefined;
+        }
+        const namespaceKeys = options?.namespaceKeys;
+        if (namespaceKeys?.length === 0) {
+            return undefined;
+        }
+        const completions: string[] = [];
+        const filter = new Set(namespaceKeys);
+        for (const [name, grammar] of this.grammars) {
+            if (filter && !filter.has(name)) {
+                continue;
+            }
+            const partial = matchGrammarCompletion(
+                grammar,
+                requestPrefix ?? "",
+            );
+            if (partial.completions.length > 0) {
+                completions.push(...partial.completions);
+            }
+        }
+
+        return {
+            completions,
+        };
     }
 }
