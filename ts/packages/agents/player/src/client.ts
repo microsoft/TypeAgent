@@ -17,6 +17,7 @@ import {
     SearchForPlaylistsAction,
     GetFromCurrentPlaylistListAction,
     AddCurrentTrackToPlaylistAction,
+    AddToPlaylistFromCurrentTrackListAction,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -510,19 +511,15 @@ async function playTrackCollection(
     const deviceId = await ensureSelectedDeviceId(clientContext);
     const tracks = trackCollection.getTracks();
     const playContext = trackCollection.getContext();
-    // todo put context in action result
+    const singleTrackCollection = new TrackCollection([tracks[trackIndex]]);
     const actionResult = await htmlTrackNames(
-        new TrackCollection([tracks[trackIndex]]),
-        "Playing",
+        singleTrackCollection,
+        "Now playing",
     );
     if (playContext === undefined) {
-        const uris = tracks.map((track) => track.uri);
-        await play(
-            clientContext.service,
-            deviceId,
-            uris,
-            trackCollection.getContext(),
-        );
+        const singleTracks = singleTrackCollection.getTracks();
+        const uris = singleTracks.map((track) => track.uri);
+        await play(clientContext.service, deviceId, uris);
     } else {
         await play(
             clientContext.service,
@@ -1059,6 +1056,10 @@ export async function handleCall(
             if (!playlists) {
                 return createErrorActionResult("No playlists found");
             } else {
+                // remove null entries from playlists
+                playlists = playlists.filter(
+                    (playlist) => playlist !== null,
+                ) as SpotifyApi.PlaylistObjectSimplified[];
                 const index =
                     getFromCurrentPlaylistListAction.parameters.playlistNumber -
                     1;
@@ -1269,10 +1270,20 @@ export async function handleCall(
                 return createActionResultFromHtmlDisplay(
                     `<div>playlist ${name} created with tracks...</div>${displayText}`,
                 );
+            } else {
+                // create empty playlist
+                await createPlaylist(
+                    clientContext.service,
+                    name,
+                    clientContext.service.retrieveUser().id!,
+                    [],
+                    name,
+                );
+                console.log(`playlist ${name} created empty`);
+                return createActionResultFromTextDisplay(
+                    chalk.magentaBright(`playlist ${name} created empty`),
+                );
             }
-            return createErrorActionResult(
-                "no input tracks for createPlaylist",
-            );
         }
         case "deletePlaylist": {
             const deletePlaylistAction = action as DeletePlaylistAction;
@@ -1336,6 +1347,50 @@ export async function handleCall(
                 chalk.magentaBright(
                     `Added track ${track.name} to playlist ${playlist.name}`,
                 ),
+            );
+        }
+        case "addToPlaylistFromCurrentTrackList": {
+            const addAction = action as AddToPlaylistFromCurrentTrackListAction;
+            const playlistName = addAction.parameters.playlistName;
+            const trackNumber = addAction.parameters.trackNumber;
+            const trackCount = addAction.parameters.trackCount ?? 1;
+            if (clientContext.userData === undefined) {
+                return createErrorActionResult("No user data found");
+            }
+            const playlists = await getPlaylistsFromUserData(
+                clientContext.service,
+                clientContext.userData!.data,
+            );
+            const playlist = playlists?.find((pl) => {
+                return pl.name
+                    .toLowerCase()
+                    .includes(playlistName.toLowerCase());
+            });
+            if (!playlist) {
+                return createErrorActionResult(
+                    `playlist ${playlistName} not found`,
+                );
+            }
+            const trackList = clientContext.currentTrackList;
+            if (!trackList) {
+                return createErrorActionResult("No current track list");
+            }
+            const tracks = trackList.getTracks();
+            if (trackNumber < 1 || trackNumber > tracks.length) {
+                return createErrorActionResult(
+                    `Track number ${trackNumber} not found in current track list`,
+                );
+            }
+            const uris = tracks
+                .slice(trackNumber - 1, trackNumber - 1 + trackCount)
+                .map((track) => track.uri);
+            await addTracksToPlaylist(clientContext.service, playlist.id, uris);
+            const resultString =
+                trackCount > 1
+                    ? `Added ${trackCount} tracks starting at track number ${trackNumber} to playlist ${playlist.name}`
+                    : `Added track number ${trackNumber} to playlist ${playlist.name}`;
+            return createActionResultFromTextDisplay(
+                chalk.magentaBright(resultString),
             );
         }
         default:
