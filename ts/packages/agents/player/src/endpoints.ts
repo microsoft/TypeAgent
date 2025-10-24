@@ -650,6 +650,9 @@ export async function createPlaylist(
         createUri,
         { name, public: false, description },
     );
+    if (uris.length === 0) {
+        return playlistResponse;
+    }
     return fetchPost<SpotifyApi.AddTracksToPlaylistResponse>(
         service,
         `https://api.spotify.com/v1/playlists/${playlistResponse.id}/tracks`,
