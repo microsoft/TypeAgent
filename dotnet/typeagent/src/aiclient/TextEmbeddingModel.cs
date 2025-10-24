@@ -61,7 +61,6 @@ public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
         return response;
     }
 
-
     private Request CreateRequest(IList<string> input)
     {
         var request = new Request

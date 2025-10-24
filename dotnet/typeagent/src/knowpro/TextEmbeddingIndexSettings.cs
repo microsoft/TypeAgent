@@ -7,13 +7,11 @@ public class TextEmbeddingIndexSettings
 {
     public TextEmbeddingIndexSettings(
         ITextEmbeddingModel model,
-        int embeddingSize,
         double minScore = 0.85,
         int maxMatches = -1
     )
     {
         EmbeddingModel = model;
-        EmbeddingSize = embeddingSize;
         MinScore = minScore;
         MaxMatches = maxMatches;
         BatchSize = 8;
@@ -28,8 +26,6 @@ public class TextEmbeddingIndexSettings
 
     public ITextEmbeddingModel EmbeddingModel { get; set; }
 
-    public int EmbeddingSize { get; set; }
-
     public double MinScore { get; set; }
 
     public int MaxMatches { get; set; }
@@ -41,6 +37,5 @@ public class TextEmbeddingIndexSettings
     public void ThrowIfInvalid()
     {
         ArgumentVerify.ThrowIfNull(EmbeddingModel, nameof(EmbeddingModel));
-        ArgumentVerify.ThrowIfLessThan(EmbeddingSize, 1, nameof(EmbeddingSize));
     }
 }
