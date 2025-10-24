@@ -71,6 +71,15 @@ public class SqliteDatabase : IDisposable
         return reader.GetList<T>(cb);
     }
 
+    public List<T>? GetListOrNull<T>(string commandText, Func<SqliteDataReader, T> cb)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
+
+        using var command = CreateCommand(commandText);
+        using var reader = command.ExecuteReader();
+        return reader.GetListOrNull<T>(cb);
+    }
+
     public IEnumerable<T> Enumerate<T>(string sql, Func<SqliteDataReader, T> rowDeserializer)
     {
         return Enumerate<T>(sql, null, rowDeserializer);

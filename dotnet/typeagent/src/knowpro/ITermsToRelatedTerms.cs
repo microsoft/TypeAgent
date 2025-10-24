@@ -5,6 +5,10 @@ namespace TypeAgent.KnowPro;
 
 public interface ITermsToRelatedTerms
 {
+    ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
+
+    ValueTask<IList<string>> GetTermsAsync(CancellationToken cancellationToken = default);
+
     ValueTask AddTermAsync(string text, Term relatedTerm, CancellationToken cancellationToken = default);
 
     // TODO: consider IReadOnlyList

@@ -18,6 +18,20 @@ public class SqliteTermToRelatedTerms : ITermsToRelatedTerms
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(GetCount());
 
+    public List<string> GetTerms()
+    {
+        return _db.GetList(
+            @"SELECT DISTINCT term from RelatedTermsAliases",
+            (reader) => reader.GetString(0)
+        );
+    }
+
+    public ValueTask<IList<string>> GetTermsAsync(CancellationToken cancellationToken = default)
+    {
+        IList<string> terms = GetTerms();
+        return ValueTask.FromResult(terms);
+    }
+
     public void AddTerm(string text, Term relatedTerm)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
@@ -31,7 +45,8 @@ VALUES (@term, @alias, @score)"
         cmd.AddParameter("@term", text);
         cmd.AddParameter("@alias", relatedTerm.Text);
         cmd.AddParameter("@score", relatedTerm.Weight);
-        cmd.ExecuteNonQuery();
+        int result = cmd.ExecuteNonQuery();
+        Console.WriteLine(result);
     }
 
     public ValueTask AddTermAsync(string text, Term relatedTerm, CancellationToken cancellationToken = default)
@@ -65,12 +80,16 @@ VALUES (@term, @alias, @score)"
         return ValueTask.CompletedTask;
     }
 
-    public IList<Term>? Lookup(string text, CancellationToken cancellationToken = default)
+    public IList<Term>? Lookup(string term, CancellationToken cancellationToken = default)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
+        ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
 
-        return _db.GetList(@"
-SELECT alias, score FROM RelatedTermsAliases WHERE term = @term",
+        using var cmd = _db.CreateCommand(@"
+SELECT alias, score FROM RelatedTermsAliases WHERE term = @term"
+);
+        cmd.AddParameter("@term", term);
+        using var reader = cmd.ExecuteReader();
+        return reader.GetListOrNull(
             (reader) => new Term(reader.GetString(0), reader.GetFloat(1))
         );
     }

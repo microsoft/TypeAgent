@@ -45,6 +45,17 @@ internal static class SqliteEx
         return list;
     }
 
+    public static List<T>? GetListOrNull<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
+    {
+        List<T>? list = null;
+        while (reader.Read())
+        {
+            list ??= [];
+            list.Add(cb(reader));
+        }
+        return list;
+    }
+
     public static string ToLogString(this SqliteCommand cmd)
     {
         var sb = new StringBuilder();
