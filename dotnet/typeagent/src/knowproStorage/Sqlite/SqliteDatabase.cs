@@ -80,7 +80,10 @@ public class SqliteDatabase : IDisposable
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = sql;
-        addParams(cmd);
+        if (addParams is not null)
+        {
+            addParams(cmd);
+        }
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {

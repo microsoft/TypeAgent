@@ -138,6 +138,7 @@ ORDER BY term_id",
         {
             var scoredTermId = termIds[i];
             terms.Add(new Term(term, (float)termIds[i].Score));
+            ++i;
         }
         return terms;
     }

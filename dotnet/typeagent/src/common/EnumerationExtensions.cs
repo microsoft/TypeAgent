@@ -15,6 +15,16 @@ public static class EnumerationExtensions
         }
     }
 
+    public static void ForEach<T>(this IEnumerable<T> list, Action<T> fn)
+    {
+        ArgumentVerify.ThrowIfNull(fn, nameof(fn));
+
+        foreach (var item in list)
+        {
+            fn(item);
+        }
+    }
+
     public static List<TResult> Map<T, TResult>(this IEnumerable<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
