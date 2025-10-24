@@ -10,12 +10,13 @@ public class SqliteRelatedTermsIndex : ITermToRelatedTermIndex
         ArgumentVerify.ThrowIfNull(settings, nameof(settings));
 
         Settings = settings;
+        Aliases = new SqliteTermToRelatedTerms(db);
         FuzzyIndex = new SqliteTermToRelatedTermsFuzzy(db, settings.EmbeddingIndexSetting);
     }
 
     public RelatedTermIndexSettings Settings { get; }
 
-    public ITermsToRelatedTerms Aliases => throw new NotImplementedException();
+    public ITermsToRelatedTerms Aliases { get; }
 
     public ITermToRelatedTermsFuzzy FuzzyIndex { get; }
 }
