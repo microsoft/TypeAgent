@@ -883,6 +883,7 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("viewEntityGraphBtn");
         const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
         const buildGraphBtn = document.getElementById("buildGraphBtn");
+        const mergeTopicsBtn = document.getElementById("mergeTopicsBtn");
 
         if (!graphStateIcon || !graphStateText || !graphStateDescription)
             return;
@@ -903,6 +904,7 @@ class WebsiteLibraryPanelFullPage {
         if (viewEntityGraphBtn) viewEntityGraphBtn.style.display = "none";
         if (rebuildGraphBtn) rebuildGraphBtn.style.display = "none";
         if (buildGraphBtn) buildGraphBtn.style.display = "none";
+        if (mergeTopicsBtn) mergeTopicsBtn.style.display = "none";
 
         if (safeStatus.isBuilding) {
             // Show building state
@@ -942,6 +944,7 @@ class WebsiteLibraryPanelFullPage {
             if (viewEntityGraphBtn)
                 viewEntityGraphBtn.style.display = "inline-block";
             if (rebuildGraphBtn) rebuildGraphBtn.style.display = "inline-block";
+            if (mergeTopicsBtn) mergeTopicsBtn.style.display = "inline-block";
         } else if (safeStatus.error) {
             // Show error state
             graphStateIcon.innerHTML =
@@ -965,6 +968,7 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("viewEntityGraphBtn");
         const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
         const buildGraphBtn = document.getElementById("buildGraphBtn");
+        const mergeTopicsBtn = document.getElementById("mergeTopicsBtn");
 
         // Remove existing listeners to avoid duplicates
         viewEntityGraphBtn?.removeEventListener(
@@ -973,6 +977,7 @@ class WebsiteLibraryPanelFullPage {
         );
         rebuildGraphBtn?.removeEventListener("click", this.handleRebuildGraph);
         buildGraphBtn?.removeEventListener("click", this.handleBuildGraph);
+        mergeTopicsBtn?.removeEventListener("click", this.handleMergeTopics);
 
         // Add new listeners
         if (viewEntityGraphBtn) {
@@ -991,6 +996,12 @@ class WebsiteLibraryPanelFullPage {
             buildGraphBtn.addEventListener(
                 "click",
                 this.handleBuildGraph.bind(this),
+            );
+        }
+        if (mergeTopicsBtn) {
+            mergeTopicsBtn.addEventListener(
+                "click",
+                this.handleMergeTopics.bind(this),
             );
         }
     }
@@ -1088,6 +1099,37 @@ class WebsiteLibraryPanelFullPage {
                 isBuilding: false,
                 error: errorMessage,
             });
+        }
+    }
+
+    private async handleMergeTopics() {
+        try {
+            this.updateGraphStatusDisplay({
+                hasGraph: true,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: true,
+            });
+
+            notificationManager.showInfo("Merging topic hierarchies...");
+
+            const result = await extensionService.mergeTopicHierarchies();
+
+            await this.loadGraphStatus();
+
+            notificationManager.showSuccess(
+                result.message || `Topics merged successfully: ${result.mergeCount} topics merged`,
+            );
+        } catch (error) {
+            console.error("Failed to merge topics:", error);
+            const errorMessage =
+                error instanceof Error ? error.message : "Unknown error";
+            notificationManager.showError(
+                `Failed to merge topics: ${errorMessage}`,
+            );
+
+            await this.loadGraphStatus();
         }
     }
 
