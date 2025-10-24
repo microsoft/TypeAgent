@@ -66,8 +66,8 @@ VALUES(@term, @term_embedding)
     {
         var embeddings = await Settings.EmbeddingModel.GenerateNormalizedInBatchesAsync(
             terms,
-            Settings.MaxCharsPerBatch,
             Settings.BatchSize,
+            Settings.MaxCharsPerBatch,
             Settings.Concurrency,
             cancellationToken
         );
@@ -97,6 +97,14 @@ VALUES(@term, @term_embedding)
     public ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int maxMatches, double minScore)
     {
         throw new NotImplementedException();
+    }
+
+    public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
+
+    public ValueTask ClearAsync(CancellationToken cancellation = default)
+    {
+        Clear();
+        return ValueTask.CompletedTask;
     }
 
     public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> GetAll()

@@ -158,13 +158,25 @@ public class TestCommands : ICommandModule
 
     private async Task TestEmbeddingsAsync(ParseResult args, CancellationToken cancellationToken)
     {
+        IConversation conversation = EnsureConversation();
+
         var settings = AzureModelApiSettings.EmbeddingSettingsFromEnv();
         var model = new TextEmbeddingModel(settings);
         NamedArgs namedArgs = new(args);
-        string text = namedArgs.Get("text") ?? "The quick brown fox";
+        string? text = namedArgs.Get("text");// ?? "The quick brown fox";
+        if (!string.IsNullOrEmpty(text))
+        {
+            var result = await model.GenerateAsync(text, cancellationToken);
+            KnowProWriter.WriteLine(result.Length);
+            return;
+        }
 
-        var result = await model.GenerateAsync(text, cancellationToken);
-        KnowProWriter.WriteLine(result.Length);
+        IList<string> allTerms = await conversation.SemanticRefIndex.GetTermsAsync(cancellationToken);
+        allTerms = allTerms.Slice(0, 16);
+
+        var fuzzyIndex = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex;
+        await fuzzyIndex.ClearAsync(cancellationToken);
+        await fuzzyIndex.AddTermsAsync(allTerms, cancellationToken);
     }
 
     async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
