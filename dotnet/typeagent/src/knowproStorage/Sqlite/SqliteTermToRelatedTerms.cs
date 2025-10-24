@@ -18,7 +18,7 @@ public class SqliteTermToRelatedTerms : ITermsToRelatedTerms
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(GetCount());
 
-    public void Add(string text, Term relatedTerm)
+    public void AddTerm(string text, Term relatedTerm)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
 
@@ -34,26 +34,26 @@ VALUES (@term, @alias, @score)"
         cmd.ExecuteNonQuery();
     }
 
-    public ValueTask AddAsync(string text, Term relatedTerm, CancellationToken cancellationToken = default)
+    public ValueTask AddTermAsync(string text, Term relatedTerm, CancellationToken cancellationToken = default)
     {
-        Add(text, relatedTerm);
+        AddTerm(text, relatedTerm);
         return ValueTask.CompletedTask;
     }
 
-    public void Add(string text, IList<Term> relatedTerms)
+    public void AddTerm(string text, IList<Term> relatedTerms)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(relatedTerms, nameof(relatedTerms));
 
         // TODO: bulk operations
         foreach (var relatedTerm in relatedTerms)
         {
-            Add(text, relatedTerm);
+            AddTerm(text, relatedTerm);
         }
     }
 
-    public ValueTask AddAsync(string text, IList<Term> relatedTerms, CancellationToken cancellationToken = default)
+    public ValueTask AddTermAsync(string text, IList<Term> relatedTerms, CancellationToken cancellationToken = default)
     {
-        Add(text, relatedTerms);
+        AddTerm(text, relatedTerms);
         return ValueTask.CompletedTask;
     }
 
@@ -75,7 +75,7 @@ SELECT alias, score FROM RelatedTermsAliases WHERE term = @term",
         );
     }
 
-    public ValueTask<IList<Term>?> LookupAsync(string text, CancellationToken cancellationToken = default)
+    public ValueTask<IList<Term>?> LookupTermAsync(string text, CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult(Lookup(text, cancellationToken));
     }
