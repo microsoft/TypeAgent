@@ -20,11 +20,6 @@ internal static class SqliteEx
         cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value);
     }
 
-    public static void AddParameter(this SqliteCommand cmd, string name, string value)
-    {
-        cmd.Parameters.AddWithValue(name, value);
-    }
-
     public static void AddParameter(this SqliteCommand cmd, string name, int value)
     {
         cmd.Parameters.AddWithValue(name, value);

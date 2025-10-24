@@ -37,7 +37,10 @@ public class Args
 
     public static Option<T> Arg<T>(string name, string description, T? defaultValue)
     {
-        var arg = Options.Arg<T>(name, description, defaultValue);
+        var arg = defaultValue is not null
+                ? Options.Arg<T>(name, description, defaultValue)
+                : Options.Arg<T>(name, description);
+
         arg.Required = true;
         return arg;
     }

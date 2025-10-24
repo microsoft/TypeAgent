@@ -5,37 +5,6 @@ using System.Diagnostics;
 
 namespace TypeAgent.AIClient;
 
-public class HttpRequestSettings
-{
-    public int MaxRetries { get; set; } = 3;
-
-    public int RetryPauseMs { get; set; } = 1000;
-
-    public int MaxRetryPauseMs { get; set; } = -1;
-
-    public double JitterRange { get; set; } = 0.5;
-
-    internal static readonly HttpRequestSettings Default = new();
-
-    public int AdjustRetryPauseMs(int retryPauseMs)
-    {
-        if (JitterRange > 0 && JitterRange <= 1)
-        {
-            double jitterOffset = JitterRange / 2;
-            double jitter = 1.0 - jitterOffset + (Random.Shared.NextDouble() * JitterRange);
-
-            retryPauseMs = (int)(retryPauseMs * jitter);
-
-        }
-        if (MaxRetryPauseMs > 0)
-        {
-            retryPauseMs = Math.Min(retryPauseMs, MaxRetryPauseMs);
-        }
-        return retryPauseMs;
-    }
-
-}
-
 /// <summary>
 /// Extension methods for working with Http 
 /// </summary>
@@ -46,11 +15,11 @@ public static class HttpEx
         string endpoint,
         Request request,
         string? apiToken = null,
-        HttpRequestSettings? settings = null,
+        RetrySettings? settings = null,
         CancellationToken cancellationToken = default
     )
     {
-        settings ??= HttpRequestSettings.Default;
+        settings ??= new RetrySettings();
 
         var requestMessage = Json.ToJsonMessage(request);
         int retryCount = 0;

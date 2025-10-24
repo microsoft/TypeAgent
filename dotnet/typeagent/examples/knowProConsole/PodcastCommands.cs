@@ -60,9 +60,8 @@ public class PodcastCommands : ICommandModule
         UnloadCurrent();
 
         _kpContext.Stopwatch.Restart();
-        var podcast = new Podcast(
-            new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, name)
-        );
+
+        var podcast = new Podcast(CreateStorageProvider(name, false));
         _kpContext.Stopwatch.Stop();
         KnowProWriter.WriteTiming(_kpContext.Stopwatch);
 
@@ -92,10 +91,12 @@ public class PodcastCommands : ICommandModule
         }
         KnowProWriter.WriteDataFileStats(data);
 
+        UnloadCurrent();
+
         string? podcastName = Path.GetFileNameWithoutExtension(filePath) ?? throw new NotSupportedException();
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Importing {podcastName}");
         var podcast = new Podcast(
-            new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, podcastName, true)
+            CreateStorageProvider(podcastName, true)
         );
         try
         {
@@ -153,6 +154,21 @@ public class PodcastCommands : ICommandModule
         );
         KnowProWriter.WriteLine($"{matches.Count} matches");
         */
+    }
+
+    private SqliteStorageProvider<PodcastMessage, PodcastMessageMeta> CreateStorageProvider(
+        string name,
+        bool createNew
+    )
+    {
+        return new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
+            new ConversationSettings(
+                new TextEmbeddingModel(AzureModelApiSettings.EmbeddingSettingsFromEnv())
+            ),
+            _kpContext.DotnetPath,
+            name,
+            createNew
+        );
     }
 
     private void UnloadCurrent()

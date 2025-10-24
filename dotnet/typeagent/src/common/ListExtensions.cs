@@ -29,6 +29,21 @@ public static class ListExtensions
         }
     }
 
+    public static List<T> Slice<T>(this IList<T> list, int start, int count)
+    {
+        ArgumentVerify.ThrowIfLessThan(start, 0, nameof(start));
+        ArgumentVerify.ThrowIfLessThan(count, 0, nameof(count));
+        ArgumentVerify.ThrowIfGreaterThan(start + count, list.Count, nameof(count));
+
+        count = Math.Min(count, list.Count - start);
+        var result = new List<T>(count);
+        for (int i = 0; i < count; ++i)
+        {
+            result.Add(list[start + i]);
+        }
+        return result;
+    }
+
     public static List<TResult> Map<T, TResult>(this IList<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
@@ -62,15 +77,15 @@ public static class ListExtensions
         return string.Join(sep, list.Select((t) => t.ToString()));
     }
 
-    public static IEnumerable<IList<T>> Batch<T>(this IList<T> items, int batchSize, IList<T>? buffer = null)
+    public static IEnumerable<IList<T>> Batch<T>(this IList<T> list, int batchSize, List<T>? buffer = null)
     {
-        if (items.Count <= batchSize)
+        if (list.Count <= batchSize)
         {
-            yield return items;
+            yield return list;
         }
         else
         {
-            foreach (var batch in EnumerationExtensions.Batch(items, batchSize, buffer))
+            foreach (var batch in EnumerationExtensions.Batch(list, batchSize, buffer))
             {
                 yield return batch;
             }
@@ -103,10 +118,10 @@ public static class ListExtensions
         return lo;
     }
 
-    public static List<ScoredItem<T>> GetTopK<T>(this IEnumerable<ScoredItem<T>> items, int topK)
+    public static List<ScoredItem<T>> GetTopK<T>(this IEnumerable<ScoredItem<T>> list, int topK)
     {
         var topNList = new TopNCollection<T>(topK);
-        topNList.Add(items);
+        topNList.Add(list);
         return topNList.ByRankAndClear();
     }
 

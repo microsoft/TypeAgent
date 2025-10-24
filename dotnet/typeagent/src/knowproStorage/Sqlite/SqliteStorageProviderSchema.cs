@@ -85,6 +85,16 @@ CREATE INDEX IF NOT EXISTS idx_property_index_value_str ON PropertyIndex(value_s
 CREATE INDEX IF NOT EXISTS idx_property_index_combined ON PropertyIndex(prop_name, value_str);
 ";
 
+    public const string RelatedTermsFuzzyTable = "RelatedTermsFuzzy";
+    public const string RelatedTermsFuzzySchema = @"
+CREATE TABLE IF NOT EXISTS RelatedTermsFuzzy(
+term_id INTEGER PRIMARY KEY AUTOINCREMENT,
+term TEXT NOT NULL UNIQUE,      -- Will also create an index
+term_embedding BLOB NOT NULL    -- Serialized embedding for the term
+);
+";
+
+
     public static string GetSchema()
     {
         string[] subSchemas = [
@@ -96,7 +106,8 @@ CREATE INDEX IF NOT EXISTS idx_property_index_combined ON PropertyIndex(prop_nam
             PropertyIndexSchema,
             PropertyIndexNameIndex,
             PropertyIndexValueStrIndex,
-            PropertyIndexCombinedIndex
+            PropertyIndexCombinedIndex,
+            RelatedTermsFuzzySchema,
         ];
         return string.Join("\n", subSchemas);
     }

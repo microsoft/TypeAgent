@@ -125,7 +125,8 @@ public class TestCommands : ICommandModule
         {
             select.When = new WhenFilter()
             {
-                DateRange = new() {
+                DateRange = new()
+                {
                     Start = conversationDateRange.Value.Start,
                     End = conversationDateRange.Value.Start.AddMinutes(10)
                 }
@@ -148,7 +149,8 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestEmbeddings")
         {
-            Options.Arg<string>("text", "text to embed")
+            Options.Arg<string>("text", "text to embed"),
+            Options.Arg<bool>("add", "add to index")
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.TestEmbeddingsAsync);
@@ -157,13 +159,37 @@ public class TestCommands : ICommandModule
 
     private async Task TestEmbeddingsAsync(ParseResult args, CancellationToken cancellationToken)
     {
-        var settings = AzureApiSettings.EmbeddingSettingsFromEnv();
+        IConversation conversation = EnsureConversation();
+
+        var settings = AzureModelApiSettings.EmbeddingSettingsFromEnv();
         var model = new TextEmbeddingModel(settings);
         NamedArgs namedArgs = new(args);
-        string text = namedArgs.Get("text") ?? "The quick brown fox";
+        string? text = namedArgs.Get("text");// ?? "The quick brown fox";
+        if (!string.IsNullOrEmpty(text))
+        {
+            var result = await model.GenerateAsync(text, cancellationToken);
+            KnowProWriter.WriteLine(result.Length);
+            return;
+        }
 
-        var result = await model.GenerateAsync(text, cancellationToken);
-        KnowProWriter.WriteLine(result.Length);
+        IList<string> allTerms = await conversation.SemanticRefIndex.GetTermsAsync(cancellationToken);
+        allTerms = allTerms.Slice(0, 256);
+        var fuzzyIndex = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex;
+        if (namedArgs.Get<bool>("add"))
+        {
+            await fuzzyIndex.ClearAsync(cancellationToken);
+            await fuzzyIndex.AddTermsAsync(allTerms, cancellationToken);
+        }
+
+        foreach (var term in allTerms)
+        {
+            KnowProWriter.WriteLine(ConsoleColor.Cyan, term);
+            _kpContext.Stopwatch.Restart();
+            var matches = await fuzzyIndex.LookupTermAsync(term, 10, 0, cancellationToken);
+            _kpContext.Stopwatch.Stop();
+            KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+            matches.ForEach(KnowProWriter.WriteTerm);
+        }
     }
 
     async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
