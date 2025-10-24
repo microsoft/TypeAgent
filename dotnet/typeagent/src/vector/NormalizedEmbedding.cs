@@ -27,8 +27,7 @@ public readonly struct NormalizedEmbedding
     /// </summary>
     public float[] Vector { get; }
 
-    [JsonIgnore]
-    public ReadOnlySpan<float> VectorSpan => Vector.AsSpan();
+    public ReadOnlySpan<float> AsSpan() => Vector.AsSpan();
 
     /// <summary>
     /// Compute the cosine similarity between this and other
@@ -38,7 +37,7 @@ public readonly struct NormalizedEmbedding
     public double CosineSimilarity(NormalizedEmbedding other)
     {
         // Since the embedding is normalized already
-        return VectorOp.DotProduct(Vector, other.Vector);
+        return TensorPrimitives.Dot(this, other);
     }
 
     /// <summary>
@@ -48,7 +47,7 @@ public readonly struct NormalizedEmbedding
     /// <returns>dot product</returns>
     public double DotProduct(NormalizedEmbedding other)
     {
-        return TensorPrimitives.Dot(VectorSpan, other.VectorSpan);
+        return TensorPrimitives.Dot(this, other);
     }
 
     public byte[] ToBytes()
@@ -61,9 +60,14 @@ public readonly struct NormalizedEmbedding
         return new NormalizedEmbedding(Embedding.FromBytes(bytes));
     }
 
-    public static implicit operator float[](NormalizedEmbedding vector)
+    public static implicit operator float[](NormalizedEmbedding embedding)
     {
-        return vector.Vector;
+        return embedding.Vector;
+    }
+
+    public static implicit operator ReadOnlySpan<float>(NormalizedEmbedding embedding)
+    {
+        return embedding.AsSpan();
     }
 }
 

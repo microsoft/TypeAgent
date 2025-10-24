@@ -56,7 +56,7 @@ VALUES(@term, @term_embedding)
     public void AddTerms(IEnumerable<KeyValuePair<string, NormalizedEmbedding>> rows)
     {
         ArgumentVerify.ThrowIfNull(rows, nameof(rows));
-        foreach(var row in rows)
+        foreach (var row in rows)
         {
             AddTerm(row.Key, row.Value);
         }
@@ -73,7 +73,8 @@ VALUES(@term, @term_embedding)
         for (int i = 0; i < count; ++i)
         {
             Embedding embedding = embeddings[i];
-            AddTerm(terms[i], embedding.Normalize());
+            embedding.NormalizeInPlace();
+            AddTerm(terms[i], new NormalizedEmbedding(embedding));
         }
     }
 
@@ -87,15 +88,16 @@ VALUES(@term, @term_embedding)
         throw new NotImplementedException();
     }
 
-    public IEnumerable<KeyValuePair<string, NormalizedEmbedding>> GetAll()
+    public IEnumerable<KeyValuePair<string, NormalizedEmbeddingB>> GetAll()
     {
-        return _db.Enumerate<KeyValuePair<string, NormalizedEmbedding>>(
+        return _db.Enumerate<KeyValuePair<string, NormalizedEmbeddingB>>(
             "SELECT term, term_embedding FROM RelatedTermsFuzzy",
-            reader => {
+            reader =>
+            {
                 int iCol = 0;
                 var term = reader.GetString(iCol++);
                 var embeddingBytes = (byte[])reader.GetValue(iCol++);
-                return new(term, NormalizedEmbedding.FromBytes(embeddingBytes));
+                return new(term, new NormalizedEmbeddingB(embeddingBytes));
             });
     }
 }

@@ -88,11 +88,10 @@ CREATE INDEX IF NOT EXISTS idx_property_index_combined ON PropertyIndex(prop_nam
     public const string RelatedTermsFuzzyTable = "RelatedTermsFuzzy";
     public const string RelatedTermsFuzzySchema = @"
 CREATE TABLE IF NOT EXISTS RelatedTermsFuzzy(
-term TEXT NOT NULL PRIMARY KEY,
-term_embedding BLOB NOT NULL    -- Serialized embedding for the term);
-";
-    public const string RelatedTermsFuzzyIndex = @"
-CREATE INDEX IF NOT EXISTS idx_related_fuzzy_term ON RelatedTermsFuzzy(term);
+term_id INTEGER PRIMARY KEY AUTOINCREMENT,
+term TEXT NOT NULL UNIQUE,      -- Will also create an index
+term_embedding BLOB NOT NULL    -- Serialized embedding for the term
+);
 ";
 
 
@@ -109,7 +108,6 @@ CREATE INDEX IF NOT EXISTS idx_related_fuzzy_term ON RelatedTermsFuzzy(term);
             PropertyIndexValueStrIndex,
             PropertyIndexCombinedIndex,
             RelatedTermsFuzzySchema,
-            RelatedTermsFuzzyIndex
         ];
         return string.Join("\n", subSchemas);
     }

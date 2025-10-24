@@ -91,6 +91,8 @@ public class PodcastCommands : ICommandModule
         }
         KnowProWriter.WriteDataFileStats(data);
 
+        UnloadCurrent();
+
         string? podcastName = Path.GetFileNameWithoutExtension(filePath) ?? throw new NotSupportedException();
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Importing {podcastName}");
         var podcast = new Podcast(
@@ -103,7 +105,7 @@ public class PodcastCommands : ICommandModule
 
             KnowProWriter.WriteLine($"{data.SemanticRefs.Length} semantic refs");
             count = await podcast.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken);
-            KnowProWriter.WriteLine($"{count} semantic Refs imported");
+            KnowProWriter.WriteLine($"{count    } semantic Refs imported");
 
             IList<ScoredSemanticRefOrdinal>? matches;
             if (data.SemanticIndexData is not null)

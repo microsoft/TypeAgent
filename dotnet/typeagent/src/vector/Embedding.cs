@@ -27,8 +27,7 @@ public readonly struct Embedding
     /// </summary>
     public float[] Vector { get; }
 
-    [JsonIgnore]
-    public ReadOnlySpan<float> VectorSpan => Vector.AsSpan();
+    public ReadOnlySpan<float> AsSpan() => Vector.AsSpan();
 
     /// <summary>
     /// Compute the cosine similarity between this and other
@@ -37,7 +36,17 @@ public readonly struct Embedding
     /// <returns>cosine similarity</returns>
     public double CosineSimilarity(Embedding other)
     {
-        return VectorOp.CosineSimilarity(Vector, other.Vector);
+        return TensorPrimitives.CosineSimilarity(this, other);
+    }
+
+    /// <summary>
+    /// Compute the cosine similarity between this and other
+    /// </summary>
+    /// <param name="other">other embedding</param>
+    /// <returns>cosine similarity</returns>
+    public double CosineSimilarity(ReadOnlySpan<float> other)
+    {
+        return TensorPrimitives.CosineSimilarity(this, other);
     }
 
     /// <summary>
@@ -47,15 +56,32 @@ public readonly struct Embedding
     /// <returns>dot product</returns>
     public double DotProduct(Embedding other)
     {
-        return VectorOp.DotProduct(Vector, other.Vector);
+        return TensorPrimitives.Dot(this, other);
     }
 
-    public NormalizedEmbedding Normalize()
+    /// <summary>
+    /// The Dot Product of this vector with the other embedding
+    /// </summary>
+    /// <param name="other">other embedding</param>
+    /// <returns>dot product</returns>
+    public double DotProduct(ReadOnlySpan<float> other)
+    {
+        return TensorPrimitives.Dot(this, other);
+    }
+
+    public NormalizedEmbedding ToNormalized()
     {
         float[] normalized = new float[Vector.Length];
         Vector.AsSpan().CopyTo(normalized);
-        VectorOp.NormalizeInPlace(normalized);
+        var l2Norm = TensorPrimitives.Norm(normalized);
+        TensorPrimitives.Divide(normalized, l2Norm, normalized);
         return new NormalizedEmbedding(normalized);
+    }
+
+    public void NormalizeInPlace()
+    {
+        var l2Norm = TensorPrimitives.Norm(this);
+        TensorPrimitives.Divide(this, l2Norm, Vector);
     }
 
     public byte[] ToBytes() => ToBytes(Vector);
@@ -82,6 +108,11 @@ public readonly struct Embedding
     public static implicit operator Embedding(float[] vector)
     {
         return new Embedding(vector);
+    }
+
+    public static implicit operator ReadOnlySpan<float>(Embedding embedding)
+    {
+        return embedding.AsSpan();
     }
 }
 
