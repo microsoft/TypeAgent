@@ -85,6 +85,26 @@ CREATE INDEX IF NOT EXISTS idx_property_index_value_str ON PropertyIndex(value_s
 CREATE INDEX IF NOT EXISTS idx_property_index_combined ON PropertyIndex(prop_name, value_str);
 ";
 
+
+    public const string RelatedTermsAliasesTable = "RelatedTermsAliases";
+
+    public const string RelatedTermsAliases = @"
+CREATE TABLE IF NOT EXISTS RelatedTermsAliases (
+    term TEXT NOT NULL,
+    alias TEXT NOT NULL,
+    score REAL NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (term, alias)
+);
+";
+
+    public const string RelatedTermsAliasesTermIndex = @"
+CREATE INDEX IF NOT EXISTS idx_related_aliases_term ON RelatedTermsAliases(term);
+";
+
+    public const string RelatedTermsAliasesAliasIndex = @"
+CREATE INDEX IF NOT EXISTS idx_related_aliases_alias ON RelatedTermsAliases(alias);
+";
+
     public const string RelatedTermsFuzzyTable = "RelatedTermsFuzzy";
     public const string RelatedTermsFuzzySchema = @"
 CREATE TABLE IF NOT EXISTS RelatedTermsFuzzy(
@@ -93,7 +113,6 @@ term TEXT NOT NULL UNIQUE,      -- Will also create an index
 term_embedding BLOB NOT NULL    -- Serialized embedding for the term
 );
 ";
-
 
     public static string GetSchema()
     {
@@ -107,6 +126,9 @@ term_embedding BLOB NOT NULL    -- Serialized embedding for the term
             PropertyIndexNameIndex,
             PropertyIndexValueStrIndex,
             PropertyIndexCombinedIndex,
+            RelatedTermsAliases,
+            RelatedTermsAliasesTermIndex,
+            RelatedTermsAliasesAliasIndex,
             RelatedTermsFuzzySchema,
         ];
         return string.Join("\n", subSchemas);

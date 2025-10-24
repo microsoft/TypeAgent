@@ -13,10 +13,7 @@ public class SqliteTimestampToTextRangeIndex : ITimestampToTextRangeIndex
         _db = db;
     }
 
-    public int GetCount()
-    {
-        return _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
-    }
+    public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.MessagesTable);
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
         => ValueTask.FromResult(GetCount());

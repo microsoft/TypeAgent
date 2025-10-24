@@ -62,7 +62,7 @@ public class SqliteDatabase : IDisposable
         return command.ExecuteScalar();
     }
 
-    public IList<T> GetList<T>(string commandText, Func<SqliteDataReader, T> cb)
+    public List<T> GetList<T>(string commandText, Func<SqliteDataReader, T> cb)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
 

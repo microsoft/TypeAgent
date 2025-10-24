@@ -10,7 +10,7 @@ public class SqliteRelatedTermsIndex : ITermToRelatedTermIndex
         ArgumentVerify.ThrowIfNull(settings, nameof(settings));
 
         Settings = settings;
-        FuzzyIndex = new SqliteRelatedTermsFuzzy(db, settings.EmbeddingIndexSetting);
+        FuzzyIndex = new SqliteTermToRelatedTermsFuzzy(db, settings.EmbeddingIndexSetting);
     }
 
     public RelatedTermIndexSettings Settings { get; }
