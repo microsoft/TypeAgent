@@ -62,25 +62,36 @@ VALUES(@term, @term_embedding)
         }
     }
 
-    public async ValueTask AddTermsAsync(IList<string> terms)
+    public async ValueTask AddTermsAsync(IList<string> terms, CancellationToken cancellationToken = default)
     {
-        var embeddings = await Settings.EmbeddingModel.GenerateInBatchesAsync(
+        var embeddings = await Settings.EmbeddingModel.GenerateNormalizedInBatchesAsync(
             terms,
             Settings.MaxCharsPerBatch,
-            Settings.BatchSize
+            Settings.BatchSize,
+            Settings.Concurrency,
+            cancellationToken
         );
         int count = terms.Count;
         for (int i = 0; i < count; ++i)
         {
-            Embedding embedding = embeddings[i];
-            embedding.NormalizeInPlace();
-            AddTerm(terms[i], new NormalizedEmbedding(embedding));
+            AddTerm(terms[i], embeddings[i]);
         }
     }
 
-    public ValueTask<IList<Term>> LookupTermAsync(string text, int maxMatches, double minScore)
+    public async ValueTask<IList<Term>> LookupTermAsync(
+        string text,
+        int? maxMatches,
+        double? minScore,
+        CancellationToken cancellationToken = default
+    )
     {
-        throw new NotImplementedException();
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(text, cancellationToken);
+        List<ScoredItem<int>> termIds = GetAll().IndexesOfNearest(
+            embedding,
+            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
+            minScore is not null ? minScore.Value : Settings.MinScore
+        );
+        return GetTerms(termIds);
     }
 
     public ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int maxMatches, double minScore)
@@ -88,16 +99,38 @@ VALUES(@term, @term_embedding)
         throw new NotImplementedException();
     }
 
-    public IEnumerable<KeyValuePair<string, NormalizedEmbeddingB>> GetAll()
+    public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> GetAll()
     {
-        return _db.Enumerate<KeyValuePair<string, NormalizedEmbeddingB>>(
-            "SELECT term, term_embedding FROM RelatedTermsFuzzy",
+        return _db.Enumerate<KeyValuePair<int, NormalizedEmbeddingB>>(
+            "SELECT term_id, term_embedding FROM RelatedTermsFuzzy",
             reader =>
             {
                 int iCol = 0;
-                var term = reader.GetString(iCol++);
+                var term = reader.GetInt32(iCol++);
                 var embeddingBytes = (byte[])reader.GetValue(iCol++);
                 return new(term, new NormalizedEmbeddingB(embeddingBytes));
             });
+    }
+
+    private List<Term> GetTerms(List<ScoredItem<int>> termIds)
+    {
+        var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(termIds.Count);
+
+        var rows = _db.Enumerate(
+            $@"
+SELECT term
+FROM RelatedTermsFuzzy WHERE term_id IN ({string.Join(", ", placeholderIds)})
+ORDER BY term_id",
+            (cmd) => cmd.AddIdParameters(placeholderIds, termIds.Map((t) => t.Item)),
+            (reader) => reader.GetString(0)
+        );
+        int i = 0;
+        List<Term> terms = new List<Term>(termIds.Count);
+        foreach (var term in rows)
+        {
+            var scoredTermId = termIds[i];
+            terms.Add(new Term(term, (float)termIds[i].Score));
+        }
+        return terms;
     }
 }

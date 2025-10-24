@@ -3,7 +3,7 @@
 
 namespace TypeAgent.Vector;
 
-public static class EmbeddingExtensions
+public static class NormalizedEmbeddingExtensions
 {
     /// <summary>
     /// Given a list of normalized embeddings, return the index of the item that is nearest to 'other'
@@ -169,6 +169,40 @@ public static class EmbeddingExtensions
             }
         }
 
+        return matches.ByRankAndClear();
+    }
+}
+
+public static class NormalizedEmbeddingBExtensions
+{
+    public static void IndexesOfNearest(
+        this IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> list,
+        NormalizedEmbedding embedding,
+        TopNCollection<int> matches,
+        double minScore = double.MinValue
+    )
+    {
+        ArgumentVerify.ThrowIfNull(matches, nameof(matches));
+
+        foreach (KeyValuePair<int, NormalizedEmbeddingB> kv in list)
+        {
+            double score = kv.Value.DotProduct(embedding);
+            if (score >= minScore)
+            {
+                matches.Add(kv.Key, score);
+            }
+        }
+    }
+
+    public static List<ScoredItem<int>> IndexesOfNearest(
+        this IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> list,
+        NormalizedEmbedding embedding,
+        int maxMatches,
+        double minScore = double.MinValue
+    )
+    {
+        TopNCollection<int> matches = new TopNCollection<int>(maxMatches);
+        list.IndexesOfNearest(embedding, matches, minScore);
         return matches.ByRankAndClear();
     }
 }

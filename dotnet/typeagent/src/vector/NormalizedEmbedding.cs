@@ -55,9 +55,18 @@ public readonly struct NormalizedEmbedding
         return Embedding.ToBytes(Vector);
     }
 
-    public static NormalizedEmbedding FromBytes(byte[] bytes)
+    public static NormalizedEmbedding FromArray(float[] array, bool normalize = true)
     {
-        return new NormalizedEmbedding(Embedding.FromBytes(bytes));
+        if (normalize)
+        {
+            Embedding embedding = array;
+            embedding.NormalizeInPlace();
+            return new NormalizedEmbedding(embedding);
+        }
+        else
+        {
+            return new NormalizedEmbedding(array);
+        }
     }
 
     public static implicit operator float[](NormalizedEmbedding embedding)

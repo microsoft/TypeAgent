@@ -27,23 +27,23 @@ public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
 
     public int MaxBatchSize { get; }
 
-    public async Task<float[]> GenerateAsync(string input, CancellationToken cancellationToken)
+    public async Task<float[]> GenerateAsync(string text, CancellationToken cancellationToken)
     {
-        Response response = await GetResponseAsync([input], cancellationToken).ConfigureAwait(false);
+        Response response = await GetResponseAsync([text], cancellationToken).ConfigureAwait(false);
         return response.data[0].embedding;
     }
 
-    public async Task<IList<float[]>> GenerateAsync(IList<string> inputs, CancellationToken cancellationToken)
+    public async Task<IList<float[]>> GenerateAsync(IList<string> texts, CancellationToken cancellationToken)
     {
-        Response response = await GetResponseAsync(inputs, cancellationToken).ConfigureAwait(false);
+        Response response = await GetResponseAsync(texts, cancellationToken).ConfigureAwait(false);
         return response.data.Map((m) => m.embedding);
     }
 
-    private async Task<Response> GetResponseAsync(IList<string> inputs, CancellationToken cancellationToken)
+    private async Task<Response> GetResponseAsync(IList<string> texts, CancellationToken cancellationToken)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(inputs, nameof(inputs));
+        ArgumentVerify.ThrowIfNullOrEmpty(texts, nameof(texts));
 
-        Request request = CreateRequest(inputs);
+        Request request = CreateRequest(texts);
         string? apiToken = Settings.ApiTokenProvider is not null
                     ? await Settings.ApiTokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false)
                     : null;

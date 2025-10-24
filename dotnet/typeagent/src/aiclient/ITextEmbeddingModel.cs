@@ -7,9 +7,9 @@ public interface ITextEmbeddingModel
 {
     int MaxBatchSize { get; }
 
-    Task<float[]> GenerateAsync(string input, CancellationToken cancellationToken);
+    Task<float[]> GenerateAsync(string text, CancellationToken cancellationToken);
 
-    Task<IList<float[]>> GenerateAsync(IList<string> inputs, CancellationToken cancellationToken);
+    Task<IList<float[]>> GenerateAsync(IList<string> texts, CancellationToken cancellationToken);
 }
 
 public static class TextEmbeddingModelExtensions
@@ -19,23 +19,23 @@ public static class TextEmbeddingModelExtensions
     /// Uses batching if the model supports it.
     /// </summary>
     /// <param name="model">The embedding model.</param>
-    /// <param name="valueList">Strings for which to generate embeddings.</param>
+    /// <param name="texts">Strings for which to generate embeddings.</param>
     /// <param name="maxCharsPerChunk">Models can limit the total number of characters per batch.</param>
     /// <param name="concurrency">Degree of parallelism. Default is 1.</param>
     /// <returns></returns>
     public static async Task<List<float[]>> GenerateInBatchesAsync(
         this ITextEmbeddingModel model,
-        IList<string> valueList,
+        IList<string> texts,
         int batchSize,
         int maxCharsPerChunk,
-        int concurrency = 2,
+        int concurrency = 1,
         CancellationToken cancellationToken = default
     )
     {
         batchSize = Math.Min(batchSize, model.MaxBatchSize);
         if (batchSize > 1)
         {
-            List<List<string>> chunks = [.. valueList.GetStringChunks(batchSize, maxCharsPerChunk)];
+            List<List<string>> chunks = [.. texts.GetStringChunks(batchSize, maxCharsPerChunk)];
             var embeddingChunks = await chunks.MapAsync(
                 concurrency,
                 (chunk) => model.GenerateAsync(chunk, cancellationToken),
@@ -46,7 +46,7 @@ public static class TextEmbeddingModelExtensions
         }
         else
         {
-            return await valueList.MapAsync(
+            return await texts.MapAsync(
                 concurrency,
                 (value) => model.GenerateAsync(value, cancellationToken),
                 cancellationToken

@@ -3,10 +3,15 @@
 
 namespace TypeAgent.Vector;
 
+public interface IEmbedding
+{
+    ReadOnlySpan<float> AsSpan();
+}
+
 /// <summary>
 /// A lightweight struct that wraps an embedding vector
 /// </summary>
-public readonly struct Embedding
+public readonly struct Embedding : IEmbedding
 {
     /// <summary>
     /// Embedding using the given vector. Normalizes the vector before storing it

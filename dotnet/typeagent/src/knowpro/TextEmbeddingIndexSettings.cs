@@ -16,7 +16,7 @@ public class TextEmbeddingIndexSettings
         MaxMatches = maxMatches;
         MaxCharsPerBatch = 2048;
         BatchSize = 8;
-
+        Concurrency = 1;
         Retry = new RetrySettings()
         {
             MaxRetries = 2,
@@ -35,6 +35,7 @@ public class TextEmbeddingIndexSettings
 
     public int BatchSize { get; set; }
 
+    public int Concurrency { get; set; }
     public RetrySettings Retry { get; set; }
 
     public void ThrowIfInvalid()

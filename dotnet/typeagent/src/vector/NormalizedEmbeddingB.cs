@@ -43,7 +43,7 @@ public readonly struct NormalizedEmbeddingB
     /// </summary>
     /// <param name="other">other embedding</param>
     /// <returns>cosine similarity</returns>
-    public double CosineSimilarity(ReadOnlySpan<float> other)
+    public double CosineSimilarity(NormalizedEmbedding other)
     {
         // Since the embedding is normalized already
         return TensorPrimitives.Dot(this, other);
@@ -64,7 +64,7 @@ public readonly struct NormalizedEmbeddingB
     /// </summary>
     /// <param name="other">other embedding</param>
     /// <returns>dot product</returns>
-    public double DotProduct(ReadOnlySpan<float> other)
+    public double DotProduct(NormalizedEmbedding other)
     {
         return TensorPrimitives.Dot(this, other);
     }
