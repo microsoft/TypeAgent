@@ -9,12 +9,21 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
 {
     SqliteDatabase _db;
 
-    public SqliteStorageProvider(string dirPath, string baseFileName, bool createNew = false)
-        : this(Path.Join(dirPath, baseFileName + ".db"), createNew)
+    public SqliteStorageProvider(
+        ConversationSettings settings,
+        string dirPath,
+        string baseFileName,
+        bool createNew = false
+    )
+        : this(settings, Path.Join(dirPath, baseFileName + ".db"), createNew)
     {
     }
 
-    public SqliteStorageProvider(string dbPath, bool createNew = false)
+    public SqliteStorageProvider(
+        ConversationSettings settings,
+        string dbPath,
+        bool createNew = false
+    )
     {
         if (!createNew)
         {
@@ -32,7 +41,8 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         SemanticRefIndex = new SqliteTermToSemanticRefIndex(_db);
         SecondaryIndexes = new ConversationSecondaryIndexes(
             new SqlitePropertyToSemanticRefIndex(_db),
-            new SqliteTimestampToTextRangeIndex(_db)
+            new SqliteTimestampToTextRangeIndex(_db),
+            new SqliteRelatedTermsIndex(_db, settings.RelatedTermIndexSettings)
         );
     }
 

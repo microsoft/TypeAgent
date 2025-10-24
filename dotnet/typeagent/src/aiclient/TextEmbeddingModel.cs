@@ -4,33 +4,46 @@
 
 namespace TypeAgent.AIClient;
 
-public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
+public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
 {
     int _dimensions;
 
-    public TextEmbeddingModel(ApiSettings settings, HttpClient? client = null, int dimensions = 0)
+    public TextEmbeddingModel(ModelApiSettings settings, int dimensions = 0, int maxBatchSize = 2048)
+        : this(settings, null, dimensions, maxBatchSize)
+    {
+    }
+
+    public TextEmbeddingModel(
+        ModelApiSettings settings,
+        HttpClient? client,
+        int dimensions = 0,
+        int maxBatchSize = 2048
+    )
         : base(settings, client)
     {
         _dimensions = dimensions;
+        MaxBatchSize = maxBatchSize;
     }
 
-    public async Task<float[]> GenerateAsync(string input, CancellationToken cancellationToken)
+    public int MaxBatchSize { get; }
+
+    public async Task<float[]> GenerateAsync(string text, CancellationToken cancellationToken)
     {
-        Response response = await GetResponseAsync([input], cancellationToken).ConfigureAwait(false);
+        Response response = await GetResponseAsync([text], cancellationToken).ConfigureAwait(false);
         return response.data[0].embedding;
     }
 
-    public async Task<IList<float[]>> GenerateAsync(string[] inputs, CancellationToken cancellationToken)
+    public async Task<IList<float[]>> GenerateAsync(IList<string> texts, CancellationToken cancellationToken)
     {
-        Response response = await GetResponseAsync(inputs, cancellationToken).ConfigureAwait(false);
+        Response response = await GetResponseAsync(texts, cancellationToken).ConfigureAwait(false);
         return response.data.Map((m) => m.embedding);
     }
 
-    private async Task<Response> GetResponseAsync(string[] inputs, CancellationToken cancellationToken)
+    private async Task<Response> GetResponseAsync(IList<string> texts, CancellationToken cancellationToken)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(inputs, nameof(inputs));
+        ArgumentVerify.ThrowIfNullOrEmpty(texts, nameof(texts));
 
-        Request request = CreateRequest(inputs);
+        Request request = CreateRequest(texts);
         string? apiToken = Settings.ApiTokenProvider is not null
                     ? await Settings.ApiTokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false)
                     : null;
@@ -39,7 +52,7 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
             Settings.Endpoint,
             request,
             apiToken,
-            RequestSettings,
+            Settings.Retry,
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -48,8 +61,7 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
         return response;
     }
 
-
-    private Request CreateRequest(string[] input)
+    private Request CreateRequest(IList<string> input)
     {
         var request = new Request
         {
@@ -59,9 +71,9 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
         {
             request.dimensions = _dimensions;
         }
-        if (!string.IsNullOrEmpty(Settings.Model))
+        if (!string.IsNullOrEmpty(Settings.ModelName))
         {
-            request.model = Settings.Model;
+            request.model = Settings.ModelName;
         }
         return request;
     }
@@ -70,7 +82,7 @@ public class TextEmbeddingModel : OpenAIModel, ITextEmbeddingModel
     {
         public string? model { get; set; }
         public int? dimensions { get; set; }
-        public string[] input { get; set; }
+        public IList<string> input { get; set; }
     }
 
     private struct Response

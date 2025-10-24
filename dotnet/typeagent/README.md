@@ -8,7 +8,7 @@ TypeAgent.NET will incorporate [TypeChat.net](https://github.com/microsoft/typec
 This **sample code** is in early stage experimental developement with **frequent changes**. 
 
 ## KnowPro.NET
-KnowPro.NET implements Structured RAG in C# for .NET platforms. 
+KnowPro.NET will implement Structured RAG in C# for .NET platforms. This work is in curently in progress
 
 It will improve on the Typescript implementation in the following ways:
 * It is fully asynchronous

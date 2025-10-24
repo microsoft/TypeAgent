@@ -7,12 +7,15 @@ namespace TypeAgent.ExamplesLib;
 
 public class KnowProWriter : ConsoleWriter
 {
-    public static async Task WriteMessagesAsync(IConversation conversation)
+    public static void WriteTerm(Term term)
     {
-        await foreach (var message in conversation.Messages)
+        if (term.Weight is not null)
         {
-            WriteMessage(message);
-            WriteLine();
+            WriteLine($"{term.Text} [{term.Weight.Value}]");
+        }
+        else
+        {
+            WriteLine(term.Text);
         }
     }
 
@@ -32,7 +35,16 @@ public class KnowProWriter : ConsoleWriter
         }
     }
 
-    public static void WriteMessage(IMessage message)
+public static async Task WriteMessagesAsync(IConversation conversation)
+{
+    await foreach (var message in conversation.Messages)
+    {
+        WriteMessage(message);
+        WriteLine();
+    }
+}
+
+public static void WriteMessage(IMessage message)
     {
         PushColor(ConsoleColor.Cyan);
         WriteNameValue("Timestamp", message.Timestamp);
@@ -73,7 +85,7 @@ public static void WriteEntity(ConcreteEntity? entity)
         }
     }
 
-    public async static Task WriteConversationSearchResultsAsync(
+    public static async Task WriteConversationSearchResultsAsync(
         IConversation conversation,
         ConversationSearchResult? searchResult,
         bool verbose = false

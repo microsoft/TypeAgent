@@ -220,8 +220,6 @@ internal class MessageRow
         cmd.AddParameter("@metadata", MetadataJson);
         cmd.AddParameter("@extra", ExtraJson);
     }
-
-
 }
 
 public class SqliteMessageCollection : IMessageCollection

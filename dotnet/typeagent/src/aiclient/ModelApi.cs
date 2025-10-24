@@ -3,9 +3,9 @@
 
 namespace TypeAgent.AIClient;
 
-public class OpenAIModel
+public class ModelApi
 {
-    public OpenAIModel(ApiSettings settings, HttpClient ? client = null)
+    public ModelApi(ModelApiSettings settings, HttpClient ? client = null)
     {
         ArgumentVerify.ThrowIfNull(settings, nameof(settings));
 
@@ -13,17 +13,11 @@ public class OpenAIModel
         Client = client ?? new HttpClient();
 
         ConfigureClient();
-
-        RequestSettings = new HttpRequestSettings();
-        RequestSettings.MaxRetries = settings.MaxRetries;
-        RequestSettings.RetryPauseMs = settings.MaxPauseMs;
     }
 
-    public ApiSettings Settings{ get; }
+    public ModelApiSettings Settings { get; }
 
     public HttpClient Client { get; }
-
-    protected HttpRequestSettings RequestSettings { get; }
 
     private void ConfigureClient()
     {
@@ -33,5 +27,4 @@ public class OpenAIModel
             Client.Timeout = TimeSpan.FromMilliseconds(Settings.TimeoutMs);
         }
     }
-
 }

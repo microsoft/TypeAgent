@@ -8,5 +8,5 @@ public interface IConversationSecondaryIndexes
 
     ITimestampToTextRangeIndex TimestampIndex { get; }
 
-    //ITermToRelatedTermIndex TermToRelatedTermsIndex { get; }
+    ITermToRelatedTermIndex TermToRelatedTermsIndex { get; }
 }
