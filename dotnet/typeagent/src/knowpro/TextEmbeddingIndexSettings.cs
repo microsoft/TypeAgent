@@ -14,6 +14,7 @@ public class TextEmbeddingIndexSettings
         EmbeddingModel = model;
         MinScore = minScore;
         MaxMatches = maxMatches;
+        MaxCharsPerBatch = 2048;
         BatchSize = 8;
 
         Retry = new RetrySettings()
@@ -30,6 +31,8 @@ public class TextEmbeddingIndexSettings
 
     public int MaxMatches { get; set; }
 
+    public int MaxCharsPerBatch { get; set; }
+
     public int BatchSize { get; set; }
 
     public RetrySettings Retry { get; set; }
@@ -37,5 +40,6 @@ public class TextEmbeddingIndexSettings
     public void ThrowIfInvalid()
     {
         ArgumentVerify.ThrowIfNull(EmbeddingModel, nameof(EmbeddingModel));
+        ArgumentVerify.ThrowIfLessThan(MaxCharsPerBatch, 0, nameof(MaxCharsPerBatch));
     }
 }

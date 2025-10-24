@@ -62,5 +62,10 @@ public readonly struct Embedding
     {
         return vector.Vector;
     }
+
+    public static implicit operator Embedding(float[] vector)
+    {
+        return new Embedding(vector);
+    }
 }
 
