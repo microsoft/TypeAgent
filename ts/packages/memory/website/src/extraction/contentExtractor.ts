@@ -612,7 +612,7 @@ export class ContentExtractor {
                                 chunkIndex,
                                 totalChunksInItem: docParts.length,
                                 globalChunkIndex: 0,
-                                totalChunksGlobal: 1,
+                                totalChunksGlobal: docParts.length,
                                 chunkContent: chunkText.substring(0, 100),
                                 chunkResult: result,
                             });
@@ -645,7 +645,7 @@ export class ContentExtractor {
                                 chunkIndex,
                                 totalChunksInItem: docParts.length,
                                 globalChunkIndex: 0,
-                                totalChunksGlobal: 1,
+                                totalChunksGlobal: docParts.length,
                                 chunkContent: chunkText.substring(0, 100),
                                 chunkResult: undefined, // No result on failure
                             });

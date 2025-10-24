@@ -4,12 +4,13 @@
 import { ValueNode } from "./grammarRuleParser.js";
 
 /**
- * In memory types
+ * Grammar Types - in memory
  */
 export type StringPart = {
     type: "string";
-
     value: string[];
+    optional?: undefined; // TODO: support optional string parts
+    variable?: undefined;
 
     /* TODO: cache the regexp?
     regexp?: RegExp;
@@ -56,7 +57,7 @@ export type Grammar = {
 };
 
 /**
- * Serialized types
+ * Grammar Types - in serialized
  */
 export type StringPartJson = {
     type: "string";
@@ -67,11 +68,13 @@ export type VarStringPartJson = {
     type: "wildcard";
     variable: string;
     typeName: string;
+    optional?: boolean | undefined;
 };
 
 export type VarNumberPartJson = {
     type: "number";
     variable: string;
+    optional?: boolean | undefined;
 };
 
 export type RulePartJson = {
@@ -92,5 +95,5 @@ export type GrammarRuleJson = {
     parts: GrammarPartJson[];
     value?: ValueNode | undefined;
 };
-export type GrammarRules = GrammarRuleJson[];
-export type GrammarJson = GrammarRules[];
+export type GrammarRulesJson = GrammarRuleJson[];
+export type GrammarJson = GrammarRulesJson[];

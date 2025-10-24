@@ -3,7 +3,7 @@
 
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
-import { ExecutableAction, getPropertyInfo } from "agent-cache";
+import { ExecutableAction, getPropertyInfo, MatchOptions } from "agent-cache";
 import { CompletionGroup, TypeAgentAction } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "common-utils";
 import {
@@ -15,7 +15,6 @@ import {
 } from "action-schema";
 import { getAppAgentName } from "./agentTranslators.js";
 import { resolveEntityTypeName } from "../execute/pendingActions.js";
-import { WildcardMode } from "agent-cache";
 import {
     getActivityActiveSchemas,
     getActivityCacheSpec,
@@ -75,100 +74,50 @@ export async function requestCompletion(
     requestPrefix: string | undefined,
     context: CommandHandlerContext,
 ): Promise<CompletionGroup[]> {
-    const constructionStore = context.agentCache.constructionStore;
-    if (!constructionStore.isEnabled()) {
-        return [];
-    }
-
     debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
-
     const namespaceKeys = getCompletionNamespaceKeys(context);
     debugCompletion(`Request completion namespace keys`, namespaceKeys);
-    if (!requestPrefix) {
-        const completions = constructionStore.getPrefix(namespaceKeys);
-
-        return completions.length > 0
-            ? [
-                  {
-                      name: "Request Completions",
-                      completions,
-                      needQuotes: false, // Request completions are partial, no quotes needed
-                  },
-              ]
-            : [];
-    }
 
     const config = context.session.getConfig();
-    const results = constructionStore.match(requestPrefix, {
-        partial: true,
+    const options: MatchOptions = {
         wildcard: config.cache.matchWildcard,
         rejectReferences: config.explainer.filter.reference.list,
         namespaceKeys,
         history: getHistoryContext(context),
-    });
+    };
+    const results = context.agentCache.completion(requestPrefix, options);
 
-    debugCompletion(`Request completion construction match: ${results.length}`);
+    if (results === undefined) {
+        return [];
+    }
+
+    const completions: CompletionGroup[] = [];
+    if (results.completions.length > 0) {
+        completions.push({
+            name: "Request Completions",
+            completions: results.completions,
+            needQuotes: false, // Request completions are partial, no quotes needed
+        });
+    }
+
+    if (results.properties === undefined) {
+        return completions;
+    }
 
     const propertyCompletions = new Map<string, CompletionGroup>();
-    const requestText: string[] = [];
-    for (const result of results) {
-        const { construction, partialPartCount } = result;
-        if (partialPartCount === undefined) {
-            throw new Error("Internal Error: Partial part count is undefined");
-        }
-
-        if (partialPartCount === construction.parts.length) {
-            continue; // No more parts to complete
-        }
-
-        const nextPart = construction.parts[partialPartCount];
-        // Only include part completion if it is not a checked or entity wildcard.
-        if (nextPart.wildcardMode <= WildcardMode.Enabled) {
-            const partCompletions = nextPart.getCompletion();
-            if (partCompletions) {
-                requestText.push(...partCompletions);
-            }
-        }
-
+    for (const completionProperty of results.properties) {
         // TODO: assuming the partial action doesn't change the possible values.
-        const propertyNames = nextPart
-            .getPropertyNames()
-            ?.filter((name) => !propertyCompletions.has(name));
-        if (propertyNames !== undefined && propertyNames.length > 0) {
-            // Detect multi-part properties
-            const allPropertyNames = new Map<string, number>();
-            for (const part of construction.parts) {
-                const names = part.getPropertyNames();
-                if (names === undefined) {
-                    continue; // No property names for this part
-                }
-                for (const name of names) {
-                    const count = allPropertyNames.get(name) ?? 0;
-                    allPropertyNames.set(name, count + 1);
-                }
-            }
-
-            const queryPropertyNames = propertyNames.filter(
-                (name) => allPropertyNames.get(name) === 1,
-            );
-            if (queryPropertyNames.length === 0) {
-                continue; // No single-part properties to complete
-            }
+        const propertyNames = completionProperty.names.filter(
+            (name) => !propertyCompletions.has(name),
+        );
+        if (propertyNames.length > 0) {
             await collectActionCompletions(
-                queryPropertyNames,
-                result.match.actions,
+                propertyNames,
+                completionProperty.actions,
                 context,
                 propertyCompletions,
             );
         }
-    }
-    const completions: CompletionGroup[] = [];
-    if (requestText.length > 0) {
-        completions.push({
-            name: "Request Completions",
-            completions: requestText,
-            needQuotes: false, // Request completions are partial, no quotes needed
-        });
     }
 
     completions.push(...propertyCompletions.values());

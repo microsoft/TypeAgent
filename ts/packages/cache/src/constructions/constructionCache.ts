@@ -1,8 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { HistoryContext } from "../explanation/requestAction.js";
-import { Construction, ConstructionMatchResult } from "./constructions.js";
+import {
+    ExecutableAction,
+    HistoryContext,
+} from "../explanation/requestAction.js";
+import {
+    Construction,
+    ConstructionMatchResult,
+    WildcardMode,
+} from "./constructions.js";
 import { MatchPart, MatchSet, isMatchPart } from "./matchPart.js";
 import { Transforms } from "./transforms.js";
 
@@ -18,7 +25,7 @@ import {
 } from "./constructionJSONTypes.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
-
+const debugCompletion = registerDebug("typeagent:const:completion");
 // Agent Cache define the namespace policy.  At the cache, it just combine the keys into a string for lookup.
 function getConstructionNamespace(namespaceKeys: string[]) {
     // Combine the namespace keys into a string using | as the separator.  Use to filter easily when
@@ -56,11 +63,37 @@ export type MatchOptions = {
     rejectReferences?: boolean; // default is true
     conflicts?: boolean; // default is false
     history?: HistoryContext | undefined;
-
-    // Partial (prefix) match, for completions.
-    partial?: boolean; // default is false
 };
 
+export type CompletionProperty = {
+    actions: ExecutableAction[];
+    names: string[];
+};
+
+export type CompletionResult = {
+    completions: string[];
+    properties?: CompletionProperty[] | undefined;
+};
+
+export function mergeCompletionResults(
+    first: CompletionResult | undefined,
+    second: CompletionResult | undefined,
+): CompletionResult | undefined {
+    if (first === undefined) {
+        return second;
+    }
+    if (second === undefined) {
+        return first;
+    }
+    return {
+        completions: [...first.completions, ...second.completions],
+        properties: first.properties
+            ? second.properties
+                ? [...first.properties, ...second.properties]
+                : first.properties
+            : second.properties,
+    };
+}
 export class ConstructionCache {
     private readonly matchSetsByUid = new Map<string, MatchSet>();
 
@@ -253,7 +286,7 @@ export class ConstructionCache {
     }
 
     // For completion
-    public getPrefix(namespaceKeys?: string[]): string[] {
+    private getPrefix(namespaceKeys?: string[]): string[] {
         if (namespaceKeys?.length === 0) {
             return [];
         }
@@ -290,6 +323,7 @@ export class ConstructionCache {
     public match(
         request: string,
         options?: MatchOptions,
+        partial?: boolean,
     ): ConstructionMatchResult[] {
         const namespaceKeys = options?.namespaceKeys;
         if (namespaceKeys?.length === 0) {
@@ -302,7 +336,7 @@ export class ConstructionCache {
             history: options?.history,
             conflicts: options?.conflicts,
             matchPartsCache: createMatchPartsCache(request),
-            partial: options?.partial ?? false, // default to false.
+            partial: partial ?? false, // default to false.
         };
 
         // If the useTranslators is undefined use all the translators
@@ -324,6 +358,90 @@ export class ConstructionCache {
         }
         debugConstMatchStat(getMatchPartsCacheStats(config.matchPartsCache));
         return matches;
+    }
+
+    public completion(
+        requestPrefix: string | undefined,
+        options?: MatchOptions,
+    ): CompletionResult | undefined {
+        debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+        const namespaceKeys = options?.namespaceKeys;
+        debugCompletion(`Request completion namespace keys`, namespaceKeys);
+        if (!requestPrefix) {
+            const completions = this.getPrefix(namespaceKeys);
+
+            return completions.length > 0
+                ? {
+                      completions,
+                  }
+                : undefined;
+        }
+
+        const results = this.match(requestPrefix, options, true);
+
+        debugCompletion(
+            `Request completion construction match: ${results.length}`,
+        );
+
+        const completionProperty: CompletionProperty[] = [];
+        const requestText: string[] = [];
+        for (const result of results) {
+            const { construction, partialPartCount } = result;
+            if (partialPartCount === undefined) {
+                throw new Error(
+                    "Internal Error: Partial part count is undefined",
+                );
+            }
+
+            if (partialPartCount === construction.parts.length) {
+                continue; // No more parts to complete
+            }
+
+            const nextPart = construction.parts[partialPartCount];
+            // Only include part completion if it is not a checked or entity wildcard.
+            if (nextPart.wildcardMode <= WildcardMode.Enabled) {
+                const partCompletions = nextPart.getCompletion();
+                if (partCompletions) {
+                    requestText.push(...partCompletions);
+                }
+            }
+
+            // TODO: assuming the partial action doesn't change the possible values.
+            const nextPartPropertyNames = nextPart.getPropertyNames();
+            if (
+                nextPartPropertyNames !== undefined &&
+                nextPartPropertyNames.length > 0
+            ) {
+                // Detect multi-part properties
+                const allPropertyNames = new Map<string, number>();
+                for (const part of construction.parts) {
+                    const names = part.getPropertyNames();
+                    if (names === undefined) {
+                        continue; // No property names for this part
+                    }
+                    for (const name of names) {
+                        const count = allPropertyNames.get(name) ?? 0;
+                        allPropertyNames.set(name, count + 1);
+                    }
+                }
+
+                const queryPropertyNames = nextPartPropertyNames.filter(
+                    (name) => allPropertyNames.get(name) === 1,
+                );
+                if (queryPropertyNames.length === 0) {
+                    continue; // No single-part properties to complete
+                }
+                completionProperty.push({
+                    actions: result.match.actions,
+                    names: queryPropertyNames,
+                });
+            }
+        }
+
+        return {
+            completions: requestText,
+            properties: completionProperty,
+        };
     }
 
     public get matchSets(): IterableIterator<MatchSet> {
