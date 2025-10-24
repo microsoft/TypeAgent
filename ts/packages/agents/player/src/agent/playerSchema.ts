@@ -259,8 +259,9 @@ export interface CreatePlaylistAction {
         // name of playlist to create
         name: string;
         // track list entity to use as the source of tracks
-        // leave this out to create an empty playlist
         trackListEntityId?: string;
+        // if true, create an empty playlist
+        empty?: boolean;
     };
 }
 

@@ -1226,6 +1226,10 @@ export async function handleCall(
         case "createPlaylist": {
             const name = action.parameters.name;
             let input = clientContext.currentTrackList;
+            let empty = action.parameters.empty;
+            if (empty === true) {
+                input = undefined;
+            }
 
             const trackListEntity = action.entities?.trackListEntityId;
             if (trackListEntity) {
