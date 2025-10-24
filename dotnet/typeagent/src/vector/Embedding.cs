@@ -58,6 +58,22 @@ public readonly struct Embedding
         return new NormalizedEmbedding(normalized);
     }
 
+    public byte[] ToBytes() => ToBytes(Vector);
+
+    public static byte[] ToBytes(float[] vector)
+    {
+        var bytes = new byte[vector.Length * sizeof(float)];
+        Buffer.BlockCopy(vector, 0, bytes, 0, bytes.Length);
+        return bytes;
+    }
+
+    public static float[] FromBytes(byte[] bytes)
+    {
+        var floats = new float[bytes.Length / sizeof(float)];
+        Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length);
+        return floats;
+    }
+
     public static implicit operator float[](Embedding vector)
     {
         return vector.Vector;

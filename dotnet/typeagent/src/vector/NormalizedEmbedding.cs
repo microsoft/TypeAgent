@@ -51,6 +51,16 @@ public readonly struct NormalizedEmbedding
         return TensorPrimitives.Dot(VectorSpan, other.VectorSpan);
     }
 
+    public byte[] ToBytes()
+    {
+        return Embedding.ToBytes(Vector);
+    }
+
+    public static NormalizedEmbedding FromBytes(byte[] bytes)
+    {
+        return new NormalizedEmbedding(Embedding.FromBytes(bytes));
+    }
+
     public static implicit operator float[](NormalizedEmbedding vector)
     {
         return vector.Vector;

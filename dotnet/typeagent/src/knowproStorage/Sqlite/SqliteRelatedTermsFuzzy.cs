@@ -49,8 +49,17 @@ INSERT OR REPLACE INTO RelatedTermsFuzzy
 VALUES(@term, @term_embedding)
     ");
         cmd.AddParameter("@term", term);
-        cmd.AddParameter("@term_embedding", embedding);
+        cmd.AddParameter("@term_embedding", embedding.ToBytes());
         cmd.ExecuteNonQuery();
+    }
+
+    public void AddTerms(IEnumerable<KeyValuePair<string, NormalizedEmbedding>> rows)
+    {
+        ArgumentVerify.ThrowIfNull(rows, nameof(rows));
+        foreach(var row in rows)
+        {
+            AddTerm(row.Key, row.Value);
+        }
     }
 
     public async ValueTask AddTermsAsync(IList<string> terms)
@@ -76,5 +85,17 @@ VALUES(@term, @term_embedding)
     public ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int maxMatches, double minScore)
     {
         throw new NotImplementedException();
+    }
+
+    public IEnumerable<KeyValuePair<string, NormalizedEmbedding>> GetAll()
+    {
+        return _db.Enumerate<KeyValuePair<string, NormalizedEmbedding>>(
+            "SELECT term, term_embedding FROM RelatedTermsFuzzy",
+            reader => {
+                int iCol = 0;
+                var term = reader.GetString(iCol++);
+                var embeddingBytes = (byte[])reader.GetValue(iCol++);
+                return new(term, NormalizedEmbedding.FromBytes(embeddingBytes));
+            });
     }
 }
