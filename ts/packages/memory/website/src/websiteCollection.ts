@@ -32,6 +32,7 @@ import {
     CommunityTable,
     Relationship,
     HierarchicalTopicTable,
+    HierarchicalTopicRecord,
     TopicEntityRelationTable,
     TopicRelationshipTable,
     TopicMetricsTable,
@@ -41,8 +42,46 @@ import { WebsiteDocPart } from "./websiteDocPart.js";
 import path from "node:path";
 import fs from "node:fs";
 import registerDebug from "debug";
+import { createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 
 const debug = registerDebug("typeagent:memory:websiteCollection");
+
+interface PairwiseTopicRelationship {
+    action: "keep_root" | "make_child" | "merge";
+    confidence: number;
+    reasoning: string;
+}
+
+const pairwiseTopicRelationshipSchema = `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+/**
+ * Schema for LLM-based pairwise topic relationship analysis
+ * Used with TypeChat for analyzing semantic relationships between two topics
+ */
+
+/**
+ * Relationship actions for organizing topic hierarchies:
+ *
+ * - "keep_root": Topic should remain independent (no relationship to the other topic)
+ *   Use when: The two topics are unrelated or equally broad
+ *   Example: "Machine Learning" and "Web Development" should both remain roots
+ *
+ * - "make_child": The first topic should become a child of the second topic
+ *   Use when: The first topic is more specific than the second and represents a subset
+ *
+ * - "merge": The first topic should be merged into the second topic
+ *   Use when: Topics are synonyms, abbreviations, or duplicates
+ */
+type RelationshipAction = "keep_root" | "make_child" | "merge";
+
+interface PairwiseTopicRelationship {
+    action: RelationshipAction;
+    confidence: number;
+    reasoning: string;
+}
+`;
 
 export interface WebsiteCollectionData
     extends IConversationDataWithIndexes<WebsiteDocPart> {}
@@ -2102,6 +2141,567 @@ export class WebsiteCollection
         }
     }
 
+    private async analyzeSemanticRelationship(
+        topic: string,
+        candidateParent: string,
+    ): Promise<{
+        action: "keep_root" | "make_child" | "merge";
+        confidence: number;
+        reasoning: string;
+    }> {
+        const topicLower = topic.toLowerCase();
+        const parentLower = candidateParent.toLowerCase();
+
+        if (topicLower === parentLower) {
+            return {
+                action: "merge",
+                confidence: 1.0,
+                reasoning: "Exact match (case-insensitive)",
+            };
+        }
+
+        try {
+            const { openai: ai } = await import("aiclient");
+            const apiSettings = ai.azureApiSettingsFromEnv(
+                ai.ModelType.Chat,
+                undefined,
+                "GPT_4_O_MINI",
+            );
+            const model = ai.createChatModel(apiSettings);
+
+            const validator =
+                createTypeScriptJsonValidator<PairwiseTopicRelationship>(
+                    pairwiseTopicRelationshipSchema,
+                    "PairwiseTopicRelationship",
+                );
+            const translator = createJsonTranslator(model, validator);
+
+            const prompt = `Analyze the semantic relationship between these two topics:
+
+Topic 1: "${topic}"
+Topic 2: "${candidateParent}"
+
+Determine the appropriate relationship action based on the PairwiseTopicRelationship schema.`;
+
+            const response = await translator.translate(prompt);
+
+            if (!response.success) {
+                console.warn(
+                    `[LLM Pairwise] Failed to analyze "${topic}" vs "${candidateParent}": ${response.message}`,
+                );
+                return {
+                    action: "keep_root",
+                    confidence: 0.0,
+                    reasoning: "LLM analysis failed",
+                };
+            }
+
+            const result = response.data;
+            return {
+                action: result.action || "keep_root",
+                confidence: result.confidence || 0.5,
+                reasoning: result.reasoning || "LLM pairwise analysis",
+            };
+        } catch (error) {
+            console.error(
+                `[LLM Pairwise] Error analyzing "${topic}" vs "${candidateParent}":`,
+                error,
+            );
+            return {
+                action: "keep_root",
+                confidence: 0.0,
+                reasoning: "Analysis error",
+            };
+        }
+    }
+
+    public async testMergeTopicHierarchies(
+        llmAnalyzer?: (topicNames: string[]) => Promise<
+            Map<
+                string,
+                {
+                    action: "keep_root" | "make_child" | "merge";
+                    targetTopic?: string;
+                    confidence: number;
+                    reasoning: string;
+                }
+            >
+        >,
+    ): Promise<{
+        mergeCount: number;
+        changes: Array<{
+            action: string;
+            sourceTopic: string;
+            targetTopic?: string;
+        }>;
+    }> {
+        console.log(
+            "[Topic Merge] Testing topic hierarchy merge (preview mode)",
+        );
+
+        const allTopics = this.hierarchicalTopics.getTopicHierarchy();
+        const rootTopics = allTopics.filter((t) => t.level === 0);
+
+        console.log(`[Topic Merge] Analyzing ${rootTopics.length} root topics`);
+
+        const changes: Array<{
+            action: string;
+            sourceTopic: string;
+            targetTopic?: string;
+        }> = [];
+
+        const topicsByName = new Map<string, HierarchicalTopicRecord[]>();
+        for (const topic of rootTopics) {
+            if (!topicsByName.has(topic.topicName)) {
+                topicsByName.set(topic.topicName, []);
+            }
+            topicsByName.get(topic.topicName)!.push(topic);
+        }
+
+        for (const [, topics] of topicsByName) {
+            if (topics.length > 1) {
+                const primaryTopic = topics.reduce((best, current) =>
+                    current.confidence > best.confidence ? current : best,
+                );
+
+                for (const topic of topics) {
+                    if (topic.url !== primaryTopic.url) {
+                        changes.push({
+                            action: "merge_duplicate",
+                            sourceTopic: `${topic.topicName} (${topic.url})`,
+                            targetTopic: `${primaryTopic.topicName} (${primaryTopic.url})`,
+                        });
+                    }
+                }
+            }
+        }
+
+        const uniqueRootNames = Array.from(
+            new Set(rootTopics.map((t) => t.topicName)),
+        );
+
+        if (llmAnalyzer) {
+            console.log("[Topic Merge] Using LLM-based semantic analysis");
+            const llmAnalysis = await llmAnalyzer(uniqueRootNames);
+
+            let loggedSamples = 0;
+            const maxSamples = 10;
+
+            for (const [topicName, analysis] of llmAnalysis) {
+                if (analysis.action === "make_child" && analysis.targetTopic) {
+                    changes.push({
+                        action: "make_child",
+                        sourceTopic: topicName,
+                        targetTopic: analysis.targetTopic,
+                    });
+                    if (loggedSamples < maxSamples) {
+                        console.log(
+                            `[Topic Merge Sample] "${topicName}" → child of "${analysis.targetTopic}"`,
+                        );
+                        console.log(`  Reasoning: ${analysis.reasoning}`);
+                        console.log(
+                            `  Confidence: ${analysis.confidence.toFixed(2)}`,
+                        );
+                        loggedSamples++;
+                    }
+                } else if (
+                    analysis.action === "merge" &&
+                    analysis.targetTopic
+                ) {
+                    changes.push({
+                        action: "merge_semantic",
+                        sourceTopic: topicName,
+                        targetTopic: analysis.targetTopic,
+                    });
+                    if (loggedSamples < maxSamples) {
+                        console.log(
+                            `[Topic Merge Sample] "${topicName}" → merge into "${analysis.targetTopic}"`,
+                        );
+                        console.log(`  Reasoning: ${analysis.reasoning}`);
+                        console.log(
+                            `  Confidence: ${analysis.confidence.toFixed(2)}`,
+                        );
+                        loggedSamples++;
+                    }
+                }
+            }
+
+            console.log(
+                `[Topic Merge] Logged ${loggedSamples} sample merge actions (showing up to ${maxSamples})`,
+            );
+        } else {
+            console.log(
+                "[Topic Merge] Using LLM-based pairwise semantic analysis",
+            );
+            let pairwiseCount = 0;
+            for (let i = 0; i < uniqueRootNames.length; i++) {
+                const topicName = uniqueRootNames[i];
+
+                for (let j = 0; j < uniqueRootNames.length; j++) {
+                    if (i === j) continue;
+
+                    const candidateParent = uniqueRootNames[j];
+                    pairwiseCount++;
+
+                    if (pairwiseCount % 10 === 0) {
+                        console.log(
+                            `[Topic Merge] Analyzed ${pairwiseCount} topic pairs...`,
+                        );
+                    }
+
+                    const relationship = await this.analyzeSemanticRelationship(
+                        topicName,
+                        candidateParent,
+                    );
+
+                    if (
+                        relationship.action === "make_child" &&
+                        relationship.confidence >= 0.7
+                    ) {
+                        changes.push({
+                            action: "make_child",
+                            sourceTopic: topicName,
+                            targetTopic: candidateParent,
+                        });
+                    } else if (
+                        relationship.action === "merge" &&
+                        relationship.confidence >= 0.9
+                    ) {
+                        changes.push({
+                            action: "merge_semantic",
+                            sourceTopic: topicName,
+                            targetTopic: candidateParent,
+                        });
+                    }
+                }
+            }
+            console.log(
+                `[Topic Merge] Completed ${pairwiseCount} pairwise LLM comparisons`,
+            );
+        }
+
+        const mergeCount = changes.length;
+
+        const actionCounts = changes.reduce(
+            (acc, change) => {
+                acc[change.action] = (acc[change.action] || 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+
+        console.log(`[Topic Merge] Preview Summary:`);
+        console.log(`  Total changes: ${mergeCount}`);
+        Object.entries(actionCounts).forEach(([action, count]) => {
+            console.log(`  - ${action}: ${count}`);
+        });
+
+        if (changes.length > 0) {
+            console.log(
+                `\n[Topic Merge] ===== Sample of 10 Merge Actions ===== `,
+            );
+            changes.slice(0, 10).forEach((change, i) => {
+                const actionLabel =
+                    change.action === "make_child"
+                        ? "MAKE CHILD"
+                        : change.action === "merge_semantic"
+                          ? "MERGE"
+                          : change.action === "merge_duplicate"
+                            ? "DEDUPE"
+                            : change.action;
+
+                if (change.targetTopic) {
+                    console.log(
+                        `  ${i + 1}. [${actionLabel}] "${change.sourceTopic}" → "${change.targetTopic}"`,
+                    );
+                } else {
+                    console.log(
+                        `  ${i + 1}. [${actionLabel}] "${change.sourceTopic}"`,
+                    );
+                }
+            });
+            console.log(
+                `[Topic Merge] =====================================\n`,
+            );
+        }
+
+        return {
+            mergeCount,
+            changes,
+        };
+    }
+
+    public async mergeTopicHierarchiesWithLLM(
+        llmAnalyzer?: (topicNames: string[]) => Promise<
+            Map<
+                string,
+                {
+                    action: "keep_root" | "make_child" | "merge";
+                    targetTopic?: string;
+                    confidence: number;
+                    reasoning: string;
+                }
+            >
+        >,
+    ): Promise<{
+        mergeCount: number;
+    }> {
+        console.log(
+            "[Topic Merge] Merging topic hierarchies with semantic analysis",
+        );
+
+        const allTopics = this.hierarchicalTopics.getTopicHierarchy();
+        const rootTopics = allTopics.filter((t) => t.level === 0);
+
+        let mergeCount = 0;
+
+        const topicsByName = new Map<string, HierarchicalTopicRecord[]>();
+        for (const topic of rootTopics) {
+            if (!topicsByName.has(topic.topicName)) {
+                topicsByName.set(topic.topicName, []);
+            }
+            topicsByName.get(topic.topicName)!.push(topic);
+        }
+
+        for (const [, topics] of topicsByName) {
+            if (topics.length > 1) {
+                const primaryTopic = topics.reduce((best, current) =>
+                    current.confidence > best.confidence ? current : best,
+                );
+
+                for (const topic of topics) {
+                    if (topic.url !== primaryTopic.url) {
+                        const stmt = this.db!.prepare(`
+                            DELETE FROM hierarchicalTopics
+                            WHERE url = ? AND topicId = ? AND topicName = ? AND level = ?
+                        `);
+                        stmt.run(
+                            topic.url,
+                            topic.topicId,
+                            topic.topicName,
+                            topic.level,
+                        );
+                        mergeCount++;
+
+                        console.log(
+                            `[Topic Merge] Merged duplicate "${topic.topicName}" from ${topic.url}`,
+                        );
+                    }
+                }
+            }
+        }
+
+        const uniqueRootNames = Array.from(
+            new Set(rootTopics.map((t) => t.topicName)),
+        );
+        const rootTopicMap = new Map<string, HierarchicalTopicRecord>();
+        for (const topic of rootTopics) {
+            if (!rootTopicMap.has(topic.topicName)) {
+                rootTopicMap.set(topic.topicName, topic);
+            } else {
+                const existing = rootTopicMap.get(topic.topicName)!;
+                if (topic.confidence > existing.confidence) {
+                    rootTopicMap.set(topic.topicName, topic);
+                }
+            }
+        }
+
+        if (llmAnalyzer) {
+            console.log("[Topic Merge] Using LLM-based semantic analysis");
+            const llmAnalysis = await llmAnalyzer(uniqueRootNames);
+
+            for (const [topicName, analysis] of llmAnalysis) {
+                if (analysis.action === "make_child" && analysis.targetTopic) {
+                    const childTopic = rootTopicMap.get(topicName);
+                    const parentTopic = rootTopicMap.get(analysis.targetTopic);
+
+                    if (childTopic && parentTopic) {
+                        const stmt = this.db!.prepare(`
+                            UPDATE hierarchicalTopics
+                            SET parentTopicId = ?, level = 1
+                            WHERE topicName = ? AND level = 0
+                        `);
+                        const result = stmt.run(
+                            parentTopic.topicId,
+                            childTopic.topicName,
+                        );
+                        mergeCount += result.changes;
+
+                        console.log(
+                            `[Topic Merge] LLM: Made "${topicName}" a child of "${analysis.targetTopic}" (${analysis.reasoning})`,
+                        );
+                    }
+                } else if (
+                    analysis.action === "merge" &&
+                    analysis.targetTopic
+                ) {
+                    const sourceTopic = rootTopicMap.get(topicName);
+                    const targetTopic = rootTopicMap.get(analysis.targetTopic);
+
+                    if (sourceTopic && targetTopic) {
+                        const stmt = this.db!.prepare(`
+                            DELETE FROM hierarchicalTopics
+                            WHERE topicName = ? AND level = 0
+                        `);
+                        const result = stmt.run(sourceTopic.topicName);
+                        mergeCount += result.changes;
+
+                        console.log(
+                            `[Topic Merge] LLM: Merged "${topicName}" into "${analysis.targetTopic}" - deleted ${result.changes} records (${analysis.reasoning})`,
+                        );
+                    }
+                }
+            }
+        } else {
+            console.log(
+                "[Topic Merge] Using LLM-based pairwise semantic analysis",
+            );
+            let pairwiseCount = 0;
+            for (let i = 0; i < uniqueRootNames.length; i++) {
+                const topicName = uniqueRootNames[i];
+
+                for (let j = 0; j < uniqueRootNames.length; j++) {
+                    if (i === j) continue;
+
+                    const candidateParent = uniqueRootNames[j];
+                    pairwiseCount++;
+
+                    if (pairwiseCount % 10 === 0) {
+                        console.log(
+                            `[Topic Merge] Analyzed ${pairwiseCount} topic pairs...`,
+                        );
+                    }
+
+                    const relationship = await this.analyzeSemanticRelationship(
+                        topicName,
+                        candidateParent,
+                    );
+
+                    if (
+                        relationship.action === "make_child" &&
+                        relationship.confidence >= 0.7
+                    ) {
+                        const childTopic = rootTopicMap.get(topicName);
+                        const parentTopic = rootTopicMap.get(candidateParent);
+
+                        if (childTopic && parentTopic) {
+                            const stmt = this.db!.prepare(`
+                                UPDATE hierarchicalTopics
+                                SET parentTopicId = ?, level = 1
+                                WHERE topicId = ? AND topicName = ? AND level = 0
+                            `);
+                            stmt.run(
+                                parentTopic.topicId,
+                                childTopic.topicId,
+                                childTopic.topicName,
+                            );
+                            mergeCount++;
+
+                            console.log(
+                                `[Topic Merge] Made "${topicName}" a child of "${candidateParent}" (${relationship.reasoning})`,
+                            );
+                        }
+                    } else if (
+                        relationship.action === "merge" &&
+                        relationship.confidence >= 0.9
+                    ) {
+                        const sourceTopic = rootTopicMap.get(topicName);
+                        const targetTopic = rootTopicMap.get(candidateParent);
+
+                        if (
+                            sourceTopic &&
+                            targetTopic &&
+                            sourceTopic.url !== targetTopic.url
+                        ) {
+                            const stmt = this.db!.prepare(`
+                                DELETE FROM hierarchicalTopics
+                                WHERE topicId = ? AND topicName = ? AND level = 0
+                            `);
+                            stmt.run(
+                                sourceTopic.topicId,
+                                sourceTopic.topicName,
+                            );
+                            mergeCount++;
+
+                            console.log(
+                                `[Topic Merge] Merged "${topicName}" into "${candidateParent}" (${relationship.reasoning})`,
+                            );
+                        }
+                    }
+                }
+            }
+            console.log(
+                `[Topic Merge] Completed ${pairwiseCount} pairwise LLM comparisons`,
+            );
+        }
+
+        this.consolidateDuplicateTopicRecords();
+        const orphanedCount = this.fixOrphanedChildren();
+        if (orphanedCount > 0) {
+            this.consolidateDuplicateTopicRecords();
+        }
+
+        console.log(
+            `[Topic Merge] Successfully completed ${mergeCount} merge operations`,
+        );
+
+        return {
+            mergeCount,
+        };
+    }
+
+    /**
+     * Consolidate duplicate topic records - keep only the highest confidence record per (topicName, level) pair
+     */
+    private consolidateDuplicateTopicRecords(): number {
+        const allTopics = this.hierarchicalTopics.getTopicHierarchy();
+        const topicsByNameAndLevel = new Map<
+            string,
+            HierarchicalTopicRecord[]
+        >();
+
+        for (const topic of allTopics) {
+            const key = `${topic.topicName}|${topic.level}`;
+            if (!topicsByNameAndLevel.has(key)) {
+                topicsByNameAndLevel.set(key, []);
+            }
+            topicsByNameAndLevel.get(key)!.push(topic);
+        }
+
+        let deletedCount = 0;
+        for (const [, topics] of topicsByNameAndLevel) {
+            if (topics.length > 1) {
+                const canonical = topics.reduce((best, current) =>
+                    current.confidence > best.confidence ? current : best,
+                );
+
+                for (const topic of topics) {
+                    if (topic.topicId !== canonical.topicId) {
+                        const stmt = this.db!.prepare(`
+                            DELETE FROM hierarchicalTopics
+                            WHERE topicId = ?
+                        `);
+                        stmt.run(topic.topicId);
+                        deletedCount++;
+                    }
+                }
+            }
+        }
+
+        return deletedCount;
+    }
+
+    private fixOrphanedChildren(): number {
+        const stmt = this.db!.prepare(`
+            UPDATE hierarchicalTopics
+            SET level = 0
+            WHERE level > 0 AND parentTopicId IS NULL
+        `);
+
+        const result = stmt.run();
+        return result.changes;
+    }
+
     /**
      * Update knowledge graph incrementally with new websites
      */
@@ -2508,14 +3108,14 @@ export class WebsiteCollection
     }
 
     /**
-     * Generate a unique topic ID
+     * Generate a deterministic topic ID (aligned with knowledgeProcessor)
      */
     private generateTopicId(topicName: string, level: number): string {
         const cleanName = topicName
             .toLowerCase()
             .replace(/[^a-z0-9]/g, "_")
             .substring(0, 30);
-        return `topic_${cleanName}_${level}_${Date.now()}`;
+        return `topic_${cleanName}_${level}`;
     }
 
     /**

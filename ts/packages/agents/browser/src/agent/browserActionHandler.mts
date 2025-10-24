@@ -655,6 +655,8 @@ async function processBrowserAgentMessage(
         case "getTopicMetrics":
         case "getTopicTimelines":
         case "getViewportBasedNeighborhood":
+        case "testMergeTopicHierarchies":
+        case "mergeTopicHierarchies":
         case "getUrlContentBreakdown": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,
