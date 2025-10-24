@@ -308,9 +308,7 @@ export async function rebuildKnowledgeGraph(
     }
 }
 
-async function analyzeTopicRelationshipsWithLLM(
-    topicNames: string[],
-): Promise<
+async function analyzeTopicRelationshipsWithLLM(topicNames: string[]): Promise<
     Map<
         string,
         {
@@ -430,13 +428,15 @@ async function analyzeBatchOfTopics(
             );
         const translator = createJsonTranslator(model, validator);
 
-        const topicList = batchTopics.map((t, i) => `${i + 1}. ${t}`).join("\n");
+        const topicList = batchTopics
+            .map((t, i) => `${i + 1}. ${t}`)
+            .join("\n");
 
         const allTopicsList =
             batchTopics.length < allTopics.length
                 ? `\n\nFor context, here are all topics in the system (consider these as potential parent topics):\n${allTopics.join(", ")}`
                 : "";
-// all-topics list is getting truncated - not useful!
+        // all-topics list is getting truncated - not useful!
         const prompt = `Analyze these topic names and identify semantic relationships between them.
 
 Topics to analyze:
@@ -2351,7 +2351,11 @@ export async function getTopicImportanceLayer(
         const targetSize = maxNodes * 2;
         const selectedTopicIds = new Set<string>();
 
-        for (let i = 0; i < Math.min(targetSize, sortedCandidates.length); i++) {
+        for (
+            let i = 0;
+            i < Math.min(targetSize, sortedCandidates.length);
+            i++
+        ) {
             selectedTopicIds.add(sortedCandidates[i].topicId);
         }
 
@@ -2372,7 +2376,6 @@ export async function getTopicImportanceLayer(
         let lateralRelationships: any[] = [];
 
         if (websiteCollection.topicRelationships) {
-
             const lateralRels =
                 websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
                     selectedTopicIdsArray,
@@ -2387,7 +2390,10 @@ export async function getTopicImportanceLayer(
             }));
         }
 
-        const selectedRelationships = [...hierarchicalRelationships, ...lateralRelationships];
+        const selectedRelationships = [
+            ...hierarchicalRelationships,
+            ...lateralRelationships,
+        ];
 
         const topicsWithMetrics = selectedTopics.map((topic: any) => {
             const metrics = selectedMetrics.find(

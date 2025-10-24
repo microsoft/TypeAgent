@@ -5802,7 +5802,7 @@ body {
 
 /* Tooltip Arrow */
 .icon-rail-sidebar:not(.expanded) .nav-item::before {
-  content: '';
+  content: "";
   position: absolute;
   left: calc(100% + 8px);
   top: 50%;

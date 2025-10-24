@@ -2249,9 +2249,7 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     }
 
     public async testMergeTopicHierarchies(
-        llmAnalyzer?: (
-            topicNames: string[],
-        ) => Promise<
+        llmAnalyzer?: (topicNames: string[]) => Promise<
             Map<
                 string,
                 {
@@ -2270,10 +2268,12 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
             targetTopic?: string;
         }>;
     }> {
-        console.log("[Topic Merge] Testing topic hierarchy merge (preview mode)");
+        console.log(
+            "[Topic Merge] Testing topic hierarchy merge (preview mode)",
+        );
 
         const allTopics = this.hierarchicalTopics.getTopicHierarchy();
-        const rootTopics = allTopics.filter(t => t.level === 0);
+        const rootTopics = allTopics.filter((t) => t.level === 0);
 
         console.log(`[Topic Merge] Analyzing ${rootTopics.length} root topics`);
 
@@ -2294,7 +2294,7 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         for (const [, topics] of topicsByName) {
             if (topics.length > 1) {
                 const primaryTopic = topics.reduce((best, current) =>
-                    current.confidence > best.confidence ? current : best
+                    current.confidence > best.confidence ? current : best,
                 );
 
                 for (const topic of topics) {
@@ -2309,7 +2309,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
             }
         }
 
-        const uniqueRootNames = Array.from(new Set(rootTopics.map(t => t.topicName)));
+        const uniqueRootNames = Array.from(
+            new Set(rootTopics.map((t) => t.topicName)),
+        );
 
         if (llmAnalyzer) {
             console.log("[Topic Merge] Using LLM-based semantic analysis");
@@ -2330,10 +2332,15 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                             `[Topic Merge Sample] "${topicName}" → child of "${analysis.targetTopic}"`,
                         );
                         console.log(`  Reasoning: ${analysis.reasoning}`);
-                        console.log(`  Confidence: ${analysis.confidence.toFixed(2)}`);
+                        console.log(
+                            `  Confidence: ${analysis.confidence.toFixed(2)}`,
+                        );
                         loggedSamples++;
                     }
-                } else if (analysis.action === "merge" && analysis.targetTopic) {
+                } else if (
+                    analysis.action === "merge" &&
+                    analysis.targetTopic
+                ) {
                     changes.push({
                         action: "merge_semantic",
                         sourceTopic: topicName,
@@ -2344,15 +2351,21 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                             `[Topic Merge Sample] "${topicName}" → merge into "${analysis.targetTopic}"`,
                         );
                         console.log(`  Reasoning: ${analysis.reasoning}`);
-                        console.log(`  Confidence: ${analysis.confidence.toFixed(2)}`);
+                        console.log(
+                            `  Confidence: ${analysis.confidence.toFixed(2)}`,
+                        );
                         loggedSamples++;
                     }
                 }
             }
 
-            console.log(`[Topic Merge] Logged ${loggedSamples} sample merge actions (showing up to ${maxSamples})`);
+            console.log(
+                `[Topic Merge] Logged ${loggedSamples} sample merge actions (showing up to ${maxSamples})`,
+            );
         } else {
-            console.log("[Topic Merge] Using LLM-based pairwise semantic analysis");
+            console.log(
+                "[Topic Merge] Using LLM-based pairwise semantic analysis",
+            );
             let pairwiseCount = 0;
             for (let i = 0; i < uniqueRootNames.length; i++) {
                 const topicName = uniqueRootNames[i];
@@ -2364,7 +2377,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                     pairwiseCount++;
 
                     if (pairwiseCount % 10 === 0) {
-                        console.log(`[Topic Merge] Analyzed ${pairwiseCount} topic pairs...`);
+                        console.log(
+                            `[Topic Merge] Analyzed ${pairwiseCount} topic pairs...`,
+                        );
                     }
 
                     const relationship = await this.analyzeSemanticRelationship(
@@ -2372,13 +2387,19 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                         candidateParent,
                     );
 
-                    if (relationship.action === "make_child" && relationship.confidence >= 0.7) {
+                    if (
+                        relationship.action === "make_child" &&
+                        relationship.confidence >= 0.7
+                    ) {
                         changes.push({
                             action: "make_child",
                             sourceTopic: topicName,
                             targetTopic: candidateParent,
                         });
-                    } else if (relationship.action === "merge" && relationship.confidence >= 0.9) {
+                    } else if (
+                        relationship.action === "merge" &&
+                        relationship.confidence >= 0.9
+                    ) {
                         changes.push({
                             action: "merge_semantic",
                             sourceTopic: topicName,
@@ -2387,7 +2408,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                     }
                 }
             }
-            console.log(`[Topic Merge] Completed ${pairwiseCount} pairwise LLM comparisons`);
+            console.log(
+                `[Topic Merge] Completed ${pairwiseCount} pairwise LLM comparisons`,
+            );
         }
 
         const mergeCount = changes.length;
@@ -2407,7 +2430,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         });
 
         if (changes.length > 0) {
-            console.log(`\n[Topic Merge] ===== Sample of 10 Merge Actions ===== `);
+            console.log(
+                `\n[Topic Merge] ===== Sample of 10 Merge Actions ===== `,
+            );
             changes.slice(0, 10).forEach((change, i) => {
                 const actionLabel =
                     change.action === "make_child"
@@ -2423,10 +2448,14 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                         `  ${i + 1}. [${actionLabel}] "${change.sourceTopic}" → "${change.targetTopic}"`,
                     );
                 } else {
-                    console.log(`  ${i + 1}. [${actionLabel}] "${change.sourceTopic}"`);
+                    console.log(
+                        `  ${i + 1}. [${actionLabel}] "${change.sourceTopic}"`,
+                    );
                 }
             });
-            console.log(`[Topic Merge] =====================================\n`);
+            console.log(
+                `[Topic Merge] =====================================\n`,
+            );
         }
 
         return {
@@ -2436,9 +2465,7 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     }
 
     public async mergeTopicHierarchiesWithLLM(
-        llmAnalyzer?: (
-            topicNames: string[],
-        ) => Promise<
+        llmAnalyzer?: (topicNames: string[]) => Promise<
             Map<
                 string,
                 {
@@ -2452,10 +2479,12 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     ): Promise<{
         mergeCount: number;
     }> {
-        console.log("[Topic Merge] Merging topic hierarchies with semantic analysis");
+        console.log(
+            "[Topic Merge] Merging topic hierarchies with semantic analysis",
+        );
 
         const allTopics = this.hierarchicalTopics.getTopicHierarchy();
-        const rootTopics = allTopics.filter(t => t.level === 0);
+        const rootTopics = allTopics.filter((t) => t.level === 0);
 
         let mergeCount = 0;
 
@@ -2470,7 +2499,7 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         for (const [, topics] of topicsByName) {
             if (topics.length > 1) {
                 const primaryTopic = topics.reduce((best, current) =>
-                    current.confidence > best.confidence ? current : best
+                    current.confidence > best.confidence ? current : best,
                 );
 
                 for (const topic of topics) {
@@ -2495,7 +2524,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
             }
         }
 
-        const uniqueRootNames = Array.from(new Set(rootTopics.map(t => t.topicName)));
+        const uniqueRootNames = Array.from(
+            new Set(rootTopics.map((t) => t.topicName)),
+        );
         const rootTopicMap = new Map<string, HierarchicalTopicRecord>();
         for (const topic of rootTopics) {
             if (!rootTopicMap.has(topic.topicName)) {
@@ -2533,7 +2564,10 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                             `[Topic Merge] LLM: Made "${topicName}" a child of "${analysis.targetTopic}" (${analysis.reasoning})`,
                         );
                     }
-                } else if (analysis.action === "merge" && analysis.targetTopic) {
+                } else if (
+                    analysis.action === "merge" &&
+                    analysis.targetTopic
+                ) {
                     const sourceTopic = rootTopicMap.get(topicName);
                     const targetTopic = rootTopicMap.get(analysis.targetTopic);
 
@@ -2552,7 +2586,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                 }
             }
         } else {
-            console.log("[Topic Merge] Using LLM-based pairwise semantic analysis");
+            console.log(
+                "[Topic Merge] Using LLM-based pairwise semantic analysis",
+            );
             let pairwiseCount = 0;
             for (let i = 0; i < uniqueRootNames.length; i++) {
                 const topicName = uniqueRootNames[i];
@@ -2564,7 +2600,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                     pairwiseCount++;
 
                     if (pairwiseCount % 10 === 0) {
-                        console.log(`[Topic Merge] Analyzed ${pairwiseCount} topic pairs...`);
+                        console.log(
+                            `[Topic Merge] Analyzed ${pairwiseCount} topic pairs...`,
+                        );
                     }
 
                     const relationship = await this.analyzeSemanticRelationship(
@@ -2572,7 +2610,10 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                         candidateParent,
                     );
 
-                    if (relationship.action === "make_child" && relationship.confidence >= 0.7) {
+                    if (
+                        relationship.action === "make_child" &&
+                        relationship.confidence >= 0.7
+                    ) {
                         const childTopic = rootTopicMap.get(topicName);
                         const parentTopic = rootTopicMap.get(candidateParent);
 
@@ -2593,16 +2634,26 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                                 `[Topic Merge] Made "${topicName}" a child of "${candidateParent}" (${relationship.reasoning})`,
                             );
                         }
-                    } else if (relationship.action === "merge" && relationship.confidence >= 0.9) {
+                    } else if (
+                        relationship.action === "merge" &&
+                        relationship.confidence >= 0.9
+                    ) {
                         const sourceTopic = rootTopicMap.get(topicName);
                         const targetTopic = rootTopicMap.get(candidateParent);
 
-                        if (sourceTopic && targetTopic && sourceTopic.url !== targetTopic.url) {
+                        if (
+                            sourceTopic &&
+                            targetTopic &&
+                            sourceTopic.url !== targetTopic.url
+                        ) {
                             const stmt = this.db!.prepare(`
                                 DELETE FROM hierarchicalTopics
                                 WHERE topicId = ? AND topicName = ? AND level = 0
                             `);
-                            stmt.run(sourceTopic.topicId, sourceTopic.topicName);
+                            stmt.run(
+                                sourceTopic.topicId,
+                                sourceTopic.topicName,
+                            );
                             mergeCount++;
 
                             console.log(
@@ -2612,7 +2663,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                     }
                 }
             }
-            console.log(`[Topic Merge] Completed ${pairwiseCount} pairwise LLM comparisons`);
+            console.log(
+                `[Topic Merge] Completed ${pairwiseCount} pairwise LLM comparisons`,
+            );
         }
 
         this.consolidateDuplicateTopicRecords();
@@ -2635,7 +2688,10 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
      */
     private consolidateDuplicateTopicRecords(): number {
         const allTopics = this.hierarchicalTopics.getTopicHierarchy();
-        const topicsByNameAndLevel = new Map<string, HierarchicalTopicRecord[]>();
+        const topicsByNameAndLevel = new Map<
+            string,
+            HierarchicalTopicRecord[]
+        >();
 
         for (const topic of allTopics) {
             const key = `${topic.topicName}|${topic.level}`;
@@ -2649,7 +2705,7 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         for (const [, topics] of topicsByNameAndLevel) {
             if (topics.length > 1) {
                 const canonical = topics.reduce((best, current) =>
-                    current.confidence > best.confidence ? current : best
+                    current.confidence > best.confidence ? current : best,
                 );
 
                 for (const topic of topics) {

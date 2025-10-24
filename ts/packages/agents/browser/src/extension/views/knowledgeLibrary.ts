@@ -1119,7 +1119,8 @@ class WebsiteLibraryPanelFullPage {
             await this.loadGraphStatus();
 
             notificationManager.showSuccess(
-                result.message || `Topics merged successfully: ${result.mergeCount} topics merged`,
+                result.message ||
+                    `Topics merged successfully: ${result.mergeCount} topics merged`,
             );
         } catch (error) {
             console.error("Failed to merge topics:", error);

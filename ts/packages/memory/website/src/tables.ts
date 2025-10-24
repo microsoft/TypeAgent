@@ -965,10 +965,15 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
                     AND fromTopic IN (${placeholders})
                 `);
 
-                const batchResults = stmt.all(minStrength, ...batch) as TopicRelationship[];
+                const batchResults = stmt.all(
+                    minStrength,
+                    ...batch,
+                ) as TopicRelationship[];
 
                 // Filter to only include relationships where toTopic is also in our set
-                const filteredResults = batchResults.filter(rel => topicIdSet.has(rel.toTopic));
+                const filteredResults = batchResults.filter((rel) =>
+                    topicIdSet.has(rel.toTopic),
+                );
                 console.log(
                     `[getRelationshipsForTopicsOptimized] Batch ${i / BATCH_SIZE + 1}: ${batchResults.length} results, ${filteredResults.length} after filtering`,
                 );
@@ -979,11 +984,16 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
             const uniqueResults = new Map<string, TopicRelationship>();
             for (const rel of allResults) {
                 const key = `${rel.fromTopic}:${rel.toTopic}:${rel.relationshipType}`;
-                if (!uniqueResults.has(key) || uniqueResults.get(key)!.strength < rel.strength) {
+                if (
+                    !uniqueResults.has(key) ||
+                    uniqueResults.get(key)!.strength < rel.strength
+                ) {
                     uniqueResults.set(key, rel);
                 }
             }
-            const finalResults = Array.from(uniqueResults.values()).sort((a, b) => b.strength - a.strength);
+            const finalResults = Array.from(uniqueResults.values()).sort(
+                (a, b) => b.strength - a.strength,
+            );
             console.log(
                 `[getRelationshipsForTopicsOptimized] Batching complete: ${allResults.length} total, ${finalResults.length} unique`,
             );

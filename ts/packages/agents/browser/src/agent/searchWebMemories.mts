@@ -600,14 +600,19 @@ export async function searchWebMemories(
                                 ) {
                                     if (chunkOrdinal < msg.textChunks.length) {
                                         const chunkKey = `${messageOrdinal}:${chunkOrdinal}`;
-                                        const existing = chunkScores.get(chunkKey);
+                                        const existing =
+                                            chunkScores.get(chunkKey);
 
                                         if (existing) {
-                                            existing.cumulativeScore += scoredRef.score;
+                                            existing.cumulativeScore +=
+                                                scoredRef.score;
                                         } else {
                                             chunkScores.set(chunkKey, {
-                                                cumulativeScore: scoredRef.score,
-                                                text: msg.textChunks[chunkOrdinal],
+                                                cumulativeScore:
+                                                    scoredRef.score,
+                                                text: msg.textChunks[
+                                                    chunkOrdinal
+                                                ],
                                                 messageOrdinal,
                                                 chunkOrdinal,
                                             });
@@ -687,7 +692,8 @@ export async function searchWebMemories(
 
                     // Calculate average score for this message
                     const avgScore =
-                        chunks.reduce((sum, c) => sum + c.score, 0) / chunks.length;
+                        chunks.reduce((sum, c) => sum + c.score, 0) /
+                        chunks.length;
 
                     const currMessage = {
                         timestamp:
