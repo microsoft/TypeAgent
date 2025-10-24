@@ -86,17 +86,24 @@ VALUES(@term, @term_embedding)
     )
     {
         var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(text, cancellationToken);
-        List<ScoredItem<int>> termIds = GetAll().IndexesOfNearest(
-            embedding,
-            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
-            minScore is not null ? minScore.Value : Settings.MinScore
-        );
-        return GetTerms(termIds);
+        return GetNearestTerms(embedding, maxMatches, minScore);
     }
 
-    public ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int maxMatches, double minScore)
+    public async ValueTask<IList<IList<Term>>> LookupTermAsync(
+        IList<string> texts,
+        int maxMatches,
+        double minScore,
+        CancellationToken cancellationToken = default
+    )
     {
-        throw new NotImplementedException();
+        var embeddings = await Settings.EmbeddingModel.GenerateNormalizedAsync(texts, cancellationToken);
+        // TODO: Bulk operation
+        IList<IList<Term>> matches = [];
+        foreach(var embedding in embeddings)
+        {
+            matches.Add(GetNearestTerms(embedding, maxMatches, minScore));
+        }
+        return matches;
     }
 
     public void Clear() => _db.ClearTable(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
@@ -119,6 +126,35 @@ VALUES(@term, @term_embedding)
                 return new(term, new NormalizedEmbeddingB(embeddingBytes));
             });
     }
+
+    private List<ScoredItem<int>> IndexesOfNearest(
+        NormalizedEmbedding embedding,
+        int? maxMatches,
+        double? minScore
+    )
+    {
+        return GetAll().IndexesOfNearest(
+            embedding,
+            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
+            minScore is not null ? minScore.Value : Settings.MinScore
+        );
+
+    }
+
+    private List<Term> GetNearestTerms(
+        NormalizedEmbedding embedding,
+        int? maxMatches,
+        double? minScore
+        )
+    {
+        var termIds = GetAll().IndexesOfNearest(
+            embedding,
+            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
+            minScore is not null ? minScore.Value : Settings.MinScore
+        );
+        return GetTerms(termIds);
+    }
+
 
     private List<Term> GetTerms(List<ScoredItem<int>> termIds)
     {

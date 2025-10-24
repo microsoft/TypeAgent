@@ -17,7 +17,7 @@ public interface ITermToRelatedTermsFuzzy
 
     ValueTask<IList<Term>> LookupTermAsync(string text, int? maxMatches = null, double? minScore = null, CancellationToken cancellationToken = default);
 
-    ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int maxMatches, double minScore);
+    ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int maxMatches, double minScore, CancellationToken cancellationToken = default);
 
     ValueTask ClearAsync(CancellationToken cancellation = default);
 }

@@ -173,7 +173,7 @@ public class TestCommands : ICommandModule
         }
 
         IList<string> allTerms = await conversation.SemanticRefIndex.GetTermsAsync(cancellationToken);
-        allTerms = allTerms.Slice(0, 16);
+        allTerms = allTerms.Slice(0, 256);
         var fuzzyIndex = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex;
         if (namedArgs.Get<bool>("add"))
         {

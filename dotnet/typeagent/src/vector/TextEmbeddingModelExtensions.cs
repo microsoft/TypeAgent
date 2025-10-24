@@ -15,6 +15,16 @@ public static class TextEmbeddingModelExtensions
         return NormalizedEmbedding.FromArray(embedding);
     }
 
+    public static async ValueTask<IList<NormalizedEmbedding>> GenerateNormalizedAsync(
+        this ITextEmbeddingModel model,
+        IList<string> texts,
+        CancellationToken cancellationToken
+    )
+    {
+        var embeddings = await model.GenerateAsync(texts, cancellationToken);
+        return embeddings.Map((e) => NormalizedEmbedding.FromArray(e));
+    }
+
     public static async ValueTask<List<NormalizedEmbedding>> GenerateNormalizedInBatchesAsync(
         this ITextEmbeddingModel model,
         IList<string> texts,
