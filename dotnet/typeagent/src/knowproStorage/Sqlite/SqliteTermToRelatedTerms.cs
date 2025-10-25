@@ -38,15 +38,16 @@ public class SqliteTermToRelatedTerms : ITermsToRelatedTerms
 
         KnowProVerify.ThrowIfInvalid(relatedTerm);
 
+        float weight = relatedTerm.Weight is not null ? relatedTerm.Weight.Value : 1.0f;
+
         using var cmd = _db.CreateCommand(@"
 INSERT OR IGNORE INTO RelatedTermsAliases (term, alias, score)
 VALUES (@term, @alias, @score)"
 );
         cmd.AddParameter("@term", text);
         cmd.AddParameter("@alias", relatedTerm.Text);
-        cmd.AddParameter("@score", relatedTerm.Weight);
-        int result = cmd.ExecuteNonQuery();
-        Console.WriteLine(result);
+        cmd.AddParameter("@score", weight);
+        cmd.ExecuteNonQuery();
     }
 
     public ValueTask AddTermAsync(string text, Term relatedTerm, CancellationToken cancellationToken = default)
