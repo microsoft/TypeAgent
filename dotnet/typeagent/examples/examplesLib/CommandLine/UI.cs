@@ -75,6 +75,11 @@ public class ConsoleControl
 
 public class ProgressBar : ConsoleControl
 {
+    public ProgressBar(int total)
+        : this(0, total)
+    {
+    }
+
     public ProgressBar(int count, int total)
         : base(CursorPos.CaptureLeft())
     {

@@ -173,12 +173,17 @@ public class TestCommands : ICommandModule
         }
 
         IList<string> allTerms = await conversation.SemanticRefIndex.GetTermsAsync(cancellationToken);
-        allTerms = allTerms.Slice(0, 256);
         var fuzzyIndex = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex;
         if (namedArgs.Get<bool>("add"))
         {
             await fuzzyIndex.ClearAsync(cancellationToken);
-            await fuzzyIndex.AddTermsAsync(allTerms, cancellationToken);
+            ProgressBar progress = new ProgressBar(allTerms.Count);
+            foreach (var batch in allTerms.Batch(16))
+            {
+                await fuzzyIndex.AddTermsAsync(batch, cancellationToken);
+                progress.Advance(batch.Count);
+                await Task.Delay(1000, cancellationToken);
+            }
         }
 
         foreach (var term in allTerms)
