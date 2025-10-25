@@ -8,6 +8,11 @@ public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
 {
     int _dimensions;
 
+    public TextEmbeddingModel()
+        : this(ModelApiSettings.FromEnv(ModelType.Embedding))
+    {
+    }
+
     public TextEmbeddingModel(ModelApiSettings settings, int dimensions = 0, int maxBatchSize = 2048)
         : this(settings, null, dimensions, maxBatchSize)
     {

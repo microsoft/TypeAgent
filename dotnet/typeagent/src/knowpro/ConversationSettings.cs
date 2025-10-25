@@ -5,8 +5,15 @@ namespace TypeAgent.KnowPro;
 
 public class ConversationSettings
 {
+    public ConversationSettings()
+        : this(new TextEmbeddingModel())
+    {
+    }
+
     public ConversationSettings(ITextEmbeddingModel embeddingModel)
     {
+        ArgumentVerify.ThrowIfNull(embeddingModel, nameof(embeddingModel));
+
         RelatedTermIndexSettings = new RelatedTermIndexSettings(
             new TextEmbeddingIndexSettings(embeddingModel, 0.85, 50)
         );
