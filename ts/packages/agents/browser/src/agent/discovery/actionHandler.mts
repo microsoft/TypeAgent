@@ -30,6 +30,12 @@ import {
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
 import registerDebug from "debug";
+import { YAMLMacroStoreExtension } from "./yamlMacro/macroStoreExtension.mjs";
+import {
+    convertParametersToYAML,
+    convertStepsToYAML,
+    extractParametersFromIntent,
+} from "./yamlMacro/macroHelper.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 
@@ -630,7 +636,7 @@ async function handleGetIntentFromReccording(
 
     console.timeEnd(timerName2);
 
-    // AUTO-SAVE: Save authored action immediately
+    // AUTO-SAVE: Save authored action immediately using YAML format
     let actionId = null;
     if (intentResponse.success && stepsResponse.success) {
         try {
@@ -645,99 +651,58 @@ async function handleGetIntentFromReccording(
 
             const domain = new URL(url).hostname;
 
-            const storedMacro =
-                ctx.sessionContext.agentContext.macrosStore.createDefaultMacro({
+            // Get macros base path - use actionsStore directory for artifacts
+            const macrosBasePath = "actionsStore/macros";
+
+            // Create YAML extension with sessionStorage for proper path handling
+            const yamlExt = new YAMLMacroStoreExtension(
+                ctx.sessionContext.agentContext.macrosStore,
+                macrosBasePath,
+                ctx.sessionContext.sessionStorage,
+            );
+
+            // Extract and convert parameters to YAML format
+            const parsedParams = extractParametersFromIntent(intentData);
+            const yamlParameters = convertParametersToYAML(parsedParams);
+
+            // Convert steps to YAML format
+            // stepsResponse.data is a macrosJson object with a steps property
+            const stepsArray = stepsResponse.data?.steps || [];
+            const yamlSteps = Array.isArray(stepsArray)
+                ? convertStepsToYAML(stepsArray)
+                : [];
+
+            // Create YAML macro from recording
+            const { yamlMacro, recordingId } =
+                await yamlExt.createYAMLFromRecording({
                     name: intentData.actionName,
                     description:
                         action.parameters.recordedActionDescription ||
                         `User action: ${intentData.actionName}`,
-                    category: "utility",
                     author: "user",
-                    scope: {
-                        type: "page",
-                        domain: domain,
-                        priority: 80,
-                    },
-                    urlPatterns: [
-                        {
-                            pattern: url,
-                            type: "exact",
-                            priority: 100,
-                            description: `Exact match for ${url}`,
-                        },
-                    ],
-                    definition: {
-                        ...(actionSchema && { intentSchema: actionSchema }),
-                        ...(stepsResponse.data &&
-                            Array.isArray(stepsResponse.data) && {
-                                actionSteps: stepsResponse.data,
-                            }),
-                        ...(intentData.actionName &&
-                            intentData.parameters && {
-                                intentJson: {
-                                    actionName: intentData.actionName,
-                                    parameters: Array.isArray(
-                                        intentData.parameters,
-                                    )
-                                        ? intentData.parameters.map(
-                                              (param: any) => ({
-                                                  shortName:
-                                                      param.shortName ||
-                                                      param.name ||
-                                                      "unknown",
-                                                  description:
-                                                      param.description ||
-                                                      param.name ||
-                                                      "Parameter",
-                                                  type:
-                                                      param.type === "string" ||
-                                                      param.type === "number" ||
-                                                      param.type === "boolean"
-                                                          ? param.type
-                                                          : "string",
-                                                  required:
-                                                      param.required ?? false,
-                                                  defaultValue:
-                                                      param.defaultValue,
-                                              }),
-                                          )
-                                        : intentData.parameters
-                                          ? Object.entries(
-                                                intentData.parameters,
-                                            ).map(([key, value]) => ({
-                                                shortName: key,
-                                                description: `Parameter ${key}`,
-                                                type:
-                                                    typeof value === "string" ||
-                                                    typeof value === "number" ||
-                                                    typeof value === "boolean"
-                                                        ? typeof value
-                                                        : "string",
-                                                required: false,
-                                                defaultValue: value,
-                                            }))
-                                          : [],
-                                },
-                            }),
-                        macrosJson: stepsResponse.data,
-                        macroDefinition: typeDefinition,
-                        description:
-                            action.parameters.recordedActionDescription,
-                        screenshot: action.parameters.screenshots,
-                        steps: JSON.parse(recordedSteps || "[]"),
-                    },
+                    category: "utility",
+                    domain,
+                    url,
+                    parameters: yamlParameters,
+                    steps: yamlSteps,
+                    ...(action.parameters.screenshots && {
+                        screenshots: action.parameters.screenshots,
+                    }),
+                    recordedSteps: JSON.parse(recordedSteps || "[]"),
                 });
 
-            const result =
-                await ctx.sessionContext.agentContext.macrosStore.saveMacro(
-                    storedMacro,
-                );
+            // Save YAML macro (will convert to JSON internally for MacroStore)
+            const result = await yamlExt.saveYAMLMacro(yamlMacro, recordingId);
 
             if (result.success) {
                 actionId = result.macroId;
                 debug(
-                    `Auto-saved authored action: ${action.parameters.recordedActionName}`,
+                    `Auto-saved authored action as YAML: ${action.parameters.recordedActionName} (ID: ${recordingId})`,
                 );
+
+                // Log YAML for debugging
+                const yamlString = yamlExt.getYAMLString(yamlMacro);
+                debug("YAML macro:\n", yamlString);
             } else {
                 console.warn(
                     `Failed to auto-save authored action: ${result.error}`,

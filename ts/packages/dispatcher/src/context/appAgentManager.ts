@@ -412,6 +412,12 @@ export class AppAgentManager implements ActionConfigProvider {
         appAgentName: string,
         grammarStore?: GrammarStore,
     ) {
+        // Check if agent exists before trying to remove it
+        if (!this.isAppAgentName(appAgentName)) {
+            debug(`Agent '${appAgentName}' does not exist, skipping removal`);
+            return;
+        }
+
         const record = this.getRecord(appAgentName);
         this.agents.delete(appAgentName);
         this.cleanupAgent(appAgentName, grammarStore);

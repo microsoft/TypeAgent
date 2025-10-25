@@ -1092,24 +1092,21 @@ class ActionDiscoveryPanel {
 
     private createUserActionDetails(action: any, index: number): string {
         const tabs = [
-            { id: `steps${index}`, label: "Steps", active: true },
-            { id: `intent${index}`, label: "Intent" },
-            { id: `actions${index}`, label: "Actions" },
+            { id: `recording${index}`, label: "Recording", active: true },
+            { id: `macro${index}`, label: "Macro" },
         ];
+
+        const yamlContent = this.convertActionToYAML(action);
 
         const panes = [
             {
-                id: `steps${index}`,
+                id: `recording${index}`,
                 content: `<div id="stepsContent${index}"></div>`,
                 active: true,
             },
             {
-                id: `intent${index}`,
-                content: `<pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>`,
-            },
-            {
-                id: `actions${index}`,
-                content: `<pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>`,
+                id: `macro${index}`,
+                content: `<pre><code class="language-yaml">${escapeHtml(yamlContent)}</code></pre>`,
             },
         ];
 
@@ -1121,6 +1118,97 @@ class ActionDiscoveryPanel {
                 </div>
             </div>
         `;
+    }
+
+    private convertActionToYAML(action: any): string {
+        const def = action.definition || {};
+        const intentJson = def.intentJson || {};
+        const parameters = intentJson.parameters || [];
+        const macrosJson = def.macrosJson || {};
+        const steps = macrosJson.steps || [];
+
+        let yaml = `macro:
+  name: ${action.name}
+  version: ${action.version || "1.0.0"}
+  description: ${action.description || ""}
+
+  author: ${action.author}
+  category: ${action.category}`;
+
+        if (action.tags && action.tags.length > 0) {
+            yaml += `\n  tags: [${action.tags.join(", ")}]`;
+        }
+
+        yaml += `
+
+  scope:
+    type: ${action.scope?.type || "page"}
+    domain: ${action.scope?.domain || ""}
+    priority: ${action.scope?.priority || 80}`;
+
+        if (action.urlPatterns && action.urlPatterns.length > 0) {
+            yaml += `\n  \n  urlPatterns:`;
+            action.urlPatterns.forEach((pattern: any) => {
+                yaml += `
+    - pattern: "${pattern.pattern}"
+      type: ${pattern.type}
+      priority: ${pattern.priority || 100}`;
+            });
+        }
+
+        yaml += `\n  \n  parameters:`;
+        if (parameters.length > 0) {
+            parameters.forEach((param: any) => {
+                yaml += `
+    ${param.shortName}:
+      type: ${param.type}
+      description: ${param.description || ""}
+      required: ${param.required || false}`;
+                if (param.defaultValue !== undefined) {
+                    const defaultVal =
+                        typeof param.defaultValue === "string"
+                            ? `"${param.defaultValue}"`
+                            : param.defaultValue;
+                    yaml += `\n      default: ${defaultVal}`;
+                }
+                if (param.valueOptions && param.valueOptions.length > 0) {
+                    yaml += `\n      options: [${param.valueOptions.map((opt: string) => `"${opt}"`).join(", ")}]`;
+                }
+            });
+        } else {
+            yaml += ` {}`;
+        }
+
+        yaml += `\n  \n  steps:`;
+        if (steps.length > 0) {
+            steps.forEach((step: any) => {
+                yaml += `
+    - action: ${step.actionName}`;
+                if (step.description) {
+                    yaml += `\n      description: ${step.description}`;
+                }
+                if (step.parameters) {
+                    yaml += `\n      parameters:`;
+                    Object.entries(step.parameters).forEach(([key, value]) => {
+                        const valStr =
+                            typeof value === "string"
+                                ? `"${value}"`
+                                : JSON.stringify(value);
+                        yaml += `\n        ${key}: ${valStr}`;
+                    });
+                }
+            });
+        } else {
+            yaml += ` []`;
+        }
+
+        yaml += `\n\nmetadata:
+  created: ${action.metadata?.createdAt || new Date().toISOString()}
+  updated: ${action.metadata?.updatedAt || new Date().toISOString()}
+  usageCount: ${action.metadata?.usageCount || 0}
+  isValid: ${action.metadata?.isValid !== false}`;
+
+        return yaml;
     }
 }
 

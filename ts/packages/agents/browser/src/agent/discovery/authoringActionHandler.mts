@@ -20,6 +20,11 @@ import { SchemaDiscoveryAgent } from "./translator.mjs";
 import { WebPlanResult, WebPlanSuggestions } from "./schema/evaluatePlan.mjs";
 import { BrowserActionContext } from "../browserActions.mjs";
 
+// YAML macro support - for future integration to save authored web plans as macros
+// import { YAMLMacroStoreExtension } from "./yamlMacro/macroStoreExtension.mjs";
+// import { convertParametersToYAML, convertStepsToYAML } from "./yamlMacro/macroHelper.mjs";
+// import { getBrowserControl } from "../browserActions.mjs";
+
 // Context interface for authoring action handler functions
 interface AuthoringActionHandlerContext {
     browser: BrowserConnector;
