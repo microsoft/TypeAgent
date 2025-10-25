@@ -32,6 +32,7 @@ export type PlayerActions =
     | CreatePlaylistAction
     | DeletePlaylistAction
     | AddCurrentTrackToPlaylistAction
+    | AddToPlaylistFromCurrentTrackListAction
     | GetQueueAction;
 
 export type PlayerEntities = MusicDevice;
@@ -258,7 +259,8 @@ export interface CreatePlaylistAction {
         // name of playlist to create
         name: string;
         // track list entity to use as the source of tracks
-        trackListEntityId: string;
+        // leave this out to create an empty playlist
+        trackListEntityId?: string;
     };
 }
 
@@ -277,6 +279,20 @@ export interface AddCurrentTrackToPlaylistAction {
     parameters: {
         // name of playlist to add the current track to
         playlistName: string;
+    };
+}
+
+// add to the named playlist one or more tracks starting at index 'trackNumber' in the current track list
+export interface AddToPlaylistFromCurrentTrackListAction {
+    actionName: "addToPlaylistFromCurrentTrackList";
+    parameters: {
+        // name of playlist to add the track to
+        playlistName: string;
+        // 1-based index of the first track to add
+        trackNumber: number;
+        // number of tracks to add (default 1)
+        // if specified, adds this many tracks starting from trackNumber; for example, to add tracks 3,4,5 set trackNumber=3 and trackCount=3
+        trackCount?: number;
     };
 }
 
