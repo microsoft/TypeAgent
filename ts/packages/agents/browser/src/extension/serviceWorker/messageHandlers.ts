@@ -1169,6 +1169,42 @@ export async function handleMessage(
             }
         }
 
+        case "testMergeTopicHierarchies": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "testMergeTopicHierarchies",
+                    parameters: {},
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Error testing topic merge:", error);
+                return {
+                    success: false,
+                    mergeCount: 0,
+                    error: "Failed to test topic merge",
+                };
+            }
+        }
+
+        case "mergeTopicHierarchies": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "mergeTopicHierarchies",
+                    parameters: {},
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Error merging topic hierarchies:", error);
+                return {
+                    success: false,
+                    mergeCount: 0,
+                    error: "Failed to merge topic hierarchies",
+                };
+            }
+        }
+
         case "getAllRelationships": {
             try {
                 const result = await sendActionToAgent({

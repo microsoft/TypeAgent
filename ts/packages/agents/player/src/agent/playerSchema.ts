@@ -33,6 +33,7 @@ export type PlayerActions =
     | DeletePlaylistAction
     | AddCurrentTrackToPlaylistAction
     | AddToPlaylistFromCurrentTrackListAction
+    | AddToPlaylistFromCurrentTrackListAction
     | GetQueueAction;
 
 export type PlayerEntities = MusicDevice;

@@ -469,6 +469,30 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async testMergeTopicHierarchies(): Promise<{
+        mergeCount: number;
+        changes?: Array<{
+            action: string;
+            sourceTopic: string;
+            targetTopic?: string;
+        }>;
+    }> {
+        return this.sendMessage({
+            type: "testMergeTopicHierarchies",
+        });
+    }
+
+    async mergeTopicHierarchies(): Promise<{
+        success: boolean;
+        mergeCount: number;
+        message?: string;
+        error?: string;
+    }> {
+        return this.sendMessage({
+            type: "mergeTopicHierarchies",
+        });
+    }
+
     async getAllRelationships(): Promise<any[]> {
         const result = await this.sendMessage<{ relationships?: any[] }>({
             type: "getAllRelationships",
