@@ -512,17 +512,11 @@ async function playTrackCollection(
     const tracks = trackCollection.getTracks();
     const playContext = trackCollection.getContext();
     const singleTrackCollection = new TrackCollection([tracks[trackIndex]]);
-    const singleTrackCollection = new TrackCollection([tracks[trackIndex]]);
     const actionResult = await htmlTrackNames(
-        singleTrackCollection,
-        "Now playing",
         singleTrackCollection,
         "Now playing",
     );
     if (playContext === undefined) {
-        const singleTracks = singleTrackCollection.getTracks();
-        const uris = singleTracks.map((track) => track.uri);
-        await play(clientContext.service, deviceId, uris);
         const singleTracks = singleTrackCollection.getTracks();
         const uris = singleTracks.map((track) => track.uri);
         await play(clientContext.service, deviceId, uris);
@@ -1284,20 +1278,6 @@ export async function handleCall(
                 return createActionResultFromHtmlDisplay(
                     `<div>playlist ${name} created with tracks...</div>${displayText}`,
                 );
-            } else {
-                // create empty playlist
-                await createPlaylist(
-                    clientContext.service,
-                    name,
-                    clientContext.service.retrieveUser().id!,
-                    [],
-                    name,
-                );
-                console.log(`playlist ${name} created empty`);
-                return createActionResultFromTextDisplay(
-                    chalk.magentaBright(`playlist ${name} created empty`),
-                );
-            }
             } else {
                 // create empty playlist
                 await createPlaylist(
