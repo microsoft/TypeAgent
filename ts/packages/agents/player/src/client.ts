@@ -1320,7 +1320,7 @@ export async function handleCall(
         }
         case "addCurrentTrackToPlaylist": {
             const addAction = action as AddCurrentTrackToPlaylistAction;
-            const playlistName = addAction.parameters.playlistName;
+            const playlistName = addAction.parameters.name;
             if (clientContext.userData === undefined) {
                 return createErrorActionResult("No user data found");
             }
@@ -1355,7 +1355,7 @@ export async function handleCall(
         }
         case "addToPlaylistFromCurrentTrackList": {
             const addAction = action as AddToPlaylistFromCurrentTrackListAction;
-            const playlistName = addAction.parameters.playlistName;
+            const playlistName = addAction.parameters.name;
             const trackNumber = addAction.parameters.trackNumber;
             const trackCount = addAction.parameters.trackCount ?? 1;
             if (clientContext.userData === undefined) {

@@ -279,7 +279,7 @@ export interface AddCurrentTrackToPlaylistAction {
     actionName: "addCurrentTrackToPlaylist";
     parameters: {
         // name of playlist to add the current track to
-        playlistName: string;
+        name: string;
     };
 }
 
@@ -288,7 +288,7 @@ export interface AddToPlaylistFromCurrentTrackListAction {
     actionName: "addToPlaylistFromCurrentTrackList";
     parameters: {
         // name of playlist to add the track to
-        playlistName: string;
+        name: string;
         // 1-based index of the first track to add
         trackNumber: number;
         // number of tracks to add (default 1)
