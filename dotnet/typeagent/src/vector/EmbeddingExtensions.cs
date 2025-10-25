@@ -3,7 +3,7 @@
 
 namespace TypeAgent.Vector;
 
-public static class NormalizedEmbeddingExtensions
+public static class EmbeddingExtensions
 {
     /// <summary>
     /// Given a list of normalized embeddings, return the index of the item that is nearest to 'other'
@@ -12,10 +12,8 @@ public static class NormalizedEmbeddingExtensions
     /// <param name="list">list of candidate embeddings</param>
     /// <param name="embedding">normalized embedding to compare against</param>
     /// <returns>The index of the nearest neighbor</returns>
-    public static ScoredItem<int> IndexOfNearest(
-        this IList<NormalizedEmbedding> list,
-        NormalizedEmbedding embedding
-    )
+    public static ScoredItem<int> IndexOfNearest<T, TOther>(this IList<T> list, TOther embedding)
+        where TOther : ICosineSimilarity<T>
     {
         int best = -1;
         double bestScore = double.MinValue;
@@ -23,7 +21,7 @@ public static class NormalizedEmbeddingExtensions
         int count = list.Count;
         for (int i = 0; i < count; ++i)
         {
-            double score = list[i].DotProduct(embedding);
+            double score = embedding.CosineSimilarity(list[i]);
             if (score > bestScore)
             {
                 best = i;
@@ -40,11 +38,8 @@ public static class NormalizedEmbeddingExtensions
     /// <param name="list">list of candidate embeddings</param>
     /// <param name="embedding">normalized embedding to compare against</param>
     /// <returns>The index of the nearest neighbor</returns>
-    public static ScoredItem<int> IndexOfNearest(
-        this IList<NormalizedEmbedding> list,
-        NormalizedEmbedding embedding,
-        double minScore
-    )
+    public static ScoredItem<int> IndexOfNearest<T, TOther>(this IList<T> list, TOther embedding, double minScore)
+        where TOther : ICosineSimilarity<T>
     {
         int best = -1;
         double bestScore = double.MinValue;
@@ -52,7 +47,7 @@ public static class NormalizedEmbeddingExtensions
         int count = list.Count;
         for (int i = 0; i < count; ++i)
         {
-            double score = list[i].DotProduct(embedding);
+            double score = embedding.CosineSimilarity(list[i]);
             if (score >= minScore && score > bestScore)
             {
                 best = i;
@@ -70,19 +65,20 @@ public static class NormalizedEmbeddingExtensions
     /// <param name="embedding">embedding to compare against</param>
     /// <param name="matches">match collector</param>
     /// <returns>matches</returns>
-    public static void IndexesOfNearest(
-        this IList<NormalizedEmbedding> list,
-        NormalizedEmbedding embedding,
+    public static void IndexesOfNearest<T, TOther>(
+        this IList<T> list,
+        TOther embedding,
         TopNCollection<int> matches,
         double minScore = double.MinValue
     )
+        where TOther : ICosineSimilarity<T>
     {
         ArgumentVerify.ThrowIfNull(matches, nameof(matches));
 
         int count = list.Count;
         for (int i = 0; i < count; ++i)
         {
-            double score = list[i].DotProduct(embedding);
+            double score = embedding.CosineSimilarity(list[i]);
             if (score >= minScore)
             {
                 matches.Add(i, score);
@@ -97,28 +93,29 @@ public static class NormalizedEmbeddingExtensions
     /// <param name="embedding">embedding to compare against</param>
     /// <param name="maxMatches">max matches</param>
     /// <returns>matches</returns>
-    public static List<ScoredItem<int>> IndexesOfNearest(
-        this IList<NormalizedEmbedding> list,
-        NormalizedEmbedding embedding,
+    public static List<ScoredItem<int>> IndexesOfNearest<T, TOther>(
+        this IList<T> list,
+        TOther embedding,
         int maxMatches,
         double minScore = double.MinValue
     )
+        where TOther : ICosineSimilarity<T>
     {
         TopNCollection<int> matches = new TopNCollection<int>(maxMatches);
         list.IndexesOfNearest(embedding, matches, minScore);
         return matches.ByRankAndClear();
     }
 
-    public static IList<ScoredItem<int>> IndexesOfNearest(
-        this IList<NormalizedEmbedding> list,
-        NormalizedEmbedding embedding,
+    public static IList<ScoredItem<int>> IndexesOfNearest<T, TOther>(
+        this IList<T> list,
+        TOther embedding,
         Func<int, bool> filter,
         int maxMatches,
         double minScore = double.MinValue
     )
+        where TOther : ICosineSimilarity<T>
     {
         ArgumentVerify.ThrowIfNull(filter, nameof(filter));
-
 
         var matches = new TopNCollection<int>(maxMatches);
 
@@ -127,7 +124,7 @@ public static class NormalizedEmbeddingExtensions
         int count = list.Count;
         for (int i = 0; i < count; ++i)
         {
-            double score = list[i].DotProduct(embedding);
+            double score = embedding.CosineSimilarity(list[i]);
             if (score > bestScore && filter(i))
             {
                 best = i;
@@ -148,13 +145,14 @@ public static class NormalizedEmbeddingExtensions
     /// <param name="maxMatches">The maximum number of matches to return. If not specified, all matches are returned.</param>
     /// <param name="minScore">The minimum similarity score required for a match to be considered valid.</param>
     /// <returns>A list of <see cref="ScoredItem{int}"/> containing the index of a matching embedding and its similarity score.</returns>
-    public static List<ScoredItem<int>> IndexesOfNearestInSubset(
-        this IList<NormalizedEmbedding> list,
-        NormalizedEmbedding embedding,
+    public static List<ScoredItem<int>> IndexesOfNearestInSubset<T, TOther>(
+        this IList<T> list,
+        TOther embedding,
         IList<int> ordinalsOfSubset,
         int maxMatches,
         double minScore = 0
     )
+        where TOther : ICosineSimilarity<T>
     {
         ArgumentVerify.ThrowIfNull(ordinalsOfSubset, nameof(ordinalsOfSubset));
 
@@ -162,7 +160,7 @@ public static class NormalizedEmbeddingExtensions
         for (int i = 0; i < ordinalsOfSubset.Count; ++i)
         {
             int idx = ordinalsOfSubset[i];
-            double score = list[idx].DotProduct(embedding);
+            double score = embedding.CosineSimilarity(list[idx]);
             if (score >= minScore)
             {
                 matches.Add(idx, score);
@@ -171,22 +169,20 @@ public static class NormalizedEmbeddingExtensions
 
         return matches.ByRankAndClear();
     }
-}
 
-public static class NormalizedEmbeddingBExtensions
-{
-    public static void IndexesOfNearest(
-        this IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> list,
-        NormalizedEmbedding embedding,
+    public static void IndexesOfNearest<T, TOther>(
+        this IEnumerable<KeyValuePair<int, T>> list,
+        TOther embedding,
         TopNCollection<int> matches,
         double minScore = double.MinValue
     )
+        where TOther : ICosineSimilarity<T>
     {
         ArgumentVerify.ThrowIfNull(matches, nameof(matches));
 
-        foreach (KeyValuePair<int, NormalizedEmbeddingB> kv in list)
+        foreach (KeyValuePair<int, T> kv in list)
         {
-            double score = kv.Value.DotProduct(embedding);
+            double score = embedding.CosineSimilarity(kv.Value);
             if (score >= minScore)
             {
                 matches.Add(kv.Key, score);
@@ -194,15 +190,17 @@ public static class NormalizedEmbeddingBExtensions
         }
     }
 
-    public static List<ScoredItem<int>> IndexesOfNearest(
-        this IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> list,
-        NormalizedEmbedding embedding,
+    public static List<ScoredItem<int>> IndexesOfNearest<T, TOther>(
+        this IEnumerable<KeyValuePair<int, T>> list,
+        TOther embedding,
         int maxMatches,
         double minScore = double.MinValue
     )
+        where TOther : ICosineSimilarity<T>
     {
         TopNCollection<int> matches = new TopNCollection<int>(maxMatches);
         list.IndexesOfNearest(embedding, matches, minScore);
         return matches.ByRankAndClear();
     }
 }
+
