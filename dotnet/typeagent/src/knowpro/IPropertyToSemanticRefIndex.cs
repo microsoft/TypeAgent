@@ -11,9 +11,9 @@ public interface IPropertyToSemanticRefIndex
 
     ValueTask AddPropertyAync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
 
-    ValueTask ClearAsync(CancellationToken cancellationToken = default);
-
     ValueTask<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default);
+
+    ValueTask ClearAsync(CancellationToken cancellationToken = default);
 }
 
 

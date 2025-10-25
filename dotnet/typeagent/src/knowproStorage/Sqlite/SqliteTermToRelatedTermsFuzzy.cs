@@ -7,12 +7,11 @@ using TypeAgent.AIClient;
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
+public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
 {
     SqliteDatabase _db;
-    int _count = -1;
 
-    public SqliteRelatedTermsFuzzy(SqliteDatabase db, TextEmbeddingIndexSettings settings)
+    public SqliteTermToRelatedTermsFuzzy(SqliteDatabase db, TextEmbeddingIndexSettings settings)
     {
         ArgumentVerify.ThrowIfNull(db, nameof(db));
         ArgumentVerify.ThrowIfNull(settings, nameof(settings));
@@ -27,14 +26,7 @@ public class SqliteRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
 
     public NormalizedEmbedding this[int index] { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
-    public int GetCount()
-    {
-        if (_count < 0)
-        {
-            _count = _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
-        }
-        return _count;
-    }
+    public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
@@ -64,6 +56,8 @@ VALUES(@term, @term_embedding)
 
     public async ValueTask AddTermsAsync(IList<string> terms, CancellationToken cancellationToken = default)
     {
+        ArgumentVerify.ThrowIfNullOrEmpty(terms, nameof(terms));
+
         var embeddings = await Settings.EmbeddingModel.GenerateNormalizedInBatchesAsync(
             terms,
             Settings.BatchSize,
@@ -85,6 +79,8 @@ VALUES(@term, @term_embedding)
         CancellationToken cancellationToken = default
     )
     {
+        ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
+
         var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(text, cancellationToken);
         return GetNearestTerms(embedding, maxMatches, minScore);
     }
@@ -96,10 +92,12 @@ VALUES(@term, @term_embedding)
         CancellationToken cancellationToken = default
     )
     {
+        ArgumentVerify.ThrowIfNullOrEmpty(texts, nameof(texts));
+
         var embeddings = await Settings.EmbeddingModel.GenerateNormalizedAsync(texts, cancellationToken);
         // TODO: Bulk operation
         IList<IList<Term>> matches = [];
-        foreach(var embedding in embeddings)
+        foreach (var embedding in embeddings)
         {
             matches.Add(GetNearestTerms(embedding, maxMatches, minScore));
         }

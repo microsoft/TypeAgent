@@ -17,7 +17,8 @@ public class MemoryCommands : ICommandModule
     {
         return [
             SearchTermsDef(),
-            MessagesDef()
+            MessagesDef(),
+            AliasesDef()
         ];
     }
 
@@ -64,6 +65,46 @@ public class MemoryCommands : ICommandModule
 
         await KnowProWriter.WriteSemanticRefsAsync(conversation);
 
+    }
+
+    private Command AliasesDef()
+    {
+        Command command = new("kpAliases")
+        {
+            Options.Arg<string>("term"),
+            Options.Arg<string>("alias")
+        };
+        command.SetAction(this.AliasesAsync);
+        return command;
+    }
+    private async Task AliasesAsync(ParseResult parseResult, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        //await KnowProWriter.WriteSemanticRefsAsync(conversation);
+        NamedArgs namedArgs = new NamedArgs(parseResult);
+        var term = namedArgs.Get("term");
+        var alias = namedArgs.Get("alias");
+
+        var aliases = conversation.SecondaryIndexes.TermToRelatedTermsIndex.Aliases;
+        if (string.IsNullOrEmpty(term))
+        {
+            // Display all
+            var relatedTerms = await aliases.GetTermsAsync(cancellationToken);
+            KnowProWriter.WriteList(relatedTerms, ListType.Ol);
+        }
+        else if (!string.IsNullOrEmpty(alias))
+        {
+            await aliases.AddTermAsync(term, alias, cancellationToken);
+        }
+        else
+        {
+            var relatedTerms = await aliases.LookupTermAsync(term, cancellationToken);
+            if (!relatedTerms.IsNullOrEmpty())
+            {
+                relatedTerms!.ForEach(KnowProWriter.WriteTerm);
+            }
+        }
     }
 
     private IConversation EnsureConversation()

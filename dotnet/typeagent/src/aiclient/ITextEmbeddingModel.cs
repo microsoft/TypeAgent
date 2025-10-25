@@ -9,11 +9,14 @@ public interface ITextEmbeddingModel
 
     Task<float[]> GenerateAsync(string text, CancellationToken cancellationToken);
 
+    // TODO: take IReadOnlyList as input
     Task<IList<float[]>> GenerateAsync(IList<string> texts, CancellationToken cancellationToken);
 }
 
 public static class TextEmbeddingModelExtensions
 {
+    // TODO: take IReadOnlyList as input
+
     /// <summary>
     /// Generate embeddings in parallel.
     /// Uses batching if the model supports it.

@@ -7,6 +7,8 @@ public class ConsoleWriter
 {
     static Stack<ConsoleColor> s_colorStack;
 
+    public const char EmptyChar = ' ';
+
     static ConsoleWriter()
     {
         s_colorStack = new Stack<ConsoleColor>();
@@ -259,6 +261,18 @@ public class ConsoleWriter
         WriteLine();
     }
 
+    public static void WriteInPlace(string text, string? prevText)
+    {
+        Console.CursorLeft = 0;
+        Write(text);
+
+        int countToErase = string.IsNullOrEmpty(prevText) ? 0 : prevText.Length - text.Length;
+        if (countToErase > 0)
+        {
+            Erase(countToErase);
+        }
+    }
+
     public static void WriteTiming(Stopwatch clock, string? label = null)
     {
         WriteTiming(ConsoleColor.Gray, clock, label);
@@ -273,6 +287,17 @@ public class ConsoleWriter
         WriteLine(color, timing);
     }
 
+    public static void WriteProgress(int curCount, int total, string? label = null)
+    {
+        label ??= "";
+        var text = $"[{label}{curCount} / ${total}]";
+        WriteLine(ConsoleColor.Gray, text);
+    }
+
+    public static void Erase(int count)
+    {
+        Write(EmptyChar, count);
+    }
 }
 
 public enum ListType

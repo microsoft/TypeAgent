@@ -3,15 +3,15 @@
 
 namespace TypeAgent.Vector;
 
-public interface IEmbedding
+public interface ICosineSimilarity<T>
 {
-    ReadOnlySpan<float> AsSpan();
+    double CosineSimilarity(T other);
 }
 
 /// <summary>
 /// A lightweight struct that wraps an embedding vector
 /// </summary>
-public readonly struct Embedding : IEmbedding
+public readonly struct Embedding : ICosineSimilarity<Embedding>
 {
     /// <summary>
     /// Embedding using the given vector. Normalizes the vector before storing it
@@ -52,26 +52,6 @@ public readonly struct Embedding : IEmbedding
     public double CosineSimilarity(ReadOnlySpan<float> other)
     {
         return TensorPrimitives.CosineSimilarity(this, other);
-    }
-
-    /// <summary>
-    /// The Dot Product of this vector with the other embedding
-    /// </summary>
-    /// <param name="other">other embedding</param>
-    /// <returns>dot product</returns>
-    public double DotProduct(Embedding other)
-    {
-        return TensorPrimitives.Dot(this, other);
-    }
-
-    /// <summary>
-    /// The Dot Product of this vector with the other embedding
-    /// </summary>
-    /// <param name="other">other embedding</param>
-    /// <returns>dot product</returns>
-    public double DotProduct(ReadOnlySpan<float> other)
-    {
-        return TensorPrimitives.Dot(this, other);
     }
 
     public NormalizedEmbedding ToNormalized()
