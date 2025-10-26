@@ -71,6 +71,85 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  examples/cacheRESTEndpoint:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../packages/agentSdk
+      agent-cache:
+        specifier: workspace:*
+        version: link:../../packages/cache
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../packages/dispatcher
+      agent-rpc:
+        specifier: workspace:*
+        version: link:../../packages/agentRpc
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      body-parser:
+        specifier: 1.20.3
+        version: 1.20.3
+      chalk:
+        specifier: ^5.4.1
+        version: 5.4.1
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.1(supports-color@8.1.1)
+      default-agent-provider:
+        specifier: workspace:*
+        version: link:../../packages/defaultAgentProvider
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
+      find-config:
+        specifier: ^1.0.0
+        version: 1.0.0
+      telemetry:
+        specifier: workspace:*
+        version: link:../../packages/telemetry
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/express':
+        specifier: ^4.17.17
+        version: 4.17.21
+      '@types/find-config':
+        specifier: 1.0.4
+        version: 1.0.4
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      ts-loader:
+        specifier: ^9.5.1
+        version: 9.5.2(typescript@5.4.5)(webpack@5.99.8)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/chat:
     dependencies:
       '@azure/search-documents':
@@ -6582,9 +6661,6 @@ packages:
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
-
-  '@types/ws@8.5.10':
-    resolution: {integrity: sha512-vmQSUcfalpIq0R9q7uTo2lXs6eGIpt9wtnLdMv9LVpIjCA/+ufZRozlVoVelIYixx1ugCBKDhn89vnsEGOCx9A==}
 
   '@types/xml2js@0.4.14':
     resolution: {integrity: sha512-4YnrRemBShWRO2QjvUin8ESA41rH+9nQGLUGZV/1IDhi3SL9OhdpNC/MrulTWuptXKwhx/aDxE7toV0f/ypIXQ==}
@@ -17281,10 +17357,6 @@ snapshots:
     dependencies:
       '@types/node': 20.17.47
 
-  '@types/ws@8.5.10':
-    dependencies:
-      '@types/node': 20.17.47
-
   '@types/xml2js@0.4.14':
     dependencies:
       '@types/node': 20.17.28
@@ -24886,7 +24958,7 @@ snapshots:
       '@types/serve-index': 1.9.4
       '@types/serve-static': 1.15.5
       '@types/sockjs': 0.3.36
-      '@types/ws': 8.5.10
+      '@types/ws': 8.18.1
       ansi-html-community: 0.0.8
       bonjour-service: 1.2.1
       chokidar: 3.6.0

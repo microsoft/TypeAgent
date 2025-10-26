@@ -1,0 +1,52 @@
+{
+  "name": "cache-rest-endpoint",
+  "version": "0.0.1",
+  "description": "AgentCache REST endpoint.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/cacheRESTEndpoint"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "start": "webpack serve --open",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "agent-cache": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "agent-rpc": "workspace:*",
+    "aiclient": "workspace:*",    
+    "body-parser": "1.20.3",
+    "chalk": "^5.4.1",
+    "common-utils": "workspace:*",
+    "debug": "^4.4.0",
+    "default-agent-provider": "workspace:*",
+    "dotenv": "^16.3.1",
+    "express": "^4.21.2",
+    "find-config": "^1.0.0",
+    "telemetry": "workspace:*",
+    "typeagent": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/express": "^4.17.17",
+    "@types/find-config": "1.0.4",
+    "@types/jest": "^29.5.7",
+    "@types/ws": "^8.5.10",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "ts-loader": "^9.5.1",
+    "typescript": "~5.4.5"
+  }
+}

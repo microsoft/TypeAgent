@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #f5f5f5;
+        }
+
+        .header {
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .input-container {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #searchInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #searchInput:focus {
+            border-color: #0078d4;
+        }
+
+        #goButton {
+            padding: 12px 32px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #goButton:hover {
+            background-color: #005a9e;
+        }
+
+        #goButton:active {
+            background-color: #004578;
+        }
+
+        #goButton:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .results-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .results-list {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .result-item {
+            background-color: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-query {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .result-response {
+            background-color: #f9f9f9;
+            padding: 12px;
+            border-radius: 4px;
+            border-left: 3px solid #0078d4;
+            overflow-x: auto;
+        }
+
+        .result-response pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .error {
+            border-left-color: #d13438;
+        }
+
+        .error pre {
+            color: #d13438;
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="input-container">
+            <input type="text" id="searchInput" placeholder="Enter text..." />
+            <button id="goButton">Go</button>
+        </div>
+    </div>
+
+    <div class="results-container">
+        <div class="results-list" id="resultsList">
+            <div class="empty-state">Enter a query and press "Go" to see results</div>
+        </div>
+    </div>
+
+    <script>
+        const searchInput = document.getElementById('searchInput');
+        const goButton = document.getElementById('goButton');
+        const resultsList = document.getElementById('resultsList');
+
+        async function performSearch() {
+            const searchText = searchInput.value.trim();
+            
+            if (!searchText) {
+                return;
+            }
+
+            // Disable button during request
+            goButton.disabled = true;
+            goButton.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(`http://localhost:10482/?s=${encodeURIComponent(searchText)}`);
+                const data = await response.json();
+
+                // Remove empty state if it exists
+                const emptyState = resultsList.querySelector('.empty-state');
+                if (emptyState) {
+                    emptyState.remove();
+                }
+
+                // Create result item
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                
+                const queryDiv = document.createElement('div');
+                queryDiv.className = 'result-query';
+                queryDiv.textContent = `Query: ${searchText}`;
+                
+                const responseDiv = document.createElement('div');
+                responseDiv.className = 'result-response';
+                
+                const pre = document.createElement('pre');
+                pre.textContent = JSON.stringify(data, null, 2);
+                responseDiv.appendChild(pre);
+                
+                const timestamp = document.createElement('div');
+                timestamp.className = 'timestamp';
+                timestamp.textContent = new Date().toLocaleString();
+                
+                resultItem.appendChild(queryDiv);
+                resultItem.appendChild(responseDiv);
+                resultItem.appendChild(timestamp);
+                
+                // Insert at the beginning (newest first)
+                resultsList.insertBefore(resultItem, resultsList.firstChild);
+                
+            } catch (error) {
+                // Remove empty state if it exists
+                const emptyState = resultsList.querySelector('.empty-state');
+                if (emptyState) {
+                    emptyState.remove();
+                }
+
+                // Create error result item
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                
+                const queryDiv = document.createElement('div');
+                queryDiv.className = 'result-query';
+                queryDiv.textContent = `Query: ${searchText}`;
+                
+                const responseDiv = document.createElement('div');
+                responseDiv.className = 'result-response error';
+                
+                const pre = document.createElement('pre');
+                pre.textContent = `Error: ${error.message}`;
+                responseDiv.appendChild(pre);
+                
+                const timestamp = document.createElement('div');
+                timestamp.className = 'timestamp';
+                timestamp.textContent = new Date().toLocaleString();
+                
+                resultItem.appendChild(queryDiv);
+                resultItem.appendChild(responseDiv);
+                resultItem.appendChild(timestamp);
+                
+                // Insert at the beginning (newest first)
+                resultsList.insertBefore(resultItem, resultsList.firstChild);
+            } finally {
+                // Re-enable button
+                goButton.disabled = false;
+                goButton.textContent = 'Go';
+                
+                // Clear input
+                searchInput.value = '';
+                searchInput.focus();
+            }
+        }
+
+        // Button click handler
+        goButton.addEventListener('click', performSearch);
+
+        // Enter key handler
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        // Focus input on load
+        searchInput.focus();
+    </script>
+</body>
+</html>

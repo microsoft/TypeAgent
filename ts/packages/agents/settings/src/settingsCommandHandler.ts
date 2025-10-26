@@ -10,7 +10,7 @@ import {
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     SettingsAction,
-} from "./settingsActionSchemaV2.js";
+} from "./settingsActionSchema.js";
 //import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -49,7 +49,7 @@ async function handleSettingsAction(
         //     result = createActionResultFromHtmlDisplayWithScript(readFileSync(file, 'utf8'));
         //     break;
         default: {
-            result = createActionResult(`TODO: call settings MCP server with '${action.parameters.originalUserRequest}'`);
+            result = createActionResult(`TODO: call settings MCP server with '${action.parameters.originalRequest}'`);
 
             // if (action.parameters.uri) {
                 
