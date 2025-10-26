@@ -65,6 +65,15 @@ export interface YAMLMacro {
     metadata: YAMLMacroMetadata;
 }
 
+export interface MinimalYAMLMacro {
+    name: string;
+    description: string;
+    domain: string;
+    url: string;
+    parameters?: Record<string, YAMLParameterDefinition>;
+    steps: YAMLMacroStep[];
+}
+
 export interface MacroArtifacts {
     recordingId: string;
     url: string;

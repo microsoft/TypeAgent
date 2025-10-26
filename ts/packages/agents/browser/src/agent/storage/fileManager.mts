@@ -93,6 +93,25 @@ export class FileManager {
     }
 
     /**
+     * Read text data from a file
+     */
+    async readText(filePath: string): Promise<string | null> {
+        const fullPath = this.getFullPath(filePath);
+
+        try {
+            const exists = await this.sessionStorage.exists(fullPath);
+            if (!exists) {
+                return null;
+            }
+
+            return await this.sessionStorage.read(fullPath, "utf8");
+        } catch (error) {
+            console.error(`Failed to read text from ${fullPath}:`, error);
+            return null;
+        }
+    }
+
+    /**
      * Check if a file exists
      */
     async exists(filePath: string): Promise<boolean> {
@@ -270,12 +289,14 @@ export class FileManager {
 
     /**
      * Get macro file path based on scope
+     * Returns YAML file path by default, with option for JSON (backward compat)
      */
     getMacroFilePath(
         macroId: string,
         scope: { type: string; domain?: string },
+        format: 'yaml' | 'json' = 'yaml',
     ): string {
-        const fileName = `${macroId}.json`;
+        const fileName = `${macroId}.${format}`;
 
         if (scope.type === "global") {
             return `macros/global/${fileName}`;

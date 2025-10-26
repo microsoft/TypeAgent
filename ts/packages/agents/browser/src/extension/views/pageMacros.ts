@@ -93,6 +93,20 @@ class ActionDiscoveryPanel {
         chrome.tabs.onActivated.addListener(() => {
             this.onTabChange();
         });
+
+        // Listen for macro changes from the backend
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            if (message.type === "macroAdded" || message.type === "macroDeleted" || message.type === "macrosChanged") {
+                console.log("Macro change detected, refreshing UI:", message.type);
+                (async () => {
+                    await this.updateUserActionsUI();
+                    await this.registerTempSchema();
+                })().catch((error) => {
+                    console.error("Error refreshing UI after macro change:", error);
+                });
+            }
+            return false;
+        });
     }
 
     private async getActiveTabUrl(): Promise<string | null> {
@@ -628,20 +642,16 @@ class ActionDiscoveryPanel {
 
             // Action is automatically saved during processing
             if (response.actionId) {
+                console.log(`[saveModalAction] Macro created successfully: ${response.intentJson.macroName} (ID: ${response.actionId})`);
                 showNotification(
                     "Macro created and saved successfully!",
                     "success",
                 );
-                console.log(
-                    `Created and saved macro: ${response.intentJson.macroName} (ID: ${response.macroId})`,
-                );
             } else {
+                console.warn("[saveModalAction] Action creation completed but no actionId returned");
                 showNotification(
                     "Macro created but save status unknown",
                     "info",
-                );
-                console.warn(
-                    "Action creation completed but no actionId returned",
                 );
             }
 
@@ -649,8 +659,11 @@ class ActionDiscoveryPanel {
             modal.hide();
 
             // Update UI
+            console.log("[saveModalAction] Calling updateUserActionsUI");
             await this.updateUserActionsUI();
+            console.log("[saveModalAction] Calling registerTempSchema");
             await this.registerTempSchema();
+            console.log("[saveModalAction] UI update complete");
         } catch (error) {
             console.error("Error creating action:", error);
             showNotification("Failed to create action", "error");
@@ -712,23 +725,30 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
-            console.log("Getting actions after update. URL: ", launchUrl);
+            console.log("[updateUserActionsUI] Starting update. URL:", launchUrl);
+            console.log("[updateUserActionsUI] Container element found:", !!userActionsContainer);
+
             // Get user-authored actions from the new ActionsStore
             const actions = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
 
-            console.log("Custom actions: ", actions);
+            console.log("[updateUserActionsUI] Received actions:", actions.length, "actions");
+            console.log("[updateUserActionsUI] Action IDs:", actions.map(a => a.id || a.name));
 
             countBadge.textContent = actions.length.toString();
 
             if (actions.length > 0) {
+                console.log("[updateUserActionsUI] Clearing container and rendering", actions.length, "actions");
                 userActionsContainer.innerHTML = "";
                 actions.forEach((action: any, index: number) => {
+                    console.log("[updateUserActionsUI] Rendering action:", action.id || action.name, "at index", index);
                     this.renderUserAction(action, index);
                 });
+                console.log("[updateUserActionsUI] Rendering complete. Container children:", userActionsContainer.children.length);
             } else {
+                console.log("[updateUserActionsUI] No actions, showing empty state");
                 showEmptyState(
                     userActionsContainer,
                     "No custom actions defined yet",
@@ -740,7 +760,7 @@ class ActionDiscoveryPanel {
                 window.Prism.highlightAll();
             }
         } catch (error) {
-            console.error("Error updating user actions UI:", error);
+            console.error("[updateUserActionsUI] Error updating user actions UI:", error);
             showErrorState(
                 userActionsContainer,
                 "Failed to load custom actions",
@@ -755,6 +775,10 @@ class ActionDiscoveryPanel {
 
         const actionElement = document.createElement("div");
         actionElement.className = "macro-item mb-3";
+
+        console.log("[renderUserAction] Rendering action:", action.id || action.name);
+        console.log("[renderUserAction] action.definition?.steps:", action.definition?.steps?.length || 0);
+        console.log("[renderUserAction] action.steps:", action.steps?.length || 0);
 
         if (!action.intentSchema) {
             action.intentSchema = action.definition?.intentSchema;
@@ -772,6 +796,8 @@ class ActionDiscoveryPanel {
         if (!action.steps) {
             action.steps = steps;
         }
+
+        console.log("[renderUserAction] Final steps count:", action.steps?.length || 0);
 
         actionElement.innerHTML = this.createUserActionCard(action, index);
 
@@ -875,26 +901,35 @@ class ActionDiscoveryPanel {
     }
 
     private async deleteMacro(macroId: string) {
+        console.log("[deleteMacro] Starting delete for macro:", macroId);
         const confirmed = await showConfirmationDialog(
             "Are you sure you want to delete this action?",
         );
-        if (!confirmed) return;
+        if (!confirmed) {
+            console.log("[deleteMacro] Delete cancelled by user");
+            return;
+        }
 
         try {
+            console.log("[deleteMacro] Calling deleteMacro API");
             const result = await deleteMacro(macroId);
+            console.log("[deleteMacro] Delete result:", result);
+
             if (result.success) {
-                console.log(`Action deleted: ${macroId}`);
+                console.log(`[deleteMacro] Action deleted successfully: ${macroId}`);
+                console.log("[deleteMacro] Calling updateUserActionsUI");
                 await this.updateUserActionsUI();
+                console.log("[deleteMacro] updateUserActionsUI completed");
                 showNotification("Action deleted successfully!", "success");
             } else {
-                console.error(`Failed to delete action:`, result.error);
+                console.error(`[deleteMacro] Failed to delete action:`, result.error);
                 showNotification(
                     `Failed to delete action: ${result.error || "Unknown error"}`,
                     "error",
                 );
             }
         } catch (error) {
-            console.error("Error deleting action:", error);
+            console.error("[deleteMacro] Error deleting action:", error);
             showNotification(
                 "Failed to delete action. Please try again.",
                 "error",
@@ -1096,7 +1131,7 @@ class ActionDiscoveryPanel {
             { id: `macro${index}`, label: "Macro" },
         ];
 
-        const yamlContent = this.convertActionToYAML(action);
+        const yamlContent = action.rawYAML || "# Error: YAML content not available";
 
         const panes = [
             {
@@ -1120,96 +1155,6 @@ class ActionDiscoveryPanel {
         `;
     }
 
-    private convertActionToYAML(action: any): string {
-        const def = action.definition || {};
-        const intentJson = def.intentJson || {};
-        const parameters = intentJson.parameters || [];
-        const macrosJson = def.macrosJson || {};
-        const steps = macrosJson.steps || [];
-
-        let yaml = `macro:
-  name: ${action.name}
-  version: ${action.version || "1.0.0"}
-  description: ${action.description || ""}
-
-  author: ${action.author}
-  category: ${action.category}`;
-
-        if (action.tags && action.tags.length > 0) {
-            yaml += `\n  tags: [${action.tags.join(", ")}]`;
-        }
-
-        yaml += `
-
-  scope:
-    type: ${action.scope?.type || "page"}
-    domain: ${action.scope?.domain || ""}
-    priority: ${action.scope?.priority || 80}`;
-
-        if (action.urlPatterns && action.urlPatterns.length > 0) {
-            yaml += `\n  \n  urlPatterns:`;
-            action.urlPatterns.forEach((pattern: any) => {
-                yaml += `
-    - pattern: "${pattern.pattern}"
-      type: ${pattern.type}
-      priority: ${pattern.priority || 100}`;
-            });
-        }
-
-        yaml += `\n  \n  parameters:`;
-        if (parameters.length > 0) {
-            parameters.forEach((param: any) => {
-                yaml += `
-    ${param.shortName}:
-      type: ${param.type}
-      description: ${param.description || ""}
-      required: ${param.required || false}`;
-                if (param.defaultValue !== undefined) {
-                    const defaultVal =
-                        typeof param.defaultValue === "string"
-                            ? `"${param.defaultValue}"`
-                            : param.defaultValue;
-                    yaml += `\n      default: ${defaultVal}`;
-                }
-                if (param.valueOptions && param.valueOptions.length > 0) {
-                    yaml += `\n      options: [${param.valueOptions.map((opt: string) => `"${opt}"`).join(", ")}]`;
-                }
-            });
-        } else {
-            yaml += ` {}`;
-        }
-
-        yaml += `\n  \n  steps:`;
-        if (steps.length > 0) {
-            steps.forEach((step: any) => {
-                yaml += `
-    - action: ${step.actionName}`;
-                if (step.description) {
-                    yaml += `\n      description: ${step.description}`;
-                }
-                if (step.parameters) {
-                    yaml += `\n      parameters:`;
-                    Object.entries(step.parameters).forEach(([key, value]) => {
-                        const valStr =
-                            typeof value === "string"
-                                ? `"${value}"`
-                                : JSON.stringify(value);
-                        yaml += `\n        ${key}: ${valStr}`;
-                    });
-                }
-            });
-        } else {
-            yaml += ` []`;
-        }
-
-        yaml += `\n\nmetadata:
-  created: ${action.metadata?.createdAt || new Date().toISOString()}
-  updated: ${action.metadata?.updatedAt || new Date().toISOString()}
-  usageCount: ${action.metadata?.usageCount || 0}
-  isValid: ${action.metadata?.isValid !== false}`;
-
-        return yaml;
-    }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

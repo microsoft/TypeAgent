@@ -69,6 +69,20 @@ export function createSessionContext<T = unknown>(
         : () => {
               throw new Error("Permission denied: cannot remove dynamic agent");
           };
+
+    const forceCleanupDynamicAgent = allowDynamicAgent
+        ? (agentName: string) =>
+              context.commandLock(async () => {
+                  dynamicAgentNames.delete(agentName);
+                  return context.agents.forceCleanupAgent(
+                      agentName,
+                      context.agentCache.grammarStore,
+                  );
+              })
+        : () => {
+              throw new Error("Permission denied: cannot force cleanup dynamic agent");
+          };
+
     const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
@@ -140,6 +154,7 @@ export function createSessionContext<T = unknown>(
         },
         addDynamicAgent,
         removeDynamicAgent,
+        forceCleanupDynamicAgent,
         getSharedLocalHostPort: async (agentName: string) => {
             const localHostPort = await context.agents.getSharedLocalHostPort(
                 name,

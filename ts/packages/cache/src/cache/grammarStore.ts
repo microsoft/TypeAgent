@@ -30,12 +30,23 @@ export class GrammarStoreImpl implements GrammarStore {
         this.grammars.set(namespaceKey, grammar);
     }
     public removeGrammar(schemaName: string): void {
-        const namespaceKey = getSchemaNamespaceKey(
-            schemaName,
-            undefined,
-            this.schemaInfoProvider,
-        );
-        this.grammars.delete(namespaceKey);
+        try {
+            const namespaceKey = getSchemaNamespaceKey(
+                schemaName,
+                undefined,
+                this.schemaInfoProvider,
+            );
+            this.grammars.delete(namespaceKey);
+        } catch (error) {
+            console.warn(`Schema ${schemaName} not found, attempting pattern cleanup:`, error);
+
+            for (const key of Array.from(this.grammars.keys())) {
+                if (key.startsWith(`${schemaName}.`)) {
+                    this.grammars.delete(key);
+                    console.debug(`Removed grammar cache entry: ${key}`);
+                }
+            }
+        }
     }
     public isEnabled(): boolean {
         return this.enabled;

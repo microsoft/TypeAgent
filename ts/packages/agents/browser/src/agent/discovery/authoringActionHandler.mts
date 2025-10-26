@@ -94,7 +94,12 @@ async function getNextAuthoringQuestion(
         action.parameters.webPlanSteps.length === 0
     ) {
         const htmlFragments = await ctx.browser.getHtmlFragments();
-        const screenshot = await ctx.browser.getCurrentPageScreenshot();
+        let screenshot = "";
+        try {
+            screenshot = await ctx.browser.getCurrentPageScreenshot();
+        } catch (error) {
+            console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+        }
         const suggestedStepsResponse = await ctx.agent.getWebPlanSuggestedSteps(
             action.parameters.webPlanName!,
             action.parameters.webPlanDescription!,
@@ -197,7 +202,12 @@ async function getNextPlanRunningQuestion(
             );
 
             const htmlFragments = await ctx.browser.getHtmlFragments();
-            const screenshot = await ctx.browser.getCurrentPageScreenshot();
+            let screenshot = "";
+            try {
+                screenshot = await ctx.browser.getCurrentPageScreenshot();
+            } catch (error) {
+                console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+            }
 
             const evaluationResult = await ctx.agent.getWebPlanRunResult(
                 action.parameters.webPlanName!,

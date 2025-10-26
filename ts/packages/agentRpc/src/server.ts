@@ -482,6 +482,23 @@ export function createAgentRpcServer(
                         closeFn();
                     }
                 }),
+            forceCleanupDynamicAgent: async (name: string) =>
+                dynamicAgentLock(async () => {
+                    const closeFn = dynamicAgentRpcServer.get(name);
+
+                    try {
+                        dynamicAgentRpcServer.delete(name);
+
+                        await rpc.invoke("forceCleanupDynamicAgent", {
+                            contextId,
+                            name,
+                        });
+                    } finally {
+                        if (closeFn) {
+                            closeFn();
+                        }
+                    }
+                }),
             indexes: async (type: string): Promise<any[]> => {
                 return await rpc.invoke("indexes", {
                     contextId,

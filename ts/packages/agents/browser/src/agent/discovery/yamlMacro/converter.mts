@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import registerDebug from "debug";
 import {
     YAMLMacro,
+    MinimalYAMLMacro,
     YAMLParameterDefinition,
     YAMLMacroStep,
 } from "./types.mjs";
@@ -13,6 +15,8 @@ import {
 } from "./schemaGenerator.mjs";
 import { ArtifactsStorage } from "./artifactsStorage.mjs";
 import { StoredMacro } from "../../storage/types.mjs";
+
+const debug = registerDebug("typeagent:browser:discover:converter");
 
 export class MacroConverter {
     constructor(private artifactsStorage: ArtifactsStorage) {}
@@ -122,6 +126,8 @@ export class MacroConverter {
     async convertJSONToYAML(
         jsonMacro: StoredMacro,
     ): Promise<{ yaml: YAMLMacro; recordingId?: string }> {
+        debug(`[YAML_DEBUG] convertJSONToYAML input for ${jsonMacro.name}:`, JSON.stringify(jsonMacro, null, 2));
+
         const { definition, metadata } = jsonMacro;
 
         const parameters: Record<string, YAMLParameterDefinition> = {};
@@ -155,13 +161,16 @@ export class MacroConverter {
             }
         }
 
+        debug(`[YAML_DEBUG] Extracted parameters for ${jsonMacro.name}:`, JSON.stringify(parameters, null, 2));
+
         const definitionAny = definition as any;
         const steps: YAMLMacroStep[] =
-            definition.macrosJson?.steps ||
             definitionAny.actionSteps ||
             definition.macroSteps ||
             definition.steps ||
             [];
+
+        debug(`[YAML_DEBUG] Extracted steps for ${jsonMacro.name}:`, JSON.stringify(steps, null, 2));
 
         let recordingId: string | undefined;
         if (
@@ -210,6 +219,19 @@ export class MacroConverter {
             },
         };
 
+        debug(`[YAML_DEBUG] Final YAML output for ${jsonMacro.name}:`, JSON.stringify(yamlMacro, null, 2));
+
         return { yaml: yamlMacro, ...(recordingId && { recordingId }) };
+    }
+
+    convertFullToMinimal(fullYaml: YAMLMacro): MinimalYAMLMacro {
+        return {
+            name: fullYaml.macro.name,
+            description: fullYaml.macro.description,
+            domain: fullYaml.macro.scope.domain,
+            url: fullYaml.macro.urlPatterns?.[0]?.pattern || "",
+            parameters: fullYaml.macro.parameters,
+            steps: fullYaml.macro.steps,
+        };
     }
 }

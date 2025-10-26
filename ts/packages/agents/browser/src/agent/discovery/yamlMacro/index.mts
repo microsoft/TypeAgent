@@ -3,6 +3,7 @@
 
 export * from "./types.mjs";
 export * from "./yamlParser.mjs";
+export * from "./minimalParser.mjs";
 export * from "./converter.mjs";
 export * from "./artifactsStorage.mjs";
 export * from "./schemaGenerator.mjs";
