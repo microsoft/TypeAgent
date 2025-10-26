@@ -96,7 +96,10 @@ async function handleFindUserActions(
     try {
         screenshot = await ctx.browser.getCurrentPageScreenshot();
     } catch (error) {
-        console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+        console.warn(
+            "Screenshot capture failed, continuing without screenshot:",
+            (error as Error)?.message,
+        );
     }
     let pageSummary = "";
 
@@ -359,7 +362,10 @@ async function handleGetPageSummary(
     try {
         screenshot = await ctx.browser.getCurrentPageScreenshot();
     } catch (error) {
-        console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+        console.warn(
+            "Screenshot capture failed, continuing without screenshot:",
+            (error as Error)?.message,
+        );
     }
     const timerName = `Summarizing page`;
     console.time(timerName);
@@ -626,9 +632,9 @@ async function handleGetIntentFromReccording(
     }
 
     let existingActionNames = action.parameters.existingActionNames;
-const url = await getBrowserControl(
-            ctx.sessionContext.agentContext,
-        ).getPageUrl();
+    const url = await getBrowserControl(
+        ctx.sessionContext.agentContext,
+    ).getPageUrl();
 
     if (!existingActionNames || existingActionNames.length === 0) {
         const existingActions =
@@ -668,7 +674,10 @@ const url = await getBrowserControl(
     const intentData = intentResponse.data as UserIntent;
 
     // Ensure action name is unique by adding a number suffix if needed
-    if (existingActionNames && existingActionNames.includes(intentData.actionName)) {
+    if (
+        existingActionNames &&
+        existingActionNames.includes(intentData.actionName)
+    ) {
         const baseName = intentData.actionName;
         let suffix = 2;
         let uniqueName = `${baseName}${suffix}`;
@@ -678,7 +687,9 @@ const url = await getBrowserControl(
             uniqueName = `${baseName}${suffix}`;
         }
 
-        debug(`LLM returned duplicate action name "${baseName}", using "${uniqueName}" instead`);
+        debug(
+            `LLM returned duplicate action name "${baseName}", using "${uniqueName}" instead`,
+        );
         intentData.actionName = uniqueName;
     }
 

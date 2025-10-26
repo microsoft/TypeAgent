@@ -25,9 +25,15 @@ export class ArtifactsStorage {
             const artifactsBasePath = `${this.basePath}/.artifacts/${recordingId}`;
 
             if (artifacts.screenshots && artifacts.screenshots.length > 0) {
-                for (let index = 0; index < artifacts.screenshots.length; index++) {
+                for (
+                    let index = 0;
+                    index < artifacts.screenshots.length;
+                    index++
+                ) {
                     const base64Data = artifacts.screenshots[index];
-                    const match = base64Data.match(/^data:image\/png;base64,(.+)$/);
+                    const match = base64Data.match(
+                        /^data:image\/png;base64,(.+)$/,
+                    );
                     if (match) {
                         const buffer = Buffer.from(match[1], "base64");
                         const screenshotPath = `${artifactsBasePath}/screenshots/step-${index + 1}.png`;
@@ -65,7 +71,9 @@ export class ArtifactsStorage {
 
             if (artifacts.screenshots && artifacts.screenshots.length > 0) {
                 artifacts.screenshots.forEach((base64Data, index) => {
-                    const match = base64Data.match(/^data:image\/png;base64,(.+)$/);
+                    const match = base64Data.match(
+                        /^data:image\/png;base64,(.+)$/,
+                    );
                     if (match) {
                         const buffer = Buffer.from(match[1], "base64");
                         fs.writeFileSync(
@@ -112,7 +120,8 @@ export class ArtifactsStorage {
                 const screenshotPath = `${artifactsBasePath}/screenshots/step-${index}.png`;
                 try {
                     if (await this.sessionStorage.exists(screenshotPath)) {
-                        const data = await this.sessionStorage.read(screenshotPath);
+                        const data =
+                            await this.sessionStorage.read(screenshotPath);
                         screenshots.push(
                             `data:image/png;base64,${Buffer.from(data).toString("base64")}`,
                         );
@@ -134,7 +143,8 @@ export class ArtifactsStorage {
                         "utf8",
                     );
                     const recordingData = JSON.parse(recordingContent);
-                    recording = recordingData.recording || recordingData.steps || [];
+                    recording =
+                        recordingData.recording || recordingData.steps || [];
                 }
             } catch {
                 // Recording not found or error reading
@@ -162,7 +172,9 @@ export class ArtifactsStorage {
                     .sort();
 
                 for (const file of files) {
-                    const data = fs.readFileSync(path.join(screenshotsDir, file));
+                    const data = fs.readFileSync(
+                        path.join(screenshotsDir, file),
+                    );
                     screenshots.push(
                         `data:image/png;base64,${data.toString("base64")}`,
                     );
@@ -176,7 +188,8 @@ export class ArtifactsStorage {
                 const recordingData = JSON.parse(
                     fs.readFileSync(recordingPath, "utf-8"),
                 );
-                recording = recordingData.recording || recordingData.steps || [];
+                recording =
+                    recordingData.recording || recordingData.steps || [];
             }
 
             return {
@@ -207,7 +220,9 @@ export class ArtifactsStorage {
 
             // Delete recording.json
             try {
-                await this.sessionStorage.delete(`${artifactsBasePath}/recording.json`);
+                await this.sessionStorage.delete(
+                    `${artifactsBasePath}/recording.json`,
+                );
             } catch {
                 // Ignore if doesn't exist
             }

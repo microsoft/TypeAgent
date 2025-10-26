@@ -49,10 +49,7 @@ export class YAMLMacroStoreExtension {
 
             return result.yaml;
         } catch (error) {
-            console.error(
-                `Failed to load YAML macro ${macroId}:`,
-                error,
-            );
+            console.error(`Failed to load YAML macro ${macroId}:`, error);
             return null;
         }
     }

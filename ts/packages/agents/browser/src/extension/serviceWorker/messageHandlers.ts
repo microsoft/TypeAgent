@@ -167,9 +167,14 @@ export async function handleMessage(
 
             // Notify sidepanel that a macro was added
             if (schemaResult.actionId) {
-                chrome.runtime.sendMessage({ type: "macroAdded", actionId: schemaResult.actionId }).catch(() => {
-                    // Ignore errors if no listeners
-                });
+                chrome.runtime
+                    .sendMessage({
+                        type: "macroAdded",
+                        actionId: schemaResult.actionId,
+                    })
+                    .catch(() => {
+                        // Ignore errors if no listeners
+                    });
             }
 
             return {
@@ -886,9 +891,14 @@ export async function handleMessage(
 
                 // Notify sidepanel that a macro was deleted
                 if (result.success) {
-                    chrome.runtime.sendMessage({ type: "macroDeleted", macroId: message.macroId }).catch(() => {
-                        // Ignore errors if no listeners
-                    });
+                    chrome.runtime
+                        .sendMessage({
+                            type: "macroDeleted",
+                            macroId: message.macroId,
+                        })
+                        .catch(() => {
+                            // Ignore errors if no listeners
+                        });
                 }
 
                 return result;

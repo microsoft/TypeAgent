@@ -22,7 +22,10 @@ export class YAMLMacroManager {
 
     constructor(macrosBasePath: string, sessionStorage?: Storage) {
         this.parser = new YAMLMacroParser();
-        this.artifactsStorage = new ArtifactsStorage(macrosBasePath, sessionStorage);
+        this.artifactsStorage = new ArtifactsStorage(
+            macrosBasePath,
+            sessionStorage,
+        );
         this.converter = new MacroConverter(this.artifactsStorage);
     }
 

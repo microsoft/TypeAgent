@@ -80,7 +80,9 @@ export function createSessionContext<T = unknown>(
                   );
               })
         : () => {
-              throw new Error("Permission denied: cannot force cleanup dynamic agent");
+              throw new Error(
+                  "Permission denied: cannot force cleanup dynamic agent",
+              );
           };
 
     const sessionContext: SessionContext<T> = {

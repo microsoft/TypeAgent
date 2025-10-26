@@ -111,7 +111,8 @@ export class MacroStore {
             const converter = new MacroConverter(artifactsStorage);
             const parser = new YAMLMacroParser();
 
-            const yamlResult = await converter.convertJSONToYAML(sanitizedMacro);
+            const yamlResult =
+                await converter.convertJSONToYAML(sanitizedMacro);
             const yamlString = parser.stringify(yamlResult.yaml);
 
             // Get YAML file path
@@ -159,19 +160,24 @@ export class MacroStore {
             }
 
             // Check file format - support both YAML and JSON for backwards compatibility
-            const isYaml = indexEntry.fileFormat === "yaml" ||
-                          (!indexEntry.fileFormat && indexEntry.filePath?.endsWith('.yaml'));
+            const isYaml =
+                indexEntry.fileFormat === "yaml" ||
+                (!indexEntry.fileFormat &&
+                    indexEntry.filePath?.endsWith(".yaml"));
 
-            const isJson = !indexEntry.fileFormat ||
-                          indexEntry.fileFormat === "json" ||
-                          indexEntry.filePath?.endsWith('.json');
+            const isJson =
+                !indexEntry.fileFormat ||
+                indexEntry.fileFormat === "json" ||
+                indexEntry.filePath?.endsWith(".json");
 
             if (isYaml) {
                 // Load YAML format using minimal parser
                 return await this.getStoredMacroFromMinimal(id);
             } else if (isJson) {
                 // Load legacy JSON format directly
-                const macro = await this.fileManager.readJson<StoredMacro>(indexEntry.filePath);
+                const macro = await this.fileManager.readJson<StoredMacro>(
+                    indexEntry.filePath,
+                );
 
                 if (!macro) {
                     // Macro file missing but in index - remove from index
@@ -182,7 +188,9 @@ export class MacroStore {
 
                 return macro;
             } else {
-                debug(`Macro ${id} has unsupported format (fileFormat: ${indexEntry.fileFormat}, filePath: ${indexEntry.filePath}), skipping`);
+                debug(
+                    `Macro ${id} has unsupported format (fileFormat: ${indexEntry.fileFormat}, filePath: ${indexEntry.filePath}), skipping`,
+                );
                 return null;
             }
         } catch (error) {
@@ -269,7 +277,9 @@ export class MacroStore {
                 throw new Error(`Macro ${id} is not in YAML format`);
             }
 
-            const yamlContent = await this.fileManager.readText(indexEntry.filePath);
+            const yamlContent = await this.fileManager.readText(
+                indexEntry.filePath,
+            );
             if (!yamlContent) return null;
 
             const parser = new MinimalYAMLParser();
@@ -325,11 +335,12 @@ export class MacroStore {
         );
 
         // Generate macroDefinition for schema registration
-        const pascalCaseName = minimal.name.charAt(0).toUpperCase() + minimal.name.slice(1);
+        const pascalCaseName =
+            minimal.name.charAt(0).toUpperCase() + minimal.name.slice(1);
         const macroDefinition = {
             type: pascalCaseName,
             actionName: minimal.name,
-            parameters: parameters.map(p => ({
+            parameters: parameters.map((p) => ({
                 name: p.shortName,
                 type: p.type,
                 description: p.description,
@@ -342,25 +353,23 @@ export class MacroStore {
         let steps: any | undefined;
 
         if (indexEntry.recordingId) {
-            debug(`Loading artifacts for macro ${id} with recordingId: ${indexEntry.recordingId}`);
             try {
                 const artifactsBasePath = "actionsStore/macros";
                 const artifactsStorage = new ArtifactsStorage(
                     artifactsBasePath,
                     this.sessionStorage,
                 );
-                const artifacts = await artifactsStorage.loadArtifacts(indexEntry.recordingId);
+                const artifacts = await artifactsStorage.loadArtifacts(
+                    indexEntry.recordingId,
+                );
                 screenshot = artifacts.screenshot;
                 steps = artifacts.steps;
-                debug(`Loaded artifacts for macro ${id}: ${screenshot?.length || 0} screenshots, ${steps?.length || 0} steps`);
             } catch (error) {
                 debug(`Failed to load artifacts for macro ${id}:`, error);
             }
-        } else {
-            debug(`No recordingId for macro ${id}, skipping artifact loading`);
         }
 
-        const macroSteps = minimal.steps.map(step => ({
+        const macroSteps = minimal.steps.map((step) => ({
             actionName: step.action,
             description: step.description,
             parameters: step.parameters,

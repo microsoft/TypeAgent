@@ -294,7 +294,7 @@ export class FileManager {
     getMacroFilePath(
         macroId: string,
         scope: { type: string; domain?: string },
-        format: 'yaml' | 'json' = 'yaml',
+        format: "yaml" | "json" = "yaml",
     ): string {
         const fileName = `${macroId}.${format}`;
 

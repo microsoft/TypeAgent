@@ -20,11 +20,6 @@ import { SchemaDiscoveryAgent } from "./translator.mjs";
 import { WebPlanResult, WebPlanSuggestions } from "./schema/evaluatePlan.mjs";
 import { BrowserActionContext } from "../browserActions.mjs";
 
-// YAML macro support - for future integration to save authored web plans as macros
-// import { YAMLMacroStoreExtension } from "./yamlMacro/macroStoreExtension.mjs";
-// import { convertParametersToYAML, convertStepsToYAML } from "./yamlMacro/macroHelper.mjs";
-// import { getBrowserControl } from "../browserActions.mjs";
-
 // Context interface for authoring action handler functions
 interface AuthoringActionHandlerContext {
     browser: BrowserConnector;
@@ -98,7 +93,10 @@ async function getNextAuthoringQuestion(
         try {
             screenshot = await ctx.browser.getCurrentPageScreenshot();
         } catch (error) {
-            console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+            console.warn(
+                "Screenshot capture failed, continuing without screenshot:",
+                (error as Error)?.message,
+            );
         }
         const suggestedStepsResponse = await ctx.agent.getWebPlanSuggestedSteps(
             action.parameters.webPlanName!,
@@ -206,7 +204,10 @@ async function getNextPlanRunningQuestion(
             try {
                 screenshot = await ctx.browser.getCurrentPageScreenshot();
             } catch (error) {
-                console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+                console.warn(
+                    "Screenshot capture failed, continuing without screenshot:",
+                    (error as Error)?.message,
+                );
             }
 
             const evaluationResult = await ctx.agent.getWebPlanRunResult(

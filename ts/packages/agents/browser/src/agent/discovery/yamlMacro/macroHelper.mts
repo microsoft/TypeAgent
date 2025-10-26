@@ -32,7 +32,10 @@ export function convertParametersToYAML(
     return yamlParams;
 }
 
-export function convertStepsToYAML(steps: any[], intentParameters?: ParsedParameter[]): YAMLMacroStep[] {
+export function convertStepsToYAML(
+    steps: any[],
+    intentParameters?: ParsedParameter[],
+): YAMLMacroStep[] {
     return steps.map((step, index) => {
         if (!step.actionName || typeof step.actionName !== "string") {
             throw new Error(
@@ -51,13 +54,15 @@ export function convertStepsToYAML(steps: any[], intentParameters?: ParsedParame
             const processedParams: Record<string, any> = {};
 
             for (const [key, value] of Object.entries(step.parameters)) {
-                if (intentParameters &&
-                    (key === 'valueTextParameter' ||
-                     key === 'textParameter' ||
-                     key === 'valueParameter' ||
-                     key === 'itemsParameter')) {
+                if (
+                    intentParameters &&
+                    (key === "valueTextParameter" ||
+                        key === "textParameter" ||
+                        key === "valueParameter" ||
+                        key === "itemsParameter")
+                ) {
                     const matchingParam = intentParameters.find(
-                        p => p.defaultValue === value
+                        (p) => p.defaultValue === value,
                     );
 
                     if (matchingParam) {
@@ -109,7 +114,9 @@ export function convertStepsToYAML(steps: any[], intentParameters?: ParsedParame
     });
 }
 
-export function extractParametersFromIntent(intentData: any): ParsedParameter[] {
+export function extractParametersFromIntent(
+    intentData: any,
+): ParsedParameter[] {
     const parameters: ParsedParameter[] = [];
 
     if (!intentData.parameters) {
@@ -175,10 +182,12 @@ export function extractUsedParameterNames(steps: YAMLMacroStep[]): Set<string> {
 
                 // Also check for direct parameter name references in specific fields
                 // These fields contain parameter names, not values
-                if (key === 'valueTextParameter' ||
-                    key === 'textParameter' ||
-                    key === 'valueParameter' ||
-                    key === 'itemsParameter') {
+                if (
+                    key === "valueTextParameter" ||
+                    key === "textParameter" ||
+                    key === "valueParameter" ||
+                    key === "itemsParameter"
+                ) {
                     usedParams.add(str);
                 }
             }

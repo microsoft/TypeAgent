@@ -38,7 +38,10 @@ export class GrammarStoreImpl implements GrammarStore {
             );
             this.grammars.delete(namespaceKey);
         } catch (error) {
-            console.warn(`Schema ${schemaName} not found, attempting pattern cleanup:`, error);
+            console.warn(
+                `Schema ${schemaName} not found, attempting pattern cleanup:`,
+                error,
+            );
 
             for (const key of Array.from(this.grammars.keys())) {
                 if (key.startsWith(`${schemaName}.`)) {

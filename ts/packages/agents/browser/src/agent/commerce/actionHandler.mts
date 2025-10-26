@@ -422,7 +422,10 @@ async function handleShoppingRequest(
         try {
             screenshot = await ctx.browser.getCurrentPageScreenshot();
         } catch (error) {
-            console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+            console.warn(
+                "Screenshot capture failed, continuing without screenshot:",
+                (error as Error)?.message,
+            );
         }
         const currentStateRequest = await ctx.agent.getPageState(
             undefined,

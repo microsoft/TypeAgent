@@ -27,10 +27,7 @@ export class MacroConverter {
     ): Promise<StoredMacro> {
         const { macro, metadata } = yamlMacro;
 
-        const intentSchema = generateIntentSchema(
-            macro.name,
-            macro.parameters,
-        );
+        const intentSchema = generateIntentSchema(macro.name, macro.parameters);
 
         const intentJson = generateIntentJson(macro.name, macro.parameters);
 
@@ -80,7 +77,11 @@ export class MacroConverter {
                   }
                 : undefined;
 
-        const scopeType = macro.scope.type as "global" | "domain" | "pattern" | "page";
+        const scopeType = macro.scope.type as
+            | "global"
+            | "domain"
+            | "pattern"
+            | "page";
 
         return {
             id: macroId,
@@ -98,7 +99,10 @@ export class MacroConverter {
             urlPatterns:
                 macro.urlPatterns?.map((pattern) => ({
                     pattern: pattern.pattern,
-                    type: pattern.type === "prefix" ? "glob" : pattern.type as "exact" | "glob" | "regex",
+                    type:
+                        pattern.type === "prefix"
+                            ? "glob"
+                            : (pattern.type as "exact" | "glob" | "regex"),
                     priority: pattern.priority || 100,
                     description: `${pattern.type === "exact" ? "Exact match for" : pattern.type === "prefix" ? "Prefix match for" : "Regex match for"} ${pattern.pattern}`,
                 })) || [],
@@ -126,7 +130,10 @@ export class MacroConverter {
     async convertJSONToYAML(
         jsonMacro: StoredMacro,
     ): Promise<{ yaml: YAMLMacro; recordingId?: string }> {
-        debug(`[YAML_DEBUG] convertJSONToYAML input for ${jsonMacro.name}:`, JSON.stringify(jsonMacro, null, 2));
+        debug(
+            `[YAML_DEBUG] convertJSONToYAML input for ${jsonMacro.name}:`,
+            JSON.stringify(jsonMacro, null, 2),
+        );
 
         const { definition, metadata } = jsonMacro;
 
@@ -161,7 +168,10 @@ export class MacroConverter {
             }
         }
 
-        debug(`[YAML_DEBUG] Extracted parameters for ${jsonMacro.name}:`, JSON.stringify(parameters, null, 2));
+        debug(
+            `[YAML_DEBUG] Extracted parameters for ${jsonMacro.name}:`,
+            JSON.stringify(parameters, null, 2),
+        );
 
         const definitionAny = definition as any;
         const steps: YAMLMacroStep[] =
@@ -170,7 +180,10 @@ export class MacroConverter {
             definition.steps ||
             [];
 
-        debug(`[YAML_DEBUG] Extracted steps for ${jsonMacro.name}:`, JSON.stringify(steps, null, 2));
+        debug(
+            `[YAML_DEBUG] Extracted steps for ${jsonMacro.name}:`,
+            JSON.stringify(steps, null, 2),
+        );
 
         let recordingId: string | undefined;
         if (
@@ -219,7 +232,10 @@ export class MacroConverter {
             },
         };
 
-        debug(`[YAML_DEBUG] Final YAML output for ${jsonMacro.name}:`, JSON.stringify(yamlMacro, null, 2));
+        debug(
+            `[YAML_DEBUG] Final YAML output for ${jsonMacro.name}:`,
+            JSON.stringify(yamlMacro, null, 2),
+        );
 
         return { yaml: yamlMacro, ...(recordingId && { recordingId }) };
     }

@@ -40,7 +40,10 @@ export function setupAuthoringActions(
             try {
                 screenshot = await browser.getCurrentPageScreenshot();
             } catch (error) {
-                console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+                console.warn(
+                    "Screenshot capture failed, continuing without screenshot:",
+                    (error as Error)?.message,
+                );
                 screenshot = "";
             }
         }
@@ -77,7 +80,10 @@ export function setupAuthoringActions(
         try {
             screenshot = await browser.getCurrentPageScreenshot();
         } catch (error) {
-            console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+            console.warn(
+                "Screenshot capture failed, continuing without screenshot:",
+                (error as Error)?.message,
+            );
         }
         let recordedSteps = "";
         const descriptionResponse = await agent.getDetailedStepsFromDescription(
@@ -151,7 +157,10 @@ export function setupAuthoringActions(
             try {
                 screenshot = await browser.getCurrentPageScreenshot();
             } catch (error) {
-                console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+                console.warn(
+                    "Screenshot capture failed, continuing without screenshot:",
+                    (error as Error)?.message,
+                );
             }
             await trackState(`__step_${index}`, "", "action", screenshot);
             let operationMessage = "";
@@ -278,7 +287,10 @@ export function setupAuthoringActions(
         try {
             screenshot = await browser.getCurrentPageScreenshot();
         } catch (error) {
-            console.warn("Screenshot capture failed, continuing without screenshot:", (error as Error)?.message);
+            console.warn(
+                "Screenshot capture failed, continuing without screenshot:",
+                (error as Error)?.message,
+            );
         }
         await trackState("Completed", "", "end", screenshot);
     }

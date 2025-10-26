@@ -404,20 +404,29 @@ export class AppAgentManager implements ActionConfigProvider {
             try {
                 this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
             } catch (error) {
-                console.warn(`Failed to unload schema file ${schemaName}:`, error);
+                console.warn(
+                    `Failed to unload schema file ${schemaName}:`,
+                    error,
+                );
             }
 
             try {
                 this.actionSemanticMap?.removeActionSchemaFile(schemaName);
             } catch (error) {
-                console.warn(`Failed to remove from semantic map ${schemaName}:`, error);
+                console.warn(
+                    `Failed to remove from semantic map ${schemaName}:`,
+                    error,
+                );
             }
 
             if (grammarStore) {
                 try {
                     grammarStore.removeGrammar(schemaName);
                 } catch (error) {
-                    console.warn(`Failed to remove grammar ${schemaName}:`, error);
+                    console.warn(
+                        `Failed to remove grammar ${schemaName}:`,
+                        error,
+                    );
                 }
             }
 
@@ -437,22 +446,29 @@ export class AppAgentManager implements ActionConfigProvider {
     ): Promise<void> {
         console.warn(`Force cleanup for agent: ${appAgentName}`);
 
-        const schemas = Array.from(this.actionConfigs.keys())
-            .filter(name => getAppAgentName(name) === appAgentName);
+        const schemas = Array.from(this.actionConfigs.keys()).filter(
+            (name) => getAppAgentName(name) === appAgentName,
+        );
 
         for (const schemaName of schemas) {
             try {
                 this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
-            } catch (e) { console.warn(`Force cleanup schema file failed:`, e); }
+            } catch (e) {
+                console.warn(`Force cleanup schema file failed:`, e);
+            }
 
             try {
                 this.actionSemanticMap?.removeActionSchemaFile(schemaName);
-            } catch (e) { console.warn(`Force cleanup semantic map failed:`, e); }
+            } catch (e) {
+                console.warn(`Force cleanup semantic map failed:`, e);
+            }
 
             if (grammarStore) {
                 try {
                     grammarStore.removeGrammar(schemaName);
-                } catch (e) { console.warn(`Force cleanup grammar failed:`, e); }
+                } catch (e) {
+                    console.warn(`Force cleanup grammar failed:`, e);
+                }
             }
 
             try {
@@ -460,16 +476,22 @@ export class AppAgentManager implements ActionConfigProvider {
                 if (config?.transient) {
                     delete this.transientAgents[schemaName];
                 }
-            } catch (e) { console.warn(`Force cleanup transient failed:`, e); }
+            } catch (e) {
+                console.warn(`Force cleanup transient failed:`, e);
+            }
 
             try {
                 this.actionConfigs.delete(schemaName);
-            } catch (e) { console.warn(`Force cleanup config failed:`, e); }
+            } catch (e) {
+                console.warn(`Force cleanup config failed:`, e);
+            }
         }
 
         try {
             this.agents.delete(appAgentName);
-        } catch (e) { console.warn(`Force cleanup agent record failed:`, e); }
+        } catch (e) {
+            console.warn(`Force cleanup agent record failed:`, e);
+        }
 
         console.warn(`Force cleanup complete for: ${appAgentName}`);
     }
