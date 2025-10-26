@@ -3,7 +3,7 @@
 
 export type SettingsAction = DimBrightNessAction;
 
-// An actio to dim or brighten the screen
+// An action to dim or brighten the screen
 export interface DimBrightNessAction {
     actionName: "dimBrightNessAction";
     parameters: {

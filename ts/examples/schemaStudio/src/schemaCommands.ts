@@ -6,14 +6,14 @@ import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { CreateSchemaAction } from "./settingsSchemaSchema.js";
 import { PromptSection, Result } from "typechat";
 
-export function createSettingsSchemaCommands(studio: SchemaStudio): CommandHandler {
+export function createSettingsSchemaCommand(studio: SchemaStudio): CommandHandler {
     const argDef: CommandMetadata = {
         description: "Generates schemas for settings commands",
         options: {
             file: {
-                description: "The input CSV file that contains the commands to schematize",
+                description: "The input TSV file that contains the commands to schematize",
                 type: "string",
-                defaultValue: "examples/schemaStudio/data/settingsCommands.csv"
+                defaultValue: "examples/schemaStudio/data/settingsCommands.txt"
             },
             output: {
                 description: "The output schema file to write the generated schemas to",
@@ -41,24 +41,25 @@ export function createSettingsSchemaCommands(studio: SchemaStudio): CommandHandl
             unlinkSync(namedArgs.output);
         }
 
+        let union = "export type SettingsAction =\n";
         for (const actionLine of settingsActions) {
-            const [actionName, testUtterance, description] = actionLine.split(",");
+            const [actionName, testUtterance, description, id] = actionLine.split("\t");
 
-            io.writer.writeLine(`Generating schema for action: ${actionName}, description: ${description}`);
+            io.writer.writeLine(`Generating schema for action: ${actionName}, description: ${description}, id: ${id}.`);
             io.writer.writeLine(`\ttestUtterance: '${testUtterance}'`);
 
-            const response = await getTypeChatResponse(actionName, testUtterance, description);
+            const response = await getTypeChatResponse(actionName, testUtterance, description, id);
             if (response.success) {
                 appendFileSync(namedArgs.output, `\n${response.data.parameters.schema}\n`);
+                union += `    | ${actionName}\n`;
             } else {
                 io.writer.writeLine(`Error generating schema for action ${actionName}: ${response.message}`);
             }
         };
 
+        appendFileSync(namedArgs.output, `\n${union};\n`);
 
-        // TODO: call LLM and generate schemas
         io.writer.writeLine("TODO: Generating settings command schemas..." + JSON.stringify(namedArgs));
-        // TODO: flush schemas to output schema file
 
         return `Settings schema generation completed in ${Date.now() - runStarted} ms`;  
     }
@@ -68,15 +69,18 @@ export function createSettingsSchemaCommands(studio: SchemaStudio): CommandHandl
 }
 
 const instructions: string = `
-You generate TypeScript schemas that define user intent into typed objects.  
-For example for a "music player agent" there is an action to play a track.  
-The schema for that action looks like:
+You generate TypeScript schemas for actions that are defined from XML fragments. 
+Each fragment defines an action that define user intent.  
 
-\`\`\`
+
+For example for a "play track action":
+
+\`\`\`TypeScript
 // Play a specific track
 export interface PlayTrackAction {
     actionName: "playTrack";
-    parameters: {
+    id: "play_track";
+    parameters: {        
         originalUserRequest: string;
         trackName: string;
         albumName?: string;
@@ -85,7 +89,19 @@ export interface PlayTrackAction {
 }
 \`\`\`
 
-Given the given action description, sample user expression, and action name; generate the schema.
+The source XML data for PlayTrackAction is:
+
+\`\`\`xml
+<action id="play_track" name="PlayTrackAction">
+    <desc>Play a specific track</desc>
+    <sample>play purple rain by prince</sample>
+</action>
+\`\`\`
+
+- Given the given action id, description, sample user expression, and name; generate the schema. 
+- DO NOT MODIFY the ID, use it as is otherwise you'll break something.
+- Only use the sample user expression to help determine what parameters are needed. Do NOT include the sample in the schema.
+- Annotate each interface with the description as a prefix comment. USE SINGLE line comments (i.e. //) ONLY.
 `;
 
 
@@ -93,6 +109,7 @@ Given the given action description, sample user expression, and action name; gen
     actionName: string,
     testUtterance: string,
     description: string,
+    id: string,
     ): Promise<Result<CreateSchemaAction>> {
         // Create Model instance
         let chatModel = createModel();
@@ -115,9 +132,10 @@ Given the given action description, sample user expression, and action name; gen
 
         // make the request
         const chatResponse = await chat.translate(`
-            actionName: ${actionName}
-            description: ${description}
-            testUtterance: ${testUtterance}
+            <action id="${id}" name="${actionName}">
+                <desc>${description.replaceAll("\"", "'")}</desc>
+                <sample>${testUtterance}</sample>
+            </action>
             `);
 
         return chatResponse;
@@ -144,4 +162,4 @@ Given the given action description, sample user expression, and action name; gen
         );
 
         return chatModel;
-    }
+    }   
