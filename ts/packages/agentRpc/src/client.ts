@@ -257,6 +257,14 @@ export async function createAgentRpcClient(
             await context.removeDynamicAgent(param.name);
             channelProvider.deleteChannel(`agent:${param.name}`);
         },
+        forceCleanupDynamicAgent: async (param: {
+            contextId: number;
+            name: string;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            await context.forceCleanupDynamicAgent(param.name);
+            channelProvider.deleteChannel(`agent:${param.name}`);
+        },
         getSharedLocalHostPort: async (param: {
             contextId: number;
             agentName: string;

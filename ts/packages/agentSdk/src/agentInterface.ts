@@ -189,6 +189,8 @@ export interface SessionContext<T = unknown> {
 
     removeDynamicAgent(agentName: string): Promise<void>;
 
+    forceCleanupDynamicAgent(agentName: string): Promise<void>;
+
     // Experimental: get the shared local host port
     getSharedLocalHostPort(agentName: string): Promise<number>;
 
