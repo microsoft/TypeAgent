@@ -9,8 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="dateTimeSchema.ts" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\aiclient\aiclient.csproj" />
     <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\typechat.schema\TypeChat.Schema.csproj" />
+    <ProjectReference Include="..\typechat\TypeChat.csproj" />
   </ItemGroup>
 
 </Project>
