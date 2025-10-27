@@ -6,7 +6,9 @@ namespace TypeAgent.Vector;
 /// <summary>
 /// A lightweight struct that wraps a Normalized (unit length) embedding vector
 /// </summary>
-public readonly struct NormalizedEmbedding
+public readonly struct NormalizedEmbedding :
+    ICosineSimilarity<NormalizedEmbedding>,
+    ICosineSimilarity<NormalizedEmbeddingB>
 {
     /// <summary>
     /// Embedding using the given vector. Normalizes the vector before storing it
@@ -36,17 +38,18 @@ public readonly struct NormalizedEmbedding
     /// <returns>cosine similarity</returns>
     public double CosineSimilarity(NormalizedEmbedding other)
     {
-        // Since the embedding is normalized already
+        // Since the embedding is normalized already (unit vector)... 
         return TensorPrimitives.Dot(this, other);
     }
 
     /// <summary>
-    /// The Dot Product of this vector with the other embedding
+    /// Compute the cosine similarity between this and other
     /// </summary>
     /// <param name="other">other embedding</param>
-    /// <returns>dot product</returns>
-    public double DotProduct(NormalizedEmbedding other)
+    /// <returns>cosine similarity</returns>
+    public double CosineSimilarity(NormalizedEmbeddingB other)
     {
+        // Since the embedding is normalized already (unit vector)... 
         return TensorPrimitives.Dot(this, other);
     }
 

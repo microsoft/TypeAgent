@@ -35,11 +35,22 @@ internal static class SqliteEx
         }
     }
 
-    public static IList<T> GetList<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
+    public static List<T> GetList<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
     {
-        IList<T> list = [];
+        List<T> list = [];
         while (reader.Read())
         {
+            list.Add(cb(reader));
+        }
+        return list;
+    }
+
+    public static List<T>? GetListOrNull<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
+    {
+        List<T>? list = null;
+        while (reader.Read())
+        {
+            list ??= [];
             list.Add(cb(reader));
         }
         return list;

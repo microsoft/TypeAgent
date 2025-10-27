@@ -226,7 +226,7 @@ ORDER BY semref_id");
         cmd.AddParameter("@end_id", endOrdinal);
 
         using var reader = cmd.ExecuteReader();
-        var semanticRefList = reader.GetList(ReadSemanticRef);
+        IList<SemanticRef> semanticRefList = reader.GetList(ReadSemanticRef);
         return ValueTask.FromResult(semanticRefList);
     }
 

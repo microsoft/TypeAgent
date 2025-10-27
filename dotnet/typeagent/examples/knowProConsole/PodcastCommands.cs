@@ -162,9 +162,7 @@ public class PodcastCommands : ICommandModule
     )
     {
         return new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
-            new ConversationSettings(
-                new TextEmbeddingModel(AzureModelApiSettings.EmbeddingSettingsFromEnv())
-            ),
+            new ConversationSettings(),
             _kpContext.DotnetPath,
             name,
             createNew

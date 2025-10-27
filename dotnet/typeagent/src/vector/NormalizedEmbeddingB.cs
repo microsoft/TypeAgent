@@ -6,7 +6,9 @@ namespace TypeAgent.Vector;
 /// <summary>
 /// A Normalized Embedding that can use a byte[] as a backing store
 /// </summary>
-public readonly struct NormalizedEmbeddingB
+public readonly struct NormalizedEmbeddingB :
+    ICosineSimilarity<NormalizedEmbedding>,
+    ICosineSimilarity<NormalizedEmbeddingB>
 {
     public NormalizedEmbeddingB(byte[] vector)
     {
@@ -46,26 +48,6 @@ public readonly struct NormalizedEmbeddingB
     public double CosineSimilarity(NormalizedEmbedding other)
     {
         // Since the embedding is normalized already
-        return TensorPrimitives.Dot(this, other);
-    }
-
-    /// <summary>
-    /// The Dot Product of this vector with the other embedding
-    /// </summary>
-    /// <param name="other">other embedding</param>
-    /// <returns>dot product</returns>
-    public double DotProduct(NormalizedEmbeddingB other)
-    {
-        return TensorPrimitives.Dot(this, other);
-    }
-
-    /// <summary>
-    /// The Dot Product of this vector with the other embedding
-    /// </summary>
-    /// <param name="other">other embedding</param>
-    /// <returns>dot product</returns>
-    public double DotProduct(NormalizedEmbedding other)
-    {
         return TensorPrimitives.Dot(this, other);
     }
 

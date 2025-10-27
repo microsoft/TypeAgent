@@ -5,15 +5,16 @@ namespace TypeAgent.KnowPro;
 
 public interface ITermsToRelatedTerms
 {
-    Task<int> GetCountAsync();
+    ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Term>?> LookupTermAsync(string text);
+    ValueTask<IList<string>> GetTermsAsync(CancellationToken cancellationToken = default);
 
-    Task AddRelatedTermAsync(string text, Term relatedTerm);
+    ValueTask AddTermAsync(string text, Term relatedTerm, CancellationToken cancellationToken = default);
 
-    Task AddRelatedTermAsync(string text, IReadOnlyList<Term> relatedTerms);
+    // TODO: consider IReadOnlyList
+    ValueTask AddTermAsync(string text, IList<Term> relatedTerms, CancellationToken cancellationToken = default);
 
-    Task RemoveTermAsync(string text);
+    ValueTask<IList<Term>?> LookupTermAsync(string text, CancellationToken cancellationToken = default);
 
     ValueTask ClearAsync(CancellationToken cancellationToken = default);
 }

@@ -246,6 +246,7 @@ dotnet_diagnostic.IDE0058.severity = none # Remove unused expression value
 dotnet_diagnostic.IDE0059.severity = none # Unnecessary assignment of a value
 dotnet_diagnostic.IDE0060.severity = none # Remove unused parameter
 dotnet_diagnostic.IDE0061.severity = none # Use expression body for local functions
+dotnet_diagnostic.IDE0072.severity = none
 dotnet_diagnostic.IDE0078.severity = none # Use pattern matching
 dotnet_diagnostic.IDE0080.severity = none # Remove unnecessary suppression operator
 dotnet_diagnostic.IDE0090.severity = none # Simplify new expression

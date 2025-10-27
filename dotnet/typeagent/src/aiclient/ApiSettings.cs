@@ -32,11 +32,5 @@ public class ApiSettings
 
     public virtual void Configure(HttpClient client)
     {
-        ArgumentVerify.ThrowIfNull(client, nameof(client));
-
-        if (ApiTokenProvider is null)
-        {
-            client.DefaultRequestHeaders.Add("api-key", ApiKey);
-        }
     }
 }

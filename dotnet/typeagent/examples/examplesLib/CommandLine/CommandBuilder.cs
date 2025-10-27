@@ -7,7 +7,7 @@ public static class Options
 {
     public const string ArgPrefix = "--";
 
-    public static Option<T> Create<T>(string name, string description)
+    public static Option<T> Create<T>(string name, string? description)
     {
         var option = new Option<T>(ArgPrefix + name);
         if (!string.IsNullOrEmpty(description))
@@ -17,9 +17,9 @@ public static class Options
         return option;
     }
 
-    public static Option<T> Arg<T>(string name, string description) => Arg<T>(name, description, default!);
+    public static Option<T> Arg<T>(string name, string? description = null) => Arg<T>(name, description, default!);
 
-    public static Option<T> Arg<T>(string name, string description, T defaultValue)
+    public static Option<T> Arg<T>(string name, string? description, T defaultValue)
     {
         var option = Create<T>(name, description);
         option.DefaultValueFactory = (_) => (T)defaultValue;

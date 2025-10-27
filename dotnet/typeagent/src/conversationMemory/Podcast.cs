@@ -10,9 +10,4 @@ public class Podcast : Memory<PodcastMessage>
     {
 
     }
-
-    public static Podcast? ReadFromFile()
-    {
-        return null;
-    }
 }

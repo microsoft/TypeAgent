@@ -11,10 +11,6 @@ public interface ITermToSemanticRefIndex
 
     ValueTask<string> AddTermAsync(string term, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
 
-    ValueTask RemoveTermAsync(string term, int semanticRefOrdinal, CancellationToken cancellationToken = default);
-
-    ValueTask ClearAsync(CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Looks up a term and retrieves its associated scored semantic reference ordinals.
     /// </summary>
@@ -25,6 +21,8 @@ public interface ITermToSemanticRefIndex
     /// If term not found: null
     /// </returns>
     ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(string term, CancellationToken cancellationToken = default);
+
+    ValueTask ClearAsync(CancellationToken cancellationToken = default);
 }
 
 public static class TermToSemanticRefIndexExtensions
