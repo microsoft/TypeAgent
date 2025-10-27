@@ -488,6 +488,28 @@ export async function handleMessage(
             }
         }
 
+        case "discoverRelatedKnowledge": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "discoverRelatedKnowledge",
+                    parameters: {
+                        entities: message.entities || [],
+                        topics: message.topics || [],
+                        depth: message.depth || 2,
+                        maxEntities: message.maxEntities || 10,
+                        maxTopics: message.maxTopics || 10,
+                    },
+                });
+            } catch (error) {
+                console.error("Error discovering related knowledge:", error);
+                return {
+                    relatedEntities: [],
+                    relatedTopics: [],
+                    success: false,
+                };
+            }
+        }
+
         case "generateGraphQuestions": {
             try {
                 return await sendActionToAgent({

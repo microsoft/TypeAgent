@@ -42,6 +42,7 @@ import {
     getTopicMetrics,
     getUrlContentBreakdown,
     getTopicTimelines,
+    discoverRelatedKnowledge,
 } from "./graphActions.mjs";
 import {
     checkAIModelStatus,
@@ -145,7 +146,8 @@ export async function handleKnowledgeAction(
                 parameters.url,
                 context,
             );
-
+        case "discoverRelatedKnowledge":
+            return await discoverRelatedKnowledge(parameters, context);
         // Search Actions (kept in searchWebMemories)
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);
