@@ -20,6 +20,7 @@ global using TypeAgent.KnowPro;
 global using TypeAgent.KnowPro.Storage.Local;
 global using TypeAgent.KnowPro.Storage.Sqlite;
 global using TypeAgent.ConversationMemory;
+global using TypeAgent.Vector;
 
 global using TypeAgent.KnowProTest;
 
