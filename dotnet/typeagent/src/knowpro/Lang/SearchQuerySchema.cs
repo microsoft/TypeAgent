@@ -73,7 +73,7 @@ public class ActionTerm
     // The origin of the action or information, typically the entity performing the action
     [Comment("The origin of the action or information, typically the entity performing the action")]
     [JsonPropertyName("actorEntities")]
-    public ActorEntitiesUnion ActorEntities { get; set; } = new();
+    public ActorEntities ActorEntities { get; set; } = new();
 
     // the recipient or target of the action or information
     // Action verbs can imply relevant facet names on the targetEntity. E.g. write -> writer, sing -> singer etc.
@@ -140,7 +140,7 @@ public class SearchQuery
 }
 
 // Handles actorEntities: EntityTerm[] | "*"
-public class ActorEntitiesUnion
+public class ActorEntities
 {
     public List<EntityTerm>? Entities { get; set; }
     public bool IsWildcard { get; set; }

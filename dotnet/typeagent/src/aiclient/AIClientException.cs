@@ -8,7 +8,9 @@ public class AIClientException : TypeAgentException<AIClientException.ErrorCode>
     public enum ErrorCode
     {
         MissingApiSetting,
-        InvalidEmbeddingResponse
+        InvalidApiSetting,
+        InvalidEmbeddingResponse,
+        InvalidChatResponse
     }
 
     public AIClientException(ErrorCode error, string? message = null)
