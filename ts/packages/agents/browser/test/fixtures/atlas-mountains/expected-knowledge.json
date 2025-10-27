@@ -1,0 +1,177 @@
+{
+  "entities": [
+    {
+      "name": "Atlas Mountains",
+      "type": "mountain_range",
+      "confidence": 0.95,
+      "description": "Mountain range in North Africa"
+    },
+    {
+      "name": "Mount Toubkal",
+      "type": "mountain",
+      "confidence": 0.92,
+      "description": "Highest peak at 4,167 meters"
+    },
+    {
+      "name": "Morocco",
+      "type": "country",
+      "confidence": 0.98,
+      "description": "North African country"
+    },
+    {
+      "name": "Algeria",
+      "type": "country",
+      "confidence": 0.97,
+      "description": "North African country"
+    },
+    {
+      "name": "Tunisia",
+      "type": "country",
+      "confidence": 0.96,
+      "description": "North African country"
+    },
+    {
+      "name": "Sahara Desert",
+      "type": "desert",
+      "confidence": 0.93,
+      "description": "Major desert in Africa"
+    },
+    {
+      "name": "Mediterranean Sea",
+      "type": "sea",
+      "confidence": 0.91,
+      "description": "Sea bordering North Africa"
+    },
+    {
+      "name": "Berber",
+      "type": "people",
+      "confidence": 0.88,
+      "description": "Indigenous people of North Africa"
+    },
+    {
+      "name": "Barbary macaque",
+      "type": "animal",
+      "confidence": 0.85,
+      "description": "Endangered primate species"
+    },
+    {
+      "name": "Pyrenees",
+      "type": "mountain_range",
+      "confidence": 0.82,
+      "description": "Mountain range between France and Spain"
+    },
+    {
+      "name": "Alps",
+      "type": "mountain_range",
+      "confidence": 0.80,
+      "description": "Mountain range in central Europe"
+    },
+    {
+      "name": "Himalayas",
+      "type": "mountain_range",
+      "confidence": 0.78,
+      "description": "Mountain range in Asia"
+    }
+  ],
+  "keyTopics": [
+    "Geography",
+    "Geology",
+    "Climate",
+    "Flora and Fauna",
+    "Indigenous People",
+    "Tourism",
+    "Mountain Formation",
+    "North Africa"
+  ],
+  "relationships": [
+    {
+      "from": "Atlas Mountains",
+      "relationship": "located_in",
+      "to": "Morocco",
+      "confidence": 0.95
+    },
+    {
+      "from": "Atlas Mountains",
+      "relationship": "located_in",
+      "to": "Algeria",
+      "confidence": 0.94
+    },
+    {
+      "from": "Atlas Mountains",
+      "relationship": "located_in",
+      "to": "Tunisia",
+      "confidence": 0.93
+    },
+    {
+      "from": "Mount Toubkal",
+      "relationship": "highest_peak_of",
+      "to": "Atlas Mountains",
+      "confidence": 0.96
+    },
+    {
+      "from": "Mount Toubkal",
+      "relationship": "located_in",
+      "to": "Morocco",
+      "confidence": 0.94
+    },
+    {
+      "from": "Atlas Mountains",
+      "relationship": "separates",
+      "to": "Sahara Desert",
+      "confidence": 0.90
+    },
+    {
+      "from": "Atlas Mountains",
+      "relationship": "separates",
+      "to": "Mediterranean Sea",
+      "confidence": 0.89
+    },
+    {
+      "from": "Berber",
+      "relationship": "inhabits",
+      "to": "Atlas Mountains",
+      "confidence": 0.87
+    },
+    {
+      "from": "Berber",
+      "relationship": "indigenous_to",
+      "to": "Morocco",
+      "confidence": 0.86
+    },
+    {
+      "from": "Barbary macaque",
+      "relationship": "native_to",
+      "to": "Atlas Mountains",
+      "confidence": 0.84
+    },
+    {
+      "from": "Atlas Mountains",
+      "relationship": "similar_formation",
+      "to": "Pyrenees",
+      "confidence": 0.75
+    },
+    {
+      "from": "Atlas Mountains",
+      "relationship": "similar_formation",
+      "to": "Alps",
+      "confidence": 0.73
+    },
+    {
+      "from": "Pyrenees",
+      "relationship": "formed_during",
+      "to": "Alpine orogeny",
+      "confidence": 0.85
+    },
+    {
+      "from": "Atlas Mountains",
+      "relationship": "formed_during",
+      "to": "Alpine orogeny",
+      "confidence": 0.86
+    }
+  ],
+  "summary": "The Atlas Mountains are a major mountain range in North Africa, stretching through Morocco, Algeria, and Tunisia. Mount Toubkal, at 4,167 meters, is the highest peak. The range separates the Sahara Desert from the Mediterranean Sea and was formed during the Alpine orogeny. The mountains are home to diverse flora and fauna, including the endangered Barbary macaque, and have been inhabited by Berber people for thousands of years.",
+  "contentMetrics": {
+    "wordCount": 750,
+    "readingTime": 4
+  }
+}

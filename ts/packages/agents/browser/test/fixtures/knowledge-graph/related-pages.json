@@ -1,0 +1,281 @@
+{
+  "pages": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Morocco",
+      "title": "Morocco - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "Morocco is a North African country with a rich history and diverse geography. The Atlas Mountains dominate much of the country's interior, with Mount Toubkal being the highest peak in North Africa. The country is home to the indigenous Berber people and has a Mediterranean coastline to the north.",
+      "entities": [
+        {
+          "name": "Morocco",
+          "type": "country",
+          "confidence": 0.98
+        },
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range",
+          "confidence": 0.92
+        },
+        {
+          "name": "Mount Toubkal",
+          "type": "mountain",
+          "confidence": 0.90
+        },
+        {
+          "name": "Berber",
+          "type": "people",
+          "confidence": 0.88
+        },
+        {
+          "name": "Mediterranean Sea",
+          "type": "sea",
+          "confidence": 0.85
+        }
+      ],
+      "topics": ["Geography", "North Africa", "Indigenous People", "Tourism"],
+      "wordCount": 1200,
+      "relevanceToAtlas": 0.95
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Pyrenees",
+      "title": "Pyrenees - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "The Pyrenees are a mountain range forming a natural border between France and Spain. The highest peak is Aneto at 3,404 meters. Like the Atlas Mountains, the Pyrenees were formed during the Alpine orogeny, the result of tectonic collision between the African and Eurasian plates. The range is known for its biodiversity and is a popular destination for hiking and skiing.",
+      "entities": [
+        {
+          "name": "Pyrenees",
+          "type": "mountain_range",
+          "confidence": 0.93
+        },
+        {
+          "name": "Aneto",
+          "type": "mountain",
+          "confidence": 0.88
+        },
+        {
+          "name": "France",
+          "type": "country",
+          "confidence": 0.95
+        },
+        {
+          "name": "Spain",
+          "type": "country",
+          "confidence": 0.94
+        },
+        {
+          "name": "Alps",
+          "type": "mountain_range",
+          "confidence": 0.82
+        },
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range",
+          "confidence": 0.80
+        }
+      ],
+      "topics": ["Geography", "Geology", "Mountain Formation"],
+      "wordCount": 980,
+      "relevanceToAtlas": 0.82
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Alps",
+      "title": "Alps - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "The Alps are the highest and most extensive mountain range system in Europe, stretching across eight countries. Mont Blanc is the highest peak at 4,809 meters. The Alps were formed during the Alpine orogeny, the same tectonic event that created the Pyrenees and Atlas Mountains, caused by the collision of the African and Eurasian plates.",
+      "entities": [
+        {
+          "name": "Alps",
+          "type": "mountain_range",
+          "confidence": 0.94
+        },
+        {
+          "name": "Mont Blanc",
+          "type": "mountain",
+          "confidence": 0.91
+        },
+        {
+          "name": "Pyrenees",
+          "type": "mountain_range",
+          "confidence": 0.85
+        },
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range",
+          "confidence": 0.78
+        }
+      ],
+      "topics": ["Geography", "Geology", "Mountain Formation"],
+      "wordCount": 1450,
+      "relevanceToAtlas": 0.78
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Algeria",
+      "title": "Algeria - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "Algeria is the largest country in Africa by area, located in North Africa. The Saharan Atlas range runs through northern Algeria, forming part of the Atlas Mountains system. The country is home to significant Berber populations and much of its territory is covered by the Sahara Desert.",
+      "entities": [
+        {
+          "name": "Algeria",
+          "type": "country",
+          "confidence": 0.97
+        },
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range",
+          "confidence": 0.89
+        },
+        {
+          "name": "Sahara Desert",
+          "type": "desert",
+          "confidence": 0.91
+        },
+        {
+          "name": "Berber",
+          "type": "people",
+          "confidence": 0.86
+        }
+      ],
+      "topics": ["Geography", "North Africa", "Indigenous People"],
+      "wordCount": 1100,
+      "relevanceToAtlas": 0.88
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tunisia",
+      "title": "Tunisia - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "Tunisia is the northernmost country in Africa, located on the Mediterranean coast. The Tell Atlas range extends into Tunisia as part of the greater Atlas Mountains system. Tunisia has a Mediterranean climate in the north and more arid conditions in the south.",
+      "entities": [
+        {
+          "name": "Tunisia",
+          "type": "country",
+          "confidence": 0.96
+        },
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range",
+          "confidence": 0.85
+        },
+        {
+          "name": "Mediterranean Sea",
+          "type": "sea",
+          "confidence": 0.88
+        }
+      ],
+      "topics": ["Geography", "North Africa"],
+      "wordCount": 890,
+      "relevanceToAtlas": 0.84
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Berber_people",
+      "title": "Berber people - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "The Berber people (also known as Amazigh) are the indigenous inhabitants of North Africa, with populations across Morocco, Algeria, Tunisia, Libya, and other countries. They have inhabited the Atlas Mountains for thousands of years and established several powerful dynasties throughout history. Berber culture is characterized by unique languages, traditions, and architectural styles adapted to mountain life.",
+      "entities": [
+        {
+          "name": "Berber",
+          "type": "people",
+          "confidence": 0.96
+        },
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range",
+          "confidence": 0.87
+        },
+        {
+          "name": "Morocco",
+          "type": "country",
+          "confidence": 0.89
+        },
+        {
+          "name": "Algeria",
+          "type": "country",
+          "confidence": 0.88
+        },
+        {
+          "name": "Tunisia",
+          "type": "country",
+          "confidence": 0.86
+        }
+      ],
+      "topics": ["Indigenous People", "North Africa", "Historical Significance"],
+      "wordCount": 1350,
+      "relevanceToAtlas": 0.87
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Barbary_macaque",
+      "title": "Barbary macaque - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "The Barbary macaque is an endangered Old World monkey that is native to the Atlas Mountains of Algeria and Morocco. It is the only primate species native to North Africa outside of humans and the only macaque found outside of Asia. The species faces threats from habitat loss and fragmentation.",
+      "entities": [
+        {
+          "name": "Barbary macaque",
+          "type": "animal",
+          "confidence": 0.94
+        },
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range",
+          "confidence": 0.88
+        },
+        {
+          "name": "Morocco",
+          "type": "country",
+          "confidence": 0.86
+        },
+        {
+          "name": "Algeria",
+          "type": "country",
+          "confidence": 0.84
+        }
+      ],
+      "topics": ["Flora and Fauna", "Geography"],
+      "wordCount": 720,
+      "relevanceToAtlas": 0.85
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Himalayas",
+      "title": "Himalayas - Wikipedia",
+      "domain": "en.wikipedia.org",
+      "indexed": true,
+      "summary": "The Himalayas are a mountain range in Asia, separating the Indian subcontinent from the Tibetan Plateau. They are the highest mountains on Earth, with Mount Everest reaching 8,849 meters. Unlike the Atlas Mountains which formed from the African-Eurasian collision, the Himalayas were formed by the collision of the Indian and Eurasian tectonic plates.",
+      "entities": [
+        {
+          "name": "Himalayas",
+          "type": "mountain_range",
+          "confidence": 0.95
+        },
+        {
+          "name": "Mount Everest",
+          "type": "mountain",
+          "confidence": 0.93
+        },
+        {
+          "name": "India",
+          "type": "country",
+          "confidence": 0.91
+        },
+        {
+          "name": "Tibet",
+          "type": "region",
+          "confidence": 0.89
+        }
+      ],
+      "topics": ["Geography", "Mountain Formation", "Geology"],
+      "wordCount": 1580,
+      "relevanceToAtlas": 0.65
+    }
+  ],
+  "metadata": {
+    "totalPages": 8,
+    "avgRelevanceToAtlas": 0.83,
+    "createdFor": "test_suite",
+    "description": "Mock related pages for testing graph-based question answering and knowledge traversal"
+  }
+}

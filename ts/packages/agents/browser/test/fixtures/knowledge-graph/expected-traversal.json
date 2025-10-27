@@ -1,0 +1,346 @@
+{
+  "traversalScenarios": [
+    {
+      "name": "2-hop traversal from Atlas Mountains",
+      "seedEntities": [
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range"
+        }
+      ],
+      "seedTopics": ["Geography", "Geology"],
+      "depth": 2,
+      "expectedEntities": [
+        {
+          "name": "Morocco",
+          "type": "country",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Morocco"],
+          "confidence": 0.98,
+          "cooccurrenceCount": 3,
+          "minRelevanceScore": 0.70
+        },
+        {
+          "name": "Algeria",
+          "type": "country",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Algeria"],
+          "confidence": 0.97,
+          "cooccurrenceCount": 2,
+          "minRelevanceScore": 0.68
+        },
+        {
+          "name": "Tunisia",
+          "type": "country",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Tunisia"],
+          "confidence": 0.96,
+          "cooccurrenceCount": 2,
+          "minRelevanceScore": 0.66
+        },
+        {
+          "name": "Mount Toubkal",
+          "type": "mountain",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Mount Toubkal"],
+          "confidence": 0.92,
+          "cooccurrenceCount": 2,
+          "minRelevanceScore": 0.65
+        },
+        {
+          "name": "Pyrenees",
+          "type": "mountain_range",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Pyrenees"],
+          "confidence": 0.93,
+          "cooccurrenceCount": 2,
+          "minRelevanceScore": 0.64
+        },
+        {
+          "name": "Alps",
+          "type": "mountain_range",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Alps"],
+          "confidence": 0.94,
+          "cooccurrenceCount": 2,
+          "minRelevanceScore": 0.63
+        },
+        {
+          "name": "Sahara Desert",
+          "type": "desert",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Sahara Desert"],
+          "confidence": 0.93,
+          "cooccurrenceCount": 1,
+          "minRelevanceScore": 0.60
+        },
+        {
+          "name": "Mediterranean Sea",
+          "type": "sea",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Mediterranean Sea"],
+          "confidence": 0.91,
+          "cooccurrenceCount": 2,
+          "minRelevanceScore": 0.58
+        },
+        {
+          "name": "Berber",
+          "type": "people",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Berber"],
+          "confidence": 0.88,
+          "cooccurrenceCount": 3,
+          "minRelevanceScore": 0.57
+        },
+        {
+          "name": "Barbary macaque",
+          "type": "animal",
+          "distance": 1,
+          "relationshipPath": ["Atlas Mountains", "Barbary macaque"],
+          "confidence": 0.85,
+          "cooccurrenceCount": 1,
+          "minRelevanceScore": 0.55
+        },
+        {
+          "name": "Aneto",
+          "type": "mountain",
+          "distance": 2,
+          "relationshipPath": ["Atlas Mountains", "Pyrenees", "Aneto"],
+          "confidence": 0.88,
+          "cooccurrenceCount": 1,
+          "minRelevanceScore": 0.45
+        },
+        {
+          "name": "Mont Blanc",
+          "type": "mountain",
+          "distance": 2,
+          "relationshipPath": ["Atlas Mountains", "Alps", "Mont Blanc"],
+          "confidence": 0.91,
+          "cooccurrenceCount": 1,
+          "minRelevanceScore": 0.44
+        },
+        {
+          "name": "France",
+          "type": "country",
+          "distance": 2,
+          "relationshipPath": ["Atlas Mountains", "Pyrenees", "France"],
+          "confidence": 0.95,
+          "cooccurrenceCount": 1,
+          "minRelevanceScore": 0.43
+        },
+        {
+          "name": "Spain",
+          "type": "country",
+          "distance": 2,
+          "relationshipPath": ["Atlas Mountains", "Pyrenees", "Spain"],
+          "confidence": 0.94,
+          "cooccurrenceCount": 1,
+          "minRelevanceScore": 0.42
+        }
+      ],
+      "expectedTopics": [
+        {
+          "name": "Geography",
+          "cooccurrenceCount": 4,
+          "distance": 0,
+          "minRelevanceScore": 0.80,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Morocco",
+            "https://en.wikipedia.org/wiki/Pyrenees",
+            "https://en.wikipedia.org/wiki/Alps"
+          ]
+        },
+        {
+          "name": "Geology",
+          "cooccurrenceCount": 3,
+          "distance": 0,
+          "minRelevanceScore": 0.75,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Pyrenees",
+            "https://en.wikipedia.org/wiki/Alps"
+          ]
+        },
+        {
+          "name": "Mountain Formation",
+          "cooccurrenceCount": 4,
+          "distance": 1,
+          "minRelevanceScore": 0.70,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Pyrenees",
+            "https://en.wikipedia.org/wiki/Alps",
+            "https://en.wikipedia.org/wiki/Himalayas"
+          ]
+        },
+        {
+          "name": "North Africa",
+          "cooccurrenceCount": 5,
+          "distance": 1,
+          "minRelevanceScore": 0.68,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Morocco",
+            "https://en.wikipedia.org/wiki/Algeria",
+            "https://en.wikipedia.org/wiki/Tunisia",
+            "https://en.wikipedia.org/wiki/Berber_people"
+          ]
+        },
+        {
+          "name": "Indigenous People",
+          "cooccurrenceCount": 3,
+          "distance": 1,
+          "minRelevanceScore": 0.65,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Berber_people",
+            "https://en.wikipedia.org/wiki/Morocco"
+          ]
+        },
+        {
+          "name": "Tourism",
+          "cooccurrenceCount": 2,
+          "distance": 1,
+          "minRelevanceScore": 0.55,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Morocco"
+          ]
+        },
+        {
+          "name": "Flora and Fauna",
+          "cooccurrenceCount": 2,
+          "distance": 1,
+          "minRelevanceScore": 0.50,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Barbary_macaque"
+          ]
+        }
+      ],
+      "minTotalEntities": 10,
+      "maxTotalEntities": 20,
+      "minTotalTopics": 5,
+      "maxTotalTopics": 10
+    },
+    {
+      "name": "3-hop traversal from Atlas Mountains and Mount Toubkal",
+      "seedEntities": [
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range"
+        },
+        {
+          "name": "Mount Toubkal",
+          "type": "mountain"
+        }
+      ],
+      "seedTopics": ["Geography", "Mountain Formation"],
+      "depth": 3,
+      "expectedEntities": [
+        {
+          "name": "Himalayas",
+          "type": "mountain_range",
+          "distance": 3,
+          "relationshipPath": ["Atlas Mountains", "Pyrenees", "Alps", "Himalayas"],
+          "confidence": 0.95,
+          "minRelevanceScore": 0.30,
+          "note": "Should be found via mountain formation topic co-occurrence"
+        },
+        {
+          "name": "Mount Everest",
+          "type": "mountain",
+          "distance": 3,
+          "relationshipPath": ["Atlas Mountains", "Pyrenees", "Alps", "Himalayas", "Mount Everest"],
+          "confidence": 0.93,
+          "minRelevanceScore": 0.25,
+          "note": "3-hop traversal through mountain ranges"
+        }
+      ],
+      "expectedTopics": [
+        {
+          "name": "Historical Significance",
+          "cooccurrenceCount": 1,
+          "distance": 2,
+          "minRelevanceScore": 0.40,
+          "relatedUrls": [
+            "https://en.wikipedia.org/wiki/Berber_people"
+          ]
+        }
+      ],
+      "minTotalEntities": 15,
+      "maxTotalEntities": 30,
+      "minTotalTopics": 7,
+      "maxTotalTopics": 12
+    },
+    {
+      "name": "Depth limit test - 1 hop only",
+      "seedEntities": [
+        {
+          "name": "Atlas Mountains",
+          "type": "mountain_range"
+        }
+      ],
+      "seedTopics": [],
+      "depth": 1,
+      "expectedEntities": [
+        {
+          "name": "Morocco",
+          "distance": 1,
+          "shouldBeIncluded": true
+        },
+        {
+          "name": "Pyrenees",
+          "distance": 1,
+          "shouldBeIncluded": true
+        },
+        {
+          "name": "Aneto",
+          "distance": 2,
+          "shouldBeIncluded": false,
+          "note": "Should be excluded - beyond depth limit"
+        },
+        {
+          "name": "France",
+          "distance": 2,
+          "shouldBeIncluded": false,
+          "note": "Should be excluded - beyond depth limit"
+        }
+      ],
+      "minTotalEntities": 8,
+      "maxTotalEntities": 12
+    }
+  ],
+  "relevanceScoringFormula": {
+    "description": "Relevance score calculation used by discoverRelatedKnowledge",
+    "formula": "(1.0 / distance) * 0.4 + confidence * 0.3 + min(cooccurrenceCount / 10, 1.0) * 0.3",
+    "components": {
+      "distanceWeight": 0.4,
+      "confidenceWeight": 0.3,
+      "cooccurrenceWeight": 0.3
+    },
+    "examples": [
+      {
+        "entity": "Morocco",
+        "distance": 1,
+        "confidence": 0.98,
+        "cooccurrenceCount": 3,
+        "calculation": "(1.0/1)*0.4 + 0.98*0.3 + min(3/10, 1.0)*0.3 = 0.4 + 0.294 + 0.09 = 0.784"
+      },
+      {
+        "entity": "Aneto",
+        "distance": 2,
+        "confidence": 0.88,
+        "cooccurrenceCount": 1,
+        "calculation": "(1.0/2)*0.4 + 0.88*0.3 + min(1/10, 1.0)*0.3 = 0.2 + 0.264 + 0.03 = 0.494"
+      }
+    ]
+  },
+  "testValidations": {
+    "entityDeduplication": "Entities should only appear once even if reached via multiple paths",
+    "distanceCalculation": "Distance should be shortest path from any seed entity",
+    "topicExpansion": "Topics should expand via co-occurrence on shared URLs",
+    "relevanceRanking": "Results should be sorted by relevance score descending",
+    "maxLimits": "Should respect maxEntities and maxTopics parameters",
+    "emptySeeds": "Should handle empty seed entities/topics gracefully"
+  },
+  "metadata": {
+    "createdFor": "test_suite",
+    "description": "Expected results for graph traversal tests validating discoverRelatedKnowledge function",
+    "lastUpdated": "2025-10-27"
+  }
+}
