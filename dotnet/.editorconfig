@@ -125,6 +125,8 @@ dotnet_diagnostic.RCS1232.severity = warning # Order elements in documentation c
 # dotnet_diagnostic.RCS1228.severity = warning # Unused element in documentation comment.
 
 # Diagnostics elevated as warnings
+# .editorconfig
+dotnet_diagnostic.CAC001.severity= warning # ConfigureAwait
 # dotnet_diagnostic.CA1000.severity = warning # Do not declare static members on generic types
 # dotnet_diagnostic.CA1031.severity = warning # Do not catch general exception types
 dotnet_diagnostic.CA1050.severity = warning # Declare types in namespaces

@@ -174,7 +174,7 @@ internal class QueryCompiler
         WhenFilter? whenFilter
     )
     {
-        var scopeExpr = await CompileScope(searchGroup, whenFilter).ConfigureAwait(false);
+        var scopeExpr = await CompileScopeAsync(searchGroup, whenFilter).ConfigureAwait(false);
 
         var selectExpr = CompileSelect(searchGroup, scopeExpr);
 
@@ -242,7 +242,7 @@ internal class QueryCompiler
         return termExpr;
     }
 
-    private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)
+    private ValueTask<GetScopeExpr?> CompileScopeAsync(SearchTermGroup? termGroup, WhenFilter? filter)
     {
         if (termGroup is null && filter is null)
         {
