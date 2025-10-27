@@ -62,6 +62,11 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         _db.Execute(schemaSql);
     }
 
+    public IReadOnlyCache<string, float[]>? GetEmbeddingCache()
+    {
+        return SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex as IReadOnlyCache<string, float[]>;
+    }
+
     public void Dispose()
     {
         Dispose(true);

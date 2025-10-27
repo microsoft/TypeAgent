@@ -5,12 +5,13 @@ using System.Threading;
 
 namespace TypeAgent.Common;
 
-public interface ICache<TKey, TValue>
+public interface IReadOnlyCache<TKey, TValue>
 {
-    bool TryGet(TKey key, out TValue value);
+    bool TryGet(TKey key, out TValue? value);
+}
 
-    bool Contains(TKey key);
-
+public interface ICache<TKey, TValue> : IReadOnlyCache<TKey, TValue>
+{
     void Add(TKey key, TValue value);
 }
 
@@ -51,9 +52,12 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
 
     public event Action<KeyValuePair<TKey, TValue>> Purged;
 
-    public TValue this[TKey key] => TryGet(key, out var value) ? value : throw new KeyNotFoundException();
+    public TValue? Get(TKey key)
+    {
+        return TryGet(key, out var value) ? value : default;
+    }
 
-    public bool TryGet(TKey key, out TValue value)
+    public bool TryGet(TKey key, out TValue? value)
     {
         value = default;
         if (_index.TryGetValue(key, out LinkedListNode<KeyValuePair<TKey, TValue>> item))
@@ -68,7 +72,7 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
 
     public bool Contains(TKey key)
     {
-        return TryGet(key, out _);
+        return _index.ContainsKey(key);
     }
 
     public void Add(TKey key, TValue value)
@@ -258,6 +262,7 @@ public static class CacheExtensions
             if (values[i] is null)
             {
                 values[i] = pendingValues[iPending++];
+                // Also update cache
                 cache.Add(keys[i], values[i]);
             }
         }

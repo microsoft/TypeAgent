@@ -7,7 +7,7 @@ using TypeAgent.AIClient;
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
+public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnlyCache<string, float[]>
 {
     SqliteDatabase _db;
 
@@ -24,13 +24,29 @@ public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
 
     public bool IsReadOnly => false;
 
-    public NormalizedEmbedding this[int index] { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-
     public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult(GetCount());
+    }
+
+    public bool TryGet(string key, out float[] value)
+    {
+        value = null;
+
+        using var cmd = _db.CreateCommand(@"
+SELECT term_embedding from RelatedTermsFuzzy
+WHERE term = @term 
+");
+        cmd.AddParameter("@term", key);
+        using var reader = cmd.ExecuteReader();
+        if (reader.Read())
+        {
+            value = new NormalizedEmbeddingB((byte[])reader.GetValue(0)).ToArray();
+            return true;
+        }
+        return false;
     }
 
     public void AddTerm(string term, NormalizedEmbedding embedding)

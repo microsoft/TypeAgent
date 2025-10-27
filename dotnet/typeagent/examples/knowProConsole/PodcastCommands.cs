@@ -161,12 +161,18 @@ public class PodcastCommands : ICommandModule
         bool createNew
     )
     {
-        return new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
-            new ConversationSettings(),
+        var model = new TextEmbeddingModelWithCache(256);
+        ConversationSettings settings = new ConversationSettings(model);
+
+        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
+            settings,
             _kpContext.DotnetPath,
             name,
             createNew
         );
+        model.Cache.PersistentCache = provider.GetEmbeddingCache();
+
+        return provider;
     }
 
     private void UnloadCurrent()
