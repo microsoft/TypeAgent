@@ -28,7 +28,6 @@ export type PlayerActions =
     | GetFromCurrentPlaylistListAction
     | GetAlbumAction
     | GetFavoritesAction
-    | FilterTracksAction
     | CreatePlaylistAction
     | DeletePlaylistAction
     | AddCurrentTrackToPlaylistAction
@@ -236,32 +235,12 @@ export interface GetFavoritesAction {
     };
 }
 
-// apply a filter to match tracks in the track list given by the entity id
-// result of this action is an entity of type 'track-list' with the tracks that match the filter
-export interface FilterTracksAction {
-    actionName: "filterTracks";
-    parameters: {
-        // track list entity to use as the source of tracks
-        trackListEntityId: string;
-        // filter type is one of "genre", "artist", "name"; name does a fuzzy match on the track name
-        filterType: "genre" | "artist" | "name";
-        // filter value is the value to match against
-        filterValue: string;
-        // if negate is true, keep the tracks that do not match the filter
-        negate?: boolean;
-    };
-}
-
-// create a new playlist from a track list entity
+// create a new empty playlist
 export interface CreatePlaylistAction {
     actionName: "createPlaylist";
     parameters: {
         // name of playlist to create
         name: string;
-        // track list entity to use as the source of tracks
-        trackListEntityId?: string;
-        // if true, create an empty playlist
-        empty?: boolean;
     };
 }
 
