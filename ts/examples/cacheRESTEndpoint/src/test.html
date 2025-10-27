@@ -75,6 +75,26 @@
             cursor: not-allowed;
         }
 
+        #clearButton {
+            padding: 12px 24px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #clearButton:hover {
+            background-color: #5a6268;
+        }
+
+        #clearButton:active {
+            background-color: #545b62;
+        }
+
         .results-container {
             flex: 1;
             overflow-y: auto;
@@ -159,6 +179,7 @@
         <div class="input-container">
             <input type="text" id="searchInput" placeholder="Enter text..." />
             <button id="goButton">Go</button>
+            <button id="clearButton">Clear</button>
         </div>
     </div>
 
@@ -171,6 +192,7 @@
     <script>
         const searchInput = document.getElementById('searchInput');
         const goButton = document.getElementById('goButton');
+        const clearButton = document.getElementById('clearButton');
         const resultsList = document.getElementById('resultsList');
 
         async function performSearch() {
@@ -263,8 +285,15 @@
             }
         }
 
+        function clearResults() {
+            resultsList.innerHTML = '<div class="empty-state">Enter a query and press "Go" to see results</div>';
+        }
+
         // Button click handler
         goButton.addEventListener('click', performSearch);
+
+        // Clear button click handler
+        clearButton.addEventListener('click', clearResults);
 
         // Enter key handler
         searchInput.addEventListener('keypress', (e) => {

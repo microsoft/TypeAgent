@@ -17,7 +17,7 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "start": "webpack serve --open",
+    "start": "node ./dist/index.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
