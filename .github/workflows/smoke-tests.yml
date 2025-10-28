@@ -8,15 +8,15 @@ name: smoke-tests
 on:
   workflow_dispatch:
   push:
-    branches: ["main", "dev/robgruen/action_trigger"]
+    branches: ["main"]
     paths:
-      - 'ts/**'
-      - '.github/workflows/smoke-tests.yml'
+      - 'ts/**' # only run on changes to ts/ folder
   pull_request_target:
     branches: ["main"]
+    paths:
+      - 'ts/**' # only run on changes to ts/ folder
   merge_group:
     branches: ["main"]
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
