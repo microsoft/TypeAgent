@@ -70,16 +70,14 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
         });
 
         it("should provide complete answers with context", () => {
-            const countriesQuestion = expectedQA.pageQuestions.find(
-                (q: any) => q.question.toLowerCase().includes("countries"),
+            const countriesQuestion = expectedQA.pageQuestions.find((q: any) =>
+                q.question.toLowerCase().includes("countries"),
             );
 
             expect(countriesQuestion.expectedAnswer).toContain("Morocco");
             expect(countriesQuestion.expectedAnswer).toContain("Algeria");
             expect(countriesQuestion.expectedAnswer).toContain("Tunisia");
-            expect(countriesQuestion.expectedAnswer.length).toBeGreaterThan(
-                50,
-            );
+            expect(countriesQuestion.expectedAnswer.length).toBeGreaterThan(50);
         });
 
         it("should reference relevant entities in answers", () => {
@@ -164,12 +162,10 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
             );
 
             if (analyticalQuestion) {
-                expect(analyticalQuestion.expectedAnswer.length).toBeGreaterThan(
-                    100,
-                );
-                expect(analyticalQuestion.sourceUrls.length).toBeGreaterThan(
-                    1,
-                );
+                expect(
+                    analyticalQuestion.expectedAnswer.length,
+                ).toBeGreaterThan(100);
+                expect(analyticalQuestion.sourceUrls.length).toBeGreaterThan(1);
             }
         });
 
@@ -220,10 +216,11 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
 
             expect(results.length).toBeGreaterThan(0);
 
-            const hasRelevant = results.some(r =>
-                r.text.toLowerCase().includes("toubkal") ||
-                r.text.toLowerCase().includes("highest") ||
-                r.text.toLowerCase().includes("peak")
+            const hasRelevant = results.some(
+                (r) =>
+                    r.text.toLowerCase().includes("toubkal") ||
+                    r.text.toLowerCase().includes("highest") ||
+                    r.text.toLowerCase().includes("peak"),
             );
             expect(hasRelevant).toBe(true);
         });
@@ -258,10 +255,9 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
         });
 
         it("should filter by scope when retrieving context", () => {
-            const messages =
-                testContext.knowledgeStore.getMessagesByUrl(
-                    "https://en.wikipedia.org/wiki/Atlas_Mountains",
-                );
+            const messages = testContext.knowledgeStore.getMessagesByUrl(
+                "https://en.wikipedia.org/wiki/Atlas_Mountains",
+            );
 
             expect(Array.isArray(messages)).toBe(true);
         });
@@ -372,9 +368,9 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
             ];
 
             for (const q of allQuestions) {
-                const sentences = q.expectedAnswer.split(/[.!?]+/).filter(
-                    (s: string) => s.trim().length > 0,
-                );
+                const sentences = q.expectedAnswer
+                    .split(/[.!?]+/)
+                    .filter((s: string) => s.trim().length > 0);
 
                 expect(sentences.length).toBeGreaterThan(0);
                 expect(sentences.length).toBeLessThan(20);
@@ -397,15 +393,13 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
         });
 
         it("should maintain consistency across related answers", () => {
-            const toubkalQuestions = expectedQA.pageQuestions.filter(
-                (q: any) => q.question.includes("Toubkal"),
+            const toubkalQuestions = expectedQA.pageQuestions.filter((q: any) =>
+                q.question.includes("Toubkal"),
             );
 
             if (toubkalQuestions.length > 1) {
                 for (const q of toubkalQuestions) {
-                    expect(q.expectedAnswer.toLowerCase()).toContain(
-                        "4,167",
-                    );
+                    expect(q.expectedAnswer.toLowerCase()).toContain("4,167");
                 }
             }
         });
@@ -444,8 +438,8 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
         });
 
         it("should cite relevant sources for answer content", () => {
-            const pyreneeQuestion = expectedQA.graphQuestions.find(
-                (q: any) => q.question.includes("Pyrenees"),
+            const pyreneeQuestion = expectedQA.graphQuestions.find((q: any) =>
+                q.question.includes("Pyrenees"),
             );
 
             if (pyreneeQuestion) {
@@ -512,9 +506,9 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
             );
 
             for (const q of graphQuestions) {
-                const sentences = q.expectedAnswer.split(/[.!?]+/).filter(
-                    (s: string) => s.trim().length > 0,
-                );
+                const sentences = q.expectedAnswer
+                    .split(/[.!?]+/)
+                    .filter((s: string) => s.trim().length > 0);
 
                 expect(sentences.length).toBeGreaterThan(1);
 
@@ -535,7 +529,8 @@ describe("Question Answering - Phase 4: Answer Generation", () => {
                 const answer = compareQuestion.expectedAnswer.toLowerCase();
 
                 expect(answer).toMatch(/\d+.*meters?/);
-                const hasFormation = answer.includes("formation") || answer.includes("formed");
+                const hasFormation =
+                    answer.includes("formation") || answer.includes("formed");
                 expect(hasFormation).toBe(true);
             }
         });

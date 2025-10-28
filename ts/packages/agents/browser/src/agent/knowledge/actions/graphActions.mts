@@ -1080,14 +1080,17 @@ export async function discoverRelatedKnowledge(
                                 );
                             }
 
-                            relatedEntitiesMap.set(neighbor.name.toLowerCase(), {
-                                name: neighbor.name,
-                                type: neighbor.type || "unknown",
-                                relationshipPath,
-                                distance,
-                                confidence: neighbor.confidence || 0.5,
-                                cooccurrenceCount,
-                            });
+                            relatedEntitiesMap.set(
+                                neighbor.name.toLowerCase(),
+                                {
+                                    name: neighbor.name,
+                                    type: neighbor.type || "unknown",
+                                    relationshipPath,
+                                    distance,
+                                    confidence: neighbor.confidence || 0.5,
+                                    cooccurrenceCount,
+                                },
+                            );
                         }
                     }
                 }
@@ -1147,9 +1150,10 @@ export async function discoverRelatedKnowledge(
                                 (websiteCollection.knowledgeTopics as any)
                                     .getRelatedTopics
                             ) {
-                                const related = (
-                                    websiteCollection.knowledgeTopics as any
-                                ).getRelatedTopics(seedTopic, 50) || [];
+                                const related =
+                                    (
+                                        websiteCollection.knowledgeTopics as any
+                                    ).getRelatedTopics(seedTopic, 50) || [];
                                 return related.some(
                                     (r: any) =>
                                         r.topic?.toLowerCase() ===

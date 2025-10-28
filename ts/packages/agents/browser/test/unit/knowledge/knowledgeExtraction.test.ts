@@ -127,10 +127,7 @@ describe("Knowledge Extraction - Phase 1 Setup Verification", () => {
 
         it("should load expected traversal fixture", () => {
             const traversalRaw = readFileSync(
-                join(
-                    FIXTURES_DIR,
-                    "knowledge-graph/expected-traversal.json",
-                ),
+                join(FIXTURES_DIR, "knowledge-graph/expected-traversal.json"),
                 "utf-8",
             );
             const traversal = JSON.parse(traversalRaw);
@@ -148,9 +145,8 @@ describe("Knowledge Extraction - Phase 1 Setup Verification", () => {
 
     describe("Mock Infrastructure", () => {
         it("should provide mock LLM responses", () => {
-            const response = testContext.llm.getEntityExtractionResponse(
-                "Atlas Mountains",
-            );
+            const response =
+                testContext.llm.getEntityExtractionResponse("Atlas Mountains");
 
             expect(response).toBeDefined();
             expect(response.entities).toBeDefined();
@@ -183,12 +179,14 @@ describe("Knowledge Extraction - Phase 1 Setup Verification", () => {
         });
 
         it("should calculate cosine similarity", () => {
-            const vec1 = testContext.embeddings.generateDeterministicEmbedding(
-                "Atlas Mountains",
-            );
-            const vec2 = testContext.embeddings.generateDeterministicEmbedding(
-                "Atlas Mountains",
-            );
+            const vec1 =
+                testContext.embeddings.generateDeterministicEmbedding(
+                    "Atlas Mountains",
+                );
+            const vec2 =
+                testContext.embeddings.generateDeterministicEmbedding(
+                    "Atlas Mountains",
+                );
             const vec3 = testContext.embeddings.generateDeterministicEmbedding(
                 "Completely different text",
             );
@@ -213,9 +211,8 @@ describe("Knowledge Extraction - Phase 1 Setup Verification", () => {
             const entities = testContext.knowledgeStore.getAllEntities();
             expect(entities.length).toBeGreaterThan(0);
 
-            const atlasEntity = testContext.knowledgeStore.getEntity(
-                "Atlas Mountains",
-            );
+            const atlasEntity =
+                testContext.knowledgeStore.getEntity("Atlas Mountains");
             expect(atlasEntity).toBeDefined();
             expect(atlasEntity?.type).toBe("mountain_range");
         });

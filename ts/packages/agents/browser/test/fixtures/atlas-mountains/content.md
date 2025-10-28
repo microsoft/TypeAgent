@@ -7,6 +7,7 @@ The **Atlas Mountains** are a mountain range in the Maghreb in North Africa. The
 The Atlas Mountains consist of multiple ranges that run through Morocco, Algeria, and Tunisia. The highest peak is **Mount Toubkal**, which reaches 4,167 meters (13,671 ft) and is located in southwestern Morocco. The mountains are home to a number of plant and animal species found nowhere else in Africa.
 
 The range is divided into several sub-ranges:
+
 - **High Atlas** - The highest and most prominent range, containing Mount Toubkal
 - **Middle Atlas** - Located in northern Morocco, characterized by extensive forests
 - **Anti-Atlas** - The southernmost range, with a more arid climate
@@ -28,6 +29,7 @@ The mountains are rich in mineral resources, including phosphate, iron ore, lead
 The Atlas Mountains support a diverse range of plant and animal life. The mountains are home to the endangered **Barbary macaque**, the only primate species native to North Africa outside of humans. Other notable species include the **Barbary leopard** (possibly extinct), **Barbary sheep**, and various species of eagles and vultures.
 
 The vegetation varies with elevation and exposure:
+
 - At lower elevations: Mediterranean scrubland and oak forests
 - Middle elevations: Cedar and pine forests
 - Higher elevations: Alpine meadows and bare rock
@@ -48,6 +50,7 @@ In more recent history, the mountains played a role in resistance to French colo
 ## Tourism and Economy
 
 Today, the Atlas Mountains are an important destination for tourism, particularly in Morocco. Mount Toubkal attracts climbers and trekkers from around the world. The mountains also support traditional economic activities including:
+
 - Agriculture (terraced farming, argan oil production)
 - Pastoralism (sheep and goat herding)
 - Mining (phosphates and other minerals)

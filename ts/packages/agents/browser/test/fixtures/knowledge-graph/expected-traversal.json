@@ -18,7 +18,7 @@
           "relationshipPath": ["Atlas Mountains", "Morocco"],
           "confidence": 0.98,
           "cooccurrenceCount": 3,
-          "minRelevanceScore": 0.70
+          "minRelevanceScore": 0.7
         },
         {
           "name": "Algeria",
@@ -72,7 +72,7 @@
           "relationshipPath": ["Atlas Mountains", "Sahara Desert"],
           "confidence": 0.93,
           "cooccurrenceCount": 1,
-          "minRelevanceScore": 0.60
+          "minRelevanceScore": 0.6
         },
         {
           "name": "Mediterranean Sea",
@@ -143,7 +143,7 @@
           "name": "Geography",
           "cooccurrenceCount": 4,
           "distance": 0,
-          "minRelevanceScore": 0.80,
+          "minRelevanceScore": 0.8,
           "relatedUrls": [
             "https://en.wikipedia.org/wiki/Morocco",
             "https://en.wikipedia.org/wiki/Pyrenees",
@@ -164,7 +164,7 @@
           "name": "Mountain Formation",
           "cooccurrenceCount": 4,
           "distance": 1,
-          "minRelevanceScore": 0.70,
+          "minRelevanceScore": 0.7,
           "relatedUrls": [
             "https://en.wikipedia.org/wiki/Pyrenees",
             "https://en.wikipedia.org/wiki/Alps",
@@ -198,18 +198,14 @@
           "cooccurrenceCount": 2,
           "distance": 1,
           "minRelevanceScore": 0.55,
-          "relatedUrls": [
-            "https://en.wikipedia.org/wiki/Morocco"
-          ]
+          "relatedUrls": ["https://en.wikipedia.org/wiki/Morocco"]
         },
         {
           "name": "Flora and Fauna",
           "cooccurrenceCount": 2,
           "distance": 1,
-          "minRelevanceScore": 0.50,
-          "relatedUrls": [
-            "https://en.wikipedia.org/wiki/Barbary_macaque"
-          ]
+          "minRelevanceScore": 0.5,
+          "relatedUrls": ["https://en.wikipedia.org/wiki/Barbary_macaque"]
         }
       ],
       "minTotalEntities": 10,
@@ -236,16 +232,27 @@
           "name": "Himalayas",
           "type": "mountain_range",
           "distance": 3,
-          "relationshipPath": ["Atlas Mountains", "Pyrenees", "Alps", "Himalayas"],
+          "relationshipPath": [
+            "Atlas Mountains",
+            "Pyrenees",
+            "Alps",
+            "Himalayas"
+          ],
           "confidence": 0.95,
-          "minRelevanceScore": 0.30,
+          "minRelevanceScore": 0.3,
           "note": "Should be found via mountain formation topic co-occurrence"
         },
         {
           "name": "Mount Everest",
           "type": "mountain",
           "distance": 3,
-          "relationshipPath": ["Atlas Mountains", "Pyrenees", "Alps", "Himalayas", "Mount Everest"],
+          "relationshipPath": [
+            "Atlas Mountains",
+            "Pyrenees",
+            "Alps",
+            "Himalayas",
+            "Mount Everest"
+          ],
           "confidence": 0.93,
           "minRelevanceScore": 0.25,
           "note": "3-hop traversal through mountain ranges"
@@ -256,10 +263,8 @@
           "name": "Historical Significance",
           "cooccurrenceCount": 1,
           "distance": 2,
-          "minRelevanceScore": 0.40,
-          "relatedUrls": [
-            "https://en.wikipedia.org/wiki/Berber_people"
-          ]
+          "minRelevanceScore": 0.4,
+          "relatedUrls": ["https://en.wikipedia.org/wiki/Berber_people"]
         }
       ],
       "minTotalEntities": 15,

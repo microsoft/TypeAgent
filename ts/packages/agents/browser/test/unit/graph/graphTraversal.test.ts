@@ -22,10 +22,7 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
         );
         expectedTraversal = JSON.parse(
             readFileSync(
-                join(
-                    FIXTURES_DIR,
-                    "knowledge-graph/expected-traversal.json",
-                ),
+                join(FIXTURES_DIR, "knowledge-graph/expected-traversal.json"),
                 "utf-8",
             ),
         );
@@ -33,11 +30,12 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
 
     describe("Entity Neighborhood Traversal", () => {
         it("should retrieve 1-hop entity neighbors", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                1,
-                50,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    1,
+                    50,
+                );
 
             expect(neighborhood).toBeDefined();
             expect(neighborhood.entities).toBeDefined();
@@ -49,11 +47,12 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
         });
 
         it("should retrieve 2-hop entity neighbors", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                2,
-                50,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    2,
+                    50,
+                );
 
             expect(neighborhood.entities.length).toBeGreaterThan(5);
 
@@ -64,32 +63,35 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
         });
 
         it("should respect max nodes limit", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                2,
-                10,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    2,
+                    10,
+                );
 
             expect(neighborhood.entities.length).toBeLessThanOrEqual(10);
         });
 
         it("should include relationships in neighborhood", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                2,
-                50,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    2,
+                    50,
+                );
 
             expect(neighborhood.relationships).toBeDefined();
             expect(neighborhood.relationships.length).toBeGreaterThan(0);
         });
 
         it("should find specific entities in neighborhood", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                1,
-                50,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    1,
+                    50,
+                );
 
             const entityNames = neighborhood.entities.map((e) => e.name);
 
@@ -99,11 +101,12 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
         });
 
         it("should calculate correct distances", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                2,
-                50,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    2,
+                    50,
+                );
 
             const morocco = neighborhood.entities.find(
                 (e) => e.name === "Morocco",
@@ -138,9 +141,8 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
         });
 
         it("should find topics that share URLs", () => {
-            const geographyTopic = testContext.knowledgeStore.getTopic(
-                "Geography",
-            );
+            const geographyTopic =
+                testContext.knowledgeStore.getTopic("Geography");
             expect(geographyTopic).toBeDefined();
 
             const relatedTopics = testContext.knowledgeStore.getRelatedTopics(
@@ -260,10 +262,7 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
                 (e: any) => e.distance === 2,
             );
 
-            if (
-                distance1Entities.length > 0 &&
-                distance2Entities.length > 0
-            ) {
+            if (distance1Entities.length > 0 && distance2Entities.length > 0) {
                 const avgScore1 =
                     distance1Entities.reduce(
                         (sum: number, e: any) => sum + e.minRelevanceScore,
@@ -298,11 +297,12 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
 
     describe("Deduplication", () => {
         it("should deduplicate entities reached via multiple paths", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                2,
-                50,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    2,
+                    50,
+                );
 
             const entityNames = neighborhood.entities.map((e) => e.name);
             const uniqueNames = new Set(entityNames);
@@ -337,11 +337,12 @@ describe("Graph Traversal - Phase 3: Graph Operations", () => {
         });
 
         it("should exclude entities beyond depth limit", () => {
-            const neighborhood = testContext.knowledgeStore.getEntityNeighborhood(
-                "Atlas Mountains",
-                1,
-                50,
-            );
+            const neighborhood =
+                testContext.knowledgeStore.getEntityNeighborhood(
+                    "Atlas Mountains",
+                    1,
+                    50,
+                );
 
             for (const entity of neighborhood.entities) {
                 expect(entity.distance).toBeLessThanOrEqual(1);

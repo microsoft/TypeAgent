@@ -47,8 +47,7 @@ export class MockLLMResponses {
                         question:
                             "Which countries do the Atlas Mountains stretch through?",
                         scope: "page",
-                        rationale:
-                            "Geographic information present on the page",
+                        rationale: "Geographic information present on the page",
                     },
                     {
                         question:
@@ -61,7 +60,8 @@ export class MockLLMResponses {
                         question:
                             "What endangered primate species lives in the Atlas Mountains?",
                         scope: "page",
-                        rationale: "Flora and fauna information on current page",
+                        rationale:
+                            "Flora and fauna information on current page",
                     },
                 ],
                 success: true,
@@ -78,9 +78,7 @@ export class MockLLMResponses {
         relatedEntities: any[],
         relatedTopics: any[],
     ): any {
-        const hasPyrenees = relatedEntities.some(
-            (e) => e.name === "Pyrenees",
-        );
+        const hasPyrenees = relatedEntities.some((e) => e.name === "Pyrenees");
         const hasAlps = relatedEntities.some((e) => e.name === "Alps");
         const hasMorocco = relatedEntities.some((e) => e.name === "Morocco");
 
@@ -122,13 +120,8 @@ export class MockLLMResponses {
         };
     }
 
-    static getAnswerGenerationResponse(
-        question: string,
-        context: any[],
-    ): any {
-        const qaFixtures = this.loadFixture(
-            "atlas-mountains/expected-qa.json",
-        );
+    static getAnswerGenerationResponse(question: string, context: any[]): any {
+        const qaFixtures = this.loadFixture("atlas-mountains/expected-qa.json");
 
         const pageQuestion = qaFixtures.pageQuestions.find(
             (q: any) => q.question === question,
@@ -157,8 +150,7 @@ export class MockLLMResponses {
         }
 
         return {
-            answer:
-                "I don't have enough information to answer that question.",
+            answer: "I don't have enough information to answer that question.",
             sources: [],
             relevantEntities: [],
             confidence: 0.0,
@@ -227,7 +219,10 @@ export class MockLLMResponses {
                         break;
 
                     default:
-                        response = { success: false, error: "Unknown operation" };
+                        response = {
+                            success: false,
+                            error: "Unknown operation",
+                        };
                 }
 
                 resolve(response as T);

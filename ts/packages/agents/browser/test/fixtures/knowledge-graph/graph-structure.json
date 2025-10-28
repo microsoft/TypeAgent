@@ -217,7 +217,7 @@
       "from": "Atlas Mountains",
       "to": "Sahara Desert",
       "type": "separates",
-      "confidence": 0.90,
+      "confidence": 0.9,
       "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
       "bidirectional": true
     },
@@ -271,7 +271,7 @@
       "from": "Atlas Mountains",
       "to": "Alps",
       "type": "similar_formation",
-      "confidence": 0.80,
+      "confidence": 0.8,
       "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
       "bidirectional": true
     },
@@ -364,9 +364,7 @@
     },
     {
       "name": "Climate",
-      "urls": [
-        "https://en.wikipedia.org/wiki/Atlas_Mountains"
-      ],
+      "urls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
       "cooccurrenceCount": 1
     },
     {

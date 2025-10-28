@@ -110,7 +110,9 @@ export class MockEmbeddings {
     static async mockBatchEmbed(texts: string[]): Promise<number[][]> {
         return new Promise((resolve) => {
             setTimeout(() => {
-                resolve(texts.map((t) => this.generateDeterministicEmbedding(t)));
+                resolve(
+                    texts.map((t) => this.generateDeterministicEmbedding(t)),
+                );
             }, 10);
         });
     }

@@ -114,9 +114,7 @@ describe("Knowledge Extraction - Phase 2: Extraction Functions", () => {
             expect(entityNames).toContain("Berber");
             expect(entityNames).toContain("Barbary macaque");
 
-            const berberEntity = entities.find(
-                (e: any) => e.name === "Berber",
-            );
+            const berberEntity = entities.find((e: any) => e.name === "Berber");
             expect(berberEntity.type).toBe("people");
         });
     });
@@ -175,8 +173,7 @@ describe("Knowledge Extraction - Phase 2: Extraction Functions", () => {
             expect(locationRels.length).toBeGreaterThan(3);
 
             const atlasInMorocco = locationRels.find(
-                (r: any) =>
-                    r.from === "Atlas Mountains" && r.to === "Morocco",
+                (r: any) => r.from === "Atlas Mountains" && r.to === "Morocco",
             );
             expect(atlasInMorocco).toBeDefined();
         });
@@ -282,9 +279,7 @@ describe("Knowledge Extraction - Phase 2: Extraction Functions", () => {
         });
 
         it("should estimate reading time", () => {
-            expect(
-                expectedKnowledge.contentMetrics.readingTime,
-            ).toBeDefined();
+            expect(expectedKnowledge.contentMetrics.readingTime).toBeDefined();
             expect(expectedKnowledge.contentMetrics.readingTime).toBe(4);
         });
     });

@@ -127,7 +127,9 @@ export class MockKnowledgeStore {
             if (!this.entityNeighborhoods.has(relationship.to)) {
                 this.entityNeighborhoods.set(relationship.to, new Set());
             }
-            this.entityNeighborhoods.get(relationship.to)!.add(relationship.from);
+            this.entityNeighborhoods
+                .get(relationship.to)!
+                .add(relationship.from);
         }
     }
 

@@ -63,7 +63,7 @@
     {
       "name": "Alps",
       "type": "mountain_range",
-      "confidence": 0.80,
+      "confidence": 0.8,
       "description": "Mountain range in central Europe"
     },
     {
@@ -118,7 +118,7 @@
       "from": "Atlas Mountains",
       "relationship": "separates",
       "to": "Sahara Desert",
-      "confidence": 0.90
+      "confidence": 0.9
     },
     {
       "from": "Atlas Mountains",

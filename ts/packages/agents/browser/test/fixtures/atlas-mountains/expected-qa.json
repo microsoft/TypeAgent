@@ -38,7 +38,7 @@
       "relevantTopics": ["Flora and Fauna"],
       "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
       "answerType": "factual",
-      "confidence": 0.90
+      "confidence": 0.9
     },
     {
       "question": "Who are the indigenous people of the Atlas Mountains?",
@@ -74,7 +74,11 @@
       "question": "How does climate vary in the Atlas Mountains?",
       "scope": "page",
       "expectedAnswer": "The climate of the Atlas Mountains varies considerably with elevation and exposure. Northern slopes facing the Mediterranean receive more precipitation than southern slopes. Winter snow is common at higher elevations, with some peaks receiving snow year-round. The climate ranges from Mediterranean forests in the north to semi-arid conditions in the south.",
-      "relevantEntities": ["Atlas Mountains", "Mediterranean Sea", "Sahara Desert"],
+      "relevantEntities": [
+        "Atlas Mountains",
+        "Mediterranean Sea",
+        "Sahara Desert"
+      ],
       "relevantTopics": ["Climate", "Geography"],
       "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
       "answerType": "explanatory",
@@ -117,7 +121,12 @@
       "question": "What is the cultural and geographic relationship between Morocco and the Atlas Mountains?",
       "scope": "related",
       "expectedAnswer": "Morocco has a deep cultural and geographic connection to the Atlas Mountains. The mountains stretch through much of Morocco and contain the highest peak, Mount Toubkal. The indigenous Berber people have inhabited the Moroccan Atlas for thousands of years, developing unique mountain cultures and traditional practices. The mountains are central to Morocco's geography, separating the Mediterranean coast from the Sahara Desert, and are important for tourism, agriculture, and water resources.",
-      "relevantEntities": ["Morocco", "Atlas Mountains", "Mount Toubkal", "Berber"],
+      "relevantEntities": [
+        "Morocco",
+        "Atlas Mountains",
+        "Mount Toubkal",
+        "Berber"
+      ],
       "relevantTopics": ["Geography", "Indigenous People", "Tourism"],
       "sourceUrls": [
         "https://en.wikipedia.org/wiki/Atlas_Mountains",
@@ -133,7 +142,11 @@
       "scope": "broader",
       "expectedAnswer": "The Berber people have been the indigenous inhabitants of North Africa, including the Atlas Mountains, for thousands of years. They established various dynasties that ruled much of North Africa during the medieval period. The mountains served as a refuge and stronghold throughout history, including during Roman expansion (which never fully conquered the mountain areas) and later resistance to French colonial rule in Morocco and Algeria. The Berber presence represents a continuous cultural thread connecting ancient North African civilization to the present day.",
       "relevantEntities": ["Berber", "Atlas Mountains", "Morocco", "Algeria"],
-      "relevantTopics": ["Indigenous People", "Historical Significance", "North Africa"],
+      "relevantTopics": [
+        "Indigenous People",
+        "Historical Significance",
+        "North Africa"
+      ],
       "sourceUrls": [
         "https://en.wikipedia.org/wiki/Atlas_Mountains",
         "https://en.wikipedia.org/wiki/Berber_people",

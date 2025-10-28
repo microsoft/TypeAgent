@@ -532,9 +532,10 @@ class PageQnAPanel {
                     );
 
                 if (graphQuestionResponse?.questions) {
-                    this.graphQuestions = graphQuestionResponse.questions.filter(
-                        (q: SuggestedQuestion) => q.scope === "broader",
-                    );
+                    this.graphQuestions =
+                        graphQuestionResponse.questions.filter(
+                            (q: SuggestedQuestion) => q.scope === "broader",
+                        );
                     this.renderQuestions(
                         "graphQuestionsList",
                         this.graphQuestions,

@@ -20,7 +20,7 @@
         {
           "name": "Mount Toubkal",
           "type": "mountain",
-          "confidence": 0.90
+          "confidence": 0.9
         },
         {
           "name": "Berber",
@@ -72,7 +72,7 @@
         {
           "name": "Atlas Mountains",
           "type": "mountain_range",
-          "confidence": 0.80
+          "confidence": 0.8
         }
       ],
       "topics": ["Geography", "Geology", "Mountain Formation"],
@@ -203,7 +203,11 @@
           "confidence": 0.86
         }
       ],
-      "topics": ["Indigenous People", "North Africa", "Historical Significance"],
+      "topics": [
+        "Indigenous People",
+        "North Africa",
+        "Historical Significance"
+      ],
       "wordCount": 1350,
       "relevanceToAtlas": 0.87
     },

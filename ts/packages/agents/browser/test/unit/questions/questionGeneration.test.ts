@@ -195,9 +195,7 @@ describe("Question Generation - Phase 3: Question Generation", () => {
             const pyreneeQuestion = graphQuestions.find((q: any) =>
                 q.question.includes("Pyrenees"),
             );
-            expect(pyreneeQuestion.sourceUrls.length).toBeGreaterThanOrEqual(
-                2,
-            );
+            expect(pyreneeQuestion.sourceUrls.length).toBeGreaterThanOrEqual(2);
         });
 
         it("should generate analytical questions", () => {
@@ -371,8 +369,8 @@ describe("Question Generation - Phase 3: Question Generation", () => {
         });
 
         it("should have topics aligned with question content", () => {
-            const geographyQuestion = expectedQA.pageQuestions.find(
-                (q: any) => q.question.toLowerCase().includes("countries"),
+            const geographyQuestion = expectedQA.pageQuestions.find((q: any) =>
+                q.question.toLowerCase().includes("countries"),
             );
 
             expect(geographyQuestion.relevantTopics).toContain("Geography");
@@ -381,9 +379,8 @@ describe("Question Generation - Phase 3: Question Generation", () => {
 
     describe("Mock Question Generation", () => {
         it("should generate page questions using mock LLM", () => {
-            const response = testContext.llm.getPageQuestionsResponse(
-                atlasContent,
-            );
+            const response =
+                testContext.llm.getPageQuestionsResponse(atlasContent);
 
             expect(response.success).toBe(true);
             expect(response.questions).toBeDefined();
