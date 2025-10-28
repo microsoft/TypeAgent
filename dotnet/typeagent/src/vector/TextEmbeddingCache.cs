@@ -13,7 +13,7 @@ public class TextEmbeddingCache : ICache<string, float[]>
         PersistentCache = null;
     }
 
-    public IReadOnlyCache<string, float[]>? PersistentCache { get; set; }
+    public IReadOnlyCache<string, Embedding>? PersistentCache { get; set; }
 
     public float[]? Get(string key) => _memCache.Get(key);
 
@@ -38,6 +38,6 @@ public class TextEmbeddingCache : ICache<string, float[]>
 
     float[]? GetPersistent(string key)
     {
-        return PersistentCache is not null && PersistentCache.TryGet(key, out var embedding) ? embedding : null;
+        return PersistentCache is not null && PersistentCache.TryGet(key, out var embedding) ? (float[])embedding : null;
     }
 }

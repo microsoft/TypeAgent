@@ -7,7 +7,7 @@ using TypeAgent.AIClient;
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnlyCache<string, float[]>
+public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnlyCache<string, Embedding>
 {
     SqliteDatabase _db;
 
@@ -31,10 +31,8 @@ public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnly
         return ValueTask.FromResult(GetCount());
     }
 
-    public bool TryGet(string key, out float[] value)
+    public bool TryGet(string key, out Embedding value)
     {
-        value = null;
-
         using var cmd = _db.CreateCommand(@"
 SELECT term_embedding from RelatedTermsFuzzy
 WHERE term = @term 
@@ -43,9 +41,10 @@ WHERE term = @term
         using var reader = cmd.ExecuteReader();
         if (reader.Read())
         {
-            value = new NormalizedEmbeddingB((byte[])reader.GetValue(0)).ToArray();
+            value = new NormalizedEmbeddingB((byte[])reader.GetValue(0)).ToEmbedding();
             return true;
         }
+        value = Embedding.Empty;
         return false;
     }
 
