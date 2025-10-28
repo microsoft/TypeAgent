@@ -140,6 +140,7 @@ public class SearchQuery
 }
 
 // Handles actorEntities: EntityTerm[] | "*"
+[JsonConverter(typeof(ActorEntitiesConverter))]
 public class ActorEntities
 {
     public List<EntityTerm>? Entities { get; set; }
