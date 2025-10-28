@@ -30,6 +30,16 @@ import {
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
 import registerDebug from "debug";
+import { YAMLMacroStoreExtension } from "./yamlMacro/macroStoreExtension.mjs";
+import {
+    convertParametersToYAML,
+    convertStepsToYAML,
+    extractParametersFromIntent,
+    filterUnusedParameters,
+} from "./yamlMacro/macroHelper.mjs";
+import { MacroConverter } from "./yamlMacro/converter.mjs";
+import { ArtifactsStorage } from "./yamlMacro/artifactsStorage.mjs";
+import { MinimalYAMLParser } from "./yamlMacro/minimalParser.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 
@@ -82,7 +92,15 @@ async function handleFindUserActions(
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
     const htmlFragments = await ctx.browser.getHtmlFragments();
-    const screenshot = await ctx.browser.getCurrentPageScreenshot();
+    let screenshot = "";
+    try {
+        screenshot = await ctx.browser.getCurrentPageScreenshot();
+    } catch (error) {
+        console.warn(
+            "Screenshot capture failed, continuing without screenshot:",
+            (error as Error)?.message,
+        );
+    }
     let pageSummary = "";
 
     const summaryResponse = await ctx.agent.getPageSummary(
@@ -173,9 +191,11 @@ async function handleFindUserActions(
     // AUTO-SAVE: Save discovered actions immediately
     if (uniqueItems.size > 0) {
         try {
+            debug("[YAML_DEBUG] About to call getPageUrl()...");
             const url = await getBrowserControl(
                 ctx.sessionContext.agentContext,
             ).getPageUrl();
+            debug(`[YAML_DEBUG] getPageUrl() returned: ${url}`);
 
             // Direct save to MacroStore (no longer using separate handler)
             if (!ctx.sessionContext.agentContext.macrosStore) {
@@ -208,6 +228,11 @@ async function handleFindUserActions(
                     );
                     continue;
                 }
+
+                debug(
+                    `[YAML_DEBUG] LLM-generated actionData for ${actionData.actionName}:`,
+                    JSON.stringify(actionData, null, 2),
+                );
 
                 const storedMacro =
                     ctx.sessionContext.agentContext.macrosStore.createDefaultMacro(
@@ -244,6 +269,11 @@ async function handleFindUserActions(
                             },
                         },
                     );
+
+                debug(
+                    `[YAML_DEBUG] StoredMacro before save for ${actionData.actionName}:`,
+                    JSON.stringify(storedMacro, null, 2),
+                );
 
                 const result =
                     await ctx.sessionContext.agentContext.macrosStore.saveMacro(
@@ -328,7 +358,15 @@ async function handleGetPageSummary(
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
     const htmlFragments = await ctx.browser.getHtmlFragments();
-    const screenshot = await ctx.browser.getCurrentPageScreenshot();
+    let screenshot = "";
+    try {
+        screenshot = await ctx.browser.getCurrentPageScreenshot();
+    } catch (error) {
+        console.warn(
+            "Screenshot capture failed, continuing without screenshot:",
+            (error as Error)?.message,
+        );
+    }
     const timerName = `Summarizing page`;
     console.time(timerName);
     const response = await ctx.agent.getPageSummary(undefined, htmlFragments, [
@@ -526,7 +564,23 @@ async function handleRegisterSiteSchema(
     setTimeout(async () => {
         try {
             await ctx.sessionContext.removeDynamicAgent(agentName);
-        } catch {}
+            debug(`Successfully removed existing agent: ${agentName}`);
+        } catch (error) {
+            console.warn(
+                `Normal removal failed for ${agentName}, attempting force cleanup:`,
+                error,
+            );
+
+            try {
+                await ctx.sessionContext.forceCleanupDynamicAgent(agentName);
+                debug(`Force cleanup successful for: ${agentName}`);
+            } catch (forceError) {
+                console.error(
+                    `Force cleanup also failed for ${agentName}:`,
+                    forceError,
+                );
+            }
+        }
 
         try {
             await ctx.sessionContext.addDynamicAgent(
@@ -538,8 +592,10 @@ async function handleRegisterSiteSchema(
                     ctx.sessionContext,
                 ),
             );
+            debug(`Successfully registered agent: ${agentName}`);
         } catch (error) {
             console.error("Failed to register dynamic agent:", error);
+            // Don't throw - this setTimeout runs async and shouldn't break the main flow
         }
     }, 1000);
 
@@ -575,11 +631,29 @@ async function handleGetIntentFromReccording(
         }
     }
 
+    let existingActionNames = action.parameters.existingActionNames;
+    const url = await getBrowserControl(
+        ctx.sessionContext.agentContext,
+    ).getPageUrl();
+
+    if (!existingActionNames || existingActionNames.length === 0) {
+        const existingActions =
+            await ctx.sessionContext.agentContext.macrosStore?.getMacrosForUrl(
+                url!,
+            );
+        if (existingActions) {
+            const dedupedActionNames = new Set(
+                existingActions.map((action: any) => action.name),
+            );
+            existingActionNames = [...dedupedActionNames];
+        }
+    }
+
     const timerName = `Getting intent schema`;
     console.time(timerName);
     const intentResponse = await ctx.agent.getIntentSchemaFromRecording(
         action.parameters.recordedActionName,
-        action.parameters.existingActionNames,
+        existingActionNames,
         action.parameters.recordedActionDescription,
         recordedSteps,
         action.parameters.fragments,
@@ -598,6 +672,27 @@ async function handleGetIntentFromReccording(
     console.timeEnd(timerName);
 
     const intentData = intentResponse.data as UserIntent;
+
+    // Ensure action name is unique by adding a number suffix if needed
+    if (
+        existingActionNames &&
+        existingActionNames.includes(intentData.actionName)
+    ) {
+        const baseName = intentData.actionName;
+        let suffix = 2;
+        let uniqueName = `${baseName}${suffix}`;
+
+        while (existingActionNames.includes(uniqueName)) {
+            suffix++;
+            uniqueName = `${baseName}${suffix}`;
+        }
+
+        debug(
+            `LLM returned duplicate action name "${baseName}", using "${uniqueName}" instead`,
+        );
+        intentData.actionName = uniqueName;
+    }
+
     const { actionSchema, typeDefinition } = await getIntentSchemaFromJSON(
         intentData,
         action.parameters.recordedActionDescription,
@@ -630,13 +725,18 @@ async function handleGetIntentFromReccording(
 
     console.timeEnd(timerName2);
 
-    // AUTO-SAVE: Save authored action immediately
+    // AUTO-SAVE: Save authored action immediately using YAML format
     let actionId = null;
     if (intentResponse.success && stepsResponse.success) {
         try {
-            const url = await getBrowserControl(
-                ctx.sessionContext.agentContext,
-            ).getPageUrl();
+            debug(
+                "JSON RESPONSE: Intent :\n",
+                JSON.stringify(intentResponse.data),
+            );
+            debug(
+                "JSON RESPONSE: STEPS :\n",
+                JSON.stringify(stepsResponse.data),
+            );
 
             // Direct save to ActionsStore (no longer using separate handler)
             if (!ctx.sessionContext.agentContext.macrosStore) {
@@ -645,103 +745,110 @@ async function handleGetIntentFromReccording(
 
             const domain = new URL(url).hostname;
 
-            const storedMacro =
-                ctx.sessionContext.agentContext.macrosStore.createDefaultMacro({
+            // Get macros base path - use actionsStore directory for artifacts
+            const macrosBasePath = "actionsStore/macros";
+
+            // Create YAML extension with sessionStorage for proper path handling
+            const yamlExt = new YAMLMacroStoreExtension(
+                ctx.sessionContext.agentContext.macrosStore,
+                macrosBasePath,
+                ctx.sessionContext.sessionStorage,
+            );
+
+            // Convert steps to YAML format first (needed for parameter filtering)
+            // stepsResponse.data is a macrosJson object with a steps property
+            const stepsArray = stepsResponse.data?.steps || [];
+
+            // Validate: Ensure all steps have actionName (LLM sometimes omits this)
+            for (let i = 0; i < stepsArray.length; i++) {
+                const step = stepsArray[i];
+                if (!step.actionName || typeof step.actionName !== "string") {
+                    console.error(
+                        `Invalid step at index ${i}:`,
+                        JSON.stringify(step, null, 2),
+                    );
+                    throw new Error(
+                        `LLM returned invalid step without actionName at index ${i}. ` +
+                            `Description: "${step.description || "none"}". ` +
+                            `This indicates a problem with the LLM prompt or response parsing.`,
+                    );
+                }
+            }
+
+            // Extract parameters first so we can pass them to convertStepsToYAML
+            const parsedParams = extractParametersFromIntent(intentData);
+
+            // Convert steps to YAML, passing parameters so values can be replaced with parameter names
+            const yamlSteps = Array.isArray(stepsArray)
+                ? convertStepsToYAML(stepsArray, parsedParams)
+                : [];
+
+            // Filter to only parameters actually used in steps
+            const filteredParams = filterUnusedParameters(
+                parsedParams,
+                yamlSteps,
+            );
+            const yamlParameters = convertParametersToYAML(filteredParams);
+
+            // Create full YAML macro from recording using tested converter
+            const { yamlMacro, recordingId } =
+                await yamlExt.createYAMLFromRecording({
                     name: intentData.actionName,
                     description:
                         action.parameters.recordedActionDescription ||
                         `User action: ${intentData.actionName}`,
-                    category: "utility",
                     author: "user",
-                    scope: {
-                        type: "page",
-                        domain: domain,
-                        priority: 80,
-                    },
-                    urlPatterns: [
-                        {
-                            pattern: url,
-                            type: "exact",
-                            priority: 100,
-                            description: `Exact match for ${url}`,
-                        },
-                    ],
-                    definition: {
-                        ...(actionSchema && { intentSchema: actionSchema }),
-                        ...(stepsResponse.data &&
-                            Array.isArray(stepsResponse.data) && {
-                                actionSteps: stepsResponse.data,
-                            }),
-                        ...(intentData.actionName &&
-                            intentData.parameters && {
-                                intentJson: {
-                                    actionName: intentData.actionName,
-                                    parameters: Array.isArray(
-                                        intentData.parameters,
-                                    )
-                                        ? intentData.parameters.map(
-                                              (param: any) => ({
-                                                  shortName:
-                                                      param.shortName ||
-                                                      param.name ||
-                                                      "unknown",
-                                                  description:
-                                                      param.description ||
-                                                      param.name ||
-                                                      "Parameter",
-                                                  type:
-                                                      param.type === "string" ||
-                                                      param.type === "number" ||
-                                                      param.type === "boolean"
-                                                          ? param.type
-                                                          : "string",
-                                                  required:
-                                                      param.required ?? false,
-                                                  defaultValue:
-                                                      param.defaultValue,
-                                              }),
-                                          )
-                                        : intentData.parameters
-                                          ? Object.entries(
-                                                intentData.parameters,
-                                            ).map(([key, value]) => ({
-                                                shortName: key,
-                                                description: `Parameter ${key}`,
-                                                type:
-                                                    typeof value === "string" ||
-                                                    typeof value === "number" ||
-                                                    typeof value === "boolean"
-                                                        ? typeof value
-                                                        : "string",
-                                                required: false,
-                                                defaultValue: value,
-                                            }))
-                                          : [],
-                                },
-                            }),
-                        macrosJson: stepsResponse.data,
-                        macroDefinition: typeDefinition,
-                        description:
-                            action.parameters.recordedActionDescription,
-                        screenshot: action.parameters.screenshots,
-                        steps: JSON.parse(recordedSteps || "[]"),
-                    },
+                    category: "utility",
+                    domain,
+                    url,
+                    parameters: yamlParameters,
+                    steps: yamlSteps,
+                    ...(action.parameters.screenshots && {
+                        screenshots: action.parameters.screenshots,
+                    }),
+                    recordedSteps: JSON.parse(recordedSteps || "[]"),
                 });
 
-            const result =
-                await ctx.sessionContext.agentContext.macrosStore.saveMacro(
-                    storedMacro,
+            // Convert to minimal format for storage
+            const artifactsStorage = new ArtifactsStorage(
+                macrosBasePath,
+                ctx.sessionContext.sessionStorage,
+            );
+            const converter = new MacroConverter(artifactsStorage);
+            const minimalYaml = converter.convertFullToMinimal(yamlMacro);
+
+            // Save minimal YAML directly to MacroStore
+            const metadata: {
+                category?: any;
+                author?: any;
+                tags?: string[];
+                recordingId?: string;
+            } = {
+                author: yamlMacro.macro.author as any,
+                category: yamlMacro.macro.category as any,
+                recordingId,
+            };
+            if (yamlMacro.macro.tags) {
+                metadata.tags = yamlMacro.macro.tags;
+            }
+            const macroId =
+                await ctx.sessionContext.agentContext.macrosStore.saveMinimalMacro(
+                    minimalYaml,
+                    metadata,
                 );
+
+            const result = { success: true, macroId };
 
             if (result.success) {
                 actionId = result.macroId;
                 debug(
-                    `Auto-saved authored action: ${action.parameters.recordedActionName}`,
+                    `Auto-saved authored action as minimal YAML: ${action.parameters.recordedActionName} (ID: ${macroId})`,
                 );
-            } else {
-                console.warn(
-                    `Failed to auto-save authored action: ${result.error}`,
-                );
+
+                // Log minimal YAML for debugging
+                const minimalParser = new MinimalYAMLParser();
+                const minimalYamlString = minimalParser.stringify(minimalYaml);
+                debug("Minimal YAML macro:\n", minimalYamlString);
             }
         } catch (error) {
             console.warn("Failed to auto-save authored action:", error);

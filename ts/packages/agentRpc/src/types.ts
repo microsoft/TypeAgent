@@ -110,6 +110,10 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         name: string;
     }) => Promise<void>;
+    forceCleanupDynamicAgent: (param: {
+        contextId: number;
+        name: string;
+    }) => Promise<void>;
     getSharedLocalHostPort: (param: {
         contextId: number;
         agentName: string;
