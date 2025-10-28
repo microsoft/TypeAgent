@@ -45,7 +45,7 @@ VALUES (@propertyName, @value, @score, @semrefId)
         cmd.ExecuteNonQuery();
     }
 
-    public ValueTask AddPropertyAync(
+    public ValueTask AddPropertyAsync(
         string propertyName,
         string value,
         ScoredSemanticRefOrdinal scoredOrdinal,

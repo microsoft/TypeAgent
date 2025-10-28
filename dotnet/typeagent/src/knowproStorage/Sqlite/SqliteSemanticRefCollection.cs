@@ -214,7 +214,7 @@ ORDER BY semref_id
 
     }
 
-    public ValueTask<IList<SemanticRef>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    public IList<SemanticRef> GetSlice(int startOrdinal, int endOrdinal)
     {
         ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
 
@@ -227,7 +227,13 @@ ORDER BY semref_id");
 
         using var reader = cmd.ExecuteReader();
         IList<SemanticRef> semanticRefList = reader.GetList(ReadSemanticRef);
-        return ValueTask.FromResult(semanticRefList);
+        return semanticRefList;
+    }
+
+
+    public ValueTask<IList<SemanticRef>> GetSliceAsync(int startOrdinal, int endOrdinal, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetSlice(startOrdinal, endOrdinal));
     }
 
     int GetNextSemanicRefId()

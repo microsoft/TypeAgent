@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Lang;
+
 namespace KnowProConsole;
 
 public class TestCommands : ICommandModule
@@ -18,7 +20,8 @@ public class TestCommands : ICommandModule
             SearchTermsDef(),
             SearchPropertyTermsDef(),
             SearchMessagesTermsDef(),
-            TestEmbeddingsDef()
+            TestEmbeddingsDef(),
+            SearchQueryTermsDef(),
         ];
     }
 
@@ -162,7 +165,7 @@ public class TestCommands : ICommandModule
         IConversation conversation = EnsureConversation();
 
         var settings = AzureModelApiSettings.EmbeddingSettingsFromEnv();
-        var model = new TextEmbeddingModel(settings);
+        var model = new OpenAITextEmbeddingModel(settings);
         var modelWithCache = new TextEmbeddingModelWithCache(
             model,
             new TextEmbeddingCache(1024)
@@ -209,6 +212,33 @@ public class TestCommands : ICommandModule
         var results = await conversation.SearchKnowledgeAsync(
             new SearchSelectExpr(searchGroup), null, null, cancellationToken).ConfigureAwait(false);
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+    }
+
+    private Command SearchQueryTermsDef()
+    {
+        Command cmd = new("kpTestSearchQuery")
+        {
+            Args.Arg<string>("query")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.SearchQueryTermsAsync);
+        return cmd;
+    }
+
+    private async Task SearchQueryTermsAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+       // IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        var query = namedArgs.Get("query");
+        if (string.IsNullOrEmpty(query))
+        {
+            return;
+        }
+        var model = new OpenAIChatModel();
+        SearchQueryTranslator translator = new SearchQueryTranslator(model);
+        var result = await translator.TranslateAsync(query, cancellationToken);
+        KnowProWriter.WriteJson(result);
     }
 
     private IConversation EnsureConversation()

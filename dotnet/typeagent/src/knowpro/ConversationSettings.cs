@@ -6,7 +6,7 @@ namespace TypeAgent.KnowPro;
 public class ConversationSettings
 {
     public ConversationSettings()
-        : this(new TextEmbeddingModel())
+        : this(new OpenAITextEmbeddingModel())
     {
     }
 

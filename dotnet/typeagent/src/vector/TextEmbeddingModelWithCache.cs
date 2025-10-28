@@ -6,7 +6,7 @@ namespace TypeAgent.Vector;
 public class TextEmbeddingModelWithCache : ITextEmbeddingModel
 {
     public TextEmbeddingModelWithCache(int maxCacheSize)
-        : this(new TextEmbeddingModel(), new TextEmbeddingCache(maxCacheSize))
+        : this(new OpenAITextEmbeddingModel(), new TextEmbeddingCache(maxCacheSize))
     {
     }
 
@@ -33,8 +33,6 @@ public class TextEmbeddingModelWithCache : ITextEmbeddingModel
 
     public async Task<float[]> GenerateAsync(string text, CancellationToken cancellationToken)
     {
-        float[]? embedding = null;
-
         if (CacheEnabled)
         {
             return await Cache.GetOrLoadAsync(

@@ -29,10 +29,10 @@ public static class Options
 
 public class Args
 {
-    public static Option<T> Arg<T>(string name, string description)
+    public static Option<T> Arg<T>(string name, string? description = null)
     {
         // Use default! to suppress CS8604 warning for possible null reference
-        return Arg<T>(name, description, default!);
+        return Arg<T>(name, string.Empty, default!);
     }
 
     public static Option<T> Arg<T>(string name, string description, T? defaultValue)

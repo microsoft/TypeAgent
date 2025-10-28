@@ -4,21 +4,21 @@
 
 namespace TypeAgent.AIClient;
 
-public class TextEmbeddingModel : ModelApi, ITextEmbeddingModel
+public class OpenAITextEmbeddingModel : ModelApi, ITextEmbeddingModel
 {
     int _dimensions;
 
-    public TextEmbeddingModel()
+    public OpenAITextEmbeddingModel()
         : this(ModelApiSettings.FromEnv(ModelType.Embedding))
     {
     }
 
-    public TextEmbeddingModel(ModelApiSettings settings, int dimensions = 0, int maxBatchSize = 2048)
+    public OpenAITextEmbeddingModel(ModelApiSettings settings, int dimensions = 0, int maxBatchSize = 2048)
         : this(settings, null, dimensions, maxBatchSize)
     {
     }
 
-    public TextEmbeddingModel(
+    public OpenAITextEmbeddingModel(
         ModelApiSettings settings,
         HttpClient? client,
         int dimensions = 0,

@@ -9,7 +9,7 @@ public interface IPropertyToSemanticRefIndex
 
     ValueTask<IList<string>> GetValuesAsync(CancellationToken cancellationToken = default);
 
-    ValueTask AddPropertyAync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
+    ValueTask AddPropertyAsync(string propertyName, string value, ScoredSemanticRefOrdinal scoredOrdinal, CancellationToken cancellationToken = default);
 
     ValueTask<IList<ScoredSemanticRefOrdinal>> LookupPropertyAsync(string propertyName, string value, CancellationToken cancellationToken = default);
 
@@ -29,7 +29,7 @@ public static class PropertyToSemanticRefIndexExtensions
         CancellationToken cancellationToken = default
     )
     {
-        return propertyIndex.AddPropertyAync(propertyName, value, ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken);
+        return propertyIndex.AddPropertyAsync(propertyName, value, ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken);
     }
 
     public static ValueTask AddSemanticRefAsync(
