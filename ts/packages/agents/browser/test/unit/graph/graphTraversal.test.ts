@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { describe, it, expect, beforeEach } from "@jest/globals";
 import { readFileSync } from "fs";
 import { join } from "path";

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 export class MockEmbeddings {
     private static embeddingCache: Map<string, number[]> = new Map();
     private static readonly EMBEDDING_DIM = 384;

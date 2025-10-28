@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { MockLLMResponses } from "./mockLLMResponses";
 import { MockEmbeddings } from "./mockEmbeddings";
 import {
