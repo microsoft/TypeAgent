@@ -8,7 +8,10 @@ name: smoke-tests
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "dev/robgruen/action_trigger"]
+    paths:
+      - 'ts/**'
+      - '.github/workflows/smoke-tests.yml'
   pull_request_target:
     branches: ["main"]
   merge_group:
