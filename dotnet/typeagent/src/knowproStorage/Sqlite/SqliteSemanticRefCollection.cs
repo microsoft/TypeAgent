@@ -102,14 +102,14 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
         List<SemanticRef> semanticRefs = new(semanticRefIds.Count);
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
-            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var sql = $@"
-                SELECT semref_id, range_json, knowledge_type, knowledge_json
-                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
-                ORDER BY semref_id";
+SELECT semref_id, range_json, knowledge_type, knowledge_json
+FROM SemanticRefs WHERE semref_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
+ORDER BY semref_id";
             var rows = _db.Enumerate(
                 sql,
-                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                cmd => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 ReadSemanticRefRow);
             foreach (var row in rows)
             {
@@ -143,14 +143,14 @@ FROM SemanticRefs WHERE semref_id = @semref_id",
         List<TextRange> ranges = new(semanticRefIds.Count);
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
-            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var sql = $@"
-                SELECT range_json
-                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
-                ORDER BY semref_id";
+SELECT range_json
+FROM SemanticRefs WHERE semref_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
+ORDER BY semref_id";
             var rows = _db.Enumerate(
                 sql,
-                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                cmd => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 (reader) => StorageSerializer.FromJson<TextRange>(reader.GetString(0))
                );
             ranges.AddRange(rows);
@@ -182,14 +182,14 @@ FROM SemanticRefs WHERE semref_id = @semref_id",
         List<KnowledgeType> ranges = new(semanticRefIds.Count);
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
-            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var sql = $@"
-                SELECT knowledge_type
-                FROM SemanticRefs WHERE semref_id IN ({string.Join(", ", placeholderIds)})
-                ORDER BY semref_id";
+SELECT knowledge_type
+FROM SemanticRefs WHERE semref_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
+ORDER BY semref_id";
             var rows = _db.Enumerate(
                 sql,
-                cmd => cmd.AddIdParameters(placeholderIds, batch),
+                cmd => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 (reader) => (KnowledgeType)reader.GetString(0)
                );
             ranges.AddRange(rows);

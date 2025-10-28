@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro.Query;
 
-public struct CompiledTermGroup
+internal struct CompiledTermGroup
 {
     public CompiledTermGroup(SearchTermBooleanOp booleanOp)
     {

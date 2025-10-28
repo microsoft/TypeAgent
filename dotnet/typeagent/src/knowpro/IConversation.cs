@@ -37,6 +37,8 @@ public interface IConversation
 
 public static class ConversationExtensions
 {
+    // TODO: Handle cancellation in these APIS
+
     public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
         this IConversation conversation,
         SearchSelectExpr select,
@@ -45,7 +47,7 @@ public static class ConversationExtensions
         CancellationToken cancellationToken = default
     )
     {
-        QueryCompiler compiler = new QueryCompiler(conversation);
+        QueryCompiler compiler = new QueryCompiler(conversation, cancellationToken);
         options ??= SearchOptions.CreateDefault();
 
         var queryExpr = await compiler.CompileKnowledgeQueryAsync(
@@ -78,7 +80,7 @@ public static class ConversationExtensions
     )
     {
         options ??= SearchOptions.CreateDefault();
-        QueryCompiler compiler = new QueryCompiler(conversation);
+        QueryCompiler compiler = new QueryCompiler(conversation, cancellationToken);
 
         var knowledgeQueryExpr = await compiler.CompileKnowledgeQueryAsync(
             select.SearchTermGroup,

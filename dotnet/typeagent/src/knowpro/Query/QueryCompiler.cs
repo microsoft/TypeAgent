@@ -10,8 +10,9 @@ internal class QueryCompiler
     private IConversation _conversation;
     private List<CompiledTermGroup> _allSearchTerms;
     private List<CompiledTermGroup> _allScopeSearchTerms;
+    private CancellationToken _cancellationToken;
 
-    public QueryCompiler(IConversation conversation)
+    public QueryCompiler(IConversation conversation, CancellationToken cancellationToken = default)
     {
         _conversation = conversation;
         _allSearchTerms = [];
@@ -328,5 +329,66 @@ internal class QueryCompiler
             }
         }
         return actionGroup;
+    }
+
+    private async ValueTask ResolveRelatedTermsAsync(
+        List<CompiledTermGroup> compiledTerms,
+        bool ensureSingleOccurence
+    )
+    {
+        ITermToRelatedTermIndex relatedTermIndex = _conversation.SecondaryIndexes.TermToRelatedTermsIndex;
+
+        List<SearchTerm> termsNeedingRelated = SelectTermsNeedingRelated(compiledTerms);
+        if (termsNeedingRelated.IsNullOrEmpty())
+        {
+            return;
+        }
+
+        List<string> termTexts = termsNeedingRelated.Map((st) => st.Term.Text);
+        // First, find an known related terms
+        var knownRelatedTerms = await relatedTermIndex.Aliases.LookupTermAsync(termTexts, _cancellationToken).ConfigureAwait(false);
+        if (!knownRelatedTerms.IsNullOrEmpty())
+        {
+            for (int i = 0; i < termsNeedingRelated.Count;)
+            {
+                if (knownRelatedTerms.TryGetValue(termTexts[i], out var relatedTerms))
+                {
+                    termsNeedingRelated[i].RelatedTerms = relatedTerms;
+                    termTexts.RemoveAt(i);
+                    termsNeedingRelated.RemoveAt(i);
+                    continue;
+                }
+                else
+                {
+                    ++i;
+                }
+            }
+        }
+        // Anything that did not have known related terms... will get terms that are fuzzily related
+        if (termsNeedingRelated.IsNullOrEmpty())
+        {
+            return;
+        }
+        var relatedTermsFuzzy = await relatedTermIndex.FuzzyIndex.LookupTermAsync(termTexts);
+        for (int i = 0; i < termsNeedingRelated.Count; ++i)
+        {
+            termsNeedingRelated[i].RelatedTerms = relatedTermsFuzzy[i];
+        }
+    }
+
+    private List<SearchTerm>? SelectTermsNeedingRelated(List<CompiledTermGroup> compiledTerms)
+    {
+        List<SearchTerm> searchTerms = [];
+        foreach (var compiledTerm in compiledTerms)
+        {
+            foreach (var searchTerm in compiledTerm.Terms)
+            {
+                if (!(searchTerm.IsWildcard() || searchTerm.IsExactMatch()))
+                {
+                    searchTerms.Add(searchTerm);
+                }
+            }
+        }
+        return searchTerms;
     }
 }

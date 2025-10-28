@@ -16,18 +16,7 @@ public interface ITermsToRelatedTermsIndex
 
     ValueTask<IList<Term>?> LookupTermAsync(string text, CancellationToken cancellationToken = default);
 
-    ValueTask ClearAsync(CancellationToken cancellationToken = default);
-}
+    ValueTask<IDictionary<string, IList<Term>>?> LookupTermAsync(IList<string> texts, CancellationToken cancellationToken = default);
 
-public static class TermsToRelatedTermsIndexExtensions
-{
-    public static ValueTask ResolveRelatedTermsAsync(
-        this ITermsToRelatedTermsIndex relatedTermsIndex,
-        IList<SearchTermGroup> compiledTerms,
-        bool ensureSingleOccurence
-    )
-    {
-        //List<SearchTerm> allSearchTerms = compiledTerms.FlatMap((ct) => ct.term)
-        throw new NotImplementedException();
-    }
+    ValueTask ClearAsync(CancellationToken cancellationToken = default);
 }

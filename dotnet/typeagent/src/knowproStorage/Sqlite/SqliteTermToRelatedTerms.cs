@@ -81,22 +81,53 @@ VALUES (@term, @alias, @score)"
         return ValueTask.CompletedTask;
     }
 
-    public IList<Term>? Lookup(string term, CancellationToken cancellationToken = default)
+    public IList<Term>? Lookup(string termText)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
+        ArgumentVerify.ThrowIfNullOrEmpty(termText, nameof(termText));
 
         using var cmd = _db.CreateCommand(@"
 SELECT alias, score FROM RelatedTermsAliases WHERE term = @term"
 );
-        cmd.AddParameter("@term", term);
+        cmd.AddParameter("@term", termText);
         using var reader = cmd.ExecuteReader();
         return reader.GetListOrNull(
-            (reader) => new Term(reader.GetString(0), reader.GetFloat(1))
+            (reader) => ReadTerm(reader)
         );
+    }
+
+    public IDictionary<string, IList<Term>>? Lookup(IList<string> termTexts)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(termTexts, nameof(termTexts));
+
+        var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(termTexts.Count);
+        var rows = _db.Enumerate(
+            $@"
+SELECT term, alias, score
+FROM  RelatedTermsAliases
+WHERE term IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
+",
+            (cmd) => cmd.AddPlaceholderParameters(placeholderIds, termTexts),
+            (reader) =>
+            {
+                return new KeyValuePair<string, Term>(reader.GetString(0), ReadTerm(reader, 1));
+            }
+        );
+        var results = new Multiset<string, Term>(rows);
+        return !results.IsNullOrEmpty() ? (IDictionary<string, IList<Term>>)results : null;
     }
 
     public ValueTask<IList<Term>?> LookupTermAsync(string text, CancellationToken cancellationToken = default)
     {
-        return ValueTask.FromResult(Lookup(text, cancellationToken));
+        return ValueTask.FromResult(Lookup(text));
+    }
+
+    public ValueTask<IDictionary<string, IList<Term>>?> LookupTermAsync(IList<string> texts, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(Lookup(texts));
+    }
+
+    Term ReadTerm(SqliteDataReader reader, int iCol = 0)
+    {
+        return new Term(reader.GetString(iCol), reader.GetFloat(iCol));
     }
 }

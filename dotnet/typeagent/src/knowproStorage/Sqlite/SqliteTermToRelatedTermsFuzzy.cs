@@ -89,8 +89,8 @@ VALUES(@term, @term_embedding)
 
     public async ValueTask<IList<Term>> LookupTermAsync(
         string text,
-        int? maxMatches,
-        double? minScore,
+        int? maxMatches = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -102,8 +102,8 @@ VALUES(@term, @term_embedding)
 
     public async ValueTask<IList<IList<Term>>> LookupTermAsync(
         IList<string> texts,
-        int maxMatches,
-        double minScore,
+        int? maxMatches = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -171,14 +171,14 @@ VALUES(@term, @term_embedding)
 
     private List<Term> GetTerms(List<ScoredItem<int>> termIds)
     {
-        var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(termIds.Count);
+        var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(termIds.Count);
 
         var rows = _db.Enumerate(
             $@"
 SELECT term
-FROM RelatedTermsFuzzy WHERE term_id IN ({string.Join(", ", placeholderIds)})
+FROM RelatedTermsFuzzy WHERE term_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ORDER BY term_id",
-            (cmd) => cmd.AddIdParameters(placeholderIds, termIds.Map((t) => t.Item)),
+            (cmd) => cmd.AddPlaceholderParameters(placeholderIds, termIds.Map((t) => t.Item)),
             (reader) => reader.GetString(0)
         );
         int i = 0;

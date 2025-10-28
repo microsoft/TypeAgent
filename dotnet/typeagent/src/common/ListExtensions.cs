@@ -57,6 +57,18 @@ public static class ListExtensions
         return results;
     }
 
+    public static List<TResult> FlatMap<T, TResult>(this IEnumerable<T> list, Func<T, IList<TResult>> mapFn)
+    {
+        ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
+
+        List<TResult> results = [];
+        foreach (var item in list)
+        {
+            results.AddRange(mapFn(item).AsReadOnly());
+        }
+        return results;
+    }
+
     public static List<T> Filter<T>(this IList<T> list, Func<T, bool> filter)
     {
         List<T> filtered = [];
