@@ -3,6 +3,39 @@
 
 @ <Start> = <Pause>
           | <Resume>
-
+          | <PlayCommand>
 @ <Pause> = pause ((the)? music)?   ->  { actionName: "pause" }
 @ <Resume> = resume ((the)? music)?   ->  { actionName: "resume" }
+@ <PlayCommand> = <PlayTrackNumberCommand>
+@ <PlayTrackNumberCommand> =
+    play (the)? $(n:<Ordinal>) (<Item>)? -> {
+        actionName: "playFromCurrentTrackList",
+        parameters: {
+            trackNumber: $(n)
+        }
+    }
+| play track $(n:<Cardinal>) -> {
+        actionName: "playFromCurrentTrackList",
+        parameters: {
+            trackNumber: $(n)
+        }
+   }
+| play track #$(n:number) -> {
+        actionName: "playFromCurrentTrackList",
+        parameters: {
+            trackNumber: $(n)
+        }
+   }
+@ <Item> = one | track | song | cut
+@ <Cardinal> = 
+    one -> 1
+|   two -> 2
+|   three -> 3
+|   four -> 4
+@ <Ordinal> =
+    first -> 1
+|   second -> 2
+|   third -> 3
+|   troisiemme -> 3
+|   fourth -> 4 
+    
