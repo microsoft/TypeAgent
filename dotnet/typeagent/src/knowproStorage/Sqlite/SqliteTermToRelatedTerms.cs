@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteTermToRelatedTerms : ITermsToRelatedTerms
+public class SqliteTermToRelatedTerms : ITermsToRelatedTermsIndex
 {
     SqliteDatabase _db;
 

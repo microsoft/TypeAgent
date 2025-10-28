@@ -37,7 +37,8 @@ public class TextEmbeddingModelWithCache : ITextEmbeddingModel
         {
             return await Cache.GetOrLoadAsync(
                 text,
-                async (text, ct) => {
+                async (text, ct) =>
+                {
                     var result = await InnerModel.GenerateAsync(text, cancellationToken).ConfigureAwait(false);
                     return result;
                 },

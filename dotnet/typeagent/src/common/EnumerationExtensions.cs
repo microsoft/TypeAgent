@@ -37,10 +37,29 @@ public static class EnumerationExtensions
         return results;
     }
 
+    public static List<TResult> FlatMap<T, TResult>(this IEnumerable<IEnumerable<T>> list, Func<T, TResult> mapFn)
+    {
+        ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
+
+        List<TResult> results = [];
+        foreach (var inner in list)
+        {
+            if (inner is not null)
+            {
+                foreach (var item in inner)
+                {
+                    results.Add(mapFn(item));
+                }
+            }
+        }
+        return results;
+    }
+
+
     public static List<T> Flat<T>(this IEnumerable<IEnumerable<T>> list)
     {
         var result = new List<T>();
-        foreach(var inner in list)
+        foreach (var inner in list)
         {
             if (inner is not null)
             {
@@ -49,7 +68,6 @@ public static class EnumerationExtensions
         }
         return result;
     }
-
 
     public static IEnumerable<List<T>> Batch<T>(this IEnumerable<T> items, int batchSize, List<T>? buffer = null)
     {

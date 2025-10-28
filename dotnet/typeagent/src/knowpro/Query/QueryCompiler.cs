@@ -8,8 +8,8 @@ namespace TypeAgent.KnowPro.Query;
 internal class QueryCompiler
 {
     private IConversation _conversation;
-    private List<SearchTermGroup> _allSearchTerms;
-    private List<SearchTermGroup> _allScopeSearchTerms;
+    private List<CompiledTermGroup> _allSearchTerms;
+    private List<CompiledTermGroup> _allScopeSearchTerms;
 
     public QueryCompiler(IConversation conversation)
     {
@@ -54,13 +54,13 @@ internal class QueryCompiler
         return ValueTask.FromResult(messagesExpr);
     }
 
-    public (IList<SearchTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroup(
+    public (List<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroupTerms(
         SearchTermGroup searchGroup,
         GetScopeExpr? scopeExpr,
         IQuerySemanticRefPredicate? matchFilter = null
     )
     {
-        List<SearchTermGroup> compiledTerms = [new SearchTermGroup(searchGroup.BooleanOp)];
+        List<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
 
         List<QueryOpExpr<SemanticRefAccumulator?>> termExpressions = [];
         foreach (var term in searchGroup.Terms)
@@ -84,7 +84,7 @@ internal class QueryCompiler
                     break;
 
                 case SearchTermGroup subGroup:
-                    var (nestedTerms, groupExpr) = CompileSearchGroup(
+                    var (nestedTerms, groupExpr) = CompileSearchGroupTerms(
                         subGroup,
                         null,  // Apply scopes on the outermost expression only
                         matchFilter
@@ -113,12 +113,12 @@ internal class QueryCompiler
         return (compiledTerms, boolExpr);
     }
 
-    public (IList<SearchTermGroup>, QueryOpExpr<MessageAccumulator>) CompileMessageSearchGroup(
+    public (List<CompiledTermGroup>, QueryOpExpr<MessageAccumulator>) CompileMessageSearchGroup(
        SearchTermGroup searchGroup,
        IQuerySemanticRefPredicate? matchFilter = null
    )
     {
-        List<SearchTermGroup> compiledTerms = [new SearchTermGroup(searchGroup.BooleanOp)];
+        List<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
 
         List<QueryOpExpr> termExpressions = [];
         foreach (var term in searchGroup.Terms)
@@ -142,7 +142,7 @@ internal class QueryCompiler
                     break;
 
                 case SearchTermGroup subGroup:
-                    var (nestedTerms, groupExpr) = CompileSearchGroup(
+                    var (nestedTerms, groupExpr) = CompileSearchGroupTerms(
                         subGroup,
                         null,  // Apply scopes on the outermost expression only
                         matchFilter
@@ -188,7 +188,7 @@ internal class QueryCompiler
         GetScopeExpr? scopeExpr
     )
     {
-        var (searchTermsUsed, selectExpr) = CompileSearchGroup(searchGroup, scopeExpr);
+        var (searchTermsUsed, selectExpr) = CompileSearchGroupTerms(searchGroup, scopeExpr);
         _allSearchTerms.AddRange(searchTermsUsed);
         return selectExpr;
     }
