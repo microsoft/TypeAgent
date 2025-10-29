@@ -22,10 +22,10 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "agent-rpc": "workspace:*",
-    "action-schema": "workspace:*",
     "aiclient": "workspace:*",
     "body-parser": "1.20.3",
     "chalk": "^5.4.1",
