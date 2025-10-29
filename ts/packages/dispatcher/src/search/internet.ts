@@ -218,10 +218,6 @@ export async function getLookupSettings(
     };
 }
 
-// function getLookupInstructions(): PromptSection[] {
-//     return [promptLib.dateTimePromptSection()];
-// }
-
 async function createActionResultWithMessage(
     messages: ThreadMessage[],
     settings: LookupSettings,
