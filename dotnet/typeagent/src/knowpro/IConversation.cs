@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using TypeAgent.KnowPro.Query;
-
 namespace TypeAgent.KnowPro;
 
 /// <summary>
@@ -24,7 +22,6 @@ public interface IConversation<TMessage> : IDisposable
     IConversationSecondaryIndexes SecondaryIndexes { get; }
 }
 
-
 public interface IConversation
 {
     ConversationSettings Settings { get; }
@@ -36,103 +33,4 @@ public interface IConversation
     ITermToSemanticRefIndex SemanticRefIndex { get; }
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
-}
-
-
-public static class ConversationExtensions
-{
-    // TODO: Handle cancellation in these APIS
-
-    public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
-        this IConversation conversation,
-        SearchSelectExpr select,
-        SearchOptions? options,
-        IConversationCache? cache = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        QueryCompiler compiler = new QueryCompiler(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken);
-        options ??= SearchOptions.CreateDefault();
-
-        var queryExpr = await compiler.CompileKnowledgeQueryAsync(
-            select.SearchTermGroup,
-            select.When,
-            options
-        ).ConfigureAwait(false);
-
-        QueryEvalContext context = new QueryEvalContext(conversation, cache, cancellationToken);
-        return await queryExpr.EvalAsync(context).ConfigureAwait(false);
-    }
-
-    public static ValueTask<ConversationSearchResult?> SearchConversationAsync(
-        this IConversation conversation,
-        SearchSelectExpr select,
-        SearchOptions? options = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return conversation.SearchConversationAsync(select, options, null, null, cancellationToken);
-    }
-
-    public static async ValueTask<ConversationSearchResult?> SearchConversationAsync(
-        this IConversation conversation,
-        SearchSelectExpr select,
-        SearchOptions? options = null,
-        IConversationCache? conversationCache = null,
-        string? rawSearchQuery = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        options ??= SearchOptions.CreateDefault();
-        QueryCompiler compiler = new QueryCompiler(conversation, cancellationToken);
-
-        var knowledgeQueryExpr = await compiler.CompileKnowledgeQueryAsync(
-            select.SearchTermGroup,
-            select.When,
-            options
-        ).ConfigureAwait(false);
-
-        var messageQueryExpr = await compiler.CompileMessageQueryAsync(
-            knowledgeQueryExpr,
-            options,
-            rawSearchQuery
-        ).ConfigureAwait(false);
-
-        QueryEvalContext context = new QueryEvalContext(conversation, conversationCache, cancellationToken);
-        var messageOrdinals = await messageQueryExpr.EvalAsync(context).ConfigureAwait(false);
-        return new ConversationSearchResult()
-        {
-            MessageMatches = messageOrdinals,
-            KnowledgeMatches = context.KnowledgeMatches,
-            RawSearchQuery = rawSearchQuery,
-        };
-    }
-
-    public static async ValueTask<DateRange?> GetDateRangeAsync(this IConversation conversation)
-    {
-        var timestampRange = await conversation.GetStartTimestampRangeAsync().ConfigureAwait(false);
-        return timestampRange is not null ? new DateRange(timestampRange.Value) : null;
-    }
-
-    public static async ValueTask<TimestampRange?> GetStartTimestampRangeAsync(this IConversation conversation)
-    {
-        // TODO: lower this method the collection
-
-        var messageCount = await conversation.Messages.GetCountAsync().ConfigureAwait(false);
-        if (messageCount > 0)
-        {
-            var start = await conversation.Messages.GetMessageTimestampAsync(1).ConfigureAwait(false);
-            var end = await conversation.Messages.GetMessageTimestampAsync(messageCount - 1).ConfigureAwait(false);
-            if (start is not null)
-            {
-                return new TimestampRange
-                {
-                    StartTimestamp = start,
-                    EndTimestamp = end
-                };
-            }
-        }
-        return null;
-    }
-
 }
