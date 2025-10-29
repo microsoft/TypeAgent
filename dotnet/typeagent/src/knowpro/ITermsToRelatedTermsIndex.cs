@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro;
 
-public interface ITermsToRelatedTerms
+public interface ITermsToRelatedTermsIndex
 {
     ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
@@ -15,6 +15,8 @@ public interface ITermsToRelatedTerms
     ValueTask AddTermAsync(string text, IList<Term> relatedTerms, CancellationToken cancellationToken = default);
 
     ValueTask<IList<Term>?> LookupTermAsync(string text, CancellationToken cancellationToken = default);
+
+    ValueTask<IDictionary<string, IList<Term>>?> LookupTermAsync(IList<string> texts, CancellationToken cancellationToken = default);
 
     ValueTask ClearAsync(CancellationToken cancellationToken = default);
 }

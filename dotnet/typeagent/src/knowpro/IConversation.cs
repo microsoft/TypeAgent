@@ -13,6 +13,8 @@ namespace TypeAgent.KnowPro;
 public interface IConversation<TMessage> : IDisposable
     where TMessage : IMessage
 {
+    ConversationSettings Settings { get; }
+
     IMessageCollection<TMessage> Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
@@ -25,6 +27,8 @@ public interface IConversation<TMessage> : IDisposable
 
 public interface IConversation
 {
+    ConversationSettings Settings { get; }
+
     IMessageCollection Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
@@ -37,6 +41,8 @@ public interface IConversation
 
 public static class ConversationExtensions
 {
+    // TODO: Handle cancellation in these APIS
+
     public static async ValueTask<IDictionary<KnowledgeType, SemanticRefSearchResult>?> SearchKnowledgeAsync(
         this IConversation conversation,
         SearchSelectExpr select,
@@ -45,7 +51,7 @@ public static class ConversationExtensions
         CancellationToken cancellationToken = default
     )
     {
-        QueryCompiler compiler = new QueryCompiler(conversation);
+        QueryCompiler compiler = new QueryCompiler(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken);
         options ??= SearchOptions.CreateDefault();
 
         var queryExpr = await compiler.CompileKnowledgeQueryAsync(
@@ -78,7 +84,7 @@ public static class ConversationExtensions
     )
     {
         options ??= SearchOptions.CreateDefault();
-        QueryCompiler compiler = new QueryCompiler(conversation);
+        QueryCompiler compiler = new QueryCompiler(conversation, cancellationToken);
 
         var knowledgeQueryExpr = await compiler.CompileKnowledgeQueryAsync(
             select.SearchTermGroup,

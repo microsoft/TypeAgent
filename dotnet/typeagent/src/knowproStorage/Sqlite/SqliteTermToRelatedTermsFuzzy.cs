@@ -7,7 +7,7 @@ using TypeAgent.AIClient;
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnlyCache<string, float[]>
+public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnlyCache<string, Embedding>
 {
     SqliteDatabase _db;
 
@@ -31,10 +31,8 @@ public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnly
         return ValueTask.FromResult(GetCount());
     }
 
-    public bool TryGet(string key, out float[] value)
+    public bool TryGet(string key, out Embedding value)
     {
-        value = null;
-
         using var cmd = _db.CreateCommand(@"
 SELECT term_embedding from RelatedTermsFuzzy
 WHERE term = @term 
@@ -43,9 +41,10 @@ WHERE term = @term
         using var reader = cmd.ExecuteReader();
         if (reader.Read())
         {
-            value = new NormalizedEmbeddingB((byte[])reader.GetValue(0)).ToArray();
+            value = new NormalizedEmbeddingB((byte[])reader.GetValue(0)).ToEmbedding();
             return true;
         }
+        value = Embedding.Empty;
         return false;
     }
 
@@ -90,8 +89,8 @@ VALUES(@term, @term_embedding)
 
     public async ValueTask<IList<Term>> LookupTermAsync(
         string text,
-        int? maxMatches,
-        double? minScore,
+        int? maxMatches = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -103,8 +102,8 @@ VALUES(@term, @term_embedding)
 
     public async ValueTask<IList<IList<Term>>> LookupTermAsync(
         IList<string> texts,
-        int maxMatches,
-        double minScore,
+        int? maxMatches = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -166,20 +165,20 @@ VALUES(@term, @term_embedding)
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore
         );
-        return GetTerms(termIds);
+        return termIds.IsNullOrEmpty() ? [] : GetTerms(termIds);
     }
 
 
     private List<Term> GetTerms(List<ScoredItem<int>> termIds)
     {
-        var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(termIds.Count);
+        var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(termIds.Count);
 
         var rows = _db.Enumerate(
             $@"
 SELECT term
-FROM RelatedTermsFuzzy WHERE term_id IN ({string.Join(", ", placeholderIds)})
+FROM RelatedTermsFuzzy WHERE term_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ORDER BY term_id",
-            (cmd) => cmd.AddIdParameters(placeholderIds, termIds.Map((t) => t.Item)),
+            (cmd) => cmd.AddPlaceholderParameters(placeholderIds, termIds.Map((t) => t.Item)),
             (reader) => reader.GetString(0)
         );
         int i = 0;

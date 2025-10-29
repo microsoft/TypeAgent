@@ -358,14 +358,14 @@ FROM Messages WHERE msg_id = @msg_id",
     {
         foreach (var batch in messageIds.Batch(SqliteDatabase.MaxBatchSize))
         {
-            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
 
             var rows = db.Enumerate(
                 $@"
 SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
-FROM Messages WHERE msg_id IN ({string.Join(", ", placeholderIds)})
+FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ORDER BY msg_id",
-                (cmd) => cmd.AddIdParameters(placeholderIds, batch),
+                (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 ReadMessageRow
             );
             foreach (var row in rows)
@@ -394,14 +394,14 @@ FROM Messages WHERE msg_id = @msg_id",
     {
         foreach (var batch in messageIds.Batch(SqliteDatabase.MaxBatchSize))
         {
-            var placeholderIds = SqliteDatabase.MakeInPlaceholderIds(batch.Count);
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
 
             var lengths = db.Enumerate(
                 $@"
 SELECT message_length
-FROM Messages WHERE msg_id IN ({string.Join(", ", placeholderIds)})
+FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ORDER BY msg_id",
-                (cmd) => cmd.AddIdParameters(placeholderIds, batch),
+                (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 (reader) => reader.GetInt32(0)
             );
             foreach (var length in lengths)
@@ -459,5 +459,4 @@ ORDER BY msg_id",
     {
         return new MessageRow().Read(reader);
     }
-
 }

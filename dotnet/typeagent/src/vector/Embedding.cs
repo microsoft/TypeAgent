@@ -13,6 +13,8 @@ public interface ICosineSimilarity<T>
 /// </summary>
 public readonly struct Embedding : ICosineSimilarity<Embedding>
 {
+    public static readonly Embedding Empty = new Embedding([]);
+
     /// <summary>
     /// Embedding using the given vector. Normalizes the vector before storing it
     /// </summary>
