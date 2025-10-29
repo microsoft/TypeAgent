@@ -31,7 +31,9 @@ const schemaFile: string = `../../packages/agents/settings/src/settingsActionSch
 
 // Set up a route for the root URL ('/')
 app.get("/", async (req: Request, res: Response) => {
-    const cachedItem: string = req.query["s"] as string;
+    const cachedItem: string = Array.isArray(req.query["s"])
+        ? (req.query["s"].join(" ") as string)
+        : (req.query["s"] as string);
 
     if (cachedItem) {
         console.log(`Received request with s=${cachedItem}`);
