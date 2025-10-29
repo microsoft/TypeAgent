@@ -1,5 +1,12 @@
 # Python package 'typeagent'
 
+## This code is obsolete
+
+**The current version lives at
+[aka.ms/typeagent-py](https://aka.ms/typeagent-py).**
+
+## Original description
+
 ### This is an experimental prototype
 
 Working toward a shared understanding of the MVP for structured RAG.
