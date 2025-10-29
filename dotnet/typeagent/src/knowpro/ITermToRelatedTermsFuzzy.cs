@@ -21,7 +21,7 @@ public interface ITermToRelatedTermsFuzzy
 
     ValueTask ClearAsync(CancellationToken cancellation = default);
 
-    event Action<Batch<string>> OnIndexed;
+    event Action<BatchItem<string>> OnIndexed;
 }
 
 public static class TermToRelatedTermsFuzzyExtensions

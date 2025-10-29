@@ -22,8 +22,7 @@ public static class Async
         this IList<T> list,
         int concurrency,
         Func<T, Task<TResult>> processor,
-        Func<T, int, TResult, bool>? progress,
-        Func<object?, bool>? shouldStop = null,
+        Action<BatchItem<T>, TResult>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(list, nameof(list));
@@ -31,25 +30,14 @@ public static class Async
         ArgumentVerify.ThrowIfNull(processor, nameof(processor));
 
         return concurrency <= 1
-            ? await MapSequentialAsync(list, processor, progress, shouldStop, cancellationToken)
-            : await MapConcurrentAsync(list, concurrency, processor, progress, shouldStop, cancellationToken);
-    }
-
-    public static Task<List<TResult>> MapAsync<T, TResult>(
-        this IList<T> list,
-        int concurrency,
-        Func<T, Task<TResult>> processor,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return list.MapAsync(concurrency, processor, null, null, cancellationToken);
+            ? await MapSequentialAsync(list, processor, progress, cancellationToken)
+            : await MapConcurrentAsync(list, concurrency, processor, progress, cancellationToken);
     }
 
     private static async Task<List<TResult>> MapSequentialAsync<T, TResult>(
         IList<T> list,
         Func<T, Task<TResult>> processor,
-        Func<T, int, TResult, bool>? progress,
-        Func<object?, bool>? shouldStop,
+        Action<BatchItem<T>, TResult>? progress,
         CancellationToken cancellationToken
     )
     {
@@ -65,11 +53,7 @@ public static class Async
             results.Add(result);
             if (progress is not null)
             {
-                var stop = progress(list[i], i, result);
-                if (shouldStop is not null && shouldStop(stop))
-                {
-                    break;
-                }
+                progress(new BatchItem<T>(list[i], i, list.Count), result);
             }
         }
         return results;
@@ -79,21 +63,20 @@ public static class Async
         IList<T> list,
         int concurrency,
         Func<T, Task<TResult>> processor,
-        Func<T, int, TResult, bool>? progress,
-        Func<object?, bool>? shouldStop,
+        Action<BatchItem<T>, TResult>? progress,
         CancellationToken cancellationToken
     )
     {
         var results = new List<TResult>();
-        int count = list.Count;
-        for (int startAt = 0; startAt < count; startAt += concurrency)
+        int totalCount = list.Count;
+        for (int startAt = 0; startAt < totalCount; startAt += concurrency)
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
 
-            int batchSize = Math.Min(concurrency, count - startAt);
+            int batchSize = Math.Min(concurrency, totalCount - startAt);
             var batch = list.Slice(startAt, batchSize);
             var tasks = batch.Map<T, Task<TResult>>(processor);
 
@@ -106,11 +89,7 @@ public static class Async
                 for (int i = 0; i < batchSize; ++i)
                 {
                     int idx = startAt + i;
-                    var r = progress(list[idx], idx, results[idx]);
-                    if (shouldStop is not null && shouldStop(r))
-                    {
-                        stop = true;
-                    }
+                    progress(new BatchItem<T>(list[idx], idx + startAt, totalCount), results[idx]);
                 }
                 if (stop)
                 {
