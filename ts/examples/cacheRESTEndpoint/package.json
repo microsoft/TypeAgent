@@ -26,7 +26,7 @@
     "agent-dispatcher": "workspace:*",
     "agent-rpc": "workspace:*",
     "action-schema": "workspace:*",
-    "aiclient": "workspace:*",    
+    "aiclient": "workspace:*",
     "body-parser": "1.20.3",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",

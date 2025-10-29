@@ -17,50 +17,34 @@
       "index": 0
     },
     {
-      "matches": [
-        "add"
-      ],
+      "matches": ["add"],
       "basename": "M:action",
       "namespace": "list.addItems::fullActionName",
       "canBeMerged": true,
       "index": 1
     },
     {
-      "matches": [
-        "eggs",
-        "bread",
-        "cheese",
-        "butter"
-      ],
+      "matches": ["eggs", "bread", "cheese", "butter"],
       "basename": "M:item",
       "namespace": "list::parameters.items.0",
       "canBeMerged": true,
       "index": 2
     },
     {
-      "matches": [
-        "and"
-      ],
+      "matches": ["and"],
       "basename": "conjunction",
       "canBeMerged": false,
       "index": 3
     },
     {
-      "matches": [
-        "milk",
-        "juice",
-        "water",
-        "soda"
-      ],
+      "matches": ["milk", "juice", "water", "soda"],
       "basename": "M:item",
       "namespace": "list::parameters.items.1",
       "canBeMerged": true,
       "index": 4
     },
     {
-      "matches": [
-        "to the grocery list"
-      ],
+      "matches": ["to the grocery list"],
       "basename": "M:list",
       "namespace": "list.addItems::fullActionName,list::parameters.listName",
       "canBeMerged": false,

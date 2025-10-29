@@ -1,7 +1,6 @@
 export interface CreateSchemaAction {
     actionName: "createSchemaAction";
     parameters: {
-
         // The schema definition in TypeScript Schema format
         /* Example: 
             // An action to dim or brighten the screen
@@ -15,6 +14,6 @@ export interface CreateSchemaAction {
                 };
             }
         */
-        schema: string; 
-    }
+        schema: string;
+    };
 }

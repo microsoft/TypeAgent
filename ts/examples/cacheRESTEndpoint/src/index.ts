@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import express, { Request, Response } from "express";
-import { AgentCache, AgentCacheFactory, MatchResult, RequestAction } from "agent-cache";
+import {
+    AgentCache,
+    AgentCacheFactory,
+    MatchResult,
+    RequestAction,
+} from "agent-cache";
 import { existsSync } from "fs";
 import path from "path";
 import { NodeType, SchemaParser } from "action-schema";
@@ -15,7 +20,7 @@ const app = express();
 const port = `10482`;
 
 // The cache file to serve
-const cacheFile = 'data/v5_sample.json';
+const cacheFile = "data/v5_sample.json";
 
 // the cache
 let agentCache: AgentCache;
@@ -25,42 +30,47 @@ let schemas: NameValue[] = [];
 const schemaFile: string = `../../packages/agents/settings/src/settingsActionSchema.ts`;
 
 // Set up a route for the root URL ('/')
-app.get('/', async (req: Request, res: Response) => {
-
-    const s = req.query['s'];
+app.get("/", async (req: Request, res: Response) => {
+    const s = req.query["s"];
 
     if (s) {
         console.log(`Received request with s=${s}`);
 
-        const matches: MatchResult[] = await agentCache.constructionStore.match(s as string, {});
+        const matches: MatchResult[] = await agentCache.constructionStore.match(
+            s as string,
+            {},
+        );
         if (matches.length > 0) {
             const hits: RequestAction[] = [];
 
             matches.forEach((construction) => {
-                
                 // add the id to the schema since that's not stored in the cache
                 construction.match.actions.forEach((a) => {
                     // TODO: actionName should match interface name
-                    const schema = schemas.find((s) => s.name.startsWith(a.action.actionName));
+                    const schema = schemas.find((s) =>
+                        s.name.startsWith(a.action.actionName),
+                    );
                     if (schema) {
                         // TODO: actually parse the schema instead of using regex
                         const idMatch = schema.value.match(/id:\s*([^;]+);/);
-                        const idValue = idMatch ? idMatch[1].trim().replaceAll("\"", "") : undefined;
+                        const idValue = idMatch
+                            ? idMatch[1].trim().replaceAll('"', "")
+                            : undefined;
                         (a.action as any).id = idValue;
                     }
                 });
-                
-                hits.push(construction.match);
 
+                hits.push(construction.match);
             });
-            
+
             res.send(`${JSON.stringify(hits, null, 0)}`);
         } else {
-            res.status(404).send("{ \"error\": \"No matches found.\" }");
+            res.status(404).send('{ "error": "No matches found." }');
         }
-
     } else {
-        res.status(400).send("{ \"error\": \"Please provide a query parameter 's' containing the cache entry to check.\" }");
+        res.status(400).send(
+            '{ "error": "Please provide a query parameter \'s\' containing the cache entry to check." }',
+        );
     }
 });
 
@@ -84,9 +94,8 @@ app.listen(port, async () => {
     }
 
     if (existsSync(schemaFile)) {
-        schemas = getActionSchema(schemaFile)
+        schemas = getActionSchema(schemaFile);
     }
-
 });
 
 function getActionSchema(filePath: string): NameValue[] {
@@ -106,4 +115,3 @@ function getActionSchema(filePath: string): NameValue[] {
     }
     return schemas;
 }
-

@@ -8,9 +8,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import {
-    SettingsAction,
-} from "./settingsActionSchema.js";
+import { SettingsAction } from "./settingsActionSchema.js";
 //import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -37,7 +35,6 @@ async function handleSettingsAction(
     action: SettingsAction,
     settingsContext: ActionContext<SettingsAgentContext>,
 ) {
-
     if (process.platform !== "win32") {
         return createActionResult("This command is only supported on Windows!");
     }
@@ -49,10 +46,12 @@ async function handleSettingsAction(
         //     result = createActionResultFromHtmlDisplayWithScript(readFileSync(file, 'utf8'));
         //     break;
         default: {
-            result = createActionResult(`TODO: call settings MCP server with '${action.parameters.originalRequest}'`);
+            result = createActionResult(
+                `TODO: call settings MCP server with '${action.parameters.originalRequest}'`,
+            );
 
             // if (action.parameters.uri) {
-                
+
             //     const child = spawn('start', [action.parameters.uri], {
             //     shell: true,       // Required for 'start' to work
             //     detached: true,
