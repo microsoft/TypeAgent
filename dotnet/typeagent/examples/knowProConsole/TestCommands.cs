@@ -170,7 +170,7 @@ public class TestCommands : ICommandModule
             model,
             new TextEmbeddingCache(1024)
         );
-        modelWithCache.Cache.PersistentCache = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex as IReadOnlyCache<string, float[]>;
+        modelWithCache.Cache.PersistentCache = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex as IReadOnlyCache<string, Embedding>;
         NamedArgs namedArgs = new(args);
         string? text = namedArgs.Get("text");// ?? "The quick brown fox";
         if (!string.IsNullOrEmpty(text))

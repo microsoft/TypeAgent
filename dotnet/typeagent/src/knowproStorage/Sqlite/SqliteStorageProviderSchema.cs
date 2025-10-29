@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS SemanticRefIndex (
     semref_id INTEGER NOT NULL,
     score REAL NOT NULL DEFAULT 1.0,
 
+    PRIMARY KEY (term, semref_id),
     FOREIGN KEY (semref_id) REFERENCES SemanticRefs(semref_id) ON DELETE CASCADE
 );
 ";

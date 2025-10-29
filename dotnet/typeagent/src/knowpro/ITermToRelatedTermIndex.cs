@@ -16,7 +16,7 @@ public class RelatedTermIndexSettings
 
 public interface ITermToRelatedTermIndex
 {
-    ITermsToRelatedTerms Aliases { get; }
+    ITermsToRelatedTermsIndex Aliases { get; }
 
     ITermToRelatedTermsFuzzy FuzzyIndex { get; }
 }

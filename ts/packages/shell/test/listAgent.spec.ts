@@ -1,21 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import test, {
-    ElectronApplication,
-    Page,
-    _electron,
-    _electron as electron,
-    expect,
-} from "@playwright/test";
-import {
-    exitApplication,
-    getAppPath,
-    sendUserRequestAndWaitForCompletion,
-    getLaunchArgs,
-    startShell,
-    testUserRequest,
-} from "./testHelper";
+import test from "@playwright/test";
+import { testUserRequest } from "./testHelper";
 
 // Annotate entire file as serial.
 test.describe.configure({ mode: "serial" });

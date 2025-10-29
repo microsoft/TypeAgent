@@ -967,6 +967,260 @@ export async function getEntityNeighborhood(
     }
 }
 
+/**
+ * Discover related entities and topics from the knowledge graph
+ * Performs multi-hop graph traversal to find connected knowledge
+ */
+export async function discoverRelatedKnowledge(
+    parameters: {
+        entities: Array<{ name: string; type: string }>;
+        topics: string[];
+        depth?: number;
+        maxEntities?: number;
+        maxTopics?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    relatedEntities: Array<{
+        name: string;
+        type: string;
+        relationshipPath: string[];
+        distance: number;
+        relevanceScore: number;
+    }>;
+    relatedTopics: Array<{
+        name: string;
+        cooccurrenceCount: number;
+        distance: number;
+        relevanceScore: number;
+    }>;
+    success: boolean;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            debug("[discoverRelatedKnowledge] No website collection available");
+            return {
+                relatedEntities: [],
+                relatedTopics: [],
+                success: false,
+            };
+        }
+
+        const depth = parameters.depth || 2;
+        const maxEntities = parameters.maxEntities || 10;
+        const maxTopics = parameters.maxTopics || 10;
+
+        debug(
+            `[discoverRelatedKnowledge] Starting discovery with ${parameters.entities.length} entities, ${parameters.topics.length} topics, depth=${depth}`,
+        );
+
+        // Discover related entities via graph traversal
+        const relatedEntitiesMap = new Map<
+            string,
+            {
+                name: string;
+                type: string;
+                relationshipPath: string[];
+                distance: number;
+                confidence: number;
+                cooccurrenceCount: number;
+            }
+        >();
+
+        // Traverse from each seed entity
+        for (const seedEntity of parameters.entities) {
+            try {
+                const neighborhoodResult = await getEntityNeighborhood(
+                    { entityId: seedEntity.name, depth, maxNodes: 50 },
+                    context,
+                );
+
+                if (neighborhoodResult.neighbors) {
+                    for (const neighbor of neighborhoodResult.neighbors) {
+                        // Skip if this is one of the seed entities
+                        if (
+                            parameters.entities.some(
+                                (e) =>
+                                    e.name.toLowerCase() ===
+                                    neighbor.name.toLowerCase(),
+                            )
+                        ) {
+                            continue;
+                        }
+
+                        const existingEntry = relatedEntitiesMap.get(
+                            neighbor.name.toLowerCase(),
+                        );
+
+                        // Calculate distance from relationships
+                        const relationships =
+                            neighborhoodResult.relationships?.filter(
+                                (r: any) =>
+                                    r.toEntity === neighbor.name ||
+                                    r.fromEntity === neighbor.name,
+                            ) || [];
+
+                        const distance = relationships.length > 0 ? 1 : depth;
+
+                        // Calculate co-occurrence count (how many pages this entity appears on)
+                        const cooccurrenceCount =
+                            neighbor.occurrences?.length || 1;
+
+                        if (
+                            !existingEntry ||
+                            distance < existingEntry.distance
+                        ) {
+                            // Get relationship path
+                            const relationshipPath: string[] = [];
+                            if (relationships.length > 0) {
+                                relationshipPath.push(
+                                    relationships[0].relationshipType ||
+                                        "related_to",
+                                );
+                            }
+
+                            relatedEntitiesMap.set(
+                                neighbor.name.toLowerCase(),
+                                {
+                                    name: neighbor.name,
+                                    type: neighbor.type || "unknown",
+                                    relationshipPath,
+                                    distance,
+                                    confidence: neighbor.confidence || 0.5,
+                                    cooccurrenceCount,
+                                },
+                            );
+                        }
+                    }
+                }
+            } catch (error) {
+                debug(
+                    `[discoverRelatedKnowledge] Error processing entity ${seedEntity.name}: ${error}`,
+                );
+            }
+        }
+
+        // Discover related topics via co-occurrence
+        const relatedTopicsMap = new Map<
+            string,
+            {
+                name: string;
+                cooccurrenceCount: number;
+                distance: number;
+            }
+        >();
+
+        if (parameters.topics.length > 0) {
+            try {
+                const expandedTopics = await expandTopicNeighborhood(
+                    parameters.topics,
+                    depth,
+                    websiteCollection,
+                );
+
+                for (const topic of expandedTopics) {
+                    // Skip if this is one of the seed topics
+                    if (
+                        parameters.topics.some(
+                            (t) => t.toLowerCase() === topic.toLowerCase(),
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    // Get co-occurrence count
+                    let cooccurrenceCount = 0;
+                    if (
+                        websiteCollection.knowledgeTopics &&
+                        (websiteCollection.knowledgeTopics as any)
+                            .getRelatedTopics
+                    ) {
+                        const relatedEntries = (
+                            websiteCollection.knowledgeTopics as any
+                        ).getRelatedTopics(topic, 100);
+                        cooccurrenceCount = relatedEntries?.length || 1;
+                    }
+
+                    // Calculate distance (1 for direct co-occurrence, 2+ for multi-hop)
+                    const isDirectlyRelated = parameters.topics.some(
+                        (seedTopic) => {
+                            if (
+                                websiteCollection.knowledgeTopics &&
+                                (websiteCollection.knowledgeTopics as any)
+                                    .getRelatedTopics
+                            ) {
+                                const related =
+                                    (
+                                        websiteCollection.knowledgeTopics as any
+                                    ).getRelatedTopics(seedTopic, 50) || [];
+                                return related.some(
+                                    (r: any) =>
+                                        r.topic?.toLowerCase() ===
+                                        topic.toLowerCase(),
+                                );
+                            }
+                            return false;
+                        },
+                    );
+
+                    const distance = isDirectlyRelated ? 1 : 2;
+
+                    relatedTopicsMap.set(topic.toLowerCase(), {
+                        name: topic,
+                        cooccurrenceCount,
+                        distance,
+                    });
+                }
+            } catch (error) {
+                debug(
+                    `[discoverRelatedKnowledge] Error expanding topics: ${error}`,
+                );
+            }
+        }
+
+        // Rank and filter entities
+        const rankedEntities = Array.from(relatedEntitiesMap.values())
+            .map((entity) => ({
+                ...entity,
+                relevanceScore:
+                    (1.0 / entity.distance) * 0.4 +
+                    entity.confidence * 0.3 +
+                    Math.min(entity.cooccurrenceCount / 10, 1.0) * 0.3,
+            }))
+            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .slice(0, maxEntities);
+
+        // Rank and filter topics
+        const rankedTopics = Array.from(relatedTopicsMap.values())
+            .map((topic) => ({
+                ...topic,
+                relevanceScore:
+                    (1.0 / topic.distance) * 0.5 +
+                    Math.min(topic.cooccurrenceCount / 20, 1.0) * 0.5,
+            }))
+            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .slice(0, maxTopics);
+
+        debug(
+            `[discoverRelatedKnowledge] Discovered ${rankedEntities.length} related entities, ${rankedTopics.length} related topics`,
+        );
+
+        return {
+            relatedEntities: rankedEntities,
+            relatedTopics: rankedTopics,
+            success: true,
+        };
+    } catch (error) {
+        console.error("[discoverRelatedKnowledge] Error:", error);
+        return {
+            relatedEntities: [],
+            relatedTopics: [],
+            success: false,
+        };
+    }
+}
+
 export async function getGlobalImportanceLayer(
     parameters: {
         maxNodes?: number;
