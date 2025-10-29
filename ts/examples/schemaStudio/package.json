@@ -25,7 +25,6 @@
     "action-schema": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
-    "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",
