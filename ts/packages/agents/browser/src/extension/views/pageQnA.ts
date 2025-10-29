@@ -507,18 +507,44 @@ class PageQnAPanel {
                 this.renderQuestions("pageQuestionsList", this.pageQuestions);
             }
 
-            // Generate graph-based questions (broader scope)
-            const graphQuestionResponse =
-                await extensionService.generateGraphQuestions(
-                    this.currentUrl,
-                    this.knowledgeData,
+            // Discover related knowledge from graph (2-hop traversal)
+            console.log(
+                "🔍 Discovering related knowledge from graph for graph-based questions",
+            );
+            const relatedKnowledge =
+                await extensionService.discoverRelatedKnowledge(
+                    this.knowledgeData.entities || [],
+                    this.knowledgeData.keyTopics || [],
+                    2,
                 );
 
-            if (graphQuestionResponse?.questions) {
-                this.graphQuestions = graphQuestionResponse.questions.filter(
-                    (q: SuggestedQuestion) => q.scope === "broader",
+            if (relatedKnowledge.success) {
+                console.log(
+                    `📊 Discovered ${relatedKnowledge.relatedEntities.length} related entities, ${relatedKnowledge.relatedTopics.length} related topics`,
                 );
-                this.renderQuestions("graphQuestionsList", this.graphQuestions);
+
+                // Generate graph-based questions with related knowledge
+                const graphQuestionResponse =
+                    await extensionService.generateGraphQuestions(
+                        this.currentUrl,
+                        relatedKnowledge.relatedEntities,
+                        relatedKnowledge.relatedTopics,
+                    );
+
+                if (graphQuestionResponse?.questions) {
+                    this.graphQuestions =
+                        graphQuestionResponse.questions.filter(
+                            (q: SuggestedQuestion) => q.scope === "broader",
+                        );
+                    this.renderQuestions(
+                        "graphQuestionsList",
+                        this.graphQuestions,
+                    );
+                }
+            } else {
+                console.warn(
+                    "⚠️ Failed to discover related knowledge, skipping graph questions",
+                );
             }
         } catch (error) {
             console.error("Error generating questions:", error);
@@ -542,9 +568,10 @@ class PageQnAPanel {
         container.innerHTML = questions
             .map(
                 (q) => `
-            <div class="question-item ${q.scope === "page" ? "page-question" : "graph-question"}" 
-                 data-question="${this.escapeHtml(q.question)}" 
-                 tabindex="0" 
+            <div class="question-item ${q.scope === "page" ? "page-question" : "graph-question"}"
+                 data-question="${this.escapeHtml(q.question)}"
+                 data-scope="${q.scope}"
+                 tabindex="0"
                  role="button">
                 <div class="question-text">${this.escapeHtml(q.question)}</div>
                 <div class="question-meta">
@@ -560,8 +587,13 @@ class PageQnAPanel {
         container.querySelectorAll(".question-item").forEach((item) => {
             item.addEventListener("click", () => {
                 const question = item.getAttribute("data-question");
+                const scope = item.getAttribute("data-scope") as
+                    | "page"
+                    | "related"
+                    | "broader"
+                    | null;
                 if (question) {
-                    this.askQuestion(question);
+                    this.askQuestion(question, scope);
                 }
             });
 
@@ -569,25 +601,35 @@ class PageQnAPanel {
                 const keyEvent = e as KeyboardEvent;
                 if (keyEvent.key === "Enter" || keyEvent.key === " ") {
                     const question = item.getAttribute("data-question");
+                    const scope = item.getAttribute("data-scope") as
+                        | "page"
+                        | "related"
+                        | "broader"
+                        | null;
                     if (question) {
-                        this.askQuestion(question);
+                        this.askQuestion(question, scope);
                     }
                 }
             });
         });
     }
 
-    private askQuestion(question: string) {
+    private askQuestion(
+        question: string,
+        questionScope?: "page" | "related" | "broader" | null,
+    ) {
         const chatInput = document.getElementById(
             "chatInput",
         ) as HTMLInputElement;
         if (chatInput) {
             chatInput.value = question;
-            this.sendMessage();
+            this.sendMessage(questionScope);
         }
     }
 
-    private async sendMessage() {
+    private async sendMessage(
+        questionScope?: "page" | "related" | "broader" | null,
+    ) {
         const chatInput = document.getElementById(
             "chatInput",
         ) as HTMLInputElement;
@@ -610,8 +652,15 @@ class PageQnAPanel {
         this.showThinking();
 
         try {
+            // Map question scope to search scope
+            const searchScope =
+                this.mapQuestionScopeToSearchScope(questionScope);
+
             // Detect and log search scope
             console.log(`🔍 Page QnA Search - Question: "${question}"`);
+            console.log(
+                `📊 Question scope: ${questionScope || "manual"} → Search scope: ${searchScope}`,
+            );
             console.log(`🌐 Current page URL: ${this.currentUrl}`);
             console.log(`📚 Page indexed: ${this.knowledgeStatus.isIndexed}`);
 
@@ -619,7 +668,7 @@ class PageQnAPanel {
             const response = await extensionService.queryKnowledge({
                 query: question,
                 url: this.currentUrl,
-                searchScope: "current_page",
+                searchScope: searchScope,
                 generateAnswer: true,
                 includeRelatedEntities: true,
                 limit: 10,
@@ -831,6 +880,35 @@ class PageQnAPanel {
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+    /**
+     * Maps question scope to search scope for answer generation
+     * @param questionScope The scope of the suggested question
+     * @returns The appropriate search scope for queryKnowledge
+     */
+    private mapQuestionScopeToSearchScope(
+        questionScope?: "page" | "related" | "broader" | null,
+    ): "current_page" | "all_indexed" {
+        // Manual questions (no scope) default to current page
+        if (!questionScope) {
+            return "current_page";
+        }
+
+        switch (questionScope) {
+            case "page":
+                // Page-specific questions search only current page
+                return "current_page";
+
+            case "related":
+            case "broader":
+                // Graph-based questions search all indexed content
+                return "all_indexed";
+
+            default:
+                // Fallback to current page for unknown scopes
+                return "current_page";
+        }
     }
 }
 

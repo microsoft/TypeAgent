@@ -15,12 +15,17 @@ public class Term
     /// <summary>
     /// The text of the term
     /// </summary>
-    public string Text { get; }
+    public string Text { get; private set; }
 
     /// <summary>
     /// Optional weighting for the term
     /// </summary>
     public float? Weight { get; set; }
+
+    public void ToLower()
+    {
+        Text = Text.ToLower();
+    }
 
     public override string ToString()
     {

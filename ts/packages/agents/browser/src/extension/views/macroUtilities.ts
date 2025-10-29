@@ -18,7 +18,6 @@ export interface StoredMacro {
 
 export interface MacroDefinition {
     intentSchema?: string;
-    macrosJson?: any;
     screenshot?: string[];
     htmlFragments?: string[];
     steps?: string | MacroStep[];

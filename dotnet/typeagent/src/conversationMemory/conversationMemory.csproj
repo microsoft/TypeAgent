@@ -9,8 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\aiclient\aiclient.csproj" />
     <ProjectReference Include="..\common\common.csproj" />
     <ProjectReference Include="..\knowpro\knowpro.csproj" />
+    <ProjectReference Include="..\vector\vector.csproj" />
   </ItemGroup>
 
 </Project>

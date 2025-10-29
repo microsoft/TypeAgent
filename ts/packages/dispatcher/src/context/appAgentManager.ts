@@ -392,26 +392,120 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     private cleanupAgent(appAgentName: string, grammarStore?: GrammarStore) {
+        const schemasToRemove: string[] = [];
+
         for (const [schemaName, config] of this.actionConfigs) {
             if (getAppAgentName(schemaName) !== appAgentName) {
                 continue;
             }
-            this.actionConfigs.delete(schemaName);
-            this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
-            this.actionSemanticMap?.removeActionSchemaFile(schemaName);
+
+            schemasToRemove.push(schemaName);
+
+            try {
+                this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+            } catch (error) {
+                console.warn(
+                    `Failed to unload schema file ${schemaName}:`,
+                    error,
+                );
+            }
+
+            try {
+                this.actionSemanticMap?.removeActionSchemaFile(schemaName);
+            } catch (error) {
+                console.warn(
+                    `Failed to remove from semantic map ${schemaName}:`,
+                    error,
+                );
+            }
+
+            if (grammarStore) {
+                try {
+                    grammarStore.removeGrammar(schemaName);
+                } catch (error) {
+                    console.warn(
+                        `Failed to remove grammar ${schemaName}:`,
+                        error,
+                    );
+                }
+            }
+
             if (config.transient) {
                 delete this.transientAgents[schemaName];
             }
+        }
+
+        for (const schemaName of schemasToRemove) {
+            this.actionConfigs.delete(schemaName);
+        }
+    }
+
+    public async forceCleanupAgent(
+        appAgentName: string,
+        grammarStore?: GrammarStore,
+    ): Promise<void> {
+        console.warn(`Force cleanup for agent: ${appAgentName}`);
+
+        const schemas = Array.from(this.actionConfigs.keys()).filter(
+            (name) => getAppAgentName(name) === appAgentName,
+        );
+
+        for (const schemaName of schemas) {
+            try {
+                this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+            } catch (e) {
+                console.warn(`Force cleanup schema file failed:`, e);
+            }
+
+            try {
+                this.actionSemanticMap?.removeActionSchemaFile(schemaName);
+            } catch (e) {
+                console.warn(`Force cleanup semantic map failed:`, e);
+            }
+
             if (grammarStore) {
-                grammarStore.removeGrammar(schemaName);
+                try {
+                    grammarStore.removeGrammar(schemaName);
+                } catch (e) {
+                    console.warn(`Force cleanup grammar failed:`, e);
+                }
+            }
+
+            try {
+                const config = this.actionConfigs.get(schemaName);
+                if (config?.transient) {
+                    delete this.transientAgents[schemaName];
+                }
+            } catch (e) {
+                console.warn(`Force cleanup transient failed:`, e);
+            }
+
+            try {
+                this.actionConfigs.delete(schemaName);
+            } catch (e) {
+                console.warn(`Force cleanup config failed:`, e);
             }
         }
+
+        try {
+            this.agents.delete(appAgentName);
+        } catch (e) {
+            console.warn(`Force cleanup agent record failed:`, e);
+        }
+
+        console.warn(`Force cleanup complete for: ${appAgentName}`);
     }
 
     public async removeAgent(
         appAgentName: string,
         grammarStore?: GrammarStore,
     ) {
+        // Check if agent exists before trying to remove it
+        if (!this.isAppAgentName(appAgentName)) {
+            debug(`Agent '${appAgentName}' does not exist, skipping removal`);
+            return;
+        }
+
         const record = this.getRecord(appAgentName);
         this.agents.delete(appAgentName);
         this.cleanupAgent(appAgentName, grammarStore);

@@ -7,8 +7,8 @@ public class Memory<TMessage> : Conversation<TMessage>
     where TMessage : class, IMessage, new()
 {
 
-    public Memory(IStorageProvider<TMessage> storageProvider)
-        : base(storageProvider)
+    public Memory(ConversationSettings settings, IStorageProvider<TMessage> storageProvider)
+        : base(settings, storageProvider)
     {
 
     }

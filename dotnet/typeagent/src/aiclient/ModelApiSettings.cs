@@ -31,5 +31,4 @@ public class ModelApiSettings : ApiSettings
             ? OpenAIModelApiSettings.FromEnv(modelType, endpointName)
             : AzureModelApiSettings.FromEnv(modelType, endpointName);
     }
-
 }

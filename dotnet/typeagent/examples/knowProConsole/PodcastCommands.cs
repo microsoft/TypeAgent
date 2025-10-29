@@ -61,7 +61,8 @@ public class PodcastCommands : ICommandModule
 
         _kpContext.Stopwatch.Restart();
 
-        var podcast = new Podcast(CreateStorageProvider(name, false));
+        var podcast = CreatePodcast(name, false);
+
         _kpContext.Stopwatch.Stop();
         KnowProWriter.WriteTiming(_kpContext.Stopwatch);
 
@@ -95,9 +96,7 @@ public class PodcastCommands : ICommandModule
 
         string? podcastName = Path.GetFileNameWithoutExtension(filePath) ?? throw new NotSupportedException();
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Importing {podcastName}");
-        var podcast = new Podcast(
-            CreateStorageProvider(podcastName, true)
-        );
+        var podcast = CreatePodcast(podcastName, true);
         try
         {
             int count = await podcast.ImportMessagesAsync(data.Messages, cancellationToken);
@@ -156,17 +155,34 @@ public class PodcastCommands : ICommandModule
         */
     }
 
+
+    private Podcast CreatePodcast(string name, bool createNew)
+    {
+        // TODO: standardize this boilerplate, esp the cache binding
+        var model = new TextEmbeddingModelWithCache(256);
+        ConversationSettings settings = new ConversationSettings(model);
+        var provider = CreateStorageProvider(settings, name, createNew);
+        model.Cache.PersistentCache = provider.GetEmbeddingCache();
+
+        var podcast = new Podcast(settings, CreateStorageProvider(settings, name, false));
+        return podcast;
+    }
+
     private SqliteStorageProvider<PodcastMessage, PodcastMessageMeta> CreateStorageProvider(
+        ConversationSettings settings,
         string name,
         bool createNew
     )
     {
-        return new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
-            new ConversationSettings(),
+        // TODO: make this a standard factory method
+        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
+            settings,
             _kpContext.DotnetPath,
             name,
             createNew
         );
+
+        return provider;
     }
 
     private void UnloadCurrent()

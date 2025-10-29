@@ -165,6 +165,18 @@ export async function handleMessage(
                 },
             });
 
+            // Notify sidepanel that a macro was added
+            if (schemaResult.actionId) {
+                chrome.runtime
+                    .sendMessage({
+                        type: "macroAdded",
+                        actionId: schemaResult.actionId,
+                    })
+                    .catch(() => {
+                        // Ignore errors if no listeners
+                    });
+            }
+
             return {
                 intent: schemaResult.intent,
                 intentJson: schemaResult.intentJson,
@@ -473,6 +485,28 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error generating page questions:", error);
                 return { error: "Failed to generate page questions" };
+            }
+        }
+
+        case "discoverRelatedKnowledge": {
+            try {
+                return await sendActionToAgent({
+                    actionName: "discoverRelatedKnowledge",
+                    parameters: {
+                        entities: message.entities || [],
+                        topics: message.topics || [],
+                        depth: message.depth || 2,
+                        maxEntities: message.maxEntities || 10,
+                        maxTopics: message.maxTopics || 10,
+                    },
+                });
+            } catch (error) {
+                console.error("Error discovering related knowledge:", error);
+                return {
+                    relatedEntities: [],
+                    relatedTopics: [],
+                    success: false,
+                };
             }
         }
 
@@ -876,6 +910,19 @@ export async function handleMessage(
                         macroId: message.macroId,
                     },
                 });
+
+                // Notify sidepanel that a macro was deleted
+                if (result.success) {
+                    chrome.runtime
+                        .sendMessage({
+                            type: "macroDeleted",
+                            macroId: message.macroId,
+                        })
+                        .catch(() => {
+                            // Ignore errors if no listeners
+                        });
+                }
+
                 return result;
             } catch (error) {
                 console.error("Failed to delete macro:", error);

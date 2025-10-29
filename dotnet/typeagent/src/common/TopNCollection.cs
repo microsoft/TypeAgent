@@ -70,7 +70,10 @@ public class TopNCollection<T>
     /// <returns></returns>
     public List<ScoredItem<T>> ByRankAndClear()
     {
-        VerifyNotEmpty();
+        if (_count == 0)
+        {
+            return [];
+        }
 
         SortDescending();
         _items.Shift();

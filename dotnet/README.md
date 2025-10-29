@@ -4,11 +4,11 @@
 
 **[TypeAgent](../README.md)** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
-TypeAgent includes [KnowPro.NET](./typeagent/src/knowpro/) explores how to implement memory using [Structured RAG](../ts/packages/knowPro/README.md#structured-rag-overview).
+TypeAgent includes [KnowPro.NET](./typeagent/src/knowpro/), which explores how to implement memory using [Structured RAG](../ts/packages/knowPro/README.md#structured-rag-overview).
 
 ## Components
 
-- [TypeAgent.NET](./typeagent/README.md): in-development port of TypeAgent to .NET, written in C#
+- [KnowPro.NET](./typeagent/README.md)
 - C# code that supports the Typescript **TypeAgent** implementation.
 
   - [AutoShell](./autoShell/)(Windows Only) - Support [Desktop](../ts/packages/agents/desktop/) to control Window functionalities.

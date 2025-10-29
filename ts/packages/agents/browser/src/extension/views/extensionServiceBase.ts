@@ -359,12 +359,27 @@ export abstract class ExtensionServiceBase {
 
     async generateGraphQuestions(
         url: string,
-        pageKnowledge: any,
+        relatedEntities: any[],
+        relatedTopics: any[],
     ): Promise<any> {
         return this.sendMessage({
             type: "generateGraphQuestions",
             url,
-            pageKnowledge,
+            relatedEntities,
+            relatedTopics,
+        });
+    }
+
+    async discoverRelatedKnowledge(
+        entities: any[],
+        topics: string[],
+        depth: number = 2,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "discoverRelatedKnowledge",
+            entities,
+            topics,
+            depth,
         });
     }
 

@@ -5,24 +5,56 @@ using System.Threading.Tasks;
 
 namespace TypeAgent.KnowPro.Query;
 
+public class QueryCompilerSettings
+{
+    /// <summary>
+    /// Default weight for entity matches, which are more meaningful
+    /// </summary>
+    public float EntityTermMatchWeight { get; set; } = 100;
+
+    /// <summary>
+    /// How much to weigh the primary term of a SearchTerm by default.
+    /// Weigh this higher because it is exactly what the user provided
+    /// Does not apply to RelatedTerms, which are weighted by their similarity 
+    /// </summary>
+    public float DefaultTermMatchWeight { get; set; } = 10;
+
+    /// <summary>
+    /// Related Terms have weights assigned based on their (fuzzy) similarity to source terms
+    /// At some point, they are so similar that we treat them as exactly the same
+    /// </summary>
+    public double RelatedIsExactThreshold { get; set; } = 0.95;
+
+}
+
 internal class QueryCompiler
 {
-    private IConversation _conversation;
-    private List<SearchTermGroup> _allSearchTerms;
-    private List<SearchTermGroup> _allScopeSearchTerms;
+    static QueryCompilerSettings s_defaultSettings = new QueryCompilerSettings();
 
-    public QueryCompiler(IConversation conversation)
+    private IConversation _conversation;
+    private List<CompiledTermGroup> _allSearchTerms;
+    private List<CompiledTermGroup> _allScopeSearchTerms;
+    private CancellationToken _cancellationToken;
+
+    public QueryCompiler(IConversation conversation, CancellationToken cancellationToken = default)
+        : this(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken)
+    {
+    }
+
+    public QueryCompiler(
+        IConversation conversation,
+        QueryCompilerSettings? compilerSettings,
+        CancellationToken cancellationToken = default
+    )
     {
         _conversation = conversation;
         _allSearchTerms = [];
         _allScopeSearchTerms = [];
+        Settings = compilerSettings ?? s_defaultSettings;
+        _cancellationToken = cancellationToken;
     }
 
-    public float EntityTermMatchWeight { get; set; } = 100;
-
-    public float DefaultTermMatchWeight { get; set; } = 10;
-
-    public double RelatedIsExactThreshold { get; set; } = 0.95;
+    public QueryCompilerSettings Settings { get; }
 
     public async ValueTask<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>>> CompileKnowledgeQueryAsync(
         SearchTermGroup searchGroup,
@@ -32,6 +64,14 @@ internal class QueryCompiler
     {
         var queryExpr = await CompileQueryAsync(searchGroup, whenFilter).ConfigureAwait(false);
         QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> resultExpr = new GroupSearchResultsExpr(queryExpr);
+
+        bool exactMatch = (searchOptions?.ExactMatch is not null) && searchOptions.ExactMatch.Value;
+        if (!exactMatch)
+        {
+            await ResolveRelatedTermsAsync(_allSearchTerms, true);
+            await ResolveRelatedTermsAsync(_allScopeSearchTerms, false);
+        }
+
         return resultExpr;
     }
 
@@ -54,13 +94,13 @@ internal class QueryCompiler
         return ValueTask.FromResult(messagesExpr);
     }
 
-    public (IList<SearchTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroup(
+    public (List<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroupTerms(
         SearchTermGroup searchGroup,
         GetScopeExpr? scopeExpr,
         IQuerySemanticRefPredicate? matchFilter = null
     )
     {
-        List<SearchTermGroup> compiledTerms = [new SearchTermGroup(searchGroup.BooleanOp)];
+        List<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
 
         List<QueryOpExpr<SemanticRefAccumulator?>> termExpressions = [];
         foreach (var term in searchGroup.Terms)
@@ -84,7 +124,7 @@ internal class QueryCompiler
                     break;
 
                 case SearchTermGroup subGroup:
-                    var (nestedTerms, groupExpr) = CompileSearchGroup(
+                    var (nestedTerms, groupExpr) = CompileSearchGroupTerms(
                         subGroup,
                         null,  // Apply scopes on the outermost expression only
                         matchFilter
@@ -113,12 +153,12 @@ internal class QueryCompiler
         return (compiledTerms, boolExpr);
     }
 
-    public (IList<SearchTermGroup>, QueryOpExpr<MessageAccumulator>) CompileMessageSearchGroup(
+    public (List<CompiledTermGroup>, QueryOpExpr<MessageAccumulator>) CompileMessageSearchGroup(
        SearchTermGroup searchGroup,
        IQuerySemanticRefPredicate? matchFilter = null
    )
     {
-        List<SearchTermGroup> compiledTerms = [new SearchTermGroup(searchGroup.BooleanOp)];
+        List<CompiledTermGroup> compiledTerms = [new CompiledTermGroup(searchGroup.BooleanOp)];
 
         List<QueryOpExpr> termExpressions = [];
         foreach (var term in searchGroup.Terms)
@@ -142,7 +182,7 @@ internal class QueryCompiler
                     break;
 
                 case SearchTermGroup subGroup:
-                    var (nestedTerms, groupExpr) = CompileSearchGroup(
+                    var (nestedTerms, groupExpr) = CompileSearchGroupTerms(
                         subGroup,
                         null,  // Apply scopes on the outermost expression only
                         matchFilter
@@ -174,7 +214,7 @@ internal class QueryCompiler
         WhenFilter? whenFilter
     )
     {
-        var scopeExpr = await CompileScope(searchGroup, whenFilter).ConfigureAwait(false);
+        var scopeExpr = await CompileScopeAsync(searchGroup, whenFilter).ConfigureAwait(false);
 
         var selectExpr = CompileSelect(searchGroup, scopeExpr);
 
@@ -188,15 +228,14 @@ internal class QueryCompiler
         GetScopeExpr? scopeExpr
     )
     {
-        var (searchTermsUsed, selectExpr) = CompileSearchGroup(searchGroup, scopeExpr);
+        var (searchTermsUsed, selectExpr) = CompileSearchGroupTerms(searchGroup, scopeExpr);
         _allSearchTerms.AddRange(searchTermsUsed);
         return selectExpr;
     }
 
     private QueryOpExpr<SemanticRefAccumulator?> CompileSearchTerm(SearchTerm searchTerm)
     {
-        float boostWeight =
-            EntityTermMatchWeight / DefaultTermMatchWeight;
+        float boostWeight = Settings.EntityTermMatchWeight / Settings.DefaultTermMatchWeight;
 
         return new MatchSearchTermExpr(
             searchTerm,
@@ -215,7 +254,7 @@ internal class QueryCompiler
                 default:
                     if (term.Value.IsEntityProperty)
                     {
-                        propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
+                        propertyTerm.PropertyValue.Term.Weight ??= Settings.EntityTermMatchWeight;
                     }
                     return new MatchPropertySearchTermExpr(propertyTerm);
                 case "tag":
@@ -242,7 +281,7 @@ internal class QueryCompiler
         return termExpr;
     }
 
-    private ValueTask<GetScopeExpr?> CompileScope(SearchTermGroup? termGroup, WhenFilter? filter)
+    private ValueTask<GetScopeExpr?> CompileScopeAsync(SearchTermGroup? termGroup, WhenFilter? filter)
     {
         if (termGroup is null && filter is null)
         {
@@ -328,5 +367,67 @@ internal class QueryCompiler
             }
         }
         return actionGroup;
+    }
+
+    private async ValueTask ResolveRelatedTermsAsync(
+        List<CompiledTermGroup> compiledTerms,
+        bool dedupe
+    )
+    {
+        compiledTerms.ForEach((ct) => ValidateAndPrepare(ct.Terms));
+
+        await _conversation.SecondaryIndexes.TermToRelatedTermsIndex.ResolveRelatedTermsAsync(
+            compiledTerms,
+            dedupe
+        ).ConfigureAwait(false);
+
+        // This second pass ensures any related terms are valid etc
+        compiledTerms.ForEach((ct) => ValidateAndPrepare(ct.Terms));
+    }
+
+    private void ValidateAndPrepare(IList<SearchTerm> searchTerms)
+    {
+        foreach (var searchTerm in searchTerms)
+        {
+            ValidateAndPrepare(searchTerm);
+        }
+    }
+
+    private void ValidateAndPrepare(SearchTerm searchTerm)
+    {
+        ValidateAndPrepare(searchTerm.Term);
+
+        // Matching the term - exact match - counts for more than matching related terms
+        // Therefore, we boost any matches where the term matches directly...
+        searchTerm.Term.Weight ??= Settings.DefaultTermMatchWeight;
+        if (!searchTerm.RelatedTerms.IsNullOrEmpty())
+        {
+            foreach (var relatedTerm in searchTerm.RelatedTerms)
+            {
+                ValidateAndPrepare(relatedTerm);
+                // If related term is *really* similar to the main term, score it the same
+                if (
+                    relatedTerm.Weight is not null &&
+                    relatedTerm.Weight.Value >= Settings.RelatedIsExactThreshold
+                )
+                {
+                    relatedTerm.Weight = Settings.DefaultTermMatchWeight;
+                }
+            }
+        }
+    }
+
+    /**
+     * Currently, just changes the case of a term
+     *  But here, we may do other things like:
+     * - Check for noise terms
+     * - Do additional rewriting
+     * - Additional checks that *reject* certain search terms
+     * Return false if the term should be rejected
+     */
+    private void ValidateAndPrepare(Term? term)
+    {
+        KnowProVerify.ThrowIfInvalid(term);
+        term.ToLower();
     }
 }

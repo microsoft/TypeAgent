@@ -37,7 +37,15 @@ export function setupAuthoringActions(
         const htmlFragments = await browser.getHtmlFragments();
 
         if (!screenshot) {
-            screenshot = await browser.getCurrentPageScreenshot();
+            try {
+                screenshot = await browser.getCurrentPageScreenshot();
+            } catch (error) {
+                console.warn(
+                    "Screenshot capture failed, continuing without screenshot:",
+                    (error as Error)?.message,
+                );
+                screenshot = "";
+            }
         }
         const response = await agent.getPageComponentSchema(
             componentType,
@@ -68,7 +76,15 @@ export function setupAuthoringActions(
         description: string,
     ) {
         const htmlFragments = await browser.getHtmlFragments();
-        const screenshot = await browser.getCurrentPageScreenshot();
+        let screenshot = "";
+        try {
+            screenshot = await browser.getCurrentPageScreenshot();
+        } catch (error) {
+            console.warn(
+                "Screenshot capture failed, continuing without screenshot:",
+                (error as Error)?.message,
+            );
+        }
         let recordedSteps = "";
         const descriptionResponse = await agent.getDetailedStepsFromDescription(
             actionName,
@@ -137,7 +153,15 @@ export function setupAuthoringActions(
 
         debug(`Running ${targetPlan.planName}`);
         for (const [index, step] of targetPlan.steps.entries()) {
-            const screenshot = await browser.getCurrentPageScreenshot();
+            let screenshot = "";
+            try {
+                screenshot = await browser.getCurrentPageScreenshot();
+            } catch (error) {
+                console.warn(
+                    "Screenshot capture failed, continuing without screenshot:",
+                    (error as Error)?.message,
+                );
+            }
             await trackState(`__step_${index}`, "", "action", screenshot);
             let operationMessage = "";
 
@@ -259,7 +283,15 @@ export function setupAuthoringActions(
             );
         }
 
-        const screenshot = await browser.getCurrentPageScreenshot();
+        let screenshot = "";
+        try {
+            screenshot = await browser.getCurrentPageScreenshot();
+        } catch (error) {
+            console.warn(
+                "Screenshot capture failed, continuing without screenshot:",
+                (error as Error)?.message,
+            );
+        }
         await trackState("Completed", "", "end", screenshot);
     }
 }

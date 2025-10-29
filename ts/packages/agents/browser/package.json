@@ -84,7 +84,8 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "website-memory": "workspace:*",
-    "ws": "^8.17.1"
+    "ws": "^8.17.1",
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",

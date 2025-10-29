@@ -93,6 +93,10 @@ const vendorAssets = [
         "node_modules/prismjs/components/prism-json.js",
         "vendor/prism/prism-json.js",
     ],
+    [
+        "node_modules/prismjs/components/prism-yaml.js",
+        "vendor/prism/prism-yaml.js",
+    ],
     // Cytoscape libraries for entity graph visualization
     [
         "node_modules/cytoscape/dist/cytoscape.min.js",

@@ -29,6 +29,11 @@ public readonly struct NormalizedEmbeddingB :
         return MemoryMarshal.Cast<byte, float>(Vector);
     }
 
+    public Embedding ToEmbedding()
+    {
+        return AsSpan().ToArray();
+    }
+
     /// <summary>
     /// Compute the cosine similarity between this and other
     /// </summary>

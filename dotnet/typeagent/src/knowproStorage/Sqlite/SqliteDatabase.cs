@@ -174,7 +174,7 @@ public class SqliteDatabase : IDisposable
         );
     }
 
-    internal static string[] MakeInPlaceholderIds(int count, string prefix = "@id")
+    internal static string[] MakeInPlaceholderParamIds(int count, string prefix = "@id")
     {
         ArgumentVerify.ThrowIfLessThanEqual(count, 0, nameof(count));
 
@@ -184,6 +184,11 @@ public class SqliteDatabase : IDisposable
             ids[i] = $"@id{i}";
         }
         return ids;
+    }
+
+    internal static string MakeInStatement(string[] placeholderIds)
+    {
+        return string.Join(", ", placeholderIds);
     }
 }
 

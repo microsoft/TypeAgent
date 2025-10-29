@@ -51,19 +51,33 @@ export class PartialCompletion {
     private completionP:
         | Promise<CommandCompletionResult | undefined>
         | undefined;
+    public closed: boolean = false;
 
+    private readonly cleanupEventListeners: () => void;
     constructor(
         private readonly container: HTMLDivElement,
         private readonly input: ExpandableTextArea,
         private readonly dispatcher: Dispatcher,
+        disableRemoteUI?: boolean,
     ) {
-        this.searchMenu = new SearchMenu((item) => {
-            this.handleSelect(item);
-        });
-        document.addEventListener("selectionchange", () => {
+        this.searchMenu = new SearchMenu(
+            (item) => {
+                this.handleSelect(item);
+            },
+            undefined,
+            disableRemoteUI ? false : undefined,
+        );
+        const selectionChangeHandler = () => {
             debug("Partial completion update on selection changed");
             this.update(false);
-        });
+        };
+        document.addEventListener("selectionchange", selectionChangeHandler);
+        this.cleanupEventListeners = () => {
+            document.removeEventListener(
+                "selectionchange",
+                selectionChangeHandler,
+            );
+        };
 
         if (document.activeElement === this.input.getTextEntry()) {
             // If the input is already focused, we need to update immediately.
@@ -72,6 +86,9 @@ export class PartialCompletion {
     }
 
     public update(contentChanged: boolean) {
+        if (this.closed) {
+            throw new Error("Using a closed PartialCompletion");
+        }
         if (contentChanged) {
             // Normalize the input text to ensure selection at end is correct.
             this.input.getTextEntry().normalize();
@@ -87,9 +104,15 @@ export class PartialCompletion {
         }
     }
 
-    public close() {
+    public hide() {
         this.completionP = undefined;
         this.cancelCompletionMenu();
+    }
+
+    public close() {
+        this.closed = true;
+        this.hide();
+        this.cleanupEventListeners();
     }
     private getCurrentInput() {
         return this.input.getTextEntry().textContent ?? "";
