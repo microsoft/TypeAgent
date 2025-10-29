@@ -7,11 +7,15 @@ import {
     ActionResult,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromHtmlDisplayWithScript,
+} from "@typeagent/agent-sdk/helpers/action";
 import { SettingsAction } from "./settingsActionSchema.js";
 //import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
+import { readFileSync } from "fs";
 
 type SettingsAgentContext = {
     store: undefined;
@@ -41,31 +45,20 @@ async function handleSettingsAction(
 
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
-        // case "AdjustMultiMonitorLayout":
-        //     const file = getPackageFilePath('settings/cards/adjustMultiMonitorLayout.html');
-        //     result = createActionResultFromHtmlDisplayWithScript(readFileSync(file, 'utf8'));
-        //     break;
+        case "adjustMultiMonitorLayoutAction":
+            const file = getPackageFilePath(
+                "settings/cards/adjustMultiMonitorLayout.html",
+            );
+            result = createActionResultFromHtmlDisplayWithScript(
+                readFileSync(file, "utf8"),
+            );
+            break;
         default: {
             result = createActionResult(
-                `TODO: call settings MCP server with '${action.parameters.originalRequest}'`,
+                `TODO: apply this setting to the local system. '${action.parameters.originalRequest}'`,
             );
-
-            // if (action.parameters.uri) {
-
-            //     const child = spawn('start', [action.parameters.uri], {
-            //     shell: true,       // Required for 'start' to work
-            //     detached: true,
-            //     stdio: 'ignore'
-            //     });
-
-            //     child.unref();
-
-            // }
-
             break;
         }
-        // default:
-        //     throw new Error(`Unknown action: ${action.actionName}`);
     }
     return result;
 }
