@@ -72,9 +72,7 @@ async function closeInstance(instanceName: string, force: boolean = false) {
 /**
  * Starts the electron app and returns the main page after the greeting agent message has been posted.
  */
-export async function startShell(
-    testGreetings: boolean = false,
-): Promise<Page> {
+async function startShell(testGreetings: boolean = false): Promise<Page> {
     // this is needed to isolate these tests session from other concurrently running tests
     const instanceName = `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
@@ -159,7 +157,7 @@ async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
  * Cleanly shuts down any running instance of the Shell
  * @param page The main window of the application
  */
-export async function exitApplication(page: Page): Promise<void> {
+async function exitApplication(page: Page): Promise<void> {
     await sendUserRequestFast("@exit", page);
     await closeInstance(process.env["INSTANCE_NAME"]!);
 }
@@ -395,21 +393,26 @@ export function deleteTestProfiles() {
     }
 }
 
-export type TestCallback = () => void;
+export type TestCallback = (mainWindow: Page) => Promise<void>;
 
 /**
- * Encapsulates the supplied method within a startup and shutdown of teh
+ * Encapsulates the supplied method within a startup and shutdown of the
  * shell.  Test code executes between them.
  */
-export async function runTestCalback(callback: TestCallback): Promise<void> {
+export async function runTestCallback(
+    callback: TestCallback,
+    testGreetings?: boolean,
+): Promise<void> {
     // launch the app
-    const mainWindow: Page = await startShell();
+    const mainWindow: Page = await startShell(testGreetings);
 
-    // run the supplied function
-    callback();
-
-    // close the application
-    await exitApplication(mainWindow);
+    try {
+        // run the supplied function
+        await callback(mainWindow);
+    } finally {
+        // close the application
+        await exitApplication(mainWindow);
+    }
 }
 
 /**
@@ -424,23 +427,19 @@ export async function testUserRequest(
         throw new Error("Request/Response count mismatch!");
     }
 
-    // launch the app
-    const mainWindow: Page = await startShell();
+    await runTestCallback(async (mainWindow: Page) => {
+        // issue the supplied requests and check their responses
+        for (let i = 0; i < userRequests.length; i++) {
+            const msg = await sendUserRequestAndWaitForCompletion(
+                userRequests[i],
+                mainWindow,
+            );
 
-    // issue the supplied requests and check their responses
-    for (let i = 0; i < userRequests.length; i++) {
-        const msg = await sendUserRequestAndWaitForCompletion(
-            userRequests[i],
-            mainWindow,
-        );
-
-        // verify expected result
-        expect(
-            msg,
-            `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
-        ).toBe(expectedResponses[i]);
-    }
-
-    // close the application
-    await exitApplication(mainWindow);
+            // verify expected result
+            expect(
+                msg,
+                `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
+            ).toBe(expectedResponses[i]);
+        }
+    });
 }
