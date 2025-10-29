@@ -12,7 +12,6 @@ import {
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
 import { SettingsAction } from "./settingsActionSchema.js";
-//import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import { readFileSync } from "fs";
