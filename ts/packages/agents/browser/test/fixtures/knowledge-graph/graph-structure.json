@@ -1,0 +1,395 @@
+{
+  "entities": [
+    {
+      "name": "Atlas Mountains",
+      "type": "mountain_range",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "confidence": 0.95,
+      "pageRank": 0.85,
+      "outboundRelationships": [
+        "located_in_Morocco",
+        "located_in_Algeria",
+        "located_in_Tunisia",
+        "has_highest_peak_Mount_Toubkal",
+        "separates_Sahara",
+        "separates_Mediterranean",
+        "inhabited_by_Berber",
+        "native_habitat_Barbary_macaque",
+        "similar_formation_Pyrenees",
+        "similar_formation_Alps",
+        "formed_during_Alpine_orogeny"
+      ]
+    },
+    {
+      "name": "Mount Toubkal",
+      "type": "mountain",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "confidence": 0.92,
+      "pageRank": 0.72,
+      "outboundRelationships": [
+        "highest_peak_of_Atlas_Mountains",
+        "located_in_Morocco",
+        "elevation_4167m"
+      ]
+    },
+    {
+      "name": "Morocco",
+      "type": "country",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Morocco",
+      "confidence": 0.98,
+      "pageRank": 0.92,
+      "outboundRelationships": [
+        "contains_Atlas_Mountains",
+        "contains_Mount_Toubkal",
+        "bordered_by_Mediterranean",
+        "bordered_by_Atlantic",
+        "home_to_Berber",
+        "part_of_North_Africa"
+      ]
+    },
+    {
+      "name": "Algeria",
+      "type": "country",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Algeria",
+      "confidence": 0.97,
+      "pageRank": 0.88,
+      "outboundRelationships": [
+        "contains_Atlas_Mountains",
+        "bordered_by_Sahara",
+        "home_to_Berber",
+        "part_of_North_Africa"
+      ]
+    },
+    {
+      "name": "Tunisia",
+      "type": "country",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Tunisia",
+      "confidence": 0.96,
+      "pageRank": 0.84,
+      "outboundRelationships": [
+        "contains_Atlas_Mountains",
+        "bordered_by_Mediterranean",
+        "part_of_North_Africa"
+      ]
+    },
+    {
+      "name": "Pyrenees",
+      "type": "mountain_range",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Pyrenees",
+      "confidence": 0.93,
+      "pageRank": 0.81,
+      "outboundRelationships": [
+        "located_between_France_Spain",
+        "formed_during_Alpine_orogeny",
+        "similar_formation_Atlas_Mountains",
+        "similar_formation_Alps",
+        "highest_peak_Aneto_3404m"
+      ]
+    },
+    {
+      "name": "Alps",
+      "type": "mountain_range",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Alps",
+      "confidence": 0.94,
+      "pageRank": 0.89,
+      "outboundRelationships": [
+        "located_in_central_Europe",
+        "formed_during_Alpine_orogeny",
+        "similar_formation_Atlas_Mountains",
+        "similar_formation_Pyrenees",
+        "highest_peak_Mont_Blanc_4809m"
+      ]
+    },
+    {
+      "name": "Sahara Desert",
+      "type": "desert",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sahara",
+      "confidence": 0.93,
+      "pageRank": 0.86,
+      "outboundRelationships": [
+        "separated_by_Atlas_Mountains",
+        "borders_Algeria",
+        "largest_hot_desert"
+      ]
+    },
+    {
+      "name": "Mediterranean Sea",
+      "type": "sea",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Mediterranean_Sea",
+      "confidence": 0.91,
+      "pageRank": 0.87,
+      "outboundRelationships": [
+        "separated_by_Atlas_Mountains",
+        "borders_Morocco",
+        "borders_Algeria",
+        "borders_Tunisia"
+      ]
+    },
+    {
+      "name": "Berber",
+      "type": "people",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Berber_people",
+      "confidence": 0.88,
+      "pageRank": 0.79,
+      "outboundRelationships": [
+        "inhabits_Atlas_Mountains",
+        "indigenous_to_Morocco",
+        "indigenous_to_Algeria",
+        "indigenous_to_Tunisia",
+        "indigenous_to_North_Africa"
+      ]
+    },
+    {
+      "name": "Barbary macaque",
+      "type": "animal",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Barbary_macaque",
+      "confidence": 0.85,
+      "pageRank": 0.68,
+      "outboundRelationships": [
+        "native_to_Atlas_Mountains",
+        "native_to_Morocco",
+        "endangered_species",
+        "only_African_primate"
+      ]
+    },
+    {
+      "name": "Himalayas",
+      "type": "mountain_range",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Himalayas",
+      "confidence": 0.95,
+      "pageRank": 0.94,
+      "outboundRelationships": [
+        "located_in_Asia",
+        "formed_by_Indian_Eurasian_collision",
+        "highest_peak_Everest_8849m",
+        "different_formation_than_Atlas"
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel_001",
+      "from": "Atlas Mountains",
+      "to": "Morocco",
+      "type": "located_in",
+      "confidence": 0.95,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_002",
+      "from": "Atlas Mountains",
+      "to": "Algeria",
+      "type": "located_in",
+      "confidence": 0.94,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_003",
+      "from": "Atlas Mountains",
+      "to": "Tunisia",
+      "type": "located_in",
+      "confidence": 0.93,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_004",
+      "from": "Mount Toubkal",
+      "to": "Atlas Mountains",
+      "type": "highest_peak_of",
+      "confidence": 0.96,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": false
+    },
+    {
+      "id": "rel_005",
+      "from": "Mount Toubkal",
+      "to": "Morocco",
+      "type": "located_in",
+      "confidence": 0.94,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_006",
+      "from": "Atlas Mountains",
+      "to": "Sahara Desert",
+      "type": "separates",
+      "confidence": 0.9,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_007",
+      "from": "Atlas Mountains",
+      "to": "Mediterranean Sea",
+      "type": "separates",
+      "confidence": 0.89,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_008",
+      "from": "Berber",
+      "to": "Atlas Mountains",
+      "type": "inhabits",
+      "confidence": 0.87,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": false
+    },
+    {
+      "id": "rel_009",
+      "from": "Berber",
+      "to": "Morocco",
+      "type": "indigenous_to",
+      "confidence": 0.86,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Berber_people",
+      "bidirectional": false
+    },
+    {
+      "id": "rel_010",
+      "from": "Barbary macaque",
+      "to": "Atlas Mountains",
+      "type": "native_to",
+      "confidence": 0.84,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": false
+    },
+    {
+      "id": "rel_011",
+      "from": "Atlas Mountains",
+      "to": "Pyrenees",
+      "type": "similar_formation",
+      "confidence": 0.82,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_012",
+      "from": "Atlas Mountains",
+      "to": "Alps",
+      "type": "similar_formation",
+      "confidence": 0.8,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_013",
+      "from": "Pyrenees",
+      "to": "Alps",
+      "type": "similar_formation",
+      "confidence": 0.85,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Pyrenees",
+      "bidirectional": true
+    },
+    {
+      "id": "rel_014",
+      "from": "Atlas Mountains",
+      "to": "Alpine orogeny",
+      "type": "formed_during",
+      "confidence": 0.86,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Atlas_Mountains",
+      "bidirectional": false
+    },
+    {
+      "id": "rel_015",
+      "from": "Pyrenees",
+      "to": "Alpine orogeny",
+      "type": "formed_during",
+      "confidence": 0.85,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Pyrenees",
+      "bidirectional": false
+    },
+    {
+      "id": "rel_016",
+      "from": "Alps",
+      "to": "Alpine orogeny",
+      "type": "formed_during",
+      "confidence": 0.87,
+      "sourceUrl": "https://en.wikipedia.org/wiki/Alps",
+      "bidirectional": false
+    }
+  ],
+  "topics": [
+    {
+      "name": "Geography",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Morocco",
+        "https://en.wikipedia.org/wiki/Pyrenees",
+        "https://en.wikipedia.org/wiki/Alps"
+      ],
+      "cooccurrenceCount": 4
+    },
+    {
+      "name": "Geology",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Pyrenees",
+        "https://en.wikipedia.org/wiki/Alps"
+      ],
+      "cooccurrenceCount": 3
+    },
+    {
+      "name": "Mountain Formation",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Pyrenees",
+        "https://en.wikipedia.org/wiki/Alps",
+        "https://en.wikipedia.org/wiki/Himalayas"
+      ],
+      "cooccurrenceCount": 4
+    },
+    {
+      "name": "North Africa",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Morocco",
+        "https://en.wikipedia.org/wiki/Algeria",
+        "https://en.wikipedia.org/wiki/Tunisia",
+        "https://en.wikipedia.org/wiki/Berber_people"
+      ],
+      "cooccurrenceCount": 5
+    },
+    {
+      "name": "Indigenous People",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Berber_people",
+        "https://en.wikipedia.org/wiki/Morocco"
+      ],
+      "cooccurrenceCount": 3
+    },
+    {
+      "name": "Climate",
+      "urls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "cooccurrenceCount": 1
+    },
+    {
+      "name": "Flora and Fauna",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Barbary_macaque"
+      ],
+      "cooccurrenceCount": 2
+    },
+    {
+      "name": "Tourism",
+      "urls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Morocco"
+      ],
+      "cooccurrenceCount": 2
+    }
+  ],
+  "metadata": {
+    "totalEntities": 12,
+    "totalRelationships": 16,
+    "totalTopics": 8,
+    "maxDistance": 3,
+    "createdFor": "test_suite",
+    "description": "Mock knowledge graph spanning multiple Wikipedia pages for testing graph traversal and question answering"
+  }
+}
