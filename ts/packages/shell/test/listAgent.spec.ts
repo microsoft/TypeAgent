@@ -15,7 +15,7 @@ test.describe("List Agent Tests", () => {
             [
                 "create a shopping list",
                 "what's on the shopping list?",
-                "add eggs, milk, flour to the shopping list",
+                "add bread, milk, flour to the shopping list",
                 "what's on the shopping list?",
                 "remove milk from the shopping list",
                 "what's on the shopping list?",
@@ -25,10 +25,10 @@ test.describe("List Agent Tests", () => {
             [
                 "Created list: shopping",
                 "List 'shopping' is empty.",
-                "Added items: eggs,milk,flour to list shopping",
-                "List 'shopping' has items:\n\neggs\nmilk\nflour",
+                "Added items: bread,milk,flour to list shopping",
+                "List 'shopping' has items:\n\nbread\nmilk\nflour",
                 "Removed items: milk from list shopping",
-                "List 'shopping' has items:\n\neggs\nflour",
+                "List 'shopping' has items:\n\nbread\nflour",
                 "Cleared list: shopping",
                 "List 'shopping' is empty.",
             ],
