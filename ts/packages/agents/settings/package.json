@@ -1,0 +1,45 @@
+{
+  "name": "settings-agent",
+  "version": "0.0.1",
+  "description": "Windows settings agent",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/settings"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/settingsManifest.json",
+    "./agent/handlers": "./dist/settingsCommandHandler.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/config.json\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "aiclient": "workspace:*",
+    "chat-agent": "workspace:*",
+    "common-utils": "workspace:*",
+    "debug": "^4.4.0",
+    "knowledge-processor": "workspace:*",
+    "telemetry": "workspace:*",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

@@ -1,0 +1,3 @@
+Command Test Query  Description Setting Id
+dimBrightnessAction   Turn down the brightness.   A setting to adjust the screen brightness.  settings/dimBrightness
+adjustMultiMonitorLayoutAction  Adjust multi-montior setup. Adjusts various settings related to multiple monitors.  settings/adjustMultiMonitorLayout
