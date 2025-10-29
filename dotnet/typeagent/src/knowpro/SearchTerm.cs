@@ -43,7 +43,7 @@ public class SearchTerm : ISearchTerm
         string term = Term.ToString();
         if (!RelatedTerms.IsNullOrEmpty())
         {
-            term = $"{term}\n<\n{RelatedTerms.Join("\n")}>";
+            term = $"{term} <<{RelatedTerms.Join("; ")}>>";
         }
         return term;
     }
