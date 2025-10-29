@@ -62,9 +62,14 @@ public class SearchTerm : ISearchTerm
 
     internal bool RelatedTermsRequired { get; set; }
 
+    internal SearchTerm Clone()
+    {
+        return new SearchTerm(Term);
+    }
+
     internal SearchTerm ToRequired()
     {
-        var copy = new SearchTerm(Term);
+        var copy = this.Clone();
         copy.RelatedTermsRequired = true;
         return copy;
     }

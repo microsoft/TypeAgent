@@ -139,7 +139,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm);
+                    compiledTerms[0].Terms.Add(searchTerm.Clone());
                     break;
 
             }
@@ -197,7 +197,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm);
+                    compiledTerms[0].Terms.Add(searchTerm.Clone());
                     break;
             }
         }
