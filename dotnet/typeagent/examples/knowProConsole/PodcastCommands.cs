@@ -161,7 +161,7 @@ public class PodcastCommands : ICommandModule
         // TODO: standardize this boilerplate, esp the cache binding
         var model = new TextEmbeddingModelWithCache(256);
         ConversationSettings settings = new ConversationSettings(model);
-        var provider = CreateStorageProvider(settings, name, false);
+        var provider = CreateStorageProvider(settings, name, createNew);
         model.Cache.PersistentCache = provider.GetEmbeddingCache();
 
         var podcast = new Podcast(settings, CreateStorageProvider(settings, name, false));

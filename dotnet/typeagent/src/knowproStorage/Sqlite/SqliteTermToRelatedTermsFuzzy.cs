@@ -165,7 +165,7 @@ VALUES(@term, @term_embedding)
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore
         );
-        return GetTerms(termIds);
+        return termIds.IsNullOrEmpty() ? [] : GetTerms(termIds);
     }
 
 

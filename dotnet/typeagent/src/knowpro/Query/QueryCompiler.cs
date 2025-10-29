@@ -371,9 +371,26 @@ internal class QueryCompiler
 
     private async ValueTask ResolveRelatedTermsAsync(
         List<CompiledTermGroup> compiledTerms,
-        bool ensureSingleOccurence
+        bool dedupe
     )
     {
+        compiledTerms.ForEach((ct) => ValidateAndPrepare(ct.Terms));
+
+        await _conversation.SecondaryIndexes.TermToRelatedTermsIndex.ResolveRelatedTermsAsync(
+            compiledTerms,
+            dedupe
+        ).ConfigureAwait(false);
+
+        // This second pass ensures any related terms are valid etc
+        compiledTerms.ForEach((ct) => ValidateAndPrepare(ct.Terms));
+    }
+
+    private void ValidateAndPrepare(IList<SearchTerm> searchTerms)
+    {
+        foreach (var searchTerm in searchTerms)
+        {
+            ValidateAndPrepare(searchTerm);
+        }
     }
 
     private void ValidateAndPrepare(SearchTerm searchTerm)
