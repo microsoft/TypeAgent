@@ -40,7 +40,7 @@ public static class EnumerationExtensions
     public static List<T> Flat<T>(this IEnumerable<IEnumerable<T>> list)
     {
         var result = new List<T>();
-        foreach(var inner in list)
+        foreach (var inner in list)
         {
             if (inner is not null)
             {
@@ -49,7 +49,6 @@ public static class EnumerationExtensions
         }
         return result;
     }
-
 
     public static IEnumerable<List<T>> Batch<T>(this IEnumerable<T> items, int batchSize, List<T>? buffer = null)
     {

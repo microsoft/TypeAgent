@@ -29,7 +29,7 @@ public readonly struct NormalizedEmbeddingB :
         return MemoryMarshal.Cast<byte, float>(Vector);
     }
 
-    public float[] ToArray()
+    public Embedding ToEmbedding()
     {
         return AsSpan().ToArray();
     }
