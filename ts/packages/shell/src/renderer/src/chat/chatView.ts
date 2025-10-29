@@ -35,6 +35,7 @@ export class ChatView {
     private _settingsView: SettingsView | undefined;
     private _dispatcher: Dispatcher | undefined;
     private partialCompletionEnabled: boolean = false;
+    private partialCompletionDisableRemoteUI: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
     private titleDiv: HTMLDivElement;
 
@@ -145,12 +146,20 @@ export class ChatView {
                 this.inputContainer,
                 this.chatInput.textarea,
                 this.getDispatcher(),
+                this.partialCompletionDisableRemoteUI,
             );
         }
     }
 
-    public enablePartialInput(enabled: boolean) {
+    public enablePartialInput(enabled: boolean, disableRemoteUI: boolean) {
         this.partialCompletionEnabled = enabled;
+        if (this.partialCompletionDisableRemoteUI !== disableRemoteUI) {
+            // Reinitialize partial completion
+            this.partialCompletion?.close();
+            this.partialCompletion = undefined;
+            this.partialCompletionDisableRemoteUI = disableRemoteUI;
+        }
+
         if (enabled) {
             this.ensurePartialCompletion();
         } else {
@@ -596,7 +605,7 @@ export class ChatView {
                 if (isInput) {
                     this.partialCompletion.update(true);
                 } else {
-                    this.partialCompletion.close();
+                    this.partialCompletion.hide();
                 }
             }
         };

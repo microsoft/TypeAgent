@@ -13,6 +13,7 @@ export type UISettings = {
     autoEmptyTab: boolean;
     dev: boolean;
     darkMode: boolean;
+    disableCompletionRemoteUI: boolean;
 };
 export type ShellUserSettings = {
     microphoneId: string | undefined;
@@ -52,6 +53,7 @@ export const defaultUserSettings: ShellUserSettings = {
         autoEmptyTab: true,
         dev: false,
         darkMode: false,
+        disableCompletionRemoteUI: false,
     },
     partialCompletion: true,
     disallowedDisplayType: "",

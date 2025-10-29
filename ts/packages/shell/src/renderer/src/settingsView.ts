@@ -175,7 +175,10 @@ export class SettingsView {
                   )
                 : undefined;
 
-            chatView.enablePartialInput(this.shellSettings.partialCompletion);
+            chatView.enablePartialInput(
+                this.shellSettings.partialCompletion,
+                this.shellSettings.ui.disableCompletionRemoteUI,
+            );
             chatView.setMetricsVisible(this.shellSettings.ui.dev);
             chatView.setInputMode(this.shellSettings.ui.verticalLayout);
         };
@@ -285,7 +288,10 @@ export class SettingsView {
         this.intellisenseCheckBox = this.addCheckbox("Intellisense", () => {
             this._shellSettings.partialCompletion =
                 this.intellisenseCheckBox.checked;
-            chatView.enablePartialInput(this.intellisenseCheckBox.checked);
+            chatView.enablePartialInput(
+                this.intellisenseCheckBox.checked,
+                this._shellSettings.ui.disableCompletionRemoteUI,
+            );
         });
 
         this.agentGreetingCheckBox = this.addCheckbox("Agent greeting", () => {

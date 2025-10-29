@@ -16,6 +16,7 @@ const debugError = registerDebug("typeagent:shell:searchMenuUI:error");
 
 const searchMenuUIs: Map<number, Promise<WebContentsView>> = new Map();
 const searchMenuIds: Map<WebContents, number> = new Map();
+let cachedSearchMenuView: WebContentsView | undefined = undefined;
 
 async function createSearchMenuUIView(_zoomFactor: number) {
     const searchMenuView = new WebContentsView({
@@ -60,9 +61,14 @@ export function initializeSearchMenuUI() {
 
             let searchMenuViewP = searchMenuUIs.get(id);
             if (searchMenuViewP === undefined) {
-                searchMenuViewP = createSearchMenuUIView(
-                    shellWindow.chatView.webContents.getZoomFactor(),
-                );
+                if (cachedSearchMenuView) {
+                    // Reuse cached view
+                    searchMenuViewP = Promise.resolve(cachedSearchMenuView);
+                } else {
+                    searchMenuViewP = createSearchMenuUIView(
+                        shellWindow.chatView.webContents.getZoomFactor(),
+                    );
+                }
                 searchMenuUIs.set(id, searchMenuViewP);
             }
             const searchMenuView = await searchMenuViewP;
@@ -112,6 +118,7 @@ export function initializeSearchMenuUI() {
         searchMenuUIs.delete(id);
         // Update with no position to remove
         shellWindow.updateOverlay(searchMenuView);
+        cachedSearchMenuView = searchMenuView;
     });
 
     ipcMain.on("search-menu-completion", async (event, item) => {
