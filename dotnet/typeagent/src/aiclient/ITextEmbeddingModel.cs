@@ -40,10 +40,19 @@ public static class TextEmbeddingModelExtensions
         if (batchSize > 1)
         {
             List<List<string>> chunks = [.. texts.GetStringChunks(batchSize, maxCharsPerChunk)];
+            int rawCompleted = 0;
+            Action<BatchProgress>? notifyProgress = progress is null
+                ? null
+                : (batch) =>
+                {
+                    rawCompleted += chunks[batch.CountCompleted - 1].Count;
+                    progress(new BatchProgress(rawCompleted, texts.Count));
+                };
+
             var embeddingChunks = await chunks.MapAsync(
                 concurrency,
                 (chunk) => model.GenerateAsync(chunk, cancellationToken),
-                progress,
+                notifyProgress,
                 cancellationToken
             ).ConfigureAwait(false);
 

@@ -236,6 +236,7 @@ public class TestCommands : ICommandModule
 
                 await conversation.BuildRelatedTermsIndexAsync(cancellationToken);
             }
+            KnowProWriter.WriteLine();
         }
         finally
         {
