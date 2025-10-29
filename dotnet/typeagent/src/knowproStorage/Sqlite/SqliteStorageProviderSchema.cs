@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS SemanticRefs (
 );
 ";
 
+    // TODO: Normalize this. Split into Terms and Postings table
+
     public const string SemanticRefIndexTable = "SemanticRefIndex";
     public const string SemanticRefIndexSchema = @"
 CREATE TABLE IF NOT EXISTS SemanticRefIndex (
