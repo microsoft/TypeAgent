@@ -20,6 +20,8 @@ public interface ITermToRelatedTermsFuzzy
     ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int? maxMatches = null, double? minScore = null, CancellationToken cancellationToken = default);
 
     ValueTask ClearAsync(CancellationToken cancellation = default);
+
+    event Action<Batch<string>> OnIndexed;
 }
 
 public static class TermToRelatedTermsFuzzyExtensions

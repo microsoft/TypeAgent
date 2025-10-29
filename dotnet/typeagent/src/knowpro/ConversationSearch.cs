@@ -5,7 +5,7 @@ using TypeAgent.KnowPro.Query;
 
 namespace TypeAgent.KnowPro;
 
-public static class ConversationSearchApis
+public static class ConversationSearch
 {
     // TODO: Handle cancellation in these APIS
 

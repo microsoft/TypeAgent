@@ -26,6 +26,8 @@ public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnly
 
     public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
 
+    public event Action<Batch<string>> OnIndexed;
+
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult(GetCount());
