@@ -31,13 +31,13 @@ const schemaFile: string = `../../packages/agents/settings/src/settingsActionSch
 
 // Set up a route for the root URL ('/')
 app.get("/", async (req: Request, res: Response) => {
-    const s = req.query["s"];
+    const cachedItem: string = req.query["s"] as string;
 
-    if (s) {
-        console.log(`Received request with s=${s}`);
+    if (cachedItem) {
+        console.log(`Received request with s=${cachedItem}`);
 
         const matches: MatchResult[] = await agentCache.constructionStore.match(
-            s as string,
+            cachedItem,
             {},
         );
         if (matches.length > 0) {
