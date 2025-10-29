@@ -38,7 +38,6 @@ async function handleSettingsAction(
     action: SettingsAction,
     settingsContext: ActionContext<SettingsAgentContext>,
 ) {
-
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
         case "adjustMultiMonitorLayoutAction":

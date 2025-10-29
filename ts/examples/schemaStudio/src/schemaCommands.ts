@@ -22,7 +22,8 @@ export function createSettingsSchemaCommand(
                 description:
                     "The input TSV file that contains the commands to schematize",
                 type: "string",
-                defaultValue: "examples/schemaStudio/data/sampleSettingsCommands.txt",
+                defaultValue:
+                    "examples/schemaStudio/data/sampleSettingsCommands.txt",
             },
             output: {
                 description:
