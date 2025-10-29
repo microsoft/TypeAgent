@@ -44,11 +44,7 @@ public static class Async
         var results = new List<TResult>();
         for (int i = 0; i < list.Count; i++)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-
+            cancellationToken.ThrowIfCancellationRequested();
             var result = await processor(list[i]);
             results.Add(result);
             if (progress is not null)
@@ -71,10 +67,7 @@ public static class Async
         int totalCount = list.Count;
         for (int startAt = 0; startAt < totalCount; startAt += concurrency)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
+            cancellationToken.ThrowIfCancellationRequested();
 
             int batchSize = Math.Min(concurrency, totalCount - startAt);
             var batch = list.Slice(startAt, batchSize);

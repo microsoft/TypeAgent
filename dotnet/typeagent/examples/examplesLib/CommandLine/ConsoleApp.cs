@@ -129,6 +129,12 @@ public abstract class ConsoleApp
             return CommandResult.NotHandled;
         }
         var parseResult = _allCommands.Parse(cmdLine);
+        if (parseResult.Errors.Count > 0)
+        {
+            WriteArgErrors(parseResult);
+            return CommandResult.NotHandled;
+        }
+
         return await parseResult.InvokeAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
@@ -214,6 +220,14 @@ public abstract class ConsoleApp
         {
             Console.WriteLine(_allCommands.Description);
             Console.WriteLine();
+        }
+    }
+
+    protected void WriteArgErrors(ParseResult parseResult)
+    {
+        foreach (var err in parseResult.Errors)
+        {
+            ConsoleWriter.WriteError(err.Message);
         }
     }
 

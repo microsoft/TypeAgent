@@ -20,6 +20,34 @@ public readonly struct IndexingStartPoints
 
 public static class ConversationIndexer
 {
+    public static async ValueTask BuildIndexAsync(
+        this IConversation conversation,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Todo:
+        // Add conversation knowledge
+        //
+        await conversation.BuildSemanticRefIndexAsync(cancellationToken).ConfigureAwait(false);
+        await conversation.BuildSecondaryIndexesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public static ValueTask BuildSemanticRefIndexAsync(
+        this IConversation conversation,
+        CancellationToken cancellationToken = default
+        )
+    {
+        return ValueTask.CompletedTask;
+    }
+
+    public static async ValueTask BuildSecondaryIndexesAsync(
+        this IConversation conversation,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await conversation.BuildRelatedTermsIndexAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public static async ValueTask AddToSecondaryIndexesAsync(
         this IConversation conversation,
         IndexingStartPoints startAt,
@@ -36,7 +64,7 @@ public static class ConversationIndexer
         var allTerms = await conversation.SemanticRefIndex.GetTermsAsync(cancellationToken).ConfigureAwait(false);
         if (allTerms.Count > 0)
         {
-            await conversation.AddToRelatedTermsIndexAsync(allTerms);
+            await conversation.AddToRelatedTermsIndexAsync(allTerms).ConfigureAwait(false);
         }
     }
 
@@ -48,5 +76,13 @@ public static class ConversationIndexer
         ArgumentVerify.ThrowIfNullOrEmpty(terms, nameof(terms));
         // These are idempotent
         return conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.AddTermsAsync(terms);
+    }
+
+    public static ValueTask BuildMessageIndexAsync(
+        this IConversation conversation,
+        CancellationToken cancellationToken = default
+     )
+    {
+        return ValueTask.CompletedTask;
     }
 }

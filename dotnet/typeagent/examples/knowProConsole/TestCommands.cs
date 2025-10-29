@@ -15,13 +15,14 @@ public class TestCommands : ICommandModule
     }
 
     public IList<Command> GetCommands()
-    {
+    {   
         return [
             SearchTermsDef(),
             SearchPropertyTermsDef(),
             SearchMessagesTermsDef(),
             TestEmbeddingsDef(),
             SearchQueryTermsDef(),
+            BuildIndexDef(),
         ];
     }
 
@@ -204,6 +205,31 @@ public class TestCommands : ICommandModule
             matches.ForEach(KnowProWriter.WriteTerm);
         }
     }
+
+    private Command BuildIndexDef()
+    {
+        Command cmd = new("kpTestBuildIndex")
+        {
+            Options.Arg<bool>("related", "index related terms", false)
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.BuildIndexAsync);
+        return cmd;
+    }
+
+    private async Task BuildIndexAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        if (namedArgs.Get<bool>("related"))
+        {
+            await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(cancellationToken);
+
+            await conversation.BuildRelatedTermsIndexAsync(cancellationToken);
+        }
+    }
+
 
     async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
     {
