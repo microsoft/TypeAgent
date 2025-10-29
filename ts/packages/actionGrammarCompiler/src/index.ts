@@ -28,11 +28,27 @@ export default class Compile extends Command {
 
         const name = path.basename(flags.input);
 
+        const errors: string[] = [];
+        const warnings: string[] = [];
         const grammar = loadGrammarRules(
             name,
             fs.readFileSync(flags.input, "utf-8"),
+            errors,
+            warnings,
         );
 
+        if (grammar === undefined) {
+            console.error(
+                `Failed to compile action grammar due to the following errors:\n${errors.join(
+                    "\n",
+                )}`,
+            );
+            process.exit(1);
+        }
+
+        if (warnings.length > 0) {
+            console.warn(warnings.join("\n"));
+        }
         const outputDir = path.dirname(flags.output);
         if (!fs.existsSync(outputDir)) {
             fs.mkdirSync(outputDir, { recursive: true });

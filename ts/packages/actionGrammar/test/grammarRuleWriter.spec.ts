@@ -9,9 +9,9 @@ import { writeGrammarRules } from "../src/grammarRuleWriter.js";
 import { escapedSpaces, spaces } from "./testUtils.js";
 
 function validateRoundTrip(grammar: string) {
-    const rules = parseGrammarRules("orig", grammar);
+    const rules = parseGrammarRules("orig", grammar, false);
     const str = writeGrammarRules(rules);
-    const parsed = parseGrammarRules("test", str);
+    const parsed = parseGrammarRules("test", str, false);
     expect(parsed).toStrictEqual(rules);
 }
 
