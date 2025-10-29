@@ -38,9 +38,6 @@ async function handleSettingsAction(
     action: SettingsAction,
     settingsContext: ActionContext<SettingsAgentContext>,
 ) {
-    if (process.platform !== "win32") {
-        return createActionResult("This command is only supported on Windows!");
-    }
 
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
