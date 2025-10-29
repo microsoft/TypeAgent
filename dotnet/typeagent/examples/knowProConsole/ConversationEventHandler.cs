@@ -24,13 +24,13 @@ public class ConversationEventHandler
         conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.OnIndexed -= this.FuzzyIndex_OnIndexed;
     }
 
-    private void FuzzyIndex_OnIndexed(BatchItem<string> item)
+    private void FuzzyIndex_OnIndexed(BatchProgress item)
     {
         WriteProgress(item, "Fuzzy");
     }
 
-    private void WriteProgress(BatchItem<string> item, string label)
+    private void WriteProgress(BatchProgress progress, string label)
     {
-        _inplaceUpdate.Write($"[{label}: {item.Pos + 1} / {item.Count}]");
+        _inplaceUpdate.Write($"[{label}: {progress.CountCompleted} / {progress.Count}]");
     }
 }

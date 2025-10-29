@@ -22,7 +22,7 @@ public static class Async
         this IList<T> list,
         int concurrency,
         Func<T, Task<TResult>> processor,
-        Action<BatchItem<T>, TResult>? progress = null,
+        Action<BatchProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(list, nameof(list));
@@ -37,7 +37,7 @@ public static class Async
     private static async Task<List<TResult>> MapSequentialAsync<T, TResult>(
         IList<T> list,
         Func<T, Task<TResult>> processor,
-        Action<BatchItem<T>, TResult>? progress,
+        Action<BatchProgress>? progress,
         CancellationToken cancellationToken
     )
     {
@@ -49,7 +49,7 @@ public static class Async
             results.Add(result);
             if (progress is not null)
             {
-                progress(new BatchItem<T>(list[i], i, list.Count), result);
+                progress(new BatchProgress(results.Count, list.Count));
             }
         }
         return results;
@@ -59,7 +59,7 @@ public static class Async
         IList<T> list,
         int concurrency,
         Func<T, Task<TResult>> processor,
-        Action<BatchItem<T>, TResult>? progress,
+        Action<BatchProgress>? progress,
         CancellationToken cancellationToken
     )
     {
@@ -78,16 +78,7 @@ public static class Async
             results.AddRange(batchResults);
             if (progress is not null)
             {
-                bool stop = false;
-                for (int i = 0; i < batchSize; ++i)
-                {
-                    int idx = startAt + i;
-                    progress(new BatchItem<T>(list[idx], idx + startAt, totalCount), results[idx]);
-                }
-                if (stop)
-                {
-                    return results;
-                }
+                progress(new BatchProgress(results.Count, totalCount));
             }
         }
         return results;

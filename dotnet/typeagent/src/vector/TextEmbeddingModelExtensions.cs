@@ -31,7 +31,7 @@ public static class TextEmbeddingModelExtensions
         int batchSize,
         int maxCharsPerChunk,
         int concurrency = 1,
-        Action<BatchItem<string>>? progress = null,
+        Action<BatchProgress>? progress = null,
         CancellationToken cancellationToken = default
     )
     {

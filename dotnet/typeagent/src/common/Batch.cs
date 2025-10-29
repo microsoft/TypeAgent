@@ -3,26 +3,22 @@
 
 namespace TypeAgent.Common;
 
-public readonly struct BatchItem<T>
+public readonly struct BatchProgress
 {
-    public BatchItem(T item, int pos, int count)
+    public BatchProgress(int countCompleted, int count)
     {
-        Item = item;
-        Pos = pos;
+        CountCompleted = countCompleted;
         Count = count;
     }
-    /// <summary>
-    /// Item in the batch
-    /// </summary>
-    public T Item { get; }
-    /// <summary>
-    /// Position of the item in the batch
-    /// </summary>
-    public int Pos { get; }
+
     /// <summary>
     /// Size of the batch
     /// </summary>
     public int Count { get; }
+    /// <summary>
+    /// Total completed
+    /// </summary>
+    public int CountCompleted { get; }
 }
 
 public readonly struct Batch<T>

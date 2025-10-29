@@ -26,7 +26,7 @@ public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnly
 
     public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
 
-    public event Action<BatchItem<string>> OnIndexed;
+    public event Action<BatchProgress> OnIndexed;
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
@@ -195,7 +195,7 @@ ORDER BY term_id",
         return terms;
     }
 
-    private void NotifyIndexed(BatchItem<string> item)
+    private void NotifyIndexed(BatchProgress item)
     {
         // SafeInvoke Checks null, handles exceptions etc
         OnIndexed.SafeInvoke(item);
