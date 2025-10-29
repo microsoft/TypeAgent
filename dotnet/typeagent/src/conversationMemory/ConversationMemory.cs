@@ -7,8 +7,8 @@ namespace TypeAgent.ConversationMemory;
 public class ConversationMemory<TMessage> : Conversation<TMessage>
     where TMessage : IMessage, new()
 {
-    public ConversationMemory(IStorageProvider<TMessage> provider)
-        : base(provider)
+    public ConversationMemory(ConversationSettings settings, IStorageProvider<TMessage> provider)
+        : base(settings, provider)
     {
     }
 }

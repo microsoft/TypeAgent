@@ -5,25 +5,56 @@ using System.Threading.Tasks;
 
 namespace TypeAgent.KnowPro.Query;
 
+public class QueryCompilerSettings
+{
+    /// <summary>
+    /// Default weight for entity matches, which are more meaningful
+    /// </summary>
+    public float EntityTermMatchWeight { get; set; } = 100;
+
+    /// <summary>
+    /// How much to weigh the primary term of a SearchTerm by default.
+    /// Weigh this higher because it is exactly what the user provided
+    /// Does not apply to RelatedTerms, which are weighted by their similarity 
+    /// </summary>
+    public float DefaultTermMatchWeight { get; set; } = 10;
+
+    /// <summary>
+    /// Related Terms have weights assigned based on their (fuzzy) similarity to source terms
+    /// At some point, they are so similar that we treat them as exactly the same
+    /// </summary>
+    public double RelatedIsExactThreshold { get; set; } = 0.95;
+
+}
+
 internal class QueryCompiler
 {
+    static QueryCompilerSettings s_defaultSettings = new QueryCompilerSettings();
+
     private IConversation _conversation;
     private List<CompiledTermGroup> _allSearchTerms;
     private List<CompiledTermGroup> _allScopeSearchTerms;
     private CancellationToken _cancellationToken;
 
     public QueryCompiler(IConversation conversation, CancellationToken cancellationToken = default)
+        : this(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken)
+    {
+    }
+
+    public QueryCompiler(
+        IConversation conversation,
+        QueryCompilerSettings? compilerSettings,
+        CancellationToken cancellationToken = default
+    )
     {
         _conversation = conversation;
         _allSearchTerms = [];
         _allScopeSearchTerms = [];
+        Settings = compilerSettings ?? s_defaultSettings;
+        _cancellationToken = cancellationToken;
     }
 
-    public float EntityTermMatchWeight { get; set; } = 100;
-
-    public float DefaultTermMatchWeight { get; set; } = 10;
-
-    public double RelatedIsExactThreshold { get; set; } = 0.95;
+    public QueryCompilerSettings Settings { get; }
 
     public async ValueTask<QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>>> CompileKnowledgeQueryAsync(
         SearchTermGroup searchGroup,
@@ -33,6 +64,14 @@ internal class QueryCompiler
     {
         var queryExpr = await CompileQueryAsync(searchGroup, whenFilter).ConfigureAwait(false);
         QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> resultExpr = new GroupSearchResultsExpr(queryExpr);
+
+        bool exactMatch = (searchOptions?.ExactMatch is not null) && searchOptions.ExactMatch.Value;
+        if (!exactMatch)
+        {
+            await ResolveRelatedTermsAsync(_allSearchTerms, true);
+            await ResolveRelatedTermsAsync(_allScopeSearchTerms, false);
+        }
+
         return resultExpr;
     }
 
@@ -196,8 +235,7 @@ internal class QueryCompiler
 
     private QueryOpExpr<SemanticRefAccumulator?> CompileSearchTerm(SearchTerm searchTerm)
     {
-        float boostWeight =
-            EntityTermMatchWeight / DefaultTermMatchWeight;
+        float boostWeight = Settings.EntityTermMatchWeight / Settings.DefaultTermMatchWeight;
 
         return new MatchSearchTermExpr(
             searchTerm,
@@ -216,7 +254,7 @@ internal class QueryCompiler
                 default:
                     if (term.Value.IsEntityProperty)
                     {
-                        propertyTerm.PropertyValue.Term.Weight ??= EntityTermMatchWeight;
+                        propertyTerm.PropertyValue.Term.Weight ??= Settings.EntityTermMatchWeight;
                     }
                     return new MatchPropertySearchTermExpr(propertyTerm);
                 case "tag":
@@ -336,59 +374,43 @@ internal class QueryCompiler
         bool ensureSingleOccurence
     )
     {
-        ITermToRelatedTermIndex relatedTermIndex = _conversation.SecondaryIndexes.TermToRelatedTermsIndex;
+    }
 
-        List<SearchTerm> termsNeedingRelated = SelectTermsNeedingRelated(compiledTerms);
-        if (termsNeedingRelated.IsNullOrEmpty())
-        {
-            return;
-        }
+    private void ValidateAndPrepare(SearchTerm searchTerm)
+    {
+        ValidateAndPrepare(searchTerm.Term);
 
-        List<string> termTexts = termsNeedingRelated.Map((st) => st.Term.Text);
-        // First, find an known related terms
-        var knownRelatedTerms = await relatedTermIndex.Aliases.LookupTermAsync(termTexts, _cancellationToken).ConfigureAwait(false);
-        if (!knownRelatedTerms.IsNullOrEmpty())
+        // Matching the term - exact match - counts for more than matching related terms
+        // Therefore, we boost any matches where the term matches directly...
+        searchTerm.Term.Weight ??= Settings.DefaultTermMatchWeight;
+        if (!searchTerm.RelatedTerms.IsNullOrEmpty())
         {
-            for (int i = 0; i < termsNeedingRelated.Count;)
+            foreach (var relatedTerm in searchTerm.RelatedTerms)
             {
-                if (knownRelatedTerms.TryGetValue(termTexts[i], out var relatedTerms))
+                ValidateAndPrepare(relatedTerm);
+                // If related term is *really* similar to the main term, score it the same
+                if (
+                    relatedTerm.Weight is not null &&
+                    relatedTerm.Weight.Value >= Settings.RelatedIsExactThreshold
+                )
                 {
-                    termsNeedingRelated[i].RelatedTerms = relatedTerms;
-                    termTexts.RemoveAt(i);
-                    termsNeedingRelated.RemoveAt(i);
-                    continue;
-                }
-                else
-                {
-                    ++i;
+                    relatedTerm.Weight = Settings.DefaultTermMatchWeight;
                 }
             }
-        }
-        // Anything that did not have known related terms... will get terms that are fuzzily related
-        if (termsNeedingRelated.IsNullOrEmpty())
-        {
-            return;
-        }
-        var relatedTermsFuzzy = await relatedTermIndex.FuzzyIndex.LookupTermAsync(termTexts);
-        for (int i = 0; i < termsNeedingRelated.Count; ++i)
-        {
-            termsNeedingRelated[i].RelatedTerms = relatedTermsFuzzy[i];
         }
     }
 
-    private List<SearchTerm>? SelectTermsNeedingRelated(List<CompiledTermGroup> compiledTerms)
+    /**
+     * Currently, just changes the case of a term
+     *  But here, we may do other things like:
+     * - Check for noise terms
+     * - Do additional rewriting
+     * - Additional checks that *reject* certain search terms
+     * Return false if the term should be rejected
+     */
+    private void ValidateAndPrepare(Term? term)
     {
-        List<SearchTerm> searchTerms = [];
-        foreach (var compiledTerm in compiledTerms)
-        {
-            foreach (var searchTerm in compiledTerm.Terms)
-            {
-                if (!(searchTerm.IsWildcard() || searchTerm.IsExactMatch()))
-                {
-                    searchTerms.Add(searchTerm);
-                }
-            }
-        }
-        return searchTerms;
+        KnowProVerify.ThrowIfInvalid(term);
+        term.ToLower();
     }
 }

@@ -13,6 +13,8 @@ namespace TypeAgent.KnowPro;
 public interface IConversation<TMessage> : IDisposable
     where TMessage : IMessage
 {
+    ConversationSettings Settings { get; }
+
     IMessageCollection<TMessage> Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
@@ -25,6 +27,8 @@ public interface IConversation<TMessage> : IDisposable
 
 public interface IConversation
 {
+    ConversationSettings Settings { get; }
+
     IMessageCollection Messages { get; }
 
     ISemanticRefCollection SemanticRefs { get; }
@@ -47,7 +51,7 @@ public static class ConversationExtensions
         CancellationToken cancellationToken = default
     )
     {
-        QueryCompiler compiler = new QueryCompiler(conversation, cancellationToken);
+        QueryCompiler compiler = new QueryCompiler(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken);
         options ??= SearchOptions.CreateDefault();
 
         var queryExpr = await compiler.CompileKnowledgeQueryAsync(
