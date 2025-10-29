@@ -44,7 +44,7 @@ app.get("/", async (req: Request, res: Response) => {
             const hits: RequestAction[] = [];
 
             matches.forEach((construction) => {
-                // add the id to the schema since that's not stored in the cache
+                // add the id of the schema (if it exists) to the action
                 construction.match.actions.forEach((a) => {
                     // TODO: actionName should match interface name
                     const schema = schemas.find((s) =>
