@@ -684,6 +684,8 @@ export async function extractKnowledgeFromPageStreaming(
         if (incrementCounter) {
             processedItems++;
         }
+
+        totalItems = Math.max(totalItems, processedItems);
         const progress: KnowledgeExtractionProgress = {
             extractionId,
             phase,

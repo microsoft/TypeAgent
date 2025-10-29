@@ -9,7 +9,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="dateTimeSchema.ts" />
+    <None Remove="Lang\searchQuerySchema.ts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Lang\searchQuerySchema.ts">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\aiclient\aiclient.csproj" />
     <ProjectReference Include="..\common\common.csproj" />
+    <ProjectReference Include="..\typechat.schema\TypeChat.Schema.csproj" />
+    <ProjectReference Include="..\typechat\TypeChat.csproj" />
   </ItemGroup>
 
 </Project>

@@ -20,31 +20,48 @@ internal static class SqliteEx
         cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value);
     }
 
-    public static void AddParameter(this SqliteCommand cmd, string name, string value)
-    {
-        cmd.Parameters.AddWithValue(name, value);
-    }
-
     public static void AddParameter(this SqliteCommand cmd, string name, int value)
     {
         cmd.Parameters.AddWithValue(name, value);
     }
 
-    public static void AddIdParameters(this SqliteCommand cmd, string[] placeHolders, IList<int> ids)
+    public static void AddPlaceholderParameters(this SqliteCommand cmd, string[] placeHolders, IList<int> parameters)
     {
-        ArgumentVerify.ThrowIfNotEqual(placeHolders.Length, ids.Count, nameof(ids));
-        int count = ids.Count;
+        ArgumentVerify.ThrowIfNotEqual(placeHolders.Length, parameters.Count, nameof(parameters));
+        int count = parameters.Count;
         for (int i = 0; i < count; ++i)
         {
-            cmd.Parameters.AddWithValue(placeHolders[i], ids[i]);
+            cmd.Parameters.AddWithValue(placeHolders[i], parameters[i]);
         }
     }
 
-    public static IList<T> GetList<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
+    public static void AddPlaceholderParameters(this SqliteCommand cmd, string[] placeHolders, IList<string> parameters)
     {
-        IList<T> list = [];
+        ArgumentVerify.ThrowIfNotEqual(placeHolders.Length, parameters.Count, nameof(parameters));
+        int count = parameters.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            cmd.Parameters.AddWithValue(placeHolders[i], parameters[i]);
+        }
+    }
+
+
+    public static List<T> GetList<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
+    {
+        List<T> list = [];
         while (reader.Read())
         {
+            list.Add(cb(reader));
+        }
+        return list;
+    }
+
+    public static List<T>? GetListOrNull<T>(this SqliteDataReader reader, Func<SqliteDataReader, T> cb)
+    {
+        List<T>? list = null;
+        while (reader.Read())
+        {
+            list ??= [];
             list.Add(cb(reader));
         }
         return list;

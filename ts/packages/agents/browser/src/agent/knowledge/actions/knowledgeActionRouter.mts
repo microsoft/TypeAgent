@@ -28,6 +28,8 @@ import {
     getKnowledgeGraphStatus,
     buildKnowledgeGraph,
     rebuildKnowledgeGraph,
+    testMergeTopicHierarchies,
+    mergeTopicHierarchies,
     getAllRelationships,
     getAllCommunities,
     getAllEntitiesWithMetrics,
@@ -40,6 +42,7 @@ import {
     getTopicMetrics,
     getUrlContentBreakdown,
     getTopicTimelines,
+    discoverRelatedKnowledge,
 } from "./graphActions.mjs";
 import {
     checkAIModelStatus,
@@ -90,6 +93,10 @@ export async function handleKnowledgeAction(
             return await buildKnowledgeGraph(parameters, context);
         case "rebuildKnowledgeGraph":
             return await rebuildKnowledgeGraph(parameters, context);
+        case "testMergeTopicHierarchies":
+            return await testMergeTopicHierarchies(parameters, context);
+        case "mergeTopicHierarchies":
+            return await mergeTopicHierarchies(parameters, context);
         case "getAllRelationships":
             return await getAllRelationships(parameters, context);
         case "getAllCommunities":
@@ -139,7 +146,8 @@ export async function handleKnowledgeAction(
                 parameters.url,
                 context,
             );
-
+        case "discoverRelatedKnowledge":
+            return await discoverRelatedKnowledge(parameters, context);
         // Search Actions (kept in searchWebMemories)
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);

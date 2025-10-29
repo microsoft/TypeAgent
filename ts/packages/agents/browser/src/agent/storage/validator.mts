@@ -130,8 +130,12 @@ export class MacroIndexManager {
     /**
      * Add macro to index
      */
-    addMacro(macro: StoredMacro, filePath: string): void {
-        return this.addAction(macro as any, filePath);
+    addMacro(
+        macro: StoredMacro,
+        filePath: string,
+        fileFormat: "yaml" | "json" = "yaml",
+    ): void {
+        return this.addAction(macro as any, filePath, fileFormat);
     }
 
     /**
@@ -244,16 +248,27 @@ export class MacroIndexManager {
     }
 
     // Backward compatibility methods
-    addAction(action: StoredAction, filePath: string): void {
+    addAction(
+        action: StoredAction,
+        filePath: string,
+        fileFormat: "yaml" | "json" = "yaml",
+    ): void {
         const entry: ActionIndexEntry = {
             id: action.id,
             name: action.name,
+            domain: action.scope.domain || "",
             scope: action.scope,
             category: action.category,
             author: action.author,
             filePath,
+            fileFormat,
+            created: action.metadata.createdAt,
+            updated: action.metadata.updatedAt,
             lastModified: action.metadata.updatedAt,
             usageCount: action.metadata.usageCount,
+            isValid: action.metadata.isValid,
+            tags: action.tags || [],
+            recordingId: (action as any).recordingId,
         };
 
         if (this.index.macros) {

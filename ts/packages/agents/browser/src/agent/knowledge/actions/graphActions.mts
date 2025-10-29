@@ -8,6 +8,30 @@ import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
 import registerDebug from "debug";
+import { openai as ai } from "aiclient";
+import { createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import { TopicRelationshipAnalysis } from "./schema/topicRelationship.mjs";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+function getSchemaFileContents(fileName: string): string {
+    const packageRoot = path.join("..", "..", "..", "..");
+    return fs.readFileSync(
+        fileURLToPath(
+            new URL(
+                path.join(
+                    packageRoot,
+                    "./src/agent/knowledge/actions/schema",
+                    fileName,
+                ),
+                import.meta.url,
+            ),
+        ),
+        "utf8",
+    );
+}
 
 // ============================================================================
 // Topic Timeline Types
@@ -280,6 +304,286 @@ export async function rebuildKnowledgeGraph(
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function analyzeTopicRelationshipsWithLLM(topicNames: string[]): Promise<
+    Map<
+        string,
+        {
+            action: "keep_root" | "make_child" | "merge";
+            targetTopic?: string;
+            confidence: number;
+            reasoning: string;
+        }
+    >
+> {
+    const relationshipMap = new Map();
+
+    if (topicNames.length === 0) {
+        return relationshipMap;
+    }
+
+    const BATCH_SIZE = 50;
+    const totalTopics = topicNames.length;
+    const needsBatching = totalTopics > BATCH_SIZE;
+
+    console.log(`[LLM Topic Analysis] Analyzing ${totalTopics} topics...`);
+    console.log(`[LLM Topic Analysis] Sample topics:`, topicNames.slice(0, 10));
+
+    if (needsBatching) {
+        const numBatches = Math.ceil(totalTopics / BATCH_SIZE);
+        console.log(
+            `[LLM Topic Analysis] Processing in ${numBatches} batches of up to ${BATCH_SIZE} topics each`,
+        );
+
+        for (let i = 0; i < numBatches; i++) {
+            const start = i * BATCH_SIZE;
+            const end = Math.min(start + BATCH_SIZE, totalTopics);
+            const batch = topicNames.slice(start, end);
+
+            console.log(
+                `[LLM Topic Analysis] Processing batch ${i + 1}/${numBatches} (topics ${start + 1}-${end})...`,
+            );
+
+            const batchResults = await analyzeBatchOfTopics(batch, topicNames);
+
+            for (const [topic, relationship] of batchResults) {
+                relationshipMap.set(topic, relationship);
+            }
+        }
+
+        let makeChildCount = 0;
+        let mergeCount = 0;
+        let keepRootCount = 0;
+        const sampleRelationships: string[] = [];
+
+        for (const [topic, relationship] of relationshipMap) {
+            if (relationship.action === "make_child") {
+                makeChildCount++;
+                if (sampleRelationships.length < 5) {
+                    sampleRelationships.push(
+                        `  "${topic}" → child of "${relationship.targetTopic}" (${relationship.confidence.toFixed(2)})`,
+                    );
+                }
+            } else if (relationship.action === "merge") {
+                mergeCount++;
+                if (sampleRelationships.length < 5) {
+                    sampleRelationships.push(
+                        `  "${topic}" → merge into "${relationship.targetTopic}" (${relationship.confidence.toFixed(2)})`,
+                    );
+                }
+            } else {
+                keepRootCount++;
+            }
+        }
+
+        console.log(`[LLM Topic Analysis] Final Summary:`);
+        console.log(`  - Keep as root: ${keepRootCount}`);
+        console.log(`  - Make child: ${makeChildCount}`);
+        console.log(`  - Merge: ${mergeCount}`);
+
+        if (sampleRelationships.length > 0) {
+            console.log(`[LLM Topic Analysis] Sample relationships:`);
+            sampleRelationships.forEach((rel) => console.log(rel));
+        }
+
+        return relationshipMap;
+    } else {
+        return await analyzeBatchOfTopics(topicNames, topicNames);
+    }
+}
+
+async function analyzeBatchOfTopics(
+    batchTopics: string[],
+    allTopics: string[],
+): Promise<
+    Map<
+        string,
+        {
+            action: "keep_root" | "make_child" | "merge";
+            targetTopic?: string;
+            confidence: number;
+            reasoning: string;
+        }
+    >
+> {
+    const relationshipMap = new Map();
+
+    try {
+        const schemaText = getSchemaFileContents("topicRelationship.mts");
+
+        const apiSettings = ai.azureApiSettingsFromEnv(
+            ai.ModelType.Chat,
+            undefined,
+            "GPT_4_O",
+        );
+        const model = ai.createChatModel(apiSettings);
+
+        const validator =
+            createTypeScriptJsonValidator<TopicRelationshipAnalysis>(
+                schemaText,
+                "TopicRelationshipAnalysis",
+            );
+        const translator = createJsonTranslator(model, validator);
+
+        const topicList = batchTopics
+            .map((t, i) => `${i + 1}. ${t}`)
+            .join("\n");
+
+        const allTopicsList =
+            batchTopics.length < allTopics.length
+                ? `\n\nFor context, here are all topics in the system (consider these as potential parent topics):\n${allTopics.join(", ")}`
+                : "";
+        // all-topics list is getting truncated - not useful!
+        const prompt = `Analyze these topic names and identify semantic relationships between them.
+
+Topics to analyze:
+${topicList}${allTopicsList}
+
+For each topic, determine the appropriate action based on the TopicRelationshipAnalysis schema.`;
+
+        const estimatedPromptSize = prompt.length + schemaText.length;
+        const estimatedTokens = Math.ceil(estimatedPromptSize / 4);
+
+        console.log(`[LLM Topic Analysis] Batch request details:`);
+        console.log(`  - Batch size: ${batchTopics.length} topics`);
+        console.log(`  - Prompt size: ${prompt.length} chars`);
+        console.log(`  - Schema size: ${schemaText.length} chars`);
+        console.log(
+            `  - Estimated total: ${estimatedPromptSize} chars (~${estimatedTokens} tokens)`,
+        );
+
+        const response = await translator.translate(prompt);
+
+        if (!response.success) {
+            console.warn("LLM batch analysis failed:", response.message);
+            return relationshipMap;
+        }
+
+        const analysisResult = response.data;
+
+        console.log(
+            `[LLM Topic Analysis] Batch received ${analysisResult.relationships.length} relationship recommendations`,
+        );
+
+        for (const relationship of analysisResult.relationships) {
+            if (relationship.topic && relationship.action) {
+                relationshipMap.set(relationship.topic, {
+                    action: relationship.action,
+                    targetTopic: relationship.targetTopic,
+                    confidence: relationship.confidence || 0.5,
+                    reasoning: relationship.reasoning || "LLM analysis",
+                });
+            }
+        }
+
+        return relationshipMap;
+    } catch (error) {
+        console.error("[LLM Topic Analysis] Batch error:", error);
+        return relationshipMap;
+    }
+}
+
+export async function testMergeTopicHierarchies(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    mergeCount: number;
+    message?: string;
+    changes?: Array<{
+        action: string;
+        sourceTopic: string;
+        targetTopic?: string;
+    }>;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                mergeCount: 0,
+                error: "Website collection not available",
+            };
+        }
+
+        console.log(
+            "[Test Merge] Running preview mode - NO CHANGES WILL BE SAVED",
+        );
+
+        const result = await websiteCollection.testMergeTopicHierarchies(
+            analyzeTopicRelationshipsWithLLM,
+        );
+
+        const message = `⚠️ Preview completed: ${result.mergeCount} potential changes found. Use 'mergeTopicHierarchies' action to apply changes.`;
+        console.log(`[Test Merge] ${message}`);
+
+        return {
+            success: true,
+            mergeCount: result.mergeCount,
+            message,
+            changes: result.changes,
+        };
+    } catch (error) {
+        console.error("Error testing topic merge:", error);
+        return {
+            success: false,
+            mergeCount: 0,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+export async function mergeTopicHierarchies(
+    parameters: {},
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    mergeCount: number;
+    message?: string;
+    error?: string;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                success: false,
+                mergeCount: 0,
+                error: "Website collection not available",
+            };
+        }
+
+        console.log(
+            "[Merge Action] Starting topic hierarchy merge with LLM analysis...",
+        );
+
+        const result = await websiteCollection.mergeTopicHierarchiesWithLLM(
+            analyzeTopicRelationshipsWithLLM,
+        );
+
+        invalidateTopicCache(websiteCollection);
+
+        const message = `✓ Topic merge completed! ${result.mergeCount} topics reorganized. Reload the page to see updated hierarchy.`;
+        console.log(`[Merge Action] ${message}`);
+
+        return {
+            success: true,
+            mergeCount: result.mergeCount,
+            message,
+        };
+    } catch (error) {
+        console.error("Error merging topic hierarchies:", error);
+        const errorMsg =
+            error instanceof Error ? error.message : "Unknown error";
+        return {
+            success: false,
+            mergeCount: 0,
+            error: `Failed to merge topics: ${errorMsg}`,
         };
     }
 }
@@ -659,6 +963,260 @@ export async function getEntityNeighborhood(
             neighbors: [],
             relationships: [],
             error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+/**
+ * Discover related entities and topics from the knowledge graph
+ * Performs multi-hop graph traversal to find connected knowledge
+ */
+export async function discoverRelatedKnowledge(
+    parameters: {
+        entities: Array<{ name: string; type: string }>;
+        topics: string[];
+        depth?: number;
+        maxEntities?: number;
+        maxTopics?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    relatedEntities: Array<{
+        name: string;
+        type: string;
+        relationshipPath: string[];
+        distance: number;
+        relevanceScore: number;
+    }>;
+    relatedTopics: Array<{
+        name: string;
+        cooccurrenceCount: number;
+        distance: number;
+        relevanceScore: number;
+    }>;
+    success: boolean;
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            debug("[discoverRelatedKnowledge] No website collection available");
+            return {
+                relatedEntities: [],
+                relatedTopics: [],
+                success: false,
+            };
+        }
+
+        const depth = parameters.depth || 2;
+        const maxEntities = parameters.maxEntities || 10;
+        const maxTopics = parameters.maxTopics || 10;
+
+        debug(
+            `[discoverRelatedKnowledge] Starting discovery with ${parameters.entities.length} entities, ${parameters.topics.length} topics, depth=${depth}`,
+        );
+
+        // Discover related entities via graph traversal
+        const relatedEntitiesMap = new Map<
+            string,
+            {
+                name: string;
+                type: string;
+                relationshipPath: string[];
+                distance: number;
+                confidence: number;
+                cooccurrenceCount: number;
+            }
+        >();
+
+        // Traverse from each seed entity
+        for (const seedEntity of parameters.entities) {
+            try {
+                const neighborhoodResult = await getEntityNeighborhood(
+                    { entityId: seedEntity.name, depth, maxNodes: 50 },
+                    context,
+                );
+
+                if (neighborhoodResult.neighbors) {
+                    for (const neighbor of neighborhoodResult.neighbors) {
+                        // Skip if this is one of the seed entities
+                        if (
+                            parameters.entities.some(
+                                (e) =>
+                                    e.name.toLowerCase() ===
+                                    neighbor.name.toLowerCase(),
+                            )
+                        ) {
+                            continue;
+                        }
+
+                        const existingEntry = relatedEntitiesMap.get(
+                            neighbor.name.toLowerCase(),
+                        );
+
+                        // Calculate distance from relationships
+                        const relationships =
+                            neighborhoodResult.relationships?.filter(
+                                (r: any) =>
+                                    r.toEntity === neighbor.name ||
+                                    r.fromEntity === neighbor.name,
+                            ) || [];
+
+                        const distance = relationships.length > 0 ? 1 : depth;
+
+                        // Calculate co-occurrence count (how many pages this entity appears on)
+                        const cooccurrenceCount =
+                            neighbor.occurrences?.length || 1;
+
+                        if (
+                            !existingEntry ||
+                            distance < existingEntry.distance
+                        ) {
+                            // Get relationship path
+                            const relationshipPath: string[] = [];
+                            if (relationships.length > 0) {
+                                relationshipPath.push(
+                                    relationships[0].relationshipType ||
+                                        "related_to",
+                                );
+                            }
+
+                            relatedEntitiesMap.set(
+                                neighbor.name.toLowerCase(),
+                                {
+                                    name: neighbor.name,
+                                    type: neighbor.type || "unknown",
+                                    relationshipPath,
+                                    distance,
+                                    confidence: neighbor.confidence || 0.5,
+                                    cooccurrenceCount,
+                                },
+                            );
+                        }
+                    }
+                }
+            } catch (error) {
+                debug(
+                    `[discoverRelatedKnowledge] Error processing entity ${seedEntity.name}: ${error}`,
+                );
+            }
+        }
+
+        // Discover related topics via co-occurrence
+        const relatedTopicsMap = new Map<
+            string,
+            {
+                name: string;
+                cooccurrenceCount: number;
+                distance: number;
+            }
+        >();
+
+        if (parameters.topics.length > 0) {
+            try {
+                const expandedTopics = await expandTopicNeighborhood(
+                    parameters.topics,
+                    depth,
+                    websiteCollection,
+                );
+
+                for (const topic of expandedTopics) {
+                    // Skip if this is one of the seed topics
+                    if (
+                        parameters.topics.some(
+                            (t) => t.toLowerCase() === topic.toLowerCase(),
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    // Get co-occurrence count
+                    let cooccurrenceCount = 0;
+                    if (
+                        websiteCollection.knowledgeTopics &&
+                        (websiteCollection.knowledgeTopics as any)
+                            .getRelatedTopics
+                    ) {
+                        const relatedEntries = (
+                            websiteCollection.knowledgeTopics as any
+                        ).getRelatedTopics(topic, 100);
+                        cooccurrenceCount = relatedEntries?.length || 1;
+                    }
+
+                    // Calculate distance (1 for direct co-occurrence, 2+ for multi-hop)
+                    const isDirectlyRelated = parameters.topics.some(
+                        (seedTopic) => {
+                            if (
+                                websiteCollection.knowledgeTopics &&
+                                (websiteCollection.knowledgeTopics as any)
+                                    .getRelatedTopics
+                            ) {
+                                const related =
+                                    (
+                                        websiteCollection.knowledgeTopics as any
+                                    ).getRelatedTopics(seedTopic, 50) || [];
+                                return related.some(
+                                    (r: any) =>
+                                        r.topic?.toLowerCase() ===
+                                        topic.toLowerCase(),
+                                );
+                            }
+                            return false;
+                        },
+                    );
+
+                    const distance = isDirectlyRelated ? 1 : 2;
+
+                    relatedTopicsMap.set(topic.toLowerCase(), {
+                        name: topic,
+                        cooccurrenceCount,
+                        distance,
+                    });
+                }
+            } catch (error) {
+                debug(
+                    `[discoverRelatedKnowledge] Error expanding topics: ${error}`,
+                );
+            }
+        }
+
+        // Rank and filter entities
+        const rankedEntities = Array.from(relatedEntitiesMap.values())
+            .map((entity) => ({
+                ...entity,
+                relevanceScore:
+                    (1.0 / entity.distance) * 0.4 +
+                    entity.confidence * 0.3 +
+                    Math.min(entity.cooccurrenceCount / 10, 1.0) * 0.3,
+            }))
+            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .slice(0, maxEntities);
+
+        // Rank and filter topics
+        const rankedTopics = Array.from(relatedTopicsMap.values())
+            .map((topic) => ({
+                ...topic,
+                relevanceScore:
+                    (1.0 / topic.distance) * 0.5 +
+                    Math.min(topic.cooccurrenceCount / 20, 1.0) * 0.5,
+            }))
+            .sort((a, b) => b.relevanceScore - a.relevanceScore)
+            .slice(0, maxTopics);
+
+        debug(
+            `[discoverRelatedKnowledge] Discovered ${rankedEntities.length} related entities, ${rankedTopics.length} related topics`,
+        );
+
+        return {
+            relatedEntities: rankedEntities,
+            relatedTopics: rankedTopics,
+            success: true,
+        };
+    } catch (error) {
+        console.error("[discoverRelatedKnowledge] Error:", error);
+        return {
+            relatedEntities: [],
+            relatedTopics: [],
+            success: false,
         };
     }
 }
@@ -1305,44 +1863,9 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
             relationships.length,
         );
 
-        // Add lateral relationships from topic relationships table - SUPER OPTIMIZED
-        if (websiteCollection.topicRelationships) {
-            tracker.startOperation(
-                "ensureTopicGraphCache.getLateralRelationships",
-            );
-            const topicIds = new Set(topics.map((t: any) => t.topicId));
-            const topicIdsArray = Array.from(topicIds);
-
-            // Use optimized query that filters at database level
-            const allRels =
-                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
-                    topicIdsArray,
-                    0.3, // Only get relationships with strength >= 0.3 for better performance
-                );
-
-            // Convert to our format - no need to filter since DB already filtered
-            const lateralRels: any[] = allRels.map((rel: any) => ({
-                from: rel.fromTopic,
-                to: rel.toTopic,
-                type: rel.relationshipType,
-                strength: rel.strength,
-            }));
-
-            // Deduplicate lateral relationships
-            const relKeys = new Set<string>();
-            for (const rel of lateralRels) {
-                const key = `${rel.from}|${rel.to}|${rel.type}`;
-                if (!relKeys.has(key)) {
-                    relKeys.add(key);
-                    relationships.push(rel);
-                }
-            }
-            tracker.endOperation(
-                "ensureTopicGraphCache.getLateralRelationships",
-                allRels.length,
-                lateralRels.length,
-            );
-        }
+        debug(
+            `[ensureTopicGraphCache] Built ${relationships.length} hierarchical relationships (lateral relationships fetched on-demand)`,
+        );
 
         // Get entity counts for topics from topic-entity relations
         const topicMetricsInput = topics.map((topic: any) => ({
@@ -2031,135 +2554,63 @@ export async function getTopicImportanceLayer(
             metricsMap.set(metric.topicId, metric);
         });
 
-        // BFS-based balanced selection
-        const selectedTopicIds = new Set<string>();
+        // Filter roots with children, expand ALL selected roots, then sort and select top 2M
+        const candidatePool = new Set<string>();
         const rootTopics = allTopics.filter((t: any) => !t.parentTopicId);
 
+        // Filter roots to only include those with children
+        const candidateRoots = rootTopics.filter((t: any) => {
+            const children = childrenMap.get(t.topicId) || [];
+            return children.length > 0;
+        });
+
         // Sort root topics by importance
-        const sortedRoots = rootTopics.sort((a: any, b: any) => {
+        const sortedRoots = candidateRoots.sort((a: any, b: any) => {
             const importanceA = metricsMap.get(a.topicId)?.importance || 0;
             const importanceB = metricsMap.get(b.topicId)?.importance || 0;
             return importanceB - importanceA;
         });
 
-        // Start with all roots
-        const queue: Array<{ id: string; depth: number }> = [];
-        sortedRoots.forEach((root: any) => {
-            if (selectedTopicIds.size < maxNodes) {
-                selectedTopicIds.add(root.topicId);
-                queue.push({ id: root.topicId, depth: 0 });
-            }
-        });
+        const maxRootsToExpand = Math.min(sortedRoots.length, 300);
 
-        // First pass: ensure each root gets at least one child
-        const rootsWithChildren = new Set<string>();
-        sortedRoots.forEach((root: any) => {
-            if (selectedTopicIds.size >= maxNodes) return;
-            const children = childrenMap.get(root.topicId) || [];
-            if (children.length > 0) {
-                const sortedChildren = children
-                    .map((id) => ({
-                        id,
-                        importance: metricsMap.get(id)?.importance || 0,
-                    }))
-                    .sort((a, b) => b.importance - a.importance);
+        // Expand ALL selected roots completely using BFS
+        for (let i = 0; i < maxRootsToExpand; i++) {
+            const root = sortedRoots[i];
+            candidatePool.add(root.topicId);
 
-                // Add at least one child for this root
-                const firstChild = sortedChildren[0];
-                if (firstChild && !selectedTopicIds.has(firstChild.id)) {
-                    selectedTopicIds.add(firstChild.id);
-                    queue.push({ id: firstChild.id, depth: 1 });
-                }
-                rootsWithChildren.add(root.topicId);
-            }
-        });
+            // BFS to add all descendants of this root
+            const queue: string[] = [root.topicId];
+            while (queue.length > 0) {
+                const currentId = queue.shift()!;
+                const children = childrenMap.get(currentId) || [];
 
-        // BFS to expand around roots, level by level
-        while (queue.length > 0 && selectedTopicIds.size < maxNodes) {
-            const { id: currentId, depth } = queue.shift()!;
-            const children = childrenMap.get(currentId) || [];
-
-            // Sort children by importance
-            const sortedChildren = children
-                .map((id) => ({
-                    id,
-                    importance: metricsMap.get(id)?.importance || 0,
-                }))
-                .sort((a, b) => b.importance - a.importance);
-
-            for (const { id } of sortedChildren) {
-                if (selectedTopicIds.size >= maxNodes) break;
-                if (!selectedTopicIds.has(id)) {
-                    selectedTopicIds.add(id);
-                    queue.push({ id, depth: depth + 1 });
+                for (const childId of children) {
+                    if (!candidatePool.has(childId)) {
+                        candidatePool.add(childId);
+                        queue.push(childId);
+                    }
                 }
             }
         }
 
-        // If still under maxNodes, add remaining high-importance topics
-        // and connect orphaned nodes to the graph
-        if (selectedTopicIds.size < maxNodes) {
-            const sortedMetrics = topicMetrics
-                .filter((m: any) => !selectedTopicIds.has(m.topicId))
-                .sort((a, b) => (b.importance || 0) - (a.importance || 0));
+        // Sort candidate pool by importance
+        const sortedCandidates = Array.from(candidatePool)
+            .map((topicId) => ({
+                topicId,
+                importance: metricsMap.get(topicId)?.importance || 0,
+            }))
+            .sort((a, b) => b.importance - a.importance);
 
-            const remaining = maxNodes - selectedTopicIds.size;
+        // Select top 2M nodes from sorted pool
+        const targetSize = maxNodes * 2;
+        const selectedTopicIds = new Set<string>();
 
-            for (
-                let i = 0;
-                i < Math.min(remaining, sortedMetrics.length);
-                i++
-            ) {
-                const topicId = sortedMetrics[i].topicId;
-
-                // Check if this topic has any neighbors in the selected set
-                const hasNeighbors = (() => {
-                    // Check if parent is in set
-                    const parent = parentMap.get(topicId);
-                    if (parent && selectedTopicIds.has(parent)) return true;
-
-                    // Check if any children are in set
-                    const children = childrenMap.get(topicId) || [];
-                    return children.some((childId) =>
-                        selectedTopicIds.has(childId),
-                    );
-                })();
-
-                if (!hasNeighbors) {
-                    // Find path to existing node by traversing up to root
-                    const pathToRoot: string[] = [];
-                    let currentId = topicId;
-
-                    while (
-                        currentId &&
-                        !selectedTopicIds.has(currentId) &&
-                        pathToRoot.length < 10
-                    ) {
-                        pathToRoot.push(currentId);
-                        const parent = parentMap.get(currentId);
-                        if (!parent) break; // Reached root
-                        currentId = parent;
-                    }
-
-                    // If we found a connection, add the path
-                    if (selectedTopicIds.has(currentId)) {
-                        // Add nodes in reverse order (from existing node down to new node)
-                        for (
-                            let j = pathToRoot.length - 1;
-                            j >= 0 && selectedTopicIds.size < maxNodes;
-                            j--
-                        ) {
-                            selectedTopicIds.add(pathToRoot[j]);
-                        }
-                    } else {
-                        // Just add the node even if orphaned
-                        selectedTopicIds.add(topicId);
-                    }
-                } else {
-                    // Already connected, just add it
-                    selectedTopicIds.add(topicId);
-                }
-            }
+        for (
+            let i = 0;
+            i < Math.min(targetSize, sortedCandidates.length);
+            i++
+        ) {
+            selectedTopicIds.add(sortedCandidates[i].topicId);
         }
 
         const selectedMetrics = topicMetrics.filter((m: any) =>
@@ -2170,10 +2621,33 @@ export async function getTopicImportanceLayer(
             selectedTopicIds.has(t.topicId),
         );
 
-        const selectedRelationships = allRelationships.filter(
+        const hierarchicalRelationships = allRelationships.filter(
             (rel: any) =>
                 selectedTopicIds.has(rel.from) && selectedTopicIds.has(rel.to),
         );
+
+        const selectedTopicIdsArray = Array.from(selectedTopicIds);
+        let lateralRelationships: any[] = [];
+
+        if (websiteCollection.topicRelationships) {
+            const lateralRels =
+                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
+                    selectedTopicIdsArray,
+                    0.3,
+                );
+
+            lateralRelationships = lateralRels.map((rel: any) => ({
+                from: rel.fromTopic,
+                to: rel.toTopic,
+                type: rel.relationshipType,
+                strength: rel.strength,
+            }));
+        }
+
+        const selectedRelationships = [
+            ...hierarchicalRelationships,
+            ...lateralRelationships,
+        ];
 
         const topicsWithMetrics = selectedTopics.map((topic: any) => {
             const metrics = selectedMetrics.find(

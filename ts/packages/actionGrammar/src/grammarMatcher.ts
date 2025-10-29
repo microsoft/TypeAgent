@@ -654,7 +654,7 @@ function partialMatchRules(
                     debugCompletion(
                         `  Completing string part ${state.name}: ${nextPart.value.join(" ")}`,
                     );
-                    completions.push(...nextPart.value);
+                    completions.push(nextPart.value.join(" "));
                     break;
             }
         }

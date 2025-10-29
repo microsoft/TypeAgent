@@ -14,10 +14,7 @@ public class SqliteTermToSemanticRefIndex : ITermToSemanticRefIndex
         _db = db;
     }
 
-    public int GetCount()
-    {
-        return _db.GetCount(SqliteStorageProviderSchema.SemanticRefIndexTable);
-    }
+    public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.SemanticRefIndexTable);
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellation = default)
     {

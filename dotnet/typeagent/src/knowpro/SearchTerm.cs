@@ -36,7 +36,7 @@ public class SearchTerm : ISearchTerm
     /// </summary>
     public IList<Term>? RelatedTerms { get; set; }
 
-    public bool IsExactMatch => RelatedTerms is not null && RelatedTerms.Count == 0;
+    public bool IsExactMatch() => RelatedTerms is not null && RelatedTerms.Count == 0;
 
     public override string ToString()
     {
@@ -51,6 +51,13 @@ public class SearchTerm : ISearchTerm
     public bool IsWildcard()
     {
         return Term.Text == "*";
+    }
+
+    public void AddRelated(Term term)
+    {
+        ArgumentVerify.ThrowIfNull(term, nameof(term));
+        RelatedTerms ??= [];
+        RelatedTerms.Add(term);
     }
 
     internal bool RelatedTermsRequired { get; set; }

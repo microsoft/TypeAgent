@@ -93,6 +93,28 @@ class ActionDiscoveryPanel {
         chrome.tabs.onActivated.addListener(() => {
             this.onTabChange();
         });
+
+        // Listen for macro changes from the backend
+        chrome.runtime.onMessage.addListener(
+            (message, sender, sendResponse) => {
+                if (
+                    message.type === "macroAdded" ||
+                    message.type === "macroDeleted" ||
+                    message.type === "macrosChanged"
+                ) {
+                    (async () => {
+                        await this.updateUserActionsUI();
+                        await this.registerTempSchema();
+                    })().catch((error) => {
+                        console.error(
+                            "Error refreshing UI after macro change:",
+                            error,
+                        );
+                    });
+                }
+                return false;
+            },
+        );
     }
 
     private async getActiveTabUrl(): Promise<string | null> {
@@ -263,7 +285,6 @@ class ActionDiscoveryPanel {
                     console.log(
                         `Discovered and saved ${response.schema.length} actions`,
                     );
-                    console.log("Discovered actions:", response.schema);
                 }
             } else {
                 const legacySchema = currentActions.map((action) => ({
@@ -605,7 +626,6 @@ class ActionDiscoveryPanel {
             const allMacros = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: true,
             });
-            console.log("All Macros", allMacros);
 
             const existingMacroNames: string[] = allMacros.map(
                 (macro) => macro.name,
@@ -632,16 +652,13 @@ class ActionDiscoveryPanel {
                     "Macro created and saved successfully!",
                     "success",
                 );
-                console.log(
-                    `Created and saved macro: ${response.intentJson.macroName} (ID: ${response.macroId})`,
-                );
             } else {
+                console.warn(
+                    "[saveModalAction] Action creation completed but no actionId returned",
+                );
                 showNotification(
                     "Macro created but save status unknown",
                     "info",
-                );
-                console.warn(
-                    "Action creation completed but no actionId returned",
                 );
             }
 
@@ -649,8 +666,11 @@ class ActionDiscoveryPanel {
             modal.hide();
 
             // Update UI
+            console.log("[saveModalAction] Calling updateUserActionsUI");
             await this.updateUserActionsUI();
+            console.log("[saveModalAction] Calling registerTempSchema");
             await this.registerTempSchema();
+            console.log("[saveModalAction] UI update complete");
         } catch (error) {
             console.error("Error creating action:", error);
             showNotification("Failed to create action", "error");
@@ -712,14 +732,11 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
-            console.log("Getting actions after update. URL: ", launchUrl);
             // Get user-authored actions from the new ActionsStore
             const actions = await getMacrosForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user",
             });
-
-            console.log("Custom actions: ", actions);
 
             countBadge.textContent = actions.length.toString();
 
@@ -740,7 +757,10 @@ class ActionDiscoveryPanel {
                 window.Prism.highlightAll();
             }
         } catch (error) {
-            console.error("Error updating user actions UI:", error);
+            console.error(
+                "[updateUserActionsUI] Error updating user actions UI:",
+                error,
+            );
             showErrorState(
                 userActionsContainer,
                 "Failed to load custom actions",
@@ -755,6 +775,19 @@ class ActionDiscoveryPanel {
 
         const actionElement = document.createElement("div");
         actionElement.className = "macro-item mb-3";
+
+        console.log(
+            "[renderUserAction] Rendering action:",
+            action.id || action.name,
+        );
+        console.log(
+            "[renderUserAction] action.definition?.steps:",
+            action.definition?.steps?.length || 0,
+        );
+        console.log(
+            "[renderUserAction] action.steps:",
+            action.steps?.length || 0,
+        );
 
         if (!action.intentSchema) {
             action.intentSchema = action.definition?.intentSchema;
@@ -772,6 +805,11 @@ class ActionDiscoveryPanel {
         if (!action.steps) {
             action.steps = steps;
         }
+
+        console.log(
+            "[renderUserAction] Final steps count:",
+            action.steps?.length || 0,
+        );
 
         actionElement.innerHTML = this.createUserActionCard(action, index);
 
@@ -878,16 +916,18 @@ class ActionDiscoveryPanel {
         const confirmed = await showConfirmationDialog(
             "Are you sure you want to delete this action?",
         );
-        if (!confirmed) return;
+        if (!confirmed) {
+            return;
+        }
 
         try {
             const result = await deleteMacro(macroId);
+
             if (result.success) {
-                console.log(`Action deleted: ${macroId}`);
                 await this.updateUserActionsUI();
                 showNotification("Action deleted successfully!", "success");
             } else {
-                console.error(`Failed to delete action:`, result.error);
+                console.error("Failed to delete action:", result.error);
                 showNotification(
                     `Failed to delete action: ${result.error || "Unknown error"}`,
                     "error",
@@ -1092,24 +1132,22 @@ class ActionDiscoveryPanel {
 
     private createUserActionDetails(action: any, index: number): string {
         const tabs = [
-            { id: `steps${index}`, label: "Steps", active: true },
-            { id: `intent${index}`, label: "Intent" },
-            { id: `actions${index}`, label: "Actions" },
+            { id: `recording${index}`, label: "Recording", active: true },
+            { id: `macro${index}`, label: "Macro" },
         ];
+
+        const yamlContent =
+            action.rawYAML || "# Error: YAML content not available";
 
         const panes = [
             {
-                id: `steps${index}`,
+                id: `recording${index}`,
                 content: `<div id="stepsContent${index}"></div>`,
                 active: true,
             },
             {
-                id: `intent${index}`,
-                content: `<pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>`,
-            },
-            {
-                id: `actions${index}`,
-                content: `<pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>`,
+                id: `macro${index}`,
+                content: `<pre><code class="language-yaml">${escapeHtml(yamlContent)}</code></pre>`,
             },
         ];
 

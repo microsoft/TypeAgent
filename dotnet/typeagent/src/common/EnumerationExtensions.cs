@@ -15,6 +15,16 @@ public static class EnumerationExtensions
         }
     }
 
+    public static void ForEach<T>(this IEnumerable<T> list, Action<T> fn)
+    {
+        ArgumentVerify.ThrowIfNull(fn, nameof(fn));
+
+        foreach (var item in list)
+        {
+            fn(item);
+        }
+    }
+
     public static List<TResult> Map<T, TResult>(this IEnumerable<T> list, Func<T, TResult> mapFn)
     {
         ArgumentVerify.ThrowIfNull(mapFn, nameof(mapFn));
@@ -27,12 +37,25 @@ public static class EnumerationExtensions
         return results;
     }
 
-    public static IEnumerable<IList<T>> Batch<T>(this IEnumerable<T> items, int batchSize, IList<T>? buffer = null)
+    public static List<T> Flat<T>(this IEnumerable<IEnumerable<T>> list)
+    {
+        var result = new List<T>();
+        foreach (var inner in list)
+        {
+            if (inner is not null)
+            {
+                result.AddRange(inner);
+            }
+        }
+        return result;
+    }
+
+    public static IEnumerable<List<T>> Batch<T>(this IEnumerable<T> items, int batchSize, List<T>? buffer = null)
     {
         bool userBuffer = buffer is not null;
         using var enumerator = items.GetEnumerator();
 
-        IList<T> batch = userBuffer ? buffer : new List<T>(batchSize);
+        List<T> batch = userBuffer ? buffer : new List<T>(batchSize);
         while (enumerator.MoveNext())
         {
             batch.Add(enumerator.Current);

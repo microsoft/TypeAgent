@@ -62,13 +62,22 @@ public class SqliteDatabase : IDisposable
         return command.ExecuteScalar();
     }
 
-    public IList<T> GetList<T>(string commandText, Func<SqliteDataReader, T> cb)
+    public List<T> GetList<T>(string commandText, Func<SqliteDataReader, T> cb)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
 
         using var command = CreateCommand(commandText);
         using var reader = command.ExecuteReader();
         return reader.GetList<T>(cb);
+    }
+
+    public List<T>? GetListOrNull<T>(string commandText, Func<SqliteDataReader, T> cb)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
+
+        using var command = CreateCommand(commandText);
+        using var reader = command.ExecuteReader();
+        return reader.GetListOrNull<T>(cb);
     }
 
     public IEnumerable<T> Enumerate<T>(string sql, Func<SqliteDataReader, T> rowDeserializer)
@@ -80,7 +89,10 @@ public class SqliteDatabase : IDisposable
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = sql;
-        addParams(cmd);
+        if (addParams is not null)
+        {
+            addParams(cmd);
+        }
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -162,7 +174,7 @@ public class SqliteDatabase : IDisposable
         );
     }
 
-    internal static string[] MakeInPlaceholderIds(int count, string prefix = "@id")
+    internal static string[] MakeInPlaceholderParamIds(int count, string prefix = "@id")
     {
         ArgumentVerify.ThrowIfLessThanEqual(count, 0, nameof(count));
 
@@ -172,6 +184,11 @@ public class SqliteDatabase : IDisposable
             ids[i] = $"@id{i}";
         }
         return ids;
+    }
+
+    internal static string MakeInStatement(string[] placeholderIds)
+    {
+        return string.Join(", ", placeholderIds);
     }
 }
 

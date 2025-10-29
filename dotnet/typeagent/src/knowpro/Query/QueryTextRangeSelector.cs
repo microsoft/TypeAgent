@@ -59,7 +59,7 @@ internal class TextRangesFromMessagesSelector : QueryOpExpr<TextRangeCollection>
 
     public QueryOpExpr<MessageAccumulator> SourceExpr { get; }
 
-    public async ValueTask<TextRangeCollection> Eval(QueryEvalContext context)
+    public override async ValueTask<TextRangeCollection> EvalAsync(QueryEvalContext context)
     {
         var matches = await SourceExpr.EvalAsync(context).ConfigureAwait(false);
         List<TextRange> rangesInScope;

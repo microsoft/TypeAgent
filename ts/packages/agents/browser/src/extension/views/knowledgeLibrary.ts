@@ -114,6 +114,9 @@ class WebsiteLibraryPanelFullPage {
         this.isInitialized = true;
 
         try {
+            // Ensure sidebar is always collapsed
+            this.ensureSidebarCollapsed();
+
             this.setupNavigation();
             this.setupEventListeners();
             this.setupImportFunctionality();
@@ -131,10 +134,17 @@ class WebsiteLibraryPanelFullPage {
         }
     }
 
-    private setupNavigation() {
-        // Setup icon rail sidebar toggle
-        this.setupIconRailSidebar();
+    private ensureSidebarCollapsed() {
+        const sidebar = document.getElementById("iconRailSidebar");
+        if (sidebar) {
+            // Remove expanded class if it exists
+            sidebar.classList.remove("expanded");
+        }
+        // Clear any saved state from localStorage
+        localStorage.removeItem("sidebar-collapsed-state");
+    }
 
+    private setupNavigation() {
         // Setup navigation items
         const navItems = document.querySelectorAll(".nav-item");
         navItems.forEach((item) => {
@@ -161,74 +171,6 @@ class WebsiteLibraryPanelFullPage {
                     this.navigateToPage(page).catch(console.error);
                 }
             });
-        });
-    }
-
-    private setupIconRailSidebar() {
-        const sidebar = document.getElementById("iconRailSidebar");
-        const toggleButton = document.getElementById("sidebarToggle");
-        const overlay = document.getElementById("sidebarOverlay");
-
-        if (!sidebar || !toggleButton) return;
-
-        // Load saved state, default to collapsed
-        const savedState = localStorage.getItem("sidebar-collapsed-state");
-        if (savedState !== null && savedState === "false") {
-            sidebar.classList.add("expanded");
-        }
-
-        // Toggle button click
-        toggleButton.addEventListener("click", () => {
-            sidebar.classList.toggle("expanded");
-            const isExpanded = sidebar.classList.contains("expanded");
-            localStorage.setItem(
-                "sidebar-collapsed-state",
-                (!isExpanded).toString(),
-            );
-        });
-
-        // Overlay click (mobile)
-        overlay?.addEventListener("click", () => {
-            if (window.innerWidth <= 768) {
-                sidebar.classList.remove("expanded");
-                localStorage.setItem("sidebar-collapsed-state", "true");
-            }
-        });
-
-        // Keyboard shortcut: Ctrl/Cmd + B
-        document.addEventListener("keydown", (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "b") {
-                e.preventDefault();
-                sidebar.classList.toggle("expanded");
-                const isExpanded = sidebar.classList.contains("expanded");
-                localStorage.setItem(
-                    "sidebar-collapsed-state",
-                    (!isExpanded).toString(),
-                );
-            }
-
-            // Escape to collapse on mobile
-            if (e.key === "Escape" && window.innerWidth <= 768) {
-                sidebar.classList.remove("expanded");
-                localStorage.setItem("sidebar-collapsed-state", "true");
-            }
-        });
-
-        // Auto-collapse on mobile
-        const handleResize = () => {
-            if (
-                window.innerWidth <= 768 &&
-                sidebar.classList.contains("expanded")
-            ) {
-                sidebar.classList.remove("expanded");
-                localStorage.setItem("sidebar-collapsed-state", "true");
-            }
-        };
-
-        let resizeTimer: number;
-        window.addEventListener("resize", () => {
-            clearTimeout(resizeTimer);
-            resizeTimer = window.setTimeout(handleResize, 250);
         });
     }
 
@@ -941,6 +883,7 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("viewEntityGraphBtn");
         const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
         const buildGraphBtn = document.getElementById("buildGraphBtn");
+        const mergeTopicsBtn = document.getElementById("mergeTopicsBtn");
 
         if (!graphStateIcon || !graphStateText || !graphStateDescription)
             return;
@@ -961,6 +904,7 @@ class WebsiteLibraryPanelFullPage {
         if (viewEntityGraphBtn) viewEntityGraphBtn.style.display = "none";
         if (rebuildGraphBtn) rebuildGraphBtn.style.display = "none";
         if (buildGraphBtn) buildGraphBtn.style.display = "none";
+        if (mergeTopicsBtn) mergeTopicsBtn.style.display = "none";
 
         if (safeStatus.isBuilding) {
             // Show building state
@@ -1000,6 +944,7 @@ class WebsiteLibraryPanelFullPage {
             if (viewEntityGraphBtn)
                 viewEntityGraphBtn.style.display = "inline-block";
             if (rebuildGraphBtn) rebuildGraphBtn.style.display = "inline-block";
+            if (mergeTopicsBtn) mergeTopicsBtn.style.display = "inline-block";
         } else if (safeStatus.error) {
             // Show error state
             graphStateIcon.innerHTML =
@@ -1023,6 +968,7 @@ class WebsiteLibraryPanelFullPage {
             document.getElementById("viewEntityGraphBtn");
         const rebuildGraphBtn = document.getElementById("rebuildGraphBtn");
         const buildGraphBtn = document.getElementById("buildGraphBtn");
+        const mergeTopicsBtn = document.getElementById("mergeTopicsBtn");
 
         // Remove existing listeners to avoid duplicates
         viewEntityGraphBtn?.removeEventListener(
@@ -1031,6 +977,7 @@ class WebsiteLibraryPanelFullPage {
         );
         rebuildGraphBtn?.removeEventListener("click", this.handleRebuildGraph);
         buildGraphBtn?.removeEventListener("click", this.handleBuildGraph);
+        mergeTopicsBtn?.removeEventListener("click", this.handleMergeTopics);
 
         // Add new listeners
         if (viewEntityGraphBtn) {
@@ -1049,6 +996,12 @@ class WebsiteLibraryPanelFullPage {
             buildGraphBtn.addEventListener(
                 "click",
                 this.handleBuildGraph.bind(this),
+            );
+        }
+        if (mergeTopicsBtn) {
+            mergeTopicsBtn.addEventListener(
+                "click",
+                this.handleMergeTopics.bind(this),
             );
         }
     }
@@ -1146,6 +1099,38 @@ class WebsiteLibraryPanelFullPage {
                 isBuilding: false,
                 error: errorMessage,
             });
+        }
+    }
+
+    private async handleMergeTopics() {
+        try {
+            this.updateGraphStatusDisplay({
+                hasGraph: true,
+                entityCount: 0,
+                relationshipCount: 0,
+                communityCount: 0,
+                isBuilding: true,
+            });
+
+            notificationManager.showInfo("Merging topic hierarchies...");
+
+            const result = await extensionService.mergeTopicHierarchies();
+
+            await this.loadGraphStatus();
+
+            notificationManager.showSuccess(
+                result.message ||
+                    `Topics merged successfully: ${result.mergeCount} topics merged`,
+            );
+        } catch (error) {
+            console.error("Failed to merge topics:", error);
+            const errorMessage =
+                error instanceof Error ? error.message : "Unknown error";
+            notificationManager.showError(
+                `Failed to merge topics: ${errorMessage}`,
+            );
+
+            await this.loadGraphStatus();
         }
     }
 

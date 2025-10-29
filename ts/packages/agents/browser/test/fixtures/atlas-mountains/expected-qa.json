@@ -1,0 +1,185 @@
+{
+  "pageQuestions": [
+    {
+      "question": "What is the highest peak in the Atlas Mountains?",
+      "scope": "page",
+      "expectedAnswer": "Mount Toubkal is the highest peak in the Atlas Mountains, reaching 4,167 meters (13,671 ft) and located in southwestern Morocco.",
+      "relevantEntities": ["Mount Toubkal", "Atlas Mountains", "Morocco"],
+      "relevantTopics": ["Geography"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "factual",
+      "confidence": 0.95
+    },
+    {
+      "question": "Which countries do the Atlas Mountains stretch through?",
+      "scope": "page",
+      "expectedAnswer": "The Atlas Mountains stretch through three North African countries: Morocco, Algeria, and Tunisia, spanning around 2,500 km (1,600 mi).",
+      "relevantEntities": ["Atlas Mountains", "Morocco", "Algeria", "Tunisia"],
+      "relevantTopics": ["Geography", "North Africa"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "factual",
+      "confidence": 0.98
+    },
+    {
+      "question": "What geological event formed the Atlas Mountains?",
+      "scope": "page",
+      "expectedAnswer": "The Atlas Mountains were primarily shaped during the Alpine orogeny, the same tectonic event that created the Alps and Pyrenees mountains, occurring during the Mesozoic and Cenozoic eras. There was also an earlier tectonic phase during the Paleozoic Era (300 million years ago).",
+      "relevantEntities": ["Atlas Mountains", "Alps", "Pyrenees"],
+      "relevantTopics": ["Geology", "Mountain Formation"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "explanatory",
+      "confidence": 0.92
+    },
+    {
+      "question": "What endangered primate species lives in the Atlas Mountains?",
+      "scope": "page",
+      "expectedAnswer": "The Barbary macaque is an endangered primate species that lives in the Atlas Mountains. It is the only primate species native to North Africa outside of humans.",
+      "relevantEntities": ["Barbary macaque", "Atlas Mountains"],
+      "relevantTopics": ["Flora and Fauna"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "factual",
+      "confidence": 0.9
+    },
+    {
+      "question": "Who are the indigenous people of the Atlas Mountains?",
+      "scope": "page",
+      "expectedAnswer": "The Berber people (also known as Amazigh) are the indigenous inhabitants of the Atlas Mountains. They have lived in the region for thousands of years and developed a unique culture adapted to the mountain environment, including distinctive architecture, agriculture, and social structures.",
+      "relevantEntities": ["Berber", "Atlas Mountains"],
+      "relevantTopics": ["Indigenous People"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "explanatory",
+      "confidence": 0.93
+    },
+    {
+      "question": "What are the main sub-ranges of the Atlas Mountains?",
+      "scope": "page",
+      "expectedAnswer": "The Atlas Mountains are divided into five main sub-ranges: High Atlas (the highest range containing Mount Toubkal), Middle Atlas (in northern Morocco with extensive forests), Anti-Atlas (the southernmost range with arid climate), Saharan Atlas (in Algeria forming the Sahara's northern boundary), and Tell Atlas (the northernmost range in Algeria and Tunisia).",
+      "relevantEntities": ["Atlas Mountains"],
+      "relevantTopics": ["Geography"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "descriptive",
+      "confidence": 0.94
+    },
+    {
+      "question": "What economic activities are important in the Atlas Mountains region?",
+      "scope": "page",
+      "expectedAnswer": "The Atlas Mountains support several important economic activities including agriculture (terraced farming and argan oil production), pastoralism (sheep and goat herding), mining (phosphates and other minerals), and tourism (trekking, mountaineering, and cultural tourism).",
+      "relevantEntities": ["Atlas Mountains"],
+      "relevantTopics": ["Tourism", "Geography"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "descriptive",
+      "confidence": 0.91
+    },
+    {
+      "question": "How does climate vary in the Atlas Mountains?",
+      "scope": "page",
+      "expectedAnswer": "The climate of the Atlas Mountains varies considerably with elevation and exposure. Northern slopes facing the Mediterranean receive more precipitation than southern slopes. Winter snow is common at higher elevations, with some peaks receiving snow year-round. The climate ranges from Mediterranean forests in the north to semi-arid conditions in the south.",
+      "relevantEntities": [
+        "Atlas Mountains",
+        "Mediterranean Sea",
+        "Sahara Desert"
+      ],
+      "relevantTopics": ["Climate", "Geography"],
+      "sourceUrls": ["https://en.wikipedia.org/wiki/Atlas_Mountains"],
+      "answerType": "explanatory",
+      "confidence": 0.89
+    }
+  ],
+  "graphQuestions": [
+    {
+      "question": "How do the Atlas Mountains compare to the Pyrenees in terms of height and formation?",
+      "scope": "broader",
+      "expectedAnswer": "The Atlas Mountains and Pyrenees share a common geological origin, both formed during the Alpine orogeny as a result of tectonic collision. However, the Atlas Mountains reach higher elevations, with Mount Toubkal at 4,167 meters compared to the Pyrenees' highest peak at around 3,404 meters. Both mountain ranges were shaped by the collision between the African and Eurasian tectonic plates.",
+      "relevantEntities": ["Atlas Mountains", "Pyrenees", "Mount Toubkal"],
+      "relevantTopics": ["Geology", "Mountain Formation", "Geography"],
+      "sourceUrls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Pyrenees"
+      ],
+      "answerType": "comparative",
+      "confidence": 0.85,
+      "requiresTraversal": true,
+      "traversalDepth": 2
+    },
+    {
+      "question": "What connections exist between the Atlas Mountains and other major mountain ranges formed during the Alpine orogeny?",
+      "scope": "broader",
+      "expectedAnswer": "The Atlas Mountains share geological origins with several major mountain ranges formed during the Alpine orogeny, including the Pyrenees (between France and Spain) and the Alps in central Europe. All these ranges formed as a result of the collision between the African and Eurasian tectonic plates during the Mesozoic and Cenozoic eras. This common tectonic event created a network of mountain ranges across Southern Europe and North Africa.",
+      "relevantEntities": ["Atlas Mountains", "Pyrenees", "Alps"],
+      "relevantTopics": ["Geology", "Mountain Formation"],
+      "sourceUrls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Pyrenees",
+        "https://en.wikipedia.org/wiki/Alps"
+      ],
+      "answerType": "analytical",
+      "confidence": 0.83,
+      "requiresTraversal": true,
+      "traversalDepth": 2
+    },
+    {
+      "question": "What is the cultural and geographic relationship between Morocco and the Atlas Mountains?",
+      "scope": "related",
+      "expectedAnswer": "Morocco has a deep cultural and geographic connection to the Atlas Mountains. The mountains stretch through much of Morocco and contain the highest peak, Mount Toubkal. The indigenous Berber people have inhabited the Moroccan Atlas for thousands of years, developing unique mountain cultures and traditional practices. The mountains are central to Morocco's geography, separating the Mediterranean coast from the Sahara Desert, and are important for tourism, agriculture, and water resources.",
+      "relevantEntities": [
+        "Morocco",
+        "Atlas Mountains",
+        "Mount Toubkal",
+        "Berber"
+      ],
+      "relevantTopics": ["Geography", "Indigenous People", "Tourism"],
+      "sourceUrls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Morocco"
+      ],
+      "answerType": "explanatory",
+      "confidence": 0.88,
+      "requiresTraversal": true,
+      "traversalDepth": 1
+    },
+    {
+      "question": "How do the Berber people's presence in the Atlas Mountains connect to broader North African history?",
+      "scope": "broader",
+      "expectedAnswer": "The Berber people have been the indigenous inhabitants of North Africa, including the Atlas Mountains, for thousands of years. They established various dynasties that ruled much of North Africa during the medieval period. The mountains served as a refuge and stronghold throughout history, including during Roman expansion (which never fully conquered the mountain areas) and later resistance to French colonial rule in Morocco and Algeria. The Berber presence represents a continuous cultural thread connecting ancient North African civilization to the present day.",
+      "relevantEntities": ["Berber", "Atlas Mountains", "Morocco", "Algeria"],
+      "relevantTopics": [
+        "Indigenous People",
+        "Historical Significance",
+        "North Africa"
+      ],
+      "sourceUrls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Berber_people",
+        "https://en.wikipedia.org/wiki/Morocco",
+        "https://en.wikipedia.org/wiki/Algeria"
+      ],
+      "answerType": "analytical",
+      "confidence": 0.81,
+      "requiresTraversal": true,
+      "traversalDepth": 3
+    },
+    {
+      "question": "What distinguishes the Atlas Mountains from the Himalayas in terms of formation and characteristics?",
+      "scope": "broader",
+      "expectedAnswer": "While both are major mountain ranges, the Atlas Mountains and Himalayas were formed by different tectonic collisions. The Atlas Mountains resulted from the African-Eurasian plate collision during the Alpine orogeny, while the Himalayas formed from the collision between the Indian and Eurasian plates. The Himalayas are significantly higher (with peaks over 8,000m) compared to the Atlas Mountains (highest peak 4,167m). The comparison helps geologists understand different mountain building processes globally.",
+      "relevantEntities": ["Atlas Mountains", "Himalayas"],
+      "relevantTopics": ["Geology", "Mountain Formation"],
+      "sourceUrls": [
+        "https://en.wikipedia.org/wiki/Atlas_Mountains",
+        "https://en.wikipedia.org/wiki/Himalayas"
+      ],
+      "answerType": "comparative",
+      "confidence": 0.79,
+      "requiresTraversal": true,
+      "traversalDepth": 2
+    }
+  ],
+  "metadata": {
+    "totalQuestions": 13,
+    "pageQuestions": 8,
+    "graphQuestions": 5,
+    "avgConfidence": 0.88,
+    "createdFor": "test_suite",
+    "lastUpdated": "2025-10-27"
+  }
+}

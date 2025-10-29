@@ -31,7 +31,7 @@ public enum FacetValueType
     Quantity
 }
 
-public readonly struct StringFacetValue : IFacetValue
+public class StringFacetValue : IFacetValue
 {
     public string Value { get; }
 
@@ -47,7 +47,7 @@ public readonly struct StringFacetValue : IFacetValue
     public override string ToString() => Value;
 }
 
-public readonly struct NumberFacetValue : IFacetValue
+public class NumberFacetValue : IFacetValue
 {
     public double Value { get; }
 
@@ -63,7 +63,7 @@ public readonly struct NumberFacetValue : IFacetValue
     public override string ToString() => Value.ToString("g");
 }
 
-public readonly struct BooleanFacetValue : IFacetValue
+public class BooleanFacetValue : IFacetValue
 {
     public bool Value { get; }
 

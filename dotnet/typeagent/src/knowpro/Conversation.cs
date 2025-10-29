@@ -8,11 +8,16 @@ public class Conversation<TMessage> : IConversation<TMessage>, IConversation, ID
 {
     private IStorageProvider<TMessage> _storageProvider;
 
-    public Conversation(IStorageProvider<TMessage> provider)
+    public Conversation(ConversationSettings settings, IStorageProvider<TMessage> provider)
     {
+        ArgumentVerify.ThrowIfNull(settings, nameof(settings));
         ArgumentVerify.ThrowIfNull(provider, nameof(provider));
+
+        Settings = settings;
         _storageProvider = provider;
     }
+
+    public ConversationSettings Settings { get; }
 
     public IMessageCollection<TMessage> Messages => _storageProvider.TypedMessages;
 
@@ -43,72 +48,24 @@ public class Conversation<TMessage> : IConversation<TMessage>, IConversation, ID
     }
 }
 
-public class Conversation : IConversation
-{
-    public Conversation(IStorageProvider provider)
-        : this(
-              provider.Messages,
-              provider.SemanticRefs,
-              provider.SemanticRefIndex,
-              provider.SecondaryIndexes
-          )
-    {
-    }
-
-    public Conversation(IConversation conversation)
-        : this(
-              conversation.Messages,
-              conversation.SemanticRefs,
-              conversation.SemanticRefIndex,
-              conversation.SecondaryIndexes
-        )
-    {
-    }
-
-    public Conversation(
-        IMessageCollection messages,
-        ISemanticRefCollection semanticRefs,
-        ITermToSemanticRefIndex semanticRefIndex,
-        IConversationSecondaryIndexes secondaryIndexes
-    )
-    {
-        ArgumentNullException.ThrowIfNull(messages, nameof(messages));
-        ArgumentNullException.ThrowIfNull(semanticRefs, nameof(semanticRefs));
-        ArgumentNullException.ThrowIfNull(semanticRefIndex, nameof(semanticRefIndex));
-        ArgumentNullException.ThrowIfNull(secondaryIndexes, nameof(secondaryIndexes));
-
-        Messages = messages;
-        SemanticRefs = semanticRefs;
-        SemanticRefIndex = semanticRefIndex;
-        SecondaryIndexes = secondaryIndexes;
-    }
-
-    public IMessageCollection Messages { get; private set; }
-
-    public ISemanticRefCollection SemanticRefs { get; private set; }
-
-    public ITermToSemanticRefIndex SemanticRefIndex { get; private set; }
-
-    public IConversationSecondaryIndexes SecondaryIndexes { get; private set; }
-};
-
 public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
 {
     public ConversationSecondaryIndexes(
         IPropertyToSemanticRefIndex propertyIndex,
-        ITimestampToTextRangeIndex timestampIndex
+        ITimestampToTextRangeIndex timestampIndex,
+        ITermToRelatedTermIndex relatedTermIndex
     )
     {
         ArgumentVerify.ThrowIfNull(propertyIndex, nameof(propertyIndex));
         ArgumentVerify.ThrowIfNull(timestampIndex, nameof(timestampIndex));
+        ArgumentVerify.ThrowIfNull(relatedTermIndex, nameof(relatedTermIndex));
 
         PropertyToSemanticRefIndex = propertyIndex;
         TimestampIndex = timestampIndex;
+        TermToRelatedTermsIndex = relatedTermIndex;
     }
 
-    public IPropertyToSemanticRefIndex PropertyToSemanticRefIndex { get; private set; }
-
-    public ITimestampToTextRangeIndex TimestampIndex { get; private set; }
-
-    //public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; private set; }
+    public IPropertyToSemanticRefIndex PropertyToSemanticRefIndex { get; }
+    public ITimestampToTextRangeIndex TimestampIndex { get; }
+    public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; }
 }

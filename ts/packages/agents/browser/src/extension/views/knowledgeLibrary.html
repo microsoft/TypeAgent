@@ -71,60 +71,30 @@
     <div class="main-wrapper">
       <!-- Icon Rail Sidebar -->
       <aside class="icon-rail-sidebar" id="iconRailSidebar">
-        <div class="sidebar-toggle-wrapper">
-          <button
-            class="sidebar-toggle"
-            id="sidebarToggle"
-            aria-label="Toggle sidebar"
-          >
-            <i class="bi bi-chevron-right"></i>
-          </button>
-        </div>
-
         <nav class="sidebar-nav">
-          <div
-            class="nav-item active"
-            data-page="search"
-            data-tooltip="Search Library"
-          >
+          <div class="nav-item active" data-page="search" title="Search">
             <i class="nav-icon bi bi-search"></i>
             <span class="nav-label">Search</span>
           </div>
 
-          <div
-            class="nav-item"
-            data-page="discover"
-            data-tooltip="Discover Insights"
-          >
+          <div class="nav-item" data-page="discover" title="Discover">
             <i class="nav-icon bi bi-lightbulb"></i>
             <span class="nav-label">Discover</span>
           </div>
 
-          <div
-            class="nav-item"
-            data-page="analytics"
-            data-tooltip="View Analytics"
-          >
+          <div class="nav-item" data-page="analytics" title="Analytics">
             <i class="nav-icon bi bi-graph-up"></i>
             <span class="nav-label">Analytics</span>
           </div>
 
           <div class="nav-divider"></div>
 
-          <div
-            class="nav-item"
-            data-page="topic-graph"
-            data-tooltip="Topic Graph"
-          >
+          <div class="nav-item" data-page="topic-graph" title="Topic Graph">
             <i class="nav-icon bi bi-diagram-3"></i>
             <span class="nav-label">Topic Graph</span>
           </div>
 
-          <div
-            class="nav-item"
-            data-page="entity-graph"
-            data-tooltip="Entity Graph"
-          >
+          <div class="nav-item" data-page="entity-graph" title="Entity Graph">
             <i class="nav-icon bi bi-diagram-2"></i>
             <span class="nav-label">Entity Graph</span>
           </div>
@@ -142,10 +112,7 @@
             <h1 class="page-title">
               <i class="bi bi-search text-primary"></i>Search Your Library
             </h1>
-            <p class="page-subtitle">
-              Ask in natural language: "latest github bookmarks", "most visited
-              sites"
-            </p>
+            <p class="page-subtitle"></p>
           </div>
 
           <!-- Search Interface -->
@@ -290,14 +257,7 @@
           </div>
 
           <!-- Empty State -->
-          <div class="empty-state" id="searchEmptyState">
-            <i class="bi bi-search"></i>
-            <h6>Search Your Library</h6>
-            <p class="mb-3">
-              Ask in natural language above: "latest github bookmarks", "most
-              visited sites"
-            </p>
-          </div>
+          <div class="empty-state" id="searchEmptyState"></div>
         </div>
 
         <!-- Discover Page -->
@@ -1350,6 +1310,14 @@
                 </button>
               </div>
               <div class="d-flex gap-2">
+                <button
+                  id="mergeTopicsBtn"
+                  class="btn btn-success"
+                  style="display: none"
+                  title="Merge topic hierarchies using LLM and save to database"
+                >
+                  <i class="bi bi-diagram-3"></i> Merge Topics
+                </button>
                 <button
                   id="rebuildGraphBtn"
                   class="btn btn-warning"

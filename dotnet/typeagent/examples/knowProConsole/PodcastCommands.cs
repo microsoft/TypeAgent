@@ -60,9 +60,9 @@ public class PodcastCommands : ICommandModule
         UnloadCurrent();
 
         _kpContext.Stopwatch.Restart();
-        var podcast = new Podcast(
-            new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, name)
-        );
+
+        var podcast = CreatePodcast(name, false);
+
         _kpContext.Stopwatch.Stop();
         KnowProWriter.WriteTiming(_kpContext.Stopwatch);
 
@@ -92,11 +92,11 @@ public class PodcastCommands : ICommandModule
         }
         KnowProWriter.WriteDataFileStats(data);
 
+        UnloadCurrent();
+
         string? podcastName = Path.GetFileNameWithoutExtension(filePath) ?? throw new NotSupportedException();
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Importing {podcastName}");
-        var podcast = new Podcast(
-            new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(_kpContext.DotnetPath, podcastName, true)
-        );
+        var podcast = CreatePodcast(podcastName, true);
         try
         {
             int count = await podcast.ImportMessagesAsync(data.Messages, cancellationToken);
@@ -153,6 +153,36 @@ public class PodcastCommands : ICommandModule
         );
         KnowProWriter.WriteLine($"{matches.Count} matches");
         */
+    }
+
+
+    private Podcast CreatePodcast(string name, bool createNew)
+    {
+        // TODO: standardize this boilerplate, esp the cache binding
+        var model = new TextEmbeddingModelWithCache(256);
+        ConversationSettings settings = new ConversationSettings(model);
+        var provider = CreateStorageProvider(settings, name, createNew);
+        model.Cache.PersistentCache = provider.GetEmbeddingCache();
+
+        var podcast = new Podcast(settings, CreateStorageProvider(settings, name, false));
+        return podcast;
+    }
+
+    private SqliteStorageProvider<PodcastMessage, PodcastMessageMeta> CreateStorageProvider(
+        ConversationSettings settings,
+        string name,
+        bool createNew
+    )
+    {
+        // TODO: make this a standard factory method
+        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
+            settings,
+            _kpContext.DotnetPath,
+            name,
+            createNew
+        );
+
+        return provider;
     }
 
     private void UnloadCurrent()

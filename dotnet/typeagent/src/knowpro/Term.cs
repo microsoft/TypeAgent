@@ -5,21 +5,27 @@ namespace TypeAgent.KnowPro;
 
 public class Term
 {
-    public Term(string termText)
+    public Term(string termText, float? weight = null)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(termText, nameof(termText));
         Text = termText;
+        Weight = weight;
     }
 
     /// <summary>
     /// The text of the term
     /// </summary>
-    public string Text { get; }
+    public string Text { get; private set; }
 
     /// <summary>
     /// Optional weighting for the term
     /// </summary>
     public float? Weight { get; set; }
+
+    public void ToLower()
+    {
+        Text = Text.ToLower();
+    }
 
     public override string ToString()
     {

@@ -565,14 +565,18 @@ async function processBrowserAgentMessage(
                 }
 
                 if (context.agentContext.crossWordState) {
+                    const acrossClues =
+                        context.agentContext.crossWordState.across?.length || 0;
+                    const downClues =
+                        context.agentContext.crossWordState.down?.length || 0;
                     context.notify(
-                        AppAgentEvent.Info,
-                        "Crossword board initialized.",
+                        AppAgentEvent.Inline,
+                        `Crossword page is ready for interaction with ${acrossClues} across and ${downClues} down clues.`,
                     );
                 } else {
                     context.notify(
-                        AppAgentEvent.Error,
-                        "Crossword board initialization failed.",
+                        AppAgentEvent.Inline,
+                        "Failed to extract crossword schema - crossword board initialization failed.",
                     );
                 }
             }
@@ -651,6 +655,9 @@ async function processBrowserAgentMessage(
         case "getTopicMetrics":
         case "getTopicTimelines":
         case "getViewportBasedNeighborhood":
+        case "testMergeTopicHierarchies":
+        case "mergeTopicHierarchies":
+        case "discoverRelatedKnowledge":
         case "getUrlContentBreakdown": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,

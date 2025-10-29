@@ -359,12 +359,27 @@ export abstract class ExtensionServiceBase {
 
     async generateGraphQuestions(
         url: string,
-        pageKnowledge: any,
+        relatedEntities: any[],
+        relatedTopics: any[],
     ): Promise<any> {
         return this.sendMessage({
             type: "generateGraphQuestions",
             url,
-            pageKnowledge,
+            relatedEntities,
+            relatedTopics,
+        });
+    }
+
+    async discoverRelatedKnowledge(
+        entities: any[],
+        topics: string[],
+        depth: number = 2,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "discoverRelatedKnowledge",
+            entities,
+            topics,
+            depth,
         });
     }
 
@@ -466,6 +481,30 @@ export abstract class ExtensionServiceBase {
     async rebuildKnowledgeGraph(): Promise<any> {
         return this.sendMessage({
             type: "rebuildKnowledgeGraph",
+        });
+    }
+
+    async testMergeTopicHierarchies(): Promise<{
+        mergeCount: number;
+        changes?: Array<{
+            action: string;
+            sourceTopic: string;
+            targetTopic?: string;
+        }>;
+    }> {
+        return this.sendMessage({
+            type: "testMergeTopicHierarchies",
+        });
+    }
+
+    async mergeTopicHierarchies(): Promise<{
+        success: boolean;
+        mergeCount: number;
+        message?: string;
+        error?: string;
+    }> {
+        return this.sendMessage({
+            type: "mergeTopicHierarchies",
         });
     }
 

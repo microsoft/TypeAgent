@@ -10,11 +10,6 @@ namespace Microsoft.TypeChat;
 public interface ILanguageModel
 {
     /// <summary>
-    /// Information about the language model
-    /// </summary>
-    ModelInfo ModelInfo { get; }
-
-    /// <summary>
     /// Get a completion for the given prompt
     /// </summary>
     /// <param name="prompt">prompt</param>

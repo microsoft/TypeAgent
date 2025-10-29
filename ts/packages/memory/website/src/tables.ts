@@ -933,23 +933,98 @@ export class TopicRelationshipTable extends ms.sqlite.SqliteDataFrame {
     ): TopicRelationship[] {
         if (topicIds.length === 0) return [];
 
+        console.log(
+            `[getRelationshipsForTopicsOptimized] Called with ${topicIds.length} topics, minStrength=${minStrength}`,
+        );
+
+        // SQLite has a limit on the number of SQL variables (default 999)
+        // For the non-batching query, we use 2 IN clauses: 2 * topicIds.length + 1 <= 999
+        // So we need topicIds.length <= 499
+        // Use a safe threshold to stay under the limit
+        const MAX_NON_BATCH_SIZE = 490; // 2 * 490 + 1 = 981 variables (well under 999)
+
+        if (topicIds.length > MAX_NON_BATCH_SIZE) {
+            console.log(
+                `[getRelationshipsForTopicsOptimized] Using batching approach (${topicIds.length} > ${MAX_NON_BATCH_SIZE})`,
+            );
+            // Split into batches and combine results
+            // Query for relationships where fromTopic is in each batch
+            // Then filter to ensure toTopic is also in the full set
+            // For batching, we use 1 IN clause: topicIds.length + 1 <= 999
+            const BATCH_SIZE = 990; // 990 + 1 = 991 variables (well under 999)
+            const topicIdSet = new Set(topicIds);
+            const allResults: TopicRelationship[] = [];
+
+            for (let i = 0; i < topicIds.length; i += BATCH_SIZE) {
+                const batch = topicIds.slice(i, i + BATCH_SIZE);
+                const placeholders = batch.map(() => "?").join(",");
+
+                const stmt = this.db.prepare(`
+                    SELECT * FROM topicRelationships
+                    WHERE strength >= ?
+                    AND fromTopic IN (${placeholders})
+                `);
+
+                const batchResults = stmt.all(
+                    minStrength,
+                    ...batch,
+                ) as TopicRelationship[];
+
+                // Filter to only include relationships where toTopic is also in our set
+                const filteredResults = batchResults.filter((rel) =>
+                    topicIdSet.has(rel.toTopic),
+                );
+                console.log(
+                    `[getRelationshipsForTopicsOptimized] Batch ${i / BATCH_SIZE + 1}: ${batchResults.length} results, ${filteredResults.length} after filtering`,
+                );
+                allResults.push(...filteredResults);
+            }
+
+            // Remove duplicates and sort by strength
+            const uniqueResults = new Map<string, TopicRelationship>();
+            for (const rel of allResults) {
+                const key = `${rel.fromTopic}:${rel.toTopic}:${rel.relationshipType}`;
+                if (
+                    !uniqueResults.has(key) ||
+                    uniqueResults.get(key)!.strength < rel.strength
+                ) {
+                    uniqueResults.set(key, rel);
+                }
+            }
+            const finalResults = Array.from(uniqueResults.values()).sort(
+                (a, b) => b.strength - a.strength,
+            );
+            console.log(
+                `[getRelationshipsForTopicsOptimized] Batching complete: ${allResults.length} total, ${finalResults.length} unique`,
+            );
+            return finalResults;
+        }
+
         // Create placeholders for the IN clause
         const placeholders = topicIds.map(() => "?").join(",");
 
+        console.log(
+            `[getRelationshipsForTopicsOptimized] Using non-batching approach (${topicIds.length} <= ${MAX_NON_BATCH_SIZE})`,
+        );
+
         const stmt = this.db.prepare(`
             SELECT * FROM topicRelationships
-            WHERE strength >= ? 
-            AND fromTopic IN (${placeholders}) 
+            WHERE strength >= ?
+            AND fromTopic IN (${placeholders})
             AND toTopic IN (${placeholders})
             ORDER BY strength DESC
         `);
 
         // Pass minStrength first, then topicIds twice
-        return stmt.all(
+        const results = stmt.all(
             minStrength,
             ...topicIds,
             ...topicIds,
         ) as TopicRelationship[];
+        console.log(
+            `[getRelationshipsForTopicsOptimized] Non-batching query returned ${results.length} relationships`,
+        );
+        return results;
     }
 
     public upsertRelationship(relationship: TopicRelationship): void {

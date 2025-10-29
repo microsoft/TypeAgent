@@ -50,7 +50,10 @@
       "name": "checked_wildcard"
     },
     "addCurrentTrackToPlaylist": {
-      "playlistName": "checked_wildcard"
+      "name": "checked_wildcard"
+    },
+    "addToPlaylistFromCurrentTrackList": {
+      "name": "checked_wildcard"
     }
   },
   "paramCompletionEmojis": {

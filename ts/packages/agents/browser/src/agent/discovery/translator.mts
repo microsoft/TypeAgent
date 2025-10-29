@@ -522,10 +522,10 @@ export class SchemaDiscoveryAgent<T extends object> {
             requestSection.push({
                 type: "text",
                 text: `
-               
-            Here are existing intent names. When picking a name for the new user intent, make sure you use a unique value that is not similar to the values on this list.
+
+            IMPORTANT: Here are existing intent names. When picking a name for the new user intent, make sure you use a unique value that is not similar to the values on this list.
             '''
-            ${JSON.stringify(existingActionNames)}
+            ${[...existingActionNames]}
             '''
             `,
             });

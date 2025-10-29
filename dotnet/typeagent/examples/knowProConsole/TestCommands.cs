@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Lang;
+
 namespace KnowProConsole;
 
 public class TestCommands : ICommandModule
@@ -18,7 +20,8 @@ public class TestCommands : ICommandModule
             SearchTermsDef(),
             SearchPropertyTermsDef(),
             SearchMessagesTermsDef(),
-            TestEmbeddingsDef()
+            TestEmbeddingsDef(),
+            SearchQueryTermsDef(),
         ];
     }
 
@@ -125,7 +128,8 @@ public class TestCommands : ICommandModule
         {
             select.When = new WhenFilter()
             {
-                DateRange = new() {
+                DateRange = new()
+                {
                     Start = conversationDateRange.Value.Start,
                     End = conversationDateRange.Value.Start.AddMinutes(10)
                 }
@@ -148,7 +152,8 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestEmbeddings")
         {
-            Options.Arg<string>("text", "text to embed")
+            Options.Arg<string>("text", "text to embed"),
+            Options.Arg<bool>("add", "add to index")
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.TestEmbeddingsAsync);
@@ -157,13 +162,47 @@ public class TestCommands : ICommandModule
 
     private async Task TestEmbeddingsAsync(ParseResult args, CancellationToken cancellationToken)
     {
-        var settings = AzureApiSettings.EmbeddingSettingsFromEnv();
-        var model = new TextEmbeddingModel(settings);
-        NamedArgs namedArgs = new(args);
-        string text = namedArgs.Get("text") ?? "The quick brown fox";
+        IConversation conversation = EnsureConversation();
 
-        var result = await model.GenerateAsync(text, cancellationToken);
-        KnowProWriter.WriteLine(result.Length);
+        var settings = AzureModelApiSettings.EmbeddingSettingsFromEnv();
+        var model = new OpenAITextEmbeddingModel(settings);
+        var modelWithCache = new TextEmbeddingModelWithCache(
+            model,
+            new TextEmbeddingCache(1024)
+        );
+        modelWithCache.Cache.PersistentCache = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex as IReadOnlyCache<string, Embedding>;
+        NamedArgs namedArgs = new(args);
+        string? text = namedArgs.Get("text");// ?? "The quick brown fox";
+        if (!string.IsNullOrEmpty(text))
+        {
+            var result = await model.GenerateAsync(text, cancellationToken);
+            KnowProWriter.WriteLine(result.Length);
+            return;
+        }
+
+        IList<string> allTerms = await conversation.SemanticRefIndex.GetTermsAsync(cancellationToken);
+        var fuzzyIndex = conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex;
+        if (namedArgs.Get<bool>("add"))
+        {
+            await fuzzyIndex.ClearAsync(cancellationToken);
+            ProgressBar progress = new ProgressBar(allTerms.Count);
+            foreach (var batch in allTerms.Batch(16))
+            {
+                await fuzzyIndex.AddTermsAsync(batch, cancellationToken);
+                progress.Advance(batch.Count);
+                await Task.Delay(1000, cancellationToken);
+            }
+        }
+
+        foreach (var term in allTerms)
+        {
+            KnowProWriter.WriteLine(ConsoleColor.Cyan, term);
+            _kpContext.Stopwatch.Restart();
+            var matches = await fuzzyIndex.LookupTermAsync(term, 10, 0, cancellationToken);
+            _kpContext.Stopwatch.Stop();
+            KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+            matches.ForEach(KnowProWriter.WriteTerm);
+        }
     }
 
     async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
@@ -173,6 +212,33 @@ public class TestCommands : ICommandModule
         var results = await conversation.SearchKnowledgeAsync(
             new SearchSelectExpr(searchGroup), null, null, cancellationToken).ConfigureAwait(false);
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+    }
+
+    private Command SearchQueryTermsDef()
+    {
+        Command cmd = new("kpTestSearchQuery")
+        {
+            Args.Arg<string>("query")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.SearchQueryTermsAsync);
+        return cmd;
+    }
+
+    private async Task SearchQueryTermsAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+       // IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        var query = namedArgs.Get("query");
+        if (string.IsNullOrEmpty(query))
+        {
+            return;
+        }
+        var model = new OpenAIChatModel();
+        SearchQueryTranslator translator = new SearchQueryTranslator(model);
+        var result = await translator.TranslateAsync(query, cancellationToken);
+        KnowProWriter.WriteJson(result);
     }
 
     private IConversation EnsureConversation()

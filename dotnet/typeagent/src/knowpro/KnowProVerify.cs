@@ -89,4 +89,9 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfNullOrEmpty(tag!.Text, nameof(tag.Text));
     }
 
+    public static void ThrowIfInvalid(Term? term)
+    {
+        ArgumentVerify.ThrowIfNull(term, nameof(term));
+        ArgumentVerify.ThrowIfNullOrEmpty(term.Text, nameof(term.Text));
+    }
 }

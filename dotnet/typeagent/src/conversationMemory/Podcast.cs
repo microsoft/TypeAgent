@@ -5,14 +5,9 @@ namespace TypeAgent.ConversationMemory;
 
 public class Podcast : Memory<PodcastMessage>
 {
-    public Podcast(IStorageProvider<PodcastMessage> provider)
-        : base(provider)
+    public Podcast(ConversationSettings settings, IStorageProvider<PodcastMessage> provider)
+        : base(settings, provider)
     {
 
-    }
-
-    public static Podcast? ReadFromFile()
-    {
-        return null;
     }
 }

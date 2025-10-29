@@ -81,7 +81,6 @@ export interface MacroDefinition {
     // Auto-discovered schema data
     detectedSchema?: any;
 
-    macrosJson?: any;
     macroDefinition?: any;
     description?: string;
 
@@ -282,12 +281,19 @@ export interface MacroIndex {
 export interface MacroIndexEntry {
     id: string;
     name: string;
+    domain: string;
     scope: MacroScope;
     category: MacroCategory;
     author: MacroAuthor;
     filePath: string;
+    fileFormat: "yaml" | "json";
+    created: string;
+    updated: string;
     lastModified: string;
     usageCount: number;
+    isValid: boolean;
+    tags: string[];
+    recordingId?: string;
 }
 
 // Validation and error types

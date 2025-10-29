@@ -4,16 +4,14 @@
 import test, {
     ElectronApplication,
     Page,
-    _electron,
     _electron as electron,
     expect,
 } from "@playwright/test";
 import {
-    exitApplication,
     getAppPath,
     sendUserRequestAndWaitForCompletion,
     getLaunchArgs,
-    startShell,
+    runTestCallback,
 } from "./testHelper";
 import { fileURLToPath } from "node:url";
 
@@ -28,28 +26,22 @@ test("simple", { tag: "@smoke" }, async ({}, testInfo) => {
 });
 
 test("startShell", { tag: "@smoke" }, async ({}) => {
-    const mainWindow = await startShell(true);
-
-    // close the application
-    await exitApplication(mainWindow);
+    await runTestCallback(async () => {}, true);
 });
 
 test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
     console.log(`Running test '${testInfo.title}'`);
 
     // launch the app
-    const mainWindow: Page = await startShell(true);
+    await runTestCallback(async (mainWindow: Page) => {
+        const msg = await sendUserRequestAndWaitForCompletion(
+            `why is the sky blue?`,
+            mainWindow,
+        );
 
-    const msg = await sendUserRequestAndWaitForCompletion(
-        `why is the sky blue?`,
-        mainWindow,
-    );
-
-    expect(
-        msg.toLowerCase(),
-        "Chat agent didn't respond with the expected message.",
-    ).toContain("scatter");
-
-    // close the application
-    await exitApplication(mainWindow);
+        expect(
+            msg.toLowerCase(),
+            "Chat agent didn't respond with the expected message.",
+        ).toContain("scatter");
+    }, true);
 });
