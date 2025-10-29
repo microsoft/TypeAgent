@@ -32,6 +32,7 @@ public static class TextEmbeddingModelExtensions
         int batchSize,
         int maxCharsPerChunk,
         int concurrency = 1,
+        Action<BatchItem<string>>? progress = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -39,10 +40,15 @@ public static class TextEmbeddingModelExtensions
         if (batchSize > 1)
         {
             List<List<string>> chunks = [.. texts.GetStringChunks(batchSize, maxCharsPerChunk)];
+
+            Action<BatchItem<List<string>>, IList<float[]>>? batchProgress = progress is not null
+                ? (batch, _) => Progress.Notify(progress, texts.Count, batch)
+                : null;
+
             var embeddingChunks = await chunks.MapAsync(
                 concurrency,
                 (chunk) => model.GenerateAsync(chunk, cancellationToken),
-                null,
+                batchProgress,
                 cancellationToken
             ).ConfigureAwait(false);
 
@@ -50,12 +56,16 @@ public static class TextEmbeddingModelExtensions
         }
         else
         {
+            Action<BatchItem<string>, float[]>? batchProgress = progress is not null
+                ? (batch, _) => progress(batch)
+                : null;
+
             return await texts.MapAsync(
                 concurrency,
                 (value) => model.GenerateAsync(value, cancellationToken),
-                null,
+                batchProgress,
                 cancellationToken
-                );
+                ).ConfigureAwait(false);
         }
     }
 }

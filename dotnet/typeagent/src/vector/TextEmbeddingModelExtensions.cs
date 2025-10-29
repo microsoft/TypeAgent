@@ -31,6 +31,7 @@ public static class TextEmbeddingModelExtensions
         int batchSize,
         int maxCharsPerChunk,
         int concurrency = 1,
+        Action<BatchItem<string>>? progress = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -39,6 +40,7 @@ public static class TextEmbeddingModelExtensions
             batchSize,
             maxCharsPerChunk,
             concurrency,
+            progress,
             cancellationToken
         );
         return rawEmbeddings.Map((array) => NormalizedEmbedding.FromArray(array));

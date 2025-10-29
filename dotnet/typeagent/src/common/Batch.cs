@@ -11,11 +11,18 @@ public readonly struct BatchItem<T>
         Pos = pos;
         Count = count;
     }
-
+    /// <summary>
+    /// Item in the batch
+    /// </summary>
     public T Item { get; }
+    /// <summary>
+    /// Position of the item in the batch
+    /// </summary>
     public int Pos { get; }
+    /// <summary>
+    /// Size of the batch
+    /// </summary>
     public int Count { get; }
-
 }
 
 public readonly struct Batch<T>

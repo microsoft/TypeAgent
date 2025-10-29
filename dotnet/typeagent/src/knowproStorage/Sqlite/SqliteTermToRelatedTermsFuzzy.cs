@@ -80,6 +80,7 @@ VALUES(@term, @term_embedding)
             Settings.BatchSize,
             Settings.MaxCharsPerBatch,
             Settings.Concurrency,
+            OnIndexed is not null ? NotifyIndexed : null,
             cancellationToken
         );
         int count = terms.Count;
@@ -192,5 +193,11 @@ ORDER BY term_id",
             ++i;
         }
         return terms;
+    }
+
+    private void NotifyIndexed(BatchItem<string> item)
+    {
+        // SafeInvoke Checks null, handles exceptions etc
+        OnIndexed.SafeInvoke(item);
     }
 }
