@@ -13,6 +13,13 @@ public interface ITermToRelatedTermsFuzzy
 {
     ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// AddTermsAsync
+    /// Idempotent. Should ignore any terms already in the index
+    /// </summary>
+    /// <param name="texts"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     ValueTask AddTermsAsync(IList<string> texts, CancellationToken cancellationToken = default);
 
     ValueTask<IList<Term>> LookupTermAsync(string text, int? maxMatches = null, double? minScore = null, CancellationToken cancellationToken = default);
