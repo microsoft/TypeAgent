@@ -1,13 +1,12 @@
 # Settings Agent
 
-The settings agent is **sample code** that explores how to call the windows settings MCP server.
+The settings agent is **sample code** that explores how a host system settings agent _could_ work.
 
 The sample demonstrates:
 
 - How to use schema to get a **structured** [Settings Response](./src/settingActionSchema.ts) from the LLM.
-- How to call the windows settings MCP server.
-
-This agent does not work on Linux or MacOS.
+- How to place response cards in the agent responses.
+- Explores what a system settings agent could be designed.
 
 ## Trademarks
 
