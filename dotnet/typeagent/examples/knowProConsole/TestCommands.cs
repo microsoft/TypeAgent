@@ -222,11 +222,27 @@ public class TestCommands : ICommandModule
         IConversation conversation = EnsureConversation();
 
         NamedArgs namedArgs = new NamedArgs(args);
-        if (namedArgs.Get<bool>("related"))
-        {
-            await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(cancellationToken);
 
-            await conversation.BuildRelatedTermsIndexAsync(cancellationToken);
+        var cachingModel = conversation.Settings.RelatedTermIndexSettings.EmbeddingIndexSetting.EmbeddingModel as TextEmbeddingModelWithCache;
+        try
+        {
+            if (cachingModel is not null)
+            {
+                cachingModel.CacheEnabled = false;
+            }
+            if (namedArgs.Get<bool>("related"))
+            {
+                await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(cancellationToken);
+
+                await conversation.BuildRelatedTermsIndexAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            if (cachingModel is not null)
+            {
+                cachingModel.CacheEnabled = true;
+            }
         }
     }
 

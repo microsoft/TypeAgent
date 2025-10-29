@@ -47,7 +47,7 @@ public static class TextEmbeddingModelExtensions
 
             var embeddingChunks = await chunks.MapAsync(
                 concurrency,
-                (chunk) => Async.CallWithRetryAsync((ct) => model.GenerateAsync(chunk, ct), cancellationToken),
+                (chunk) => model.GenerateAsync(chunk, cancellationToken),
                 batchProgress,
                 cancellationToken
             ).ConfigureAwait(false);
