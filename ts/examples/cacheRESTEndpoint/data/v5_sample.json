@@ -1,0 +1,221 @@
+{
+  "version": 3,
+  "explainerName": "v5",
+  "matchSets": [
+    {
+      "matches": [
+        "could you please",
+        "would you mind",
+        "can you kindly",
+        "please",
+        "when you have a moment",
+        "if it's not too much trouble",
+        "thank you"
+      ],
+      "basename": "politeness",
+      "canBeMerged": true,
+      "index": 0
+    },
+    {
+      "matches": ["add"],
+      "basename": "M:action",
+      "namespace": "list.addItems::fullActionName",
+      "canBeMerged": true,
+      "index": 1
+    },
+    {
+      "matches": ["eggs", "bread", "cheese", "butter"],
+      "basename": "M:item",
+      "namespace": "list::parameters.items.0",
+      "canBeMerged": true,
+      "index": 2
+    },
+    {
+      "matches": ["and"],
+      "basename": "conjunction",
+      "canBeMerged": false,
+      "index": 3
+    },
+    {
+      "matches": ["milk", "juice", "water", "soda"],
+      "basename": "M:item",
+      "namespace": "list::parameters.items.1",
+      "canBeMerged": true,
+      "index": 4
+    },
+    {
+      "matches": ["to the grocery list"],
+      "basename": "M:list",
+      "namespace": "list.addItems::fullActionName,list::parameters.listName",
+      "canBeMerged": false,
+      "index": 5
+    }
+  ],
+  "constructionNamespaces": [
+    {
+      "name": "list,BOqCxGyyjWTqeAMjyy1Un811iKzN0HQ3LwVTErU7ogA=,",
+      "constructions": [
+        {
+          "parts": [
+            {
+              "matchSet": "politeness_0",
+              "optional": true
+            },
+            {
+              "matchSet": "M:action_1",
+              "transformInfos": [
+                {
+                  "namespace": "list.addItems",
+                  "transformName": "fullActionName"
+                }
+              ]
+            },
+            {
+              "matchSet": "M:item_2",
+              "wildcardMode": 1,
+              "transformInfos": [
+                {
+                  "namespace": "list",
+                  "transformName": "parameters.items.0"
+                }
+              ]
+            },
+            {
+              "matchSet": "conjunction_3",
+              "optional": true
+            },
+            {
+              "matchSet": "M:item_4",
+              "wildcardMode": 1,
+              "transformInfos": [
+                {
+                  "namespace": "list",
+                  "transformName": "parameters.items.1"
+                }
+              ]
+            },
+            {
+              "matchSet": "M:list_5",
+              "transformInfos": [
+                {
+                  "namespace": "list.addItems",
+                  "transformName": "fullActionName"
+                },
+                {
+                  "namespace": "list",
+                  "transformName": "parameters.listName"
+                }
+              ]
+            },
+            {
+              "matchSet": "politeness_0",
+              "optional": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "transformNamespaces": [
+    {
+      "name": "list.addItems",
+      "transforms": [
+        {
+          "name": "fullActionName",
+          "transform": [
+            [
+              "add|to the grocery list",
+              {
+                "value": "list.addItems",
+                "count": 1
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "list",
+      "transforms": [
+        {
+          "name": "parameters.items.0",
+          "transform": [
+            [
+              "eggs",
+              {
+                "value": "eggs",
+                "count": 1
+              }
+            ],
+            [
+              "bread",
+              {
+                "value": "bread",
+                "count": 0
+              }
+            ],
+            [
+              "cheese",
+              {
+                "value": "cheese",
+                "count": 0
+              }
+            ],
+            [
+              "butter",
+              {
+                "value": "butter",
+                "count": 0
+              }
+            ]
+          ]
+        },
+        {
+          "name": "parameters.items.1",
+          "transform": [
+            [
+              "milk",
+              {
+                "value": "milk",
+                "count": 1
+              }
+            ],
+            [
+              "juice",
+              {
+                "value": "juice",
+                "count": 0
+              }
+            ],
+            [
+              "water",
+              {
+                "value": "water",
+                "count": 0
+              }
+            ],
+            [
+              "soda",
+              {
+                "value": "soda",
+                "count": 0
+              }
+            ]
+          ]
+        },
+        {
+          "name": "parameters.listName",
+          "transform": [
+            [
+              "to the grocery list",
+              {
+                "value": "grocery",
+                "count": 1
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

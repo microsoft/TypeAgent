@@ -1,0 +1,9 @@
+{
+  "emojiChar": "⚙️",
+  "description": "Agent to manipulate system settings",
+  "schema": {
+    "description": "Settings agent that helps the user change system settings.",
+    "schemaFile": "./settingsActionSchema.ts",
+    "schemaType": "SettingsAction"
+  }
+}

@@ -56,6 +56,10 @@
     "video": {
       "name": "video-agent",
       "excecMode": "dispatcher"
+    },
+    "settings": {
+      "name": "settings-agent",
+      "execMode": "dispatcher"
     }
   },
   "mcpServers": {

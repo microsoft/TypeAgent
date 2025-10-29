@@ -414,6 +414,16 @@
       "args": [],
       "console": "externalTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
-    },       
+    }, 
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch AgentCache REST Endpoint",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/examples/cacheRESTEndpoint",
+      "program": "./dist/index.js",
+      "outFiles": ["${workspaceFolder}/**/*.js"],
+      "resolveSourceMapLocations": []
+    },          
   ]
 }
