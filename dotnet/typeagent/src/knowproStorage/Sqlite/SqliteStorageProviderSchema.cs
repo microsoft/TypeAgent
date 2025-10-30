@@ -36,6 +36,18 @@ CREATE TABLE IF NOT EXISTS Messages(
 );
 ";
 
+    public const string MessageTextIndexTableName = "MessageTextIndex";
+    public const string MessageTextIndexSchema = @"
+CREATE TABLE IF NOT EXISTS MessageTextIndex (
+    msg_id INTEGER NOT NULL,
+    chunk_ordinal INTEGER NOT NULL,
+    embedding BLOB NOT NULL,        -- Serialized embedding (numpy array as bytes)
+
+    PRIMARY KEY (msg_id, chunk_ordinal),
+    FOREIGN KEY (msg_id) REFERENCES Messages(msg_id) ON DELETE CASCADE
+);
+";
+
     public const string TimestampIndex = @"
 CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
 ";
@@ -122,6 +134,7 @@ term_embedding BLOB NOT NULL    -- Serialized embedding for the term
         string[] subSchemas = [
             ConversationMetadataSchema,
             MessagesSchema,
+            MessageTextIndexSchema,
             TimestampIndex,
             SemanticRefsSchema,
             SemanticRefIndexSchema,

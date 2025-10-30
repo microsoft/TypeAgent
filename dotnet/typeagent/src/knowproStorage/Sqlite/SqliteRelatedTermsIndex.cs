@@ -5,16 +5,18 @@ namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqliteRelatedTermsIndex : ITermToRelatedTermIndex
 {
-    public SqliteRelatedTermsIndex(SqliteDatabase db, RelatedTermIndexSettings settings)
+    public SqliteRelatedTermsIndex(SqliteDatabase db, TermToRelatedTermIndexSettings settings)
     {
         ArgumentVerify.ThrowIfNull(settings, nameof(settings));
 
         Settings = settings;
         Aliases = new SqliteTermToRelatedTerms(db);
-        FuzzyIndex = new SqliteTermToRelatedTermsFuzzy(db, settings.EmbeddingIndexSetting);
+        FuzzyIndex = settings.EmbeddingIndexSetting is null
+            ? new NullTermToRelatedTermsFuzzy()
+            : new SqliteTermToRelatedTermsFuzzy(db, settings.EmbeddingIndexSetting);
     }
 
-    public RelatedTermIndexSettings Settings { get; }
+    public TermToRelatedTermIndexSettings Settings { get; }
 
     public ITermsToRelatedTermsIndex Aliases { get; }
 
