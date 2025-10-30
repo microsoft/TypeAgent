@@ -1,0 +1,143 @@
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+<!-- This file was created by AI -->
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multi-Monitor Layout</title>
+    <style>
+      body {
+        font-family:
+          Segoe UI,
+          sans-serif;
+        background-color: #f3f3f3;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      }
+      .monitor-layout {
+        display: flex;
+        gap: 20px;
+      }
+      .monitor {
+        width: 200px;
+        height: 120px;
+        background-color: #0078d4;
+        color: #fff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 24px;
+        font-weight: bold;
+        border-radius: 4px;
+        cursor: grab;
+        user-select: none;
+      }
+      .monitor.dragging {
+        opacity: 0.5;
+      }
+      .settings {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      select {
+        padding: 6px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" id="monitorLayout_0">
+      <div class="monitor-layout" id="monitorLayout">
+        <div class="monitor" draggable="true" data-id="1">1</div>
+        <div class="monitor" draggable="true" data-id="2">2</div>
+      </div>
+      <div class="settings">
+        <div>
+          <label for="resolution">Resolution:</label>
+          <select id="resolution">
+            <option>1920 x 1080</option>
+            <option>2560 x 1440</option>
+            <option>3840 x 2160</option>
+          </select>
+        </div>
+        <div>
+          <label for="orientation">Orientation:</label>
+          <select id="orientation">
+            <option>Landscape</option>
+            <option>Portrait</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const monitors = document.querySelectorAll(".monitor");
+      const layout = document.getElementById("monitorLayout");
+      let dragged = null;
+
+      monitors.forEach((monitor) => {
+        monitor.addEventListener("dragstart", (e) => {
+          dragged = monitor;
+          monitor.classList.add("dragging");
+        });
+        monitor.addEventListener("dragend", (e) => {
+          monitor.classList.remove("dragging");
+          dragged = null;
+        });
+      });
+
+      layout.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        const afterElement = getDragAfterElement(layout, e.clientX);
+        if (afterElement == null) {
+          layout.appendChild(dragged);
+        } else {
+          layout.insertBefore(dragged, afterElement);
+        }
+      });
+
+      function getDragAfterElement(container, x) {
+        const draggableElements = [
+          ...container.querySelectorAll(".monitor:not(.dragging)"),
+        ];
+        return draggableElements.reduce(
+          (closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = x - box.left - box.width / 2;
+            if (offset < 0 && offset > closest.offset) {
+              return closest;
+            }
+          },
+          { offset: Number.NEGATIVE_INFINITY },
+        ).element;
+      }
+
+      var ro = new ResizeObserver((entries) => {
+        for (let e of entries) {
+          window.top.postMessage(
+            "monitorlayout_0_" +
+              document.getElementById("monitorLayout_0").scrollHeight,
+            "*",
+          );
+        }
+      });
+
+      ro.observe(document.querySelector("#monitorLayout"));
+    </script>
+  </body>
+</html>

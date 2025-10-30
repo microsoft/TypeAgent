@@ -55,6 +55,8 @@ public class ConsoleControl
 
     public CursorPos TopLeft { get; }
 
+    public ConsoleColor? Color { get; set; }
+
     protected void Erase()
     {
         if (!string.IsNullOrEmpty(_lastText))
@@ -66,10 +68,33 @@ public class ConsoleControl
 
     protected void WriteInPlace(string text)
     {
+        if (Color is not null)
+        {
+            ConsoleWriter.PushColor(Color.Value);
+        }
+
         var curPos = TopLeft.Apply();
         ConsoleWriter.WriteInPlace(text, _lastText);
         _lastText = text;
         curPos.Apply();
+
+        if (Color is not null)
+        {
+            ConsoleWriter.PopColor();
+        }
+    }
+}
+
+public class InplaceText : ConsoleControl
+{
+    public InplaceText(bool slideDown = true)
+        : base(slideDown ? CursorPos.CaptureLeft() : CursorPos.Capture())
+    {
+    }
+
+    public void Write(string text)
+    {
+        base.WriteInPlace(text);
     }
 }
 

@@ -11,40 +11,93 @@ import { Rule, RuleDefinition } from "./grammarRuleParser.js";
 
 type DefinitionMap = Map<
     string,
-    { rules: Rule[]; grammarRules?: GrammarRule[] }
+    { rules: Rule[]; pos: number | undefined; grammarRules?: GrammarRule[] }
 >;
 
-export function compileGrammar(definitions: RuleDefinition[]): Grammar {
+type GrammarCompileResult = {
+    grammar: Grammar;
+    errors: GrammarCompileError[];
+    warnings: GrammarCompileError[];
+};
+
+export type GrammarCompileError = {
+    message: string;
+    definition?: string | undefined;
+    pos?: number | undefined;
+};
+
+type CompileContext = {
+    ruleDefMap: DefinitionMap;
+    currentDefinition?: string | undefined;
+    errors: GrammarCompileError[];
+    warnings: GrammarCompileError[];
+};
+
+export function compileGrammar(
+    definitions: RuleDefinition[],
+    start: string,
+): GrammarCompileResult {
     const ruleDefMap: DefinitionMap = new Map();
+    const context: CompileContext = {
+        ruleDefMap,
+        errors: [],
+        warnings: [],
+    };
+
     for (const def of definitions) {
         const existing = ruleDefMap.get(def.name);
         if (existing === undefined) {
-            ruleDefMap.set(def.name, { rules: [...def.rules] });
+            ruleDefMap.set(def.name, { rules: [...def.rules], pos: def.pos });
         } else {
             existing.rules.push(...def.rules);
         }
     }
-    return { rules: createGrammarRules(ruleDefMap, "Start") };
+    const grammar = { rules: createGrammarRules(context, start) };
+
+    for (const [name, record] of ruleDefMap.entries()) {
+        if (record.grammarRules === undefined) {
+            context.warnings.push({
+                message: `Rule '<${name}>' is defined but never used.`,
+                pos: record.pos,
+            });
+        }
+    }
+    return {
+        grammar,
+        errors: context.errors,
+        warnings: context.warnings,
+    };
 }
 
+const emptyRecord = { rules: [], pos: undefined, grammarRules: [] };
 function createGrammarRules(
-    ruleDefMap: DefinitionMap,
+    context: CompileContext,
     name: string,
+    pos?: number,
 ): GrammarRule[] {
-    const record = ruleDefMap.get(name);
+    const record = context.ruleDefMap.get(name);
     if (record === undefined) {
-        throw new Error(`Missing rule definition for '<${name}>'`);
+        context.errors.push({
+            message: `Missing rule definition for '<${name}>'`,
+            definition: context.currentDefinition,
+            pos,
+        });
+        context.ruleDefMap.set(name, emptyRecord);
+        return emptyRecord.grammarRules;
     }
     if (record.grammarRules === undefined) {
         record.grammarRules = [];
+        const prev = context.currentDefinition;
+        context.currentDefinition = name;
         for (const r of record.rules) {
-            record.grammarRules.push(createGrammarRule(ruleDefMap, r));
+            record.grammarRules.push(createGrammarRule(context, r));
         }
+        context.currentDefinition = prev;
     }
     return record.grammarRules;
 }
 
-function createGrammarRule(ruleDefMap: DefinitionMap, rule: Rule): GrammarRule {
+function createGrammarRule(context: CompileContext, rule: Rule): GrammarRule {
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
     for (const expr of expressions) {
@@ -59,15 +112,15 @@ function createGrammarRule(ruleDefMap: DefinitionMap, rule: Rule): GrammarRule {
                 break;
             }
             case "variable": {
-                const { name, typeName, ruleReference } = expr;
+                const { name, typeName, ruleReference, ruleRefPos } = expr;
                 if (ruleReference) {
-                    const rules = ruleDefMap.get(typeName);
-                    if (rules === undefined) {
-                        throw new Error(`No rule named ${typeName}`);
-                    }
                     parts.push({
                         type: "rules",
-                        rules: createGrammarRules(ruleDefMap, typeName),
+                        rules: createGrammarRules(
+                            context,
+                            typeName,
+                            ruleRefPos,
+                        ),
                         variable: name,
                         name: typeName,
                         optional: expr.optional,
@@ -91,7 +144,7 @@ function createGrammarRule(ruleDefMap: DefinitionMap, rule: Rule): GrammarRule {
             case "ruleReference":
                 parts.push({
                     type: "rules",
-                    rules: createGrammarRules(ruleDefMap, expr.name),
+                    rules: createGrammarRules(context, expr.name, expr.pos),
                     name: expr.name,
                 });
                 break;
@@ -99,7 +152,7 @@ function createGrammarRule(ruleDefMap: DefinitionMap, rule: Rule): GrammarRule {
                 const { rules, optional } = expr;
                 parts.push({
                     type: "rules",
-                    rules: rules.map((r) => createGrammarRule(ruleDefMap, r)),
+                    rules: rules.map((r) => createGrammarRule(context, r)),
                     optional,
                 });
 
@@ -107,7 +160,7 @@ function createGrammarRule(ruleDefMap: DefinitionMap, rule: Rule): GrammarRule {
             }
             default:
                 throw new Error(
-                    `Unknown expression type ${(expr as any).type}`,
+                    `Internal Error: Unknown expression type ${(expr as any).type}`,
                 );
         }
     }

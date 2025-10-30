@@ -7,6 +7,28 @@ public class KnowProConsoleContext : KnowProContext
 {
     public KnowProConsoleContext()
     {
+        EventHandler = new ConversationEventHandler();
+    }
+
+    public ConversationEventHandler EventHandler { get; }
+
+    public void UnloadCurrent()
+    {
+        if (Conversation is not null)
+        {
+            EventHandler.Unsubscribe(Conversation);
+            Conversation = null;
+        }
+    }
+
+    public void SetCurrent(IConversation conversation)
+    {
+        UnloadCurrent();
+        if (conversation is not null)
+        {
+            Conversation = conversation;
+            EventHandler.Subscribe(conversation);
+        }
     }
 }
 

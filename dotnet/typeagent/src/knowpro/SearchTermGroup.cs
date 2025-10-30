@@ -69,7 +69,23 @@ public class SearchTermGroup : ISearchTerm, IEnumerable<ISearchTerm>
 
     public override string ToString()
     {
-        return $"{BooleanOp} ({Terms.Join()})";
+        // TODO: pretty printer
+        string sep = $" {BooleanOp.ToString().ToUpper()} ";
+
+        StringBuilder sb = new StringBuilder();
+        sb.Append(" ( ");
+        for (int i = 0; i < Terms.Count; ++i)
+        {
+            if (i > 0)
+            {
+                sb.Append(sep);
+            }
+            sb.Append('(');
+            sb.Append(Terms[i].ToString());
+            sb.Append(')');
+        }
+        sb.Append(" )");
+        return sb.ToString();
     }
 
     IEnumerator IEnumerable.GetEnumerator()

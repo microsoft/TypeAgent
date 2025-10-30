@@ -75,7 +75,10 @@ VALUES (@term, @semref_id, @score)
         ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
 
         term = PrepareTerm(term);
-        using var cmd = _db.CreateCommand("SELECT semref_id, score FROM SemanticRefIndex WHERE term = @term");
+        using var cmd = _db.CreateCommand(@"
+SELECT semref_id, score FROM SemanticRefIndex WHERE term = @term
+ORDER BY semref_id ASC
+");
         cmd.AddParameter("@term", term);
 
         using var reader = cmd.ExecuteReader();

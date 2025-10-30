@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import registerDebug from "debug";
+import { getLineCol } from "./utils.js";
 
 const debugParse = registerDebug("typeagent:grammar:parse");
 /**
@@ -50,8 +51,9 @@ const debugParse = registerDebug("typeagent:grammar:parse");
 export function parseGrammarRules(
     fileName: string,
     content: string,
+    position: boolean = true,
 ): RuleDefinition[] {
-    const parser = new GrammarRuleParser(fileName, content);
+    const parser = new GrammarRuleParser(fileName, content, position);
     const definitions = parser.parse();
     debugParse(JSON.stringify(definitions, undefined, 2));
     return definitions;
@@ -67,6 +69,7 @@ type StrExpr = {
 type RuleRefExpr = {
     type: "ruleReference";
     name: string;
+    pos?: number | undefined;
 };
 
 type RulesExpr = {
@@ -80,6 +83,7 @@ type VarDefExpr = {
     name: string;
     typeName: string;
     ruleReference: boolean;
+    ruleRefPos?: number | undefined;
     optional?: boolean;
 };
 
@@ -113,6 +117,7 @@ export type Rule = {
 export type RuleDefinition = {
     name: string;
     rules: Rule[];
+    pos?: number | undefined;
 };
 
 export function isWhitespace(char: string) {
@@ -152,7 +157,12 @@ class GrammarRuleParser {
     constructor(
         private readonly fileName: string,
         private readonly content: string,
+        private readonly position: boolean = true,
     ) {}
+
+    private get pos(): number | undefined {
+        return this.position ? this.curr : undefined;
+    }
 
     private isAtWhiteSpace() {
         return !this.isAtEnd() && isWhitespace(this.content[this.curr]);
@@ -319,14 +329,16 @@ class GrammarRuleParser {
         const id = this.parseId("Variable name");
         let typeName: string = "string";
         let ruleReference: boolean = false;
+        let ruleRefPos: number | undefined = undefined;
 
         if (this.isAt(":")) {
             // Consume colon
             this.skipWhitespace(1);
 
             if (this.isAt("<")) {
-                typeName = this.parseRuleName();
+                ruleRefPos = this.pos;
                 ruleReference = true;
+                typeName = this.parseRuleName();
             } else {
                 typeName = this.parseId("Type name");
             }
@@ -336,6 +348,7 @@ class GrammarRuleParser {
             name: id,
             typeName,
             ruleReference,
+            ruleRefPos,
         };
     }
 
@@ -343,11 +356,9 @@ class GrammarRuleParser {
         const expNodes: Expr[] = [];
         do {
             if (this.isAt("<")) {
-                const n = this.parseRuleName();
-                expNodes.push({
-                    type: "ruleReference",
-                    name: n,
-                });
+                const pos = this.pos;
+                const name = this.parseRuleName();
+                expNodes.push({ type: "ruleReference", name, pos });
                 continue;
             }
             if (this.isAt("$(")) {
@@ -575,13 +586,11 @@ class GrammarRuleParser {
 
     private parseRuleDefinition(): RuleDefinition {
         this.consume("@", "start of rule");
-        const n = this.parseRuleName();
+        const pos = this.pos;
+        const name = this.parseRuleName();
         this.consume("=", "after rule identifier");
-        const r = this.parseRules();
-        return {
-            name: n,
-            rules: r,
-        };
+        const rules = this.parseRules();
+        return { name, rules, pos };
     }
 
     private consume(expected: string, reason?: string) {
@@ -594,18 +603,7 @@ class GrammarRuleParser {
     }
 
     private getLineCol(pos: number) {
-        let line = 1;
-        let col = 1;
-        const content = this.content;
-        for (let i = 0; i < pos && i < content.length; i++) {
-            if (content[i] === "\n") {
-                line++;
-                col = 1;
-            } else {
-                col++;
-            }
-        }
-        return { line, col };
+        return getLineCol(this.content, pos);
     }
 
     private throwError(message: string, pos: number = this.curr): never {

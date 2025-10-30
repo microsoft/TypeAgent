@@ -3,7 +3,9 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-// TODO: update methods to not use readers directly
+// TODO: update methods to use new wrappers and extension methods
+//  in SqliteDatabase etc. Should not need to use ExecuteReader
+// directly in most cases
 
 public class SqliteSemanticRefCollection : ISemanticRefCollection
 {
