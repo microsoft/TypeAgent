@@ -132,15 +132,9 @@ VALUES(@term, @term_embedding)
 
     public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> GetAll()
     {
-        return _db.Enumerate<KeyValuePair<int, NormalizedEmbeddingB>>(
-            "SELECT term_id, term_embedding FROM RelatedTermsFuzzy",
-            reader =>
-            {
-                int iCol = 0;
-                var term = reader.GetInt32(iCol++);
-                var embedding = reader.GetNormalizedEmbedding(iCol++);
-                return new(term, embedding);
-            });
+        return _db.EnumerateEmbeddings(
+"SELECT term_id, term_embedding FROM RelatedTermsFuzzy"
+        );
     }
 
     private List<ScoredItem<int>> IndexesOfNearest(

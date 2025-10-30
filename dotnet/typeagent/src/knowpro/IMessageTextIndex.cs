@@ -14,13 +14,13 @@ public interface IMessageTextIndex
     ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(
         string messageText,
         int? maxMatches = null,
-        double? thresholdScore = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default);
 
     ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
         string messageText,
         IEnumerable<int> ordinalsToSearch,
         int? maxMatches = null,
-        double? thresholdScore = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default);
 }

@@ -60,14 +60,42 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         }
     }
 
-    public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(string messageText, int? maxMatches = null, double? thresholdScore = null, CancellationToken cancellationToken = default)
+    public async ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(
+        string messageText,
+        int? maxMatches = null,
+        double? minScore = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(messageText, nameof(messageText));
+
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(messageText, cancellationToken);
+        return GetNearestOrdinals(embedding, maxMatches, minScore);
+    }
+
+    public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
+        string messageText,
+        IEnumerable<int> ordinalsToSearch,
+        int? maxMatches = null,
+        double? minScore = null,
+        CancellationToken cancellationToken = default
+    )
     {
         throw new NotImplementedException();
     }
 
-    public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(string messageText, IEnumerable<int> ordinalsToSearch, int? maxMatches = null, double? thresholdScore = null, CancellationToken cancellationToken = default)
+    private List<ScoredMessageOrdinal> GetNearestOrdinals(
+        NormalizedEmbedding embedding,
+        int? maxMatches,
+        double? minScore
+    )
     {
-        throw new NotImplementedException();
+        var matches = GetAll().IndexesOfNearest(
+            embedding,
+            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
+            minScore is not null ? minScore.Value : Settings.MinScore
+        );
+        return matches.IsNullOrEmpty() ? [] : ToScoredOrdinals(matches);
     }
 
     private void Insert(SqliteCommand cmd, int messageOrdinal, List<NormalizedEmbedding> embeddings)
@@ -106,5 +134,11 @@ VALUES (@msg_id, @chunk_ordinal, @embedding)");
             null,
             (reader) => reader.GetInt32(0)
         );
+    }
+
+    // TODO: get rid of this conversion
+    private List<ScoredMessageOrdinal> ToScoredOrdinals(List<ScoredItem<int>> items)
+    {
+        return items.Map((s) => new ScoredMessageOrdinal { MessageOrdinal = s.Item, Score = s.Score });
     }
 }
