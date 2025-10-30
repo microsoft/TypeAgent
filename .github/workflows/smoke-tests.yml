@@ -160,6 +160,6 @@ jobs:
 
       - name: Clean up Keys
         run: |
-          rm ./.env
+          rm -f ./.env
         working-directory: ts
         if: always()
