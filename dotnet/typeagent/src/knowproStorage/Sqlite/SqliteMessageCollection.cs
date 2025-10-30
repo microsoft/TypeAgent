@@ -71,6 +71,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         // TODO: Bulk operations
         foreach (var message in messages)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Append(message);
         }
         return ValueTask.CompletedTask;

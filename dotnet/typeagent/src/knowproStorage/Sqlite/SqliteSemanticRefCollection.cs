@@ -66,6 +66,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         // TODO: Bulk operations
         foreach (var sr in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Append(sr);
         }
         return ValueTask.CompletedTask;
@@ -184,6 +185,8 @@ FROM SemanticRefs WHERE semref_id = @semref_id",
         List<KnowledgeType> ranges = new(semanticRefIds.Count);
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var sql = $@"
 SELECT knowledge_type

@@ -5,6 +5,10 @@ namespace TypeAgent.KnowPro;
 
 public interface IMessageTextIndex
 {
+    ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
+
+    ValueTask AddMessageAsync(IMessage message, CancellationToken cancellation = default);
+
     ValueTask AddMessagesAsync(IList<IMessage> messages, CancellationToken cancellationToken = default);
 
     ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(

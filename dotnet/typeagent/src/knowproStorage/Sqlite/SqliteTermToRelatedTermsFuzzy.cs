@@ -24,9 +24,9 @@ public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnly
 
     public bool IsReadOnly => false;
 
-    public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
-
     public event Action<BatchProgress> OnIndexed;
+
+    public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
     {
@@ -43,7 +43,7 @@ WHERE term = @term
         using var reader = cmd.ExecuteReader();
         if (reader.Read())
         {
-            value = new NormalizedEmbeddingB((byte[])reader.GetValue(0)).ToEmbedding();
+            value = reader.GetEmbedding(0);
             return true;
         }
         value = Embedding.Empty;
@@ -58,7 +58,7 @@ INSERT OR REPLACE INTO RelatedTermsFuzzy
 VALUES(@term, @term_embedding)
     ");
         cmd.AddParameter("@term", term);
-        cmd.AddParameter("@term_embedding", embedding.ToBytes());
+        cmd.AddParameter("@term_embedding", embedding);
         cmd.ExecuteNonQuery();
     }
 
