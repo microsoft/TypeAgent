@@ -9,12 +9,12 @@ on:
   workflow_dispatch:
   push:
     branches: ["main"]
-    paths:
-      - 'ts/**' # only run on changes to ts/ folder
+    #paths:
+    #  - 'ts/**' # only run on changes to ts/ folder
   pull_request_target:
     branches: ["main"]
-    paths:
-      - 'ts/**' # only run on changes to ts/ folder
+    #paths:
+    #  - 'ts/**' # only run on changes to ts/ folder
   merge_group:
     branches: ["main"]
 concurrency:
@@ -126,7 +126,7 @@ jobs:
           node tools/scripts/getKeys.mjs --vault build-pipeline-kv
         working-directory: ts
 
-      - name: Test CLI - smoke
+      - name: Test CLI - smoke      
         run: |
           npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
