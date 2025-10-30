@@ -227,6 +227,10 @@ export async function sendUserRequestFast(prompt: string, page: Page) {
     page.keyboard.down("Enter");
 }
 
+async function getAgentMessageLocators(page: Page): Promise<Locator[]> {
+    return page.locator(".chat-message-agent .chat-message-content").all();
+}
+
 /**
  * Submits a user request to the system via the chat input box and then waits for the first available response
  * NOTE: If your expected response changes or you invoke multi-action flow you should be calling
@@ -241,9 +245,7 @@ export async function sendUserRequestAndWaitForResponse(
     prompt: string,
     page: Page,
 ): Promise<string> {
-    const locators: Locator[] = await page
-        .locator(".chat-message-agent .chat-message-content")
-        .all();
+    const locators = await getAgentMessageLocators(page);
 
     // send the user request
     await sendUserRequest(prompt, page);
@@ -264,9 +266,7 @@ export async function sendUserRequestAndWaitForCompletion(
     prompt: string,
     page: Page,
 ): Promise<string> {
-    const locators: Locator[] = await page
-        .locator(".chat-message-agent .chat-message-content")
-        .all();
+    const locators = await getAgentMessageLocators(page);
 
     // send the user request
     await sendUserRequest(prompt, page);
@@ -415,8 +415,17 @@ export async function runTestCallback(
     }
 }
 
+export async function getAllAgentMessages(page: Page): Promise<string[]> {
+    const locators = await getAgentMessageLocators(page);
+    return (
+        await Promise.all(
+            locators.map((locator) => locator.innerText()).reverse(),
+        )
+    ).filter((msg) => msg.length > 0);
+}
+
 /**
- * Encapsulates the supplied method within a startup and shutdown of teh
+ * Encapsulates the supplied method within a startup and shutdown of the
  * shell.  Test code executes between them.
  */
 export async function testUserRequest(
@@ -434,11 +443,14 @@ export async function testUserRequest(
                 userRequests[i],
                 mainWindow,
             );
-
             // verify expected result
             expect(
                 msg,
-                `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
+                [
+                    `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
+                    `All response so far:`,
+                    ...(await getAllAgentMessages(mainWindow)),
+                ].join("\n"),
             ).toBe(expectedResponses[i]);
         }
     });

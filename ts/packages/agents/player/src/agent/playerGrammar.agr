@@ -6,7 +6,7 @@
           | <PlayCommand>
 @ <Pause> = pause ((the)? music)?   ->  { actionName: "pause" }
 @ <Resume> = resume ((the)? music)?   ->  { actionName: "resume" }
-@ <PlayCommand> = <PlayTrackNumberCommand>
+@ <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>
 @ <PlayTrackNumberCommand> =
     play (the)? $(n:<Ordinal>) (<Item>)? -> {
         actionName: "playFromCurrentTrackList",
@@ -26,16 +26,35 @@
             trackNumber: $(n)
         }
    }
-@ <Item> = one | track | song | cut
+
+@ <Item> = one | cut | <TrackTerm> 
+@ <TrackTerm> = track | song
+
 @ <Cardinal> = 
-    one -> 1
+  $(x:number) 
+|   one -> 1
 |   two -> 2
 |   three -> 3
 |   four -> 4
-@ <Ordinal> =
+
+
+@ <Ordinal> = 
     first -> 1
 |   second -> 2
 |   third -> 3
 |   troisiemme -> 3
-|   fourth -> 4 
-    
+|   fourth -> 4
+
+@ <TrackPhrase> = ((the)? <TrackTerm>)? $(trackName:<TrackName>)
+                | $(trackName:<TrackName>) <TrackTerm>
+@ <PlaySpecificTrack> = play $(trackName:<TrackPhrase>) -> { actionName: "playTrack", parameters: { trackName: $(trackName) } }
+                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)] } }
+                      | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), albumName: $(albumName) } }
+                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)], albumName: $(albumName) } }                      
+
+// TODO: wire up entity names
+@ <TrackName> = $(x:string)
+@ <ArtistName> = $(x:string)  
+@ <AlbumName> = $(x:string)
+
+
