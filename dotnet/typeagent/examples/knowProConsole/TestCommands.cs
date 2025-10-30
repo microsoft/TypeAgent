@@ -245,6 +245,10 @@ public class TestCommands : ICommandModule
             }
             KnowProWriter.WriteLine();
         }
+        catch(Exception ex)
+        {
+            KnowProWriter.WriteError(ex);
+        }
         finally
         {
             if (cachingModel is not null)

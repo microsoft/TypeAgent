@@ -23,6 +23,9 @@ public class ConversationSettings
         // Need a lookup table to recommend settings for different standard models
         RelatedTermIndexSettings = new TermToRelatedTermIndexSettings(
             new TextEmbeddingIndexSettings(embeddingModel, 0.85, 50)
+            {
+                BatchSize = 64
+            }
         );
 
         MessageTextIndexSettings = new MessageTextIndexSettings(

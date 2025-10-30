@@ -117,10 +117,10 @@ public static class Async
                 }
             }
 
-            retryCount++;
             int pauseMs = settings.RetryPauseMs > 0
-                ? settings.RetryPauseMs * (1 << retryCount) // Exponential backoff
+                ? settings.RetryPauseMs * (1 << (retryCount)) // Exponential backoff
                 : 0;
+            retryCount++;
 
             if (pauseMs > 0)
             {

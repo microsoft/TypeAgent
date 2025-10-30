@@ -55,6 +55,7 @@ public class KnowProConsole : ConsoleApp
         {
             KnowProWriter.WriteError("NO .env variables applied");
         }
+
         KnowProConsole console = new KnowProConsole();
         if (args.IsNullOrEmpty())
         {
