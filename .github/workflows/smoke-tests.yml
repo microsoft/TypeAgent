@@ -160,6 +160,6 @@ jobs:
 
       - name: Clean up Keys
         run: |
-          rm -f ./.env
+          node -e "try{require('fs').unlinkSync('./.env');}catch(e){}"
         working-directory: ts
         if: always()
