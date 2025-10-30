@@ -30,13 +30,16 @@ internal class TermSet
     public bool Add(Term term)
     {
         ArgumentVerify.ThrowIfNull(term, nameof(term));
+        return _termSet.TryAdd(term.Text, term);
+    }
 
-        if (_termSet.ContainsKey(term.Text))
+    public void Add(IEnumerable<Term> terms)
+    {
+        ArgumentVerify.ThrowIfNull(terms, nameof(terms));
+        foreach(var term in terms)
         {
-            return false;
+            Add(term);
         }
-        _termSet.Add(term.Text, term);
-        return true;
     }
 
     public void AddOrUnion(IEnumerable<Term> terms)

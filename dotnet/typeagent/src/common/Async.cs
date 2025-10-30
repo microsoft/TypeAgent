@@ -22,8 +22,7 @@ public static class Async
         this IList<T> list,
         int concurrency,
         Func<T, Task<TResult>> processor,
-        Func<T, int, TResult, bool>? progress,
-        Func<object?, bool>? shouldStop = null,
+        Action<BatchProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(list, nameof(list));
@@ -31,45 +30,26 @@ public static class Async
         ArgumentVerify.ThrowIfNull(processor, nameof(processor));
 
         return concurrency <= 1
-            ? await MapSequentialAsync(list, processor, progress, shouldStop, cancellationToken)
-            : await MapConcurrentAsync(list, concurrency, processor, progress, shouldStop, cancellationToken);
-    }
-
-    public static Task<List<TResult>> MapAsync<T, TResult>(
-        this IList<T> list,
-        int concurrency,
-        Func<T, Task<TResult>> processor,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return list.MapAsync(concurrency, processor, null, null, cancellationToken);
+            ? await MapSequentialAsync(list, processor, progress, cancellationToken)
+            : await MapConcurrentAsync(list, concurrency, processor, progress, cancellationToken);
     }
 
     private static async Task<List<TResult>> MapSequentialAsync<T, TResult>(
         IList<T> list,
         Func<T, Task<TResult>> processor,
-        Func<T, int, TResult, bool>? progress,
-        Func<object?, bool>? shouldStop,
+        Action<BatchProgress>? progress,
         CancellationToken cancellationToken
     )
     {
         var results = new List<TResult>();
         for (int i = 0; i < list.Count; i++)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-
+            cancellationToken.ThrowIfCancellationRequested();
             var result = await processor(list[i]);
             results.Add(result);
             if (progress is not null)
             {
-                var stop = progress(list[i], i, result);
-                if (shouldStop is not null && shouldStop(stop))
-                {
-                    break;
-                }
+                progress(new BatchProgress(results.Count, list.Count));
             }
         }
         return results;
@@ -79,21 +59,17 @@ public static class Async
         IList<T> list,
         int concurrency,
         Func<T, Task<TResult>> processor,
-        Func<T, int, TResult, bool>? progress,
-        Func<object?, bool>? shouldStop,
+        Action<BatchProgress>? progress,
         CancellationToken cancellationToken
     )
     {
         var results = new List<TResult>();
-        int count = list.Count;
-        for (int startAt = 0; startAt < count; startAt += concurrency)
+        int totalCount = list.Count;
+        for (int startAt = 0; startAt < totalCount; startAt += concurrency)
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
+            cancellationToken.ThrowIfCancellationRequested();
 
-            int batchSize = Math.Min(concurrency, count - startAt);
+            int batchSize = Math.Min(concurrency, totalCount - startAt);
             var batch = list.Slice(startAt, batchSize);
             var tasks = batch.Map<T, Task<TResult>>(processor);
 
@@ -102,22 +78,62 @@ public static class Async
             results.AddRange(batchResults);
             if (progress is not null)
             {
-                bool stop = false;
-                for (int i = 0; i < batchSize; ++i)
-                {
-                    int idx = startAt + i;
-                    var r = progress(list[idx], idx, results[idx]);
-                    if (shouldStop is not null && shouldStop(r))
-                    {
-                        stop = true;
-                    }
-                }
-                if (stop)
-                {
-                    return results;
-                }
+                progress(new BatchProgress(results.Count, totalCount));
             }
         }
         return results;
+    }
+
+    /// <summary>
+    /// Calls an async function with automatic retry in the case of exceptions.
+    /// </summary>
+    /// <typeparam name="T">Return type of the async function.</typeparam>
+    /// <param name="asyncFn">Async function to execute. Use closures to pass parameters.</param>
+    /// <param name="settings">Retry settings. If null, uses defaults.</param>
+    /// <param name="shouldAbort">Optional function to inspect the exception and abort retries.</param>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
+    /// <returns>Result of type T.</returns>
+    public static async Task<T> CallWithRetryAsync<T>(
+        Func<CancellationToken, Task<T>> asyncFn,
+        RetrySettings? settings = null,
+        Func<Exception, bool>? shouldAbort = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        settings ??= RetrySettings.Default;
+        int retryCount = 0;
+        while (true)
+        {
+            try
+            {
+                return await asyncFn(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                if (retryCount >= settings.MaxRetries || (shouldAbort != null && shouldAbort(e)))
+                {
+                    throw;
+                }
+            }
+
+            retryCount++;
+            int pauseMs = settings.RetryPauseMs > 0
+                ? settings.RetryPauseMs * (1 << retryCount) // Exponential backoff
+                : 0;
+
+            if (pauseMs > 0)
+            {
+                pauseMs = settings.AdjustRetryPauseMs(pauseMs);
+                await Task.Delay(pauseMs, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    public static Task<T> CallWithRetryAsync<T>(
+        Func<CancellationToken, Task<T>> asyncFn,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return CallWithRetryAsync<T>(asyncFn, null, null, cancellationToken);
     }
 }
