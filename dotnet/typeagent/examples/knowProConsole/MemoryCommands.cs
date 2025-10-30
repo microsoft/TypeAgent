@@ -18,7 +18,8 @@ public class MemoryCommands : ICommandModule
         return [
             SearchTermsDef(),
             MessagesDef(),
-            AliasesDef()
+            AliasesDef(),
+            SearchRagDef()
         ];
     }
 
@@ -105,6 +106,38 @@ public class MemoryCommands : ICommandModule
                 relatedTerms!.ForEach(KnowProWriter.WriteTerm);
             }
         }
+    }
+
+    private Command SearchRagDef()
+    {
+        Command command = new("kpSearchRag")
+        {
+            Options.Arg<string>("query"),
+            Options.Arg<int>("maxMatches", 25),
+            Options.Arg<double>("minScore", 0.7),
+            Options.Arg<int>("budget", 16 * 1024)
+        };
+        command.SetAction(this.SearchRagAsync);
+        return command;
+    }
+    private async Task SearchRagAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        var namedArgs = new NamedArgs(args);
+        var query = namedArgs.Get<string>("query");
+        if (string.IsNullOrEmpty(query))
+        {
+            return;
+        }
+        var matches = await conversation.SearchConversationRagAsync(
+            query,
+            namedArgs.Get<int>("maxMatches"),
+            namedArgs.Get<double>("minScore"),
+            namedArgs.Get<int>("budget"),
+            cancellationToken
+        );
+        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, matches, true);
     }
 
     private IConversation EnsureConversation()

@@ -22,12 +22,16 @@ public static class MessageCollectionExtensions
     internal static async ValueTask<int> GetCountInCharBudgetAsync(
         this IMessageCollection messages,
         IList<int> messageOrdinals,
-        int maxCharsInBudget
+        int maxCharsInBudget,
+        CancellationToken cancellationToken = default
     )
     {
-
         int messageCount = messageOrdinals.Count;
-        var messageLengths = await messages.GetMessageLengthAsync(messageOrdinals).ConfigureAwait(false);
+        var messageLengths = await messages.GetMessageLengthAsync(
+            messageOrdinals,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         int totalCharCount = 0;
         for (int i = 0; i < messageCount; ++i)
         {
