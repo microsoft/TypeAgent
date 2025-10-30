@@ -11,7 +11,7 @@ public static class TextEmbeddingModelExtensions
         CancellationToken cancellationToken
     )
     {
-        float[] embedding = await model.GenerateAsync(text, cancellationToken);
+        float[] embedding = await model.GenerateAsync(text, cancellationToken).ConfigureAwait(false);
         return NormalizedEmbedding.FromArray(embedding);
     }
 
@@ -21,7 +21,7 @@ public static class TextEmbeddingModelExtensions
         CancellationToken cancellationToken
     )
     {
-        var embeddings = await model.GenerateAsync(texts, cancellationToken);
+        var embeddings = await model.GenerateAsync(texts, cancellationToken).ConfigureAwait(false);
         return embeddings.Map((e) => NormalizedEmbedding.FromArray(e));
     }
 
@@ -31,6 +31,7 @@ public static class TextEmbeddingModelExtensions
         int batchSize,
         int maxCharsPerChunk,
         int concurrency = 1,
+        Action<BatchProgress>? progress = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -39,8 +40,9 @@ public static class TextEmbeddingModelExtensions
             batchSize,
             maxCharsPerChunk,
             concurrency,
+            progress,
             cancellationToken
-        );
+        ).ConfigureAwait(false);
         return rawEmbeddings.Map((array) => NormalizedEmbedding.FromArray(array));
     }
 }
