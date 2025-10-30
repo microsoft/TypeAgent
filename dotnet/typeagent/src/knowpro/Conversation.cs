@@ -53,19 +53,24 @@ public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
     public ConversationSecondaryIndexes(
         IPropertyToSemanticRefIndex propertyIndex,
         ITimestampToTextRangeIndex timestampIndex,
-        ITermToRelatedTermIndex relatedTermIndex
+        ITermToRelatedTermIndex relatedTermIndex,
+        IMessageTextIndex messageIndex
     )
     {
         ArgumentVerify.ThrowIfNull(propertyIndex, nameof(propertyIndex));
         ArgumentVerify.ThrowIfNull(timestampIndex, nameof(timestampIndex));
         ArgumentVerify.ThrowIfNull(relatedTermIndex, nameof(relatedTermIndex));
+        ArgumentVerify.ThrowIfNull(messageIndex, nameof(messageIndex));
 
         PropertyToSemanticRefIndex = propertyIndex;
         TimestampIndex = timestampIndex;
         TermToRelatedTermsIndex = relatedTermIndex;
+        MessageIndex = messageIndex;
     }
 
     public IPropertyToSemanticRefIndex PropertyToSemanticRefIndex { get; }
     public ITimestampToTextRangeIndex TimestampIndex { get; }
     public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; }
+
+    public IMessageTextIndex MessageIndex { get; }
 }

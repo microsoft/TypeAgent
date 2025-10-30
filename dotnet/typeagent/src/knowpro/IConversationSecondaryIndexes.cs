@@ -9,4 +9,6 @@ public interface IConversationSecondaryIndexes
     ITimestampToTextRangeIndex TimestampIndex { get; }
 
     ITermToRelatedTermIndex TermToRelatedTermsIndex { get; }
+
+    IMessageTextIndex MessageIndex { get; }
 }

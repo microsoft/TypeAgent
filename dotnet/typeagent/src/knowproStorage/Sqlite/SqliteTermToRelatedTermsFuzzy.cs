@@ -138,8 +138,8 @@ VALUES(@term, @term_embedding)
             {
                 int iCol = 0;
                 var term = reader.GetInt32(iCol++);
-                var embeddingBytes = (byte[])reader.GetValue(iCol++);
-                return new(term, new NormalizedEmbeddingB(embeddingBytes));
+                var embedding = reader.GetNormalizedEmbedding(iCol++);
+                return new(term, embedding);
             });
     }
 

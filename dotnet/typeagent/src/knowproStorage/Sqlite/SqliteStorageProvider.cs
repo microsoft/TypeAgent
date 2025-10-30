@@ -42,7 +42,10 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         SecondaryIndexes = new ConversationSecondaryIndexes(
             new SqlitePropertyToSemanticRefIndex(_db),
             new SqliteTimestampToTextRangeIndex(_db),
-            new SqliteRelatedTermsIndex(_db, settings.RelatedTermIndexSettings)
+            new SqliteRelatedTermsIndex(_db, settings.RelatedTermIndexSettings),
+            settings.MessageTextIndexSettings.EmbeddingIndexSettings is null
+            ? new NullMessageTextIndex()
+            : new SqliteMessageTextIndex(_db, settings.MessageTextIndexSettings.EmbeddingIndexSettings)
         );
     }
 

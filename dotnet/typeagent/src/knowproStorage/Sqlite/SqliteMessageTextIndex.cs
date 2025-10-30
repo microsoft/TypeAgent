@@ -83,6 +83,13 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         }
     }
 
+    public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> GetAll()
+    {
+        return _db.EnumerateEmbeddings(
+"SELECT msg_id, embedding FROM MessageTextIndex"
+        );
+    }
+
     private SqliteCommand CreateInsertCommand()
     {
         return _db.CreateCommand(@"

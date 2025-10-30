@@ -9,7 +9,6 @@ public interface IStorageProvider : IDisposable
     ISemanticRefCollection SemanticRefs { get; }
     ITermToSemanticRefIndex SemanticRefIndex { get; }
     IConversationSecondaryIndexes SecondaryIndexes { get; }
-
 }
 
 public interface IStorageProvider<TMessage> : IStorageProvider
