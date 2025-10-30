@@ -6,7 +6,7 @@
 
 @fromSchema --action GetAlbumAction --count 20 --facets "Phrase Structure, Album Name, Slang" --example "Yo, load up Nevermind by Nirvana"
 
-@variations "Yo, play me some Goldberg Variations by Bach!" --facets "Composer, Piece, Slang" --depth 2 --progress
+@variations "Yo, play me some Goldberg Variations by Bach!" --facets "Composer, Piece, Slang" --depth 3 --progress
 
 # Interactive mode only
 "Play me Aja by Steely Dan" --facets "Composer, Piece, Slang" --type "similar"
