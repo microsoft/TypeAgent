@@ -307,12 +307,19 @@ JSON OUTPUT:`;
 
             // Build hierarchy from LLM response
             for (const rootData of hierarchyData) {
+                // Check if root topic name matches any knowledge topics
+                const rootSourceNames = findMatchingKnowledgeTopics(
+                    rootData.rootTopic,
+                    topics,
+                );
+
                 const rootTopic: HierarchicalTopic = {
                     id: generateTopicId(rootData.rootTopic, 0),
                     name: rootData.rootTopic,
                     level: 0,
                     childIds: [],
                     sourceRefOrdinals: [],
+                    sourceTopicNames: rootSourceNames,
                     confidence: 0.8,
                     keywords: [rootData.rootTopic],
                     entityReferences: [],
@@ -325,6 +332,12 @@ JSON OUTPUT:`;
 
                 // Add children
                 for (const childName of rootData.children || []) {
+                    // Check if child topic name matches any knowledge topics
+                    const childSourceNames = findMatchingKnowledgeTopics(
+                        childName,
+                        topics,
+                    );
+
                     const childTopic: HierarchicalTopic = {
                         id: generateTopicId(childName, 1),
                         name: childName,
@@ -332,6 +345,7 @@ JSON OUTPUT:`;
                         parentId: rootTopic.id,
                         childIds: [],
                         sourceRefOrdinals: [],
+                        sourceTopicNames: childSourceNames,
                         confidence: 0.7,
                         keywords: [childName],
                         entityReferences: [],
@@ -347,6 +361,12 @@ JSON OUTPUT:`;
                     const grandchildrenForThisChild =
                         rootData.grandchildren?.[childName] || [];
                     for (const grandchildName of grandchildrenForThisChild) {
+                        // Check if grandchild topic name matches any knowledge topics
+                        const grandchildSourceNames = findMatchingKnowledgeTopics(
+                            grandchildName,
+                            topics,
+                        );
+
                         const grandchildTopic: HierarchicalTopic = {
                             id: generateTopicId(grandchildName, 2),
                             name: grandchildName,
@@ -354,6 +374,7 @@ JSON OUTPUT:`;
                             parentId: childTopic.id,
                             childIds: [],
                             sourceRefOrdinals: [],
+                            sourceTopicNames: grandchildSourceNames,
                             confidence: 0.6,
                             keywords: [grandchildName],
                             entityReferences: [],
@@ -381,12 +402,18 @@ JSON OUTPUT:`;
 
             // Build hierarchy from fallback data
             for (const rootData of hierarchyData) {
+                const rootSourceNames = findMatchingKnowledgeTopics(
+                    rootData.rootTopic,
+                    topics,
+                );
+
                 const rootTopic: HierarchicalTopic = {
                     id: generateTopicId(rootData.rootTopic, 0),
                     name: rootData.rootTopic,
                     level: 0,
                     childIds: [],
                     sourceRefOrdinals: [],
+                    sourceTopicNames: rootSourceNames,
                     confidence: 0.6, // Lower confidence for fallback
                     keywords: [rootData.rootTopic],
                     entityReferences: [],
@@ -399,6 +426,11 @@ JSON OUTPUT:`;
 
                 // Add children from fallback
                 for (const childName of rootData.children || []) {
+                    const childSourceNames = findMatchingKnowledgeTopics(
+                        childName,
+                        topics,
+                    );
+
                     const childTopic: HierarchicalTopic = {
                         id: generateTopicId(childName, 1),
                         name: childName,
@@ -406,6 +438,7 @@ JSON OUTPUT:`;
                         parentId: rootTopic.id,
                         childIds: [],
                         sourceRefOrdinals: [],
+                        sourceTopicNames: childSourceNames,
                         confidence: 0.5, // Lower confidence for fallback
                         keywords: [childName],
                         entityReferences: [],
@@ -425,12 +458,18 @@ JSON OUTPUT:`;
 
     // Fallback: If LLM failed or produced no results, use simple rule-based approach
     if (rootTopics.length === 0 && aggregatedTopics.length > 0) {
+        const rootSourceNames = findMatchingKnowledgeTopics(
+            aggregatedTopics[0],
+            topics,
+        );
+
         const rootTopic: HierarchicalTopic = {
             id: generateTopicId(aggregatedTopics[0], 0),
             name: aggregatedTopics[0],
             level: 0,
             childIds: [],
             sourceRefOrdinals: [],
+            sourceTopicNames: rootSourceNames,
             confidence: 0.8,
             keywords: [aggregatedTopics[0]],
             entityReferences: [],
@@ -442,6 +481,7 @@ JSON OUTPUT:`;
 
         // Add topics as children
         for (let i = 0; i < Math.min(topics.length, 15); i++) {
+            // Each child topic directly corresponds to a knowledge topic
             const childTopic: HierarchicalTopic = {
                 id: generateTopicId(topics[i], 1),
                 name: topics[i],
@@ -449,6 +489,7 @@ JSON OUTPUT:`;
                 parentId: rootTopic.id,
                 childIds: [],
                 sourceRefOrdinals: [],
+                sourceTopicNames: [topics[i]], // Direct 1:1 mapping
                 confidence: 0.6,
                 keywords: [topics[i]],
                 entityReferences: [],
@@ -475,15 +516,28 @@ function enrichHierarchy(
     fragmentExtractions: FragmentTopicExtraction[],
     context: TopicExtractionContext,
 ): TopicHierarchy {
-    // Add semanticRef ordinal information
+    // Add semanticRef ordinal information and sourceTopicNames
     for (const extraction of fragmentExtractions) {
         for (const [, topic] of hierarchy.topicMap) {
-            if (extraction.topics.includes(topic.name)) {
-                const ordinal = typeof extraction.fragmentId === 'number'
-                    ? extraction.fragmentId
-                    : parseInt(extraction.fragmentId, 10);
-                if (!isNaN(ordinal)) {
-                    topic.sourceRefOrdinals.push(ordinal);
+            // Check if this hierarchical topic matches any fragment topics
+            for (const fragmentTopic of extraction.topics) {
+                const normalizedTopicName = topic.name.toLowerCase().trim();
+                const normalizedFragmentTopic = fragmentTopic.toLowerCase().trim();
+
+                if (normalizedTopicName === normalizedFragmentTopic) {
+                    // Add ordinal
+                    const ordinal = typeof extraction.fragmentId === 'number'
+                        ? extraction.fragmentId
+                        : parseInt(extraction.fragmentId, 10);
+                    if (!isNaN(ordinal)) {
+                        topic.sourceRefOrdinals.push(ordinal);
+                    }
+
+                    // Add to sourceTopicNames if not already present
+                    if (!topic.sourceTopicNames.includes(fragmentTopic)) {
+                        topic.sourceTopicNames.push(fragmentTopic);
+                    }
+                    break;
                 }
             }
         }
@@ -510,12 +564,18 @@ function mergeHierarchies(
                 mergedRootTopics.push(topic);
             }
         } else {
-            // Merge sourceRefOrdinals for existing topics
+            // Merge sourceRefOrdinals and sourceTopicNames for existing topics
             const existingTopic = mergedTopicMap.get(topicId)!;
             existingTopic.sourceRefOrdinals = [
                 ...new Set([
                     ...existingTopic.sourceRefOrdinals,
                     ...topic.sourceRefOrdinals,
+                ]),
+            ];
+            existingTopic.sourceTopicNames = [
+                ...new Set([
+                    ...existingTopic.sourceTopicNames,
+                    ...topic.sourceTopicNames,
                 ]),
             ];
         }
@@ -556,6 +616,29 @@ function calculateKeywordOverlap(
     const union = new Set([...set1, ...set2]);
 
     return intersection.size / union.size;
+}
+
+/**
+ * Find knowledge topics that match a hierarchical topic name
+ * Uses case-insensitive comparison to match topic names
+ */
+function findMatchingKnowledgeTopics(
+    hierarchicalTopicName: string,
+    knowledgeTopics: string[],
+): string[] {
+    const matches: string[] = [];
+    const normalizedHierarchicalName = hierarchicalTopicName.toLowerCase().trim();
+
+    for (const knowledgeTopic of knowledgeTopics) {
+        const normalizedKnowledgeName = knowledgeTopic.toLowerCase().trim();
+
+        // Exact match (case-insensitive)
+        if (normalizedHierarchicalName === normalizedKnowledgeName) {
+            matches.push(knowledgeTopic);
+        }
+    }
+
+    return matches;
 }
 
 /**

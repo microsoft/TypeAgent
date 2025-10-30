@@ -143,7 +143,7 @@ export async function getKnowledgeGraphStatus(
             if (websiteCollection.knowledgeEntities) {
                 entityCount = (
                     websiteCollection.knowledgeEntities as any
-                ).getTotalEntityCount();
+                ).getUniqueEntityCount();
             }
         } catch (error) {
             console.warn("Failed to get entity count:", error);
@@ -1996,8 +1996,6 @@ export async function invalidateTopicCacheAction(
 
 // Ensure topic graph data is cached for fast access
 async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
-    // TEMPORARY: Always invalidate cache to ensure fresh data
-    invalidateTopicCache(websiteCollection);
 
     const cache = getTopicGraphCache(websiteCollection);
 

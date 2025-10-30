@@ -8,6 +8,7 @@ export interface HierarchicalTopic {
     parentId?: string; // Reference to parent topic
     childIds: string[]; // References to child topics
     sourceRefOrdinals: number[]; // SemanticRef ordinals linking to knowledge topics
+    sourceTopicNames: string[]; // Knowledge topic names that contributed to this hierarchical topic (for co-occurrence lookup)
     confidence: number; // Extraction confidence (0-1)
     keywords: string[]; // Associated keywords
     entityReferences: string[]; // Related entities

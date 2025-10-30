@@ -1886,13 +1886,16 @@ export class WebsiteCollection
         try {
             // First, check if websites already have rich hierarchies from extraction
             const websites = this.getWebsites();
+            debug(`[Knowledge Graph] Total websites: ${websites.length}`);
             const websitesToProcess = urlLimit
                 ? websites.slice(0, urlLimit)
                 : websites;
+            debug(`[Knowledge Graph] Processing ${websitesToProcess.length} websites for hierarchies`);
 
             const websitesWithHierarchies = websitesToProcess.filter(
                 (w) => (w.knowledge as any)?.topicHierarchy,
             );
+            debug(`[Knowledge Graph] Found ${websitesWithHierarchies.length} websites with existing hierarchies`);
 
             if (websitesWithHierarchies.length > 0) {
                 // Clear existing hierarchical topics before rebuilding
@@ -1901,15 +1904,19 @@ export class WebsiteCollection
                         "DELETE FROM hierarchicalTopics",
                     );
                     clearStmt.run();
+                    debug(`[Knowledge Graph] Cleared existing hierarchical topics`);
                 }
 
                 // Use existing rich hierarchies from websites
+                debug(`[Knowledge Graph] Using rich hierarchies from ${websitesWithHierarchies.length} websites`);
                 await this.updateHierarchicalTopics(websitesWithHierarchies);
                 return;
             }
 
             // No existing hierarchies, fall back to building from flat topics
+            debug(`[Knowledge Graph] No websites with hierarchies, extracting flat topics...`);
             const flatTopics = await this.extractFlatTopics(urlLimit);
+            debug(`[Knowledge Graph] Extracted ${flatTopics.length} flat topics`);
 
             if (flatTopics.length === 0) {
                 return;
@@ -1931,6 +1938,7 @@ export class WebsiteCollection
             let topicExtractor: any;
             try {
                 // Try to create AI model for topic merging
+                debug(`[Knowledge Graph] Creating AI model for topic extraction...`);
                 const apiSettings = ai.openai.azureApiSettingsFromEnv(
                     ai.openai.ModelType.Chat,
                     undefined,
@@ -1939,16 +1947,20 @@ export class WebsiteCollection
                 const languageModel = ai.openai.createChatModel(apiSettings);
                 topicExtractor =
                     kpLib.conversation.createTopicExtractor(languageModel);
+                debug(`[Knowledge Graph] AI model created successfully`);
             } catch (error) {
                 debug(
                     `[Knowledge Graph] AI model not available for topic merging: ${error}`,
                 );
                 // Fall back to simple hierarchical grouping
+                debug(`[Knowledge Graph] Using simple hierarchical grouping for ${flatTopics.length} topics`);
                 await this.buildSimpleTopicHierarchy(flatTopics);
+                debug(`[Knowledge Graph] Simple hierarchy built`);
                 return;
             }
 
             // Use AI to merge topics into higher-level topics
+            debug(`[Knowledge Graph] Merging ${flatTopics.length} topics into hierarchy...`);
             const mergeResult = await topicExtractor.mergeTopics(
                 flatTopics,
                 undefined, // No past topics for initial build
@@ -1956,8 +1968,10 @@ export class WebsiteCollection
             );
 
             if (mergeResult && mergeResult.status === "Success") {
+                debug(`[Knowledge Graph] Topic merge successful: ${mergeResult.topic}`);
                 // Store the merged topic as root
                 const rootTopicId = this.generateTopicId(mergeResult.topic, 0);
+                debug(`[Knowledge Graph] Storing root topic: ${rootTopicId}`);
                 await this.storeHierarchicalTopic(
                     {
                         topicId: rootTopicId,
@@ -1971,16 +1985,19 @@ export class WebsiteCollection
                 );
 
                 // Organize flat topics under the root
+                debug(`[Knowledge Graph] Organizing ${flatTopics.length} topics under root`);
                 await this.organizeTopicsUnderRoot(
                     flatTopics,
                     rootTopicId,
                 );
+                debug(`[Knowledge Graph] Topics organized successfully`);
             } else {
                 // Fall back to simple hierarchy if merging fails
                 debug(
-                    `[Knowledge Graph] Topic merging failed, using simple hierarchy`,
+                    `[Knowledge Graph] Topic merging failed (status: ${mergeResult?.status}), using simple hierarchy`,
                 );
                 await this.buildSimpleTopicHierarchy(flatTopics);
+                debug(`[Knowledge Graph] Simple hierarchy built`);
             }
 
             debug(
@@ -2107,13 +2124,28 @@ export class WebsiteCollection
                     // Merge sourceRefOrdinals to track semanticRefs that contributed to this topic
                     existingTopic.sourceRefOrdinals = [
                         ...new Set([
-                            ...existingTopic.sourceRefOrdinals,
-                            ...topic.sourceRefOrdinals,
+                            ...(existingTopic.sourceRefOrdinals || []),
+                            ...(topic.sourceRefOrdinals || []),
+                        ]),
+                    ];
+                    // Merge sourceTopicNames for hierarchical aggregation
+                    existingTopic.sourceTopicNames = [
+                        ...new Set([
+                            ...(existingTopic.sourceTopicNames || []),
+                            ...(topic.sourceTopicNames || []),
                         ]),
                     ];
 
                 }
             }
+        }
+
+        // Calculate sibling relationships
+        const siblingRels = this.calculateSiblingRelationships(
+            mergedTopicMap as Map<string, any>,
+        );
+        for (const rel of siblingRels) {
+            this.topicRelationships?.upsertRelationship(rel);
         }
 
         return {
@@ -2160,6 +2192,7 @@ export class WebsiteCollection
                     ...(parentTopicId ? { parentTopicId } : {}),
                     confidence: topic.confidence,
                     keywords: topic.keywords,
+                    sourceTopicNames: topic.sourceTopicNames,
                 },
                 urlInfo.url,
                 urlInfo.domain,
@@ -3061,6 +3094,7 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
             parentTopicId?: string;
             confidence: number;
             keywords: string[];
+            sourceTopicNames?: string[];
         },
         websiteUrl: string,
         websiteDomain: string,
@@ -3083,6 +3117,9 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                 parentTopicId: topic.parentTopicId,
                 confidence: topic.confidence,
                 keywords: JSON.stringify(topic.keywords),
+                sourceTopicNames: topic.sourceTopicNames
+                    ? JSON.stringify(topic.sourceTopicNames)
+                    : undefined,
                 extractionDate: new Date().toISOString(),
             },
         };
@@ -3443,6 +3480,31 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
             entityRelationsByTopic.get(rel.topicId)!.push(rel);
         }
 
+        // Calculate co-occurrence relationships
+        debug(`[Knowledge Graph] Calculating co-occurrence relationships`);
+        const cooccurrenceRels = this.calculateCooccurrenceRelationships(
+            topicIds,
+            cacheManager,
+        );
+        debug(
+            `[Knowledge Graph] Found ${cooccurrenceRels.length} co-occurrence relationships`,
+        );
+
+        // Calculate entity-mediated relationships
+        debug(`[Knowledge Graph] Calculating entity-mediated relationships`);
+        const entityRels = await this.calculateEntityMediatedRelationships(
+            topicIds,
+            entityRelationsByTopic,
+        );
+        debug(
+            `[Knowledge Graph] Found ${entityRels.length} entity-mediated relationships`,
+        );
+
+        // Store all relationships
+        for (const rel of [...cooccurrenceRels, ...entityRels]) {
+            this.topicRelationships?.upsertRelationship(rel);
+        }
+
         // Calculate metrics for each topic using pre-fetched data
         for (const topicId of uniqueTopics) {
             const topic = this.hierarchicalTopics?.getTopicById(topicId);
@@ -3507,5 +3569,322 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         const allTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
         const topic = allTopics.find((t) => t.topicName === topicName);
         return topic?.topicId || null;
+    }
+
+    /**
+     * Calculate co-occurrence relationships using bottom-up hierarchical aggregation
+     *
+     * Algorithm:
+     * 1. Leaf topics: Get co-occurrences from GraphBuildingCache using sourceTopicNames
+     * 2. Parent topics: Aggregate from direct children (not from leaves)
+     * 3. Use intermediate cache to avoid re-computation
+     */
+    private calculateCooccurrenceRelationships(
+        topicIds: string[],
+        cacheManager: any,
+    ): any[] {
+        const relationships: any[] = [];
+
+        // Working cache: hierarchicalTopicId → (otherTopicId → {count, strength, sources})
+        const hierarchicalCooccurrenceCache = new Map<string, Map<string, any>>();
+
+        // Group topics by level for bottom-up processing
+        const topicsByLevel = new Map<number, any[]>();
+        for (const topicId of topicIds) {
+            const topic = this.hierarchicalTopics?.getTopicById(topicId);
+            if (!topic) continue;
+
+            if (!topicsByLevel.has(topic.level)) {
+                topicsByLevel.set(topic.level, []);
+            }
+            topicsByLevel.get(topic.level)!.push(topic);
+        }
+
+        // Process level by level, starting from leaves (highest level number)
+        const levels = Array.from(topicsByLevel.keys()).sort((a, b) => b - a);
+
+        for (const level of levels) {
+            const topicsAtLevel = topicsByLevel.get(level)!;
+
+            for (const topic of topicsAtLevel) {
+                const topicCooccurrences = new Map<string, any>();
+
+                if (topic.childIds && topic.childIds.length > 0) {
+                    // Parent topic: aggregate from direct children
+                    for (const childId of topic.childIds) {
+                        const childCooccurrences = hierarchicalCooccurrenceCache.get(childId);
+                        if (!childCooccurrences) continue;
+
+                        for (const [otherTopicId, cooccurData] of childCooccurrences) {
+                            if (!topicCooccurrences.has(otherTopicId)) {
+                                topicCooccurrences.set(otherTopicId, {
+                                    count: 0,
+                                    sources: new Set(),
+                                    combinations: 0,
+                                });
+                            }
+                            const existing = topicCooccurrences.get(otherTopicId)!;
+                            existing.count += cooccurData.count;
+                            cooccurData.sources?.forEach((src: string) => existing.sources.add(src));
+                            existing.combinations += 1;
+                        }
+                    }
+                } else {
+                    // Leaf topic: get from GraphBuildingCache using sourceTopicNames
+                    const sourceNames = topic.sourceTopicNames || [topic.topicName];
+
+                    for (const sourceName of sourceNames) {
+                        // Get all co-occurrences for this source topic name
+                        const allCooccurrences = cacheManager.getAllTopicRelationships();
+
+                        for (const cooccur of allCooccurrences) {
+                            if (cooccur.fromTopic !== sourceName && cooccur.toTopic !== sourceName) {
+                                continue;
+                            }
+
+                            // Find the other topic in the co-occurrence
+                            const otherTopicName = cooccur.fromTopic === sourceName
+                                ? cooccur.toTopic
+                                : cooccur.fromTopic;
+
+                            // Map knowledge topic name to hierarchical topic ID
+                            const otherHierarchicalTopic = this.findHierarchicalTopicBySourceName(
+                                otherTopicName,
+                                topicIds,
+                            );
+
+                            if (!otherHierarchicalTopic) continue;
+
+                            if (!topicCooccurrences.has(otherHierarchicalTopic.topicId)) {
+                                topicCooccurrences.set(otherHierarchicalTopic.topicId, {
+                                    count: 0,
+                                    sources: new Set(),
+                                    combinations: 0,
+                                });
+                            }
+                            const existing = topicCooccurrences.get(otherHierarchicalTopic.topicId)!;
+                            existing.count += cooccur.count;
+                            cooccur.sources?.forEach((src: string) => existing.sources.add(src));
+                            existing.combinations += 1;
+                        }
+                    }
+                }
+
+                // Store in cache for parent nodes to use
+                hierarchicalCooccurrenceCache.set(topic.topicId, topicCooccurrences);
+            }
+        }
+
+        // Convert cache to relationships
+        for (const [fromTopicId, cooccurrences] of hierarchicalCooccurrenceCache) {
+            const fromTopic = this.hierarchicalTopics?.getTopicById(fromTopicId);
+            if (!fromTopic) continue;
+
+            for (const [toTopicId, cooccurData] of cooccurrences) {
+                if (fromTopicId >= toTopicId) continue; // Avoid duplicates
+
+                const toTopic = this.hierarchicalTopics?.getTopicById(toTopicId);
+                if (!toTopic) continue;
+
+                // Calculate aggregate strength
+                const avgCount = cooccurData.count / (cooccurData.combinations || 1);
+                const sourceArray = Array.from(cooccurData.sources);
+
+                // Normalize by document coverage
+                const strength = Math.min(
+                    avgCount / Math.min(
+                        sourceArray.length || 1,
+                        10, // cap for reasonable normalization
+                    ),
+                    1.0
+                );
+
+                if (strength < 0.1) continue; // Filter weak relationships
+
+                relationships.push({
+                    fromTopic: fromTopicId,
+                    toTopic: toTopicId,
+                    relationshipType: "CO_OCCURS",
+                    strength,
+                    metadata: JSON.stringify({
+                        cooccurrenceCount: cooccurData.count,
+                        commonDocuments: sourceArray.length,
+                        aggregatedFrom: cooccurData.combinations,
+                    }),
+                    sourceUrls: JSON.stringify(sourceArray.slice(0, 10)),
+                    cooccurrenceCount: cooccurData.count,
+                    firstSeen: fromTopic.extractionDate || new Date().toISOString(),
+                    lastSeen: toTopic.extractionDate || new Date().toISOString(),
+                    updated: new Date().toISOString(),
+                });
+            }
+        }
+
+        return relationships;
+    }
+
+    /**
+     * Find hierarchical topic that has the given source topic name
+     */
+    private findHierarchicalTopicBySourceName(
+        sourceName: string,
+        topicIds: string[],
+    ): any | null {
+        for (const topicId of topicIds) {
+            const topic = this.hierarchicalTopics?.getTopicById(topicId);
+            if (!topic) continue;
+
+            const sourceNames = topic.sourceTopicNames || [topic.topicName];
+            if (sourceNames.includes(sourceName)) {
+                return topic;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Calculate entity-mediated relationships using bottom-up hierarchical aggregation
+     *
+     * Algorithm:
+     * 1. Leaf topics: Get entities from entityRelationsByTopic
+     * 2. Parent topics: Aggregate entities from direct children (union of entity sets)
+     * 3. Calculate pairwise entity overlap using aggregated entity sets
+     */
+    private async calculateEntityMediatedRelationships(
+        topicIds: string[],
+        entityRelationsByTopic: Map<string, any[]>,
+    ): Promise<any[]> {
+        const relationships: any[] = [];
+
+        // Working cache: hierarchicalTopicId → Set<entityName>
+        const hierarchicalEntityCache = new Map<string, Set<string>>();
+
+        // Group topics by level for bottom-up processing
+        const topicsByLevel = new Map<number, any[]>();
+        for (const topicId of topicIds) {
+            const topic = this.hierarchicalTopics?.getTopicById(topicId);
+            if (!topic) continue;
+
+            if (!topicsByLevel.has(topic.level)) {
+                topicsByLevel.set(topic.level, []);
+            }
+            topicsByLevel.get(topic.level)!.push(topic);
+        }
+
+        // Process level by level, starting from leaves (highest level number)
+        const levels = Array.from(topicsByLevel.keys()).sort((a, b) => b - a);
+
+        for (const level of levels) {
+            const topicsAtLevel = topicsByLevel.get(level)!;
+
+            for (const topic of topicsAtLevel) {
+                const topicEntities = new Set<string>();
+
+                if (topic.childIds && topic.childIds.length > 0) {
+                    // Parent topic: aggregate entities from direct children (union)
+                    for (const childId of topic.childIds) {
+                        const childEntities = hierarchicalEntityCache.get(childId);
+                        if (!childEntities) continue;
+
+                        for (const entity of childEntities) {
+                            topicEntities.add(entity);
+                        }
+                    }
+                } else {
+                    // Leaf topic: get entities from entityRelationsByTopic
+                    const entities = entityRelationsByTopic.get(topic.topicId) || [];
+                    for (const entity of entities) {
+                        topicEntities.add(entity.entityName);
+                    }
+                }
+
+                // Store in cache for parent nodes to use
+                hierarchicalEntityCache.set(topic.topicId, topicEntities);
+            }
+        }
+
+        // Calculate pairwise entity overlap using aggregated entity sets
+        for (let i = 0; i < topicIds.length; i++) {
+            for (let j = i + 1; j < topicIds.length; j++) {
+                const topicA = topicIds[i];
+                const topicB = topicIds[j];
+
+                const entitiesA = hierarchicalEntityCache.get(topicA) || new Set();
+                const entitiesB = hierarchicalEntityCache.get(topicB) || new Set();
+
+                if (entitiesA.size === 0 || entitiesB.size === 0) continue;
+
+                // Calculate shared entities
+                const shared = Array.from(entitiesA).filter((e) =>
+                    entitiesB.has(e),
+                );
+
+                if (shared.length === 0) continue;
+
+                // Calculate strength as Jaccard similarity (intersection / union)
+                const unionSize = new Set([...entitiesA, ...entitiesB]).size;
+                const strength = shared.length / unionSize;
+
+                // Only create relationship if strength is significant
+                if (strength < 0.1) continue;
+
+                relationships.push({
+                    fromTopic: topicA,
+                    toTopic: topicB,
+                    relationshipType: "RELATED_VIA_ENTITY",
+                    strength,
+                    metadata: JSON.stringify({
+                        sharedEntities: shared.slice(0, 10),
+                        sharedEntityCount: shared.length,
+                        entityOverlapRatio: strength,
+                        totalEntitiesA: entitiesA.size,
+                        totalEntitiesB: entitiesB.size,
+                    }),
+                    updated: new Date().toISOString(),
+                });
+            }
+        }
+
+        return relationships;
+    }
+
+    /**
+     * Calculate sibling relationships from hierarchical structure
+     */
+    private calculateSiblingRelationships(topicMap: Map<string, any>): any[] {
+        const relationships: any[] = [];
+        const parentToChildren = new Map<string, string[]>();
+
+        // Group children by parent
+        for (const [topicId, topic] of topicMap) {
+            if (topic.parentId) {
+                if (!parentToChildren.has(topic.parentId)) {
+                    parentToChildren.set(topic.parentId, []);
+                }
+                parentToChildren.get(topic.parentId)!.push(topicId);
+            }
+        }
+
+        // Create sibling relationships
+        for (const [parentId, children] of parentToChildren) {
+            for (let i = 0; i < children.length; i++) {
+                for (let j = i + 1; j < children.length; j++) {
+                    const parent = topicMap.get(parentId);
+                    relationships.push({
+                        fromTopic: children[i],
+                        toTopic: children[j],
+                        relationshipType: "SIBLING",
+                        strength: 0.8,
+                        metadata: JSON.stringify({
+                            parentTopic: parent?.name,
+                            sharedParentId: parentId,
+                        }),
+                        updated: new Date().toISOString(),
+                    });
+                }
+            }
+        }
+
+        return relationships;
     }
 }
