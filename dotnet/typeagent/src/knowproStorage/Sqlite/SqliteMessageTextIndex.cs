@@ -33,7 +33,6 @@ public class SqliteMessageTextIndex : IMessageTextIndex
             return;
         }
 
-        int messageOrdinal = GetNextMessageOrdinal();
         var embeddings = await Settings.EmbeddingModel.GenerateNormalizedInBatchesAsync(
             message.TextChunks,
             Settings.BatchSize,
@@ -43,6 +42,7 @@ public class SqliteMessageTextIndex : IMessageTextIndex
             cancellationToken
         ).ConfigureAwait(false);
 
+        int messageOrdinal = GetNextMessageOrdinal();
         using var cmd = CreateInsertCommand();
         Insert(cmd, messageOrdinal, embeddings);
     }
@@ -50,12 +50,30 @@ public class SqliteMessageTextIndex : IMessageTextIndex
     public async ValueTask AddMessagesAsync(IList<IMessage> messages, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messages, nameof(messages));
+        //
+        // Parallelize across all chunks
+        //
+        var (ordinals, chunks) = messages.FlattenChunks();
+        var embeddings = await Settings.EmbeddingModel.GenerateNormalizedInBatchesAsync(
+            chunks,
+            Settings.BatchSize,
+            Settings.MaxCharsPerBatch,
+            Settings.Concurrency,
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
 
-        // TODO: Bulk
-        foreach (var message in messages)
+        int baseOrdinal = GetNextMessageOrdinal();
+        using var cmd = CreateInsertCommand();
+        int count = embeddings.Count;
+        for (int i = 0; i < count; ++i)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await AddMessageAsync(message, cancellationToken).ConfigureAwait(false);
+            Insert(
+                cmd,
+                baseOrdinal + ordinals[i].MessageOrdinal,
+                ordinals[i].ChunkOrdinal,
+                embeddings[i]
+            );
         }
     }
 
@@ -94,16 +112,21 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         return matches.IsNullOrEmpty() ? [] : ToScoredOrdinals(matches);
     }
 
+    private void Insert(SqliteCommand cmd, int messageOrdinal, int chunkOrdinal, NormalizedEmbedding embedding)
+    {
+        cmd.Parameters.Clear();
+        cmd.AddParameter("@msg_id", messageOrdinal);
+        cmd.AddParameter("@chunk_ordinal", chunkOrdinal);
+        cmd.AddParameter("@embedding", embedding);
+        cmd.ExecuteNonQuery();
+    }
+
     private void Insert(SqliteCommand cmd, int messageOrdinal, List<NormalizedEmbedding> embeddings)
     {
         int count = embeddings.Count;
-        for (int i = 0; i < count; ++i)
+        for (int chunkOrdinal = 0; chunkOrdinal < count; ++chunkOrdinal)
         {
-            cmd.Parameters.Clear();
-            cmd.AddParameter("@msg_id", messageOrdinal);
-            cmd.AddParameter("@chunk_ordinal", i);
-            cmd.AddParameter("@embedding", embeddings[i]);
-            cmd.ExecuteNonQuery();
+            Insert(cmd, messageOrdinal, chunkOrdinal, embeddings[chunkOrdinal]);
         }
     }
 

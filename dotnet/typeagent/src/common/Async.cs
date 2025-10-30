@@ -45,6 +45,7 @@ public static class Async
         for (int i = 0; i < list.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
             var result = await processor(list[i]);
             results.Add(result);
             if (progress is not null)
