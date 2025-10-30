@@ -620,6 +620,13 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async invalidateTopicCache(): Promise<any> {
+        return this.sendMessage({
+            type: "invalidateTopicCacheAction",
+            parameters: {},
+        });
+    }
+
     async getTopicTimelines(parameters: {
         topicNames: string[];
         maxTimelineEntries?: number;

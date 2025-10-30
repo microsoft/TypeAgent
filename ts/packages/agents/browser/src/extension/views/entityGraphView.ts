@@ -1406,9 +1406,9 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Get importance layer data (top 500 most important nodes - TESTING)
+            // Get importance layer data (top 1000 most important nodes)
             const importanceData =
-                await this.graphDataProvider.getGlobalImportanceLayer(500);
+                await this.graphDataProvider.getGlobalImportanceLayer(1000);
 
             if (importanceData.entities.length === 0) {
                 this.hideGraphLoading();
@@ -1416,9 +1416,16 @@ class EntityGraphView {
                 return;
             }
 
-            // Transform data to expected format for visualizer with proper LoD properties
-            const transformedData = {
-                entities: this.enhanceEntitiesForLoD(importanceData.entities),
+            // Check if graphology layout is available
+            const hasGraphologyLayout = importanceData.metadata?.graphologyLayout;
+
+            // Transform data to expected format for visualizer
+            const transformedData: any = {
+                // Only enhance for LoD if graphology layout is NOT available
+                // This preserves community colors and sizes from graphology
+                entities: hasGraphologyLayout
+                    ? importanceData.entities // Use entities as-is (preserves graphology data)
+                    : this.enhanceEntitiesForLoD(importanceData.entities), // Fallback to blue gradient
                 relationships: importanceData.relationships,
                 communities: [],
                 topics: [],
@@ -1427,7 +1434,24 @@ class EntityGraphView {
                     totalRelationships: importanceData.relationships.length,
                     totalCommunities: 0,
                 },
+                metadata: importanceData.metadata,
             };
+
+            if (hasGraphologyLayout) {
+                console.log(
+                    `[EntityGraphView] Using graphology preset layout with community colors (${importanceData.metadata.graphologyLayout.elements?.length || 0} elements)`,
+                );
+                transformedData.presetLayout = {
+                    elements: importanceData.metadata.graphologyLayout.elements,
+                    layoutDuration:
+                        importanceData.metadata.graphologyLayout.layoutDuration,
+                    avgSpacing:
+                        importanceData.metadata.graphologyLayout.avgSpacing,
+                    communityCount:
+                        importanceData.metadata.graphologyLayout.communityCount,
+                };
+            }
+
             await this.visualizer.loadGlobalGraph(transformedData);
             this.hideGraphLoading();
         } catch (error) {

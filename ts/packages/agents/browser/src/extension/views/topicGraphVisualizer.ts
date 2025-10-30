@@ -53,6 +53,7 @@ export class TopicGraphVisualizer {
     private lastLodUpdate: number = 0;
     private lodUpdateInterval: number = 33; // ~30fps (reduced from 16ms for better performance)
     private zoomHandlerSetup: boolean = false;
+    private prototypeModeEnabled: boolean = false;
 
     // Dual-instance approach: separate instances for global and neighborhood views
     private globalInstance: any = null;
@@ -708,6 +709,11 @@ export class TopicGraphVisualizer {
     private async applyLevelOfDetail(zoom: number): Promise<void> {
         if (!this.cy) return;
 
+        // Skip LoD updates when in prototype mode
+        if (this.prototypeModeEnabled) {
+            return;
+        }
+
         // Check for view transitions based on zoom
         await this.checkViewTransitions(zoom);
 
@@ -1043,7 +1049,25 @@ export class TopicGraphVisualizer {
         instance: any,
         data: any,
     ): Promise<void> {
-        const elements = this.convertToTopicElements(data);
+        let elements: any[];
+        let usePresetLayout = false;
+
+        if (data.presetLayout?.elements) {
+            console.log(
+                `[TopicGraphVisualizer] Using graphology preset layout with ${data.presetLayout.elements.length} elements`,
+            );
+            console.log(
+                `[TopicGraphVisualizer] Layout computed in ${data.presetLayout.layoutDuration?.toFixed(0)}ms, ` +
+                    `${data.presetLayout.communityCount} communities detected`,
+            );
+            elements = data.presetLayout.elements;
+            usePresetLayout = true;
+        } else {
+            console.log(
+                "[TopicGraphVisualizer] No preset layout, will compute CoSE layout",
+            );
+            elements = this.convertToTopicElements(data);
+        }
 
         // Use batch operations for better performance
         instance.batch(() => {
@@ -1052,7 +1076,7 @@ export class TopicGraphVisualizer {
         });
 
         // Apply layout on this specific instance
-        await this.applyLayoutToInstance(instance);
+        await this.applyLayoutToInstance(instance, usePresetLayout);
 
         // Focus on center topic if specified
         if (data.centerTopic) {
@@ -1262,7 +1286,9 @@ export class TopicGraphVisualizer {
             {
                 selector: 'node[nodeType="topic"]',
                 style: {
-                    "background-color": "#FF6B9D",
+                    "background-color": "data(color)",
+                    width: "data(size)",
+                    height: "data(size)",
                     label: "data(label)",
                     "text-valign": "bottom",
                     "text-margin-y": 5,
@@ -1270,7 +1296,7 @@ export class TopicGraphVisualizer {
                     "font-weight": "bold",
                     color: "#333",
                     "border-width": 2,
-                    "border-color": "#E5507A",
+                    "border-color": "#666",
                     "min-zoomed-font-size": 8,
                     "transition-property": "none",
                     "transition-duration": 0,
@@ -1278,42 +1304,30 @@ export class TopicGraphVisualizer {
                 },
             },
 
-            // Level-specific styling with fixed sizes for performance
+            // Level-specific styling - using graphology community colors instead
             {
                 selector: ".level-0",
                 style: {
-                    "background-color": "#4A90E2",
-                    "border-color": "#1565C0",
                     shape: "roundrectangle",
-                    width: 60,
-                    height: 60,
                     "font-size": "14px",
                     "font-weight": "bold",
-                    "text-opacity": 1, // Show labels for important level-0 nodes
+                    "text-opacity": 1,
                     "z-index": 1000,
                 },
             },
             {
                 selector: ".level-1",
                 style: {
-                    "background-color": "#7ED321",
-                    "border-color": "#388E3C",
                     shape: "ellipse",
-                    width: 50,
-                    height: 50,
                     "font-size": "12px",
-                    "text-opacity": 1, // Show labels for level-1 nodes
+                    "text-opacity": 1,
                     "z-index": 900,
                 },
             },
             {
                 selector: ".level-2",
                 style: {
-                    "background-color": "#F5A623",
-                    "border-color": "#F57C00",
                     shape: "diamond",
-                    width: 35,
-                    height: 35,
                     "font-size": "11px",
                     "z-index": 800,
                 },
@@ -1321,11 +1335,7 @@ export class TopicGraphVisualizer {
             {
                 selector: ".level-3",
                 style: {
-                    "background-color": "#BD10E0",
-                    "border-color": "#9013FE",
                     shape: "triangle",
-                    width: 30,
-                    height: 30,
                     "font-size": "10px",
                     "z-index": 700,
                 },
@@ -1333,11 +1343,7 @@ export class TopicGraphVisualizer {
             {
                 selector: ".level-4",
                 style: {
-                    "background-color": "#50E3C2",
-                    "border-color": "#4ECDC4",
                     shape: "pentagon",
-                    width: 25,
-                    height: 25,
                     "font-size": "9px",
                     "z-index": 600,
                 },
@@ -1537,10 +1543,38 @@ export class TopicGraphVisualizer {
     /**
      * Apply layout to a specific instance
      */
-    private async applyLayoutToInstance(instance: any): Promise<void> {
+    private async applyLayoutToInstance(
+        instance: any,
+        usePreset: boolean = false,
+    ): Promise<void> {
         return new Promise((resolve) => {
-            const layout = instance.layout(this.getLayoutOptions());
-            layout.on("layoutstop", () => resolve());
+            let layoutConfig;
+
+            if (usePreset) {
+                layoutConfig = {
+                    name: "preset",
+                    fit: false,
+                    animate: false,
+                };
+                console.log(
+                    "[TopicGraphVisualizer] Applying preset layout (using pre-computed positions)",
+                );
+            } else {
+                layoutConfig = this.getLayoutOptions();
+                console.log(
+                    `[TopicGraphVisualizer] Computing CoSE layout...`,
+                );
+            }
+
+            const layout = instance.layout(layoutConfig);
+            layout.on("layoutstop", () => {
+                if (!usePreset) {
+                    console.log(
+                        "[TopicGraphVisualizer] CoSE layout computation complete",
+                    );
+                }
+                resolve();
+            });
             layout.run();
         });
     }
@@ -1801,6 +1835,49 @@ export class TopicGraphVisualizer {
             full: true,
             scale: 2,
         });
+    }
+
+    /**
+     * Enable or disable prototype rendering mode
+     * When enabled, disables LoD and shows all elements with simple styling
+     */
+    public setPrototypeMode(enabled: boolean): void {
+        if (!this.cy) {
+            console.warn("[TopicGraphVisualizer] No Cytoscape instance available");
+            return;
+        }
+
+        this.prototypeModeEnabled = enabled;
+
+        if (enabled) {
+            console.log("[TopicGraphVisualizer] Enabling prototype mode - disabling LoD, showing all elements");
+
+            this.cy.batch(() => {
+                this.cy.nodes().forEach((node: any) => {
+                    node.removeClass("hidden-at-zoom");
+                    node.addClass("visible-at-zoom");
+                    node.style("display", "element");
+                    node.style("events", "yes");
+                    node.style("text-opacity", 0);
+                });
+
+                this.cy.edges().forEach((edge: any) => {
+                    edge.removeClass("hidden-at-zoom");
+                    edge.addClass("visible-at-zoom");
+                    edge.style("display", "element");
+                    edge.style("events", "yes");
+                });
+            });
+
+            console.log(`[TopicGraphVisualizer] Prototype mode enabled - ${this.cy.nodes().length} nodes, ${this.cy.edges().length} edges visible`);
+        } else {
+            console.log("[TopicGraphVisualizer] Disabling prototype mode - re-enabling LoD");
+
+            const currentZoom = this.cy.zoom();
+            this.applyLevelOfDetail(currentZoom);
+
+            console.log(`[TopicGraphVisualizer] Prototype mode disabled - LoD re-applied at zoom ${currentZoom.toFixed(2)}x`);
+        }
     }
 
     /**

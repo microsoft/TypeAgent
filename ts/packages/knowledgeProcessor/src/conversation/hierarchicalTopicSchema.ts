@@ -7,7 +7,7 @@ export interface HierarchicalTopic {
     level: number; // Hierarchy level (0 = root, 1 = sub-topic, etc.)
     parentId?: string; // Reference to parent topic
     childIds: string[]; // References to child topics
-    sourceFragments: string[]; // Which HTML fragments contributed
+    sourceRefOrdinals: number[]; // SemanticRef ordinals linking to knowledge topics
     confidence: number; // Extraction confidence (0-1)
     keywords: string[]; // Associated keywords
     entityReferences: string[]; // Related entities

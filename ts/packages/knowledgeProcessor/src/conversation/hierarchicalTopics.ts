@@ -312,7 +312,7 @@ JSON OUTPUT:`;
                     name: rootData.rootTopic,
                     level: 0,
                     childIds: [],
-                    sourceFragments: [],
+                    sourceRefOrdinals: [],
                     confidence: 0.8,
                     keywords: [rootData.rootTopic],
                     entityReferences: [],
@@ -331,7 +331,7 @@ JSON OUTPUT:`;
                         level: 1,
                         parentId: rootTopic.id,
                         childIds: [],
-                        sourceFragments: [],
+                        sourceRefOrdinals: [],
                         confidence: 0.7,
                         keywords: [childName],
                         entityReferences: [],
@@ -353,7 +353,7 @@ JSON OUTPUT:`;
                             level: 2,
                             parentId: childTopic.id,
                             childIds: [],
-                            sourceFragments: [],
+                            sourceRefOrdinals: [],
                             confidence: 0.6,
                             keywords: [grandchildName],
                             entityReferences: [],
@@ -386,7 +386,7 @@ JSON OUTPUT:`;
                     name: rootData.rootTopic,
                     level: 0,
                     childIds: [],
-                    sourceFragments: [],
+                    sourceRefOrdinals: [],
                     confidence: 0.6, // Lower confidence for fallback
                     keywords: [rootData.rootTopic],
                     entityReferences: [],
@@ -405,7 +405,7 @@ JSON OUTPUT:`;
                         level: 1,
                         parentId: rootTopic.id,
                         childIds: [],
-                        sourceFragments: [],
+                        sourceRefOrdinals: [],
                         confidence: 0.5, // Lower confidence for fallback
                         keywords: [childName],
                         entityReferences: [],
@@ -430,7 +430,7 @@ JSON OUTPUT:`;
             name: aggregatedTopics[0],
             level: 0,
             childIds: [],
-            sourceFragments: [],
+            sourceRefOrdinals: [],
             confidence: 0.8,
             keywords: [aggregatedTopics[0]],
             entityReferences: [],
@@ -448,7 +448,7 @@ JSON OUTPUT:`;
                 level: 1,
                 parentId: rootTopic.id,
                 childIds: [],
-                sourceFragments: [],
+                sourceRefOrdinals: [],
                 confidence: 0.6,
                 keywords: [topics[i]],
                 entityReferences: [],
@@ -475,11 +475,16 @@ function enrichHierarchy(
     fragmentExtractions: FragmentTopicExtraction[],
     context: TopicExtractionContext,
 ): TopicHierarchy {
-    // Add fragment source information
+    // Add semanticRef ordinal information
     for (const extraction of fragmentExtractions) {
         for (const [, topic] of hierarchy.topicMap) {
             if (extraction.topics.includes(topic.name)) {
-                topic.sourceFragments.push(extraction.fragmentId);
+                const ordinal = typeof extraction.fragmentId === 'number'
+                    ? extraction.fragmentId
+                    : parseInt(extraction.fragmentId, 10);
+                if (!isNaN(ordinal)) {
+                    topic.sourceRefOrdinals.push(ordinal);
+                }
             }
         }
     }
@@ -505,12 +510,12 @@ function mergeHierarchies(
                 mergedRootTopics.push(topic);
             }
         } else {
-            // Merge source fragments for existing topics
+            // Merge sourceRefOrdinals for existing topics
             const existingTopic = mergedTopicMap.get(topicId)!;
-            existingTopic.sourceFragments = [
+            existingTopic.sourceRefOrdinals = [
                 ...new Set([
-                    ...existingTopic.sourceFragments,
-                    ...topic.sourceFragments,
+                    ...existingTopic.sourceRefOrdinals,
+                    ...topic.sourceRefOrdinals,
                 ]),
             ];
         }

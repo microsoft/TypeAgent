@@ -9,16 +9,19 @@ interface TopicGraphViewState {
     searchQuery: string;
     visibleLevels: number[];
     sidebarOpen: boolean;
+    prototypeMode: boolean;
 }
 
 class TopicGraphView {
     private visualizer: TopicGraphVisualizer | null = null;
     private extensionService: any;
+    private lastLoadedData: any = null;
     private state: TopicGraphViewState = {
         currentTopic: null,
         searchQuery: "",
         visibleLevels: [0, 1, 2, 3],
         sidebarOpen: false,
+        prototypeMode: false,
     };
 
     private loadingOverlay: HTMLElement;
@@ -84,6 +87,25 @@ class TopicGraphView {
             .getElementById("exportButton")
             ?.addEventListener("click", () => {
                 this.exportGraph();
+            });
+
+        document
+            .getElementById("exportJsonButton")
+            ?.addEventListener("click", () => {
+                this.exportGraphologyJson();
+            });
+
+        document
+            .getElementById("invalidateCacheButton")
+            ?.addEventListener("click", () => {
+                this.invalidateCache();
+            });
+
+        document
+            .getElementById("prototypeMode")
+            ?.addEventListener("change", (e) => {
+                const checkbox = e.target as HTMLInputElement;
+                this.togglePrototypeMode(checkbox.checked);
             });
 
         // Settings modal removed - using optimized defaults
@@ -173,6 +195,8 @@ class TopicGraphView {
                 return;
             }
 
+            this.lastLoadedData = topicData;
+
             await this.visualizer?.init(topicData);
 
             this.updateGraphStats();
@@ -242,13 +266,27 @@ class TopicGraphView {
 
         const relationships = data.relationships || [];
 
-        return {
+        const result: any = {
             centerTopic: null,
             topics,
             relationships,
             maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
             metadata: data.metadata,
         };
+
+        if (data.metadata?.graphologyLayout) {
+            console.log(
+                `[TopicGraphView] Using graphology preset layout (${data.metadata.graphologyLayout.elements?.length || 0} elements)`,
+            );
+            result.presetLayout = {
+                elements: data.metadata.graphologyLayout.elements,
+                layoutDuration: data.metadata.graphologyLayout.layoutDuration,
+                avgSpacing: data.metadata.graphologyLayout.avgSpacing,
+                communityCount: data.metadata.graphologyLayout.communityCount,
+            };
+        }
+
+        return result;
     }
 
     /**
@@ -997,6 +1035,52 @@ class TopicGraphView {
         link.click();
 
         this.showNotification("Graph exported as image");
+    }
+
+    private exportGraphologyJson(): void {
+        if (!this.lastLoadedData || !this.lastLoadedData.presetLayout) {
+            this.showNotification("No graphology layout data available to export");
+            return;
+        }
+
+        const jsonData = JSON.stringify(this.lastLoadedData.presetLayout.elements, null, 2);
+        const blob = new Blob([jsonData], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.download = `graphology-topic-graph-${new Date().toISOString().slice(0, 10)}.json`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        this.showNotification("Cytoscape JSON exported successfully");
+    }
+
+    private async invalidateCache(): Promise<void> {
+        try {
+            const result = await this.extensionService.invalidateTopicCache();
+
+            if (result && result.success) {
+                this.showNotification(result.message);
+            } else {
+                this.showNotification(result?.message || "Failed to invalidate cache");
+            }
+        } catch (error) {
+            console.error("Error invalidating cache:", error);
+            this.showNotification("Error invalidating cache");
+        }
+    }
+
+    private togglePrototypeMode(enabled: boolean): void {
+        this.state.prototypeMode = enabled;
+        console.log(`[TopicGraphView] Prototype mode: ${enabled ? "ENABLED" : "DISABLED"}`);
+
+        if (!this.lastLoadedData) {
+            this.showNotification("No data available. Load a graph first.");
+            return;
+        }
+
+        this.visualizer?.setPrototypeMode(enabled);
+        this.showNotification(enabled ? "Prototype mode enabled" : "Prototype mode disabled");
     }
 
     private toggleSidebar(): void {
