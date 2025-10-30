@@ -9,7 +9,9 @@ namespace TypeAgent.KnowPro.Storage;
 /// </summary>
 public sealed class NullTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
 {
+#pragma warning disable CS0067
     public event Action<BatchProgress> OnIndexed;
+#pragma warning restore CS0067
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
         => ValueTask.FromResult(0);
@@ -34,3 +36,4 @@ public sealed class NullTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
     public ValueTask ClearAsync(CancellationToken cancellation = default)
         => ValueTask.CompletedTask;
 }
+

@@ -15,5 +15,10 @@ public class MessageTextIndexSettings
     /// </summary>
     public TextEmbeddingIndexSettings? EmbeddingIndexSettings { get; set; }
 
-    public int? BatchSize { get; set; }
+    public int BatchSize { get; set; } = 8;
+
+    public void ThrowIfInvalid()
+    {
+        ArgumentVerify.ThrowIfLessThan(BatchSize, 1, nameof(BatchSize));
+    }
 }

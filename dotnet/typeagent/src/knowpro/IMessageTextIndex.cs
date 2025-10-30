@@ -7,9 +7,13 @@ public interface IMessageTextIndex
 {
     ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
-    ValueTask AddMessageAsync(IMessage message, CancellationToken cancellation = default);
+    ValueTask AddMessageAsync(IMessage message, int messageOrdinal, CancellationToken cancellation = default);
 
-    ValueTask AddMessagesAsync(IList<IMessage> messages, CancellationToken cancellationToken = default);
+    ValueTask AddMessagesAsync(
+        IList<IMessage> messages,
+        int baseMessageOrdinal,
+        CancellationToken cancellationToken = default
+    );
 
     ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(
         string messageText,
@@ -23,4 +27,8 @@ public interface IMessageTextIndex
         int? maxMatches = null,
         double? minScore = null,
         CancellationToken cancellationToken = default);
+
+    ValueTask ClearAsync(CancellationToken cancellationToken = default);
+
+    public event Action<BatchProgress> OnIndexed;
 }

@@ -9,15 +9,24 @@ namespace TypeAgent.KnowPro.Storage;
 /// </summary>
 public sealed class NullMessageTextIndex : IMessageTextIndex
 {
+#pragma warning disable CS0067
+    public event Action<BatchProgress> OnIndexed;
+#pragma warning restore CS0067
+
     public ValueTask AddMessageAsync(
         IMessage message,
+        int messageOrdinal,
         CancellationToken cancellation = default
     ) => ValueTask.CompletedTask;
 
     public ValueTask AddMessagesAsync(
         IList<IMessage> messages,
+        int messageOrdinal,
         CancellationToken cancellationToken = default
     ) => ValueTask.CompletedTask;
+
+    public ValueTask ClearAsync(CancellationToken cancellationToken = default)
+        => ValueTask.CompletedTask;
 
     public ValueTask<int> GetCountAsync(
         CancellationToken cancellationToken = default

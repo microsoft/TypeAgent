@@ -18,6 +18,8 @@ public class SqliteMessageTextIndex : IMessageTextIndex
 
     public TextEmbeddingIndexSettings Settings { get; }
 
+    public event Action<BatchProgress> OnIndexed;
+
     public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.MessageTextIndexTableName);
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
@@ -25,7 +27,11 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         return ValueTask.FromResult(GetCount());
     }
 
-    public async ValueTask AddMessageAsync(IMessage message, CancellationToken cancellationToken = default)
+    public async ValueTask AddMessageAsync(
+        IMessage message,
+        int messageOrdinal,
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentVerify.ThrowIfNull(message, nameof(message));
         if (message.TextChunks.IsNullOrEmpty())
@@ -38,16 +44,18 @@ public class SqliteMessageTextIndex : IMessageTextIndex
             Settings.BatchSize,
             Settings.MaxCharsPerBatch,
             Settings.Concurrency,
-            null,
+            OnIndexed is not null ? NotifyIndexed : null,
             cancellationToken
         ).ConfigureAwait(false);
 
-        int messageOrdinal = GetNextMessageOrdinal();
         using var cmd = CreateInsertCommand();
         Insert(cmd, messageOrdinal, embeddings);
     }
 
-    public async ValueTask AddMessagesAsync(IList<IMessage> messages, CancellationToken cancellationToken = default)
+    public async ValueTask AddMessagesAsync(
+        IList<IMessage> messages,
+        int baseMessageOrdinal,
+        CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messages, nameof(messages));
         //
@@ -59,18 +67,17 @@ public class SqliteMessageTextIndex : IMessageTextIndex
             Settings.BatchSize,
             Settings.MaxCharsPerBatch,
             Settings.Concurrency,
-            null,
+            OnIndexed is not null ? NotifyIndexed : null,
             cancellationToken
         ).ConfigureAwait(false);
 
-        int baseOrdinal = GetNextMessageOrdinal();
         using var cmd = CreateInsertCommand();
         int count = embeddings.Count;
         for (int i = 0; i < count; ++i)
         {
             Insert(
                 cmd,
-                baseOrdinal + ordinals[i].MessageOrdinal,
+                baseMessageOrdinal + ordinals[i].MessageOrdinal,
                 ordinals[i].ChunkOrdinal,
                 embeddings[i]
             );
@@ -86,7 +93,11 @@ public class SqliteMessageTextIndex : IMessageTextIndex
     {
         ArgumentVerify.ThrowIfNullOrEmpty(messageText, nameof(messageText));
 
-        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(messageText, cancellationToken);
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            messageText,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         var matches = GetAll().KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
@@ -103,7 +114,11 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         CancellationToken cancellationToken = default
     )
     {
-        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(messageText, cancellationToken);
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            messageText,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         var matches = GetSubset(ordinalsToSearch).KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
@@ -159,6 +174,12 @@ ORDER BY msg_id",
         }
     }
 
+    public ValueTask ClearAsync(CancellationToken cancellationToken = default)
+    {
+        _db.ClearTable(SqliteStorageProviderSchema.MessageTextIndexTableName);
+        return ValueTask.CompletedTask;
+    }
+
     private SqliteCommand CreateInsertCommand()
     {
         return _db.CreateCommand(@"
@@ -166,20 +187,16 @@ INSERT INTO MessageTextIndex (msg_id, chunk_ordinal, embedding)
 VALUES (@msg_id, @chunk_ordinal, @embedding)");
     }
 
-    private int GetNextMessageOrdinal() => GetMaxMessageOrdinal() + 1;
-
-    private int GetMaxMessageOrdinal()
-    {
-        return _db.Get(
-            "SELECT MAX(msg_id) FROM MessageTextIndex",
-            null,
-            (reader) => reader.GetInt32(0)
-        );
-    }
-
     // TODO: get rid of this conversion
     private List<ScoredMessageOrdinal> ToScoredOrdinals(List<ScoredItem<int>> items)
     {
         return items.Map((s) => new ScoredMessageOrdinal { MessageOrdinal = s.Item, Score = s.Score });
     }
+
+    private void NotifyIndexed(BatchProgress item)
+    {
+        // SafeInvoke Checks null, handles exceptions etc
+        OnIndexed.SafeInvoke(item);
+    }
+
 }

@@ -82,7 +82,8 @@ VALUES(@term, @term_embedding)
             Settings.Concurrency,
             OnIndexed is not null ? NotifyIndexed : null,
             cancellationToken
-        );
+        ).ConfigureAwait(false);
+
         int count = terms.Count;
         for (int i = 0; i < count; ++i)
         {
@@ -99,7 +100,11 @@ VALUES(@term, @term_embedding)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
 
-        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(text, cancellationToken);
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            text,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         return GetNearestTerms(embedding, maxMatches, minScore);
     }
 
@@ -112,7 +117,11 @@ VALUES(@term, @term_embedding)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(texts, nameof(texts));
 
-        var embeddings = await Settings.EmbeddingModel.GenerateNormalizedAsync(texts, cancellationToken);
+        var embeddings = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            texts,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         // TODO: Bulk operation
         IList<IList<Term>> matches = [];
         foreach (var embedding in embeddings)
