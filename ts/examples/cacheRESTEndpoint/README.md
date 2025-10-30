@@ -4,7 +4,7 @@
 
 This example shows how to host the AgentCache and serve HTTP rest calls to return cach hits/misses. This is **sample code**.
 
-## Running
+## Running 
 
 The server can be started with `npm run start` in this package's directory or launch it from the debug menu in VS code. Once it is up and running you can `http://localhost:10482` using a web browser to issue API calls.
 
