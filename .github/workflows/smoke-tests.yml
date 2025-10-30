@@ -33,23 +33,7 @@ env:
   #  DEBUG: typeagent:*                       # TypeAgent debug messages
 
 jobs:
-  check-changes: 
-    runs-on: ubuntu-latest
-    steps:
-      - name: Determine if relevant files changed # don't run tests if we didn't modify an code under ts/
-        id: changes
-        run: |
-          git fetch origin ${{ github.base_ref }}
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }} | grep -E '^(ts/)') || true
-          if [ -z "$CHANGED" ]; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT    
-
-
   shell_and_cli:
-    needs: check-changes
-    if: needs.check-changes.outputs.changed == 'true'
     #environment: ${{ github.event_name == 'pull_request_target' && 'development-fork' || 'development' }}      # required for federated credentials
     environment: development-fork
     strategy:
