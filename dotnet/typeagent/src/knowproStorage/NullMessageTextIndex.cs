@@ -32,7 +32,7 @@ public sealed class NullMessageTextIndex : IMessageTextIndex
 
     public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
         string messageText,
-        IEnumerable<int> ordinalsToSearch,
+        IList<int> ordinalsToSearch,
         int? maxMatches = null,
         double? thresholdScore = null,
         CancellationToken cancellationToken = default

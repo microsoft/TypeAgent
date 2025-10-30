@@ -19,7 +19,7 @@ public interface IMessageTextIndex
 
     ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
         string messageText,
-        IEnumerable<int> ordinalsToSearch,
+        IList<int> ordinalsToSearch,
         int? maxMatches = null,
         double? minScore = null,
         CancellationToken cancellationToken = default);

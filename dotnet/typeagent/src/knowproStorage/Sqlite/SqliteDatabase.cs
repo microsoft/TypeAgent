@@ -80,14 +80,9 @@ public class SqliteDatabase : IDisposable
         return reader.GetListOrNull<T>(cb);
     }
 
-    public IEnumerable<T> Enumerate<T>(string sql, Func<SqliteDataReader, T> rowDeserializer)
-    {
-        return Enumerate<T>(sql, null, rowDeserializer);
-    }
-
     public IEnumerable<T> Enumerate<T>(
         string sql,
-        Action<SqliteCommand>? addParams,
+        Action<SqliteCommand> addParams,
         Func<SqliteDataReader, T> rowDeserializer
     )
     {
@@ -104,6 +99,11 @@ public class SqliteDatabase : IDisposable
         }
     }
 
+    public IEnumerable<T> Enumerate<T>(string sql, Func<SqliteDataReader, T> rowDeserializer)
+    {
+        return Enumerate<T>(sql, null, rowDeserializer);
+    }
+
     public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> EnumerateEmbeddings(string sql)
     {
         return Enumerate<KeyValuePair<int, NormalizedEmbeddingB>>(
@@ -111,7 +111,7 @@ public class SqliteDatabase : IDisposable
             reader => new(reader.GetInt32(0), reader.GetNormalizedEmbedding(1))
         );
     }
-
+    
     public IAsyncEnumerable<T> EnumerateAsync<T>(
         string sql,
         Func<SqliteDataReader, T> rowDeserializer,

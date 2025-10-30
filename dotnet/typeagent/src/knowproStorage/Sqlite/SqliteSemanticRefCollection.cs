@@ -113,7 +113,8 @@ ORDER BY semref_id";
             var rows = _db.Enumerate(
                 sql,
                 cmd => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                ReadSemanticRefRow);
+                ReadSemanticRefRow
+            );
             foreach (var row in rows)
             {
                 semanticRefs.Add(FromSemanticRefRow(row));

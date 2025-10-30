@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public class SqliteMessageTextIndex : IMessageTextIndex
@@ -70,27 +69,24 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         ArgumentVerify.ThrowIfNullOrEmpty(messageText, nameof(messageText));
 
         var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(messageText, cancellationToken);
-        return GetNearestOrdinals(embedding, maxMatches, minScore);
+        var matches = GetAll().IndexesOfNearest(
+            embedding,
+            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
+            minScore is not null ? minScore.Value : Settings.MinScore
+        );
+        return matches.IsNullOrEmpty() ? [] : ToScoredOrdinals(matches);
     }
 
-    public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
+    public async ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
         string messageText,
-        IEnumerable<int> ordinalsToSearch,
+        IList<int> ordinalsToSearch,
         int? maxMatches = null,
         double? minScore = null,
         CancellationToken cancellationToken = default
     )
     {
-        throw new NotImplementedException();
-    }
-
-    private List<ScoredMessageOrdinal> GetNearestOrdinals(
-        NormalizedEmbedding embedding,
-        int? maxMatches,
-        double? minScore
-    )
-    {
-        var matches = GetAll().IndexesOfNearest(
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(messageText, cancellationToken);
+        var matches = GetSubset(ordinalsToSearch).IndexesOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore
@@ -116,6 +112,28 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         return _db.EnumerateEmbeddings(
 "SELECT msg_id, embedding FROM MessageTextIndex"
         );
+    }
+
+    public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> GetSubset(IList<int> messageOrdinals)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(messageOrdinals, nameof(messageOrdinals));
+
+        foreach (IList<int> batch in messageOrdinals.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            string[] placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
+            var rows = _db.Enumerate(
+                $@"
+SELECT msg_id, embedding FROM MessageTextIndex
+FROM MessageTextIndex WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
+ORDER BY msg_id",
+                (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
+                reader => new KeyValuePair<int, NormalizedEmbeddingB>(reader.GetInt32(0), reader.GetNormalizedEmbedding(1))
+            );
+            foreach (var row in rows)
+            {
+                yield return row;
+            }
+        }
     }
 
     private SqliteCommand CreateInsertCommand()
