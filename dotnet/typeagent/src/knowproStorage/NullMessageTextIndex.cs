@@ -26,7 +26,7 @@ public sealed class NullMessageTextIndex : IMessageTextIndex
     public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(
         string messageText,
         int? maxMatches = null,
-        double? thresholdScore = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default
     ) => new ValueTask<IList<ScoredMessageOrdinal>>([]);
 
@@ -34,7 +34,7 @@ public sealed class NullMessageTextIndex : IMessageTextIndex
         string messageText,
         IList<int> ordinalsToSearch,
         int? maxMatches = null,
-        double? thresholdScore = null,
+        double? minScore = null,
         CancellationToken cancellationToken = default
     ) => new ValueTask<IList<ScoredMessageOrdinal>>([]);
 }

@@ -103,7 +103,7 @@ VALUES(@term, @term_embedding)
         return GetNearestTerms(embedding, maxMatches, minScore);
     }
 
-    public async ValueTask<IList<IList<Term>>> LookupTermAsync(
+    public async ValueTask<IList<IList<Term>>> LookupTermsAsync(
         IList<string> texts,
         int? maxMatches = null,
         double? minScore = null,
@@ -143,7 +143,7 @@ VALUES(@term, @term_embedding)
         double? minScore
     )
     {
-        return GetAll().IndexesOfNearest(
+        return GetAll().KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore
@@ -157,7 +157,7 @@ VALUES(@term, @term_embedding)
         double? minScore
         )
     {
-        var termIds = GetAll().IndexesOfNearest(
+        var termIds = GetAll().KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore

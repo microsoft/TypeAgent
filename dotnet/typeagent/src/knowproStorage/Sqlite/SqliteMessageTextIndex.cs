@@ -69,7 +69,7 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         ArgumentVerify.ThrowIfNullOrEmpty(messageText, nameof(messageText));
 
         var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(messageText, cancellationToken);
-        var matches = GetAll().IndexesOfNearest(
+        var matches = GetAll().KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore
@@ -86,7 +86,7 @@ public class SqliteMessageTextIndex : IMessageTextIndex
     )
     {
         var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(messageText, cancellationToken);
-        var matches = GetSubset(ordinalsToSearch).IndexesOfNearest(
+        var matches = GetSubset(ordinalsToSearch).KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore

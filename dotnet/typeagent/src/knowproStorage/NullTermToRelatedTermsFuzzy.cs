@@ -24,7 +24,7 @@ public sealed class NullTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
         CancellationToken cancellationToken = default)
         => ValueTask.FromResult<IList<Term>>([]);
 
-    public ValueTask<IList<IList<Term>>> LookupTermAsync(
+    public ValueTask<IList<IList<Term>>> LookupTermsAsync(
         IList<string> texts,
         int? maxMatches = null,
         double? minScore = null,

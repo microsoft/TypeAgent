@@ -18,7 +18,7 @@ public class SqliteRelatedTermsIndex : ITermToRelatedTermIndex
 
     public TermToRelatedTermIndexSettings Settings { get; }
 
-    public ITermsToRelatedTermsIndex Aliases { get; }
+    public ITermToRelatedTermsIndex Aliases { get; }
 
     public ITermToRelatedTermsFuzzy FuzzyIndex { get; }
 }

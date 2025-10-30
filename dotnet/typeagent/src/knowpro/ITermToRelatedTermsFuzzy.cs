@@ -1,15 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 namespace TypeAgent.KnowPro;
 
-public interface ITermToRelatedTermsFuzzy
+public interface ITermToRelatedTermsFuzzyLookup
+{
+    ValueTask<IList<Term>> LookupTermAsync(string text, int? maxMatches = null, double? minScore = null, CancellationToken cancellationToken = default);
+
+    ValueTask<IList<IList<Term>>> LookupTermsAsync(IList<string> texts, int? maxMatches = null, double? minScore = null, CancellationToken cancellationToken = default);
+}
+
+public interface ITermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzyLookup
 {
     ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default);
 
@@ -21,10 +22,6 @@ public interface ITermToRelatedTermsFuzzy
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     ValueTask AddTermsAsync(IList<string> texts, CancellationToken cancellationToken = default);
-
-    ValueTask<IList<Term>> LookupTermAsync(string text, int? maxMatches = null, double? minScore = null, CancellationToken cancellationToken = default);
-
-    ValueTask<IList<IList<Term>>> LookupTermAsync(IList<string> texts, int? maxMatches = null, double? minScore = null, CancellationToken cancellationToken = default);
 
     ValueTask ClearAsync(CancellationToken cancellation = default);
 

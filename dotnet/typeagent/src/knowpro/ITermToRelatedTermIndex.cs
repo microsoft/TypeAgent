@@ -5,7 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public interface ITermToRelatedTermIndex
 {
-    ITermsToRelatedTermsIndex Aliases { get; }
+    ITermToRelatedTermsIndex Aliases { get; }
 
     ITermToRelatedTermsFuzzy FuzzyIndex { get; }
 }

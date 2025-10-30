@@ -33,10 +33,9 @@ public class CachingCollectionReader<TValue> : IAsyncCollectionReader<TValue>
     IReadOnlyAsyncCollection<TValue> _collection;
     ICache<int, TValue> _cache;
 
-    public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection)
-        : this(collection, new KeyValueCache<int, TValue>())
+    public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection, int? maxCacheSize = null)
+        : this(collection, Cache.Create<int, TValue>(maxCacheSize))
     {
-
     }
 
     public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection, ICache<int, TValue> cache)

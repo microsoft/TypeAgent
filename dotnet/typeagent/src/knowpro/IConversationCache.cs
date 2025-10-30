@@ -9,5 +9,8 @@ namespace TypeAgent.KnowPro;
 public interface IConversationCache
 { 
     IAsyncCollectionReader<SemanticRef> SemanticRefs { get; }
+
     IAsyncCollectionReader<IMessage> Messages { get; }
+
+    ITermToRelatedTermsFuzzyLookup RelatedTermsFuzzy { get; }
 }

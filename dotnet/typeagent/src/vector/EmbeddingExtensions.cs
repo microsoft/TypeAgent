@@ -170,7 +170,7 @@ public static class EmbeddingExtensions
         return matches.ByRankAndClear();
     }
 
-    public static void IndexesOfNearest<T, TOther>(
+    public static void KeysOfNearest<T, TOther>(
         this IEnumerable<KeyValuePair<int, T>> list,
         TOther embedding,
         TopNCollection<int> matches,
@@ -190,7 +190,7 @@ public static class EmbeddingExtensions
         }
     }
 
-    public static List<ScoredItem<int>> IndexesOfNearest<T, TOther>(
+    public static List<ScoredItem<int>> KeysOfNearest<T, TOther>(
         this IEnumerable<KeyValuePair<int, T>> list,
         TOther embedding,
         int maxMatches,
@@ -199,7 +199,7 @@ public static class EmbeddingExtensions
         where TOther : ICosineSimilarity<T>
     {
         TopNCollection<int> matches = new TopNCollection<int>(maxMatches);
-        list.IndexesOfNearest(embedding, matches, minScore);
+        list.KeysOfNearest(embedding, matches, minScore);
         return matches.ByRankAndClear();
     }
 }
