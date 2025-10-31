@@ -212,6 +212,7 @@ public class TestCommands : ICommandModule
         {
             Options.Arg<bool>("related", "index related terms", false),
             Options.Arg<bool>("messages", "index messages", false),
+            Options.Arg<bool>("semanticRefs", "index semantic refs", false)
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.BuildIndexAsync);
@@ -243,9 +244,17 @@ public class TestCommands : ICommandModule
 
                 await conversation.UpdateMessageIndexAsync(false, cancellationToken);
             }
+            if (namedArgs.Get<bool>("semanticRefs"))
+            {
+                await conversation.SemanticRefIndex.ClearAsync(cancellationToken);
+                await conversation.SecondaryIndexes.PropertyToSemanticRefIndex.ClearAsync(cancellationToken);
+                await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(cancellationToken);
+
+                await conversation.UpdateSemanticRefIndexAsync(cancellationToken);
+            }
             KnowProWriter.WriteLine();
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
             KnowProWriter.WriteError(ex);
         }
