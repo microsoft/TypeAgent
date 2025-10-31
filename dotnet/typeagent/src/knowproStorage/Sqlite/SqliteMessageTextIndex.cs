@@ -180,6 +180,17 @@ ORDER BY msg_id",
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask<int> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
+    {
+        int maxId = _db.Get(
+            "SELECT MAX(msg_id) from MessageTextIndex",
+            null,
+            (reader) => reader.GetInt32(0)
+        );
+
+        return ValueTask.FromResult(maxId);
+    }
+
     private SqliteCommand CreateInsertCommand()
     {
         return _db.CreateCommand(@"
