@@ -9,7 +9,7 @@ public static class ImportExtensions
 {
     public static async ValueTask<int> ImportMessagesAsync<TMessage>(
         this IConversation<TMessage> conversation,
-        IEnumerable<TMessage> messages,
+        IList<TMessage> messages,
         CancellationToken cancellationToken = default
     )
         where TMessage : IMessage
@@ -24,7 +24,7 @@ public static class ImportExtensions
 
     public static async ValueTask<int> ImportSemanticRefsAsync<TMessage>(
         this IConversation<TMessage> conversation,
-        IEnumerable<SemanticRef> semanticRefs,
+        IList<SemanticRef> semanticRefs,
         CancellationToken cancellationToken = default
     )
         where TMessage : IMessage

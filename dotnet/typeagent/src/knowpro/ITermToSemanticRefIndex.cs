@@ -24,5 +24,5 @@ public interface ITermToSemanticRefIndex
 
     ValueTask ClearAsync(CancellationToken cancellationToken = default);
 
-    ValueTask<int> GetMaxOrdinalAsync(CancellationToken cancellationToken = default);
+    ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default);
 }

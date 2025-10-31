@@ -59,39 +59,39 @@ public class SemanticRef
         }
     }
 
-    public ConcreteEntity? AsEntity()
+    public ConcreteEntity AsEntity()
     {
         return KnowledgeType == KnowledgeType.Entity
             ? Knowledge as ConcreteEntity
-            : null;
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
     }
 
-    public Action? AsAction()
+    public Action AsAction()
     {
         return KnowledgeType == KnowledgeType.Action
             ? Knowledge as Action
-            : null;
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
     }
 
-    public Topic? AsTopic()
+    public Topic AsTopic()
     {
         return KnowledgeType == KnowledgeType.Topic
             ? Knowledge as Topic
-            : null;
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
     }
 
-    public Tag? AsTag()
+    public Tag AsTag()
     {
         return KnowledgeType == KnowledgeType.Tag
             ? Knowledge as Tag
-            : null;
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
     }
 
-    public StructuredTag? AsSTag()
+    public StructuredTag AsSTag()
     {
         return KnowledgeType == KnowledgeType.STag
             ? Knowledge as StructuredTag
-            : null;
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
     }
 
     public static JsonElement SerializeToElement(Knowledge knowledge, string type)

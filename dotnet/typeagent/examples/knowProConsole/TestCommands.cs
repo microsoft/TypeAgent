@@ -235,13 +235,13 @@ public class TestCommands : ICommandModule
             {
                 await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(cancellationToken);
 
-                await conversation.BuildRelatedTermsIndexAsync(cancellationToken);
+                await conversation.RebuildRelatedTermsIndexAsync(cancellationToken);
             }
             if (namedArgs.Get<bool>("messages"))
             {
                 await conversation.SecondaryIndexes.MessageIndex.ClearAsync(cancellationToken);
 
-                await conversation.BuildMessageIndexAsync(cancellationToken);
+                await conversation.UpdateMessageIndexAsync(false, cancellationToken);
             }
             KnowProWriter.WriteLine();
         }

@@ -47,7 +47,7 @@ public sealed class NullMessageTextIndex : IMessageTextIndex
         CancellationToken cancellationToken = default
     ) => new ValueTask<IList<ScoredMessageOrdinal>>([]);
 
-    public ValueTask<int> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(0);
+    public ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<int?>(null);
 
 }

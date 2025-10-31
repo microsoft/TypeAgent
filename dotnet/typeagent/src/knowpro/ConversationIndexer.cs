@@ -40,24 +40,77 @@ public class CollectionRangesToIndex
 
 public static class ConversationIndexer
 {
-    public static async ValueTask BuildIndexAsync(
+    /// <summary>
+    /// Incrementally update the index to include any new messages and semantic refs
+    /// that have not already been indexed
+    /// </summary>
+    /// <param name="conversation"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public static async ValueTask UpdateIndexAsync(
         this IConversation conversation,
         CancellationToken cancellationToken = default
     )
     {
-        // Todo:
-        // Add conversation knowledge
-        //
-        await conversation.BuildSemanticRefIndexAsync(
+        await conversation.UpdateMessageIndexAsync(
+            true,
             cancellationToken
         ).ConfigureAwait(false);
 
-        await conversation.BuildSecondaryIndexesAsync(
+        await conversation.UpdateSemanticRefIndexAsync(
             cancellationToken
         ).ConfigureAwait(false);
     }
 
-    public static async ValueTask BuildSemanticRefIndexAsync(
+    /// <summary>
+    /// Incrementally update the message index
+    /// </summary>
+    /// <returns></returns>
+    public static async ValueTask UpdateMessageIndexAsync(
+        this IConversation conversation,
+        bool addKnowledge,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var messageRangeToIndex = await conversation.GetMessageRangeToIndexAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (messageRangeToIndex.IsEmpty)
+        {
+            return;
+        }
+
+        var messagesToIndex = await conversation.Messages.GetSliceAsync(
+            messageRangeToIndex.OrdinalStartAt,
+            messageRangeToIndex.Count,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (addKnowledge)
+        {
+            await conversation.AddMessageKnowledgeAsync(
+                messageRangeToIndex,
+                messagesToIndex,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
+        await conversation.SecondaryIndexes.MessageIndex.AddMessagesAsync(
+            messagesToIndex,
+            messageRangeToIndex.OrdinalStartAt,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+    }
+
+    /// <summary>
+    /// Incrementally update SemanticRef and related indexes
+    /// </summary>
+    /// <param name="conversation"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public static async ValueTask UpdateSemanticRefIndexAsync(
         this IConversation conversation,
         CancellationToken cancellationToken = default
     )
@@ -65,7 +118,6 @@ public static class ConversationIndexer
         CollectionRangeToIndex indexRange = await conversation.GetSemanticRefRangeToIndexAsync(
             cancellationToken
         ).ConfigureAwait(false);
-
         if (indexRange.IsEmpty)
         {
             return;
@@ -77,116 +129,74 @@ public static class ConversationIndexer
             cancellationToken
         ).ConfigureAwait(false);
 
-        if (semanticRefs.IsNullOrEmpty())
-        {
-            return;
-        }
-
         HashSet<string> termsAdded = [];
         await conversation.SemanticRefIndex.AddSemanticRefsAsync(
             semanticRefs,
             termsAdded,
             cancellationToken
         ).ConfigureAwait(false);
-    }
 
-    public static async ValueTask BuildSecondaryIndexesAsync(
-        this IConversation conversation,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await conversation.BuildRelatedTermsIndexAsync(
+        await conversation.SecondaryIndexes.PropertyToSemanticRefIndex.AddSemanticRefsAsync(
+            semanticRefs,
             cancellationToken
         ).ConfigureAwait(false);
 
-        await conversation.BuildMessageIndexAsync(
+        await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.AddTermsAsync(
+            [.. termsAdded],
             cancellationToken
         ).ConfigureAwait(false);
     }
 
-    public static async ValueTask AddToSecondaryIndexesAsync(
-        this IConversation conversation,
-        CollectionRangeToIndex messageRange,
-        IList<string> relatedTerms,
-        CancellationToken cancellationToken = default
-    )
-    {
-        await conversation.AddToRelatedTermsIndexAsync(
-            relatedTerms,
-            cancellationToken
-        ).ConfigureAwait(false);
-
-        await conversation.AddToMessageIndexAsync(
-            messageRange.OrdinalStartAt,
-            cancellationToken
-        ).ConfigureAwait(false);
-    }
-
-    public static async ValueTask BuildRelatedTermsIndexAsync(
+    public static async ValueTask RebuildRelatedTermsIndexAsync(
         this IConversation conversation,
         CancellationToken cancellationToken = default
     )
     {
+        await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
         var allTerms = await conversation.SemanticRefIndex.GetTermsAsync(
             cancellationToken
         ).ConfigureAwait(false);
 
         if (allTerms.Count > 0)
         {
-            await conversation.AddToRelatedTermsIndexAsync(
+            await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.AddTermsAsync(
                 allTerms,
                 cancellationToken
             ).ConfigureAwait(false);
         }
     }
 
-    public static ValueTask AddToRelatedTermsIndexAsync(
+    internal static async ValueTask AddMessageKnowledgeAsync(
         this IConversation conversation,
-        IList<string> terms,
+        CollectionRangeToIndex messageRange,
+        IList<IMessage> messages,
         CancellationToken cancellationToken = default
     )
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(terms, nameof(terms));
+        List<SemanticRef> semanticRefs = [];
 
-        // These are idempotent
-        return conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.AddTermsAsync(
-            terms,
-            cancellationToken
-        );
-    }
+        int count = messages.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            var message = messages[i];
+            var knowledge = message.GetKnowledge();
+            if (knowledge is not null)
+            {
+                TextRange textRange = new TextRange(messageRange.OrdinalStartAt + i);
+                semanticRefs.AddRange(knowledge.ToSemanticRefs(textRange));
+            }
+        }
 
-    public static ValueTask BuildMessageIndexAsync(
-        this IConversation conversation,
-        CancellationToken cancellationToken = default
-     )
-    {
-        return conversation.AddToMessageIndexAsync(0, cancellationToken);
-    }
-
-    public static async ValueTask AddToMessageIndexAsync(
-        this IConversation conversation,
-        int messageOrdinalStartAt,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var batchSize = conversation.Settings.MessageTextIndexSettings.BatchSize;
-        var messageIndex = conversation.SecondaryIndexes.MessageIndex;
-
-        int messageCount = await conversation.Messages.GetCountAsync(
-            cancellationToken
-        ).ConfigureAwait(false);
-
-        var messages = await conversation.Messages.GetSliceAsync(
-            messageOrdinalStartAt,
-            messageCount,
-            cancellationToken
-        ).ConfigureAwait(false);
-
-        await conversation.SecondaryIndexes.MessageIndex.AddMessagesAsync(
-            messages,
-            messageOrdinalStartAt,
-            cancellationToken
-        ).ConfigureAwait(false);
+        if (!semanticRefs.IsNullOrEmpty())
+        {
+            await conversation.SemanticRefs.AppendAsync(
+                semanticRefs,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
     }
 
     internal static async ValueTask<CollectionRangeToIndex> GetMessageRangeToIndexAsync(
@@ -194,7 +204,7 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
     )
     {
-        int maxOrdinal = await conversation.SecondaryIndexes.MessageIndex.GetMaxOrdinalAsync(
+        int? maxOrdinal = await conversation.SecondaryIndexes.MessageIndex.GetMaxOrdinalAsync(
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -203,7 +213,7 @@ public static class ConversationIndexer
         ).ConfigureAwait(false);
 
         return new CollectionRangeToIndex(
-            maxOrdinal + 1,
+            maxOrdinal is not null ? maxOrdinal.Value + 1 : 0,
             maxCount
         );
     }
@@ -213,7 +223,7 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
     )
     {
-        int maxOrdinal = await conversation.SemanticRefIndex.GetMaxOrdinalAsync(
+        int? maxOrdinal = await conversation.SemanticRefIndex.GetMaxOrdinalAsync(
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -222,7 +232,7 @@ public static class ConversationIndexer
         ).ConfigureAwait(false);
 
         return new CollectionRangeToIndex(
-            maxOrdinal + 1,
+            maxOrdinal is not null ? maxOrdinal.Value + 1 : 0,
             count
         );
     }

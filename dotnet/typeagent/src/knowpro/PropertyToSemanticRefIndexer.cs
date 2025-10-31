@@ -10,18 +10,25 @@ public static class PropertyToSemanticRefIndexer
 {
     public static ValueTask AddPropertyAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
-        string propertyName, string value,
+        string propertyName,
+        string propertyValue,
         int semanticRefOrdinal,
         CancellationToken cancellationToken = default
     )
     {
-        return propertyIndex.AddPropertyAsync(propertyName, value, ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken);
+        return propertyIndex.AddPropertyAsync(
+            propertyName,
+            propertyValue,
+            ScoredSemanticRefOrdinal.New(semanticRefOrdinal),
+            cancellationToken
+        );
     }
 
     public static ValueTask AddSemanticRefAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         SemanticRef semanticRef,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
         KnowProVerify.ThrowIfInvalid(semanticRef);
@@ -33,7 +40,7 @@ public static class PropertyToSemanticRefIndexer
                 break;
 
             case KnowledgeType.EntityTypeName:
-                var entity = semanticRef.Knowledge as ConcreteEntity;
+                var entity = semanticRef.AsEntity();
                 KnowProVerify.ThrowIfInvalid(entity);
 
                 result = propertyIndex.AddEntityPropertiesAsync(
@@ -91,11 +98,14 @@ public static class PropertyToSemanticRefIndexer
         // TODO: Bulk operations
         foreach (var semanticRef in semanticRefs)
         {
-            await propertyIndex.AddSemanticRefAsync(semanticRef, cancellationToken).ConfigureAwait(false);
+            await propertyIndex.AddSemanticRefAsync(
+                semanticRef,
+                cancellationToken
+            ).ConfigureAwait(false);
         }
     }
 
-    public static async ValueTask AddEntityPropertiesAsync(
+    internal static async ValueTask AddEntityPropertiesAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         ConcreteEntity entity,
         int semanticRefOrdinal,
@@ -128,13 +138,17 @@ public static class PropertyToSemanticRefIndexer
         {
             foreach (var facet in entity.Facets!)
             {
-                await propertyIndex.AddFacetAsync(facet, semanticRefOrdinal, cancellationToken).ConfigureAwait(false);
+                await propertyIndex.AddFacetAsync(
+                    facet,
+                    semanticRefOrdinal,
+                    cancellationToken
+                ).ConfigureAwait(false);
             }
         }
 
     }
 
-    public static async ValueTask AddFacetAsync(
+    internal static async ValueTask AddFacetAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         Facet facet,
         int semanticRefOrdinal,
@@ -162,7 +176,7 @@ public static class PropertyToSemanticRefIndexer
         }
     }
 
-    public static async ValueTask AddActionPropertiesAsync(
+    internal static async ValueTask AddActionPropertiesAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         Action action,
         int semanticRefOrdinal,
@@ -209,7 +223,7 @@ public static class PropertyToSemanticRefIndexer
         }
     }
 
-    public static ValueTask AddTagPropertiesAsync(
+    internal static ValueTask AddTagPropertiesAsync(
         this IPropertyToSemanticRefIndex propertyIndex,
         Tag tag,
         int semanticRefOrdinal,

@@ -59,7 +59,7 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask AppendAsync(IEnumerable<SemanticRef> items, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(IList<SemanticRef> items, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(items, nameof(items));
 

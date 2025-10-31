@@ -91,7 +91,7 @@ public partial class Tag
     {
         return tag.Text;
     }
-}
+}   
 
 public partial class StructuredTag
 {
@@ -101,9 +101,9 @@ public partial class StructuredTag
 
 public partial class KnowledgeResponse
 {
-    public IEnumerable<SemanticRef> ToSemanticRefs(MessageChunkOrdinal ordinal)
+    public IEnumerable<SemanticRef> ToSemanticRefs(TextRange range)
     {
-        TextRange range = ordinal.ToRange();
+        ArgumentVerify.ThrowIfNull(range, nameof(range));
 
         if (!Entities.IsNullOrEmpty())
         {

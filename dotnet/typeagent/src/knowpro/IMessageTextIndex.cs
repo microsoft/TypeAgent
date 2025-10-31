@@ -30,7 +30,7 @@ public interface IMessageTextIndex
 
     ValueTask ClearAsync(CancellationToken cancellationToken = default);
 
-    ValueTask<int> GetMaxOrdinalAsync(CancellationToken cancellationToken = default);
+    ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default);
 
     public event Action<BatchProgress> OnIndexed;
 }
