@@ -129,6 +129,7 @@ export class WebsiteCollection
 
     private db: sqlite.Database | undefined = undefined;
     private dbPath: string = "";
+    private graphStateManager: any = null;
 
     constructor(
         nameTag: string = "",
@@ -1666,18 +1667,20 @@ export class WebsiteCollection
             `[Knowledge Graph] Built hierarchical topics in ${Date.now() - topicStartTime}ms`,
         );
 
-        // Build topic relationships and metrics using batch operations
-        const topicRelationshipsStart = Date.now();
-        await this.buildTopicRelationships(cacheManager);
-        debug(
-            `[Knowledge Graph] Completed topic relationships in ${Date.now() - topicRelationshipsStart}ms`,
+        // Build topic relationships and metrics using Graphology-based graph builder
+        const topicGraphStart = Date.now();
+        const { buildTopicGraphWithGraphology } = await import(
+            "./buildTopicGraphWithGraphology.js"
         );
-
-        // Calculate topic metrics using batch operations
-        const topicMetricsStart = Date.now();
-        await this.calculateTopicMetrics(cacheManager);
+        const allHierarchicalTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
+        await buildTopicGraphWithGraphology(
+            allHierarchicalTopics,
+            cacheManager,
+            this.topicRelationships,
+            this.topicMetrics,
+        );
         debug(
-            `[Knowledge Graph] Completed topic metrics in ${Date.now() - topicMetricsStart}ms`,
+            `[Knowledge Graph] Completed topic graph build in ${Date.now() - topicGraphStart}ms`,
         );
 
         const totalTime = Date.now() - startTime;
@@ -1707,6 +1710,98 @@ export class WebsiteCollection
 
         // Update hierarchical topics with new website topics
         await this.updateHierarchicalTopics(newWebsites);
+
+        // Update topic graph incrementally
+        await this.updateTopicGraphIncremental(newWebsites);
+    }
+
+    private async updateTopicGraphIncremental(newWebsites: Website[]): Promise<void> {
+        debug(`[Knowledge Graph] Updating topic graph incrementally for ${newWebsites.length} websites`);
+
+        if (!this.graphStateManager) {
+            const { GraphStateManager } = await import("./graph/graphStateManager.js");
+            this.graphStateManager = new GraphStateManager();
+        }
+
+        const allHierarchicalTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
+        
+        const { GraphBuildingCacheManager } = await import(
+            "./utils/graphBuildingCacheManager.mjs"
+        );
+        const cacheManager = new GraphBuildingCacheManager();
+        const websites = this.getWebsites();
+        await cacheManager.initializeCache(websites);
+
+        const cooccurrences = cacheManager.getAllTopicRelationships().map((rel: any) => ({
+            fromTopic: rel.fromTopic,
+            toTopic: rel.toTopic,
+            count: rel.count,
+            urls: rel.sources || [],
+        }));
+
+        await this.graphStateManager.ensureGraphsInitialized(
+            allHierarchicalTopics,
+            cooccurrences,
+        );
+
+        for (const website of newWebsites) {
+            const knowledge = website.knowledge as any;
+            if (!knowledge?.topicHierarchy) continue;
+
+            const topicMap = knowledge.topicHierarchy.topicMap instanceof Map
+                ? knowledge.topicHierarchy.topicMap
+                : new Map(Object.entries(knowledge.topicHierarchy.topicMap || {}));
+
+            const hierarchicalTopics: any[] = [];
+            for (const [topicId, topic] of topicMap) {
+                hierarchicalTopics.push({
+                    url: website.metadata.url,
+                    domain: website.metadata.domain,
+                    topicId: topicId,
+                    topicName: (topic as any).name,
+                    level: (topic as any).level || 0,
+                    parentTopicId: (topic as any).parentId,
+                    confidence: (topic as any).confidence || 0.5,
+                    sourceTopicNames: JSON.stringify((topic as any).sourceTopicNames || []),
+                    extractionDate: new Date().toISOString(),
+                });
+            }
+
+            const websiteCooccurrences: any[] = [];
+
+            const result = await this.graphStateManager.addWebpage({
+                url: website.metadata.url,
+                domain: website.metadata.domain,
+                hierarchicalTopics,
+                cooccurrences: websiteCooccurrences,
+            });
+
+            debug(
+                `[Knowledge Graph] Added ${website.metadata.url}: ${result.addedTopics} topics, ${result.addedRelationships} relationships in ${result.durationMs}ms`,
+            );
+        }
+
+        const relationships = this.graphStateManager.exportRelationships();
+        for (const rel of relationships) {
+            this.topicRelationships?.upsertRelationship(rel);
+        }
+
+        const metricsCalculator = await import("./graph/metricsCalculator.js");
+        const calc = new metricsCalculator.MetricsCalculator();
+        const topicCounts = calc.calculateTopicCounts(
+            allHierarchicalTopics.map((t: any) => ({
+                topicId: t.topicId,
+                url: t.url,
+                domain: t.domain,
+            })),
+        );
+
+        const { topicMetrics } = await this.graphStateManager.recomputeMetrics(topicCounts);
+        for (const [, metrics] of topicMetrics) {
+            this.topicMetrics?.upsertMetrics(metrics);
+        }
+
+        debug(`[Knowledge Graph] Incremental update complete`);
     }
 
     /**
@@ -3377,480 +3472,6 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         debug(`[Knowledge Graph] Finished storing ${storedCount} communities`);
     }
 
-    /**
-     * Build topic relationships using batch operations
-     */
-    private async buildTopicRelationships(cacheManager: any): Promise<void> {
-        debug(
-            `[Knowledge Graph] Building topic relationships using batch approach`,
-        );
-
-        // Get all topic relationships from cache manager (pre-computed co-occurrences)
-        const cachedRelationships = cacheManager.getAllTopicRelationships();
-        debug(
-            `[Knowledge Graph] Found ${cachedRelationships.length} cached topic relationships`,
-        );
-
-        const now = new Date().toISOString();
-
-        for (const cachedRel of cachedRelationships) {
-            if (cachedRel.count < 2) continue; // Filter weak relationships
-
-            const strength = Math.min(cachedRel.count / 10, 1.0);
-
-            // Use hierarchical topics to get topic IDs
-            const fromTopicId = this.findTopicIdByNameInHierarchy(
-                cachedRel.fromTopic,
-            );
-            const toTopicId = this.findTopicIdByNameInHierarchy(
-                cachedRel.toTopic,
-            );
-
-            if (fromTopicId && toTopicId) {
-                this.topicRelationships?.upsertRelationship({
-                    fromTopic: fromTopicId,
-                    toTopic: toTopicId,
-                    relationshipType: "co_occurs",
-                    strength,
-                    sourceUrls: JSON.stringify(cachedRel.sources),
-                    cooccurrenceCount: cachedRel.count,
-                    firstSeen: now,
-                    lastSeen: now,
-                    updated: now,
-                });
-            }
-        }
-
-        debug(`[Knowledge Graph] Completed topic relationships`);
-    }
-
-    /**
-     * Calculate topic metrics using batch operations
-     */
-    private async calculateTopicMetrics(cacheManager: any): Promise<void> {
-        debug(
-            `[Knowledge Graph] Calculating topic metrics using batch approach`,
-        );
-
-        const allTopics = this.hierarchicalTopics?.getTopicHierarchy();
-        if (!allTopics || allTopics.length === 0) return;
-
-        const uniqueTopics = new Set(allTopics.map((t) => t.topicId));
-        const topicIds = Array.from(uniqueTopics);
-
-        // MAJOR OPTIMIZATION: Use batch queries instead of individual queries
-        // Get all relationships for all topics in one query
-        const startTime = performance.now();
-        const allRelationships =
-            this.topicRelationships?.getRelationshipsForTopics?.(topicIds) ||
-            [];
-        const relationshipQueryTime = performance.now() - startTime;
-        debug(
-            `[Knowledge Graph] Batch fetched ${allRelationships.length} topic relationships in ${relationshipQueryTime.toFixed(2)}ms`,
-        );
-
-        // Get all entity relations for all topics in one query
-        const entityStartTime = performance.now();
-        const allEntityRelations =
-            this.topicEntityRelations?.getEntitiesForTopics?.(topicIds) || [];
-        const entityQueryTime = performance.now() - entityStartTime;
-        debug(
-            `[Knowledge Graph] Batch fetched ${allEntityRelations.length} topic-entity relations in ${entityQueryTime.toFixed(2)}ms`,
-        );
-
-        // Group results by topic ID for efficient lookup
-        const relationshipsByTopic = new Map<string, any[]>();
-        const entityRelationsByTopic = new Map<string, any[]>();
-
-        for (const rel of allRelationships) {
-            if (!relationshipsByTopic.has(rel.fromTopic)) {
-                relationshipsByTopic.set(rel.fromTopic, []);
-            }
-            if (!relationshipsByTopic.has(rel.toTopic)) {
-                relationshipsByTopic.set(rel.toTopic, []);
-            }
-            relationshipsByTopic.get(rel.fromTopic)!.push(rel);
-            relationshipsByTopic.get(rel.toTopic)!.push(rel);
-        }
-
-        for (const rel of allEntityRelations) {
-            if (!entityRelationsByTopic.has(rel.topicId)) {
-                entityRelationsByTopic.set(rel.topicId, []);
-            }
-            entityRelationsByTopic.get(rel.topicId)!.push(rel);
-        }
-
-        // Calculate co-occurrence relationships
-        debug(`[Knowledge Graph] Calculating co-occurrence relationships`);
-        const cooccurrenceRels = this.calculateCooccurrenceRelationships(
-            topicIds,
-            cacheManager,
-        );
-        debug(
-            `[Knowledge Graph] Found ${cooccurrenceRels.length} co-occurrence relationships`,
-        );
-
-        // Calculate entity-mediated relationships
-        debug(`[Knowledge Graph] Calculating entity-mediated relationships`);
-        const entityRels = await this.calculateEntityMediatedRelationships(
-            topicIds,
-            entityRelationsByTopic,
-        );
-        debug(
-            `[Knowledge Graph] Found ${entityRels.length} entity-mediated relationships`,
-        );
-
-        // Store all relationships
-        for (const rel of [...cooccurrenceRels, ...entityRels]) {
-            this.topicRelationships?.upsertRelationship(rel);
-        }
-
-        // Calculate metrics for each topic using pre-fetched data
-        for (const topicId of uniqueTopics) {
-            const topic = this.hierarchicalTopics?.getTopicById(topicId);
-            if (!topic) continue;
-
-            // Get data from cache manager
-            const documentsWithTopic = cacheManager.getWebsitesForTopic(
-                topic.topicName,
-            );
-            const domains = new Set(
-                documentsWithTopic.map((url: string) => {
-                    // Extract domain from URL or use a default approach
-                    try {
-                        return new URL(url).hostname;
-                    } catch {
-                        return url.split("/")[0];
-                    }
-                }),
-            ).size;
-
-            // Use pre-fetched data instead of individual queries
-            const relationships = relationshipsByTopic.get(topicId) || [];
-            const strongRelationships = relationships.filter(
-                (r) => r.strength > 0.7,
-            ).length;
-            const entityRelations = entityRelationsByTopic.get(topicId) || [];
-
-            const topEntities = entityRelations
-                .sort((a, b) => b.relevance - a.relevance)
-                .slice(0, 10)
-                .map((r) => r.entityName);
-
-            const metricsData = {
-                topicId,
-                topicName: topic.topicName,
-                documentCount: documentsWithTopic.length,
-                domainCount: domains,
-                degreeCentrality: relationships.length,
-                betweennessCentrality: 0, // Could be calculated using graph algorithms if needed
-                activityPeriod: 0, // Simplified for now
-                avgConfidence: topic.confidence,
-                maxConfidence: topic.confidence,
-                totalRelationships: relationships.length,
-                strongRelationships,
-                entityCount: entityRelations.length,
-                topEntities: JSON.stringify(topEntities),
-                updated: new Date().toISOString(),
-            };
-
-            this.topicMetrics?.upsertMetrics(metricsData);
-        }
-
-        debug(
-            `[Knowledge Graph] Completed topic metrics calculation for ${topicIds.length} topics`,
-        );
-    }
-
-    /**
-     * Helper method to find topic ID by name in hierarchical topics
-     */
-    private findTopicIdByNameInHierarchy(topicName: string): string | null {
-        const allTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
-        const topic = allTopics.find((t) => t.topicName === topicName);
-        return topic?.topicId || null;
-    }
-
-    /**
-     * Calculate co-occurrence relationships using bottom-up hierarchical aggregation
-     *
-     * Algorithm:
-     * 1. Leaf topics: Get co-occurrences from GraphBuildingCache using sourceTopicNames
-     * 2. Parent topics: Aggregate from direct children (not from leaves)
-     * 3. Use intermediate cache to avoid re-computation
-     */
-    private calculateCooccurrenceRelationships(
-        topicIds: string[],
-        cacheManager: any,
-    ): any[] {
-        const relationships: any[] = [];
-
-        // Working cache: hierarchicalTopicId → (otherTopicId → {count, strength, sources})
-        const hierarchicalCooccurrenceCache = new Map<string, Map<string, any>>();
-
-        // Group topics by level for bottom-up processing
-        const topicsByLevel = new Map<number, any[]>();
-        for (const topicId of topicIds) {
-            const topic = this.hierarchicalTopics?.getTopicById(topicId);
-            if (!topic) continue;
-
-            if (!topicsByLevel.has(topic.level)) {
-                topicsByLevel.set(topic.level, []);
-            }
-            topicsByLevel.get(topic.level)!.push(topic);
-        }
-
-        // Process level by level, starting from leaves (highest level number)
-        const levels = Array.from(topicsByLevel.keys()).sort((a, b) => b - a);
-
-        for (const level of levels) {
-            const topicsAtLevel = topicsByLevel.get(level)!;
-
-            for (const topic of topicsAtLevel) {
-                const topicCooccurrences = new Map<string, any>();
-
-                if (topic.childIds && topic.childIds.length > 0) {
-                    // Parent topic: aggregate from direct children
-                    for (const childId of topic.childIds) {
-                        const childCooccurrences = hierarchicalCooccurrenceCache.get(childId);
-                        if (!childCooccurrences) continue;
-
-                        for (const [otherTopicId, cooccurData] of childCooccurrences) {
-                            if (!topicCooccurrences.has(otherTopicId)) {
-                                topicCooccurrences.set(otherTopicId, {
-                                    count: 0,
-                                    sources: new Set(),
-                                    combinations: 0,
-                                });
-                            }
-                            const existing = topicCooccurrences.get(otherTopicId)!;
-                            existing.count += cooccurData.count;
-                            cooccurData.sources?.forEach((src: string) => existing.sources.add(src));
-                            existing.combinations += 1;
-                        }
-                    }
-                } else {
-                    // Leaf topic: get from GraphBuildingCache using sourceTopicNames
-                    const sourceNames = topic.sourceTopicNames || [topic.topicName];
-
-                    for (const sourceName of sourceNames) {
-                        // Get all co-occurrences for this source topic name
-                        const allCooccurrences = cacheManager.getAllTopicRelationships();
-
-                        for (const cooccur of allCooccurrences) {
-                            if (cooccur.fromTopic !== sourceName && cooccur.toTopic !== sourceName) {
-                                continue;
-                            }
-
-                            // Find the other topic in the co-occurrence
-                            const otherTopicName = cooccur.fromTopic === sourceName
-                                ? cooccur.toTopic
-                                : cooccur.fromTopic;
-
-                            // Map knowledge topic name to hierarchical topic ID
-                            const otherHierarchicalTopic = this.findHierarchicalTopicBySourceName(
-                                otherTopicName,
-                                topicIds,
-                            );
-
-                            if (!otherHierarchicalTopic) continue;
-
-                            if (!topicCooccurrences.has(otherHierarchicalTopic.topicId)) {
-                                topicCooccurrences.set(otherHierarchicalTopic.topicId, {
-                                    count: 0,
-                                    sources: new Set(),
-                                    combinations: 0,
-                                });
-                            }
-                            const existing = topicCooccurrences.get(otherHierarchicalTopic.topicId)!;
-                            existing.count += cooccur.count;
-                            cooccur.sources?.forEach((src: string) => existing.sources.add(src));
-                            existing.combinations += 1;
-                        }
-                    }
-                }
-
-                // Store in cache for parent nodes to use
-                hierarchicalCooccurrenceCache.set(topic.topicId, topicCooccurrences);
-            }
-        }
-
-        // Convert cache to relationships
-        for (const [fromTopicId, cooccurrences] of hierarchicalCooccurrenceCache) {
-            const fromTopic = this.hierarchicalTopics?.getTopicById(fromTopicId);
-            if (!fromTopic) continue;
-
-            for (const [toTopicId, cooccurData] of cooccurrences) {
-                if (fromTopicId >= toTopicId) continue; // Avoid duplicates
-
-                const toTopic = this.hierarchicalTopics?.getTopicById(toTopicId);
-                if (!toTopic) continue;
-
-                // Calculate aggregate strength
-                const avgCount = cooccurData.count / (cooccurData.combinations || 1);
-                const sourceArray = Array.from(cooccurData.sources);
-
-                // Normalize by document coverage
-                const strength = Math.min(
-                    avgCount / Math.min(
-                        sourceArray.length || 1,
-                        10, // cap for reasonable normalization
-                    ),
-                    1.0
-                );
-
-                if (strength < 0.1) continue; // Filter weak relationships
-
-                relationships.push({
-                    fromTopic: fromTopicId,
-                    toTopic: toTopicId,
-                    relationshipType: "CO_OCCURS",
-                    strength,
-                    metadata: JSON.stringify({
-                        cooccurrenceCount: cooccurData.count,
-                        commonDocuments: sourceArray.length,
-                        aggregatedFrom: cooccurData.combinations,
-                    }),
-                    sourceUrls: JSON.stringify(sourceArray.slice(0, 10)),
-                    cooccurrenceCount: cooccurData.count,
-                    firstSeen: fromTopic.extractionDate || new Date().toISOString(),
-                    lastSeen: toTopic.extractionDate || new Date().toISOString(),
-                    updated: new Date().toISOString(),
-                });
-            }
-        }
-
-        return relationships;
-    }
-
-    /**
-     * Find hierarchical topic that has the given source topic name
-     */
-    private findHierarchicalTopicBySourceName(
-        sourceName: string,
-        topicIds: string[],
-    ): any | null {
-        for (const topicId of topicIds) {
-            const topic = this.hierarchicalTopics?.getTopicById(topicId);
-            if (!topic) continue;
-
-            const sourceNames = topic.sourceTopicNames || [topic.topicName];
-            if (sourceNames.includes(sourceName)) {
-                return topic;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Calculate entity-mediated relationships using bottom-up hierarchical aggregation
-     *
-     * Algorithm:
-     * 1. Leaf topics: Get entities from entityRelationsByTopic
-     * 2. Parent topics: Aggregate entities from direct children (union of entity sets)
-     * 3. Calculate pairwise entity overlap using aggregated entity sets
-     */
-    private async calculateEntityMediatedRelationships(
-        topicIds: string[],
-        entityRelationsByTopic: Map<string, any[]>,
-    ): Promise<any[]> {
-        const relationships: any[] = [];
-
-        // Working cache: hierarchicalTopicId → Set<entityName>
-        const hierarchicalEntityCache = new Map<string, Set<string>>();
-
-        // Group topics by level for bottom-up processing
-        const topicsByLevel = new Map<number, any[]>();
-        for (const topicId of topicIds) {
-            const topic = this.hierarchicalTopics?.getTopicById(topicId);
-            if (!topic) continue;
-
-            if (!topicsByLevel.has(topic.level)) {
-                topicsByLevel.set(topic.level, []);
-            }
-            topicsByLevel.get(topic.level)!.push(topic);
-        }
-
-        // Process level by level, starting from leaves (highest level number)
-        const levels = Array.from(topicsByLevel.keys()).sort((a, b) => b - a);
-
-        for (const level of levels) {
-            const topicsAtLevel = topicsByLevel.get(level)!;
-
-            for (const topic of topicsAtLevel) {
-                const topicEntities = new Set<string>();
-
-                if (topic.childIds && topic.childIds.length > 0) {
-                    // Parent topic: aggregate entities from direct children (union)
-                    for (const childId of topic.childIds) {
-                        const childEntities = hierarchicalEntityCache.get(childId);
-                        if (!childEntities) continue;
-
-                        for (const entity of childEntities) {
-                            topicEntities.add(entity);
-                        }
-                    }
-                } else {
-                    // Leaf topic: get entities from entityRelationsByTopic
-                    const entities = entityRelationsByTopic.get(topic.topicId) || [];
-                    for (const entity of entities) {
-                        topicEntities.add(entity.entityName);
-                    }
-                }
-
-                // Store in cache for parent nodes to use
-                hierarchicalEntityCache.set(topic.topicId, topicEntities);
-            }
-        }
-
-        // Calculate pairwise entity overlap using aggregated entity sets
-        for (let i = 0; i < topicIds.length; i++) {
-            for (let j = i + 1; j < topicIds.length; j++) {
-                const topicA = topicIds[i];
-                const topicB = topicIds[j];
-
-                const entitiesA = hierarchicalEntityCache.get(topicA) || new Set();
-                const entitiesB = hierarchicalEntityCache.get(topicB) || new Set();
-
-                if (entitiesA.size === 0 || entitiesB.size === 0) continue;
-
-                // Calculate shared entities
-                const shared = Array.from(entitiesA).filter((e) =>
-                    entitiesB.has(e),
-                );
-
-                if (shared.length === 0) continue;
-
-                // Calculate strength as Jaccard similarity (intersection / union)
-                const unionSize = new Set([...entitiesA, ...entitiesB]).size;
-                const strength = shared.length / unionSize;
-
-                // Only create relationship if strength is significant
-                if (strength < 0.1) continue;
-
-                relationships.push({
-                    fromTopic: topicA,
-                    toTopic: topicB,
-                    relationshipType: "RELATED_VIA_ENTITY",
-                    strength,
-                    metadata: JSON.stringify({
-                        sharedEntities: shared.slice(0, 10),
-                        sharedEntityCount: shared.length,
-                        entityOverlapRatio: strength,
-                        totalEntitiesA: entitiesA.size,
-                        totalEntitiesB: entitiesB.size,
-                    }),
-                    updated: new Date().toISOString(),
-                });
-            }
-        }
-
-        return relationships;
-    }
-
-    /**
-     * Calculate sibling relationships from hierarchical structure
-     */
     private calculateSiblingRelationships(topicMap: Map<string, any>): any[] {
         const relationships: any[] = [];
         const parentToChildren = new Map<string, string[]>();
