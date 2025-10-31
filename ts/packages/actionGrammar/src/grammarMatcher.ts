@@ -256,11 +256,9 @@ function nextNonSeparatorIndex(request: string, index: number) {
     return match === null ? index : index + match[0].length;
 }
 
-function finalizeMatch(
-    state: MatchState,
-    request: string,
-    results: GrammarMatchResult[],
-) {
+// Finalize the state to make capture the last wildcard if any
+// and make sure there are any trailing un-matched non-separator characters.
+function finalizeState(state: MatchState, request: string) {
     if (state.pendingWildcard !== undefined) {
         const value = getWildcardStr(
             request,
@@ -268,7 +266,7 @@ function finalizeMatch(
             request.length,
         );
         if (value === undefined) {
-            return;
+            return false;
         }
         state.index = request.length;
         addValueWithId(state, state.pendingWildcard.valueId, value, true);
@@ -282,12 +280,23 @@ function finalizeMatch(
                     nonSepIndex,
                 )}`,
             );
-            return;
+            return false;
         }
 
         debugMatch(
             `Consume trailing separators at ${state.index} to ${request.length}}`,
         );
+    }
+    return true;
+}
+
+function finalizeMatch(
+    state: MatchState,
+    request: string,
+    results: GrammarMatchResult[],
+) {
+    if (!finalizeState(state, request)) {
+        return;
     }
     debugMatch(
         `Matched at end of input. Matched ids: ${JSON.stringify(state.valueIds)}, values: ${JSON.stringify(state.values)}'`,
@@ -640,12 +649,7 @@ function partialMatchRules(
             `Start state ${state.name}{${state.partIndex}}: @${state.index}`,
         );
         if (!matchState(state, request, pending)) {
-            const nonSepIndex = nextNonSeparatorIndex(request, state.index);
-            if (nonSepIndex !== request.length) {
-                // There are not matched non-separator characters left
-                debugCompletion(
-                    `  Rejecting completion at ${state.name} with non-separator text at ${nonSepIndex}`,
-                );
+            if (!finalizeState(state, request)) {
                 continue;
             }
             const nextPart = state.rule.parts[state.partIndex];
