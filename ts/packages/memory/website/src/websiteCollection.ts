@@ -1647,7 +1647,9 @@ export class WebsiteCollection
         // Store entities in knowledge entities table
         const storeStart = Date.now();
         await this.storeEntitiesInDatabase(cacheManager, websitesToProcess);
-        debug(`[Knowledge Graph] Stored entities in database in ${Date.now() - storeStart}ms`);
+        debug(
+            `[Knowledge Graph] Stored entities in database in ${Date.now() - storeStart}ms`,
+        );
 
         // Build relationships between entities using cache-based approach
         const relationshipStartTime = Date.now();
@@ -2097,14 +2099,18 @@ export class WebsiteCollection
             // Use AI to merge topics into higher-level topics
             const mergeStart = Date.now();
             const topicListSize = JSON.stringify(flatTopics).length;
-            debug(`[Knowledge Graph] Merging ${flatTopics.length} topics into hierarchy (prompt size: ${topicListSize} chars)...`);
+            debug(
+                `[Knowledge Graph] Merging ${flatTopics.length} topics into hierarchy (prompt size: ${topicListSize} chars)...`,
+            );
 
             const mergeResult = await topicExtractor.mergeTopics(
                 flatTopics,
                 undefined, // No past topics for initial build
                 "comprehensive, hierarchical",
             );
-            debug(`[Knowledge Graph] Topic merge completed in ${Date.now() - mergeStart}ms`);
+            debug(
+                `[Knowledge Graph] Topic merge completed in ${Date.now() - mergeStart}ms`,
+            );
 
             if (mergeResult && mergeResult.status === "Success") {
                 debug(
