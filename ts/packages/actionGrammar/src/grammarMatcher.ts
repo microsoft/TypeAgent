@@ -165,6 +165,10 @@ function createValue(
 ): unknown {
     if (node === undefined) {
         if (valueIds === undefined) {
+            if (partialValueId !== undefined) {
+                // Partial match, missing variable is ok
+                return undefined;
+            }
             throw new Error("Internal error: missing value for default");
         }
         if (valueIds.prev !== undefined) {
@@ -787,21 +791,15 @@ export function matchGrammarCompletion(
             const pendingWildcard = state.pendingWildcard;
             if (pendingWildcard !== undefined) {
                 debugCompletion("Completing wildcard part");
-                try {
-                    const completionProperty = getGrammarCompletionProperty(
-                        state,
-                        pendingWildcard.valueId,
-                    );
-                    if (completionProperty !== undefined) {
-                        debugCompletion(
-                            `Adding completion property: ${JSON.stringify(completionProperty)}`,
-                        );
-                        properties.push(completionProperty);
-                    }
-                } catch (err) {
+                const completionProperty = getGrammarCompletionProperty(
+                    state,
+                    pendingWildcard.valueId,
+                );
+                if (completionProperty !== undefined) {
                     debugCompletion(
-                        `Error getting completion property: ${(err as Error).message}`,
+                        `Adding completion property: ${JSON.stringify(completionProperty)}`,
                     );
+                    properties.push(completionProperty);
                 }
             }
         }
