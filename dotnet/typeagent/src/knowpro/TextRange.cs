@@ -14,6 +14,12 @@ public class TextRange : IComparable<TextRange>
         Start = new TextLocation(messageOrdinal);
     }
 
+    public TextRange(int messageOrdinal, int chunkOrdinal)
+    {
+        Start = new TextLocation(messageOrdinal, chunkOrdinal);
+    }
+
+
     [JsonConstructor]
     public TextRange(TextLocation start)
     {

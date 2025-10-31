@@ -10,10 +10,10 @@ namespace TypeAgent.AIClient;
 /// </summary>
 public static class HttpEx
 {
-    internal static async Task<Response> GetJsonResponseAsync<Request, Response>(
+    internal static async Task<TResponse> GetJsonResponseAsync<TRequest, TResponse>(
         this HttpClient client,
         string endpoint,
-        Request request,
+        TRequest request,
         string? apiToken = null,
         RetrySettings? settings = null,
         CancellationToken cancellationToken = default
@@ -21,56 +21,72 @@ public static class HttpEx
     {
         settings ??= new RetrySettings();
 
-        var requestMessage = Json.ToJsonMessage(request);
         int retryCount = 0;
         while (true)
         {
-            HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
-            {
-                Content = requestMessage
-            };
+            HttpRequestMessage? httpRequest = null;
+            int pauseMs = -1;
             try
             {
+                var requestMessage = Json.ToJsonMessage(request);
+
+                httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
+                {
+                    Content = requestMessage
+                };
                 if (!string.IsNullOrEmpty(apiToken))
                 {
                     httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
                 }
 
-
-                HttpResponseMessage response = await client.SendAsync(httpRequest,cancellationToken).ConfigureAwait(false);
-                if (response.StatusCode == HttpStatusCode.OK)
+                try
                 {
-                    using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    return Json.Parse<Response>(stream);
+                    using HttpResponseMessage response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                    if (response.StatusCode == HttpStatusCode.OK)
+                    {
+                        using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                        return Json.Parse<TResponse>(stream);
+                    }
+                    if (!response.StatusCode.IsTransientError() || retryCount >= settings.MaxRetries)
+                    {
+                        // Let HttpClient throw an exception
+                        response.EnsureSuccessStatusCode();
+                        throw new HttpRequestException("GetJsonResponse", null, response.StatusCode);
+                    }
+                    if (response.StatusCode == (HttpStatusCode)429) // Too Many Requests
+                    {
+                        pauseMs = GetRetryAfterMs(response, pauseMs);
+                    }
                 }
-
-                if (!response.StatusCode.IsTransientError() || retryCount >= settings.MaxRetries)
+                catch (HttpRequestException)
                 {
-                    // Let HttpClient throw an exception
-                    response.EnsureSuccessStatusCode();
-                    break;
-                }
-
-                retryCount++;
-
-                int pauseMs = settings.RetryPauseMs > 0
-                            ? settings.RetryPauseMs * (1 << retryCount) // Exponential backoff
-                            : 0;
-
-                if (response.StatusCode == (HttpStatusCode)429) // Too Many Requests
-                {
-                    pauseMs = GetRetryAfterMs(response, pauseMs);
-                }
-                if (pauseMs > 0)
-                {
-                    pauseMs = settings.AdjustRetryPauseMs(pauseMs);
-                    await Task.Delay(pauseMs, cancellationToken).ConfigureAwait(false);
+                    if (retryCount >= settings.MaxRetries)
+                    {
+                        throw;
+                    }
                 }
             }
             finally
             {
-                httpRequest.Dispose();
+                httpRequest?.Dispose();
+                httpRequest = null;
             }
+
+            if (pauseMs < 0)
+            {
+                pauseMs = settings.RetryPauseMs > 0
+                            ? settings.RetryPauseMs * (1 << (retryCount)) // Exponential backoff
+                            : 0;
+
+            }
+            retryCount++;
+
+            if (pauseMs > 0)
+            {
+                pauseMs = settings.AdjustRetryPauseMs(pauseMs);
+                await Task.Delay(pauseMs, cancellationToken).ConfigureAwait(false);
+            }
+
         }
         throw new TypeAgentException("GetJsonResponse");
     }
@@ -87,6 +103,7 @@ public static class HttpEx
             case HttpStatusCode.BadGateway:
             case HttpStatusCode.ServiceUnavailable:
             case HttpStatusCode.GatewayTimeout:
+            case HttpStatusCode.RequestTimeout:
                 break;
         }
 

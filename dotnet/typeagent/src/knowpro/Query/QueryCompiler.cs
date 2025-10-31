@@ -32,22 +32,24 @@ internal class QueryCompiler
     static QueryCompilerSettings s_defaultSettings = new QueryCompilerSettings();
 
     private IConversation _conversation;
+    private IConversationCache _conversationCache;
     private List<CompiledTermGroup> _allSearchTerms;
     private List<CompiledTermGroup> _allScopeSearchTerms;
     private CancellationToken _cancellationToken;
 
-    public QueryCompiler(IConversation conversation, CancellationToken cancellationToken = default)
-        : this(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken)
-    {
-    }
 
     public QueryCompiler(
         IConversation conversation,
+        IConversationCache conversationCache,
         QueryCompilerSettings? compilerSettings,
         CancellationToken cancellationToken = default
     )
     {
+        ArgumentVerify.ThrowIfNull(conversation, nameof(conversation));
+        ArgumentVerify.ThrowIfNull(conversationCache, nameof(conversationCache));
+
         _conversation = conversation;
+        _conversationCache = conversationCache;
         _allSearchTerms = [];
         _allScopeSearchTerms = [];
         Settings = compilerSettings ?? s_defaultSettings;
@@ -377,7 +379,8 @@ internal class QueryCompiler
         compiledTerms.ForEach((ct) => ValidateAndPrepare(ct.Terms));
 
         await ResolveRelatedTermsAsync(
-            _conversation.SecondaryIndexes.TermToRelatedTermsIndex,
+            _conversation.SecondaryIndexes.TermToRelatedTermsIndex.Aliases,
+            _conversationCache.RelatedTermsFuzzy,
             compiledTerms,
             dedupe
         ).ConfigureAwait(false);
@@ -387,7 +390,8 @@ internal class QueryCompiler
     }
 
     private async ValueTask ResolveRelatedTermsAsync(
-        ITermToRelatedTermIndex relatedTermIndex,
+        ITermToRelatedTermsLookup aliases,
+        ITermToRelatedTermsFuzzyLookup fuzzyIndex,
         List<CompiledTermGroup> compiledTerms,
         bool ensureSingleOccurence
     )
@@ -400,7 +404,7 @@ internal class QueryCompiler
 
         List<string> termTexts = termsNeedingRelated.Map((st) => st.Term.Text);
         // First, find an known related terms
-        var knownRelatedTerms = await relatedTermIndex.Aliases.LookupTermAsync(
+        var knownRelatedTerms = await aliases.LookupTermsAsync(
             termTexts,
             _cancellationToken
         ).ConfigureAwait(false);
@@ -427,7 +431,7 @@ internal class QueryCompiler
         {
             return;
         }
-        var relatedTermsFuzzy = await relatedTermIndex.FuzzyIndex.LookupTermAsync(
+        var relatedTermsFuzzy = await fuzzyIndex.LookupTermsAsync(
             termTexts,
             null,
             null,

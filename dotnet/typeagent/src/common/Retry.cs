@@ -23,6 +23,11 @@ public class RetrySettings
 
     public double JitterRange { get; set; }
 
+    public void ThrowIfInvalid()
+    {
+        ArgumentVerify.ThrowIfGreaterThan(MaxRetries, 30, nameof(MaxRetries));
+
+    }
     /// <summary>
     /// Adjusts the retry pause duration by applying a jitter factor and ensuring it does not exceed the maximum allowed
     /// pause.

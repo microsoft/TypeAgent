@@ -13,11 +13,17 @@ public static class ConversationSearch
         this IConversation conversation,
         SearchSelectExpr select,
         SearchOptions? options,
-        IConversationCache? cache = null,
+        IConversationCache? conversationCache = null,
         CancellationToken cancellationToken = default
     )
     {
-        QueryCompiler compiler = new QueryCompiler(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken);
+        QueryEvalContext context = new QueryEvalContext(conversation, conversationCache, cancellationToken);
+        QueryCompiler compiler = new QueryCompiler(
+            conversation,
+            context.Cache,
+            conversation.Settings.QueryCompilerSettings,
+            cancellationToken
+        );
         options ??= SearchOptions.CreateDefault();
 
         var queryExpr = await compiler.CompileKnowledgeQueryAsync(
@@ -26,7 +32,6 @@ public static class ConversationSearch
             options
         ).ConfigureAwait(false);
 
-        QueryEvalContext context = new QueryEvalContext(conversation, cache, cancellationToken);
         return await queryExpr.EvalAsync(context).ConfigureAwait(false);
     }
 
@@ -49,8 +54,14 @@ public static class ConversationSearch
         CancellationToken cancellationToken = default
     )
     {
+        QueryEvalContext context = new QueryEvalContext(conversation, conversationCache, cancellationToken);
+        QueryCompiler compiler = new QueryCompiler(
+            conversation,
+            context.Cache,
+            conversation.Settings.QueryCompilerSettings,
+            cancellationToken
+        );
         options ??= SearchOptions.CreateDefault();
-        QueryCompiler compiler = new QueryCompiler(conversation, cancellationToken);
 
         var knowledgeQueryExpr = await compiler.CompileKnowledgeQueryAsync(
             select.SearchTermGroup,
@@ -64,14 +75,45 @@ public static class ConversationSearch
             rawSearchQuery
         ).ConfigureAwait(false);
 
-        QueryEvalContext context = new QueryEvalContext(conversation, conversationCache, cancellationToken);
         var messageOrdinals = await messageQueryExpr.EvalAsync(context).ConfigureAwait(false);
-        return new ConversationSearchResult()
-        {
-            MessageMatches = messageOrdinals,
-            KnowledgeMatches = context.KnowledgeMatches,
-            RawSearchQuery = rawSearchQuery,
-        };
+
+        return new ConversationSearchResult(context.KnowledgeMatches, messageOrdinals, rawSearchQuery);
     }
 
+    public static async ValueTask<ConversationSearchResult?> SearchConversationRagAsync(
+        this IConversation conversation,
+        string searchText,
+        int? maxMatches,
+        double? minScore,
+        int? maxCharsInBudget = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var messageMatches = await conversation.SecondaryIndexes.MessageIndex.LookupMessagesAsync(
+            searchText,
+            maxMatches,
+            minScore,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (messageMatches.IsNullOrEmpty())
+        {
+            return null;
+        }
+
+        if (maxCharsInBudget is not null)
+        {
+            var messageOrdinals = messageMatches.ToMessageOrdinals();
+
+            int messageCountInBudget = await conversation.Messages.GetCountInCharBudgetAsync(
+                messageOrdinals,
+                maxCharsInBudget.Value,
+                cancellationToken
+            ).ConfigureAwait(false);
+
+            Debug.Assert(messageCountInBudget >= 0);
+            messageMatches = messageMatches.Slice(0, messageCountInBudget);
+        }
+        return new ConversationSearchResult(messageMatches, searchText);
+    }
 }

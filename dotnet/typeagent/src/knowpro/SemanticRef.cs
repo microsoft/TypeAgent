@@ -8,6 +8,22 @@ namespace TypeAgent.KnowPro;
 
 public class SemanticRef
 {
+    public SemanticRef()
+    {
+
+    }
+
+    public SemanticRef(
+        Knowledge knowledge,
+        TextRange range
+    )
+    {
+        ArgumentVerify.ThrowIfNull(knowledge, nameof(knowledge));
+        Knowledge = knowledge;
+        KnowledgeType = knowledge.KnowledgeType;
+        Range = range;
+    }
+
     [JsonPropertyName("semanticRefOrdinal")]
     public int SemanticRefOrdinal { get; set; } = -1;
 
@@ -20,7 +36,6 @@ public class SemanticRef
     // The public, strongly-typed property
     [JsonIgnore]
     public Knowledge Knowledge { get; set; }
-
 
     // For serialization
     [JsonPropertyName("knowledgeType")]

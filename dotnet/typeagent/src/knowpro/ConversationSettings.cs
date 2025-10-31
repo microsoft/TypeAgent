@@ -16,17 +16,26 @@ public class ConversationSettings
     {
         ArgumentVerify.ThrowIfNull(embeddingModel, nameof(embeddingModel));
 
+        QueryCompilerSettings = new QueryCompilerSettings();
+
         // Warning: The 0.85 threshold is good for Ada002 only.
         // The threshold reduces match noise significantly
         // Need a lookup table to recommend settings for different standard models
-        RelatedTermIndexSettings = new RelatedTermIndexSettings(
+        RelatedTermIndexSettings = new TermToRelatedTermIndexSettings(
             new TextEmbeddingIndexSettings(embeddingModel, 0.85, 50)
+            {
+                BatchSize = 64
+            }
         );
 
-        QueryCompilerSettings = new QueryCompilerSettings();
+        MessageTextIndexSettings = new MessageTextIndexSettings(
+            new TextEmbeddingIndexSettings(embeddingModel, 0.7)
+        );
     }
 
     public QueryCompilerSettings QueryCompilerSettings { get; }
 
-    public RelatedTermIndexSettings RelatedTermIndexSettings { get; }
+    public TermToRelatedTermIndexSettings RelatedTermIndexSettings { get; }
+
+    public MessageTextIndexSettings MessageTextIndexSettings { get; }
 }

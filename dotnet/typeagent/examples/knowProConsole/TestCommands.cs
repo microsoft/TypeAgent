@@ -15,7 +15,7 @@ public class TestCommands : ICommandModule
     }
 
     public IList<Command> GetCommands()
-    {   
+    {
         return [
             SearchTermsDef(),
             SearchPropertyTermsDef(),
@@ -210,7 +210,8 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestBuildIndex")
         {
-            Options.Arg<bool>("related", "index related terms", false)
+            Options.Arg<bool>("related", "index related terms", false),
+            Options.Arg<bool>("messages", "index messages", false),
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.BuildIndexAsync);
@@ -223,7 +224,7 @@ public class TestCommands : ICommandModule
 
         NamedArgs namedArgs = new NamedArgs(args);
 
-        var cachingModel = conversation.Settings.RelatedTermIndexSettings.EmbeddingIndexSetting.EmbeddingModel as TextEmbeddingModelWithCache;
+        var cachingModel = conversation.Settings.RelatedTermIndexSettings.EmbeddingIndexSetting?.EmbeddingModel as TextEmbeddingModelWithCache;
         try
         {
             if (cachingModel is not null)
@@ -236,7 +237,17 @@ public class TestCommands : ICommandModule
 
                 await conversation.BuildRelatedTermsIndexAsync(cancellationToken);
             }
+            if (namedArgs.Get<bool>("messages"))
+            {
+                await conversation.SecondaryIndexes.MessageIndex.ClearAsync(cancellationToken);
+
+                await conversation.BuildMessageIndexAsync(cancellationToken);
+            }
             KnowProWriter.WriteLine();
+        }
+        catch(Exception ex)
+        {
+            KnowProWriter.WriteError(ex);
         }
         finally
         {

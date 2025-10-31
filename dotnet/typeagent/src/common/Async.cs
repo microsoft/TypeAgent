@@ -45,6 +45,7 @@ public static class Async
         for (int i = 0; i < list.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
             var result = await processor(list[i]);
             results.Add(result);
             if (progress is not null)
@@ -116,10 +117,10 @@ public static class Async
                 }
             }
 
-            retryCount++;
             int pauseMs = settings.RetryPauseMs > 0
-                ? settings.RetryPauseMs * (1 << retryCount) // Exponential backoff
+                ? settings.RetryPauseMs * (1 << (retryCount)) // Exponential backoff
                 : 0;
+            retryCount++;
 
             if (pauseMs > 0)
             {

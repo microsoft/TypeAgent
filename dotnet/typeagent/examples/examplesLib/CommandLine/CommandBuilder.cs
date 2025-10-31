@@ -19,6 +19,8 @@ public static class Options
 
     public static Option<T> Arg<T>(string name, string? description = null) => Arg<T>(name, description, default!);
 
+    public static Option<T> Arg<T>(string name, T defaultValue) => Arg<T>(name, null, defaultValue);
+
     public static Option<T> Arg<T>(string name, string? description, T defaultValue)
     {
         var option = Create<T>(name, description);

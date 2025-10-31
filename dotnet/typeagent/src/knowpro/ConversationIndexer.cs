@@ -5,17 +5,17 @@ namespace TypeAgent.KnowPro;
 
 public readonly struct IndexingStartPoints
 {
-    public IndexingStartPoints(int messageCount, int semanticRefCount)
+    public IndexingStartPoints(int messageOrdinal, int semanticRefOrdinal)
     {
-        ArgumentVerify.ThrowIfLessThan(messageCount, 0, nameof(messageCount));
-        ArgumentVerify.ThrowIfLessThan(semanticRefCount, 0, nameof(semanticRefCount));
+        ArgumentVerify.ThrowIfLessThan(messageOrdinal, 0, nameof(messageOrdinal));
+        ArgumentVerify.ThrowIfLessThan(semanticRefOrdinal, 0, nameof(semanticRefOrdinal));
 
-        MessageCount = messageCount;
-        SemanticRefCount = semanticRefCount;
+        MessageOrdinalStartAt = messageOrdinal;
+        SemanticRefOrdinalStartAt = semanticRefOrdinal;
     }
 
-    public int MessageCount { get; }
-    public int SemanticRefCount { get; }
+    public int MessageOrdinalStartAt { get; }
+    public int SemanticRefOrdinalStartAt { get; }
 }
 
 public static class ConversationIndexer
@@ -28,8 +28,13 @@ public static class ConversationIndexer
         // Todo:
         // Add conversation knowledge
         //
-        await conversation.BuildSemanticRefIndexAsync(cancellationToken).ConfigureAwait(false);
-        await conversation.BuildSecondaryIndexesAsync(cancellationToken).ConfigureAwait(false);
+        await conversation.BuildSemanticRefIndexAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        await conversation.BuildSecondaryIndexesAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 
     public static ValueTask BuildSemanticRefIndexAsync(
@@ -45,15 +50,31 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
     )
     {
-        await conversation.BuildRelatedTermsIndexAsync(cancellationToken).ConfigureAwait(false);
+        await conversation.BuildRelatedTermsIndexAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        await conversation.BuildMessageIndexAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 
     public static async ValueTask AddToSecondaryIndexesAsync(
         this IConversation conversation,
         IndexingStartPoints startAt,
-        IList<string> relatedTerms)
+        IList<string> relatedTerms,
+        CancellationToken cancellationToken = default
+    )
     {
-        await conversation.AddToRelatedTermsIndexAsync(relatedTerms);
+        await conversation.AddToRelatedTermsIndexAsync(
+            relatedTerms,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        await conversation.AddToMessageIndexAsync(
+            startAt.MessageOrdinalStartAt,
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 
     public static async ValueTask BuildRelatedTermsIndexAsync(
@@ -61,21 +82,32 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
     )
     {
-        var allTerms = await conversation.SemanticRefIndex.GetTermsAsync(cancellationToken).ConfigureAwait(false);
+        var allTerms = await conversation.SemanticRefIndex.GetTermsAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
         if (allTerms.Count > 0)
         {
-            await conversation.AddToRelatedTermsIndexAsync(allTerms).ConfigureAwait(false);
+            await conversation.AddToRelatedTermsIndexAsync(
+                allTerms,
+                cancellationToken
+            ).ConfigureAwait(false);
         }
     }
 
     public static ValueTask AddToRelatedTermsIndexAsync(
         this IConversation conversation,
-        IList<string> terms
+        IList<string> terms,
+        CancellationToken cancellationToken = default
     )
     {
         ArgumentVerify.ThrowIfNullOrEmpty(terms, nameof(terms));
+
         // These are idempotent
-        return conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.AddTermsAsync(terms);
+        return conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.AddTermsAsync(
+            terms,
+            cancellationToken
+        );
     }
 
     public static ValueTask BuildMessageIndexAsync(
@@ -83,6 +115,33 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
      )
     {
-        return ValueTask.CompletedTask;
+        return conversation.AddToMessageIndexAsync(0, cancellationToken);
     }
+
+    public static async ValueTask AddToMessageIndexAsync(
+        this IConversation conversation,
+        int messageOrdinalStartAt,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var batchSize = conversation.Settings.MessageTextIndexSettings.BatchSize;
+        var messageIndex = conversation.SecondaryIndexes.MessageIndex;
+
+        int messageCount = await conversation.Messages.GetCountAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        var messages = await conversation.Messages.GetSliceAsync(
+            messageOrdinalStartAt,
+            messageCount,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        await conversation.SecondaryIndexes.MessageIndex.AddMessagesAsync(
+            messages,
+            messageOrdinalStartAt,
+            cancellationToken
+        ).ConfigureAwait(false);
+    }
+
 }

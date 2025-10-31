@@ -11,11 +11,15 @@ public class Serializer
     static Serializer()
     {
         var facetConvertor = new FacetValueJsonConverter();
+        var actionParamConvertor = new ActionParamJsonConverter();
+
         s_options = Json.DefaultOptions();
         s_options.Converters.Add(facetConvertor);
+        s_options.Converters.Add(actionParamConvertor);
 
         s_optionsIndent = Json.DefaultOptions();
         s_optionsIndent.Converters.Add(facetConvertor);
+        s_optionsIndent.Converters.Add(actionParamConvertor);
         s_optionsIndent.WriteIndented = true;
     }
 

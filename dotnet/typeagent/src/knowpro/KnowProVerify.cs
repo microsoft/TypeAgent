@@ -83,6 +83,12 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfNullOrEmpty(action.IndirectObjectEntityName, nameof(action.IndirectObjectEntityName));
     }
 
+    public static void ThrowIfInvalid(Topic topic)
+    {
+        ArgumentVerify.ThrowIfNull(topic, nameof(topic));
+        ArgumentVerify.ThrowIfNullOrEmpty(topic!.Text, nameof(topic.Text));
+    }
+
     public static void ThrowIfInvalid(Tag? tag)
     {
         ArgumentVerify.ThrowIfNull(tag, nameof(tag));
