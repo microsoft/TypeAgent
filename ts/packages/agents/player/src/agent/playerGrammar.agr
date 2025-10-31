@@ -4,6 +4,7 @@
 @ <Start> = <Pause>
           | <Resume>
           | <PlayCommand>
+          | <SelectDevice>
 @ <Pause> = pause ((the)? music)?   ->  { actionName: "pause" }
 @ <Resume> = resume ((the)? music)?   ->  { actionName: "resume" }
 @ <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>
@@ -52,9 +53,19 @@
                       | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), albumName: $(albumName) } }
                       | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)], albumName: $(albumName) } }                      
 
+@ <SelectDevice> = select $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | select (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | switch to $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | switch to (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | use $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | use (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | play on $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | play on (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+
 // TODO: wire up entity names
 @ <TrackName> = $(x:string)
 @ <ArtistName> = $(x:string)  
 @ <AlbumName> = $(x:string)
+@ <DeviceName> = $(x:MusicDevice)
 
 
