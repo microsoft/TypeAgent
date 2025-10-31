@@ -3,19 +3,39 @@
 
 namespace TypeAgent.KnowPro;
 
-public readonly struct IndexingStartPoints
+public readonly struct CollectionRangeToIndex
 {
-    public IndexingStartPoints(int messageOrdinal, int semanticRefOrdinal)
+    public CollectionRangeToIndex(int ordinal, int count)
     {
-        ArgumentVerify.ThrowIfLessThan(messageOrdinal, 0, nameof(messageOrdinal));
-        ArgumentVerify.ThrowIfLessThan(semanticRefOrdinal, 0, nameof(semanticRefOrdinal));
+        ArgumentVerify.ThrowIfLessThan(ordinal, 0, nameof(ordinal));
+        ArgumentVerify.ThrowIfLessThan(count, 0, nameof(count));
 
-        MessageOrdinalStartAt = messageOrdinal;
-        SemanticRefOrdinalStartAt = semanticRefOrdinal;
+        OrdinalStartAt = ordinal;
+        Count = count;
     }
 
-    public int MessageOrdinalStartAt { get; }
-    public int SemanticRefOrdinalStartAt { get; }
+    public int OrdinalStartAt { get; }
+
+    public int Count { get; }
+
+    public bool IsEmpty => OrdinalStartAt >= Count;
+
+}
+
+public class CollectionRangesToIndex
+{
+    public CollectionRangesToIndex(
+        CollectionRangeToIndex messages,
+        CollectionRangeToIndex semanicRefs
+    )
+    {
+        Messages = messages;
+        SemanticRefs = semanicRefs;
+    }
+
+    public CollectionRangeToIndex Messages { get; }
+
+    public CollectionRangeToIndex SemanticRefs { get; }
 }
 
 public static class ConversationIndexer
@@ -37,12 +57,37 @@ public static class ConversationIndexer
         ).ConfigureAwait(false);
     }
 
-    public static ValueTask BuildSemanticRefIndexAsync(
+    public static async ValueTask BuildSemanticRefIndexAsync(
         this IConversation conversation,
         CancellationToken cancellationToken = default
-        )
+    )
     {
-        return ValueTask.CompletedTask;
+        CollectionRangeToIndex indexRange = await conversation.GetSemanticRefRangeToIndexAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (indexRange.IsEmpty)
+        {
+            return;
+        }
+
+        IList<SemanticRef> semanticRefs = await conversation.SemanticRefs.GetSliceAsync(
+            indexRange.OrdinalStartAt,
+            indexRange.Count,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (semanticRefs.IsNullOrEmpty())
+        {
+            return;
+        }
+
+        HashSet<string> termsAdded = [];
+        await conversation.SemanticRefIndex.AddSemanticRefsAsync(
+            semanticRefs,
+            termsAdded,
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 
     public static async ValueTask BuildSecondaryIndexesAsync(
@@ -61,7 +106,7 @@ public static class ConversationIndexer
 
     public static async ValueTask AddToSecondaryIndexesAsync(
         this IConversation conversation,
-        IndexingStartPoints startAt,
+        CollectionRangeToIndex messageRange,
         IList<string> relatedTerms,
         CancellationToken cancellationToken = default
     )
@@ -72,7 +117,7 @@ public static class ConversationIndexer
         ).ConfigureAwait(false);
 
         await conversation.AddToMessageIndexAsync(
-            startAt.MessageOrdinalStartAt,
+            messageRange.OrdinalStartAt,
             cancellationToken
         ).ConfigureAwait(false);
     }
@@ -144,4 +189,41 @@ public static class ConversationIndexer
         ).ConfigureAwait(false);
     }
 
+    internal static async ValueTask<CollectionRangeToIndex> GetMessageRangeToIndexAsync(
+        this IConversation conversation,
+        CancellationToken cancellationToken = default
+    )
+    {
+        int maxOrdinal = await conversation.SecondaryIndexes.MessageIndex.GetMaxOrdinalAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        int maxCount = await conversation.Messages.GetCountAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        return new CollectionRangeToIndex(
+            maxOrdinal + 1,
+            maxCount
+        );
+    }
+
+    internal static async ValueTask<CollectionRangeToIndex> GetSemanticRefRangeToIndexAsync(
+        this IConversation conversation,
+        CancellationToken cancellationToken = default
+    )
+    {
+        int maxOrdinal = await conversation.SemanticRefIndex.GetMaxOrdinalAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        int count = await conversation.SemanticRefs.GetCountAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        return new CollectionRangeToIndex(
+            maxOrdinal + 1,
+            count
+        );
+    }
 }

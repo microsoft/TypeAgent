@@ -58,7 +58,7 @@ public partial class Action : Knowledge
     public IActionParam[]? Params { get; set; }
 }
 
-public class KnowledgeResponse
+public partial class KnowledgeResponse
 {
     [JsonPropertyName("entities")]
     [JsonRequired]

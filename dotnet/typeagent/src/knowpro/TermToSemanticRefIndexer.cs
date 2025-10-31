@@ -7,52 +7,83 @@ namespace TypeAgent.KnowPro;
 
 public static class TermToSemanticRefIndexer
 {
-    public static async ValueTask AddKnowledgeAsync(
+    // TODO: bulk operations
+
+    public static async ValueTask AddSemanticRefsAsync(
         this ITermToSemanticRefIndex index,
-        KnowledgeResponse knowledge,
-        int semanticRefOrdinal,
+        IEnumerable<SemanticRef> semanticRefs,
         ISet<string>? termsAdded = null,
         CancellationToken cancellationToken = default
     )
     {
-        foreach (var entity in knowledge.Entities)
+        foreach (var sr in semanticRefs)
         {
-            await index.AddEntityAsync(
-                entity,
-                semanticRefOrdinal,
+            await index.AddSemanticRefAsync(
+                sr,
                 termsAdded,
                 cancellationToken
             ).ConfigureAwait(false);
         }
+    }
 
-        foreach (var action in knowledge.Actions)
-        {
-            await index.AddActionAsync(
-                action,
-                semanticRefOrdinal,
-                termsAdded,
-                cancellationToken
-            ).ConfigureAwait(false);
-        }
+    public static async ValueTask AddSemanticRefAsync(
+        this ITermToSemanticRefIndex index,
+        SemanticRef semanticRef,
+        ISet<string>? termsAdded = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
 
-        foreach (var action in knowledge.InverseActions)
+        switch(semanticRef.KnowledgeType)
         {
-            await index.AddActionAsync(
-                action,
-                semanticRefOrdinal,
-                termsAdded,
-                cancellationToken
-            ).ConfigureAwait(false);
-        }
+            default:
+                throw new NotSupportedException(semanticRef.KnowledgeType.ToString());
 
-        foreach (var topic in knowledge.Topics)
-        {
-            await index.AddTopicAsync(
-                topic,
-                semanticRefOrdinal,
-                termsAdded,
-                cancellationToken
-            ).ConfigureAwait(false);
+            case KnowledgeType.EntityTypeName:
+                await index.AddEntityAsync(
+                    semanticRef.AsEntity(),
+                    semanticRef.SemanticRefOrdinal,
+                    termsAdded,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                break;
+
+            case KnowledgeType.ActionTypeName:
+                await index.AddActionAsync(
+                    semanticRef.AsAction(),
+                    semanticRef.SemanticRefOrdinal,
+                    termsAdded,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                break;
+
+            case KnowledgeType.TopicTypeName:
+                await index.AddTopicAsync(
+                    semanticRef.AsTopic(),
+                    semanticRef.SemanticRefOrdinal,
+                    termsAdded,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                break;
+
+            case KnowledgeType.TagTypeName:
+                await index.AddTagAsync(
+                    semanticRef.AsTag(),
+                    semanticRef.SemanticRefOrdinal,
+                    termsAdded,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                break;
+
+            case KnowledgeType.STagTypeName:
+                await index.AddSTagAsync(
+                    semanticRef.AsSTag(),
+                    semanticRef.SemanticRefOrdinal,
+                    termsAdded,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                break;
         }
     }
 
@@ -94,7 +125,7 @@ public static class TermToSemanticRefIndexer
     /// <summary>
     /// Adds an entity (name, types, and all facet names/values) to the term-to-semanticRef index.
     /// </summary>
-    public static async ValueTask AddEntityAsync(
+    internal static async ValueTask AddEntityAsync(
         this ITermToSemanticRefIndex index,
         ConcreteEntity? entity,
         int semanticRefOrdinal,
@@ -145,7 +176,7 @@ public static class TermToSemanticRefIndexer
     /// Adds a single facet (its name and value) to the term-to-semanticRef index.
     /// Ported from the TypeScript addFacet function.
     /// </summary>
-    public static async ValueTask AddFacetAsync(
+    internal static async ValueTask AddFacetAsync(
         this ITermToSemanticRefIndex index,
         Facet? facet,
         int semanticRefOrdinal,
@@ -179,23 +210,23 @@ public static class TermToSemanticRefIndexer
         }
     }
 
-    public static async ValueTask AddTopicAsync(
+    internal static async ValueTask AddTopicAsync(
         this ITermToSemanticRefIndex index,
-        string topic,
+        Topic topic,
         int semanticRefOrdinal,
         ISet<string>? termsAdded = null,
         CancellationToken cancellationToken = default
     )
     {
         await index.AddTermAsync(
-            topic,
+            topic.Text,
             semanticRefOrdinal,
             termsAdded,
             cancellationToken
         ).ConfigureAwait(false);
     }
 
-    public static async ValueTask AddActionAsync(
+    internal static async ValueTask AddActionAsync(
         this ITermToSemanticRefIndex index,
         Action action,
         int semanticRefOrdinal,
@@ -274,4 +305,37 @@ public static class TermToSemanticRefIndexer
             }
         }
     }
+
+    internal static async ValueTask AddTagAsync(
+        this ITermToSemanticRefIndex index,
+        Tag tag,
+        int semanticRefOrdinal,
+        ISet<string>? termsAdded = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await index.AddTermAsync(
+            tag.Text,
+            semanticRefOrdinal,
+            termsAdded,
+            cancellationToken
+        ).ConfigureAwait(false);
+    }
+
+    internal static async ValueTask AddSTagAsync(
+        this ITermToSemanticRefIndex index,
+        StructuredTag tag,
+        int semanticRefOrdinal,
+        ISet<string>? termsAdded = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await index.AddEntityAsync(
+            tag,
+            semanticRefOrdinal,
+            termsAdded,
+            cancellationToken
+        ).ConfigureAwait(false);
+    }
+
 }
