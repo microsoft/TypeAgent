@@ -3,6 +3,13 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
+public enum SqliteProviderCreateMode
+{
+    Load,
+    Load_UpgradeSchema,
+    CreateNew,
+}
+
 public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>, IDisposable
     where TMessage : class, IMessage, new()
     where TMeta : IMessageMetadata, new()
@@ -13,25 +20,25 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         ConversationSettings settings,
         string dirPath,
         string baseFileName,
-        bool createNew = false
+        SqliteProviderCreateMode mode = SqliteProviderCreateMode.Load
     )
-        : this(settings, Path.Join(dirPath, baseFileName + ".db"), createNew)
+        : this(settings, Path.Join(dirPath, baseFileName + ".db"), mode)
     {
     }
 
     public SqliteStorageProvider(
         ConversationSettings settings,
         string dbPath,
-        bool createNew = false
+        SqliteProviderCreateMode mode = SqliteProviderCreateMode.Load
     )
     {
-        if (!createNew)
+        if (mode != SqliteProviderCreateMode.CreateNew)
         {
             FileExtensions.VerifyExists(dbPath);
         }
-        _db = new SqliteDatabase(dbPath, createNew);
+        _db = new SqliteDatabase(dbPath, mode == SqliteProviderCreateMode.CreateNew);
         ConfigureDatabase();
-        if (createNew)
+        if (mode == SqliteProviderCreateMode.CreateNew || mode == SqliteProviderCreateMode.Load_UpgradeSchema)
         {
             InitSchema();
         }

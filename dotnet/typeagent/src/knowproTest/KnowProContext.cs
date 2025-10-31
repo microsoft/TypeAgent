@@ -37,7 +37,7 @@ public class KnowProContext
             settings,
             DotnetPath,
             name,
-            createNew
+            createNew ? SqliteProviderCreateMode.CreateNew : SqliteProviderCreateMode.Load
         );
 
         return provider;

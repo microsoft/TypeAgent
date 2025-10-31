@@ -111,7 +111,7 @@ public class SqliteDatabase : IDisposable
             reader => new(reader.GetInt32(0), reader.GetNormalizedEmbedding(1))
         );
     }
-    
+
     public IAsyncEnumerable<T> EnumerateAsync<T>(
         string sql,
         Func<SqliteDataReader, T> rowDeserializer,
