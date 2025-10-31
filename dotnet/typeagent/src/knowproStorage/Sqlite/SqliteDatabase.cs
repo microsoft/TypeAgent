@@ -111,7 +111,7 @@ public class SqliteDatabase : IDisposable
             reader => new(reader.GetInt32(0), reader.GetNormalizedEmbedding(1))
         );
     }
-    
+
     public IAsyncEnumerable<T> EnumerateAsync<T>(
         string sql,
         Func<SqliteDataReader, T> rowDeserializer,
@@ -153,6 +153,11 @@ public class SqliteDatabase : IDisposable
     {
         using var cmd = CreateCommand($"DELETE FROM {tableName}");
         cmd.ExecuteNonQuery();
+    }
+
+    public SqliteTransaction BeginTransaction()
+    {
+        return _connection.BeginTransaction();
     }
 
     public void Dispose()

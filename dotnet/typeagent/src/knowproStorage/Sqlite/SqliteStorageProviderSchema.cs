@@ -75,7 +75,9 @@ CREATE TABLE IF NOT EXISTS SemanticRefIndex (
     FOREIGN KEY (semref_id) REFERENCES SemanticRefs(semref_id) ON DELETE CASCADE
 );
 ";
-
+    public const string SemanticRefIndexSemrefIdIndex = @"
+CREATE INDEX IF NOT EXISTS idx_semrefindex_semref_id ON SemanticRefIndex(semref_id);
+";
     public const string PropertyIndexTable = "PropertyIndex";
     public const string PropertyIndexSchema = @"
 CREATE TABLE IF NOT EXISTS PropertyIndex (
@@ -138,6 +140,7 @@ term_embedding BLOB NOT NULL    -- Serialized embedding for the term
             TimestampIndex,
             SemanticRefsSchema,
             SemanticRefIndexSchema,
+            SemanticRefIndexSemrefIdIndex,
             PropertyIndexSchema,
             PropertyIndexNameIndex,
             PropertyIndexValueStrIndex,

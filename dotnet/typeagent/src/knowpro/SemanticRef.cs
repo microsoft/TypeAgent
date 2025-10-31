@@ -8,10 +8,7 @@ namespace TypeAgent.KnowPro;
 
 public class SemanticRef
 {
-    public SemanticRef()
-    {
-
-    }
+    public SemanticRef() { }
 
     public SemanticRef(
         Knowledge knowledge,
@@ -62,12 +59,39 @@ public class SemanticRef
         }
     }
 
-    [JsonIgnore]
-    public bool IsEntity => KnowledgeType == KnowledgeType.Entity;
-
-    public ConcreteEntity? AsEntity()
+    public ConcreteEntity AsEntity()
     {
-        return IsEntity ? Knowledge as ConcreteEntity : null;
+        return KnowledgeType == KnowledgeType.Entity
+            ? Knowledge as ConcreteEntity
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
+    }
+
+    public Action AsAction()
+    {
+        return KnowledgeType == KnowledgeType.Action
+            ? Knowledge as Action
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
+    }
+
+    public Topic AsTopic()
+    {
+        return KnowledgeType == KnowledgeType.Topic
+            ? Knowledge as Topic
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
+    }
+
+    public Tag AsTag()
+    {
+        return KnowledgeType == KnowledgeType.Tag
+            ? Knowledge as Tag
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
+    }
+
+    public StructuredTag AsSTag()
+    {
+        return KnowledgeType == KnowledgeType.STag
+            ? Knowledge as StructuredTag
+            : throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeTypeMismatch);
     }
 
     public static JsonElement SerializeToElement(Knowledge knowledge, string type)

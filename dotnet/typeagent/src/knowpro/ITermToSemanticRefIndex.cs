@@ -23,4 +23,6 @@ public interface ITermToSemanticRefIndex
     ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(string term, CancellationToken cancellationToken = default);
 
     ValueTask ClearAsync(CancellationToken cancellationToken = default);
+
+    ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default);
 }

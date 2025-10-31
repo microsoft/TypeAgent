@@ -29,7 +29,7 @@ public class ConversationSearchResult
 
     public IList<ScoredMessageOrdinal> MessageMatches { get; }
 
-    public IDictionary<KnowledgeType, SemanticRefSearchResult> KnowledgeMatches {get; }
+    public IDictionary<KnowledgeType, SemanticRefSearchResult> KnowledgeMatches { get; }
 
     public string? RawSearchQuery { get; }
 }

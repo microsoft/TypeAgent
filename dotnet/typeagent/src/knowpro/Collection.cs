@@ -20,7 +20,7 @@ public interface IAsyncCollection<T> : IReadOnlyAsyncCollection<T>
     bool IsPersistent { get; }
 
     ValueTask AppendAsync(T item, CancellationToken cancellationToken = default);
-    ValueTask AppendAsync(IEnumerable<T> items, CancellationToken cancellationToken = default);
+    ValueTask AppendAsync(IList<T> items, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
