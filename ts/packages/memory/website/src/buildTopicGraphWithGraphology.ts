@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import registerDebug from "debug";
-import { TopicGraphBuilder, type CooccurrenceData } from "./graph/topicGraphBuilder.js";
+import {
+    TopicGraphBuilder,
+    type CooccurrenceData,
+} from "./graph/topicGraphBuilder.js";
 import { MetricsCalculator } from "./graph/metricsCalculator.js";
 import type { HierarchicalTopicRecord } from "./tables.js";
 
@@ -14,18 +17,20 @@ export async function buildTopicGraphWithGraphology(
     topicRelationshipsTable: any,
     topicMetricsTable: any,
 ): Promise<void> {
-    debug(`Building topic graph for ${hierarchicalTopics.length} hierarchical topics`);
+    debug(
+        `Building topic graph for ${hierarchicalTopics.length} hierarchical topics`,
+    );
 
     const cooccurrences = extractCooccurrencesFromCache(cacheManager);
     debug(`Extracted ${cooccurrences.length} cooccurrences from cache`);
 
     const graphBuilder = new TopicGraphBuilder();
-    const { flatGraph, hierarchicalGraph } = graphBuilder.buildFromTopicHierarchy(
-        hierarchicalTopics,
-        cooccurrences,
-    );
+    const { flatGraph, hierarchicalGraph } =
+        graphBuilder.buildFromTopicHierarchy(hierarchicalTopics, cooccurrences);
 
-    debug(`Graphs built: flat=${flatGraph.order} nodes, hierarchical=${hierarchicalGraph.order} nodes`);
+    debug(
+        `Graphs built: flat=${flatGraph.order} nodes, hierarchical=${hierarchicalGraph.order} nodes`,
+    );
 
     const relationships = graphBuilder.exportToTopicRelationships();
     debug(`Exporting ${relationships.length} topic relationships to database`);
@@ -48,7 +53,9 @@ export async function buildTopicGraphWithGraphology(
         topicCounts,
     );
 
-    debug(`Calculated metrics for ${topicMetrics.size} topics, ${communities.size} communities`);
+    debug(
+        `Calculated metrics for ${topicMetrics.size} topics, ${communities.size} communities`,
+    );
 
     for (const [, metrics] of topicMetrics) {
         topicMetricsTable.upsertMetrics(metrics);

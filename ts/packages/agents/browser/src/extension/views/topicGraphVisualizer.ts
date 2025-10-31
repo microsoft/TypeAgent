@@ -1561,9 +1561,7 @@ export class TopicGraphVisualizer {
                 );
             } else {
                 layoutConfig = this.getLayoutOptions();
-                console.log(
-                    `[TopicGraphVisualizer] Computing CoSE layout...`,
-                );
+                console.log(`[TopicGraphVisualizer] Computing CoSE layout...`);
             }
 
             const layout = instance.layout(layoutConfig);
@@ -1843,14 +1841,18 @@ export class TopicGraphVisualizer {
      */
     public setPrototypeMode(enabled: boolean): void {
         if (!this.cy) {
-            console.warn("[TopicGraphVisualizer] No Cytoscape instance available");
+            console.warn(
+                "[TopicGraphVisualizer] No Cytoscape instance available",
+            );
             return;
         }
 
         this.prototypeModeEnabled = enabled;
 
         if (enabled) {
-            console.log("[TopicGraphVisualizer] Enabling prototype mode - disabling LoD, showing all elements");
+            console.log(
+                "[TopicGraphVisualizer] Enabling prototype mode - disabling LoD, showing all elements",
+            );
 
             this.cy.batch(() => {
                 this.cy.nodes().forEach((node: any) => {
@@ -1869,14 +1871,20 @@ export class TopicGraphVisualizer {
                 });
             });
 
-            console.log(`[TopicGraphVisualizer] Prototype mode enabled - ${this.cy.nodes().length} nodes, ${this.cy.edges().length} edges visible`);
+            console.log(
+                `[TopicGraphVisualizer] Prototype mode enabled - ${this.cy.nodes().length} nodes, ${this.cy.edges().length} edges visible`,
+            );
         } else {
-            console.log("[TopicGraphVisualizer] Disabling prototype mode - re-enabling LoD");
+            console.log(
+                "[TopicGraphVisualizer] Disabling prototype mode - re-enabling LoD",
+            );
 
             const currentZoom = this.cy.zoom();
             this.applyLevelOfDetail(currentZoom);
 
-            console.log(`[TopicGraphVisualizer] Prototype mode disabled - LoD re-applied at zoom ${currentZoom.toFixed(2)}x`);
+            console.log(
+                `[TopicGraphVisualizer] Prototype mode disabled - LoD re-applied at zoom ${currentZoom.toFixed(2)}x`,
+            );
         }
     }
 

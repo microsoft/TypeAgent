@@ -48,9 +48,7 @@ class GraphologyCacheManager {
             lastAccessed: Date.now(),
         });
 
-        debug(
-            `Cache size: ${this.caches.size}/${this.maxCacheSize} entries`,
-        );
+        debug(`Cache size: ${this.caches.size}/${this.maxCacheSize} entries`);
     }
 
     getCacheEntry(key: string): GraphologyCache | null {
@@ -142,10 +140,7 @@ export function getGraphologyCache(key: string): GraphologyCache | null {
     return globalCacheManager.getCacheEntry(key);
 }
 
-export function setGraphologyCache(
-    key: string,
-    cache: GraphologyCache,
-): void {
+export function setGraphologyCache(key: string, cache: GraphologyCache): void {
     globalCacheManager.setCacheEntry(key, cache);
 }
 

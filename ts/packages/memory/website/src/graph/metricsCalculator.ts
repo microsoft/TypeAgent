@@ -23,13 +23,15 @@ export interface MetricsResult {
 export class MetricsCalculator {
     public calculateMetrics(
         hierarchicalGraph: Graph,
-        topicCounts?: Map<string, { documentCount: number; domainCount: number }>,
+        topicCounts?: Map<
+            string,
+            { documentCount: number; domainCount: number }
+        >,
     ): MetricsResult {
         debug(`Calculating metrics for ${hierarchicalGraph.order} topics`);
 
-        const undirectedGraph = this.createUndirectedCooccurrenceGraph(
-            hierarchicalGraph,
-        );
+        const undirectedGraph =
+            this.createUndirectedCooccurrenceGraph(hierarchicalGraph);
 
         debug("Running betweenness centrality...");
         const betweennessScores = betweennessCentrality(undirectedGraph);
@@ -41,7 +43,10 @@ export class MetricsCalculator {
         const communities = new Map<string, number>();
         louvain.assign(undirectedGraph);
         for (const node of undirectedGraph.nodes()) {
-            const community = undirectedGraph.getNodeAttribute(node, "community");
+            const community = undirectedGraph.getNodeAttribute(
+                node,
+                "community",
+            );
             communities.set(node, community);
         }
 
@@ -100,9 +105,7 @@ export class MetricsCalculator {
         return { topicMetrics, communities };
     }
 
-    private createUndirectedCooccurrenceGraph(
-        hierarchicalGraph: Graph,
-    ): Graph {
+    private createUndirectedCooccurrenceGraph(hierarchicalGraph: Graph): Graph {
         const undirectedGraph = new Graph({ type: "undirected" });
 
         for (const node of hierarchicalGraph.nodes()) {

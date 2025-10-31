@@ -362,10 +362,8 @@ JSON OUTPUT:`;
                         rootData.grandchildren?.[childName] || [];
                     for (const grandchildName of grandchildrenForThisChild) {
                         // Check if grandchild topic name matches any knowledge topics
-                        const grandchildSourceNames = findMatchingKnowledgeTopics(
-                            grandchildName,
-                            topics,
-                        );
+                        const grandchildSourceNames =
+                            findMatchingKnowledgeTopics(grandchildName, topics);
 
                         const grandchildTopic: HierarchicalTopic = {
                             id: generateTopicId(grandchildName, 2),
@@ -522,13 +520,16 @@ function enrichHierarchy(
             // Check if this hierarchical topic matches any fragment topics
             for (const fragmentTopic of extraction.topics) {
                 const normalizedTopicName = topic.name.toLowerCase().trim();
-                const normalizedFragmentTopic = fragmentTopic.toLowerCase().trim();
+                const normalizedFragmentTopic = fragmentTopic
+                    .toLowerCase()
+                    .trim();
 
                 if (normalizedTopicName === normalizedFragmentTopic) {
                     // Add ordinal
-                    const ordinal = typeof extraction.fragmentId === 'number'
-                        ? extraction.fragmentId
-                        : parseInt(extraction.fragmentId, 10);
+                    const ordinal =
+                        typeof extraction.fragmentId === "number"
+                            ? extraction.fragmentId
+                            : parseInt(extraction.fragmentId, 10);
                     if (!isNaN(ordinal)) {
                         topic.sourceRefOrdinals.push(ordinal);
                     }
@@ -627,7 +628,9 @@ function findMatchingKnowledgeTopics(
     knowledgeTopics: string[],
 ): string[] {
     const matches: string[] = [];
-    const normalizedHierarchicalName = hierarchicalTopicName.toLowerCase().trim();
+    const normalizedHierarchicalName = hierarchicalTopicName
+        .toLowerCase()
+        .trim();
 
     for (const knowledgeTopic of knowledgeTopics) {
         const normalizedKnowledgeName = knowledgeTopic.toLowerCase().trim();
