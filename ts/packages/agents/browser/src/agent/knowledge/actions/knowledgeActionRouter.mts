@@ -43,7 +43,6 @@ import {
     getUrlContentBreakdown,
     getTopicTimelines,
     discoverRelatedKnowledge,
-    invalidateTopicCacheAction,
 } from "./graphActions.mjs";
 import {
     checkAIModelStatus,
@@ -122,8 +121,6 @@ export async function handleKnowledgeAction(
             return await getUrlContentBreakdown(parameters, context);
         case "getTopicTimelines":
             return await getTopicTimelines(parameters, context);
-        case "invalidateTopicCacheAction":
-            return await invalidateTopicCacheAction(parameters, context);
 
         // Query Actions
         case "getRecentKnowledgeItems":

@@ -96,12 +96,6 @@ class TopicGraphView {
             });
 
         document
-            .getElementById("invalidateCacheButton")
-            ?.addEventListener("click", () => {
-                this.invalidateCache();
-            });
-
-        document
             .getElementById("prototypeMode")
             ?.addEventListener("change", (e) => {
                 const checkbox = e.target as HTMLInputElement;
@@ -1053,21 +1047,6 @@ class TopicGraphView {
         URL.revokeObjectURL(url);
 
         this.showNotification("Cytoscape JSON exported successfully");
-    }
-
-    private async invalidateCache(): Promise<void> {
-        try {
-            const result = await this.extensionService.invalidateTopicCache();
-
-            if (result && result.success) {
-                this.showNotification(result.message);
-            } else {
-                this.showNotification(result?.message || "Failed to invalidate cache");
-            }
-        } catch (error) {
-            console.error("Error invalidating cache:", error);
-            this.showNotification("Error invalidating cache");
-        }
     }
 
     private togglePrototypeMode(enabled: boolean): void {

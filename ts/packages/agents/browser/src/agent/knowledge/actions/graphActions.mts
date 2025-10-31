@@ -1962,38 +1962,6 @@ export function invalidateTopicCache(websiteCollection: any): void {
     invalidateAllGraphologyCaches();
 }
 
-/**
- * Action to invalidate topic cache from UI
- */
-export async function invalidateTopicCacheAction(
-    parameters: {},
-    context: SessionContext<BrowserActionContext>,
-): Promise<{ success: boolean; message: string }> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                success: false,
-                message: "Website collection not available",
-            };
-        }
-
-        invalidateTopicCache(websiteCollection);
-
-        return {
-            success: true,
-            message: "Topic cache cleared successfully. Reload the page to regenerate the graph.",
-        };
-    } catch (error) {
-        console.error("Error invalidating topic cache:", error);
-        return {
-            success: false,
-            message: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
 // Ensure topic graph data is cached for fast access
 async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
 
