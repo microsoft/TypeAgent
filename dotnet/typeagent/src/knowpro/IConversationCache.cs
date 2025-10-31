@@ -7,7 +7,7 @@ namespace TypeAgent.KnowPro;
 /// Represents a cache for storing and retrieving conversation data, including semantic references and messages.
 /// </summary>
 public interface IConversationCache
-{ 
+{
     IAsyncCollectionReader<SemanticRef> SemanticRefs { get; }
 
     IAsyncCollectionReader<IMessage> Messages { get; }

@@ -35,7 +35,7 @@ public static class TermToSemanticRefIndexer
     {
         ArgumentVerify.ThrowIfNull(semanticRef, nameof(semanticRef));
 
-        switch(semanticRef.KnowledgeType)
+        switch (semanticRef.KnowledgeType)
         {
             default:
                 throw new NotSupportedException(semanticRef.KnowledgeType.ToString());

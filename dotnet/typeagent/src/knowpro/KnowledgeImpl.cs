@@ -91,7 +91,7 @@ public partial class Tag
     {
         return tag.Text;
     }
-}   
+}
 
 public partial class StructuredTag
 {

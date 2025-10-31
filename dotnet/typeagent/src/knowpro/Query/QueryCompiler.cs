@@ -320,8 +320,10 @@ internal class QueryCompiler
 
             if (!filter.Tags.IsNullOrEmpty())
             {
-                var tagGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax);
-                tagGroup.Add(KnowledgePropertyName.Tag, filter.Tags, true);
+                var tagGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
+                {
+                    { KnowledgePropertyName.Tag, filter.Tags, true }
+                };
                 AddTermsScopeSelector(tagGroup, scopeSelectors);
             }
 

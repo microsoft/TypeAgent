@@ -100,7 +100,7 @@ ORDER BY semref_id ASC
 
     public ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
     {
-        int? maxId =_db.Get(
+        int? maxId = _db.Get(
             "SELECT MAX(semref_id) from SemanticRefIndex",
             null,
             (reader) => reader.GetIntOrNull(0)

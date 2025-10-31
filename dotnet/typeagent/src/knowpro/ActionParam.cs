@@ -32,7 +32,7 @@ public class ActionParamJsonConverter : JsonConverter<IActionParam>
 {
     public override IActionParam? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        switch(reader.TokenType)
+        switch (reader.TokenType)
         {
             default:
                 break;

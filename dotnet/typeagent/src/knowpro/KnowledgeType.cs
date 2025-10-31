@@ -36,13 +36,13 @@ public struct KnowledgeType : IEquatable<KnowledgeType>
 
     public static bool IsKnowledgeType(string type)
     {
-        return (
+        return 
             type == EntityTypeName ||
             type == ActionTypeName ||
             type == TopicTypeName ||
             type == STagTypeName ||
             type == TagTypeName
-        );
+        ;
     }
 
     internal KnowledgeType(string value)
@@ -58,12 +58,7 @@ public struct KnowledgeType : IEquatable<KnowledgeType>
 
     public override bool Equals([NotNullWhen(true)] object? obj)
     {
-        if (obj is not null && obj is var kType)
-        {
-            return Equals(kType);
-        }
-
-        return false;
+        return obj is not null && obj is var kType ? Equals(kType) : false;
     }
 
     public bool Equals(KnowledgeType other)
@@ -71,7 +66,7 @@ public struct KnowledgeType : IEquatable<KnowledgeType>
         return Value == other.Value;
     }
 
-    public static bool operator==(KnowledgeType x, KnowledgeType y)
+    public static bool operator ==(KnowledgeType x, KnowledgeType y)
     {
         return x.Value == y.Value;
     }

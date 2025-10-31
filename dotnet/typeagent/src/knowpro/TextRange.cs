@@ -88,7 +88,8 @@ public class TextRange : IComparable<TextRange>
         // outer start must be <= inner start
         // inner end must be < outerEnd (which is exclusive)
         int cmpStart = TextLocation.Compare(outerRange.Start, innerRange.Start);
-        if (outerRange.End is null && innerRange.End is null) {
+        if (outerRange.End is null && innerRange.End is null)
+        {
             // Since both ends are undefined, we have an point location, not a range.
             // Points must be equal
             return cmpStart == 0;
