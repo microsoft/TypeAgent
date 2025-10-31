@@ -1417,7 +1417,8 @@ class EntityGraphView {
             }
 
             // Check if graphology layout is available
-            const hasGraphologyLayout = importanceData.metadata?.graphologyLayout;
+            const hasGraphologyLayout =
+                importanceData.metadata?.graphologyLayout;
 
             // Transform data to expected format for visualizer
             const transformedData: any = {

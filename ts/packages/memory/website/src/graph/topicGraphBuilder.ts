@@ -96,8 +96,16 @@ export class TopicGraphBuilder {
                 for (const toTopic of toTopics) {
                     if (fromTopic.topicId === toTopic.topicId) continue;
 
-                    if (this.flatGraph.hasEdge(fromTopic.topicId, toTopic.topicId)) {
-                        const current = this.flatGraph.getEdgeAttributes(fromTopic.topicId, toTopic.topicId);
+                    if (
+                        this.flatGraph.hasEdge(
+                            fromTopic.topicId,
+                            toTopic.topicId,
+                        )
+                    ) {
+                        const current = this.flatGraph.getEdgeAttributes(
+                            fromTopic.topicId,
+                            toTopic.topicId,
+                        );
                         this.flatGraph.setEdgeAttribute(
                             fromTopic.topicId,
                             toTopic.topicId,
@@ -159,9 +167,10 @@ export class TopicGraphBuilder {
                         { type: "parent-child" },
                     );
 
-                    const parentAttrs = this.hierarchicalGraph.getNodeAttributes(
-                        topic.parentTopicId,
-                    );
+                    const parentAttrs =
+                        this.hierarchicalGraph.getNodeAttributes(
+                            topic.parentTopicId,
+                        );
                     parentAttrs.childIds.push(topic.topicId);
                 }
             }
@@ -177,7 +186,10 @@ export class TopicGraphBuilder {
 
         const nodesByLevel = new Map<number, string[]>();
         for (const node of this.hierarchicalGraph.nodes()) {
-            const level = this.hierarchicalGraph.getNodeAttribute(node, "level");
+            const level = this.hierarchicalGraph.getNodeAttribute(
+                node,
+                "level",
+            );
             if (!nodesByLevel.has(level)) {
                 nodesByLevel.set(level, []);
             }
@@ -197,8 +209,10 @@ export class TopicGraphBuilder {
                         for (const edge of this.flatGraph.edges(topicId)) {
                             const source = this.flatGraph.source(edge);
                             const target = this.flatGraph.target(edge);
-                            const edgeAttrs = this.flatGraph.getEdgeAttributes(edge);
-                            const otherNode = source === topicId ? target : source;
+                            const edgeAttrs =
+                                this.flatGraph.getEdgeAttributes(edge);
+                            const otherNode =
+                                source === topicId ? target : source;
 
                             if (!this.hierarchicalGraph.hasNode(otherNode)) {
                                 continue;
@@ -209,7 +223,9 @@ export class TopicGraphBuilder {
                                 otherNode,
                             );
                             if (
-                                !this.hierarchicalGraph.hasEdge(hierarchicalEdgeKey)
+                                !this.hierarchicalGraph.hasEdge(
+                                    hierarchicalEdgeKey,
+                                )
                             ) {
                                 this.hierarchicalGraph.addEdge(
                                     topicId,
@@ -234,7 +250,9 @@ export class TopicGraphBuilder {
                     >();
 
                     for (const childId of attrs.childIds) {
-                        for (const edge of this.hierarchicalGraph.edges(childId)) {
+                        for (const edge of this.hierarchicalGraph.edges(
+                            childId,
+                        )) {
                             const edgeAttrs =
                                 this.hierarchicalGraph.getEdgeAttributes(edge);
                             if (edgeAttrs.type !== "cooccurrence") continue;
@@ -275,7 +293,9 @@ export class TopicGraphBuilder {
                             topicId,
                             otherNode,
                         );
-                        if (!this.hierarchicalGraph.hasEdge(hierarchicalEdgeKey)) {
+                        if (
+                            !this.hierarchicalGraph.hasEdge(hierarchicalEdgeKey)
+                        ) {
                             this.hierarchicalGraph.addEdge(topicId, otherNode, {
                                 type: "cooccurrence",
                                 count: agg.count,
@@ -311,7 +331,8 @@ export class TopicGraphBuilder {
 
         while (current) {
             ancestorsA.add(current);
-            const attrs: any = this.hierarchicalGraph.getNodeAttributes(current);
+            const attrs: any =
+                this.hierarchicalGraph.getNodeAttributes(current);
             current = attrs.parentTopicId || null;
         }
 
@@ -320,7 +341,8 @@ export class TopicGraphBuilder {
             if (ancestorsA.has(current)) {
                 return current;
             }
-            const attrs: any = this.hierarchicalGraph.getNodeAttributes(current);
+            const attrs: any =
+                this.hierarchicalGraph.getNodeAttributes(current);
             current = attrs.parentTopicId || null;
         }
 

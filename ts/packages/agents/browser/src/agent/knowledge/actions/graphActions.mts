@@ -1464,7 +1464,9 @@ export async function getGlobalImportanceLayer(
         let cachedGraph = getGraphologyCache(cacheKey);
 
         if (!cachedGraph) {
-            debug("[Graphology] Building layout for entity importance layer...");
+            debug(
+                "[Graphology] Building layout for entity importance layer...",
+            );
             const layoutStart = performance.now();
 
             const graphNodes: GraphNode[] = optimizedEntities.map(
@@ -1520,7 +1522,8 @@ export async function getGlobalImportanceLayer(
         // Enrich entities with graphology colors and sizes
         const enrichedEntities = optimizedEntities.map((entity: any) => {
             const graphElement = cachedGraph!.cytoscapeElements.find(
-                (el: any) => el.data?.id === entity.id || el.data?.label === entity.name,
+                (el: any) =>
+                    el.data?.id === entity.id || el.data?.label === entity.name,
             );
             if (graphElement?.data) {
                 return {
@@ -1964,7 +1967,6 @@ export function invalidateTopicCache(websiteCollection: any): void {
 
 // Ensure topic graph data is cached for fast access
 async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
-
     const cache = getTopicGraphCache(websiteCollection);
 
     // Cache never expires - only invalidated on graph rebuild or knowledge import
@@ -2033,7 +2035,8 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
         }
         for (const topic of topics) {
             if (topic.parentTopicId) {
-                const currentCount = childCountMap.get(topic.parentTopicId) || 0;
+                const currentCount =
+                    childCountMap.get(topic.parentTopicId) || 0;
                 childCountMap.set(topic.parentTopicId, currentCount + 1);
             }
         }

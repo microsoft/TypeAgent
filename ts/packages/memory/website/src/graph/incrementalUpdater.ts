@@ -3,10 +3,7 @@
 
 import { createRequire } from "module";
 import registerDebug from "debug";
-import type {
-    HierarchicalTopicRecord,
-    TopicMetrics,
-} from "../tables.js";
+import type { HierarchicalTopicRecord, TopicMetrics } from "../tables.js";
 import { MetricsCalculator } from "./metricsCalculator.js";
 import type { CooccurrenceData } from "./topicGraphBuilder.js";
 
@@ -179,7 +176,8 @@ export class IncrementalGraphUpdater {
                     );
 
                     if (this.flatGraph.hasEdge(edgeKey)) {
-                        const current = this.flatGraph.getEdgeAttributes(edgeKey);
+                        const current =
+                            this.flatGraph.getEdgeAttributes(edgeKey);
                         this.flatGraph.setEdgeAttribute(
                             edgeKey,
                             "count",
@@ -233,9 +231,8 @@ export class IncrementalGraphUpdater {
             const existingCooccurrences = this.hierarchicalGraph
                 .edges(topicId)
                 .filter((edge: string) => {
-                    const edgeAttrs = this.hierarchicalGraph.getEdgeAttributes(
-                        edge,
-                    );
+                    const edgeAttrs =
+                        this.hierarchicalGraph.getEdgeAttributes(edge);
                     return edgeAttrs.type === "cooccurrence";
                 });
 
@@ -285,7 +282,8 @@ export class IncrementalGraphUpdater {
         const existingCooccurrences = this.hierarchicalGraph
             .edges(topicId)
             .filter((edge: string) => {
-                const edgeAttrs = this.hierarchicalGraph.getEdgeAttributes(edge);
+                const edgeAttrs =
+                    this.hierarchicalGraph.getEdgeAttributes(edge);
                 return edgeAttrs.type === "cooccurrence";
             });
 
@@ -300,7 +298,8 @@ export class IncrementalGraphUpdater {
 
         for (const childId of attrs.childIds) {
             for (const edge of this.hierarchicalGraph.edges(childId)) {
-                const edgeAttrs = this.hierarchicalGraph.getEdgeAttributes(edge);
+                const edgeAttrs =
+                    this.hierarchicalGraph.getEdgeAttributes(edge);
                 if (edgeAttrs.type !== "cooccurrence") continue;
 
                 const source = this.hierarchicalGraph.source(edge);

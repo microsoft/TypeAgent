@@ -285,7 +285,11 @@ function applyMultiPhaseLayout(
                 const source = graph.source(edge);
                 const target = graph.target(edge);
                 if (subgraph.hasNode(source) && subgraph.hasNode(target)) {
-                    subgraph.addEdge(source, target, graph.getEdgeAttributes(edge));
+                    subgraph.addEdge(
+                        source,
+                        target,
+                        graph.getEdgeAttributes(edge),
+                    );
                 }
             }
 
@@ -313,12 +317,14 @@ function applyMultiPhaseLayout(
 
             const centroidX =
                 nodes.reduce(
-                    (sum, n) => sum + (graph.getNodeAttribute(n, "x") as number),
+                    (sum, n) =>
+                        sum + (graph.getNodeAttribute(n, "x") as number),
                     0,
                 ) / nodes.length;
             const centroidY =
                 nodes.reduce(
-                    (sum, n) => sum + (graph.getNodeAttribute(n, "y") as number),
+                    (sum, n) =>
+                        sum + (graph.getNodeAttribute(n, "y") as number),
                     0,
                 ) / nodes.length;
 
@@ -403,8 +409,8 @@ export function convertToCytoscapeElements(
 
     for (const node of graph.nodes()) {
         const attr = graph.getNodeAttributes(node);
-        const x = ((attr.x - minX) * scaleX) + targetMin;
-        const y = ((attr.y - minY) * scaleY) + targetMin;
+        const x = (attr.x - minX) * scaleX + targetMin;
+        const y = (attr.y - minY) * scaleY + targetMin;
 
         elements.push({
             data: {

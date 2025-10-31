@@ -3,8 +3,14 @@
 
 import { createRequire } from "module";
 import registerDebug from "debug";
-import { TopicGraphBuilder, type CooccurrenceData } from "./topicGraphBuilder.js";
-import { IncrementalGraphUpdater, type WebpageKnowledge } from "./incrementalUpdater.js";
+import {
+    TopicGraphBuilder,
+    type CooccurrenceData,
+} from "./topicGraphBuilder.js";
+import {
+    IncrementalGraphUpdater,
+    type WebpageKnowledge,
+} from "./incrementalUpdater.js";
 import { MetricsCalculator } from "./metricsCalculator.js";
 import type { HierarchicalTopicRecord } from "../tables.js";
 
@@ -29,7 +35,9 @@ export class GraphStateManager {
             return;
         }
 
-        debug(`Initializing graphs with ${hierarchicalTopics.length} topics, ${cooccurrences.length} cooccurrences`);
+        debug(
+            `Initializing graphs with ${hierarchicalTopics.length} topics, ${cooccurrences.length} cooccurrences`,
+        );
 
         const graphBuilder = new TopicGraphBuilder();
         const graphs = graphBuilder.buildFromTopicHierarchy(
@@ -45,22 +53,36 @@ export class GraphStateManager {
             this.hierarchicalGraph,
         );
 
-        debug(`Graphs initialized: flat=${this.flatGraph.order} nodes, hierarchical=${this.hierarchicalGraph.order} nodes`);
+        debug(
+            `Graphs initialized: flat=${this.flatGraph.order} nodes, hierarchical=${this.hierarchicalGraph.order} nodes`,
+        );
     }
 
     public async addWebpage(
         knowledge: WebpageKnowledge,
-    ): Promise<{ addedTopics: number; updatedTopics: number; addedRelationships: number; durationMs: number }> {
+    ): Promise<{
+        addedTopics: number;
+        updatedTopics: number;
+        addedRelationships: number;
+        durationMs: number;
+    }> {
         if (!this.incrementalUpdater) {
-            throw new Error("Graphs not initialized. Call ensureGraphsInitialized() first.");
+            throw new Error(
+                "Graphs not initialized. Call ensureGraphsInitialized() first.",
+            );
         }
 
         const result = await this.incrementalUpdater.addWebpage(knowledge);
-        debug(`Added webpage in ${result.durationMs}ms: ${result.addedTopics} topics, ${result.addedRelationships} relationships`);
+        debug(
+            `Added webpage in ${result.durationMs}ms: ${result.addedTopics} topics, ${result.addedRelationships} relationships`,
+        );
         return result;
     }
 
-    public getGraphs(): { flatGraph: Graph | null; hierarchicalGraph: Graph | null } {
+    public getGraphs(): {
+        flatGraph: Graph | null;
+        hierarchicalGraph: Graph | null;
+    } {
         return {
             flatGraph: this.flatGraph,
             hierarchicalGraph: this.hierarchicalGraph,
@@ -88,8 +110,14 @@ export class GraphStateManager {
 
             const source = this.hierarchicalGraph.source(edge);
             const target = this.hierarchicalGraph.target(edge);
-            const sourceName = this.hierarchicalGraph.getNodeAttribute(source, "topicName");
-            const targetName = this.hierarchicalGraph.getNodeAttribute(target, "topicName");
+            const sourceName = this.hierarchicalGraph.getNodeAttribute(
+                source,
+                "topicName",
+            );
+            const targetName = this.hierarchicalGraph.getNodeAttribute(
+                target,
+                "topicName",
+            );
 
             relationships.push({
                 fromTopic: source,
@@ -110,16 +138,29 @@ export class GraphStateManager {
     }
 
     public async recomputeMetrics(
-        topicCounts?: Map<string, { documentCount: number; domainCount: number }>,
-    ): Promise<{ topicMetrics: Map<string, any>; communities: Map<string, number> }> {
+        topicCounts?: Map<
+            string,
+            { documentCount: number; domainCount: number }
+        >,
+    ): Promise<{
+        topicMetrics: Map<string, any>;
+        communities: Map<string, number>;
+    }> {
         if (!this.hierarchicalGraph) {
-            throw new Error("Graphs not initialized. Call ensureGraphsInitialized() first.");
+            throw new Error(
+                "Graphs not initialized. Call ensureGraphsInitialized() first.",
+            );
         }
 
         const metricsCalculator = new MetricsCalculator();
-        const result = metricsCalculator.calculateMetrics(this.hierarchicalGraph, topicCounts);
+        const result = metricsCalculator.calculateMetrics(
+            this.hierarchicalGraph,
+            topicCounts,
+        );
 
-        debug(`Recomputed metrics for ${result.topicMetrics.size} topics, ${result.communities.size} communities`);
+        debug(
+            `Recomputed metrics for ${result.topicMetrics.size} topics, ${result.communities.size} communities`,
+        );
         return result;
     }
 

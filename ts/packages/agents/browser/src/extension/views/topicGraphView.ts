@@ -1033,11 +1033,17 @@ class TopicGraphView {
 
     private exportGraphologyJson(): void {
         if (!this.lastLoadedData || !this.lastLoadedData.presetLayout) {
-            this.showNotification("No graphology layout data available to export");
+            this.showNotification(
+                "No graphology layout data available to export",
+            );
             return;
         }
 
-        const jsonData = JSON.stringify(this.lastLoadedData.presetLayout.elements, null, 2);
+        const jsonData = JSON.stringify(
+            this.lastLoadedData.presetLayout.elements,
+            null,
+            2,
+        );
         const blob = new Blob([jsonData], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -1051,7 +1057,9 @@ class TopicGraphView {
 
     private togglePrototypeMode(enabled: boolean): void {
         this.state.prototypeMode = enabled;
-        console.log(`[TopicGraphView] Prototype mode: ${enabled ? "ENABLED" : "DISABLED"}`);
+        console.log(
+            `[TopicGraphView] Prototype mode: ${enabled ? "ENABLED" : "DISABLED"}`,
+        );
 
         if (!this.lastLoadedData) {
             this.showNotification("No data available. Load a graph first.");
@@ -1059,7 +1067,9 @@ class TopicGraphView {
         }
 
         this.visualizer?.setPrototypeMode(enabled);
-        this.showNotification(enabled ? "Prototype mode enabled" : "Prototype mode disabled");
+        this.showNotification(
+            enabled ? "Prototype mode enabled" : "Prototype mode disabled",
+        );
     }
 
     private toggleSidebar(): void {

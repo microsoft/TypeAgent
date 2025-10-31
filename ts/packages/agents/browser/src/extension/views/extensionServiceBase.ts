@@ -620,7 +620,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-
     async getTopicTimelines(parameters: {
         topicNames: string[];
         maxTimelineEntries?: number;
