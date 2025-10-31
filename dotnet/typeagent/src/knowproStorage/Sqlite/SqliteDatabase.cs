@@ -155,6 +155,11 @@ public class SqliteDatabase : IDisposable
         cmd.ExecuteNonQuery();
     }
 
+    public SqliteTransaction BeginTransaction()
+    {
+        return _connection.BeginTransaction();
+    }
+
     public void Dispose()
     {
         Dispose(true);

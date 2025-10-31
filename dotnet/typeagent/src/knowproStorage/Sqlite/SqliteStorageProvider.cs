@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
 public enum SqliteProviderCreateMode
@@ -77,6 +78,11 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         return SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex as IReadOnlyCache<string, Embedding>;
     }
 
+    public IStorageTransaction BeginTransaction()
+    {
+        return new SqliteProviderTransaction(_db.BeginTransaction());
+    }
+
     public void Dispose()
     {
         Dispose(true);
@@ -109,4 +115,24 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         SemanticRefIndex = null;
         SecondaryIndexes = null;
     }
+}
+
+internal class SqliteProviderTransaction : IStorageTransaction
+{
+    SqliteTransaction? _transaction;
+
+    internal SqliteProviderTransaction(SqliteTransaction transaction)
+    {
+        _transaction = transaction;
+    }
+
+    public Task CommitAsync() => _transaction.CommitAsync();
+
+    public void Dispose()
+    {
+        _transaction?.Dispose();
+        _transaction = null;
+    }
+
+    public Task RollbackAsync() => _transaction.RollbackAsync();
 }
