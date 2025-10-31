@@ -3,13 +3,6 @@
 
 namespace TypeAgent.KnowPro.Storage;
 
-internal struct MessageChunkOrdinal
-{
-    public int MessageOrdinal { get; set; }
-
-    public int ChunkOrdinal { get; set; }
-}
-
 internal static class MessageExtensions
 {
     public static (List<MessageChunkOrdinal>, List<string>) FlattenChunks(this IList<IMessage> messages)

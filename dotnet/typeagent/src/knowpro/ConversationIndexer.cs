@@ -143,4 +143,5 @@ public static class ConversationIndexer
             cancellationToken
         ).ConfigureAwait(false);
     }
+
 }

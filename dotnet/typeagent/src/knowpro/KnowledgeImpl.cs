@@ -51,6 +51,8 @@ public partial class Action
     [JsonIgnore]
     public bool HasIndirectObject => IsDefined(IndirectObjectEntityName);
 
+    public string VerbString() => string.Join(" ", Verbs);
+
     private static bool IsDefined(string value)
     {
         return !string.IsNullOrEmpty(value) && value != NoneEntityName;

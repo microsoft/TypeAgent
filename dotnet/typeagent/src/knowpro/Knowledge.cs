@@ -50,9 +50,9 @@ public partial class Action : Knowledge
 
     [JsonPropertyName("indirecObjectEntityName")]
     public string IndirectObjectEntityName { get; set; }
-    //
-    // TODO: Support Params
-    //
+
+    [JsonPropertyName("params")]
+    public IActionParam[]? Params { get; set; }
 }
 
 public class KnowledgeResponse
