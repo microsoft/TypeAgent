@@ -14,6 +14,9 @@ namespace TypeAgent.KnowPro;
 public abstract class Knowledge
 {
     public Knowledge() { }
+
+    [JsonIgnore]
+    public abstract KnowledgeType KnowledgeType { get; }
 }
 
 public interface IKnowledgeSource

@@ -7,41 +7,6 @@ namespace TypeAgent.KnowPro;
 
 public static class TermToSemanticRefIndexer
 {
-    public static async ValueTask AddTermAsync(
-        this ITermToSemanticRefIndex index,
-        string term,
-        int semanticRefOrdinal,
-        ISet<string>? termsAdded,
-        CancellationToken cancellationToken = default
-    )
-    {
-        if (string.IsNullOrEmpty(term))
-        {
-            return;
-        }
-
-        term = await index.AddTermAsync(
-            term,
-            ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken
-        ).ConfigureAwait(false);
-
-        termsAdded?.Add(term);
-    }
-
-    public static async ValueTask AddEntriesAsync(
-        this ITermToSemanticRefIndex index,
-        string term,
-        ScoredSemanticRefOrdinal[] entries,
-        CancellationToken cancellationToken = default
-    )
-    {
-        // TODO: Bulk operations
-        foreach (var entry in entries)
-        {
-            await index.AddTermAsync(term, entry, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
     public static async ValueTask AddKnowledgeAsync(
         this ITermToSemanticRefIndex index,
         KnowledgeResponse knowledge,
@@ -88,6 +53,41 @@ public static class TermToSemanticRefIndexer
                 termsAdded,
                 cancellationToken
             ).ConfigureAwait(false);
+        }
+    }
+
+    public static async ValueTask AddTermAsync(
+        this ITermToSemanticRefIndex index,
+        string term,
+        int semanticRefOrdinal,
+        ISet<string>? termsAdded,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrEmpty(term))
+        {
+            return;
+        }
+
+        term = await index.AddTermAsync(
+            term,
+            ScoredSemanticRefOrdinal.New(semanticRefOrdinal), cancellationToken
+        ).ConfigureAwait(false);
+
+        termsAdded?.Add(term);
+    }
+
+    public static async ValueTask AddEntriesAsync(
+        this ITermToSemanticRefIndex index,
+        string term,
+        ScoredSemanticRefOrdinal[] entries,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // TODO: Bulk operations
+        foreach (var entry in entries)
+        {
+            await index.AddTermAsync(term, entry, cancellationToken).ConfigureAwait(false);
         }
     }
 

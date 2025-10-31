@@ -17,6 +17,8 @@ public partial class ConcreteEntity
         this.Type = [type];
     }
 
+    public override KnowledgeType KnowledgeType => KnowledgeType.Entity;
+
     [JsonIgnore]
     public bool HasName => !string.IsNullOrEmpty(Name);
 
@@ -38,6 +40,8 @@ public partial class Action
         ObjectEntityName = NoneEntityName;
         IndirectObjectEntityName = NoneEntityName;
     }
+
+    public override KnowledgeType KnowledgeType => KnowledgeType.Action;
 
     [JsonIgnore]
     public bool HasVerbs => !Verbs.IsNullOrEmpty();
@@ -61,6 +65,18 @@ public partial class Action
 
 public partial class Topic
 {
+    public Topic()
+    {
+
+    }
+
+    public Topic(string text)
+    {
+        Text = text;
+    }
+
+    public override KnowledgeType KnowledgeType => KnowledgeType.Topic;
+
     public static implicit operator string(Topic topic)
     {
         return topic.Text;
@@ -69,9 +85,16 @@ public partial class Topic
 
 public partial class Tag
 {
+    public override KnowledgeType KnowledgeType => KnowledgeType.Tag;
+
     public static implicit operator string(Tag tag)
     {
         return tag.Text;
     }
+}
+
+public partial class StructuredTag
+{
+    public override KnowledgeType KnowledgeType => KnowledgeType.STag;
 }
 

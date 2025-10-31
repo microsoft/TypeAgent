@@ -256,7 +256,9 @@ ORDER BY semref_id");
     SemanticRefRow ToSemanticRefRow(SemanticRef semanticRef)
     {
         SemanticRefRow row = new();
-        row.SemanticRefId = (semanticRef.SemanticRefOrdinal < 0) ? GetNextSemanicRefId() : semanticRef.SemanticRefOrdinal;
+        row.SemanticRefId = (semanticRef.SemanticRefOrdinal < 0)
+            ? GetNextSemanicRefId()
+            : semanticRef.SemanticRefOrdinal;
         row.RangeJson = StorageSerializer.ToJson(semanticRef.Range);
         row.KnowledgeType = semanticRef.KnowledgeType;
         row.KnowledgeJson = StorageSerializer.ToJson(semanticRef.Knowledge);
