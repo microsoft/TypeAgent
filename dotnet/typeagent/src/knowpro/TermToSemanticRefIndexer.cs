@@ -42,6 +42,55 @@ public static class TermToSemanticRefIndexer
         }
     }
 
+    public static async ValueTask AddKnowledgeAsync(
+        this ITermToSemanticRefIndex index,
+        KnowledgeResponse knowledge,
+        int semanticRefOrdinal,
+        ISet<string>? termsAdded = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        foreach (var entity in knowledge.Entities)
+        {
+            await index.AddEntityAsync(
+                entity,
+                semanticRefOrdinal,
+                termsAdded,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
+        foreach (var action in knowledge.Actions)
+        {
+            await index.AddActionAsync(
+                action,
+                semanticRefOrdinal,
+                termsAdded,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
+        foreach (var action in knowledge.InverseActions)
+        {
+            await index.AddActionAsync(
+                action,
+                semanticRefOrdinal,
+                termsAdded,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+
+        foreach (var topic in knowledge.Topics)
+        {
+            await index.AddTopicAsync(
+                topic,
+                semanticRefOrdinal,
+                termsAdded,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// Adds an entity (name, types, and all facet names/values) to the term-to-semanticRef index.
     /// </summary>
@@ -132,16 +181,14 @@ public static class TermToSemanticRefIndexer
 
     public static async ValueTask AddTopicAsync(
         this ITermToSemanticRefIndex index,
-        Topic topic,
+        string topic,
         int semanticRefOrdinal,
         ISet<string>? termsAdded = null,
         CancellationToken cancellationToken = default
     )
     {
-        KnowProVerify.ThrowIfInvalid(topic);
-
         await index.AddTermAsync(
-            topic.Text,
+            topic,
             semanticRefOrdinal,
             termsAdded,
             cancellationToken
