@@ -130,6 +130,7 @@ export class WebsiteCollection
     private db: sqlite.Database | undefined = undefined;
     private dbPath: string = "";
     private graphStateManager: any = null;
+    private cachedEntityCount: number = 0;
 
     constructor(
         nameTag: string = "",
@@ -1634,14 +1635,19 @@ export class WebsiteCollection
         );
 
         // Extract entities from cache (much faster than iterating websites)
+        const entityExtractionStart = Date.now();
         const entities = cacheManager.getAllEntities();
         debug(
-            `[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - startTime}ms`,
+            `[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - entityExtractionStart}ms`,
         );
 
+        // Initialize cached entity count for incremental updates
+        this.cachedEntityCount = entities.length;
+
         // Store entities in knowledge entities table
+        const storeStart = Date.now();
         await this.storeEntitiesInDatabase(cacheManager, websitesToProcess);
-        debug(`[Knowledge Graph] Stored entities in database`);
+        debug(`[Knowledge Graph] Stored entities in database in ${Date.now() - storeStart}ms`);
 
         // Build relationships between entities using cache-based approach
         const relationshipStartTime = Date.now();
@@ -2055,12 +2061,16 @@ export class WebsiteCollection
             }
 
             // Use AI to merge topics into higher-level topics
-            debug(`[Knowledge Graph] Merging ${flatTopics.length} topics into hierarchy...`);
+            const mergeStart = Date.now();
+            const topicListSize = JSON.stringify(flatTopics).length;
+            debug(`[Knowledge Graph] Merging ${flatTopics.length} topics into hierarchy (prompt size: ${topicListSize} chars)...`);
+
             const mergeResult = await topicExtractor.mergeTopics(
                 flatTopics,
                 undefined, // No past topics for initial build
                 "comprehensive, hierarchical",
             );
+            debug(`[Knowledge Graph] Topic merge completed in ${Date.now() - mergeStart}ms`);
 
             if (mergeResult && mergeResult.status === "Success") {
                 debug(`[Knowledge Graph] Topic merge successful: ${mergeResult.topic}`);
@@ -2879,18 +2889,40 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         const startTime = Date.now();
 
         try {
+            // Extract entities from NEW websites only
+            const extractionStart = Date.now();
             const newEntities =
                 await this.extractEntitiesFromWebsites(newWebsites);
+            debug(
+                `[Knowledge Graph] Entity extraction completed in ${Date.now() - extractionStart}ms (${newEntities.length} new entities)`,
+            );
 
             if (newEntities.length > 0) {
+                const relationshipsStart = Date.now();
                 await this.updateRelationships(newEntities);
+                debug(
+                    `[Knowledge Graph] Relationships updated in ${Date.now() - relationshipsStart}ms`,
+                );
             }
 
+            const hierarchyStart = Date.now();
             await this.updateHierarchicalTopics(newWebsites);
+            debug(
+                `[Knowledge Graph] Hierarchical topics updated in ${Date.now() - hierarchyStart}ms`,
+            );
 
-            const totalEntityCount = (await this.extractEntities()).length;
-            if (this.shouldRecomputeCommunities(totalEntityCount)) {
+            // ✅ FIX: Track entity count instead of re-extracting from all websites
+            // Only recompute communities if we've added significant new entities
+            const previousEntityCount = this.cachedEntityCount || 0;
+            const currentEntityCount = previousEntityCount + newEntities.length;
+            this.cachedEntityCount = currentEntityCount;
+
+            if (this.shouldRecomputeCommunities(currentEntityCount)) {
+                const communityStart = Date.now();
                 await this.recomputeCommunities();
+                debug(
+                    `[Knowledge Graph] Communities recomputed in ${Date.now() - communityStart}ms`,
+                );
             }
 
             debug(
