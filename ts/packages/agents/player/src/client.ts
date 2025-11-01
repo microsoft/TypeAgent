@@ -11,13 +11,13 @@ import {
     PlayArtistAction,
     PlayerActions,
     PlayGenreAction,
-    PlayRandomAction,
     PlayTrackAction,
     SearchTracksAction,
     SearchForPlaylistsAction,
     GetFromCurrentPlaylistListAction,
     AddCurrentTrackToPlaylistAction,
     AddToPlaylistFromCurrentTrackListAction,
+    StartRadioAction,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -397,14 +397,23 @@ function updatePlaylistList(
     context.currentPlaylistList = playlists;
 }
 
+function updateTrackList(
+    collection: ITrackCollection,
+    context: IClientContext,
+) {
+    context.currentTrackList = collection;
+    context.lastTrackStartIndex = 0;
+    context.lastTrackEndIndex = collection.getTrackCount();
+
+    context.currentTrackList = collection;
+}
+
 async function updateTrackListAndPrint(
     collection: ITrackCollection,
     clientContext: IClientContext,
 ) {
     await printTrackNames(collection, clientContext);
-    clientContext.currentTrackList = collection;
-    clientContext.lastTrackStartIndex = 0;
-    clientContext.lastTrackEndIndex = collection.getTrackCount();
+    updateTrackList(collection, clientContext);
 }
 
 export async function getClientContext(
@@ -506,30 +515,62 @@ export async function searchForPlaylists(
 async function playTrackCollection(
     trackCollection: ITrackCollection,
     clientContext: IClientContext,
-    trackIndex = 0,
+    trackIndex: number | undefined = undefined,
 ) {
     const deviceId = await ensureSelectedDeviceId(clientContext);
     const tracks = trackCollection.getTracks();
     const playContext = trackCollection.getContext();
-    const singleTrackCollection = new TrackCollection([tracks[trackIndex]]);
-    const actionResult = await htmlTrackNames(
-        singleTrackCollection,
-        "Now playing",
-    );
-    if (playContext === undefined) {
-        const singleTracks = singleTrackCollection.getTracks();
-        const uris = singleTracks.map((track) => track.uri);
-        await play(clientContext.service, deviceId, uris);
-    } else {
-        await play(
-            clientContext.service,
-            deviceId,
-            undefined,
-            playContext,
-            trackIndex,
+    if (
+        trackIndex !== undefined &&
+        (trackIndex < 0 || trackIndex >= tracks.length)
+    ) {
+        return createErrorActionResult(
+            `Track index ${trackIndex} out of range for track collection of size ${tracks.length}`,
         );
+    } else {
+        if (trackIndex !== undefined) {
+            if (playContext === undefined) {
+                const singleTrackCollection = new TrackCollection([
+                    tracks[trackIndex],
+                ]);
+                const actionResult = await htmlTrackNames(
+                    singleTrackCollection,
+                    "Now playing",
+                );
+                const singleTracks = singleTrackCollection.getTracks();
+                const uris = singleTracks.map((track) => track.uri);
+                await play(clientContext.service, deviceId, uris);
+                return actionResult;
+            } else {
+                const trackCollectionFromTrackNumber = new TrackCollection(
+                    tracks.slice(trackIndex),
+                    playContext,
+                );
+                const actionResult = await htmlTrackNames(
+                    trackCollectionFromTrackNumber,
+                    "Now playing",
+                );
+                updateTrackList(trackCollectionFromTrackNumber, clientContext);
+                await play(
+                    clientContext.service,
+                    deviceId,
+                    undefined,
+                    playContext,
+                    trackIndex,
+                );
+                return actionResult;
+            }
+        } else {
+            const actionResult = await htmlTrackNames(
+                trackCollection,
+                "Now playing",
+            );
+            updateTrackList(trackCollection, clientContext);
+            const uris = tracks.map((track) => track.uri);
+            await play(clientContext.service, deviceId, uris, playContext);
+            return actionResult;
+        }
     }
-    return actionResult;
 }
 
 function randomShuffle<T>(array: T[]) {
@@ -541,17 +582,12 @@ function randomShuffle<T>(array: T[]) {
     return result;
 }
 
-async function playRandomAction(
+async function startRadioAction(
     clientContext: IClientContext,
-    action: PlayRandomAction,
+    action: StartRadioAction,
 ) {
-    const quantity = action.parameters?.quantity ?? 0;
     const savedTracks = await getRecentlyPlayed(clientContext.service);
     if (savedTracks && savedTracks.length > 0) {
-        if (quantity > 0) {
-            savedTracks.splice(quantity);
-        }
-
         const tracks = randomShuffle(savedTracks.map((track) => track.track));
         const collection = new TrackCollection(tracks);
         return playTrackCollection(collection, clientContext);
@@ -848,8 +884,8 @@ export async function handleCall(
     instanceStorage?: Storage,
 ): Promise<ActionResult> {
     switch (action.actionName) {
-        case "playRandom":
-            return playRandomAction(clientContext, action);
+        case "startRadio":
+            return startRadioAction(clientContext, action);
         case "playTrack":
             return playTrackAction(clientContext, action);
         case "playFromCurrentTrackList":

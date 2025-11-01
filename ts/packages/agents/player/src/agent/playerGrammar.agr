@@ -3,30 +3,36 @@
 
 @ <Start> = <Pause>
           | <Resume>
+          | <Next>
+          | <Previous>
           | <PlayCommand>
 @ <Pause> = pause ((the)? music)?   ->  { actionName: "pause" }
 @ <Resume> = resume ((the)? music)?   ->  { actionName: "resume" }
+@ <Next> = (<PlayTrackAction>)? (the)? next (<Item>)? -> { actionName: "next" }
+@ <Previous> = (<PlayTrackAction>)? (the)? previous (<Item>)? -> { actionName: "previous" }
+
 @ <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>
 @ <PlayTrackNumberCommand> =
-    play (the)? $(n:<Ordinal>) (<Item>)? -> {
+    <PlayTrackAction> (the)? $(n:<Ordinal>) (<Item>)? -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
             trackNumber: $(n)
         }
     }
-| play track $(n:<Cardinal>) -> {
+| <PlayTrackAction> (<TrackTerm>)? (<NumberIndicator>)? $(n:<Cardinal>) -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
             trackNumber: $(n)
         }
    }
-| play track #$(n:number) -> {
+| <PlayTrackAction> (<TrackTerm>)? (<NumberIndicator>)? $(n:number) -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
             trackNumber: $(n)
         }
    }
-
+@ <PlayTrackAction> = play | joue | cue up
+@ <NumberIndicator> = # | numero | number | no.
 @ <Item> = one | cut | <TrackTerm> 
 @ <TrackTerm> = track | song
 

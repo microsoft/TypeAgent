@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 export type PlayerActions =
-    | PlayRandomAction
+    | StartRadioAction
     | PlayTrackAction
     | PlayFromCurrentTrackListAction
     | PlayAlbumAction
@@ -37,12 +37,8 @@ export type PlayerActions =
 export type PlayerEntities = MusicDevice;
 export type MusicDevice = string;
 
-// Use playRandom when the user asks for some music to play
-export interface PlayRandomAction {
-    actionName: "playRandom";
-    parameters?: {
-        quantity?: number;
-    };
+export interface StartRadioAction {
+    actionName: "startRadio";
 }
 
 // Play a specific track
