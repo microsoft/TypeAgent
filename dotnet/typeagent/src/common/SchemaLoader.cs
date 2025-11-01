@@ -8,12 +8,7 @@ public static class SchemaLoader
     // Resource name is: <FullNamespace>.<filename>
     public static string LoadResource(Assembly assembly, string resourceName)
     {
-        ArgumentVerify.ThrowIfNull(assembly, nameof(assembly));
-
-        using var stream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new FileNotFoundException($"Resource not found: {resourceName}");
-        using var reader = new StreamReader(stream);
-        string schemaText = reader.ReadToEnd();
+        string schemaText = Resource.LoadResourceText(assembly, resourceName);
         RemoveCopyright(schemaText);
         return schemaText;
     }

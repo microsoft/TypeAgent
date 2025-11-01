@@ -57,7 +57,7 @@ public class VerbsTerm
     // individual words in single or compound verb
     [Comment("individual words in single or compound verb")]
     [JsonPropertyName("words")]
-    public List<string> Words { get; set; } = [];
+    public List<string> Words { get; } = [];
 
     [JsonPropertyName("tense")]
     public VerbsTermTense Tense { get; set; }
@@ -127,7 +127,7 @@ public class SearchExpr
     public string RewrittenQuery { get; set; } = string.Empty;
 
     [JsonPropertyName("filters")]
-    public List<SearchFilter> Filters { get; set; } = [];
+    public List<SearchFilter> Filters { get; } = [];
 }
 
 // One expression for each search required by user request
@@ -136,7 +136,7 @@ public class SearchExpr
 public class SearchQuery
 {
     [JsonPropertyName("searchExpressions")]
-    public List<SearchExpr> SearchExpressions { get; set; } = [];
+    public List<SearchExpr> SearchExpressions { get; } = [];
 }
 
 // Handles actorEntities: EntityTerm[] | "*"
@@ -144,5 +144,13 @@ public class SearchQuery
 public class ActorEntities
 {
     public List<EntityTerm>? Entities { get; set; }
+
     public bool IsWildcard { get; set; }
+
+    public bool IsArray()
+    {
+        // If the action has no subject, disable scope
+        // isEntityTermArray checks for wildcards etc
+        return !(IsWildcard || Entities.IsNullOrEmpty());
+    }
 }

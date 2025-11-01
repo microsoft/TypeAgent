@@ -16,4 +16,6 @@ public class WhenFilter
     public SearchTermGroup? ScopeDefiningTerms { get; set; }
 
     public IList<TextRange>? TextRangesInScope { get; set; }
+
+    public string? ThreadDescription { get; set; }
 }

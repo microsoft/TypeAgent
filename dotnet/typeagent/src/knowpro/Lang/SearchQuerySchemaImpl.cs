@@ -18,7 +18,8 @@ public class ActorEntitiesConverter : JsonConverter<ActorEntities>
             var entities = JsonSerializer.Deserialize<List<EntityTerm>>(ref reader, options);
             return new ActorEntities { Entities = entities, IsWildcard = false };
         }
-        throw new JsonException("Invalid actorEntities value.");
+
+        return null;
     }
 
     public override void Write(Utf8JsonWriter writer, ActorEntities value, JsonSerializerOptions options)
