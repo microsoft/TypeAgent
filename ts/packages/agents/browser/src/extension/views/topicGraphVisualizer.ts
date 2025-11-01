@@ -117,7 +117,6 @@ export class TopicGraphVisualizer {
         }
     }
 
-
     /**
      * Initialize the topic graph with data
      */
@@ -129,7 +128,7 @@ export class TopicGraphVisualizer {
             this.cy = cytoscape({
                 container: this.container,
                 style: this.getOptimizedTopicGraphStyles(),
-                layout: { name: 'preset' },
+                layout: { name: "preset" },
                 elements: [],
                 renderer: rendererConfig,
                 minZoom: 0.25,
@@ -147,23 +146,12 @@ export class TopicGraphVisualizer {
         await this.loadData(data);
     }
 
-
     /**
      * Set graph data provider for API calls
      */
     public setGraphDataProvider(provider: any): void {
         this.graphDataProvider = provider;
     }
-
-
-
-
-
-
-
-
-
-
 
     /**
      * Load topic data into the graph
@@ -985,9 +973,7 @@ export class TopicGraphVisualizer {
                 `[TopicGraphVisualizer] Prototype mode enabled - ${this.cy.nodes().length} nodes, ${this.cy.edges().length} edges visible`,
             );
         } else {
-            console.log(
-                "[TopicGraphVisualizer] Disabling prototype mode",
-            );
+            console.log("[TopicGraphVisualizer] Disabling prototype mode");
         }
     }
 

@@ -62,7 +62,6 @@ export class EntityGraphVisualizer {
     private lastCursorPosition: { x: number; y: number } | null = null;
     private isCursorOverMap: boolean = false;
 
-
     // Investigation tracking
     private zoomEventCount: number = 0;
     private eventSequence: Array<{
@@ -155,7 +154,9 @@ export class EntityGraphVisualizer {
         const rendererConfig = this.getOptimalRendererConfig();
 
         // Initialize single Cytoscape instance with WebGL
-        console.log("[EntityGraphVisualizer] Using single-instance initialization");
+        console.log(
+            "[EntityGraphVisualizer] Using single-instance initialization",
+        );
         console.time("[Perf] Single instance initialization");
         this.initializeSingleInstance(rendererConfig);
         console.timeEnd("[Perf] Single instance initialization");
@@ -166,13 +167,16 @@ export class EntityGraphVisualizer {
         console.timeEnd("[Perf] EntityGraphVisualizer initialization");
     }
 
-
     /**
      * Initialize simplified single-instance system for prototype mode
      */
     private initializeSingleInstance(rendererConfig: any): void {
-        console.log("[Prototype] Initializing single Cytoscape instance with WebGL");
-        console.log(`[Prototype] Renderer configuration: ${JSON.stringify(rendererConfig)}`);
+        console.log(
+            "[Prototype] Initializing single Cytoscape instance with WebGL",
+        );
+        console.log(
+            `[Prototype] Renderer configuration: ${JSON.stringify(rendererConfig)}`,
+        );
 
         // Create single instance directly on the container
         this.cy = cytoscape({
@@ -195,7 +199,6 @@ export class EntityGraphVisualizer {
 
         console.log("[Prototype] Single instance created successfully");
     }
-
 
     /**
      * Switch to global view instance
@@ -282,8 +285,6 @@ export class EntityGraphVisualizer {
         this.clearNeighborhoodState(true);
     }
 
-
-
     /**
      * Check if triple-instance system is available and can handle fast navigation
      */
@@ -305,7 +306,6 @@ export class EntityGraphVisualizer {
             this.switchToGlobalView();
         }
     }
-
 
     /**
      * Get the current active view for UI integration
@@ -460,8 +460,6 @@ export class EntityGraphVisualizer {
             },
         };
     }
-
-
 
     /**
      * Normalize wheel delta values for cross-platform consistency
@@ -1018,7 +1016,6 @@ export class EntityGraphVisualizer {
         });
     }
 
-
     /**
      * Load global importance layer into global instance (Triple-Instance Architecture)
      */
@@ -1028,35 +1025,37 @@ export class EntityGraphVisualizer {
 
         // Require graphology preset layout - no fallback modes
         if (!graphData.presetLayout?.elements) {
-            const errorMsg = "Graphology layout data is required but not available";
+            const errorMsg =
+                "Graphology layout data is required but not available";
             console.error(`[EntityGraphVisualizer] ${errorMsg}`);
             throw new Error(errorMsg);
         }
 
-        console.log(`[EntityGraphVisualizer] Loading graph using graphology preset layout (${graphData.presetLayout.elements.length} elements)`);
+        console.log(
+            `[EntityGraphVisualizer] Loading graph using graphology preset layout (${graphData.presetLayout.elements.length} elements)`,
+        );
 
         // Clear existing elements and add graphology elements directly
         this.cy.elements().remove();
         this.cy.add(graphData.presetLayout.elements);
 
         // Apply preset layout to use the positions from graphology without any computation
-        this.cy.layout({
-            name: 'preset',
-            fit: true,
-            padding: 50,
-            animate: false
-        }).run();
+        this.cy
+            .layout({
+                name: "preset",
+                fit: true,
+                padding: 50,
+                animate: false,
+            })
+            .run();
 
         // Store global data reference
         this.globalGraphData = graphData;
 
-        console.log(`[EntityGraphVisualizer] Loaded ${graphData.presetLayout.elements.length} pre-positioned elements from server`);
+        console.log(
+            `[EntityGraphVisualizer] Loaded ${graphData.presetLayout.elements.length} pre-positioned elements from server`,
+        );
     }
-
-
-
-
-
 
     /**
      * Legacy loadGlobalGraph method - updated to use new triple-instance approach
@@ -1385,8 +1384,6 @@ export class EntityGraphVisualizer {
         );
     }
 
-
-
     /**
      * Get target visibility percentages based on zoom level
      * Progressive disclosure: fewer items visible when zoomed out
@@ -1422,8 +1419,6 @@ export class EntityGraphVisualizer {
 
         return { nodeVisibilityPercentage, edgeVisibilityPercentage };
     }
-
-
 
     /**
      * Prepare all data with computed importance scores for style-based LOD
@@ -1790,7 +1785,6 @@ export class EntityGraphVisualizer {
         );
     }
 
-
     /**
      * Calculate entity importance from available metrics
      */
@@ -1823,8 +1817,6 @@ export class EntityGraphVisualizer {
         return 0.1;
     }
 
-
-
     /**
      * Load full global data when transitioning from direct entity view
      */
@@ -1847,10 +1839,6 @@ export class EntityGraphVisualizer {
         console.timeEnd("[Transition] Load global elements");
     }
 
-
-
-
-
     private calculatePercentiles(values: number[]): any {
         if (values.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
 
@@ -1864,8 +1852,6 @@ export class EntityGraphVisualizer {
             p90: sorted[Math.floor(len * 0.9)],
         };
     }
-
-
 
     private getTypePriority(type: string): number {
         const priorities: { [key: string]: number } = {
@@ -1983,8 +1969,6 @@ export class EntityGraphVisualizer {
         return isFinite(result) ? result : 0.8;
     }
 
-
-
     private convertGlobalDataToElements(globalData: any): any[] {
         const elements: any[] = [];
         const nodeIds = new Set<string>();
@@ -2035,7 +2019,10 @@ export class EntityGraphVisualizer {
                         presetPositions.get(entity.id) ||
                         presetPositions.get(entity.name);
                     if (presetPos) {
-                        nodeElement.position = { x: presetPos.x, y: presetPos.y };
+                        nodeElement.position = {
+                            x: presetPos.x,
+                            y: presetPos.y,
+                        };
                     }
 
                     elements.push(nodeElement);
@@ -2095,7 +2082,9 @@ export class EntityGraphVisualizer {
         if (!this.cy) return;
 
         // Always use preset positions from graphology - no client-side layout computation
-        console.log("[EntityGraphVisualizer] Skipping layout calculation, using preset positions from graphology");
+        console.log(
+            "[EntityGraphVisualizer] Skipping layout calculation, using preset positions from graphology",
+        );
     }
 
     /**
@@ -2122,8 +2111,6 @@ export class EntityGraphVisualizer {
         console.log("[HierarchicalLoading] Graph data provider set");
     }
 
-    
-
     // Store current anchor nodes for LoD calculations
     private currentAnchorNodes: Set<string> = new Set();
 
@@ -2135,7 +2122,6 @@ export class EntityGraphVisualizer {
         };
         timestamp: number;
     }> = [];
-
 
     /**
      * Restore previously hidden view
@@ -2210,9 +2196,6 @@ export class EntityGraphVisualizer {
         this.hiddenViewStack = [];
         console.log("[Navigation] Hidden view stack cleared");
     }
-
-
-
 
     /**
      * Highlight connected elements
@@ -2453,8 +2436,6 @@ export class EntityGraphVisualizer {
         }
         return "";
     }
-
-
 
     // Interactive feature implementations
     private focusOnNode(node: any): void {
@@ -2833,7 +2814,6 @@ export class EntityGraphVisualizer {
         });
     }
 
-
     /**
      * Show labels for entity and its neighborhood within specified degrees
      */
@@ -2942,8 +2922,6 @@ export class EntityGraphVisualizer {
         }
     }
 
-
-
     // Anchor node position tracking for global->neighborhood transitions
     private anchorNodeData: Map<
         string,
@@ -2954,7 +2932,6 @@ export class EntityGraphVisualizer {
             neighborhoodViewport?: any;
         }
     > = new Map();
-
 
     /**
      * Calculate distance from a point to the viewport boundary
@@ -2972,8 +2949,6 @@ export class EntityGraphVisualizer {
         );
         return Math.sqrt(dx * dx + dy * dy);
     }
-
-
 
     /**
      * Calculate the center point of anchor nodes

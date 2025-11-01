@@ -2520,4 +2520,3 @@ async function handleGetTopicMetrics(message: any): Promise<any> {
         };
     }
 }
-

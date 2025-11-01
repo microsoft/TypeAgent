@@ -58,9 +58,7 @@ export class GraphStateManager {
         );
     }
 
-    public async addWebpage(
-        knowledge: WebpageKnowledge,
-    ): Promise<{
+    public async addWebpage(knowledge: WebpageKnowledge): Promise<{
         addedTopics: number;
         updatedTopics: number;
         addedRelationships: number;

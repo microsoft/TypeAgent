@@ -1524,7 +1524,8 @@ export async function getGlobalImportanceLayer(
             .map((entity: any) => {
                 const graphElement = cachedGraph!.cytoscapeElements.find(
                     (el: any) =>
-                        el.data?.id === entity.id || el.data?.label === entity.name,
+                        el.data?.id === entity.id ||
+                        el.data?.label === entity.name,
                 );
                 if (graphElement?.data) {
                     return {
@@ -1539,28 +1540,33 @@ export async function getGlobalImportanceLayer(
             .filter((entity: any) => entity !== null);
 
         // Debug logging to verify entity vs topic data
-        console.log("[getGlobalImportanceLayer] DEBUG - First 10 entities:",
+        console.log(
+            "[getGlobalImportanceLayer] DEBUG - First 10 entities:",
             enrichedEntities.slice(0, 10).map((e: any) => ({
                 name: e.name,
                 type: e.type,
-                hasLevel: 'level' in e,
-                hasChildCount: 'childCount' in e,
-                hasParentId: 'parentId' in e,
-                hasDegree: 'degree' in e,
-                hasCommunityId: 'communityId' in e
-            }))
+                hasLevel: "level" in e,
+                hasChildCount: "childCount" in e,
+                hasParentId: "parentId" in e,
+                hasDegree: "degree" in e,
+                hasCommunityId: "communityId" in e,
+            })),
         );
 
-        console.log("[getGlobalImportanceLayer] DEBUG - First 10 graphology nodes:",
-            cachedGraph.cytoscapeElements.filter((el: any) => el.data && !el.data.source).slice(0, 10).map((el: any) => ({
-                id: el.data.id,
-                name: el.data.name,
-                type: el.data.type,
-                nodeType: el.data.nodeType,
-                hasLevel: 'level' in el.data,
-                hasChildCount: 'childCount' in el.data,
-                hasParentId: 'parentId' in el.data
-            }))
+        console.log(
+            "[getGlobalImportanceLayer] DEBUG - First 10 graphology nodes:",
+            cachedGraph.cytoscapeElements
+                .filter((el: any) => el.data && !el.data.source)
+                .slice(0, 10)
+                .map((el: any) => ({
+                    id: el.data.id,
+                    name: el.data.name,
+                    type: el.data.type,
+                    nodeType: el.data.nodeType,
+                    hasLevel: "level" in el.data,
+                    hasChildCount: "childCount" in el.data,
+                    hasParentId: "parentId" in el.data,
+                })),
         );
 
         console.log("[getGlobalImportanceLayer] Cache key used:", cacheKey);
@@ -1623,7 +1629,8 @@ export async function getTopicImportanceLayer(
         const maxNodes = parameters.maxNodes || 500;
 
         // Get all topics from hierarchical topics table
-        const allTopics = websiteCollection.hierarchicalTopics.getTopicHierarchy() || [];
+        const allTopics =
+            websiteCollection.hierarchicalTopics.getTopicHierarchy() || [];
 
         if (allTopics.length === 0) {
             return {
@@ -1644,7 +1651,8 @@ export async function getTopicImportanceLayer(
         }
         for (const topic of allTopics) {
             if (topic.parentTopicId) {
-                const currentCount = childCountMap.get(topic.parentTopicId) || 0;
+                const currentCount =
+                    childCountMap.get(topic.parentTopicId) || 0;
                 childCountMap.set(topic.parentTopicId, currentCount + 1);
             }
         }
@@ -1658,14 +1666,22 @@ export async function getTopicImportanceLayer(
 
         // Simple selection: get top N topics by descendant count or importance
         const selectedTopics = topicsWithCounts
-            .sort((a: any, b: any) => (b.descendantCount || 0) - (a.descendantCount || 0))
+            .sort(
+                (a: any, b: any) =>
+                    (b.descendantCount || 0) - (a.descendantCount || 0),
+            )
             .slice(0, maxNodes * 2);
 
-        const selectedTopicIds = new Set(selectedTopics.map((t: any) => t.topicId));
+        const selectedTopicIds = new Set(
+            selectedTopics.map((t: any) => t.topicId),
+        );
 
         // Build hierarchical relationships
         const hierarchicalRelationships = selectedTopics
-            .filter((t: any) => t.parentTopicId && selectedTopicIds.has(t.parentTopicId))
+            .filter(
+                (t: any) =>
+                    t.parentTopicId && selectedTopicIds.has(t.parentTopicId),
+            )
             .map((t: any) => ({
                 from: t.parentTopicId,
                 to: t.topicId,
@@ -1677,10 +1693,11 @@ export async function getTopicImportanceLayer(
         let lateralRelationships: any[] = [];
         if (websiteCollection.topicRelationships) {
             const selectedTopicIdsArray = Array.from(selectedTopicIds);
-            const lateralRels = websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
-                selectedTopicIdsArray,
-                0.3,
-            );
+            const lateralRels =
+                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
+                    selectedTopicIdsArray,
+                    0.3,
+                );
 
             // Filter out sibling relationships
             const parentMap = new Map<string, string>();
@@ -1717,25 +1734,29 @@ export async function getTopicImportanceLayer(
             debug("[Graphology] Building layout for topic importance layer...");
             const layoutStart = performance.now();
 
-            const graphNodes: GraphNode[] = selectedTopics.map((topic: any) => ({
-                id: topic.topicId,
-                name: topic.topicName,
-                type: "topic",
-                confidence: topic.confidence || 0.5,
-                count: topic.descendantCount || 1,
-                importance: (topic.descendantCount || 0) / 100, // Normalize
-                level: topic.level || 0,
-                parentId: topic.parentTopicId,
-                childCount: topic.childCount || 0,
-            }));
+            const graphNodes: GraphNode[] = selectedTopics.map(
+                (topic: any) => ({
+                    id: topic.topicId,
+                    name: topic.topicName,
+                    type: "topic",
+                    confidence: topic.confidence || 0.5,
+                    count: topic.descendantCount || 1,
+                    importance: (topic.descendantCount || 0) / 100, // Normalize
+                    level: topic.level || 0,
+                    parentId: topic.parentTopicId,
+                    childCount: topic.childCount || 0,
+                }),
+            );
 
-            const graphEdges: GraphEdge[] = selectedRelationships.map((rel: any) => ({
-                from: rel.from,
-                to: rel.to,
-                type: rel.type,
-                confidence: rel.strength || rel.confidence || 0.5,
-                strength: rel.strength || 0.5,
-            }));
+            const graphEdges: GraphEdge[] = selectedRelationships.map(
+                (rel: any) => ({
+                    from: rel.from,
+                    to: rel.to,
+                    type: rel.type,
+                    confidence: rel.strength || rel.confidence || 0.5,
+                    strength: rel.strength || 0.5,
+                }),
+            );
 
             const graph = buildGraphologyGraph(graphNodes, graphEdges, {
                 nodeLimit: maxNodes * 2,
@@ -1756,7 +1777,9 @@ export async function getTopicImportanceLayer(
 
             setGraphologyCache(cacheKey, cachedGraph);
 
-            debug(`[Graphology] Layout complete in ${layoutDuration.toFixed(2)}ms`);
+            debug(
+                `[Graphology] Layout complete in ${layoutDuration.toFixed(2)}ms`,
+            );
         } else {
             debug("[Graphology] Using cached layout");
         }
@@ -1964,20 +1987,26 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
         // Build graphology layout with overlap prevention
         tracker.startOperation("ensureGraphCache.buildGraphologyLayout");
         let presetLayout:
-            | { elements: any[]; layoutDuration?: number; communityCount?: number }
+            | {
+                  elements: any[];
+                  layoutDuration?: number;
+                  communityCount?: number;
+              }
             | undefined;
 
         try {
             const layoutStart = Date.now();
 
             // Convert entities to graph nodes
-            const graphNodes: GraphNode[] = entityMetrics.map((entity: any) => ({
-                id: entity.name,
-                name: entity.name,
-                label: entity.name,
-                community: entity.community || 0,
-                importance: entity.importance || 0,
-            }));
+            const graphNodes: GraphNode[] = entityMetrics.map(
+                (entity: any) => ({
+                    id: entity.name,
+                    name: entity.name,
+                    label: entity.name,
+                    community: entity.community || 0,
+                    importance: entity.importance || 0,
+                }),
+            );
 
             // Convert relationships to graph edges
             const graphEdges: GraphEdge[] = relationships.map((rel: any) => ({
@@ -2550,8 +2579,11 @@ export async function getTopicDetails(
             };
         }
 
-        const allTopics = websiteCollection.hierarchicalTopics.getTopicHierarchy() || [];
-        const topic = allTopics.find((t: any) => t.topicId === parameters.topicId);
+        const allTopics =
+            websiteCollection.hierarchicalTopics.getTopicHierarchy() || [];
+        const topic = allTopics.find(
+            (t: any) => t.topicId === parameters.topicId,
+        );
 
         if (!topic) {
             return {
@@ -2569,15 +2601,28 @@ export async function getTopicDetails(
 
         const sourceRefOrdinals: Set<number> = new Set();
 
-        if (topicData.sourceRefOrdinals && Array.isArray(topicData.sourceRefOrdinals)) {
-            topicData.sourceRefOrdinals.forEach((ordinal: number) => sourceRefOrdinals.add(ordinal));
+        if (
+            topicData.sourceRefOrdinals &&
+            Array.isArray(topicData.sourceRefOrdinals)
+        ) {
+            topicData.sourceRefOrdinals.forEach((ordinal: number) =>
+                sourceRefOrdinals.add(ordinal),
+            );
         }
 
         if (topicData.childIds && Array.isArray(topicData.childIds)) {
             topicData.childIds.forEach((childId: string) => {
-                const childTopic: any = allTopics.find((t: any) => t.topicId === childId);
-                if (childTopic && childTopic.sourceRefOrdinals && Array.isArray(childTopic.sourceRefOrdinals)) {
-                    childTopic.sourceRefOrdinals.forEach((ordinal: number) => sourceRefOrdinals.add(ordinal));
+                const childTopic: any = allTopics.find(
+                    (t: any) => t.topicId === childId,
+                );
+                if (
+                    childTopic &&
+                    childTopic.sourceRefOrdinals &&
+                    Array.isArray(childTopic.sourceRefOrdinals)
+                ) {
+                    childTopic.sourceRefOrdinals.forEach((ordinal: number) =>
+                        sourceRefOrdinals.add(ordinal),
+                    );
                 }
             });
         }
@@ -2589,12 +2634,14 @@ export async function getTopicDetails(
             for (const ordinal of sourceRefOrdinals) {
                 const semanticRef = websiteCollection.semanticRefs.get(ordinal);
                 if (semanticRef) {
-                    const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                    const messageOrdinal =
+                        semanticRef.range.start.messageOrdinal;
 
                     if (!processedMessages.has(messageOrdinal)) {
                         processedMessages.add(messageOrdinal);
 
-                        const message = websiteCollection.messages.get(messageOrdinal);
+                        const message =
+                            websiteCollection.messages.get(messageOrdinal);
                         if (message) {
                             if (message.timestamp) {
                                 timestamps.push(message.timestamp);
@@ -2602,17 +2649,27 @@ export async function getTopicDetails(
 
                             const knowledge = message.knowledge;
                             if (knowledge) {
-                                if (knowledge.entities && Array.isArray(knowledge.entities)) {
-                                    knowledge.entities.forEach((entity: any) => {
-                                        if (entity.name) {
-                                            entityReferences.add(entity.name);
-                                        }
-                                    });
+                                if (
+                                    knowledge.entities &&
+                                    Array.isArray(knowledge.entities)
+                                ) {
+                                    knowledge.entities.forEach(
+                                        (entity: any) => {
+                                            if (entity.name) {
+                                                entityReferences.add(
+                                                    entity.name,
+                                                );
+                                            }
+                                        },
+                                    );
                                 }
 
-                                if (knowledge.topics && Array.isArray(knowledge.topics)) {
+                                if (
+                                    knowledge.topics &&
+                                    Array.isArray(knowledge.topics)
+                                ) {
                                     knowledge.topics.forEach((topic: any) => {
-                                        if (typeof topic === 'string') {
+                                        if (typeof topic === "string") {
                                             keywords.add(topic);
                                         }
                                     });
@@ -2653,7 +2710,8 @@ export async function getTopicDetails(
         if (firstSeen) details.firstSeen = firstSeen;
         if (lastSeen) details.lastSeen = lastSeen;
         if (topic.parentTopicId) details.parentTopicId = topic.parentTopicId;
-        if (topicData.childCount !== undefined) details.childCount = topicData.childCount as number;
+        if (topicData.childCount !== undefined)
+            details.childCount = topicData.childCount as number;
 
         return {
             success: true,
@@ -2715,7 +2773,9 @@ export async function getEntityDetails(
             };
         }
 
-        const entity = cache.entityMetrics.find((e: any) => e.name === parameters.entityName);
+        const entity = cache.entityMetrics.find(
+            (e: any) => e.name === parameters.entityName,
+        );
 
         if (!entity) {
             return {
@@ -2751,14 +2811,20 @@ export async function getEntityDetails(
             for (const [, result] of searchResult) {
                 if (result.semanticRefMatches) {
                     for (const scoredRef of result.semanticRefMatches) {
-                        const semanticRef = websiteCollection.semanticRefs.get(scoredRef.semanticRefOrdinal);
+                        const semanticRef = websiteCollection.semanticRefs.get(
+                            scoredRef.semanticRefOrdinal,
+                        );
                         if (semanticRef) {
-                            const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
 
                             if (!processedMessages.has(messageOrdinal)) {
                                 processedMessages.add(messageOrdinal);
 
-                                const message = websiteCollection.messages.get(messageOrdinal);
+                                const message =
+                                    websiteCollection.messages.get(
+                                        messageOrdinal,
+                                    );
                                 if (message) {
                                     if (message.timestamp) {
                                         timestamps.push(message.timestamp);
@@ -2770,20 +2836,39 @@ export async function getEntityDetails(
 
                                     const knowledge = message.knowledge;
                                     if (knowledge) {
-                                        if (knowledge.entities && Array.isArray(knowledge.entities)) {
-                                            knowledge.entities.forEach((e: any) => {
-                                                if (e.name && e.name !== parameters.entityName) {
-                                                    entityReferences.add(e.name);
-                                                }
-                                            });
+                                        if (
+                                            knowledge.entities &&
+                                            Array.isArray(knowledge.entities)
+                                        ) {
+                                            knowledge.entities.forEach(
+                                                (e: any) => {
+                                                    if (
+                                                        e.name &&
+                                                        e.name !==
+                                                            parameters.entityName
+                                                    ) {
+                                                        entityReferences.add(
+                                                            e.name,
+                                                        );
+                                                    }
+                                                },
+                                            );
                                         }
 
-                                        if (knowledge.topics && Array.isArray(knowledge.topics)) {
-                                            knowledge.topics.forEach((topic: any) => {
-                                                if (typeof topic === 'string') {
-                                                    topics.add(topic);
-                                                }
-                                            });
+                                        if (
+                                            knowledge.topics &&
+                                            Array.isArray(knowledge.topics)
+                                        ) {
+                                            knowledge.topics.forEach(
+                                                (topic: any) => {
+                                                    if (
+                                                        typeof topic ===
+                                                        "string"
+                                                    ) {
+                                                        topics.add(topic);
+                                                    }
+                                                },
+                                            );
                                         }
                                     }
                                 }
@@ -2810,7 +2895,8 @@ export async function getEntityDetails(
         };
 
         if (entity.degree !== undefined) details.degree = entity.degree;
-        if (entity.importance !== undefined) details.importance = entity.importance;
+        if (entity.importance !== undefined)
+            details.importance = entity.importance;
 
         if (topics.size > 0) {
             details.topicAffinity = Array.from(topics).slice(0, 15);

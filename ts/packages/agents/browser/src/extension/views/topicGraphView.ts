@@ -205,16 +205,14 @@ class TopicGraphView {
                 0.0,
             );
 
-            if (!result ) {
+            if (!result) {
                 console.warn(
                     "[TopicGraphView] No importance layer data available",
                 );
                 return this.createEmptyTopicGraph();
             }
 
-            console.log(
-                `[TopicGraphView] Fetched global importance layer`,
-            );
+            console.log(`[TopicGraphView] Fetched global importance layer`);
             if (result.metadata) {
                 console.log(`[TopicGraphView] Metadata:`, result.metadata);
             }
@@ -931,7 +929,11 @@ class TopicGraphView {
                         : "-";
                 }
 
-                if (keywordsEl && details.keywords && details.keywords.length > 0) {
+                if (
+                    keywordsEl &&
+                    details.keywords &&
+                    details.keywords.length > 0
+                ) {
                     keywordsEl.innerHTML = details.keywords
                         .map(
                             (keyword: string) =>
@@ -939,10 +941,15 @@ class TopicGraphView {
                         )
                         .join("");
                 } else if (keywordsEl) {
-                    keywordsEl.innerHTML = '<span class="text-muted">No keywords</span>';
+                    keywordsEl.innerHTML =
+                        '<span class="text-muted">No keywords</span>';
                 }
 
-                if (entitiesEl && details.entityReferences && details.entityReferences.length > 0) {
+                if (
+                    entitiesEl &&
+                    details.entityReferences &&
+                    details.entityReferences.length > 0
+                ) {
                     entitiesEl.innerHTML = details.entityReferences
                         .map(
                             (entity: string) =>
@@ -950,7 +957,8 @@ class TopicGraphView {
                         )
                         .join("");
                 } else if (entitiesEl) {
-                    entitiesEl.innerHTML = '<li class="text-muted">No related entities</li>';
+                    entitiesEl.innerHTML =
+                        '<li class="text-muted">No related entities</li>';
                 }
             }
         } catch (error) {
@@ -962,8 +970,12 @@ class TopicGraphView {
 
             if (firstSeenEl) firstSeenEl.textContent = "-";
             if (lastSeenEl) lastSeenEl.textContent = "-";
-            if (keywordsEl) keywordsEl.innerHTML = '<span class="text-muted">Error loading</span>';
-            if (entitiesEl) entitiesEl.innerHTML = '<li class="text-muted">Error loading</li>';
+            if (keywordsEl)
+                keywordsEl.innerHTML =
+                    '<span class="text-muted">Error loading</span>';
+            if (entitiesEl)
+                entitiesEl.innerHTML =
+                    '<li class="text-muted">Error loading</li>';
         }
     }
 

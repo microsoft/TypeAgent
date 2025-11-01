@@ -173,8 +173,16 @@ function initializeCircularLayout(graph: Graph): void {
     let nodesWithMissingPositions = 0;
     for (const node of graph.nodes()) {
         const pos = positions[node];
-        if (!pos || pos.x === undefined || pos.y === undefined || isNaN(pos.x) || isNaN(pos.y)) {
-            debug(`[POSITION-ERROR] Node ${node} has invalid position from circular layout: ${JSON.stringify(pos)}`);
+        if (
+            !pos ||
+            pos.x === undefined ||
+            pos.y === undefined ||
+            isNaN(pos.x) ||
+            isNaN(pos.y)
+        ) {
+            debug(
+                `[POSITION-ERROR] Node ${node} has invalid position from circular layout: ${JSON.stringify(pos)}`,
+            );
             nodesWithMissingPositions++;
             graph.setNodeAttribute(node, "x", 0);
             graph.setNodeAttribute(node, "y", 0);
@@ -185,7 +193,9 @@ function initializeCircularLayout(graph: Graph): void {
     }
 
     if (nodesWithMissingPositions > 0) {
-        debug(`[POSITION-ERROR] ${nodesWithMissingPositions} nodes had invalid positions from circular layout`);
+        debug(
+            `[POSITION-ERROR] ${nodesWithMissingPositions} nodes had invalid positions from circular layout`,
+        );
     }
 }
 
@@ -271,12 +281,16 @@ function applyMultiPhaseLayout(
         const x = graph.getNodeAttribute(node, "x");
         const y = graph.getNodeAttribute(node, "y");
         if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) {
-            debug(`[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y})`);
+            debug(
+                `[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y})`,
+            );
             invalidAfterFA2++;
         }
     }
     if (invalidAfterFA2 > 0) {
-        debug(`[POSITION-ERROR] ${invalidAfterFA2} nodes have invalid positions after ForceAtlas2`);
+        debug(
+            `[POSITION-ERROR] ${invalidAfterFA2} nodes have invalid positions after ForceAtlas2`,
+        );
     }
 
     debug("  ✓ ForceAtlas2 complete");
@@ -441,9 +455,17 @@ export function convertToCytoscapeElements(
         const attr = graph.getNodeAttributes(node);
 
         let x: number, y: number;
-        if (attr.x === undefined || attr.x === null || isNaN(attr.x) ||
-            attr.y === undefined || attr.y === null || isNaN(attr.y)) {
-            debug(`Warning: Node ${node} has invalid position (x=${attr.x}, y=${attr.y}), using (0, 0)`);
+        if (
+            attr.x === undefined ||
+            attr.x === null ||
+            isNaN(attr.x) ||
+            attr.y === undefined ||
+            attr.y === null ||
+            isNaN(attr.y)
+        ) {
+            debug(
+                `Warning: Node ${node} has invalid position (x=${attr.x}, y=${attr.y}), using (0, 0)`,
+            );
             nodesWithInvalidPositions++;
             x = 0;
             y = 0;
@@ -467,7 +489,8 @@ export function convertToCytoscapeElements(
         // Only include topic-specific fields if they exist
         if (attr.level !== undefined) nodeData.level = attr.level;
         if (attr.parentId !== undefined) nodeData.parentId = attr.parentId;
-        if (attr.childCount !== undefined) nodeData.childCount = attr.childCount;
+        if (attr.childCount !== undefined)
+            nodeData.childCount = attr.childCount;
 
         elements.push({
             data: nodeData,
@@ -476,7 +499,9 @@ export function convertToCytoscapeElements(
     }
 
     if (nodesWithInvalidPositions > 0) {
-        debug(`WARNING: ${nodesWithInvalidPositions} nodes had invalid positions and were placed at (0, 0)`);
+        debug(
+            `WARNING: ${nodesWithInvalidPositions} nodes had invalid positions and were placed at (0, 0)`,
+        );
     }
 
     for (const edge of graph.edges()) {

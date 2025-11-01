@@ -524,9 +524,8 @@ class EntityGraphView {
             };
             await this.sidebar.loadEntity(basicEntityData);
 
-            const result = await this.extensionService.getEntityDetails(
-                entityName,
-            );
+            const result =
+                await this.extensionService.getEntityDetails(entityName);
 
             if (result && result.success && result.details) {
                 const details = result.details;
@@ -536,7 +535,8 @@ class EntityGraphView {
                     type: details.type,
                     confidence: details.confidence,
                     count: details.count,
-                    relatedTopics: details.relatedTopics ||  details.topicAffinity || [],
+                    relatedTopics:
+                        details.relatedTopics || details.topicAffinity || [],
                     relatedEntities: details.relatedEntities || [],
                     sources: details.sources || [],
                 };
