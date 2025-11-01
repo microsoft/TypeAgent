@@ -601,6 +601,51 @@ export async function handleMessage(
             return await handleGetTopicMetrics(message);
         }
 
+        case "getTopicDetails": {
+            try {
+                console.log("Fetching topic details from agent...");
+
+                const result = await sendActionToAgent({
+                    actionName: "getTopicDetails",
+                    parameters: {
+                        topicId: message.parameters?.topicId,
+                    },
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Error fetching topic details:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to fetch topic details",
+                };
+            }
+        }
+
+        case "getEntityDetails": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getEntityDetails",
+                    parameters: {
+                        entityName: message.parameters?.entityName,
+                    },
+                });
+                return result;
+            } catch (error) {
+                console.error("Error getting entity details:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to fetch entity details",
+                };
+            }
+        }
+
         case "getTopicTimelines": {
             try {
                 const result = await sendActionToAgent({
@@ -2475,3 +2520,4 @@ async function handleGetTopicMetrics(message: any): Promise<any> {
         };
     }
 }
+

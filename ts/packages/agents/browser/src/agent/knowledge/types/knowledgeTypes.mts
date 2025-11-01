@@ -103,6 +103,11 @@ export interface GraphCache {
     communities: any[];
     relationships: any[];
     entityMetrics: any[];
+    presetLayout?: {
+        elements: any[];
+        layoutDuration?: number;
+        communityCount?: number;
+    } | undefined;
     lastUpdated: number;
     isValid: boolean;
 }

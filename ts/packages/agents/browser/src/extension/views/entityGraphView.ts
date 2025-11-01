@@ -29,6 +29,7 @@ interface NavigationState {
 class EntityGraphView {
     private visualizer: EntityGraphVisualizer;
     private sidebar: EntitySidebar;
+    private extensionService: any;
     private currentEntity: string | null = null;
     private currentViewMode: ViewMode = { type: "global" };
     private graphDataProvider: GraphDataProvider;
@@ -43,11 +44,11 @@ class EntityGraphView {
             console.log("EntityGraphView constructor starting...");
 
             // Initialize services with appropriate extension service based on environment
-            const extensionService = createExtensionService();
+            this.extensionService = createExtensionService();
 
             // Initialize Graph data provider for direct storage access
             this.graphDataProvider = new GraphDataProviderImpl(
-                extensionService,
+                this.extensionService,
             );
             console.log(
                 "Services initialized with Chrome extension connection",
@@ -177,8 +178,20 @@ class EntityGraphView {
     private setupEventHandlers(): void {
         // Entity click navigation
         this.visualizer.onEntityClick((entityData) => {
-            this.navigateToEntity(entityData.name);
+            if (this.currentViewMode.type === "global") {
+                this.showEntityDetails(entityData.name);
+            } else {
+                this.navigateToEntity(entityData.name);
+            }
         });
+
+        // Sidebar close button
+        const closeSidebarBtn = document.getElementById("closeEntitySidebar");
+        if (closeSidebarBtn) {
+            closeSidebarBtn.addEventListener("click", () => {
+                this.closeEntitySidebar();
+            });
+        }
     }
 
     /**
@@ -495,6 +508,51 @@ class EntityGraphView {
         }
     }
 
+    private async showEntityDetails(entityName: string): Promise<void> {
+        try {
+            console.log(`Fetching details for entity: ${entityName}`);
+
+            const sidebarElement = document.getElementById("entitySidebar");
+            if (sidebarElement) {
+                sidebarElement.style.display = "flex";
+            }
+
+            const basicEntityData = {
+                name: entityName,
+                type: "Loading...",
+                confidence: 0,
+            };
+            await this.sidebar.loadEntity(basicEntityData);
+
+            const result = await this.extensionService.getEntityDetails(
+                entityName,
+            );
+
+            if (result && result.success && result.details) {
+                const details = result.details;
+
+                const fullEntityData = {
+                    name: details.name,
+                    type: details.type,
+                    confidence: details.confidence,
+                    count: details.count,
+                    relatedTopics: details.relatedTopics ||  details.topicAffinity || [],
+                    relatedEntities: details.relatedEntities || [],
+                    sources: details.sources || [],
+                };
+
+                await this.sidebar.loadEntity(fullEntityData, fullEntityData);
+            } else {
+                console.warn(
+                    "No entity details available:",
+                    result?.error || "Unknown error",
+                );
+            }
+        } catch (error) {
+            console.error("Failed to load entity details:", error);
+        }
+    }
+
     async navigateToGlobalView(): Promise<void> {
         try {
             // Update internal state
@@ -633,6 +691,13 @@ class EntityGraphView {
             if (this.visualizer) {
                 setTimeout(() => this.visualizer.resize(), 100);
             }
+        }
+    }
+
+    private closeEntitySidebar(): void {
+        const sidebar = document.getElementById("entitySidebar");
+        if (sidebar) {
+            sidebar.style.display = "none";
         }
     }
 
@@ -1211,15 +1276,15 @@ class EntityGraphView {
                     }
                 }
 
-                // Load the graph into the visualizer
-                await this.visualizer.loadEntityGraph(
-                    {
-                        centerEntity: graphData.centerEntity,
-                        entities: allEntities,
-                        relationships: validatedRelationships,
-                    },
-                    graphData.centerEntity,
-                );
+                // PHASE 3d: Detail view removed - loadEntityGraph method no longer exists
+                // await this.visualizer.loadEntityGraph(
+                //     {
+                //         centerEntity: graphData.centerEntity,
+                //         entities: allEntities,
+                //         relationships: validatedRelationships,
+                //     },
+                //     graphData.centerEntity,
+                // );
 
                 // Find the center entity from allEntities (should be first)
                 const centerEntityFromGraph =
@@ -1639,10 +1704,10 @@ class EntityGraphView {
                 backToGlobalBtn.innerHTML =
                     '<i class="bi bi-arrow-left"></i> Global';
                 backToGlobalBtn.title = "Back to Global View";
-            } else if (hiddenViewType === "neighborhood") {
+            } else if (hiddenViewType === "detail") {
                 backToGlobalBtn.innerHTML =
-                    '<i class="bi bi-arrow-left"></i> Neighborhood';
-                backToGlobalBtn.title = "Back to Neighborhood View";
+                    '<i class="bi bi-arrow-left"></i> Details';
+                backToGlobalBtn.title = "Back to Detail View";
             } else {
                 backToGlobalBtn.innerHTML =
                     '<i class="bi bi-arrow-left"></i> Back';
@@ -1722,16 +1787,16 @@ class EntityGraphView {
             this.currentEntity &&
             this.currentViewMode.type === "entity-specific"
         ) {
-            // Check if we're in neighborhood view via the visualizer
-            const activeView = this.visualizer.getCurrentActiveView();
-            if (activeView === "neighborhood") {
-                title = `${this.currentEntity} Neighborhood`;
-            } else if (activeView === "detail") {
-                title = `${this.currentEntity} Details`;
-            } else {
-                // Fallback for entity-specific view
-                title = `${this.currentEntity} Details`;
-            }
+            /* COMMENTED OUT - Phase 3 detail view cleanup */
+            // const activeView = this.visualizer.getCurrentActiveView();
+            // if (activeView === "detail") {
+            //     title = `${this.currentEntity} Details`;
+            // } else {
+            //     // Fallback for entity-specific view
+            //     title = `${this.currentEntity} Details`;
+            // }
+            // Simplified - only global view now
+            title = `${this.currentEntity} Details`;
         } else {
             // Global view
             title = "Entity Graph";
