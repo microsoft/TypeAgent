@@ -98,3 +98,43 @@ public partial class StructuredTag
     public override KnowledgeType KnowledgeType => KnowledgeType.STag;
 }
 
+
+public partial class KnowledgeResponse
+{
+    public IEnumerable<SemanticRef> ToSemanticRefs(TextRange range)
+    {
+        ArgumentVerify.ThrowIfNull(range, nameof(range));
+
+        if (!Entities.IsNullOrEmpty())
+        {
+            foreach (var entity in Entities)
+            {
+                yield return new SemanticRef(entity, range);
+            }
+        }
+
+        if (!Topics.IsNullOrEmpty())
+        {
+            foreach (var topic in Topics)
+            {
+                yield return new SemanticRef(new Topic(topic), range);
+            }
+        }
+
+        if (!Actions.IsNullOrEmpty())
+        {
+            foreach (var action in Actions)
+            {
+                yield return new SemanticRef(action, range);
+            }
+        }
+
+        if (!InverseActions.IsNullOrEmpty())
+        {
+            foreach (var action in InverseActions)
+            {
+                yield return new SemanticRef(action, range);
+            }
+        }
+    }
+}

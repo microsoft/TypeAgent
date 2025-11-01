@@ -26,7 +26,7 @@ internal class QueryTextRangeSelector : QueryOpExpr<TextRangeCollection>, IQuery
 
 internal class TextRangesInDateRangeSelector : QueryOpExpr<TextRangeCollection>, IQueryTextRangeSelector
 {
-    public TextRangesInDateRangeSelector (DateRange dateRangeInScope)
+    public TextRangesInDateRangeSelector(DateRange dateRangeInScope)
     {
         DateRangeInScope = dateRangeInScope;
     }

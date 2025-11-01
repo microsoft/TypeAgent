@@ -98,6 +98,17 @@ ORDER BY semref_id ASC
         return ValueTask.FromResult(LookupTerm(term));
     }
 
+    public ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
+    {
+        int? maxId = _db.Get(
+            "SELECT MAX(semref_id) from SemanticRefIndex",
+            null,
+            (reader) => reader.GetIntOrNull(0)
+        );
+
+        return ValueTask.FromResult(maxId);
+    }
+
     public void RemoveTerm(string term, int semanticRefOrdinal)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));

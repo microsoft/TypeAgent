@@ -36,7 +36,7 @@ internal class TermSet
     public void Add(IEnumerable<Term> terms)
     {
         ArgumentVerify.ThrowIfNull(terms, nameof(terms));
-        foreach(var term in terms)
+        foreach (var term in terms)
         {
             Add(term);
         }

@@ -332,7 +332,7 @@ export async function canResolvePropertyEntity(
         );
     }
 
-    // REVIEW: should we check if with agent as well? (which might take a long time)
+    // REVIEW: should we check with agents as well? (which might take a long time)
     return (
         (await resolveEntityWithMemory(
             conversationMemory,
