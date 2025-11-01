@@ -31,4 +31,18 @@ public static class ConversationExtensions
         }
         return null;
     }
+
+    public static async ValueTask<PromptSection?> GetTimeRangePromptSectionAsync(
+        this IConversation conversation,
+        CancellationToken cancellationToken
+    )
+    {
+        var timeRange = await conversation.GetStartTimestampRangeAsync().ConfigureAwait(false);
+        if (timeRange is not null)
+        {
+            var content = $"ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: \"{timeRange.Value.StartTimestamp} to {timeRange.Value.EndTimestamp}\"`";
+            return new PromptSection(content);
+        }
+        return null;
+    }
 }

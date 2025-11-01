@@ -300,7 +300,7 @@ public class TestCommands : ICommandModule
         }
         var model = new OpenAIChatModel();
         SearchQueryTranslator translator = new SearchQueryTranslator(model);
-        var result = await translator.TranslateAsync(query, cancellationToken);
+        var result = await translator.TranslateAsync(query, null, cancellationToken);
         KnowProWriter.WriteJson(result);
     }
 

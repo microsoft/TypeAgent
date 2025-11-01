@@ -5,6 +5,11 @@ namespace TypeAgent.KnowPro;
 
 public class SearchOptions
 {
+    public SearchOptions()
+    {
+        ExactMatch = false;
+    }
+
     public int? MaxKnowledgeMatches { get; set; }
 
     public int? MaxMessageMatches { get; set; }
@@ -21,10 +26,7 @@ public class SearchOptions
 
     public static SearchOptions CreateDefault()
     {
-        return new SearchOptions()
-        {
-            ExactMatch = false
-        };
+        return new SearchOptions();
     }
 
     public static SearchOptions CreateTypical()
