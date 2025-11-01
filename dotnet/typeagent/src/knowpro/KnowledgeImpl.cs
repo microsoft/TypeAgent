@@ -17,6 +17,8 @@ public partial class ConcreteEntity
         this.Type = [type];
     }
 
+    public override KnowledgeType KnowledgeType => KnowledgeType.Entity;
+
     [JsonIgnore]
     public bool HasName => !string.IsNullOrEmpty(Name);
 
@@ -39,6 +41,8 @@ public partial class Action
         IndirectObjectEntityName = NoneEntityName;
     }
 
+    public override KnowledgeType KnowledgeType => KnowledgeType.Action;
+
     [JsonIgnore]
     public bool HasVerbs => !Verbs.IsNullOrEmpty();
 
@@ -51,6 +55,8 @@ public partial class Action
     [JsonIgnore]
     public bool HasIndirectObject => IsDefined(IndirectObjectEntityName);
 
+    public string VerbString() => string.Join(" ", Verbs);
+
     private static bool IsDefined(string value)
     {
         return !string.IsNullOrEmpty(value) && value != NoneEntityName;
@@ -59,6 +65,18 @@ public partial class Action
 
 public partial class Topic
 {
+    public Topic()
+    {
+
+    }
+
+    public Topic(string text)
+    {
+        Text = text;
+    }
+
+    public override KnowledgeType KnowledgeType => KnowledgeType.Topic;
+
     public static implicit operator string(Topic topic)
     {
         return topic.Text;
@@ -67,9 +85,56 @@ public partial class Topic
 
 public partial class Tag
 {
+    public override KnowledgeType KnowledgeType => KnowledgeType.Tag;
+
     public static implicit operator string(Tag tag)
     {
         return tag.Text;
     }
 }
 
+public partial class StructuredTag
+{
+    public override KnowledgeType KnowledgeType => KnowledgeType.STag;
+}
+
+
+public partial class KnowledgeResponse
+{
+    public IEnumerable<SemanticRef> ToSemanticRefs(TextRange range)
+    {
+        ArgumentVerify.ThrowIfNull(range, nameof(range));
+
+        if (!Entities.IsNullOrEmpty())
+        {
+            foreach (var entity in Entities)
+            {
+                yield return new SemanticRef(entity, range);
+            }
+        }
+
+        if (!Topics.IsNullOrEmpty())
+        {
+            foreach (var topic in Topics)
+            {
+                yield return new SemanticRef(new Topic(topic), range);
+            }
+        }
+
+        if (!Actions.IsNullOrEmpty())
+        {
+            foreach (var action in Actions)
+            {
+                yield return new SemanticRef(action, range);
+            }
+        }
+
+        if (!InverseActions.IsNullOrEmpty())
+        {
+            foreach (var action in InverseActions)
+            {
+                yield return new SemanticRef(action, range);
+            }
+        }
+    }
+}

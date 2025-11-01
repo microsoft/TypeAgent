@@ -3,6 +3,7 @@
 
 import { Grammar, matchGrammar, matchGrammarCompletion } from "action-grammar";
 import {
+    CompletionProperty,
     CompletionResult,
     MatchOptions,
 } from "../constructions/constructionCache.js";
@@ -110,6 +111,7 @@ export class GrammarStoreImpl implements GrammarStore {
             return undefined;
         }
         const completions: string[] = [];
+        const properties: CompletionProperty[] = [];
         const filter = new Set(namespaceKeys);
         for (const [name, grammar] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -122,10 +124,30 @@ export class GrammarStoreImpl implements GrammarStore {
             if (partial.completions.length > 0) {
                 completions.push(...partial.completions);
             }
+            if (
+                partial.properties !== undefined &&
+                partial.properties.length > 0
+            ) {
+                const { schemaName } = splitSchemaNamespaceKey(name);
+                for (const p of partial.properties) {
+                    const action: any = p.match;
+                    properties.push({
+                        actions: [
+                            createExecutableAction(
+                                schemaName,
+                                action.actionName,
+                                action.parameters,
+                            ),
+                        ],
+                        names: p.propertyNames,
+                    });
+                }
+            }
         }
 
         return {
             completions,
+            properties,
         };
     }
 }

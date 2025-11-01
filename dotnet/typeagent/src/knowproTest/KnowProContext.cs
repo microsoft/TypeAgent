@@ -23,4 +23,24 @@ public class KnowProContext
     public Stopwatch Stopwatch { get; }
 
     public IConversation? Conversation { get; set; }
+
+    public SqliteStorageProvider<TMessage, TMeta> CreateStorageProvider<TMessage, TMeta>(
+        ConversationSettings settings,
+        string name,
+        bool createNew
+    )
+    where TMessage : class, IMessage, new()
+    where TMeta : IMessageMetadata, new()
+    {
+        // TODO: make this a standard factory method
+        var provider = new SqliteStorageProvider<TMessage, TMeta>(
+            settings,
+            DotnetPath,
+            name,
+            createNew ? SqliteProviderCreateMode.CreateNew : SqliteProviderCreateMode.Load
+        );
+
+        return provider;
+    }
+
 }

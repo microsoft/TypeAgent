@@ -8,11 +8,13 @@ public class FacetTerm
     // the name of the facet, such as "color", "profession", "patent number"; "*" means match any facet name
     [Comment("the name of the facet, such as \"color\", \"profession\", \"patent number\"; \"*\" means match any facet name")]
     [JsonPropertyName("facetName")]
+    [JsonRequired]
     public string FacetName { get; set; } = string.Empty;
 
     // the value of the facet, such as "red", "writer"; "*" means match any facet value
     [Comment("the value of the facet, such as \"red\", \"writer\"; \"*\" means match any facet value")]
     [JsonPropertyName("facetValue")]
+    [JsonRequired]
     public string FacetValue { get; set; } = string.Empty;
 }
 
@@ -26,6 +28,7 @@ public class EntityTerm
     // the name of the entity or thing such as "Bach", "Great Gatsby", "frog" or "piano" or "we", "I"; "*" means match any entity name
     [Comment("the name of the entity or thing such as \"Bach\", \"Great Gatsby\", \"frog\" or \"piano\" or \"we\", \"I\"; \"*\" means match any entity name")]
     [JsonPropertyName("name")]
+    [JsonRequired]
     public string Name { get; set; } = string.Empty;
 
     [JsonPropertyName("isNamePronoun")]
@@ -57,7 +60,8 @@ public class VerbsTerm
     // individual words in single or compound verb
     [Comment("individual words in single or compound verb")]
     [JsonPropertyName("words")]
-    public List<string> Words { get; set; } = new();
+    [JsonRequired]
+    public List<string> Words { get; set; }
 
     [JsonPropertyName("tense")]
     public VerbsTermTense Tense { get; set; }
@@ -73,6 +77,7 @@ public class ActionTerm
     // The origin of the action or information, typically the entity performing the action
     [Comment("The origin of the action or information, typically the entity performing the action")]
     [JsonPropertyName("actorEntities")]
+    [JsonRequired]
     public ActorEntities ActorEntities { get; set; } = new();
 
     // the recipient or target of the action or information
@@ -127,7 +132,8 @@ public class SearchExpr
     public string RewrittenQuery { get; set; } = string.Empty;
 
     [JsonPropertyName("filters")]
-    public List<SearchFilter> Filters { get; set; } = new();
+    [JsonRequired]
+    public List<SearchFilter> Filters { get; set; }
 }
 
 // One expression for each search required by user request
@@ -136,7 +142,8 @@ public class SearchExpr
 public class SearchQuery
 {
     [JsonPropertyName("searchExpressions")]
-    public List<SearchExpr> SearchExpressions { get; set; } = new();
+    [JsonRequired]
+    public List<SearchExpr> SearchExpressions { get; set; }
 }
 
 // Handles actorEntities: EntityTerm[] | "*"
@@ -144,5 +151,13 @@ public class SearchQuery
 public class ActorEntities
 {
     public List<EntityTerm>? Entities { get; set; }
+
     public bool IsWildcard { get; set; }
+
+    public bool IsArray()
+    {
+        // If the action has no subject, disable scope
+        // isEntityTermArray checks for wildcards etc
+        return !(IsWildcard || Entities.IsNullOrEmpty());
+    }
 }

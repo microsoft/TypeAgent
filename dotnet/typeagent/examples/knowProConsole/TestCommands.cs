@@ -22,6 +22,7 @@ public class TestCommands : ICommandModule
             SearchMessagesTermsDef(),
             TestEmbeddingsDef(),
             SearchQueryTermsDef(),
+            BuildIndexDef(),
         ];
     }
 
@@ -204,6 +205,68 @@ public class TestCommands : ICommandModule
             matches.ForEach(KnowProWriter.WriteTerm);
         }
     }
+
+    private Command BuildIndexDef()
+    {
+        Command cmd = new("kpTestBuildIndex")
+        {
+            Options.Arg<bool>("related", "index related terms", false),
+            Options.Arg<bool>("messages", "index messages", false),
+            Options.Arg<bool>("semanticRefs", "index semantic refs", false)
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.BuildIndexAsync);
+        return cmd;
+    }
+
+    private async Task BuildIndexAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+
+        var cachingModel = conversation.Settings.RelatedTermIndexSettings.EmbeddingIndexSetting?.EmbeddingModel as TextEmbeddingModelWithCache;
+        try
+        {
+            if (cachingModel is not null)
+            {
+                cachingModel.CacheEnabled = false;
+            }
+            if (namedArgs.Get<bool>("related"))
+            {
+                await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(cancellationToken);
+
+                await conversation.RebuildRelatedTermsIndexAsync(cancellationToken);
+            }
+            if (namedArgs.Get<bool>("messages"))
+            {
+                await conversation.SecondaryIndexes.MessageIndex.ClearAsync(cancellationToken);
+
+                await conversation.UpdateMessageIndexAsync(false, cancellationToken);
+            }
+            if (namedArgs.Get<bool>("semanticRefs"))
+            {
+                await conversation.SemanticRefIndex.ClearAsync(cancellationToken);
+                await conversation.SecondaryIndexes.PropertyToSemanticRefIndex.ClearAsync(cancellationToken);
+                await conversation.SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.ClearAsync(cancellationToken);
+
+                await conversation.UpdateSemanticRefIndexAsync(cancellationToken);
+            }
+            KnowProWriter.WriteLine();
+        }
+        catch (Exception ex)
+        {
+            KnowProWriter.WriteError(ex);
+        }
+        finally
+        {
+            if (cachingModel is not null)
+            {
+                cachingModel.CacheEnabled = true;
+            }
+        }
+    }
+
 
     async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
     {

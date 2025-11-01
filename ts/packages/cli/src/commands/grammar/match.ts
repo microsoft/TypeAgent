@@ -2,11 +2,12 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { Args, Command } from "@oclif/core";
+import { Args, Command, Flags } from "@oclif/core";
 import {
     grammarFromJson,
     loadGrammarRules,
     matchGrammar,
+    matchGrammarCompletion,
 } from "action-grammar";
 
 async function load(fileName: string) {
@@ -18,7 +19,12 @@ async function load(fileName: string) {
 }
 export default class MatchCommand extends Command {
     static description = "Match input against a grammar";
-
+    static flags = {
+        completion: Flags.boolean({
+            char: "c",
+            description: "Show completion results",
+        }),
+    };
     static args = {
         grammar: Args.string({ description: "Grammar file", required: true }),
         input: Args.string({
@@ -28,19 +34,24 @@ export default class MatchCommand extends Command {
     };
 
     async run(): Promise<void> {
-        const { args } = await this.parse(MatchCommand);
+        const { args, flags } = await this.parse(MatchCommand);
 
         const grammar = await load(args.grammar);
-        const result = matchGrammar(grammar, args.input);
-        if (result.length > 0) {
-            console.log("Matched:");
+        const completion = flags.completion;
+        if (completion) {
             console.log(
                 JSON.stringify(
-                    result.map((r) => r.match),
+                    matchGrammarCompletion(grammar, args.input),
                     null,
                     2,
                 ),
             );
+            return;
+        }
+        const result = matchGrammar(grammar, args.input);
+        if (result.length > 0) {
+            console.log("Matched:");
+            console.log(JSON.stringify(result, null, 2));
         } else {
             console.log("No match");
         }

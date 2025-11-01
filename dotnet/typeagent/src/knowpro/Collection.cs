@@ -20,7 +20,7 @@ public interface IAsyncCollection<T> : IReadOnlyAsyncCollection<T>
     bool IsPersistent { get; }
 
     ValueTask AppendAsync(T item, CancellationToken cancellationToken = default);
-    ValueTask AppendAsync(IEnumerable<T> items, CancellationToken cancellationToken = default);
+    ValueTask AppendAsync(IList<T> items, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -33,10 +33,9 @@ public class CachingCollectionReader<TValue> : IAsyncCollectionReader<TValue>
     IReadOnlyAsyncCollection<TValue> _collection;
     ICache<int, TValue> _cache;
 
-    public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection)
-        : this(collection, new KeyValueCache<int, TValue>())
+    public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection, int? maxCacheSize = null)
+        : this(collection, Cache.Create<int, TValue>(maxCacheSize))
     {
-
     }
 
     public CachingCollectionReader(IReadOnlyAsyncCollection<TValue> collection, ICache<int, TValue> cache)

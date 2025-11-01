@@ -177,7 +177,8 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
         if (!propertyValue.RelatedTerms.IsNullOrEmpty())
         {
             // TODO: Do this in parallel
-            foreach (var relatedPropertyValue in propertyValue.RelatedTerms) {
+            foreach (var relatedPropertyValue in propertyValue.RelatedTerms)
+            {
                 await AccumulateMatchesForPropertyValueAsync(
                     context,
                     matches,
@@ -216,20 +217,23 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
                 }
             }
         }
-        else {
+        else
+        {
             //
             // To prevent over-counting, ensure this relatedPropValue was not already used to match
             // terms earlier
             if (
                 !context.MatchedPropertyTerms.Has(propertyName, relatedPropVal)
-            ) {
+            )
+            {
                 var semanticRefs = await LookupPropertyAsync(
                     context,
                     propertyName,
                     relatedPropVal.Text
                 ).ConfigureAwait(false);
 
-                if (!semanticRefs.IsNullOrEmpty()) {
+                if (!semanticRefs.IsNullOrEmpty())
+                {
                     // This will only consider semantic refs that were not already matched by this expression.
                     // In other words, if a semantic ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
                     matches.AddTermMatchesIfNew(

@@ -139,7 +139,7 @@ public abstract class ConsoleApp
     {
         try
         {
-            return input.StartsWith(CommandPrefix)
+            return (input.StartsWith(CommandPrefix) || IsHelp(input))
                 ? await EvalCommandAsync(input, cancellationToken).ConfigureAwait(false)
                 : await EvalLineAsync(input, cancellationToken).ConfigureAwait(false);
         }
@@ -197,26 +197,6 @@ public abstract class ConsoleApp
         return line is not null ? line.Trim() : line;
     }
 
-    protected virtual void OnException(string input, Exception ex)
-    {
-        Console.WriteLine("## Could not process request");
-        WriteError(ex);
-    }
-
-    protected void WriteError(Exception ex)
-    {
-        ConsoleWriter.WriteError(ex);
-    }
-
-    protected virtual void WriteTitle()
-    {
-        if (!string.IsNullOrEmpty(_allCommands.Description))
-        {
-            Console.WriteLine(_allCommands.Description);
-            Console.WriteLine();
-        }
-    }
-
     public void AddModule(ICommandModule module)
     {
         _allCommands.AddModule(module);
@@ -239,5 +219,38 @@ public abstract class ConsoleApp
         {
             _allCommands.Add(cmd);
         }
+    }
+
+    protected virtual void OnException(string input, Exception ex)
+    {
+        Console.WriteLine("## Could not process request");
+        WriteError(ex);
+    }
+
+    protected void WriteError(Exception ex)
+    {
+        ConsoleWriter.WriteError(ex);
+    }
+
+    protected virtual void WriteTitle()
+    {
+        if (!string.IsNullOrEmpty(_allCommands.Description))
+        {
+            Console.WriteLine(_allCommands.Description);
+            Console.WriteLine();
+        }
+    }
+
+    protected void WriteArgErrors(ParseResult parseResult)
+    {
+        foreach (var err in parseResult.Errors)
+        {
+            ConsoleWriter.WriteError(err.Message);
+        }
+    }
+
+    private bool IsHelp(string value)
+    {
+        return value == "--help" || value == "--?" || value == "-?";
     }
 }

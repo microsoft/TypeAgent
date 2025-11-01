@@ -12,7 +12,7 @@ public class TextEmbeddingIndexSettings
     public TextEmbeddingIndexSettings(
         ITextEmbeddingModel model,
         double minScore,
-        int maxMatches
+        int maxMatches = -1
     )
     {
         EmbeddingModel = model;

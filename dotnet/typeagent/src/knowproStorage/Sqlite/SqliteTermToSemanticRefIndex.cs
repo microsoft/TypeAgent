@@ -75,7 +75,10 @@ VALUES (@term, @semref_id, @score)
         ArgumentVerify.ThrowIfNullOrEmpty(term, nameof(term));
 
         term = PrepareTerm(term);
-        using var cmd = _db.CreateCommand("SELECT semref_id, score FROM SemanticRefIndex WHERE term = @term");
+        using var cmd = _db.CreateCommand(@"
+SELECT semref_id, score FROM SemanticRefIndex WHERE term = @term
+ORDER BY semref_id ASC
+");
         cmd.AddParameter("@term", term);
 
         using var reader = cmd.ExecuteReader();
@@ -93,6 +96,17 @@ VALUES (@term, @semref_id, @score)
     public ValueTask<IList<ScoredSemanticRefOrdinal>> LookupTermAsync(string term, CancellationToken cancellation = default)
     {
         return ValueTask.FromResult(LookupTerm(term));
+    }
+
+    public ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
+    {
+        int? maxId = _db.Get(
+            "SELECT MAX(semref_id) from SemanticRefIndex",
+            null,
+            (reader) => reader.GetIntOrNull(0)
+        );
+
+        return ValueTask.FromResult(maxId);
     }
 
     public void RemoveTerm(string term, int semanticRefOrdinal)

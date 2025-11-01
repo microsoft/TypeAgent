@@ -53,7 +53,8 @@
       "name": "checked_wildcard"
     },
     "addToPlaylistFromCurrentTrackList": {
-      "name": "checked_wildcard"
+      "name": "checked_wildcard",
+      "trackNumber": "ordinal"
     }
   },
   "paramCompletionEmojis": {
@@ -77,6 +78,12 @@
       "name": "📃"
     },
     "deletePlaylist": {
+      "name": "📃"
+    },
+    "addCurrentTrackToPlaylist": {
+      "name": "📃"
+    },
+    "addToPlaylistFromCurrentTrackList": {
       "name": "📃"
     }
   }

@@ -32,22 +32,24 @@ internal class QueryCompiler
     static QueryCompilerSettings s_defaultSettings = new QueryCompilerSettings();
 
     private IConversation _conversation;
+    private IConversationCache _conversationCache;
     private List<CompiledTermGroup> _allSearchTerms;
     private List<CompiledTermGroup> _allScopeSearchTerms;
     private CancellationToken _cancellationToken;
 
-    public QueryCompiler(IConversation conversation, CancellationToken cancellationToken = default)
-        : this(conversation, conversation.Settings.QueryCompilerSettings, cancellationToken)
-    {
-    }
 
     public QueryCompiler(
         IConversation conversation,
+        IConversationCache conversationCache,
         QueryCompilerSettings? compilerSettings,
         CancellationToken cancellationToken = default
     )
     {
+        ArgumentVerify.ThrowIfNull(conversation, nameof(conversation));
+        ArgumentVerify.ThrowIfNull(conversationCache, nameof(conversationCache));
+
         _conversation = conversation;
+        _conversationCache = conversationCache;
         _allSearchTerms = [];
         _allScopeSearchTerms = [];
         Settings = compilerSettings ?? s_defaultSettings;
@@ -139,7 +141,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm);
+                    compiledTerms[0].Terms.Add(searchTerm.Clone());
                     break;
 
             }
@@ -197,7 +199,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm);
+                    compiledTerms[0].Terms.Add(searchTerm.Clone());
                     break;
             }
         }
@@ -318,8 +320,10 @@ internal class QueryCompiler
 
             if (!filter.Tags.IsNullOrEmpty())
             {
-                var tagGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax);
-                tagGroup.Add(KnowledgePropertyName.Tag, filter.Tags, true);
+                var tagGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
+                {
+                    { KnowledgePropertyName.Tag, filter.Tags, true }
+                };
                 AddTermsScopeSelector(tagGroup, scopeSelectors);
             }
 
@@ -376,13 +380,159 @@ internal class QueryCompiler
     {
         compiledTerms.ForEach((ct) => ValidateAndPrepare(ct.Terms));
 
-        await _conversation.SecondaryIndexes.TermToRelatedTermsIndex.ResolveRelatedTermsAsync(
+        await ResolveRelatedTermsAsync(
+            _conversation.SecondaryIndexes.TermToRelatedTermsIndex.Aliases,
+            _conversationCache.RelatedTermsFuzzy,
             compiledTerms,
             dedupe
         ).ConfigureAwait(false);
 
         // This second pass ensures any related terms are valid etc
         compiledTerms.ForEach((ct) => ValidateAndPrepare(ct.Terms));
+    }
+
+    private async ValueTask ResolveRelatedTermsAsync(
+        ITermToRelatedTermsLookup aliases,
+        ITermToRelatedTermsFuzzyLookup fuzzyIndex,
+        List<CompiledTermGroup> compiledTerms,
+        bool ensureSingleOccurence
+    )
+    {
+        List<SearchTerm> termsNeedingRelated = SelectTermsNeedingRelated(compiledTerms);
+        if (termsNeedingRelated.IsNullOrEmpty())
+        {
+            return;
+        }
+
+        List<string> termTexts = termsNeedingRelated.Map((st) => st.Term.Text);
+        // First, find an known related terms
+        var knownRelatedTerms = await aliases.LookupTermsAsync(
+            termTexts,
+            _cancellationToken
+        ).ConfigureAwait(false);
+
+        if (!knownRelatedTerms.IsNullOrEmpty())
+        {
+            for (int i = 0; i < termsNeedingRelated.Count;)
+            {
+                if (knownRelatedTerms.TryGetValue(termTexts[i], out var relatedTerms))
+                {
+                    termsNeedingRelated[i].RelatedTerms = relatedTerms;
+                    termTexts.RemoveAt(i);
+                    termsNeedingRelated.RemoveAt(i);
+                    continue;
+                }
+                else
+                {
+                    ++i;
+                }
+            }
+        }
+        // Anything that did not have known related terms... will get terms that are fuzzily related
+        if (termsNeedingRelated.IsNullOrEmpty())
+        {
+            return;
+        }
+        var relatedTermsFuzzy = await fuzzyIndex.LookupTermsAsync(
+            termTexts,
+            null,
+            null,
+            _cancellationToken
+        ).ConfigureAwait(false);
+        for (int i = 0; i < termsNeedingRelated.Count; ++i)
+        {
+            termsNeedingRelated[i].RelatedTerms = relatedTermsFuzzy[i];
+        }
+
+        //
+        // Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
+        // This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
+        // - The same related term can show up for different search terms but with different weights
+        // - related terms may also already be present as search terms
+        //
+        foreach (var ct in compiledTerms)
+        {
+            DedupeTermGroup(ct, ensureSingleOccurence && ct.BooleanOp != SearchTermBooleanOp.And);
+        }
+    }
+
+    // TODO: refactor this logic
+    private void DedupeTermGroup(CompiledTermGroup ct, bool ensureSingleOccurrence)
+    {
+        var searchTerms = ct.Terms;
+        TermSet allPrimaryTerms = new TermSet();
+        TermSet? allRelatedTerms = ensureSingleOccurrence ? new TermSet() : null;
+        //
+        // Collect all unique search and related terms.
+        // We end up with {term, maximum weight for term} pairs
+        //
+        foreach (var st in searchTerms)
+        {
+            allPrimaryTerms.Add(st.Term);
+            if (ensureSingleOccurrence && !st.RelatedTerms.IsNullOrEmpty())
+            {
+                allRelatedTerms!.AddOrUnion(st.RelatedTerms);
+            }
+        }
+
+        // Related terms may be required by operators such as AND or to enforce scoping rules; removing
+        // terms from a term group may cause higher level boolean logic to fail.
+        // However, for example with OR operators, a particular related term need match just once in the group..
+        foreach (var searchTerm in searchTerms)
+        {
+            if (searchTerm.RelatedTermsRequired || searchTerm.RelatedTerms.IsNullOrEmpty())
+            {
+                continue;
+            }
+
+            List<Term> uniqueRelatedForSearchTerm = [];
+            foreach (var candidateRelatedTerm in searchTerm.RelatedTerms)
+            {
+                if (allPrimaryTerms.Has(candidateRelatedTerm))
+                {
+                    // This related term is already a search term
+                    continue;
+                }
+                if (ensureSingleOccurrence && allRelatedTerms is not null && allRelatedTerms.Count > 0)
+                {
+                    // Each unique related term should be searched for only once
+                    // And (if there were duplicates) assign the maximum weight assigned to that term
+                    // allRelatedTerms always contains unique terms with the "max weight" - see AddUnion call above
+                    Term? termWithMaxWeight = allRelatedTerms.Get(candidateRelatedTerm);
+                    if (
+                        termWithMaxWeight is not null &&
+                        termWithMaxWeight.Weight == candidateRelatedTerm.Weight
+                    )
+                    {
+                        // Associate this related term with the current search term
+                        uniqueRelatedForSearchTerm.Add(termWithMaxWeight);
+                        allRelatedTerms.Remove(candidateRelatedTerm);
+                    }
+                    // Else, the max weight term belonged to some other group
+                }
+                else
+                {
+                    uniqueRelatedForSearchTerm.Add(candidateRelatedTerm);
+                }
+            }
+            searchTerm.RelatedTerms = uniqueRelatedForSearchTerm;
+        }
+    }
+
+    private List<SearchTerm>? SelectTermsNeedingRelated(List<Query.CompiledTermGroup> compiledTerms)
+    {
+        List<SearchTerm> searchTerms = [];
+        foreach (var compiledTerm in compiledTerms)
+        {
+            foreach (var searchTerm in compiledTerm.Terms)
+            {
+                if (!(searchTerm.IsWildcard() || searchTerm.IsExactMatch()))
+                {
+                    searchTerms.Add(searchTerm);
+                }
+            }
+        }
+        return searchTerms;
     }
 
     private void ValidateAndPrepare(IList<SearchTerm> searchTerms)

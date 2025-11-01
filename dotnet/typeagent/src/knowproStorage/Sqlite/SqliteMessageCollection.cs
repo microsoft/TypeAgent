@@ -64,13 +64,14 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask AppendAsync(IEnumerable<TMessage> messages, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(IList<TMessage> messages, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(messages, nameof(messages));
 
         // TODO: Bulk operations
         foreach (var message in messages)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Append(message);
         }
         return ValueTask.CompletedTask;

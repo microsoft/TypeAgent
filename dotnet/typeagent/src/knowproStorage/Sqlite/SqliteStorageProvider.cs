@@ -1,7 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+
 namespace TypeAgent.KnowPro.Storage.Sqlite;
+
+public enum SqliteProviderCreateMode
+{
+    Load,
+    Load_UpgradeSchema,
+    CreateNew,
+}
 
 public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>, IDisposable
     where TMessage : class, IMessage, new()
@@ -13,25 +21,25 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         ConversationSettings settings,
         string dirPath,
         string baseFileName,
-        bool createNew = false
+        SqliteProviderCreateMode mode = SqliteProviderCreateMode.Load
     )
-        : this(settings, Path.Join(dirPath, baseFileName + ".db"), createNew)
+        : this(settings, Path.Join(dirPath, baseFileName + ".db"), mode)
     {
     }
 
     public SqliteStorageProvider(
         ConversationSettings settings,
         string dbPath,
-        bool createNew = false
+        SqliteProviderCreateMode mode = SqliteProviderCreateMode.Load
     )
     {
-        if (!createNew)
+        if (mode != SqliteProviderCreateMode.CreateNew)
         {
             FileExtensions.VerifyExists(dbPath);
         }
-        _db = new SqliteDatabase(dbPath, createNew);
+        _db = new SqliteDatabase(dbPath, mode == SqliteProviderCreateMode.CreateNew);
         ConfigureDatabase();
-        if (createNew)
+        if (mode == SqliteProviderCreateMode.CreateNew || mode == SqliteProviderCreateMode.Load_UpgradeSchema)
         {
             InitSchema();
         }
@@ -42,7 +50,10 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         SecondaryIndexes = new ConversationSecondaryIndexes(
             new SqlitePropertyToSemanticRefIndex(_db),
             new SqliteTimestampToTextRangeIndex(_db),
-            new SqliteRelatedTermsIndex(_db, settings.RelatedTermIndexSettings)
+            new SqliteRelatedTermsIndex(_db, settings.RelatedTermIndexSettings),
+            settings.MessageTextIndexSettings.EmbeddingIndexSettings is null
+            ? new NullMessageTextIndex()
+            : new SqliteMessageTextIndex(_db, settings.MessageTextIndexSettings.EmbeddingIndexSettings)
         );
     }
 
@@ -65,6 +76,11 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
     public IReadOnlyCache<string, Embedding>? GetEmbeddingCache()
     {
         return SecondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex as IReadOnlyCache<string, Embedding>;
+    }
+
+    public IStorageTransaction BeginTransaction()
+    {
+        return new SqliteProviderTransaction(_db.BeginTransaction());
     }
 
     public void Dispose()
@@ -99,4 +115,24 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         SemanticRefIndex = null;
         SecondaryIndexes = null;
     }
+}
+
+internal class SqliteProviderTransaction : IStorageTransaction
+{
+    SqliteTransaction? _transaction;
+
+    internal SqliteProviderTransaction(SqliteTransaction transaction)
+    {
+        _transaction = transaction;
+    }
+
+    public Task CommitAsync() => _transaction.CommitAsync();
+
+    public void Dispose()
+    {
+        _transaction?.Dispose();
+        _transaction = null;
+    }
+
+    public Task RollbackAsync() => _transaction.RollbackAsync();
 }

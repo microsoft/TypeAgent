@@ -13,5 +13,5 @@ internal struct CompiledTermGroup
 
     public SearchTermBooleanOp BooleanOp { get; }
 
-    public IList<SearchTerm> Terms { get; set; }
+    public List<SearchTerm> Terms { get; set; }
 }

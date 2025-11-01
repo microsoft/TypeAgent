@@ -36,6 +36,18 @@ CREATE TABLE IF NOT EXISTS Messages(
 );
 ";
 
+    public const string MessageTextIndexTableName = "MessageTextIndex";
+    public const string MessageTextIndexSchema = @"
+CREATE TABLE IF NOT EXISTS MessageTextIndex (
+    msg_id INTEGER NOT NULL,
+    chunk_ordinal INTEGER NOT NULL,
+    embedding BLOB NOT NULL,        -- Serialized embedding (numpy array as bytes)
+
+    PRIMARY KEY (msg_id, chunk_ordinal),
+    FOREIGN KEY (msg_id) REFERENCES Messages(msg_id) ON DELETE CASCADE
+);
+";
+
     public const string TimestampIndex = @"
 CREATE INDEX IF NOT EXISTS idx_messages_start_timestamp ON Messages(start_timestamp);
 ";
@@ -50,6 +62,8 @@ CREATE TABLE IF NOT EXISTS SemanticRefs (
 );
 ";
 
+    // TODO: Normalize this. Split into Terms and Postings table
+
     public const string SemanticRefIndexTable = "SemanticRefIndex";
     public const string SemanticRefIndexSchema = @"
 CREATE TABLE IF NOT EXISTS SemanticRefIndex (
@@ -61,7 +75,9 @@ CREATE TABLE IF NOT EXISTS SemanticRefIndex (
     FOREIGN KEY (semref_id) REFERENCES SemanticRefs(semref_id) ON DELETE CASCADE
 );
 ";
-
+    public const string SemanticRefIndexSemrefIdIndex = @"
+CREATE INDEX IF NOT EXISTS idx_semrefindex_semref_id ON SemanticRefIndex(semref_id);
+";
     public const string PropertyIndexTable = "PropertyIndex";
     public const string PropertyIndexSchema = @"
 CREATE TABLE IF NOT EXISTS PropertyIndex (
@@ -120,9 +136,11 @@ term_embedding BLOB NOT NULL    -- Serialized embedding for the term
         string[] subSchemas = [
             ConversationMetadataSchema,
             MessagesSchema,
+            MessageTextIndexSchema,
             TimestampIndex,
             SemanticRefsSchema,
             SemanticRefIndexSchema,
+            SemanticRefIndexSemrefIdIndex,
             PropertyIndexSchema,
             PropertyIndexNameIndex,
             PropertyIndexValueStrIndex,

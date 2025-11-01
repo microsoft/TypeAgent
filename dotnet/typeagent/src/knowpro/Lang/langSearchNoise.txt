@@ -1,0 +1,5 @@
+thing
+object
+concept
+idea
+entity

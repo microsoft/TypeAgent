@@ -13,7 +13,6 @@ on:
     branches: ["main"]
   merge_group:
     branches: ["main"]
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -84,34 +83,40 @@ jobs:
           filters: |
             ts:
               - "ts/**"
-              - ".github/workflows/build-ts.yml"
+              - ".github/workflows/smoke-tests.yml"
 
       - uses: pnpm/action-setup@v4
+        if: ${{ steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
 
       - uses: actions/setup-node@v4
+        if: ${{ steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
 
       - name: Install dependencies
+        if: ${{ steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
 
       - name: Install Playwright Browsers
+        if: ${{ steps.filter.outputs.ts != 'false' }}
         run: pnpm exec playwright install --with-deps
         working-directory: ts/packages/shell
 
       - name: Build
+        if: ${{ steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           npm run build
 
       - name: Login to Azure
+        if: ${{ steps.filter.outputs.ts != 'false' }}
         uses: azure/login@v2.2.0
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
@@ -119,24 +124,26 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
 
       - name: Get Keys
+        if: ${{ steps.filter.outputs.ts != 'false' }}
         run: |
           node tools/scripts/getKeys.mjs --vault build-pipeline-kv
         working-directory: ts
 
-      - name: Test CLI - smoke
+      - name: Test CLI - smoke 
+        if: ${{ steps.filter.outputs.ts != 'false' }}     
         run: |
           npm run start:dev 'prompt' 'why is the sky blue'
         working-directory: ts/packages/cli
 
       - name: Shell Tests - full (windows)
-        if: ${{ runner.os == 'windows' }}
+        if: ${{ steps.filter.outputs.ts != 'false' &&  runner.os == 'windows'}}
         timeout-minutes: 60
         run: |
           npm run shell:test
         working-directory: ts/packages/shell
 
       - name: Shell Tests - smoke (linux)
-        if: ${{ runner.os == 'Linux' }}
+        if: ${{ steps.filter.outputs.ts != 'false' && runner.os == 'Linux' }}
         timeout-minutes: 60
         run: |
           Xvfb :99 -screen 0 1600x1200x24 & export DISPLAY=:99
@@ -144,7 +151,7 @@ jobs:
         working-directory: ts/packages/shell
 
       - name: Live Tests (Linux)
-        if: ${{ runner.os == 'Linux' }}
+        if: ${{ steps.filter.outputs.ts != 'false' && runner.os == 'Linux' }}
         timeout-minutes: 60
         run: |
           npm run test:live
@@ -153,6 +160,6 @@ jobs:
 
       - name: Clean up Keys
         run: |
-          rm ./.env
+          node -e "try{require('fs').unlinkSync('./.env');}catch(e){}"
         working-directory: ts
         if: always()

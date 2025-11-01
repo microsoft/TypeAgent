@@ -14,7 +14,6 @@ public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 
 public static class SemanticRefCollectionExtensions
 {
-    // TOOO: Should we make these methods on ISemanticRefCollection directly? 
     public static ValueTask<IList<SemanticRef>> GetAsync(
         this IAsyncCollectionReader<SemanticRef> semanticRefs,
         IList<ScoredSemanticRefOrdinal> scoredOrdinals,
@@ -25,5 +24,4 @@ public static class SemanticRefCollectionExtensions
             cancellationToken
         );
     }
-
 }

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Query;
+
 namespace TypeAgent.KnowPro;
 
 public interface ISearchTerm
@@ -43,15 +45,12 @@ public class SearchTerm : ISearchTerm
         string term = Term.ToString();
         if (!RelatedTerms.IsNullOrEmpty())
         {
-            term = $"{term}\n<\n{RelatedTerms.Join("\n")}>";
+            term = $"{term} <<{RelatedTerms.Join("; ")}>>";
         }
         return term;
     }
 
-    public bool IsWildcard()
-    {
-        return Term.Text == "*";
-    }
+    public bool IsWildcard() => Term.Text.IsWildcard();
 
     public void AddRelated(Term term)
     {
@@ -62,9 +61,14 @@ public class SearchTerm : ISearchTerm
 
     internal bool RelatedTermsRequired { get; set; }
 
+    internal SearchTerm Clone()
+    {
+        return new SearchTerm(Term);
+    }
+
     internal SearchTerm ToRequired()
     {
-        var copy = new SearchTerm(Term);
+        var copy = this.Clone();
         copy.RelatedTermsRequired = true;
         return copy;
     }

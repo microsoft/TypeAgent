@@ -24,6 +24,8 @@ public class SqliteTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy, IReadOnly
 
     public bool IsReadOnly => false;
 
+    public event Action<BatchProgress> OnIndexed;
+
     public int GetCount() => _db.GetCount(SqliteStorageProviderSchema.RelatedTermsFuzzyTable);
 
     public ValueTask<int> GetCountAsync(CancellationToken cancellationToken = default)
@@ -41,7 +43,7 @@ WHERE term = @term
         using var reader = cmd.ExecuteReader();
         if (reader.Read())
         {
-            value = new NormalizedEmbeddingB((byte[])reader.GetValue(0)).ToEmbedding();
+            value = reader.GetEmbedding(0);
             return true;
         }
         value = Embedding.Empty;
@@ -56,7 +58,7 @@ INSERT OR REPLACE INTO RelatedTermsFuzzy
 VALUES(@term, @term_embedding)
     ");
         cmd.AddParameter("@term", term);
-        cmd.AddParameter("@term_embedding", embedding.ToBytes());
+        cmd.AddParameter("@term_embedding", embedding);
         cmd.ExecuteNonQuery();
     }
 
@@ -78,8 +80,10 @@ VALUES(@term, @term_embedding)
             Settings.BatchSize,
             Settings.MaxCharsPerBatch,
             Settings.Concurrency,
+            OnIndexed is not null ? NotifyIndexed : null,
             cancellationToken
-        );
+        ).ConfigureAwait(false);
+
         int count = terms.Count;
         for (int i = 0; i < count; ++i)
         {
@@ -96,11 +100,15 @@ VALUES(@term, @term_embedding)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
 
-        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(text, cancellationToken);
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            text,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         return GetNearestTerms(embedding, maxMatches, minScore);
     }
 
-    public async ValueTask<IList<IList<Term>>> LookupTermAsync(
+    public async ValueTask<IList<IList<Term>>> LookupTermsAsync(
         IList<string> texts,
         int? maxMatches = null,
         double? minScore = null,
@@ -109,7 +117,11 @@ VALUES(@term, @term_embedding)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(texts, nameof(texts));
 
-        var embeddings = await Settings.EmbeddingModel.GenerateNormalizedAsync(texts, cancellationToken);
+        var embeddings = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            texts,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         // TODO: Bulk operation
         IList<IList<Term>> matches = [];
         foreach (var embedding in embeddings)
@@ -129,15 +141,9 @@ VALUES(@term, @term_embedding)
 
     public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> GetAll()
     {
-        return _db.Enumerate<KeyValuePair<int, NormalizedEmbeddingB>>(
-            "SELECT term_id, term_embedding FROM RelatedTermsFuzzy",
-            reader =>
-            {
-                int iCol = 0;
-                var term = reader.GetInt32(iCol++);
-                var embeddingBytes = (byte[])reader.GetValue(iCol++);
-                return new(term, new NormalizedEmbeddingB(embeddingBytes));
-            });
+        return _db.EnumerateEmbeddings(
+"SELECT term_id, term_embedding FROM RelatedTermsFuzzy"
+        );
     }
 
     private List<ScoredItem<int>> IndexesOfNearest(
@@ -146,7 +152,7 @@ VALUES(@term, @term_embedding)
         double? minScore
     )
     {
-        return GetAll().IndexesOfNearest(
+        return GetAll().KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore
@@ -160,7 +166,7 @@ VALUES(@term, @term_embedding)
         double? minScore
         )
     {
-        var termIds = GetAll().IndexesOfNearest(
+        var termIds = GetAll().KeysOfNearest(
             embedding,
             maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
             minScore is not null ? minScore.Value : Settings.MinScore
@@ -190,5 +196,11 @@ ORDER BY term_id",
             ++i;
         }
         return terms;
+    }
+
+    private void NotifyIndexed(BatchProgress item)
+    {
+        // SafeInvoke Checks null, handles exceptions etc
+        OnIndexed.SafeInvoke(item);
     }
 }

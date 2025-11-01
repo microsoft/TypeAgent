@@ -3,7 +3,9 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-// TODO: update methods to not use readers directly
+// TODO: update methods to use new wrappers and extension methods
+//  in SqliteDatabase etc. Should not need to use ExecuteReader
+// directly in most cases
 
 public class SqliteSemanticRefCollection : ISemanticRefCollection
 {
@@ -57,13 +59,14 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask AppendAsync(IEnumerable<SemanticRef> items, CancellationToken cancellationToken = default)
+    public ValueTask AppendAsync(IList<SemanticRef> items, CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(items, nameof(items));
 
         // TODO: Bulk operations
         foreach (var sr in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Append(sr);
         }
         return ValueTask.CompletedTask;
@@ -110,7 +113,8 @@ ORDER BY semref_id";
             var rows = _db.Enumerate(
                 sql,
                 cmd => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                ReadSemanticRefRow);
+                ReadSemanticRefRow
+            );
             foreach (var row in rows)
             {
                 semanticRefs.Add(FromSemanticRefRow(row));
@@ -182,6 +186,8 @@ FROM SemanticRefs WHERE semref_id = @semref_id",
         List<KnowledgeType> ranges = new(semanticRefIds.Count);
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var sql = $@"
 SELECT knowledge_type
@@ -250,7 +256,9 @@ ORDER BY semref_id");
     SemanticRefRow ToSemanticRefRow(SemanticRef semanticRef)
     {
         SemanticRefRow row = new();
-        row.SemanticRefId = (semanticRef.SemanticRefOrdinal < 0) ? GetNextSemanicRefId() : semanticRef.SemanticRefOrdinal;
+        row.SemanticRefId = (semanticRef.SemanticRefOrdinal < 0)
+            ? GetNextSemanicRefId()
+            : semanticRef.SemanticRefOrdinal;
         row.RangeJson = StorageSerializer.ToJson(semanticRef.Range);
         row.KnowledgeType = semanticRef.KnowledgeType;
         row.KnowledgeJson = StorageSerializer.ToJson(semanticRef.Knowledge);

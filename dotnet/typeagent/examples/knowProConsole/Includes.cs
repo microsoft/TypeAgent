@@ -8,7 +8,7 @@ global using System.Text;
 global using System.ComponentModel;
 global using System.CommandLine;
 global using System.Threading.Tasks;
-
+global using System.Diagnostics;
 
 global using TypeAgent.Common;
 

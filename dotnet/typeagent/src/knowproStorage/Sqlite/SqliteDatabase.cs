@@ -80,12 +80,11 @@ public class SqliteDatabase : IDisposable
         return reader.GetListOrNull<T>(cb);
     }
 
-    public IEnumerable<T> Enumerate<T>(string sql, Func<SqliteDataReader, T> rowDeserializer)
-    {
-        return Enumerate<T>(sql, null, rowDeserializer);
-    }
-
-    public IEnumerable<T> Enumerate<T>(string sql, Action<SqliteCommand>? addParams, Func<SqliteDataReader, T> rowDeserializer)
+    public IEnumerable<T> Enumerate<T>(
+        string sql,
+        Action<SqliteCommand> addParams,
+        Func<SqliteDataReader, T> rowDeserializer
+    )
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = sql;
@@ -98,6 +97,19 @@ public class SqliteDatabase : IDisposable
         {
             yield return rowDeserializer(reader);
         }
+    }
+
+    public IEnumerable<T> Enumerate<T>(string sql, Func<SqliteDataReader, T> rowDeserializer)
+    {
+        return Enumerate<T>(sql, null, rowDeserializer);
+    }
+
+    public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> EnumerateEmbeddings(string sql)
+    {
+        return Enumerate<KeyValuePair<int, NormalizedEmbeddingB>>(
+            sql,
+            reader => new(reader.GetInt32(0), reader.GetNormalizedEmbedding(1))
+        );
     }
 
     public IAsyncEnumerable<T> EnumerateAsync<T>(
@@ -141,6 +153,11 @@ public class SqliteDatabase : IDisposable
     {
         using var cmd = CreateCommand($"DELETE FROM {tableName}");
         cmd.ExecuteNonQuery();
+    }
+
+    public SqliteTransaction BeginTransaction()
+    {
+        return _connection.BeginTransaction();
     }
 
     public void Dispose()

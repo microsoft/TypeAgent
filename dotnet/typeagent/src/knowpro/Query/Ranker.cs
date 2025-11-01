@@ -61,7 +61,7 @@ internal static class Ranker
         float boostWeight
     )
     {
-        if (semanticRef.IsEntity)
+        if (semanticRef.KnowledgeType == KnowledgeType.Entity)
         {
             scoredOrdinal = new ScoredSemanticRefOrdinal()
             {

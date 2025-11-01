@@ -173,8 +173,24 @@ public class KeyValueCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey
     public bool TryGet(TKey key, out TValue value) => base.TryGetValue(key, out value);
 }
 
-public static class CacheExtensions
+public static class Cache
 {
+    /// <summary>
+    /// Create a new cache.
+    /// If maxCacheSize provided, creates an LRUCache
+    /// Else creates a KeyValueCache
+    /// </summary>
+    /// <typeparam name="TKey"></typeparam>
+    /// <typeparam name="TValue"></typeparam>
+    /// <param name="maxCacheSize"></param>
+    /// <returns></returns>
+    public static ICache<TKey, TValue> Create<TKey, TValue>(int? maxCacheSize = null)
+    {
+        return maxCacheSize is not null
+            ? new LRUCache<TKey, TValue>(maxCacheSize.Value)
+            : new KeyValueCache<TKey, TValue>();
+    }
+
     // If item is found in cache, return it, else load
     public static async ValueTask<TValue> GetOrLoadAsync<TKey, TValue>(
         this ICache<TKey, TValue> cache,
@@ -220,6 +236,7 @@ public static class CacheExtensions
         return values;
     }
 
+    // Fill available items from the cache, returning a list of pending keys to retrieve
     private static (TValue[] values, List<TKey>? pending) ResolveKeys<TKey, TValue>(
         this ICache<TKey, TValue> cache,
         IList<TKey> keys

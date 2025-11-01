@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
 
-public class SqliteTermToRelatedTerms : ITermsToRelatedTermsIndex
+public class SqliteTermToRelatedTerms : ITermToRelatedTermsIndex
 {
     SqliteDatabase _db;
 
@@ -121,7 +121,7 @@ WHERE term IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
         return ValueTask.FromResult(Lookup(text));
     }
 
-    public ValueTask<IDictionary<string, IList<Term>>?> LookupTermAsync(IList<string> texts, CancellationToken cancellationToken = default)
+    public ValueTask<IDictionary<string, IList<Term>>?> LookupTermsAsync(IList<string> texts, CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult(Lookup(texts));
     }

@@ -127,32 +127,6 @@ public class PodcastCommands : ICommandModule
             podcast.Dispose();
             throw;
         }
-        /*
-        var messages = await podcast.Messages.GetAsync([1, 2, 3, 4], cancellationToken);
-        KnowProWriter.WriteJson(messages);
-
-        await KnowProWriter.WriteSemanticRefsAsync(podcast);
-
-        IList<ScoredSemanticRefOrdinal>? matches;
-        if (data.SemanticIndexData is not null)
-        {
-            await podcast.ImportTermToSemanticRefIndexAsync(data.SemanticIndexData.Items, cancellationToken);
-            count = await podcast.SemanticRefIndex.GetCountAsync(cancellationToken);
-            KnowProWriter.WriteLine($"{count} index entries imported");
-
-            matches = await podcast.SemanticRefIndex.LookupTermAsync("Children of Time", cancellationToken);
-            KnowProWriter.WriteLine($"{matches?.Count ?? 0} matches");
-        }
-
-        count = await podcast.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken);
-        KnowProWriter.WriteLine($"{count} properties imported");
-        matches = await podcast.SecondaryIndexes.PropertyToSemanticRefIndex.LookupPropertyAsync(
-            KnowledgePropertyName.EntityName,
-            "Children of Time",
-            cancellationToken
-        );
-        KnowProWriter.WriteLine($"{matches.Count} matches");
-        */
     }
 
 
@@ -161,35 +135,21 @@ public class PodcastCommands : ICommandModule
         // TODO: standardize this boilerplate, esp the cache binding
         var model = new TextEmbeddingModelWithCache(256);
         ConversationSettings settings = new ConversationSettings(model);
-        var provider = CreateStorageProvider(settings, name, createNew);
+        var provider = _kpContext.CreateStorageProvider<PodcastMessage, PodcastMessageMeta>(settings, name, createNew);
         model.Cache.PersistentCache = provider.GetEmbeddingCache();
 
-        var podcast = new Podcast(settings, CreateStorageProvider(settings, name, false));
+        var podcast = new Podcast(settings, provider);
         return podcast;
-    }
-
-    private SqliteStorageProvider<PodcastMessage, PodcastMessageMeta> CreateStorageProvider(
-        ConversationSettings settings,
-        string name,
-        bool createNew
-    )
-    {
-        // TODO: make this a standard factory method
-        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(
-            settings,
-            _kpContext.DotnetPath,
-            name,
-            createNew
-        );
-
-        return provider;
     }
 
     private void UnloadCurrent()
     {
-        _podcast?.Dispose();
-        _podcast = null;
-        _kpContext.Conversation = null;
+        _kpContext.UnloadCurrent();
+        if (_podcast is not null)
+        {
+            _podcast.Dispose();
+            _podcast = null;
+        }
     }
 
     private void SetCurrent(Podcast? podcast)
@@ -198,7 +158,7 @@ public class PodcastCommands : ICommandModule
         if (podcast is not null)
         {
             _podcast = podcast;
-            _kpContext.Conversation = podcast;
+            _kpContext.SetCurrent(podcast);
         }
     }
 }

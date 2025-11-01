@@ -15,6 +15,16 @@ internal static class SqliteEx
         return reader.IsDBNull(iCol) ? null : reader.GetInt32(iCol);
     }
 
+    public static NormalizedEmbeddingB GetNormalizedEmbedding(this SqliteDataReader reader, int iCol)
+    {
+        return new NormalizedEmbeddingB((byte[])reader.GetValue(iCol));
+    }
+
+    public static Embedding GetEmbedding(this SqliteDataReader reader, int iCol)
+    {
+        return reader.GetNormalizedEmbedding(iCol).ToEmbedding();
+    }
+
     public static void AddParameter(this SqliteCommand cmd, string name, object? value)
     {
         cmd.Parameters.AddWithValue(name, value is not null ? value : DBNull.Value);
@@ -23,6 +33,11 @@ internal static class SqliteEx
     public static void AddParameter(this SqliteCommand cmd, string name, int value)
     {
         cmd.Parameters.AddWithValue(name, value);
+    }
+
+    public static void AddParameter(this SqliteCommand cmd, string name, NormalizedEmbedding value)
+    {
+        cmd.Parameters.AddWithValue(name, value.ToBytes());
     }
 
     public static void AddPlaceholderParameters(this SqliteCommand cmd, string[] placeHolders, IList<int> parameters)
