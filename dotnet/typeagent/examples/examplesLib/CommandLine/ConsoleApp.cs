@@ -129,12 +129,6 @@ public abstract class ConsoleApp
             return CommandResult.NotHandled;
         }
         var parseResult = _allCommands.Parse(cmdLine);
-        if (parseResult.Errors.Count > 0)
-        {
-            WriteArgErrors(parseResult);
-            return CommandResult.NotHandled;
-        }
-
         return await parseResult.InvokeAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
@@ -145,7 +139,7 @@ public abstract class ConsoleApp
     {
         try
         {
-            return input.StartsWith(CommandPrefix)
+            return (input.StartsWith(CommandPrefix) || IsHelp(input))
                 ? await EvalCommandAsync(input, cancellationToken).ConfigureAwait(false)
                 : await EvalLineAsync(input, cancellationToken).ConfigureAwait(false);
         }
@@ -203,6 +197,30 @@ public abstract class ConsoleApp
         return line is not null ? line.Trim() : line;
     }
 
+    public void AddModule(ICommandModule module)
+    {
+        _allCommands.AddModule(module);
+    }
+
+    public void AddModules(params ICommandModule[] modules)
+    {
+        foreach (var module in modules)
+        {
+            AddModule(module);
+        }
+    }
+
+    public void SortCommands()
+    {
+        var commands = _allCommands.Subcommands.ToList();
+        _allCommands.Subcommands.Clear();
+        commands.Sort((x, y) => x.Name.CompareTo(y.Name));
+        foreach (var cmd in commands)
+        {
+            _allCommands.Add(cmd);
+        }
+    }
+
     protected virtual void OnException(string input, Exception ex)
     {
         Console.WriteLine("## Could not process request");
@@ -231,27 +249,8 @@ public abstract class ConsoleApp
         }
     }
 
-    public void AddModule(ICommandModule module)
+    private bool IsHelp(string value)
     {
-        _allCommands.AddModule(module);
-    }
-
-    public void AddModules(params ICommandModule[] modules)
-    {
-        foreach (var module in modules)
-        {
-            AddModule(module);
-        }
-    }
-
-    public void SortCommands()
-    {
-        var commands = _allCommands.Subcommands.ToList();
-        _allCommands.Subcommands.Clear();
-        commands.Sort((x, y) => x.Name.CompareTo(y.Name));
-        foreach (var cmd in commands)
-        {
-            _allCommands.Add(cmd);
-        }
+        return value == "--help" || value == "--?" || value == "-?";
     }
 }
