@@ -5,7 +5,7 @@ using TypeAgent.KnowPro.Query;
 
 namespace TypeAgent.KnowPro.Lang;
 
-public class LangQueryExpr
+internal class LangQueryExpr
 {
     /**
      * The text of the query.
@@ -21,7 +21,7 @@ public class LangQueryExpr
     public List<SearchQueryExpr> QueryExpressions { get; set; }
 };
 
-public static class LangSearch
+internal static class LangSearch
 {
     public static async ValueTask<LangQueryExpr> SearchQueryExprFromLangAsync(
         this IConversation conversation,
@@ -101,5 +101,4 @@ public static class LangSearch
         var searchQueryExprs = compiler.CompileQuery(query);
         return searchQueryExprs;
     }
-
 }
