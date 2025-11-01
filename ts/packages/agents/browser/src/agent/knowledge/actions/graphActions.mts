@@ -7,6 +7,19 @@ import { searchByEntities } from "../../searchWebMemories.mjs";
 import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import { calculateTopicImportance } from "../utils/topicMetricsCalculator.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
+import {
+    buildGraphologyGraph,
+    convertToCytoscapeElements,
+    calculateLayoutQualityMetrics,
+    type GraphNode,
+    type GraphEdge,
+} from "../utils/graphologyLayoutEngine.mjs";
+import {
+    getGraphologyCache,
+    setGraphologyCache,
+    createGraphologyCache,
+    invalidateAllGraphologyCaches,
+} from "../utils/graphologyCache.mjs";
 import registerDebug from "debug";
 import { openai as ai } from "aiclient";
 import { createJsonTranslator } from "typechat";
@@ -130,7 +143,7 @@ export async function getKnowledgeGraphStatus(
             if (websiteCollection.knowledgeEntities) {
                 entityCount = (
                     websiteCollection.knowledgeEntities as any
-                ).getTotalEntityCount();
+                ).getUniqueEntityCount();
             }
         } catch (error) {
             console.warn("Failed to get entity count:", error);
@@ -956,7 +969,80 @@ export async function getEntityNeighborhood(
             },
         };
 
-        return optimizedResult;
+        const cacheKey = `entity_neighborhood_${entityId}_${depth}_${maxNodes}`;
+        let cachedGraph = getGraphologyCache(cacheKey);
+
+        if (!cachedGraph) {
+            debug("[Graphology] Building layout for entity neighborhood...");
+            const layoutStart = performance.now();
+
+            const allEntities = [
+                optimizedResult.centerEntity,
+                ...optimizedResult.neighbors,
+            ].filter((e) => e !== null);
+
+            const graphNodes: GraphNode[] = allEntities.map((entity: any) => ({
+                id: entity.id,
+                name: entity.name,
+                type: entity.type,
+                confidence: entity.confidence || 0.5,
+                count: entity.count || 1,
+                importance: entity.importance || entity.degree || 0,
+            }));
+
+            const graphEdges: GraphEdge[] = optimizedResult.relationships.map(
+                (rel: any) => ({
+                    from: rel.fromEntity,
+                    to: rel.toEntity,
+                    type: rel.relationshipType,
+                    confidence: rel.confidence || 0.5,
+                    strength: rel.confidence || 0.5,
+                }),
+            );
+
+            const graph = buildGraphologyGraph(graphNodes, graphEdges, {
+                nodeLimit: maxNodes * 2,
+                minEdgeConfidence: 0.2,
+                denseClusterThreshold: 50,
+                forceAtlas2Iterations: 100,
+                noverlapIterations: 300,
+            });
+
+            const cytoscapeElements = convertToCytoscapeElements(graph, 1500);
+            const layoutMetrics = calculateLayoutQualityMetrics(graph);
+            const layoutDuration = performance.now() - layoutStart;
+
+            cachedGraph = createGraphologyCache(
+                graph,
+                cytoscapeElements,
+                layoutDuration,
+                layoutMetrics.avgSpacing,
+            );
+
+            setGraphologyCache(cacheKey, cachedGraph);
+
+            debug(
+                `[Graphology] Layout complete in ${layoutDuration.toFixed(2)}ms`,
+            );
+            debug(
+                `[Graphology] Average node spacing: ${layoutMetrics.avgSpacing.toFixed(2)}`,
+            );
+        } else {
+            debug("[Graphology] Using cached layout");
+        }
+
+        return {
+            ...optimizedResult,
+            metadata: {
+                ...optimizedResult.metadata,
+                graphologyLayout: {
+                    elements: cachedGraph.cytoscapeElements,
+                    layoutDuration: cachedGraph.metadata.layoutDuration,
+                    avgSpacing: cachedGraph.metadata.avgSpacing,
+                    communityCount: cachedGraph.metadata.communityCount,
+                },
+            },
+        };
     } catch (error) {
         console.error("Error getting entity neighborhood:", error);
         return {
@@ -1373,10 +1459,95 @@ export async function getGlobalImportanceLayer(
             size: entity.size,
         }));
 
+        // Build graphology layout for entities
+        const cacheKey = `entity_importance_${maxNodes}`;
+        let cachedGraph = getGraphologyCache(cacheKey);
+
+        if (!cachedGraph) {
+            debug(
+                "[Graphology] Building layout for entity importance layer...",
+            );
+            const layoutStart = performance.now();
+
+            const graphNodes: GraphNode[] = optimizedEntities.map(
+                (entity: any) => ({
+                    id: entity.id || entity.name,
+                    name: entity.name,
+                    type: entity.type || "entity",
+                    confidence: entity.confidence || 0.5,
+                    count: entity.count || 1,
+                    importance: entity.importance || 0,
+                }),
+            );
+
+            const graphEdges: GraphEdge[] = optimizedRelationships.map(
+                (rel: any) => ({
+                    from: rel.fromEntity,
+                    to: rel.toEntity,
+                    type: rel.relationshipType,
+                    confidence: rel.confidence || 0.5,
+                    strength: rel.confidence || 0.5,
+                }),
+            );
+
+            const graph = buildGraphologyGraph(graphNodes, graphEdges, {
+                nodeLimit: maxNodes * 2,
+                minEdgeConfidence: 0.3,
+                denseClusterThreshold: 100,
+            });
+
+            const cytoscapeElements = convertToCytoscapeElements(graph, 2000);
+            const layoutMetrics = calculateLayoutQualityMetrics(graph);
+            const layoutDuration = performance.now() - layoutStart;
+
+            cachedGraph = createGraphologyCache(
+                graph,
+                cytoscapeElements,
+                layoutDuration,
+                layoutMetrics.avgSpacing,
+            );
+
+            setGraphologyCache(cacheKey, cachedGraph);
+
+            debug(
+                `[Graphology] Entity layout complete in ${layoutDuration.toFixed(2)}ms`,
+            );
+            debug(
+                `[Graphology] Average node spacing: ${layoutMetrics.avgSpacing.toFixed(2)}`,
+            );
+        } else {
+            debug("[Graphology] Using cached entity layout");
+        }
+
+        // Enrich entities with graphology colors and sizes
+        const enrichedEntities = optimizedEntities.map((entity: any) => {
+            const graphElement = cachedGraph!.cytoscapeElements.find(
+                (el: any) =>
+                    el.data?.id === entity.id || el.data?.label === entity.name,
+            );
+            if (graphElement?.data) {
+                return {
+                    ...entity,
+                    color: graphElement.data.color,
+                    size: graphElement.data.size,
+                    community: graphElement.data.community,
+                };
+            }
+            return entity;
+        });
+
         return {
-            entities: optimizedEntities,
+            entities: enrichedEntities,
             relationships: optimizedRelationships,
-            metadata: metadata,
+            metadata: {
+                ...metadata,
+                graphologyLayout: {
+                    elements: cachedGraph.cytoscapeElements,
+                    layoutDuration: cachedGraph.metadata.layoutDuration,
+                    avgSpacing: cachedGraph.metadata.avgSpacing,
+                    communityCount: cachedGraph.metadata.communityCount,
+                },
+            },
         };
     } catch (error) {
         console.error("Error getting global importance layer:", error);
@@ -1790,6 +1961,8 @@ export function invalidateTopicCache(websiteCollection: any): void {
         lastUpdated: 0,
         isValid: false,
     });
+    // Also clear the graphology layout cache
+    invalidateAllGraphologyCaches();
 }
 
 // Ensure topic graph data is cached for fast access
@@ -1853,6 +2026,28 @@ async function ensureTopicGraphCache(websiteCollection: any): Promise<void> {
                 topics.length,
             );
         }
+
+        // Calculate childCount for each topic
+        tracker.startOperation("ensureTopicGraphCache.calculateChildCounts");
+        const childCountMap = new Map<string, number>();
+        for (const topic of topics) {
+            childCountMap.set(topic.topicId, 0);
+        }
+        for (const topic of topics) {
+            if (topic.parentTopicId) {
+                const currentCount =
+                    childCountMap.get(topic.parentTopicId) || 0;
+                childCountMap.set(topic.parentTopicId, currentCount + 1);
+            }
+        }
+        for (const topic of topics) {
+            topic.childCount = childCountMap.get(topic.topicId) || 0;
+        }
+        tracker.endOperation(
+            "ensureTopicGraphCache.calculateChildCounts",
+            topics.length,
+            topics.length,
+        );
 
         // Build relationships from parent-child structure
         tracker.startOperation("ensureTopicGraphCache.buildTopicRelationships");
@@ -2630,18 +2825,39 @@ export async function getTopicImportanceLayer(
         let lateralRelationships: any[] = [];
 
         if (websiteCollection.topicRelationships) {
+            // Fetch ALL lateral relationships (all types, min strength 0.3)
             const lateralRels =
                 websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
                     selectedTopicIdsArray,
                     0.3,
                 );
 
-            lateralRelationships = lateralRels.map((rel: any) => ({
-                from: rel.fromTopic,
-                to: rel.toTopic,
-                type: rel.relationshipType,
-                strength: rel.strength,
-            }));
+            // Build parent map to filter out sibling relationships
+            const parentMap = new Map<string, string>();
+            for (const topic of selectedTopics) {
+                if (topic.parentTopicId) {
+                    parentMap.set(topic.topicId, topic.parentTopicId);
+                }
+            }
+
+            // Filter out sibling relationships (topics with same parent)
+            lateralRelationships = lateralRels
+                .filter((rel: any) => {
+                    const parentA = parentMap.get(rel.fromTopic);
+                    const parentB = parentMap.get(rel.toTopic);
+                    // Skip if both have same parent (siblings)
+                    return !(parentA && parentB && parentA === parentB);
+                })
+                .map((rel: any) => ({
+                    from: rel.fromTopic,
+                    to: rel.toTopic,
+                    type: rel.relationshipType,
+                    strength: rel.strength,
+                }));
+
+            debug(
+                `[Topic Graph] Fetched ${lateralRels.length} lateral relationships, kept ${lateralRelationships.length} after filtering siblings`,
+            );
         }
 
         const selectedRelationships = [
@@ -2672,10 +2888,78 @@ export async function getTopicImportanceLayer(
             layer: "topic_importance",
         };
 
+        const cacheKey = `topic_importance_${maxNodes}`;
+        let cachedGraph = getGraphologyCache(cacheKey);
+
+        if (!cachedGraph) {
+            debug("[Graphology] Building layout for topic importance layer...");
+            const layoutStart = performance.now();
+
+            const graphNodes: GraphNode[] = topicsWithMetrics.map(
+                (topic: any) => ({
+                    id: topic.topicId,
+                    name: topic.topicName,
+                    type: "topic",
+                    confidence: topic.confidence || 0.5,
+                    count: topic.descendantCount || 1,
+                    importance: topic.importance || 0,
+                    level: topic.level || 0,
+                    parentId: topic.parentTopicId,
+                    childCount: topic.childCount || 0,
+                }),
+            );
+
+            const graphEdges: GraphEdge[] = selectedRelationships.map(
+                (rel: any) => ({
+                    from: rel.from,
+                    to: rel.to,
+                    type: rel.type,
+                    confidence: rel.strength || rel.confidence || 0.5,
+                    strength: rel.strength || 0.5,
+                }),
+            );
+
+            const graph = buildGraphologyGraph(graphNodes, graphEdges, {
+                nodeLimit: maxNodes * 2,
+                minEdgeConfidence: 0.3,
+                denseClusterThreshold: 100,
+            });
+
+            const cytoscapeElements = convertToCytoscapeElements(graph, 2000);
+            const layoutMetrics = calculateLayoutQualityMetrics(graph);
+            const layoutDuration = performance.now() - layoutStart;
+
+            cachedGraph = createGraphologyCache(
+                graph,
+                cytoscapeElements,
+                layoutDuration,
+                layoutMetrics.avgSpacing,
+            );
+
+            setGraphologyCache(cacheKey, cachedGraph);
+
+            debug(
+                `[Graphology] Layout complete in ${layoutDuration.toFixed(2)}ms`,
+            );
+            debug(
+                `[Graphology] Average node spacing: ${layoutMetrics.avgSpacing.toFixed(2)}`,
+            );
+        } else {
+            debug("[Graphology] Using cached layout");
+        }
+
         return {
             topics: topicsWithMetrics,
             relationships: selectedRelationships,
-            metadata,
+            metadata: {
+                ...metadata,
+                graphologyLayout: {
+                    elements: cachedGraph.cytoscapeElements,
+                    layoutDuration: cachedGraph.metadata.layoutDuration,
+                    avgSpacing: cachedGraph.metadata.avgSpacing,
+                    communityCount: cachedGraph.metadata.communityCount,
+                },
+            },
         };
     } catch (error) {
         console.error("Error getting topic importance layer:", error);

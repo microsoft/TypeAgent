@@ -1303,11 +1303,9 @@ export class EntityGraphVisualizer {
                 style: {
                     "line-color": "#4A90E2",
                     width: "mapData(strength, 0, 1, 2, 5)",
-                    "line-opacity": 1,
-                    "target-arrow-color": "#4A90E2",
-                    "target-arrow-shape": "triangle",
-                    "curve-style": "bezier",
-                    "line-style": "solid",
+                    "line-opacity": 1.0,
+                    "curve-style": "haystack",
+                    "haystack-radius": 0.5,
                 },
             },
             {
@@ -1315,11 +1313,9 @@ export class EntityGraphVisualizer {
                 style: {
                     "line-color": "#7ED321",
                     width: "mapData(strength, 0, 1, 2, 4)",
-                    "line-opacity": 0.8,
-                    "target-arrow-color": "#7ED321",
-                    "target-arrow-shape": "triangle",
-                    "curve-style": "bezier",
-                    "line-style": "dashed",
+                    "line-opacity": 0.6,
+                    "curve-style": "haystack",
+                    "haystack-radius": 0.5,
                 },
             },
             {
@@ -1327,11 +1323,9 @@ export class EntityGraphVisualizer {
                 style: {
                     "line-color": "#BD10E0",
                     width: "mapData(strength, 0, 1, 1, 3)",
-                    "line-opacity": 0.6,
-                    "target-arrow-color": "#BD10E0",
-                    "target-arrow-shape": "triangle",
-                    "curve-style": "bezier",
-                    "line-style": "dotted",
+                    "line-opacity": 0.4,
+                    "curve-style": "haystack",
+                    "haystack-radius": 0.5,
                 },
             },
             {
@@ -1340,10 +1334,8 @@ export class EntityGraphVisualizer {
                     "line-color": "#F5A623",
                     width: "mapData(strength, 0, 1, 2, 4)",
                     "line-opacity": 0.7,
-                    "target-arrow-color": "#F5A623",
-                    "target-arrow-shape": "triangle",
-                    "curve-style": "bezier",
-                    "line-style": "solid",
+                    "curve-style": "haystack",
+                    "haystack-radius": 0.5,
                 },
             },
             {
@@ -1352,10 +1344,8 @@ export class EntityGraphVisualizer {
                     "line-color": "#FF6B9D",
                     width: "mapData(strength, 0, 1, 1, 3)",
                     "line-opacity": 0.5,
-                    "target-arrow-color": "#FF6B9D",
-                    "target-arrow-shape": "triangle",
-                    "curve-style": "bezier",
-                    "line-style": "dashed",
+                    "curve-style": "haystack",
+                    "haystack-radius": 0.5,
                 },
             },
             // Fallback edge styles by strength (fixed selectors)
@@ -1404,6 +1394,15 @@ export class EntityGraphVisualizer {
                 style: {
                     opacity: 1,
                     "z-index": 15,
+                },
+            },
+
+            // Override type-specific colors with community colors when available
+            // This selector has higher priority by being placed after type-specific selectors
+            {
+                selector: "node[color]",
+                style: {
+                    "background-color": "data(color)",
                 },
             },
 
@@ -1730,6 +1729,11 @@ export class EntityGraphVisualizer {
 
         this.globalInstance.add(elements);
 
+        // Check if elements have preset positions
+        const hasPresetPositions = elements.some(
+            (el: any) => el.group === "nodes" && el.position,
+        );
+
         // Apply direct sizing based on computed importance (since CSS mapData doesn't auto-refresh)
         this.applyImportanceBasedSizing();
 
@@ -1749,12 +1753,30 @@ export class EntityGraphVisualizer {
         // Store global data reference
         this.globalGraphData = graphData;
 
-        // Apply layout optimized for global size
-        await this.applyLayoutToInstance(
-            this.globalInstance,
-            "cose",
-            graphData.entities.length,
-        );
+        // Apply layout based on whether we have preset positions
+        if (hasPresetPositions) {
+            console.log(
+                "[Visualizer] Using preset layout (graphology positions)",
+            );
+            // Use preset layout - no calculation needed
+            this.globalInstance
+                .layout({
+                    name: "preset",
+                    fit: true,
+                    padding: 50,
+                })
+                .run();
+        } else {
+            console.log(
+                "[Visualizer] No preset positions - running force layout",
+            );
+            // Fallback to force-directed layout
+            await this.applyLayoutToInstance(
+                this.globalInstance,
+                "cose",
+                graphData.entities.length,
+            );
+        }
 
         // Fit the graph to the viewport to let Cytoscape handle optimal sizing
         this.globalInstance.fit({
@@ -2089,6 +2111,28 @@ export class EntityGraphVisualizer {
      * Convert graph data to Cytoscape elements (enhanced for triple-instance)
      */
     private convertToGraphElements(graphData: any): any[] {
+        // Check if preset layout is available
+        const presetLayout = graphData.presetLayout?.elements;
+        const presetPositions = new Map<string, { x: number; y: number }>();
+
+        if (presetLayout) {
+            console.log(
+                `[Visualizer] Using preset layout with ${presetLayout.length} positioned elements`,
+            );
+            for (const element of presetLayout) {
+                if (element.position && element.data?.id) {
+                    presetPositions.set(element.data.id, element.position);
+                }
+                // Also try label-based lookup
+                if (element.position && element.data?.label) {
+                    presetPositions.set(element.data.label, element.position);
+                }
+            }
+            console.log(
+                `[Visualizer] Extracted ${presetPositions.size} preset positions`,
+            );
+        }
+
         const nodes = graphData.entities.map((entity: any) => {
             // Set appropriate importance values based on current context
             const baseImportance =
@@ -2097,14 +2141,19 @@ export class EntityGraphVisualizer {
                 this.currentActiveView === "neighborhood" ? 0.5 : 0;
             const effectiveImportance = Math.max(baseImportance, minImportance);
 
-            return {
+            const entityId = entity.id || entity.name;
+            const nodeElement: any = {
                 group: "nodes",
                 data: {
-                    id: entity.id || entity.name,
+                    id: entityId,
                     name: entity.name,
                     type: entity.type,
                     importance: effectiveImportance,
                     confidence: entity.confidence || 0.5,
+                    // Preserve graphology properties if available
+                    color: entity.color,
+                    size: entity.size,
+                    community: entity.community,
                     // Ensure LOD-compatible properties are set
                     degreeCount:
                         entity.properties?.degree ||
@@ -2118,6 +2167,16 @@ export class EntityGraphVisualizer {
                     ...entity.properties,
                 },
             };
+
+            // Add preset position if available
+            const presetPos =
+                presetPositions.get(entityId) ||
+                presetPositions.get(entity.name);
+            if (presetPos) {
+                nodeElement.position = { x: presetPos.x, y: presetPos.y };
+            }
+
+            return nodeElement;
         });
 
         // Create a set of valid node IDs for fast lookup
