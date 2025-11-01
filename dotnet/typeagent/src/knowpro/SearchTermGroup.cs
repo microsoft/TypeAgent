@@ -62,6 +62,11 @@ public class SearchTermGroup : ISearchTerm, IEnumerable<ISearchTerm>
         Add(new PropertySearchTerm(propertyName, propertyValue));
     }
 
+    public ISearchTerm Optimize()
+    {
+        return Terms.Count == 1 ? Terms[0] : this;
+    }
+
     public IEnumerator<ISearchTerm> GetEnumerator()
     {
         return this.Terms.GetEnumerator();

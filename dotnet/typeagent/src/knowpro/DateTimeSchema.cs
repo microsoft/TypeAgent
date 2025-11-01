@@ -29,7 +29,7 @@ public class TimeVal
     public int Seconds { get; set; }
 }
 
-public class DateTime
+public partial class DateTime
 {
     [JsonPropertyName("date")]
     public DateVal Date { get; set; }
@@ -38,7 +38,7 @@ public class DateTime
     public TimeVal? Time { get; set; }
 }
 
-public class DateTimeRange
+public partial class DateTimeRange
 {
     [JsonPropertyName("startDate")]
     public DateTime StartDate { get; set; }

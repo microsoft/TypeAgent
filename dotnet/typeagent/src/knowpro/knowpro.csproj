@@ -10,10 +10,12 @@
 
   <ItemGroup>
     <None Remove="dateTimeSchema.ts" />
+    <None Remove="Lang\langSearchNoise.txt" />
     <None Remove="Lang\searchQuerySchema.ts" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Lang\langSearchNoise.txt" />
     <EmbeddedResource Include="Lang\searchQuerySchema.ts">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </EmbeddedResource>
