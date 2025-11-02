@@ -129,6 +129,7 @@ export class WebsiteCollection
 
     private db: sqlite.Database | undefined = undefined;
     private dbPath: string = "";
+    private graphStateManager: any = null;
 
     constructor(
         nameTag: string = "",
@@ -1666,18 +1667,21 @@ export class WebsiteCollection
             `[Knowledge Graph] Built hierarchical topics in ${Date.now() - topicStartTime}ms`,
         );
 
-        // Build topic relationships and metrics using batch operations
-        const topicRelationshipsStart = Date.now();
-        await this.buildTopicRelationships(cacheManager);
-        debug(
-            `[Knowledge Graph] Completed topic relationships in ${Date.now() - topicRelationshipsStart}ms`,
+        // Build topic relationships and metrics using Graphology-based graph builder
+        const topicGraphStart = Date.now();
+        const { buildTopicGraphWithGraphology } = await import(
+            "./buildTopicGraphWithGraphology.js"
         );
-
-        // Calculate topic metrics using batch operations
-        const topicMetricsStart = Date.now();
-        await this.calculateTopicMetrics(cacheManager);
+        const allHierarchicalTopics =
+            this.hierarchicalTopics?.getTopicHierarchy() || [];
+        await buildTopicGraphWithGraphology(
+            allHierarchicalTopics,
+            cacheManager,
+            this.topicRelationships,
+            this.topicMetrics,
+        );
         debug(
-            `[Knowledge Graph] Completed topic metrics in ${Date.now() - topicMetricsStart}ms`,
+            `[Knowledge Graph] Completed topic graph build in ${Date.now() - topicGraphStart}ms`,
         );
 
         const totalTime = Date.now() - startTime;
@@ -1707,6 +1711,115 @@ export class WebsiteCollection
 
         // Update hierarchical topics with new website topics
         await this.updateHierarchicalTopics(newWebsites);
+
+        // Update topic graph incrementally
+        await this.updateTopicGraphIncremental(newWebsites);
+    }
+
+    private async updateTopicGraphIncremental(
+        newWebsites: Website[],
+    ): Promise<void> {
+        debug(
+            `[Knowledge Graph] Updating topic graph incrementally for ${newWebsites.length} websites`,
+        );
+
+        if (!this.graphStateManager) {
+            const { GraphStateManager } = await import(
+                "./graph/graphStateManager.js"
+            );
+            this.graphStateManager = new GraphStateManager();
+        }
+
+        const allHierarchicalTopics =
+            this.hierarchicalTopics?.getTopicHierarchy() || [];
+
+        const { GraphBuildingCacheManager } = await import(
+            "./utils/graphBuildingCacheManager.mjs"
+        );
+        const cacheManager = new GraphBuildingCacheManager();
+        const websites = this.getWebsites();
+        await cacheManager.initializeCache(websites);
+
+        const cooccurrences = cacheManager
+            .getAllTopicRelationships()
+            .map((rel: any) => ({
+                fromTopic: rel.fromTopic,
+                toTopic: rel.toTopic,
+                count: rel.count,
+                urls: rel.sources || [],
+            }));
+
+        await this.graphStateManager.ensureGraphsInitialized(
+            allHierarchicalTopics,
+            cooccurrences,
+        );
+
+        for (const website of newWebsites) {
+            const knowledge = website.knowledge as any;
+            if (!knowledge?.topicHierarchy) continue;
+
+            const topicMap =
+                knowledge.topicHierarchy.topicMap instanceof Map
+                    ? knowledge.topicHierarchy.topicMap
+                    : new Map(
+                          Object.entries(
+                              knowledge.topicHierarchy.topicMap || {},
+                          ),
+                      );
+
+            const hierarchicalTopics: any[] = [];
+            for (const [topicId, topic] of topicMap) {
+                hierarchicalTopics.push({
+                    url: website.metadata.url,
+                    domain: website.metadata.domain,
+                    topicId: topicId,
+                    topicName: (topic as any).name,
+                    level: (topic as any).level || 0,
+                    parentTopicId: (topic as any).parentId,
+                    confidence: (topic as any).confidence || 0.5,
+                    sourceTopicNames: JSON.stringify(
+                        (topic as any).sourceTopicNames || [],
+                    ),
+                    extractionDate: new Date().toISOString(),
+                });
+            }
+
+            const websiteCooccurrences: any[] = [];
+
+            const result = await this.graphStateManager.addWebpage({
+                url: website.metadata.url,
+                domain: website.metadata.domain,
+                hierarchicalTopics,
+                cooccurrences: websiteCooccurrences,
+            });
+
+            debug(
+                `[Knowledge Graph] Added ${website.metadata.url}: ${result.addedTopics} topics, ${result.addedRelationships} relationships in ${result.durationMs}ms`,
+            );
+        }
+
+        const relationships = this.graphStateManager.exportRelationships();
+        for (const rel of relationships) {
+            this.topicRelationships?.upsertRelationship(rel);
+        }
+
+        const metricsCalculator = await import("./graph/metricsCalculator.js");
+        const calc = new metricsCalculator.MetricsCalculator();
+        const topicCounts = calc.calculateTopicCounts(
+            allHierarchicalTopics.map((t: any) => ({
+                topicId: t.topicId,
+                url: t.url,
+                domain: t.domain,
+            })),
+        );
+
+        const { topicMetrics } =
+            await this.graphStateManager.recomputeMetrics(topicCounts);
+        for (const [, metrics] of topicMetrics) {
+            this.topicMetrics?.upsertMetrics(metrics);
+        }
+
+        debug(`[Knowledge Graph] Incremental update complete`);
     }
 
     /**
@@ -1886,12 +1999,19 @@ export class WebsiteCollection
         try {
             // First, check if websites already have rich hierarchies from extraction
             const websites = this.getWebsites();
+            debug(`[Knowledge Graph] Total websites: ${websites.length}`);
             const websitesToProcess = urlLimit
                 ? websites.slice(0, urlLimit)
                 : websites;
+            debug(
+                `[Knowledge Graph] Processing ${websitesToProcess.length} websites for hierarchies`,
+            );
 
             const websitesWithHierarchies = websitesToProcess.filter(
                 (w) => (w.knowledge as any)?.topicHierarchy,
+            );
+            debug(
+                `[Knowledge Graph] Found ${websitesWithHierarchies.length} websites with existing hierarchies`,
             );
 
             if (websitesWithHierarchies.length > 0) {
@@ -1901,15 +2021,27 @@ export class WebsiteCollection
                         "DELETE FROM hierarchicalTopics",
                     );
                     clearStmt.run();
+                    debug(
+                        `[Knowledge Graph] Cleared existing hierarchical topics`,
+                    );
                 }
 
                 // Use existing rich hierarchies from websites
+                debug(
+                    `[Knowledge Graph] Using rich hierarchies from ${websitesWithHierarchies.length} websites`,
+                );
                 await this.updateHierarchicalTopics(websitesWithHierarchies);
                 return;
             }
 
             // No existing hierarchies, fall back to building from flat topics
+            debug(
+                `[Knowledge Graph] No websites with hierarchies, extracting flat topics...`,
+            );
             const flatTopics = await this.extractFlatTopics(urlLimit);
+            debug(
+                `[Knowledge Graph] Extracted ${flatTopics.length} flat topics`,
+            );
 
             if (flatTopics.length === 0) {
                 return;
@@ -1931,6 +2063,9 @@ export class WebsiteCollection
             let topicExtractor: any;
             try {
                 // Try to create AI model for topic merging
+                debug(
+                    `[Knowledge Graph] Creating AI model for topic extraction...`,
+                );
                 const apiSettings = ai.openai.azureApiSettingsFromEnv(
                     ai.openai.ModelType.Chat,
                     undefined,
@@ -1939,16 +2074,24 @@ export class WebsiteCollection
                 const languageModel = ai.openai.createChatModel(apiSettings);
                 topicExtractor =
                     kpLib.conversation.createTopicExtractor(languageModel);
+                debug(`[Knowledge Graph] AI model created successfully`);
             } catch (error) {
                 debug(
                     `[Knowledge Graph] AI model not available for topic merging: ${error}`,
                 );
                 // Fall back to simple hierarchical grouping
-                await this.buildSimpleTopicHierarchy(flatTopics, urlLimit);
+                debug(
+                    `[Knowledge Graph] Using simple hierarchical grouping for ${flatTopics.length} topics`,
+                );
+                await this.buildSimpleTopicHierarchy(flatTopics);
+                debug(`[Knowledge Graph] Simple hierarchy built`);
                 return;
             }
 
             // Use AI to merge topics into higher-level topics
+            debug(
+                `[Knowledge Graph] Merging ${flatTopics.length} topics into hierarchy...`,
+            );
             const mergeResult = await topicExtractor.mergeTopics(
                 flatTopics,
                 undefined, // No past topics for initial build
@@ -1956,8 +2099,12 @@ export class WebsiteCollection
             );
 
             if (mergeResult && mergeResult.status === "Success") {
+                debug(
+                    `[Knowledge Graph] Topic merge successful: ${mergeResult.topic}`,
+                );
                 // Store the merged topic as root
                 const rootTopicId = this.generateTopicId(mergeResult.topic, 0);
+                debug(`[Knowledge Graph] Storing root topic: ${rootTopicId}`);
                 await this.storeHierarchicalTopic(
                     {
                         topicId: rootTopicId,
@@ -1966,21 +2113,23 @@ export class WebsiteCollection
                         confidence: 0.9,
                         keywords: [mergeResult.topic],
                     },
-                    urlLimit,
+                    "aggregated:multiple-sources",
+                    "aggregated",
                 );
 
                 // Organize flat topics under the root
-                await this.organizeTopicsUnderRoot(
-                    flatTopics,
-                    rootTopicId,
-                    urlLimit,
+                debug(
+                    `[Knowledge Graph] Organizing ${flatTopics.length} topics under root`,
                 );
+                await this.organizeTopicsUnderRoot(flatTopics, rootTopicId);
+                debug(`[Knowledge Graph] Topics organized successfully`);
             } else {
                 // Fall back to simple hierarchy if merging fails
                 debug(
-                    `[Knowledge Graph] Topic merging failed, using simple hierarchy`,
+                    `[Knowledge Graph] Topic merging failed (status: ${mergeResult?.status}), using simple hierarchy`,
                 );
-                await this.buildSimpleTopicHierarchy(flatTopics, urlLimit);
+                await this.buildSimpleTopicHierarchy(flatTopics);
+                debug(`[Knowledge Graph] Simple hierarchy built`);
             }
 
             debug(
@@ -2005,6 +2154,10 @@ export class WebsiteCollection
         );
 
         let globalHierarchy: any | undefined;
+        const websiteUrlMap = new Map<
+            string,
+            { url: string; domain: string }
+        >();
 
         for (const website of newWebsites) {
             const docHierarchy = (website.knowledge as any)?.topicHierarchy as
@@ -2015,28 +2168,43 @@ export class WebsiteCollection
                 continue;
             }
 
-            if (!globalHierarchy) {
-                let topicMap: Map<string, any>;
+            let topicMap: Map<string, any>;
 
-                if (docHierarchy.topicMap instanceof Map) {
-                    topicMap = docHierarchy.topicMap;
-                } else if (
-                    typeof docHierarchy.topicMap === "object" &&
-                    docHierarchy.topicMap !== null
-                ) {
-                    topicMap = new Map(Object.entries(docHierarchy.topicMap));
-                } else {
-                    topicMap = new Map();
+            if (docHierarchy.topicMap instanceof Map) {
+                topicMap = docHierarchy.topicMap;
+            } else if (
+                typeof docHierarchy.topicMap === "object" &&
+                docHierarchy.topicMap !== null
+            ) {
+                topicMap = new Map(Object.entries(docHierarchy.topicMap));
+            } else {
+                topicMap = new Map();
+            }
+
+            // Track which website each topic came from
+            const websiteUrl = website.metadata.url || "unknown";
+            const websiteDomain = website.metadata.domain || "unknown";
+            for (const [topicId] of topicMap) {
+                if (!websiteUrlMap.has(topicId)) {
+                    websiteUrlMap.set(topicId, {
+                        url: websiteUrl,
+                        domain: websiteDomain,
+                    });
                 }
+            }
 
-                globalHierarchy = {
-                    ...docHierarchy,
-                    topicMap: topicMap,
-                };
+            const hierarchyWithMap = {
+                ...docHierarchy,
+                topicMap: topicMap,
+            };
+
+            if (!globalHierarchy) {
+                globalHierarchy = hierarchyWithMap;
             } else {
                 globalHierarchy = this.mergeHierarchies(
                     globalHierarchy,
-                    docHierarchy,
+                    hierarchyWithMap,
+                    websiteUrl,
                 );
             }
         }
@@ -2050,16 +2218,23 @@ export class WebsiteCollection
                 await this.storeTopicHierarchyRecursive(
                     rootTopic,
                     globalHierarchy.topicMap,
+                    websiteUrlMap,
                 );
             }
         } catch (error) {
             debug(
                 `[Knowledge Graph] Error updating hierarchical topics: ${error}`,
+                // Note: Full document provenance is available via semanticRefIndex lookup
+                // Each topic has semanticRefs with range.start.messageOrdinal pointing to source documents
             );
         }
     }
 
-    private mergeHierarchies(existing: any, newHierarchy: any): any {
+    private mergeHierarchies(
+        existing: any,
+        newHierarchy: any,
+        newWebsiteUrl: string,
+    ): any {
         // Convert existing topicMap to Map if it's a plain object (from deserialization)
         const existingTopicMap =
             existing.topicMap instanceof Map
@@ -2084,14 +2259,30 @@ export class WebsiteCollection
             } else {
                 const existingTopic: any = mergedTopicMap.get(topicId);
                 if (existingTopic) {
-                    existingTopic.sourceFragments = [
+                    // Merge sourceRefOrdinals to track semanticRefs that contributed to this topic
+                    existingTopic.sourceRefOrdinals = [
                         ...new Set([
-                            ...existingTopic.sourceFragments,
-                            ...topic.sourceFragments,
+                            ...(existingTopic.sourceRefOrdinals || []),
+                            ...(topic.sourceRefOrdinals || []),
+                        ]),
+                    ];
+                    // Merge sourceTopicNames for hierarchical aggregation
+                    existingTopic.sourceTopicNames = [
+                        ...new Set([
+                            ...(existingTopic.sourceTopicNames || []),
+                            ...(topic.sourceTopicNames || []),
                         ]),
                     ];
                 }
             }
+        }
+
+        // Calculate sibling relationships
+        const siblingRels = this.calculateSiblingRelationships(
+            mergedTopicMap as Map<string, any>,
+        );
+        for (const rel of siblingRels) {
+            this.topicRelationships?.upsertRelationship(rel);
         }
 
         return {
@@ -2105,6 +2296,7 @@ export class WebsiteCollection
     private async storeTopicHierarchyRecursive(
         topic: any,
         topicMap: Map<string, any>,
+        websiteUrlMap: Map<string, { url: string; domain: string }>,
     ): Promise<void> {
         const existing = this.hierarchicalTopics.getTopicByName(
             topic.name,
@@ -2123,20 +2315,35 @@ export class WebsiteCollection
                 }
             }
 
-            await this.storeHierarchicalTopic({
-                topicId: topic.id,
-                topicName: topic.name,
-                level: topic.level,
-                ...(parentTopicId ? { parentTopicId } : {}),
-                confidence: topic.confidence,
-                keywords: topic.keywords,
-            });
+            // Get URL from the first website that contributed this topic
+            const urlInfo = websiteUrlMap.get(topic.id) || {
+                url: "unknown",
+                domain: "unknown",
+            };
+
+            await this.storeHierarchicalTopic(
+                {
+                    topicId: topic.id,
+                    topicName: topic.name,
+                    level: topic.level,
+                    ...(parentTopicId ? { parentTopicId } : {}),
+                    confidence: topic.confidence,
+                    keywords: topic.keywords,
+                    sourceTopicNames: topic.sourceTopicNames,
+                },
+                urlInfo.url,
+                urlInfo.domain,
+            );
         }
 
         for (const childId of topic.childIds) {
             const childTopic = topicMap.get(childId);
             if (childTopic) {
-                await this.storeTopicHierarchyRecursive(childTopic, topicMap);
+                await this.storeTopicHierarchyRecursive(
+                    childTopic,
+                    topicMap,
+                    websiteUrlMap,
+                );
             }
         }
     }
@@ -2897,10 +3104,7 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     /**
      * Build a simple topic hierarchy when AI is not available
      */
-    private async buildSimpleTopicHierarchy(
-        topics: string[],
-        urlLimit?: number,
-    ): Promise<void> {
+    private async buildSimpleTopicHierarchy(topics: string[]): Promise<void> {
         debug(
             `[Knowledge Graph] Building simple topic hierarchy for ${topics.length} topics`,
         );
@@ -2922,7 +3126,8 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                     confidence: 0.7,
                     keywords: [groupName],
                 },
-                urlLimit,
+                "aggregated:multiple-sources",
+                "aggregated",
             );
 
             // Store child topics
@@ -2937,7 +3142,8 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                         confidence: 0.6,
                         keywords: [topic],
                     },
-                    urlLimit,
+                    "aggregated:multiple-sources",
+                    "aggregated",
                 );
             }
 
@@ -2951,7 +3157,6 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     private async organizeTopicsUnderRoot(
         topics: string[],
         rootTopicId: string,
-        urlLimit?: number,
     ): Promise<void> {
         // Group similar topics
         const groups = this.groupTopicsBySimpleSimilarity(topics);
@@ -2972,7 +3177,8 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                         confidence: 0.7,
                         keywords: [groupName],
                     },
-                    urlLimit,
+                    "aggregated:multiple-sources",
+                    "aggregated",
                 );
 
                 // Store leaf topics
@@ -2987,7 +3193,8 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                             confidence: 0.6,
                             keywords: [topic],
                         },
-                        urlLimit,
+                        "aggregated:multiple-sources",
+                        "aggregated",
                     );
                 }
             }
@@ -3004,7 +3211,8 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
                         confidence: 0.6,
                         keywords: [topic],
                     },
-                    urlLimit,
+                    "aggregated:multiple-sources",
+                    "aggregated",
                 );
             }
         }
@@ -3021,19 +3229,11 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
             parentTopicId?: string;
             confidence: number;
             keywords: string[];
+            sourceTopicNames?: string[];
         },
-        urlLimit?: number,
+        websiteUrl: string,
+        websiteDomain: string,
     ): Promise<void> {
-        // Get a sample URL and domain from processed websites
-        const websites = this.getWebsites();
-        const websitesToProcess = urlLimit
-            ? websites.slice(0, urlLimit)
-            : websites;
-
-        const sampleWebsite = websitesToProcess[0];
-        const url = sampleWebsite?.metadata?.url || "unknown";
-        const domain = sampleWebsite?.metadata?.domain || "unknown";
-
         const sourceRef: dataFrame.RowSourceRef = {
             range: {
                 start: { messageOrdinal: 0, chunkOrdinal: 0 },
@@ -3044,14 +3244,17 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         const topicRow = {
             sourceRef,
             record: {
-                url,
-                domain,
+                url: websiteUrl,
+                domain: websiteDomain,
                 topicId: topic.topicId,
                 topicName: topic.topicName,
                 level: topic.level,
                 parentTopicId: topic.parentTopicId,
                 confidence: topic.confidence,
                 keywords: JSON.stringify(topic.keywords),
+                sourceTopicNames: topic.sourceTopicNames
+                    ? JSON.stringify(topic.sourceTopicNames)
+                    : undefined,
                 extractionDate: new Date().toISOString(),
             },
         };
@@ -3309,172 +3512,40 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         debug(`[Knowledge Graph] Finished storing ${storedCount} communities`);
     }
 
-    /**
-     * Build topic relationships using batch operations
-     */
-    private async buildTopicRelationships(cacheManager: any): Promise<void> {
-        debug(
-            `[Knowledge Graph] Building topic relationships using batch approach`,
-        );
+    private calculateSiblingRelationships(topicMap: Map<string, any>): any[] {
+        const relationships: any[] = [];
+        const parentToChildren = new Map<string, string[]>();
 
-        // Get all topic relationships from cache manager (pre-computed co-occurrences)
-        const cachedRelationships = cacheManager.getAllTopicRelationships();
-        debug(
-            `[Knowledge Graph] Found ${cachedRelationships.length} cached topic relationships`,
-        );
-
-        const now = new Date().toISOString();
-
-        for (const cachedRel of cachedRelationships) {
-            if (cachedRel.count < 2) continue; // Filter weak relationships
-
-            const strength = Math.min(cachedRel.count / 10, 1.0);
-
-            // Use hierarchical topics to get topic IDs
-            const fromTopicId = this.findTopicIdByNameInHierarchy(
-                cachedRel.fromTopic,
-            );
-            const toTopicId = this.findTopicIdByNameInHierarchy(
-                cachedRel.toTopic,
-            );
-
-            if (fromTopicId && toTopicId) {
-                this.topicRelationships?.upsertRelationship({
-                    fromTopic: fromTopicId,
-                    toTopic: toTopicId,
-                    relationshipType: "co_occurs",
-                    strength,
-                    sourceUrls: JSON.stringify(cachedRel.sources),
-                    cooccurrenceCount: cachedRel.count,
-                    firstSeen: now,
-                    lastSeen: now,
-                    updated: now,
-                });
+        // Group children by parent
+        for (const [topicId, topic] of topicMap) {
+            if (topic.parentId) {
+                if (!parentToChildren.has(topic.parentId)) {
+                    parentToChildren.set(topic.parentId, []);
+                }
+                parentToChildren.get(topic.parentId)!.push(topicId);
             }
         }
 
-        debug(`[Knowledge Graph] Completed topic relationships`);
-    }
-
-    /**
-     * Calculate topic metrics using batch operations
-     */
-    private async calculateTopicMetrics(cacheManager: any): Promise<void> {
-        debug(
-            `[Knowledge Graph] Calculating topic metrics using batch approach`,
-        );
-
-        const allTopics = this.hierarchicalTopics?.getTopicHierarchy();
-        if (!allTopics || allTopics.length === 0) return;
-
-        const uniqueTopics = new Set(allTopics.map((t) => t.topicId));
-        const topicIds = Array.from(uniqueTopics);
-
-        // MAJOR OPTIMIZATION: Use batch queries instead of individual queries
-        // Get all relationships for all topics in one query
-        const startTime = performance.now();
-        const allRelationships =
-            this.topicRelationships?.getRelationshipsForTopics?.(topicIds) ||
-            [];
-        const relationshipQueryTime = performance.now() - startTime;
-        debug(
-            `[Knowledge Graph] Batch fetched ${allRelationships.length} topic relationships in ${relationshipQueryTime.toFixed(2)}ms`,
-        );
-
-        // Get all entity relations for all topics in one query
-        const entityStartTime = performance.now();
-        const allEntityRelations =
-            this.topicEntityRelations?.getEntitiesForTopics?.(topicIds) || [];
-        const entityQueryTime = performance.now() - entityStartTime;
-        debug(
-            `[Knowledge Graph] Batch fetched ${allEntityRelations.length} topic-entity relations in ${entityQueryTime.toFixed(2)}ms`,
-        );
-
-        // Group results by topic ID for efficient lookup
-        const relationshipsByTopic = new Map<string, any[]>();
-        const entityRelationsByTopic = new Map<string, any[]>();
-
-        for (const rel of allRelationships) {
-            if (!relationshipsByTopic.has(rel.fromTopic)) {
-                relationshipsByTopic.set(rel.fromTopic, []);
+        // Create sibling relationships
+        for (const [parentId, children] of parentToChildren) {
+            for (let i = 0; i < children.length; i++) {
+                for (let j = i + 1; j < children.length; j++) {
+                    const parent = topicMap.get(parentId);
+                    relationships.push({
+                        fromTopic: children[i],
+                        toTopic: children[j],
+                        relationshipType: "SIBLING",
+                        strength: 0.8,
+                        metadata: JSON.stringify({
+                            parentTopic: parent?.name,
+                            sharedParentId: parentId,
+                        }),
+                        updated: new Date().toISOString(),
+                    });
+                }
             }
-            if (!relationshipsByTopic.has(rel.toTopic)) {
-                relationshipsByTopic.set(rel.toTopic, []);
-            }
-            relationshipsByTopic.get(rel.fromTopic)!.push(rel);
-            relationshipsByTopic.get(rel.toTopic)!.push(rel);
         }
 
-        for (const rel of allEntityRelations) {
-            if (!entityRelationsByTopic.has(rel.topicId)) {
-                entityRelationsByTopic.set(rel.topicId, []);
-            }
-            entityRelationsByTopic.get(rel.topicId)!.push(rel);
-        }
-
-        // Calculate metrics for each topic using pre-fetched data
-        for (const topicId of uniqueTopics) {
-            const topic = this.hierarchicalTopics?.getTopicById(topicId);
-            if (!topic) continue;
-
-            // Get data from cache manager
-            const documentsWithTopic = cacheManager.getWebsitesForTopic(
-                topic.topicName,
-            );
-            const domains = new Set(
-                documentsWithTopic.map((url: string) => {
-                    // Extract domain from URL or use a default approach
-                    try {
-                        return new URL(url).hostname;
-                    } catch {
-                        return url.split("/")[0];
-                    }
-                }),
-            ).size;
-
-            // Use pre-fetched data instead of individual queries
-            const relationships = relationshipsByTopic.get(topicId) || [];
-            const strongRelationships = relationships.filter(
-                (r) => r.strength > 0.7,
-            ).length;
-            const entityRelations = entityRelationsByTopic.get(topicId) || [];
-
-            const topEntities = entityRelations
-                .sort((a, b) => b.relevance - a.relevance)
-                .slice(0, 10)
-                .map((r) => r.entityName);
-
-            const metricsData = {
-                topicId,
-                topicName: topic.topicName,
-                documentCount: documentsWithTopic.length,
-                domainCount: domains,
-                degreeCentrality: relationships.length,
-                betweennessCentrality: 0, // Could be calculated using graph algorithms if needed
-                activityPeriod: 0, // Simplified for now
-                avgConfidence: topic.confidence,
-                maxConfidence: topic.confidence,
-                totalRelationships: relationships.length,
-                strongRelationships,
-                entityCount: entityRelations.length,
-                topEntities: JSON.stringify(topEntities),
-                updated: new Date().toISOString(),
-            };
-
-            this.topicMetrics?.upsertMetrics(metricsData);
-        }
-
-        debug(
-            `[Knowledge Graph] Completed topic metrics calculation for ${topicIds.length} topics`,
-        );
-    }
-
-    /**
-     * Helper method to find topic ID by name in hierarchical topics
-     */
-    private findTopicIdByNameInHierarchy(topicName: string): string | null {
-        const allTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
-        const topic = allTopics.find((t) => t.topicName === topicName);
-        return topic?.topicId || null;
+        return relationships;
     }
 }

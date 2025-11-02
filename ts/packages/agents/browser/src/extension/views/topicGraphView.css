@@ -123,6 +123,7 @@ body {
 /* Sidebar Styles */
 .topic-sidebar {
   width: 320px;
+  flex-shrink: 0;
   background: white;
   border-right: 1px solid #dee2e6;
   display: flex;
