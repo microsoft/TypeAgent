@@ -7,7 +7,7 @@ namespace TypeAgent.KnowPro.Storage;
 /// Null-object implementation of ITermToRelatedTermsFuzzy used when fuzzy (embedding) indexing is disabled.
 /// All operations are no-ops and lookups return empty collections.
 /// </summary>
-public sealed class NullTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
+public class NullTermToRelatedTermsFuzzy : ITermToRelatedTermsFuzzy
 {
 #pragma warning disable CS0067
     public event Action<BatchProgress> OnIndexed;

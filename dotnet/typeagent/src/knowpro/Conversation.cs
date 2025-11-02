@@ -27,6 +27,8 @@ public class Conversation<TMessage> : IConversation<TMessage>, IConversation, ID
 
     public IConversationSecondaryIndexes SecondaryIndexes => _storageProvider.SecondaryIndexes;
 
+    public IConversationCache? Cache { get; set; }
+
     // If used as IConversation, return a message collection of IMessage
     // Keeps the .NET type system happy
     IMessageCollection IConversation.Messages => _storageProvider.Messages;
@@ -73,4 +75,6 @@ public class ConversationSecondaryIndexes : IConversationSecondaryIndexes
     public ITermToRelatedTermIndex TermToRelatedTermsIndex { get; }
 
     public IMessageTextIndex MessageIndex { get; }
+
+    public IConversationCache? Cache { get; set; }
 }

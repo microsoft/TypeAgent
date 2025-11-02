@@ -24,6 +24,8 @@ public struct TextLocation
 
     public readonly bool IsValid() => MessageOrdinal >= 0 && ChunkOrdinal >= 0;
 
+    public TextRange ToRange() => new TextRange(MessageOrdinal, ChunkOrdinal);
+
     /// <summary>
     // 0 if locations are equal
     // < 0 if x is less than y

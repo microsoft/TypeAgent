@@ -19,7 +19,16 @@ public interface IMessageTextIndex
         string messageText,
         int? maxMatches = null,
         double? minScore = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
+
+    ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(
+        string messageText,
+        Func<int, bool> filter,
+        int? maxMatches = null,
+        double? minScore = null,
+        CancellationToken cancellationToken = default
+    );
 
     ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
         string messageText,
@@ -27,6 +36,15 @@ public interface IMessageTextIndex
         int? maxMatches = null,
         double? minScore = null,
         CancellationToken cancellationToken = default);
+
+    ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
+        string messageText,
+        Func<int, bool> filter,
+        IList<int> ordinalsToSearch,
+        int? maxMatches = null,
+        double? minScore = null,
+        CancellationToken cancellationToken = default
+    );
 
     ValueTask ClearAsync(CancellationToken cancellationToken = default);
 
