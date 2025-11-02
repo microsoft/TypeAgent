@@ -20,7 +20,9 @@ internal class MessagesFromKnowledgeExpr : QueryOpExpr<MessageAccumulator>
 
     public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
     {
-        context.KnowledgeMatches = await SrcExpr.EvalAsync(context).ConfigureAwait(false);
+        context.KnowledgeMatches = await SrcExpr.EvalAsync(
+            context
+        ).ConfigureAwait(false);
 
         var messageMatches = new MessageAccumulator();
         if (context.KnowledgeMatches.IsNullOrEmpty())
@@ -108,7 +110,123 @@ internal class GetScoredMessagesExpr : QueryOpExpr<List<ScoredMessageOrdinal>>
 
     public override async ValueTask<List<ScoredMessageOrdinal>> EvalAsync(QueryEvalContext context)
     {
-        var matches = await SrcExpr.EvalAsync(context);
+        var matches = await SrcExpr.EvalAsync(
+            context
+        ).ConfigureAwait(false);
+
         return matches.ToScoredOrdinals();
     }
 }
+
+internal class MatchMessagesBySimilarityExpr : QueryOpExpr<IList<ScoredMessageOrdinal>>
+{
+    public MatchMessagesBySimilarityExpr(
+        string queryText,
+        int? maxMessages = null,
+        double? minScore = null,
+        GetScopeExpr? getScopeExpr = null
+    )
+        : base()
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(queryText, nameof(queryText));
+        QueryText = queryText;
+        MaxMessages = maxMessages;
+        MinScore = minScore;
+        GetScopeExpr = getScopeExpr;
+    }
+
+    public string QueryText { get; }
+
+    public int? MaxMessages { get; }
+
+    public double? MinScore { get; }
+
+    public GetScopeExpr? GetScopeExpr { get; }
+
+    public override async ValueTask<IList<ScoredMessageOrdinal>> EvalAsync(QueryEvalContext context)
+    {
+        if (GetScopeExpr is not null)
+        {
+            context.TextRangesInScope = await GetScopeExpr.EvalAsync(context);
+        }
+
+        var rangesInScope = context.TextRangesInScope;
+        Func<int, bool> predicate = rangesInScope is not null
+            ? (int messageOrdinal) => this.IsInScope(rangesInScope, messageOrdinal)
+            : null;
+
+        return await context.Conversation.SecondaryIndexes.MessageIndex.LookupMessagesAsync(
+            QueryText,
+            predicate,
+            MaxMessages,
+            MinScore
+        ).ConfigureAwait(false);
+    }
+
+    private bool IsInScope(TextRangesInScope scope, int messageOrdinal)
+    {
+        return scope.IsRangeInScope(new TextRange(messageOrdinal));
+    }
+}
+
+internal class RankMessagesBySimilarityExpr : QueryOpExpr<MessageAccumulator>
+{
+    public RankMessagesBySimilarityExpr(
+        QueryOpExpr<MessageAccumulator> srcExpr,
+        string queryText,
+        int? maxMessages = null,
+        double? minScore = null
+    )
+        : base()
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(queryText, nameof(queryText));
+
+        QueryText = queryText;
+        SrcExpr = srcExpr;
+        MaxMessages = maxMessages;
+        MinScore = minScore;
+    }
+
+    public QueryOpExpr<MessageAccumulator> SrcExpr { get; }
+
+    public string QueryText { get; }
+
+    public int? MaxMessages { get; }
+
+    public double? MinScore { get; }
+
+    public override async ValueTask<MessageAccumulator> EvalAsync(QueryEvalContext context)
+    {
+        var matches = await SrcExpr.EvalAsync(
+            context
+        ).ConfigureAwait(false);
+
+        if (MaxMessages is not null && matches.Count <= MaxMessages.Value)
+        {
+            return matches;
+        }
+        //
+        // If the messageIndex supports re-ranking by similarity, we will try that as
+        // a secondary way of picking relevant messages
+        //
+        var messageIndex = context.Conversation.SecondaryIndexes.MessageIndex;
+        List<int> messageOrdinals = matches.ToValues();
+
+        matches.Clear();
+
+        IList<ScoredMessageOrdinal> rankedMessages = await messageIndex.LookupMessagesInSubsetAsync(
+            QueryText,
+            messageOrdinals,
+            MaxMessages,
+            MinScore
+        ).ConfigureAwait(false);
+
+        foreach (var match in rankedMessages)
+        {
+            matches.Add(match.MessageOrdinal, match.Score);
+        }
+        return matches;
+    }
+}
+
+

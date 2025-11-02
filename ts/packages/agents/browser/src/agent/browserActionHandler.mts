@@ -658,6 +658,8 @@ async function processBrowserAgentMessage(
         case "testMergeTopicHierarchies":
         case "mergeTopicHierarchies":
         case "discoverRelatedKnowledge":
+        case "getTopicDetails":
+        case "getEntityDetails":
         case "getUrlContentBreakdown": {
             const knowledgeResult = await handleKnowledgeAction(
                 data.method,
@@ -1702,11 +1704,9 @@ async function executeBrowserAction(
             } else {
                 console.error(JSON.stringify(ex));
             }
-
-            throw new Error("Unable to contact browser backend.");
         }
     } else {
-        throw new Error("No WebSocket server available.");
+        console.error("No WebSocket server available.");
     }
     return undefined;
 }
@@ -2097,11 +2097,9 @@ async function handleTabIndexActions(
             } else {
                 console.error(JSON.stringify(ex));
             }
-
-            throw new Error("Unable to contact browser backend.");
         }
     } else {
-        throw new Error("No WebSocket server available.");
+        console.error("No WebSocket server available.");
     }
     return undefined;
 }

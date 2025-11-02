@@ -9,7 +9,6 @@ interface TopicGraphViewState {
     searchQuery: string;
     visibleLevels: number[];
     sidebarOpen: boolean;
-    prototypeMode: boolean;
 }
 
 class TopicGraphView {
@@ -21,7 +20,6 @@ class TopicGraphView {
         searchQuery: "",
         visibleLevels: [0, 1, 2, 3],
         sidebarOpen: false,
-        prototypeMode: false,
     };
 
     private loadingOverlay: HTMLElement;
@@ -93,13 +91,6 @@ class TopicGraphView {
             .getElementById("exportJsonButton")
             ?.addEventListener("click", () => {
                 this.exportGraphologyJson();
-            });
-
-        document
-            .getElementById("prototypeMode")
-            ?.addEventListener("change", (e) => {
-                const checkbox = e.target as HTMLInputElement;
-                this.togglePrototypeMode(checkbox.checked);
             });
 
         // Settings modal removed - using optimized defaults
@@ -184,7 +175,7 @@ class TopicGraphView {
         try {
             const topicData = await this.fetchGlobalImportanceView();
 
-            if (!topicData || topicData.topics.length === 0) {
+            if (!topicData) {
                 this.showError("No topic data available");
                 return;
             }
@@ -214,16 +205,14 @@ class TopicGraphView {
                 0.0,
             );
 
-            if (!result || !result.topics || result.topics.length === 0) {
+            if (!result) {
                 console.warn(
                     "[TopicGraphView] No importance layer data available",
                 );
                 return this.createEmptyTopicGraph();
             }
 
-            console.log(
-                `[TopicGraphView] Fetched global importance layer: ${result.topics.length} topics`,
-            );
+            console.log(`[TopicGraphView] Fetched global importance layer`);
             if (result.metadata) {
                 console.log(`[TopicGraphView] Metadata:`, result.metadata);
             }
@@ -242,11 +231,13 @@ class TopicGraphView {
      * Transform importance layer data to visualization format
      */
     private transformImportanceLayerData(data: any): any {
-        if (!data.topics || data.topics.length === 0) {
+        if (!data.topics) {
             return this.createEmptyTopicGraph();
         }
 
-        const topics = data.topics.map((topic: any) => ({
+        const inputTopics = data.topics || [];
+
+        const topics = inputTopics.map((topic: any) => ({
             id: topic.topicId,
             name: topic.topicName,
             level: topic.level,
@@ -254,7 +245,7 @@ class TopicGraphView {
             confidence: topic.confidence || 0.7,
             keywords: this.parseKeywords(topic.keywords),
             entityReferences: topic.entityReferences || [],
-            childCount: this.countChildren(topic.topicId, data.topics),
+            childCount: this.countChildren(topic.topicId, inputTopics),
             importance: topic.importance || 0.5,
         }));
 
@@ -886,25 +877,15 @@ class TopicGraphView {
 
                 <div class="topic-keywords">
                     <h6>Keywords</h6>
-                    <div class="keyword-tags">
-                        ${topic.keywords
-                            .map(
-                                (keyword: string) =>
-                                    `<span class="keyword-tag">${this.escapeHtml(keyword)}</span>`,
-                            )
-                            .join("")}
+                    <div id="topicKeywords" class="keyword-tags">
+                        <span class="text-muted">Loading...</span>
                     </div>
                 </div>
 
                 <div class="topic-entities">
                     <h6>Related Entities</h6>
-                    <ul class="entity-list">
-                        ${topic.entityReferences
-                            .map(
-                                (entity: string) =>
-                                    `<li class="entity-item" title="Click to view in Entity Graph">${this.escapeHtml(entity)}</li>`,
-                            )
-                            .join("")}
+                    <ul id="topicEntities" class="entity-list">
+                        <li class="text-muted">Loading...</li>
                     </ul>
                 </div>
 
@@ -921,36 +902,80 @@ class TopicGraphView {
 
         this.state.sidebarOpen = true;
 
-        this.loadTopicMetrics(topic.id);
+        this.loadTopicDetails(topic.id);
     }
 
-    private async loadTopicMetrics(topicId: string): Promise<void> {
+    private async loadTopicDetails(topicId: string): Promise<void> {
         try {
-            const result = await this.extensionService.getTopicMetrics(topicId);
+            const result = await this.extensionService.getTopicDetails(topicId);
 
-            if (result && result.success) {
-                const metrics = result.metrics;
+            if (result && result.success && result.details) {
+                const details = result.details;
+
                 const firstSeenEl = document.getElementById("topicFirstSeen");
                 const lastSeenEl = document.getElementById("topicLastSeen");
+                const keywordsEl = document.getElementById("topicKeywords");
+                const entitiesEl = document.getElementById("topicEntities");
 
                 if (firstSeenEl) {
-                    firstSeenEl.textContent = metrics.firstSeen
-                        ? this.formatDate(metrics.firstSeen)
+                    firstSeenEl.textContent = details.firstSeen
+                        ? this.formatDate(details.firstSeen)
                         : "-";
                 }
 
                 if (lastSeenEl) {
-                    lastSeenEl.textContent = metrics.lastSeen
-                        ? this.formatDate(metrics.lastSeen)
+                    lastSeenEl.textContent = details.lastSeen
+                        ? this.formatDate(details.lastSeen)
                         : "-";
+                }
+
+                if (
+                    keywordsEl &&
+                    details.keywords &&
+                    details.keywords.length > 0
+                ) {
+                    keywordsEl.innerHTML = details.keywords
+                        .map(
+                            (keyword: string) =>
+                                `<span class="keyword-tag">${this.escapeHtml(keyword)}</span>`,
+                        )
+                        .join("");
+                } else if (keywordsEl) {
+                    keywordsEl.innerHTML =
+                        '<span class="text-muted">No keywords</span>';
+                }
+
+                if (
+                    entitiesEl &&
+                    details.entityReferences &&
+                    details.entityReferences.length > 0
+                ) {
+                    entitiesEl.innerHTML = details.entityReferences
+                        .map(
+                            (entity: string) =>
+                                `<li class="entity-item" title="Click to view in Entity Graph">${this.escapeHtml(entity)}</li>`,
+                        )
+                        .join("");
+                } else if (entitiesEl) {
+                    entitiesEl.innerHTML =
+                        '<li class="text-muted">No related entities</li>';
                 }
             }
         } catch (error) {
-            console.error("Error loading topic metrics:", error);
+            console.error("Error loading topic details:", error);
             const firstSeenEl = document.getElementById("topicFirstSeen");
             const lastSeenEl = document.getElementById("topicLastSeen");
+            const keywordsEl = document.getElementById("topicKeywords");
+            const entitiesEl = document.getElementById("topicEntities");
+
             if (firstSeenEl) firstSeenEl.textContent = "-";
             if (lastSeenEl) lastSeenEl.textContent = "-";
+            if (keywordsEl)
+                keywordsEl.innerHTML =
+                    '<span class="text-muted">Error loading</span>';
+            if (entitiesEl)
+                entitiesEl.innerHTML =
+                    '<li class="text-muted">Error loading</li>';
         }
     }
 
@@ -1053,23 +1078,6 @@ class TopicGraphView {
         URL.revokeObjectURL(url);
 
         this.showNotification("Cytoscape JSON exported successfully");
-    }
-
-    private togglePrototypeMode(enabled: boolean): void {
-        this.state.prototypeMode = enabled;
-        console.log(
-            `[TopicGraphView] Prototype mode: ${enabled ? "ENABLED" : "DISABLED"}`,
-        );
-
-        if (!this.lastLoadedData) {
-            this.showNotification("No data available. Load a graph first.");
-            return;
-        }
-
-        this.visualizer?.setPrototypeMode(enabled);
-        this.showNotification(
-            enabled ? "Prototype mode enabled" : "Prototype mode disabled",
-        );
     }
 
     private toggleSidebar(): void {

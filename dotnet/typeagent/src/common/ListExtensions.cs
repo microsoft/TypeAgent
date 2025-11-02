@@ -137,4 +137,11 @@ public static class ListExtensions
         return topNList.ByRankAndClear();
     }
 
+    public static void Fill<T>(this IList<T> list, T value, int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            list.Add(value);
+        }
+    }
 }

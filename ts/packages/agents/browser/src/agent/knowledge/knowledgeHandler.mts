@@ -34,7 +34,6 @@ import {
     getAllEntitiesWithMetrics,
     getEntityNeighborhood,
     getGlobalImportanceLayer,
-    getViewportBasedNeighborhood,
     getImportanceStatistics,
 } from "./actions/graphActions.mjs";
 import {
@@ -149,9 +148,6 @@ export async function handleKnowledgeAction(
 
         case "getGlobalImportanceLayer":
             return await getGlobalImportanceLayer(parameters, context);
-
-        case "getViewportBasedNeighborhood":
-            return await getViewportBasedNeighborhood(parameters, context);
 
         case "getImportanceStatistics":
             return await getImportanceStatistics(parameters, context);

@@ -117,7 +117,7 @@ public class TestCommands : ICommandModule
             }
         );
 
-        ConversationSearchResult? searchResults = await conversation.SearchConversationAsync(
+        ConversationSearchResult? searchResults = await conversation.SearchAsync(
             select,
             null,
             cancellationToken
@@ -137,7 +137,7 @@ public class TestCommands : ICommandModule
             };
 
         }
-        searchResults = await conversation.SearchConversationAsync(
+        searchResults = await conversation.SearchAsync(
             select,
             new SearchOptions()
             {
@@ -273,7 +273,11 @@ public class TestCommands : ICommandModule
         KnowProWriter.WriteLine(searchGroup);
 
         var results = await conversation.SearchKnowledgeAsync(
-            new SearchSelectExpr(searchGroup), null, null, cancellationToken).ConfigureAwait(false);
+            new SearchSelectExpr(searchGroup),
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
     }
 
@@ -300,7 +304,7 @@ public class TestCommands : ICommandModule
         }
         var model = new OpenAIChatModel();
         SearchQueryTranslator translator = new SearchQueryTranslator(model);
-        var result = await translator.TranslateAsync(query, cancellationToken);
+        var result = await translator.TranslateAsync(query, null, cancellationToken);
         KnowProWriter.WriteJson(result);
     }
 

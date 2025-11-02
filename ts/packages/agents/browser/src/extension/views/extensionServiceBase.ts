@@ -620,6 +620,20 @@ export abstract class ExtensionServiceBase {
         });
     }
 
+    async getTopicDetails(topicId: string): Promise<any> {
+        return this.sendMessage({
+            type: "getTopicDetails",
+            parameters: { topicId },
+        });
+    }
+
+    async getEntityDetails(entityName: string): Promise<any> {
+        return this.sendMessage({
+            type: "getEntityDetails",
+            parameters: { entityName },
+        });
+    }
+
     async getTopicTimelines(parameters: {
         topicNames: string[];
         maxTimelineEntries?: number;

@@ -7,7 +7,7 @@ namespace TypeAgent.KnowPro.Storage;
 /// Null object implementation of IMessageTextIndex.
 /// Provides a safe no-op index when message text indexing is disabled.
 /// </summary>
-public sealed class NullMessageTextIndex : IMessageTextIndex
+public class NullMessageTextIndex : IMessageTextIndex
 {
 #pragma warning disable CS0067
     public event Action<BatchProgress> OnIndexed;
@@ -39,6 +39,14 @@ public sealed class NullMessageTextIndex : IMessageTextIndex
         CancellationToken cancellationToken = default
     ) => new ValueTask<IList<ScoredMessageOrdinal>>([]);
 
+    ValueTask<IList<ScoredMessageOrdinal>> IMessageTextIndex.LookupMessagesAsync(
+        string messageText,
+        Func<int, bool> filter,
+        int? maxMatches,
+        double? minScore,
+        CancellationToken cancellationToken
+    ) => new ValueTask<IList<ScoredMessageOrdinal>>([]);
+
     public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
         string messageText,
         IList<int> ordinalsToSearch,
@@ -47,7 +55,15 @@ public sealed class NullMessageTextIndex : IMessageTextIndex
         CancellationToken cancellationToken = default
     ) => new ValueTask<IList<ScoredMessageOrdinal>>([]);
 
+    public ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
+        string messageText,
+        Func<int, bool> filter,
+        IList<int> ordinalsToSearch,
+        int? maxMatches = null,
+        double? minScore = null,
+        CancellationToken cancellationToken = default
+    ) => new ValueTask<IList<ScoredMessageOrdinal>>([]);
+
     public ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
         => ValueTask.FromResult<int?>(null);
-
 }

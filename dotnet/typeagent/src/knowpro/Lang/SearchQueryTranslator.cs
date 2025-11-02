@@ -24,8 +24,12 @@ public class SearchQueryTranslator
         );
     }
 
-    public async ValueTask<SearchQuery> TranslateAsync(string request, CancellationToken cancellationToken)
+    public async ValueTask<SearchQuery> TranslateAsync(
+        string request,
+        IList<IPromptSection>? preamble = null,
+        CancellationToken cancellationToken = default
+    )
     {
-        return await _translator.TranslateAsync(request, cancellationToken);
+        return await _translator.TranslateAsync(request, preamble, null, cancellationToken);
     }
 }

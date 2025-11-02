@@ -127,6 +127,53 @@ public class SqliteMessageTextIndex : IMessageTextIndex
         return matches.IsNullOrEmpty() ? [] : ToScoredOrdinals(matches);
     }
 
+    public async ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesAsync(
+        string messageText,
+        Func<int, bool> filter,
+        int? maxMatches = null,
+        double? minScore = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(messageText, nameof(messageText));
+
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            messageText,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        var matches = GetAll().KeysOfNearest(
+            embedding,
+            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
+            minScore is not null ? minScore.Value : Settings.MinScore,
+            filter
+        );
+        return matches.IsNullOrEmpty() ? [] : ToScoredOrdinals(matches);
+    }
+
+    public async ValueTask<IList<ScoredMessageOrdinal>> LookupMessagesInSubsetAsync(
+        string messageText,
+        Func<int, bool> filter,
+        IList<int> ordinalsToSearch,
+        int? maxMatches = null,
+        double? minScore = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var embedding = await Settings.EmbeddingModel.GenerateNormalizedAsync(
+            messageText,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        var matches = GetSubset(ordinalsToSearch).KeysOfNearest(
+            embedding,
+            maxMatches is not null ? maxMatches.Value : Settings.MaxMatches,
+            minScore is not null ? minScore.Value : Settings.MinScore,
+            filter
+        );
+        return matches.IsNullOrEmpty() ? [] : ToScoredOrdinals(matches);
+    }
+
     private void Insert(SqliteCommand cmd, int messageOrdinal, int chunkOrdinal, NormalizedEmbedding embedding)
     {
         cmd.Parameters.Clear();

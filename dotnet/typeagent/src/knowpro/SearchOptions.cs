@@ -5,11 +5,28 @@ namespace TypeAgent.KnowPro;
 
 public class SearchOptions
 {
+    public SearchOptions()
+    {
+        ExactMatch = false;
+    }
+
+    public SearchOptions(SearchOptions options)
+    {
+        ArgumentVerify.ThrowIfNull(options, nameof(options));
+
+        MaxKnowledgeMatches = options.MaxKnowledgeMatches;
+        MaxMessageMatches = options.MaxMessageMatches;
+        ExactMatch = options.ExactMatch;
+        MaxCharsInBudget = options.MaxCharsInBudget;
+        ThresholdScore = options.ThresholdScore;
+    }
+
     public int? MaxKnowledgeMatches { get; set; }
 
     public int? MaxMessageMatches { get; set; }
 
     public bool? ExactMatch { get; set; }
+
     /// <summary>
     /// The maximum # of total message characters to select
     /// The query processor will ensure that the cumulative character count of message matches
@@ -21,10 +38,7 @@ public class SearchOptions
 
     public static SearchOptions CreateDefault()
     {
-        return new SearchOptions()
-        {
-            ExactMatch = false
-        };
+        return new SearchOptions();
     }
 
     public static SearchOptions CreateTypical()
