@@ -61,10 +61,10 @@ export interface GraphologyLayoutOptions {
 
 const DEFAULT_OPTIONS: Required<GraphologyLayoutOptions> = {
     nodeLimit: 2000,
-    minEdgeConfidence: 0.3,
+    minEdgeConfidence: 0.2,
     denseClusterThreshold: 100,
     forceAtlas2Iterations: 150,
-    noverlapIterations: 500,
+    noverlapIterations: 1000,
     targetViewportSize: 2000,
 };
 
@@ -118,10 +118,11 @@ export function buildGraphologyGraph(
         const edgeKey = [edge.from, edge.to].sort().join("|");
         if (edgeSet.has(edgeKey)) continue;
 
+        // Filter edges with confidence < 0.2 (except parent relationships)
         if (
             edge.type !== "parent" &&
             edge.type !== "parent-child" &&
-            (edge.confidence || 1) < opts.minEdgeConfidence
+            (edge.confidence || 1) < 0.2
         ) {
             continue;
         }
@@ -169,9 +170,32 @@ function initializeCircularLayout(graph: Graph): void {
     debug("Initializing circular layout...");
     const positions = circular(graph, { scale: 100 });
 
+    let nodesWithMissingPositions = 0;
     for (const node of graph.nodes()) {
-        graph.setNodeAttribute(node, "x", positions[node].x);
-        graph.setNodeAttribute(node, "y", positions[node].y);
+        const pos = positions[node];
+        if (
+            !pos ||
+            pos.x === undefined ||
+            pos.y === undefined ||
+            isNaN(pos.x) ||
+            isNaN(pos.y)
+        ) {
+            debug(
+                `[POSITION-ERROR] Node ${node} has invalid position from circular layout: ${JSON.stringify(pos)}`,
+            );
+            nodesWithMissingPositions++;
+            graph.setNodeAttribute(node, "x", 0);
+            graph.setNodeAttribute(node, "y", 0);
+        } else {
+            graph.setNodeAttribute(node, "x", pos.x);
+            graph.setNodeAttribute(node, "y", pos.y);
+        }
+    }
+
+    if (nodesWithMissingPositions > 0) {
+        debug(
+            `[POSITION-ERROR] ${nodesWithMissingPositions} nodes had invalid positions from circular layout`,
+        );
     }
 }
 
@@ -250,16 +274,35 @@ function applyMultiPhaseLayout(
             barnesHutTheta: 0.5,
         },
     });
+
+    // Check for invalid positions after ForceAtlas2
+    let invalidAfterFA2 = 0;
+    for (const node of graph.nodes()) {
+        const x = graph.getNodeAttribute(node, "x");
+        const y = graph.getNodeAttribute(node, "y");
+        if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) {
+            debug(
+                `[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y})`,
+            );
+            invalidAfterFA2++;
+        }
+    }
+    if (invalidAfterFA2 > 0) {
+        debug(
+            `[POSITION-ERROR] ${invalidAfterFA2} nodes have invalid positions after ForceAtlas2`,
+        );
+    }
+
     debug("  ✓ ForceAtlas2 complete");
 
     debug("Step 2: Applying global overlap prevention...");
     noverlap.assign(graph, {
         maxIterations: options.noverlapIterations,
         settings: {
-            margin: 20,
-            ratio: 1.3,
-            expansion: 1.2,
-            gridSize: 40,
+            margin: 60,
+            ratio: 2.5,
+            expansion: 1.8,
+            gridSize: 60,
         },
     });
     debug("  ✓ Global overlap prevention complete");
@@ -407,26 +450,58 @@ export function convertToCytoscapeElements(
     debug(`Scaling factors: X=${scaleX.toFixed(2)}, Y=${scaleY.toFixed(2)}`);
     debug(`Target viewport: [${targetMin}, ${targetMax}]`);
 
+    let nodesWithInvalidPositions = 0;
     for (const node of graph.nodes()) {
         const attr = graph.getNodeAttributes(node);
-        const x = (attr.x - minX) * scaleX + targetMin;
-        const y = (attr.y - minY) * scaleY + targetMin;
+
+        let x: number, y: number;
+        if (
+            attr.x === undefined ||
+            attr.x === null ||
+            isNaN(attr.x) ||
+            attr.y === undefined ||
+            attr.y === null ||
+            isNaN(attr.y)
+        ) {
+            debug(
+                `Warning: Node ${node} has invalid position (x=${attr.x}, y=${attr.y}), using (0, 0)`,
+            );
+            nodesWithInvalidPositions++;
+            x = 0;
+            y = 0;
+        } else {
+            x = (attr.x - minX) * scaleX + targetMin;
+            y = (attr.y - minY) * scaleY + targetMin;
+        }
+
+        const nodeData: any = {
+            id: node,
+            name: attr.name,
+            label: attr.name,
+            type: attr.type || "entity",
+            confidence: attr.confidence,
+            computedImportance: attr.importance,
+            nodeType: attr.type || "entity",
+            color: attr.color,
+            size: attr.size,
+        };
+
+        // Only include topic-specific fields if they exist
+        if (attr.level !== undefined) nodeData.level = attr.level;
+        if (attr.parentId !== undefined) nodeData.parentId = attr.parentId;
+        if (attr.childCount !== undefined)
+            nodeData.childCount = attr.childCount;
 
         elements.push({
-            data: {
-                id: node,
-                label: attr.name,
-                level: attr.level || 0,
-                confidence: attr.confidence,
-                computedImportance: attr.importance,
-                parentId: attr.parentId,
-                childCount: attr.childCount || 0,
-                nodeType: "topic",
-                color: attr.color,
-                size: attr.size,
-            },
+            data: nodeData,
             position: { x, y },
         });
+    }
+
+    if (nodesWithInvalidPositions > 0) {
+        debug(
+            `WARNING: ${nodesWithInvalidPositions} nodes had invalid positions and were placed at (0, 0)`,
+        );
     }
 
     for (const edge of graph.edges()) {
