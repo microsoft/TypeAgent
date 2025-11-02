@@ -19,6 +19,7 @@ import { createInterface } from "readline/promises";
 import fs from "fs";
 import readline from "readline";
 import open from "open";
+import { convert } from "html-to-text";
 
 function displayPadEnd(content: string, length: number): string {
     // Account for full width characters
@@ -120,9 +121,16 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
     ): void {
         const time = new Date(timestamp).toLocaleTimeString();
 
-        // Format the notification with timestamp and source
         const header = chalk.dim(`[${time}] ${source}:`);
-        const content = formatDisplayContent(data);
+
+        let content: string;
+        if (isHtmlContent(data)) {
+            const htmlContent = extractHtmlString(data);
+            content = convertHtmlToText(htmlContent);
+        } else {
+            content = formatDisplayContent(data);
+        }
+
         const formattedMessage = `${header}\n  ${content}`;
 
         displayContent(formattedMessage);
@@ -266,6 +274,77 @@ function initializeConsole(rl?: readline.promises.Interface) {
     });
     process.stdin.resume();
     readline.emitKeypressEvents(process.stdin);
+}
+
+function isHtmlContent(data: string | DisplayContent): boolean {
+    if (typeof data === "object" && data !== null && "type" in data) {
+        return data.type === "html";
+    }
+    if (typeof data === "string") {
+        return /<[^>]+>/.test(data);
+    }
+    if (typeof data === "object" && data !== null && "content" in data) {
+        const content = data.content;
+        if (typeof content === "string") {
+            return /<[^>]+>/.test(content);
+        }
+    }
+    return false;
+}
+
+function extractHtmlString(data: string | DisplayContent): string {
+    if (typeof data === "string") {
+        return data;
+    }
+    if (typeof data === "object" && data !== null && "content" in data) {
+        if (typeof data.content === "string") {
+            return data.content;
+        }
+    }
+    return String(data);
+}
+
+function convertHtmlToText(html: string): string {
+    try {
+        const result = convert(html, {
+            wordwrap: 80,
+            preserveNewlines: false,
+            selectors: [
+                {
+                    selector: "div",
+                    format: "block",
+                    options: { leadingLineBreaks: 1, trailingLineBreaks: 1 },
+                },
+                {
+                    selector: "p",
+                    format: "block",
+                    options: { leadingLineBreaks: 1, trailingLineBreaks: 1 },
+                },
+                {
+                    selector: 'div[style*="font-weight: 600"]',
+                    format: "block",
+                    options: { leadingLineBreaks: 1, trailingLineBreaks: 1 },
+                },
+                {
+                    selector: "a",
+                    format: "inline",
+                    options: {
+                        linkBrackets: false,
+                        hideLinkHrefIfSameAsText: true,
+                        ignoreHref: true,
+                    },
+                },
+            ],
+        });
+
+        return result.replace(/\n{3,}/g, "\n\n").trim();
+    } catch (error) {
+        console.warn("HTML-to-text conversion failed:", error);
+        return extractHtmlString(html)
+            .replace(/<[^>]*>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
 }
 
 function formatDisplayContent(content: string | DisplayContent): string {

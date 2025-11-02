@@ -139,7 +139,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.23)(ts-node@10.9.2(@types/node@20.19.23)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -540,7 +540,7 @@ importers:
         version: 23.11.1(typescript@5.4.5)
       ts-node:
         specifier: ^10.9.1
-        version: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
+        version: 10.9.2(@types/node@20.19.23)(typescript@5.4.5)
       xml2js:
         specifier: ^0.6.2
         version: 0.6.2
@@ -2507,7 +2507,7 @@ importers:
         version: 16.5.0
       ts-node:
         specifier: ^10.9.1
-        version: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
+        version: 10.9.2(@types/node@20.19.23)(typescript@5.4.5)
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
@@ -2520,7 +2520,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.23)(ts-node@10.9.2(@types/node@20.19.23)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2903,6 +2903,9 @@ importers:
       glob:
         specifier: ^10.3.12
         version: 10.4.5
+      html-to-text:
+        specifier: ^9.0.5
+        version: 9.0.5
       image-memory:
         specifier: workspace:*
         version: link:../memory/image
@@ -2946,6 +2949,9 @@ importers:
       '@types/glob':
         specifier: ^8.1.0
         version: 8.1.0
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
@@ -2960,7 +2966,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.23)(ts-node@10.9.2(@types/node@20.19.23)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3555,7 +3561,7 @@ importers:
     devDependencies:
       '@electron-toolkit/tsconfig':
         specifier: ^1.0.1
-        version: 1.0.1(@types/node@22.15.18)
+        version: 1.0.1(@types/node@20.19.23)
       '@fontsource/lato':
         specifier: ^5.2.5
         version: 5.2.5
@@ -3579,7 +3585,7 @@ importers:
         version: 26.0.20(electron-builder-squirrel-windows@26.0.20)
       electron-vite:
         specifier: ^3.1.0
-        version: 3.1.0(vite@6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0))
+        version: 3.1.0(vite@6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0))
       less:
         specifier: ^4.2.0
         version: 4.3.0
@@ -3597,7 +3603,7 @@ importers:
         version: 5.4.5
       vite:
         specifier: ^6.4.1
-        version: 6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+        version: 6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
 
   packages/telemetry:
     dependencies:
@@ -7839,6 +7845,7 @@ packages:
   crx@5.0.1:
     resolution: {integrity: sha512-n/PzBx/fR1+xZCiJBats9y5zw/a+YBcoJ0ABnUaY56xb1RpXuFhsiCMpNY6WjVtylLzhUUXSWsbitesVg7v2vg==}
     engines: {node: '>=10'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
     hasBin: true
 
   css-select@4.3.0:
@@ -14648,9 +14655,9 @@ snapshots:
     dependencies:
       electron: 37.4.0
 
-  '@electron-toolkit/tsconfig@1.0.1(@types/node@22.15.18)':
+  '@electron-toolkit/tsconfig@1.0.1(@types/node@20.19.23)':
     dependencies:
-      '@types/node': 22.15.18
+      '@types/node': 20.19.23
 
   '@electron/asar@3.4.1':
     dependencies:
@@ -19472,7 +19479,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@3.1.0(vite@6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)):
+  electron-vite@3.1.0(vite@6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)):
     dependencies:
       '@babel/core': 7.26.10
       '@babel/plugin-transform-arrow-functions': 7.25.9(@babel/core@7.26.10)
@@ -19480,7 +19487,7 @@ snapshots:
       esbuild: 0.25.4
       magic-string: 0.30.17
       picocolors: 1.1.1
-      vite: 6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+      vite: 6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -24727,7 +24734,6 @@ snapshots:
       typescript: 5.4.5
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
-    optional: true
 
   ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5):
     dependencies:
@@ -24746,6 +24752,7 @@ snapshots:
       typescript: 5.4.5
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
+    optional: true
 
   tslib@2.6.2: {}
 
