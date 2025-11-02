@@ -16,6 +16,8 @@ public class ConversationSettings
     {
         ArgumentVerify.ThrowIfNull(embeddingModel, nameof(embeddingModel));
 
+        EmbeddingModel = embeddingModel;
+
         QueryCompilerSettings = new QueryCompilerSettings();
 
         // Warning: The 0.85 threshold is good for Ada002 only.
@@ -33,9 +35,11 @@ public class ConversationSettings
         );
     }
 
-    public QueryCompilerSettings QueryCompilerSettings { get; }
+    public ITextEmbeddingModel EmbeddingModel { get; }
 
-    public TermToRelatedTermIndexSettings RelatedTermIndexSettings { get; }
+    public QueryCompilerSettings QueryCompilerSettings { get; private set; }
 
-    public MessageTextIndexSettings MessageTextIndexSettings { get; }
+    public TermToRelatedTermIndexSettings RelatedTermIndexSettings { get; private set; }
+
+    public MessageTextIndexSettings MessageTextIndexSettings { get; private set; }
 }

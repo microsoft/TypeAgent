@@ -29,15 +29,14 @@ public class KnowProContext
         string name,
         bool createNew
     )
-    where TMessage : class, IMessage, new()
-    where TMeta : IMessageMetadata, new()
+        where TMessage : class, IMessage, new()
+        where TMeta : IMessageMetadata, new()
     {
-        // TODO: make this a standard factory method
         var provider = new SqliteStorageProvider<TMessage, TMeta>(
             settings,
             DotnetPath,
             name,
-            createNew ? SqliteProviderCreateMode.CreateNew : SqliteProviderCreateMode.Load
+            createNew
         );
 
         return provider;

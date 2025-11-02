@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace TypeAgent.KnowPro.Query;
+using TypeAgent.KnowPro.Query;
+
+namespace TypeAgent.KnowPro;
 
 public static class ConversatonSearchSimilarity
 {

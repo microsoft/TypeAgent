@@ -28,4 +28,9 @@
     <ProjectReference Include="..\typechat\TypeChat.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Knowledge\" />
+    <Folder Include="Answer\" />
+  </ItemGroup>
+
 </Project>

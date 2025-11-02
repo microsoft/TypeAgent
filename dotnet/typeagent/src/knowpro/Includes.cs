@@ -10,5 +10,6 @@ global using System.Text.Json;
 global using System.Text.Json.Serialization;
 global using Microsoft.TypeChat;
 global using Microsoft.TypeChat.Schema;
+
 global using TypeAgent.AIClient;
 global using TypeAgent.Common;

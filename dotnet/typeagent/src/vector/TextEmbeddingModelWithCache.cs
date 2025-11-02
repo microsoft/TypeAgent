@@ -6,7 +6,12 @@ namespace TypeAgent.Vector;
 public class TextEmbeddingModelWithCache : ITextEmbeddingModel
 {
     public TextEmbeddingModelWithCache(int maxCacheSize)
-        : this(new OpenAITextEmbeddingModel(), new TextEmbeddingCache(maxCacheSize))
+        : this(new OpenAITextEmbeddingModel(), maxCacheSize)
+    {
+    }
+
+    public TextEmbeddingModelWithCache(ITextEmbeddingModel model, int maxCacheSize)
+    : this(new OpenAITextEmbeddingModel(), new TextEmbeddingCache(maxCacheSize))
     {
     }
 
