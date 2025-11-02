@@ -41,7 +41,6 @@ internal class QueryCompiler
     public QueryCompiler(
         IConversation conversation,
         IConversationCache conversationCache,
-        QueryCompilerSettings? compilerSettings,
         CancellationToken cancellationToken = default
     )
     {
@@ -52,7 +51,7 @@ internal class QueryCompiler
         _conversationCache = conversationCache;
         _allSearchTerms = [];
         _allScopeSearchTerms = [];
-        Settings = compilerSettings ?? s_defaultSettings;
+        Settings = conversation.Settings.QueryCompilerSettings ?? s_defaultSettings;
         _cancellationToken = cancellationToken;
     }
 
@@ -77,7 +76,7 @@ internal class QueryCompiler
         return resultExpr;
     }
 
-    public ValueTask<QueryOpExpr<List<ScoredMessageOrdinal>>> CompileMessageQueryAsync(
+    public async ValueTask<QueryOpExpr<List<ScoredMessageOrdinal>>> CompileMessageQueryAsync(
         QueryOpExpr<IDictionary<KnowledgeType, SemanticRefSearchResult>> knowledgeMatches,
         SearchOptions? options,
         string? rawSearchQuery
@@ -86,6 +85,12 @@ internal class QueryCompiler
         QueryOpExpr<MessageAccumulator> query = new MessagesFromKnowledgeExpr(knowledgeMatches);
         if (options is not null)
         {
+            query = await CompileMessageReRankAsync(
+                query,
+                rawSearchQuery,
+                options
+            ).ConfigureAwait(false);
+
             if (options.MaxCharsInBudget is not null && options.MaxCharsInBudget.Value > 0)
             {
                 query = new SelectMessagesInCharBudget(query, options.MaxCharsInBudget.Value);
@@ -93,7 +98,18 @@ internal class QueryCompiler
         }
 
         QueryOpExpr<List<ScoredMessageOrdinal>> messagesExpr = new GetScoredMessagesExpr(query);
-        return ValueTask.FromResult(messagesExpr);
+        return messagesExpr;
+    }
+
+    public async ValueTask<QueryOpExpr<IList<ScoredMessageOrdinal>>> CompileMessageSimilarityQueryAsync(
+        string query,
+        WhenFilter? whenFilter,
+        SearchOptions? options
+    )
+    {
+        IMessageTextIndex messageIndex = _conversation.SecondaryIndexes.MessageIndex;
+        GetScopeExpr? scopeExpr = await CompileScopeAsync(null, whenFilter);
+        return CompileMessageSimilarity(query, scopeExpr, options);
     }
 
     public (List<CompiledTermGroup>, QueryOpExpr<SemanticRefAccumulator>) CompileSearchGroupTerms(
@@ -329,7 +345,11 @@ internal class QueryCompiler
 
             if (!filter.TagMatchingTerms.IsNullOrEmpty())
             {
-                AddTermsScopeSelector(termGroup, scopeSelectors, new KnowledgeTypePredicate(KnowledgeType.STag));
+                AddTermsScopeSelector(
+                    termGroup,
+                    scopeSelectors,
+                    new KnowledgeTypePredicate(KnowledgeType.STag)
+                );
             }
         }
         else if (!termGroup.IsNullOrEmpty())
@@ -346,6 +366,53 @@ internal class QueryCompiler
             ? new GetScopeExpr(scopeSelectors)
             : null;
         return ValueTask.FromResult(scopeExpr);
+    }
+
+    private async ValueTask<QueryOpExpr<MessageAccumulator>> CompileMessageReRankAsync(
+        QueryOpExpr<MessageAccumulator> srcExpr,
+        string? rawQueryText,
+        SearchOptions? options
+    ) {
+        var messageIndex = _conversation.SecondaryIndexes.MessageIndex;
+        int messageCount = await messageIndex.GetCountAsync(
+            _cancellationToken
+        ).ConfigureAwait(false);
+
+        if (!string.IsNullOrEmpty(rawQueryText) && messageCount > 0)
+        {
+            return new RankMessagesBySimilarityExpr(
+                srcExpr,
+                rawQueryText,
+                options?.MaxMessageMatches,
+                options?.ThresholdScore
+            );
+        }
+        else if (
+            options?.MaxMessageMatches is not null &&
+            options.MaxMessageMatches.Value > 0
+        )
+        {
+            return new SelectTopNExpr<MessageAccumulator, int>(srcExpr, options.MaxMessageMatches);
+        }
+        else
+        {
+            return new NoOpExpr<MessageAccumulator>(srcExpr);
+        }
+    }
+
+    private QueryOpExpr<IList<ScoredMessageOrdinal>> CompileMessageSimilarity(
+        string query,
+        GetScopeExpr? scopeExpr,
+        SearchOptions? options
+    )
+    {
+        var messageIndex = _conversation.SecondaryIndexes.MessageIndex;
+        return new MatchMessagesBySimilarityExpr(
+            query,
+            options?.MaxMessageMatches,
+            options?.ThresholdScore,
+            scopeExpr
+        );
     }
 
     private void AddTermsScopeSelector(

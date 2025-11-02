@@ -33,6 +33,17 @@ internal class SearchQueryCompiler
 
     public LangSearchOptions Options { get; set; }
 
+    public List<SearchQueryExpr> CompileQuery(SearchQuery query)
+    {
+        // Clone the query so we can modify it
+        List<SearchQueryExpr> queryExpressions = [];
+        foreach (var searchExpr in query.SearchExpressions)
+        {
+            queryExpressions.Add(CompileSearchExpr(searchExpr));
+        }
+        return queryExpressions;
+    }
+
     public SearchQueryExpr CompileSearchExpr(SearchExpr searchExpr)
     {
         SearchQueryExpr queryExpr = new();

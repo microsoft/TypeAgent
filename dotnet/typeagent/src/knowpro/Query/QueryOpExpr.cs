@@ -24,4 +24,27 @@ internal class QueryOpExpr<TRetVal> : QueryOpExpr
     {
         throw new NotImplementedException();
     }
+
+    public ValueTask<TRetVal> RunAsync(
+        IConversation conversation,
+        QueryEvalContext context
+    )
+    {
+        return EvalAsync(context);
+    }
+}
+
+internal class NoOpExpr<T> : QueryOpExpr<T>
+{
+    public NoOpExpr(QueryOpExpr<T> srcExpr)
+    {
+        SrcExpr = srcExpr;
+    }
+
+    public QueryOpExpr<T> SrcExpr { get; }
+
+    public override ValueTask<T> EvalAsync(QueryEvalContext context)
+    {
+        return SrcExpr.EvalAsync(context);
+    }
 }

@@ -130,7 +130,7 @@ public class MemoryCommands : ICommandModule
         {
             return;
         }
-        var matches = await conversation.SearchConversationRagAsync(
+        var matches = await conversation.SearchRagAsync(
             query,
             namedArgs.Get<int>("maxMatches"),
             namedArgs.Get<double>("minScore"),

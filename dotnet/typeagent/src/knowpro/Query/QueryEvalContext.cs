@@ -11,14 +11,13 @@ internal class QueryEvalContext
 
     public QueryEvalContext(
         IConversation conversation,
-        IConversationCache? cache = null,
         CancellationToken cancellationToken = default
     )
     {
         CancellationToken = cancellationToken;
 
         Conversation = conversation;
-        _cache = cache;
+        _cache = conversation.Cache;
 
         MatchedTerms = new TermSet();
         MatchedPropertyTerms = new PropertyTermSet();

@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Lang;
+using TypeAgent.KnowPro.Query;
+
 namespace TypeAgent.KnowPro;
 
 /// <summary>
@@ -20,6 +23,8 @@ public interface IConversation<TMessage> : IDisposable
     ITermToSemanticRefIndex SemanticRefIndex { get; }
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
+
+    IConversationCache? Cache { get; set; }
 }
 
 public interface IConversation
@@ -33,4 +38,6 @@ public interface IConversation
     ITermToSemanticRefIndex SemanticRefIndex { get; }
 
     IConversationSecondaryIndexes SecondaryIndexes { get; }
+
+    IConversationCache? Cache { get; set; }
 }

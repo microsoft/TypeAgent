@@ -174,18 +174,37 @@ public static class EmbeddingExtensions
         this IEnumerable<KeyValuePair<int, T>> list,
         TOther embedding,
         TopNCollection<int> matches,
-        double minScore = double.MinValue
+        double minScore = double.MinValue,
+        Func<int, bool>? filter = null
     )
         where TOther : ICosineSimilarity<T>
     {
         ArgumentVerify.ThrowIfNull(matches, nameof(matches));
 
-        foreach (KeyValuePair<int, T> kv in list)
+        if (filter is null)
         {
-            double score = embedding.CosineSimilarity(kv.Value);
-            if (score >= minScore)
+            foreach (KeyValuePair<int, T> kv in list)
             {
-                matches.Add(kv.Key, score);
+                double score = embedding.CosineSimilarity(kv.Value);
+                if (score >= minScore)
+                {
+                    matches.Add(kv.Key, score);
+                }
+            }
+        }
+        else
+        {
+            foreach (KeyValuePair<int, T> kv in list)
+            {
+                if (filter(kv.Key))
+                {
+                    double score = embedding.CosineSimilarity(kv.Value);
+                    if (score >= minScore)
+                    {
+                        matches.Add(kv.Key, score);
+                    }
+
+                }
             }
         }
     }
@@ -194,12 +213,13 @@ public static class EmbeddingExtensions
         this IEnumerable<KeyValuePair<int, T>> list,
         TOther embedding,
         int maxMatches,
-        double minScore = double.MinValue
+        double minScore = double.MinValue,
+        Func<int, bool>? filter = null
     )
         where TOther : ICosineSimilarity<T>
     {
         TopNCollection<int> matches = new TopNCollection<int>(maxMatches);
-        list.KeysOfNearest(embedding, matches, minScore);
+        list.KeysOfNearest(embedding, matches, minScore, filter);
         return matches.ByRankAndClear();
     }
 }
