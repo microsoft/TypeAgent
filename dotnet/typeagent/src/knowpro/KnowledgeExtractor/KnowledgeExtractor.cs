@@ -27,7 +27,7 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         }
     }
 
-    public async ValueTask<KnowledgeResponse?> ExtractAsync(
+    public async Task<KnowledgeResponse?> ExtractAsync(
         string message,
         CancellationToken cancellationToken = default
     )
