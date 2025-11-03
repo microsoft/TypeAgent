@@ -183,7 +183,7 @@ public class KnowProWriter : ConsoleWriter
         KnowledgeType kType,
         SemanticRefSearchResult result,
         int? maxToDisplay = null,
-        bool isAsc = false
+        bool isAsc = true
     )
     {
         WriteLineUnderline(kType.ToString().ToUpper());

@@ -47,4 +47,16 @@ public static class StringExtensions
             yield return chunk;
         }
     }
+
+    public static List<string> LowerAndSort(this List<string> list)
+    {
+        int count = list.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            list[i] = list[i].ToLower();
+        }
+        list.Sort();
+        return list;
+    }
+
 }

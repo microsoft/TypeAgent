@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.KnowledgeExtractor;
+
 namespace TypeAgent.KnowPro;
 
 public partial class ConcreteEntity
@@ -40,6 +42,35 @@ public partial class ConcreteEntity
         }
         Facets = Facets.Append(facet);
     }
+
+    internal MergedEntity ToMerged()
+    {
+        List<string> types = [.. Type];
+        types.LowerAndSort();
+
+        return new MergedEntity()
+        {
+            Name = Name.ToLower(),
+            Type = types,
+            Facets = !Facets.IsNullOrEmpty() ? ToMergedFacets() : null
+        };
+    }
+
+    internal MergedFacets ToMergedFacets()
+    {
+        MergedFacets mergedFacets = [];
+        if (!Facets.IsNullOrEmpty())
+        {
+            foreach (var facet in Facets)
+            {
+                string name = facet.Name.ToLower();
+                string value = facet.Value.ToString().ToLower();
+                mergedFacets.AddUnique(name, value);
+            }
+        }
+        return mergedFacets;
+    }
+
 }
 
 public partial class Action
