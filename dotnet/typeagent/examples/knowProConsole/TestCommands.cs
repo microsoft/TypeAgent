@@ -22,6 +22,7 @@ public class TestCommands : ICommandModule
             SearchMessagesTermsDef(),
             TestEmbeddingsDef(),
             SearchQueryTermsDef(),
+            SearchLangDef(),
             KnowledgeDef(),
             BuildIndexDef(),
         ];

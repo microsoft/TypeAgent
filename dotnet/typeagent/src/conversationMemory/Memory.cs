@@ -78,7 +78,7 @@ public class Memory<TMessage> : Conversation<TMessage>, IMemory
         // Filter noise terms
         options.CompilerSettings.TermFilter = (t) =>
         {
-            return !NoiseTerms.IsNullOrEmpty() && NoiseTerms.Contains(t);
+            return NoiseTerms.IsNullOrEmpty() || !NoiseTerms.Contains(t);
         };
 
         return options;
