@@ -33,6 +33,7 @@ export type BrowserActionContext = {
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
     websiteCollection?: website.WebsiteCollection | undefined;
+    graphJsonStorage?: any | undefined; // GraphJsonStorageManager - will import when used
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;

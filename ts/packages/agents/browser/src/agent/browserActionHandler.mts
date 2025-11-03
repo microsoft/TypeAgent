@@ -53,6 +53,7 @@ import registerDebug from "debug";
 
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
+import { GraphJsonStorageManager, SqliteToJsonMigrator } from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
 import {
@@ -792,6 +793,10 @@ async function initializeWebsiteIndex(
                     websiteIndexes[0].path,
                     "index",
                 );
+            
+            // Initialize JSON storage alongside SQLite
+            await initializeJsonGraphStorage(context, websiteIndexes[0].path);
+            
             debug(
                 `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
             );
@@ -848,6 +853,9 @@ async function initializeWebsiteIndex(
                                     sizeOnDisk: 0,
                                 };
 
+                                // Initialize JSON storage and perform migration if needed
+                                await initializeJsonGraphStorage(context, indexPath);
+
                                 debug(
                                     `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
                                 );
@@ -891,6 +899,9 @@ async function initializeWebsiteIndex(
                         sizeOnDisk: 0,
                     };
 
+                    // Initialize JSON storage for new index
+                    await initializeJsonGraphStorage(context, indexPath);
+
                     debug(
                         `Index will be created at ${indexPath} when first page is indexed`,
                     );
@@ -915,6 +926,75 @@ async function initializeWebsiteIndex(
         context.agentContext.websiteCollection =
             new website.WebsiteCollection();
         context.agentContext.index = undefined;
+    }
+}
+
+/**
+ * Initialize JSON graph storage and perform migration from SQLite if needed
+ */
+async function initializeJsonGraphStorage(
+    context: SessionContext<BrowserActionContext>,
+    indexPath: string
+): Promise<void> {
+    try {
+        debug("Initializing JSON graph storage");
+        
+        // Create storage manager
+        const storageManager = new GraphJsonStorageManager(indexPath);
+        
+        // Store reference in context for later use
+        if (!context.agentContext.graphJsonStorage) {
+            context.agentContext.graphJsonStorage = {
+                manager: storageManager,
+                lastEntityGraphUpdate: null,
+                lastTopicGraphUpdate: null
+            };
+        }
+
+        // Check if we have a website collection to migrate from
+        if (context.agentContext.websiteCollection) {
+            const sqliteDbPath = path.join(indexPath, "index_dataFrames.sqlite");
+            
+            // Create migrator - cast to the expected interface type
+            const migrator = new SqliteToJsonMigrator(
+                context.agentContext.websiteCollection as any,
+                storageManager,
+                sqliteDbPath
+            );
+
+            // Get migration status and perform if needed
+            const migrationStatus = await migrator.getMigrationStatus();
+            debug(`Migration status: ${migrationStatus.recommendation} - ${migrationStatus.details}`);
+
+            if (migrationStatus.recommendation === 'migrate') {
+                debug("Performing SQLite to JSON migration");
+                
+                const migrationResult = await migrator.migrateIfNeeded({
+                    createBackup: true,
+                    validateAfterMigration: true,
+                    skipIfExistsAndNewer: true
+                });
+
+                if (migrationResult.success && migrationResult.migrated) {
+                    debug(`Migration completed: ${migrationResult.reason}`);
+                    if (migrationResult.details) {
+                        debug(`Migration details: ${JSON.stringify(migrationResult.details)}`);
+                    }
+                } else if (!migrationResult.success) {
+                    debug(`Migration failed: ${migrationResult.reason}`);
+                    if (migrationResult.error) {
+                        debug(`Migration error: ${migrationResult.error}`);
+                    }
+                } else {
+                    debug(`Migration skipped: ${migrationResult.reason}`);
+                }
+            }
+        }
+
+        debug("JSON graph storage initialization complete");
+    } catch (error) {
+        debug(`Error initializing JSON graph storage: ${error}`);
+        // Don't throw - this should not break the main initialization
     }
 }
 
