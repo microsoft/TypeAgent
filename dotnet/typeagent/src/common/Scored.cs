@@ -3,9 +3,9 @@
 
 namespace TypeAgent.Common;
 
-public struct ScoredItem<T> : IComparable<ScoredItem<T>>
+public struct Scored<T> : IComparable<Scored<T>>
 {
-    public ScoredItem(T item, double score)
+    public Scored(T item, double score)
     {
         this.Item = item;
         this.Score = score;
@@ -14,25 +14,25 @@ public struct ScoredItem<T> : IComparable<ScoredItem<T>>
     public T Item { get; set; }
     public double Score { get; set; }
 
-    public readonly int CompareTo(ScoredItem<T> other)
+    public readonly int CompareTo(Scored<T> other)
     {
         return this.Score.CompareTo(other.Score);
     }
 
     public override readonly string ToString() => $"{this.Score}, {this.Item}";
 
-    public static implicit operator double(ScoredItem<T> src)
+    public static implicit operator double(Scored<T> src)
     {
         return src.Score;
     }
 
-    public static implicit operator T(ScoredItem<T> src)
+    public static implicit operator T(Scored<T> src)
     {
         return src.Item;
     }
 
-    public static implicit operator ScoredItem<T>(KeyValuePair<T, double> src)
+    public static implicit operator Scored<T>(KeyValuePair<T, double> src)
     {
-        return new ScoredItem<T>(src.Key, src.Value);
+        return new Scored<T>(src.Key, src.Value);
     }
 }

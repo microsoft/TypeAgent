@@ -246,7 +246,7 @@ VALUES (@msg_id, @chunk_ordinal, @embedding)");
     }
 
     // TODO: get rid of this conversion
-    private List<ScoredMessageOrdinal> ToScoredOrdinals(List<ScoredItem<int>> items)
+    private List<ScoredMessageOrdinal> ToScoredOrdinals(List<Scored<int>> items)
     {
         return items.Map((s) => new ScoredMessageOrdinal { MessageOrdinal = s.Item, Score = s.Score });
     }

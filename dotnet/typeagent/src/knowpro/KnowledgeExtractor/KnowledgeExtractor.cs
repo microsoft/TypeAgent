@@ -37,7 +37,12 @@ public class KnowledgeExtractor : IKnowledgeExtractor
             cancellationToken
         ).ConfigureAwait(false);
 
-        return extractedKnowledge.ToKnowledgeResponse();
+        KnowledgeResponse knowledgeResponse = extractedKnowledge.ToKnowledgeResponse();
+        if (Settings.MergeEntityFacets)
+        {
+            knowledgeResponse.MergeActionKnowledge();
+        }
+        return knowledgeResponse;
     }
 
     private static JsonTranslator<ExtractedKnowledge> CreateTranslator(ILanguageModel model)

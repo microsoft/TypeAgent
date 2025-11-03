@@ -27,6 +27,19 @@ public partial class ConcreteEntity
 
     [JsonIgnore]
     public bool HasFacets => !Facets.IsNullOrEmpty();
+
+    public void MergeEntityFacet(Facet facet)
+    {
+        // Look for an equal facet
+        foreach (var f in Facets)
+        {
+            if (f.Match(facet))
+            {
+                return;
+            }
+        }
+        Facets = Facets.Append(facet);
+    }
 }
 
 public partial class Action
@@ -134,6 +147,29 @@ public partial class KnowledgeResponse
             foreach (var action in InverseActions)
             {
                 yield return new SemanticRef(action, range);
+            }
+        }
+    }
+
+    //
+    // Some knowledge found via actions is actually meant for entities...
+    //
+    internal void MergeActionKnowledge()
+    {
+        if (Actions.IsNullOrEmpty())
+        {
+            return;
+        }
+        foreach (var action in Actions)
+        {
+            if (action.SubjectEntityFacet is not null)
+            {
+                ConcreteEntity? entity = Array.Find(Entities, (c) => c.Name == action.SubjectEntityName);
+                if (entity is not null)
+                {
+                    entity.MergeEntityFacet(action.SubjectEntityFacet);
+                }
+                action.SubjectEntityFacet = null;
             }
         }
     }
