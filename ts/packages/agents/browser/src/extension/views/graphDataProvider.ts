@@ -472,33 +472,37 @@ class GraphDataProviderImpl implements GraphDataProvider {
         const importance = hybridEntity.importance || 0;
         const degree = hybridEntity.degree || 0;
 
-        // Compute size based on importance/degree (remove server size field dependency)
-        const computedSize = Math.max(20, 20 + Math.sqrt(importance * 1000)); // Dynamic sizing
+        // Preserve graphology size if available, otherwise compute
+        const computedSize =
+            hybridEntity.size ||
+            Math.max(20, 20 + Math.sqrt(importance * 1000));
 
-        // Compute colors based on type (remove server color field dependency)
-        let color = "#6C7B7F"; // Default gray
+        // Preserve graphology color if available, otherwise compute based on type
+        let color = hybridEntity.color || "#6C7B7F"; // Use graphology color or default gray
         let borderColor = "#4A5568"; // Default border
 
-        // Type-specific styling
-        switch (entityType) {
-            case "concept":
-            case "entity":
-                color = "#4299E1"; // Blue
-                borderColor = "#2B6CB0";
-                break;
-            case "website":
-                color = "#48BB78"; // Green
-                borderColor = "#2F855A";
-                break;
-            case "topic":
-                color = "#ED8936"; // Orange
-                borderColor = "#C05621";
-                break;
-            case "unknown":
-            default:
-                color = "#A0AEC0"; // Light gray
-                borderColor = "#718096";
-                break;
+        // Only compute type-specific colors if no color was provided
+        if (!hybridEntity.color) {
+            switch (entityType) {
+                case "concept":
+                case "entity":
+                    color = "#4299E1"; // Blue
+                    borderColor = "#2B6CB0";
+                    break;
+                case "website":
+                    color = "#48BB78"; // Green
+                    borderColor = "#2F855A";
+                    break;
+                case "topic":
+                    color = "#ED8936"; // Orange
+                    borderColor = "#C05621";
+                    break;
+                case "unknown":
+                default:
+                    color = "#A0AEC0"; // Light gray
+                    borderColor = "#718096";
+                    break;
+            }
         }
 
         return {
@@ -515,14 +519,14 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 communityId: hybridEntity.communityId,
 
                 // Optional fields (only if non-empty)
-                ...(hybridEntity.community && {
+                ...(hybridEntity.community !== undefined && {
                     community: hybridEntity.community,
                 }),
                 ...(hybridEntity.description && {
                     description: hybridEntity.description,
                 }),
 
-                // Computed UI properties
+                // Computed or preserved UI properties
                 color: color,
                 size: computedSize,
                 borderColor: borderColor,

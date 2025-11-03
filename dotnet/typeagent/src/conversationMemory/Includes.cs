@@ -10,5 +10,6 @@ global using System.Text.Json.Serialization;
 
 global using TypeAgent.Common;
 global using TypeAgent.KnowPro;
+global using TypeAgent.KnowPro.Lang;
 global using TypeAgent.Vector;
 global using TypeAgent.AIClient;

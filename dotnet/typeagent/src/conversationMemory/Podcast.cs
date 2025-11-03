@@ -5,9 +5,8 @@ namespace TypeAgent.ConversationMemory;
 
 public class Podcast : Memory<PodcastMessage>
 {
-    public Podcast(ConversationSettings settings, IStorageProvider<PodcastMessage> provider)
+    public Podcast(MemorySettings settings, IStorageProvider<PodcastMessage> provider)
         : base(settings, provider)
     {
-
     }
 }

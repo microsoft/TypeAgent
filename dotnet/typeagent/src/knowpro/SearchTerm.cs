@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Query;
+
 namespace TypeAgent.KnowPro;
 
 public interface ISearchTerm
@@ -48,10 +50,7 @@ public class SearchTerm : ISearchTerm
         return term;
     }
 
-    public bool IsWildcard()
-    {
-        return Term.Text == "*";
-    }
+    public bool IsWildcard() => Term.Text.IsWildcard();
 
     public void AddRelated(Term term)
     {

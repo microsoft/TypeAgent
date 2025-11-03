@@ -304,6 +304,16 @@ public static class TermToSemanticRefIndexer
                 }
             }
         }
+
+        if (action.SubjectEntityFacet is not null)
+        {
+            await index.AddFacetAsync(
+                action.SubjectEntityFacet,
+                semanticRefOrdinal,
+                termsAdded,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
     }
 
     internal static async ValueTask AddTagAsync(

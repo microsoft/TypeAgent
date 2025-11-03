@@ -22,6 +22,7 @@ public class TestCommands : ICommandModule
             SearchMessagesTermsDef(),
             TestEmbeddingsDef(),
             SearchQueryTermsDef(),
+            KnowledgeDef(),
             BuildIndexDef(),
         ];
     }
@@ -117,7 +118,7 @@ public class TestCommands : ICommandModule
             }
         );
 
-        ConversationSearchResult? searchResults = await conversation.SearchConversationAsync(
+        ConversationSearchResult? searchResults = await conversation.SearchAsync(
             select,
             null,
             cancellationToken
@@ -137,7 +138,7 @@ public class TestCommands : ICommandModule
             };
 
         }
-        searchResults = await conversation.SearchConversationAsync(
+        searchResults = await conversation.SearchAsync(
             select,
             new SearchOptions()
             {
@@ -273,7 +274,11 @@ public class TestCommands : ICommandModule
         KnowProWriter.WriteLine(searchGroup);
 
         var results = await conversation.SearchKnowledgeAsync(
-            new SearchSelectExpr(searchGroup), null, null, cancellationToken).ConfigureAwait(false);
+            new SearchSelectExpr(searchGroup),
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
     }
 
@@ -300,8 +305,38 @@ public class TestCommands : ICommandModule
         }
         var model = new OpenAIChatModel();
         SearchQueryTranslator translator = new SearchQueryTranslator(model);
-        var result = await translator.TranslateAsync(query, cancellationToken);
+        var result = await translator.TranslateAsync(query, null, cancellationToken);
         KnowProWriter.WriteJson(result);
+    }
+
+    private Command KnowledgeDef()
+    {
+        Command cmd = new("kpTestKnowledge")
+        {
+            Args.Arg<string>("text")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.KnowledgeAsync);
+        return cmd;
+    }
+
+    private async Task KnowledgeAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        // IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        var text = namedArgs.Get("text");
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+        var model = new OpenAIChatModel();
+        KnowledgeExtractor exctractor = new KnowledgeExtractor(model);
+        var result = await exctractor.ExtractAsync(text, cancellationToken);
+        if (result is not null)
+        {
+            KnowProWriter.WriteJson(result);
+        }
     }
 
     private IConversation EnsureConversation()

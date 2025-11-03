@@ -513,7 +513,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.23)(ts-node@10.9.2(@types/node@20.19.23)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -540,7 +540,7 @@ importers:
         version: 23.11.1(typescript@5.4.5)
       ts-node:
         specifier: ^10.9.1
-        version: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
+        version: 10.9.2(@types/node@20.19.23)(typescript@5.4.5)
       xml2js:
         specifier: ^0.6.2
         version: 0.6.2
@@ -1194,6 +1194,21 @@ importers:
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.0(express@4.21.2)
+      graphology:
+        specifier: ^0.25.4
+        version: 0.25.4(graphology-types@0.24.8)
+      graphology-communities-louvain:
+        specifier: ^2.0.1
+        version: 2.0.2(graphology-types@0.24.8)
+      graphology-layout:
+        specifier: ^0.6.1
+        version: 0.6.1(graphology-types@0.24.8)
+      graphology-layout-forceatlas2:
+        specifier: ^0.10.1
+        version: 0.10.1(graphology-types@0.24.8)
+      graphology-layout-noverlap:
+        specifier: ^0.4.1
+        version: 0.4.2(graphology-types@0.24.8)
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -2492,7 +2507,7 @@ importers:
         version: 16.5.0
       ts-node:
         specifier: ^10.9.1
-        version: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
+        version: 10.9.2(@types/node@20.19.23)(typescript@5.4.5)
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
@@ -2505,7 +2520,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.23)(ts-node@10.9.2(@types/node@20.19.23)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2888,6 +2903,9 @@ importers:
       glob:
         specifier: ^10.3.12
         version: 10.4.5
+      html-to-text:
+        specifier: ^9.0.5
+        version: 9.0.5
       image-memory:
         specifier: workspace:*
         version: link:../memory/image
@@ -2931,6 +2949,9 @@ importers:
       '@types/glob':
         specifier: ^8.1.0
         version: 8.1.0
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
@@ -2945,7 +2966,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.23)(ts-node@10.9.2(@types/node@20.19.23)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3382,6 +3403,15 @@ importers:
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
+      graphology:
+        specifier: ^0.25.4
+        version: 0.25.4(graphology-types@0.24.8)
+      graphology-communities-louvain:
+        specifier: ^2.0.1
+        version: 2.0.2(graphology-types@0.24.8)
+      graphology-metrics:
+        specifier: ^2.1.0
+        version: 2.4.0(graphology-types@0.24.8)
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
@@ -3531,7 +3561,7 @@ importers:
     devDependencies:
       '@electron-toolkit/tsconfig':
         specifier: ^1.0.1
-        version: 1.0.1(@types/node@22.15.18)
+        version: 1.0.1(@types/node@20.19.23)
       '@fontsource/lato':
         specifier: ^5.2.5
         version: 5.2.5
@@ -3555,7 +3585,7 @@ importers:
         version: 26.0.20(electron-builder-squirrel-windows@26.0.20)
       electron-vite:
         specifier: ^3.1.0
-        version: 3.1.0(vite@6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0))
+        version: 3.1.0(vite@6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0))
       less:
         specifier: ^4.2.0
         version: 4.3.0
@@ -3573,7 +3603,7 @@ importers:
         version: 5.4.5
       vite:
         specifier: ^6.4.1
-        version: 6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+        version: 6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
 
   packages/telemetry:
     dependencies:
@@ -6857,6 +6887,9 @@ packages:
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
 
+  '@yomguithereal/helpers@1.1.1':
+    resolution: {integrity: sha512-UYvAq/XCA7xoh1juWDYsq3W0WywOB+pz8cgVnE1b45ZfdMhBvHDrgmSFG3jXeZSr2tMTYLGHFHON+ekG05Jebg==}
+
   abab@2.0.6:
     resolution: {integrity: sha512-j2afSsaIENvHZN2B8GOpF566vZ5WVk5opAiMTvWgaQT8DkbOqsTfvNAvHoRGU2zzP8cPoqys+xHTRDWW8L+/BA==}
     deprecated: Use your platform's native atob() and btoa() methods instead
@@ -7812,6 +7845,7 @@ packages:
   crx@5.0.1:
     resolution: {integrity: sha512-n/PzBx/fR1+xZCiJBats9y5zw/a+YBcoJ0ABnUaY56xb1RpXuFhsiCMpNY6WjVtylLzhUUXSWsbitesVg7v2vg==}
     engines: {node: '>=10'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
     hasBin: true
 
   css-select@4.3.0:
@@ -8990,6 +9024,54 @@ packages:
 
   graphlib@2.1.8:
     resolution: {integrity: sha512-jcLLfkpoVGmH7/InMC/1hIvOPSUh38oJtGhvrOFGzioE1DZ+0YW16RgmOJhHiuWTvGiJQ9Z1Ik43JvkRPRvE+A==}
+
+  graphology-communities-louvain@2.0.2:
+    resolution: {integrity: sha512-zt+2hHVPYxjEquyecxWXoUoIuN/UvYzsvI7boDdMNz0rRvpESQ7+e+Ejv6wK7AThycbZXuQ6DkG8NPMCq6XwoA==}
+    peerDependencies:
+      graphology-types: '>=0.19.0'
+
+  graphology-indices@0.17.0:
+    resolution: {integrity: sha512-A7RXuKQvdqSWOpn7ZVQo4S33O0vCfPBnUSf7FwE0zNCasqwZVUaCXePuWo5HBpWw68KJcwObZDHpFk6HKH6MYQ==}
+    peerDependencies:
+      graphology-types: '>=0.20.0'
+
+  graphology-layout-forceatlas2@0.10.1:
+    resolution: {integrity: sha512-ogzBeF1FvWzjkikrIFwxhlZXvD2+wlY54lqhsrWprcdPjopM2J9HoMweUmIgwaTvY4bUYVimpSsOdvDv1gPRFQ==}
+    peerDependencies:
+      graphology-types: '>=0.19.0'
+
+  graphology-layout-noverlap@0.4.2:
+    resolution: {integrity: sha512-13WwZSx96zim6l1dfZONcqLh3oqyRcjIBsqz2c2iJ3ohgs3605IDWjldH41Gnhh462xGB1j6VGmuGhZ2FKISXA==}
+    peerDependencies:
+      graphology-types: '>=0.19.0'
+
+  graphology-layout@0.6.1:
+    resolution: {integrity: sha512-m9aMvbd0uDPffUCFPng5ibRkb2pmfNvdKjQWeZrf71RS1aOoat5874+DcyNfMeCT4aQguKC7Lj9eCbqZj/h8Ag==}
+    peerDependencies:
+      graphology-types: '>=0.19.0'
+
+  graphology-metrics@2.4.0:
+    resolution: {integrity: sha512-7WOfOP+mFLCaTJx55Qg4eY+211vr1/b3D/R3biz3SXGhAaCVcWYkfabnmO4O4WBNWANEHtVnFrGgJ0kj6MM6xw==}
+    peerDependencies:
+      graphology-types: '>=0.20.0'
+
+  graphology-shortest-path@2.1.0:
+    resolution: {integrity: sha512-KbT9CTkP/u72vGEJzyRr24xFC7usI9Es3LMmCPHGwQ1KTsoZjxwA9lMKxfU0syvT/w+7fZUdB/Hu2wWYcJBm6Q==}
+    peerDependencies:
+      graphology-types: '>=0.20.0'
+
+  graphology-types@0.24.8:
+    resolution: {integrity: sha512-hDRKYXa8TsoZHjgEaysSRyPdT6uB78Ci8WnjgbStlQysz7xR52PInxNsmnB7IBOM1BhikxkNyCVEFgmPKnpx3Q==}
+
+  graphology-utils@2.5.2:
+    resolution: {integrity: sha512-ckHg8MXrXJkOARk56ZaSCM1g1Wihe2d6iTmz1enGOz4W/l831MBCKSayeFQfowgF8wd+PQ4rlch/56Vs/VZLDQ==}
+    peerDependencies:
+      graphology-types: '>=0.23.0'
+
+  graphology@0.25.4:
+    resolution: {integrity: sha512-33g0Ol9nkWdD6ulw687viS8YJQBxqG5LWII6FI6nul0pq6iM2t5EKquOTFDbyTblRB3O9I+7KX4xI8u5ffekAQ==}
+    peerDependencies:
+      graphology-types: '>=0.24.0'
 
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
@@ -10540,6 +10622,9 @@ packages:
   mlly@1.7.4:
     resolution: {integrity: sha512-qmdSIPC4bDJXgZTCR7XosJiNKySV7O215tsPtDN9iEO/7q/76b/ijtgRu/+epFXSJhijtTCCGp3DWS549P3xKw==}
 
+  mnemonist@0.39.8:
+    resolution: {integrity: sha512-vyWo2K3fjrUw8YeeZ1zF0fy6Mu59RHokURlld8ymdUPjMlD9EC9ov1/YPqTgqRvUN9nTr3Gqfz29LYAmu0PHPQ==}
+
   mocha@10.8.2:
     resolution: {integrity: sha512-VZlYo/WE8t1tstuRmqgeyBgCbJc/lEdopaa+axcKzTBJ+UIdlAB9XnmvTCAH4pwR4ElNInaedhEBmZD8iCSVEg==}
     engines: {node: '>= 14.0.0'}
@@ -10766,6 +10851,9 @@ packages:
     resolution: {integrity: sha512-nK28WOo+QIjBkDduTINE4JkF/UJJKyf2EJxvJKfblDpyg0Q+pkOHNTL0Qwy6NP6FhE/EnzV73BxxqcJaXY9anw==}
     engines: {node: '>= 0.4'}
 
+  obliterator@2.0.5:
+    resolution: {integrity: sha512-42CPE9AhahZRsMNslczq0ctAEtqk8Eka26QofnqC346BZdHDySk3LWka23LI7ULIw11NmltpiLagIq8gBozxTw==}
+
   obuf@1.1.2:
     resolution: {integrity: sha512-PX1wu0AmAdPqOL1mWhqmlOd8kOIZQwGZw6rh7uby9fTc5lhaOWFLX3I6R1hrF9k3zUY40e6igsLGkDXK92LJNg==}
 
@@ -10895,6 +10983,9 @@ packages:
 
   pako@1.0.11:
     resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
+
+  pandemonium@2.4.1:
+    resolution: {integrity: sha512-wRqjisUyiUfXowgm7MFH2rwJzKIr20rca5FsHXCMNm1W5YPP1hCtrZfgmQ62kP7OZ7Xt+cR858aB28lu5NX55g==}
 
   param-case@3.0.4:
     resolution: {integrity: sha512-RXlj7zCYokReqWpOPH9oYivUzLYZ5vAPIfEmCTNViosC78F8F0H9y7T7gG2M39ymgutxF5gcFEsyZQSph9Bp3A==}
@@ -14564,9 +14655,9 @@ snapshots:
     dependencies:
       electron: 37.4.0
 
-  '@electron-toolkit/tsconfig@1.0.1(@types/node@22.15.18)':
+  '@electron-toolkit/tsconfig@1.0.1(@types/node@20.19.23)':
     dependencies:
-      '@types/node': 22.15.18
+      '@types/node': 20.19.23
 
   '@electron/asar@3.4.1':
     dependencies:
@@ -17648,6 +17739,8 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
+  '@yomguithereal/helpers@1.1.1': {}
+
   abab@2.0.6: {}
 
   abbrev@1.1.1: {}
@@ -19386,7 +19479,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@3.1.0(vite@6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)):
+  electron-vite@3.1.0(vite@6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)):
     dependencies:
       '@babel/core': 7.26.10
       '@babel/plugin-transform-arrow-functions': 7.25.9(@babel/core@7.26.10)
@@ -19394,7 +19487,7 @@ snapshots:
       esbuild: 0.25.4
       magic-string: 0.30.17
       picocolors: 1.1.1
-      vite: 6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
+      vite: 6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -20294,6 +20387,65 @@ snapshots:
   graphlib@2.1.8:
     dependencies:
       lodash: 4.17.21
+
+  graphology-communities-louvain@2.0.2(graphology-types@0.24.8):
+    dependencies:
+      graphology-indices: 0.17.0(graphology-types@0.24.8)
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+      mnemonist: 0.39.8
+      pandemonium: 2.4.1
+
+  graphology-indices@0.17.0(graphology-types@0.24.8):
+    dependencies:
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+      mnemonist: 0.39.8
+
+  graphology-layout-forceatlas2@0.10.1(graphology-types@0.24.8):
+    dependencies:
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+
+  graphology-layout-noverlap@0.4.2(graphology-types@0.24.8):
+    dependencies:
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+
+  graphology-layout@0.6.1(graphology-types@0.24.8):
+    dependencies:
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+      pandemonium: 2.4.1
+
+  graphology-metrics@2.4.0(graphology-types@0.24.8):
+    dependencies:
+      graphology-indices: 0.17.0(graphology-types@0.24.8)
+      graphology-shortest-path: 2.1.0(graphology-types@0.24.8)
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+      mnemonist: 0.39.8
+      pandemonium: 2.4.1
+
+  graphology-shortest-path@2.1.0(graphology-types@0.24.8):
+    dependencies:
+      '@yomguithereal/helpers': 1.1.1
+      graphology-indices: 0.17.0(graphology-types@0.24.8)
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+      mnemonist: 0.39.8
+
+  graphology-types@0.24.8: {}
+
+  graphology-utils@2.5.2(graphology-types@0.24.8):
+    dependencies:
+      graphology-types: 0.24.8
+
+  graphology@0.25.4(graphology-types@0.24.8):
+    dependencies:
+      events: 3.3.0
+      graphology-types: 0.24.8
+      obliterator: 2.0.5
 
   hachure-fill@0.5.2: {}
 
@@ -22408,6 +22560,10 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.1
 
+  mnemonist@0.39.8:
+    dependencies:
+      obliterator: 2.0.5
+
   mocha@10.8.2:
     dependencies:
       ansi-colors: 4.1.3
@@ -22600,6 +22756,8 @@ snapshots:
       has-symbols: 1.1.0
       object-keys: 1.1.1
 
+  obliterator@2.0.5: {}
+
   obuf@1.1.2: {}
 
   on-finished@2.4.1:
@@ -22768,6 +22926,10 @@ snapshots:
   package-manager-detector@1.3.0: {}
 
   pako@1.0.11: {}
+
+  pandemonium@2.4.1:
+    dependencies:
+      mnemonist: 0.39.8
 
   param-case@3.0.4:
     dependencies:
@@ -24572,7 +24734,6 @@ snapshots:
       typescript: 5.4.5
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
-    optional: true
 
   ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5):
     dependencies:
@@ -24591,6 +24752,7 @@ snapshots:
       typescript: 5.4.5
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
+    optional: true
 
   tslib@2.6.2: {}
 

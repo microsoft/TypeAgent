@@ -29,7 +29,7 @@ export interface HierarchicalTopic {
     level: number;
     parentId?: string;
     childIds: string[];
-    sourceFragments: string[];
+    sourceRefOrdinals: number[];
     confidence: number;
     keywords: string[];
     entityReferences: string[];

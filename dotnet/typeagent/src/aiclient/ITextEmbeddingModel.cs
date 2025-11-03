@@ -51,7 +51,7 @@ public static class TextEmbeddingModelExtensions
 
             var embeddingChunks = await chunks.MapAsync(
                 concurrency,
-                (chunk) => model.GenerateAsync(chunk, cancellationToken),
+                model.GenerateAsync,
                 notifyProgress,
                 cancellationToken
             ).ConfigureAwait(false);
@@ -62,7 +62,7 @@ public static class TextEmbeddingModelExtensions
         {
             return await texts.MapAsync(
                 concurrency,
-                (value) => model.GenerateAsync(value, cancellationToken),
+                model.GenerateAsync,
                 progress,
                 cancellationToken
                 ).ConfigureAwait(false);

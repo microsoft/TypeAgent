@@ -15,6 +15,20 @@ public class Facet
     {
         return $"{this.Name}= \"{this.Value}\"";
     }
+
+    public bool Match(Facet y)
+    {
+        ArgumentVerify.ThrowIfNull(y, nameof(y));
+
+        if (!Name.Equals(y.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return Value is Quantity qx
+            ? y.Value is Quantity qy && qx.Amount == qy.Amount && qx.Units == qy.Units
+            : Value == y.Value;
+    }
 }
 
 public interface IFacetValue

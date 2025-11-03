@@ -193,6 +193,21 @@ body {
   border-bottom: 1px solid var(--border-color);
   background: var(--primary-color);
   color: white;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.entity-header .btn-close {
+  filter: brightness(0) invert(1);
+  opacity: 0.7;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.entity-header .btn-close:hover {
+  opacity: 1;
 }
 
 .entity-icon {

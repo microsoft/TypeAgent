@@ -243,6 +243,16 @@ export class KnowledgeEntityTable extends ms.sqlite.SqliteDataFrame {
         const result = stmt.get() as { count: number };
         return result.count;
     }
+
+    public getUniqueEntityCount(): number {
+        const stmt = this.db.prepare(`
+            SELECT COUNT(DISTINCT entityName) as count
+            FROM knowledgeEntities
+            WHERE entityName != '' AND entityName IS NOT NULL
+        `);
+        const result = stmt.get() as { count: number };
+        return result.count;
+    }
 }
 
 // Knowledge topics table
@@ -615,11 +625,14 @@ export interface HierarchicalTopicRecord {
     parentTopicId?: string;
     confidence: number;
     keywords?: string; // JSON array stored as string
+    sourceTopicNames?: string; // JSON array of knowledge topic names stored as string
     extractionDate: string;
 }
 
 export class HierarchicalTopicTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
+        HierarchicalTopicTable.migrateSchema(db);
+
         super(db, "hierarchicalTopics", [
             ["url", { type: "string" }],
             ["domain", { type: "string" }],
@@ -629,8 +642,53 @@ export class HierarchicalTopicTable extends ms.sqlite.SqliteDataFrame {
             ["parentTopicId", { type: "string", optional: true }],
             ["confidence", { type: "number" }],
             ["keywords", { type: "string", optional: true }],
+            ["sourceTopicNames", { type: "string", optional: true }],
             ["extractionDate", { type: "string" }],
         ]);
+    }
+
+    private static migrateSchema(db: sqlite.Database): void {
+        try {
+            // Check if table exists
+            const tableInfo = db
+                .prepare(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='hierarchicalTopics'",
+                )
+                .get() as { sql?: string } | undefined;
+
+            if (!tableInfo) {
+                // Table doesn't exist yet, will be created by super constructor
+                return;
+            }
+
+            // Check if sourceTopicNames column exists
+            const columnInfo = db
+                .prepare("PRAGMA table_info(hierarchicalTopics)")
+                .all() as Array<{ name: string }>;
+
+            const hasSourceTopicNames = columnInfo.some(
+                (col) => col.name === "sourceTopicNames",
+            );
+
+            if (!hasSourceTopicNames) {
+                console.log(
+                    "[HierarchicalTopicTable] Migrating schema: Adding sourceTopicNames column",
+                );
+                // Add the missing column
+                db.exec(`
+                    ALTER TABLE hierarchicalTopics
+                    ADD COLUMN sourceTopicNames TEXT
+                `);
+                console.log(
+                    "[HierarchicalTopicTable] Migration complete: sourceTopicNames column added",
+                );
+            }
+        } catch (error) {
+            console.warn(
+                "[HierarchicalTopicTable] Schema migration warning:",
+                error,
+            );
+        }
     }
 
     public getTopicsByLevel(level: number): HierarchicalTopicRecord[] {

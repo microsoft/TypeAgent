@@ -129,14 +129,14 @@ public class PodcastCommands : ICommandModule
         }
     }
 
-
     private Podcast CreatePodcast(string name, bool createNew)
     {
-        // TODO: standardize this boilerplate, esp the cache binding
-        var model = new TextEmbeddingModelWithCache(256);
-        ConversationSettings settings = new ConversationSettings(model);
-        var provider = _kpContext.CreateStorageProvider<PodcastMessage, PodcastMessageMeta>(settings, name, createNew);
-        model.Cache.PersistentCache = provider.GetEmbeddingCache();
+        MemorySettings settings = new MemorySettings();
+        var provider = _kpContext.CreateStorageProvider<PodcastMessage, PodcastMessageMeta>(
+            settings.ConversationSettings,
+            name,
+            createNew
+        );
 
         var podcast = new Podcast(settings, provider);
         return podcast;

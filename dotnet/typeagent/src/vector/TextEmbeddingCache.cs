@@ -15,6 +15,8 @@ public class TextEmbeddingCache : ICache<string, float[]>
 
     public IReadOnlyCache<string, Embedding>? PersistentCache { get; set; }
 
+    public int Count => _memCache.HighWatermark;
+
     public float[]? Get(string key) => _memCache.Get(key);
 
     public void Add(string key, float[]? value)

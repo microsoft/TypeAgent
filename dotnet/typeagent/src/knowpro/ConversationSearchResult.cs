@@ -5,10 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public class ConversationSearchResult
 {
-    public ConversationSearchResult(
-        IList<ScoredMessageOrdinal> messageMatches,
-        string? rawSearchQuery
-    )
+    public ConversationSearchResult(IList<ScoredMessageOrdinal> messageMatches, string? rawSearchQuery)
         : this(new Dictionary<KnowledgeType, SemanticRefSearchResult>(), messageMatches, rawSearchQuery)
     {
     }
@@ -32,4 +29,6 @@ public class ConversationSearchResult
     public IDictionary<KnowledgeType, SemanticRefSearchResult> KnowledgeMatches { get; }
 
     public string? RawSearchQuery { get; }
+
+    public bool HasResults => KnowledgeMatches.Count > 0 || MessageMatches.Count > 0;
 }

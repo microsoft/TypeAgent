@@ -35,14 +35,14 @@ import {
     getAllEntitiesWithMetrics,
     getEntityNeighborhood,
     getGlobalImportanceLayer,
-    getViewportBasedNeighborhood,
-    getImportanceStatistics,
     getTopicImportanceLayer,
-    getTopicViewportNeighborhood,
+    getImportanceStatistics,
     getTopicMetrics,
     getUrlContentBreakdown,
     getTopicTimelines,
     discoverRelatedKnowledge,
+    getTopicDetails,
+    getEntityDetails,
 } from "./graphActions.mjs";
 import {
     checkAIModelStatus,
@@ -107,14 +107,10 @@ export async function handleKnowledgeAction(
             return await getEntityNeighborhood(parameters, context);
         case "getGlobalImportanceLayer":
             return await getGlobalImportanceLayer(parameters, context);
-        case "getViewportBasedNeighborhood":
-            return await getViewportBasedNeighborhood(parameters, context);
         case "getImportanceStatistics":
             return await getImportanceStatistics(parameters, context);
         case "getTopicImportanceLayer":
             return await getTopicImportanceLayer(parameters, context);
-        case "getTopicViewportNeighborhood":
-            return await getTopicViewportNeighborhood(parameters, context);
         case "getTopicMetrics":
             return await getTopicMetrics(parameters, context);
         case "getUrlContentBreakdown":
@@ -151,6 +147,11 @@ export async function handleKnowledgeAction(
         // Search Actions (kept in searchWebMemories)
         case "searchWebMemories":
             return await searchWebMemories(parameters, context);
+
+        case "getTopicDetails":
+            return await getTopicDetails(parameters, context);
+        case "getEntityDetails":
+            return await getEntityDetails(parameters, context);
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);

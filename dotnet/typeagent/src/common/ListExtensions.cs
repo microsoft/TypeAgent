@@ -130,11 +130,31 @@ public static class ListExtensions
         return lo;
     }
 
-    public static List<ScoredItem<T>> GetTopK<T>(this IEnumerable<ScoredItem<T>> list, int topK)
+    public static List<Scored<T>> GetTopK<T>(this IEnumerable<Scored<T>> list, int topK)
     {
         var topNList = new TopNCollection<T>(topK);
         topNList.Add(list);
         return topNList.ByRankAndClear();
     }
 
+    public static void Fill<T>(this IList<T> list, T value, int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            list.Add(value);
+        }
+    }
+
+    public static T[] Append<T>(this T[]? list, T value)
+    {
+        if (list.IsNullOrEmpty())
+        {
+            return [value];
+        }
+
+        T[] copy = new T[list.Length + 1];
+        Array.Copy(list, copy, list.Length);
+        copy[list.Length] = value;
+        return copy;
+    }
 }
