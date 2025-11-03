@@ -5,7 +5,6 @@ namespace TypeAgent.KnowPro;
 
 public interface IActionParam
 {
-
 }
 
 public class ActionParam : IActionParam

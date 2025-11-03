@@ -5,21 +5,25 @@ namespace TypeAgent.KnowPro;
 
 public class Serializer
 {
-    static JsonSerializerOptions s_optionsIndent;
-    static JsonSerializerOptions s_options;
+    internal static readonly JsonSerializerOptions s_optionsIndent;
+    internal static readonly JsonSerializerOptions s_options;
 
     static Serializer()
     {
         var facetConvertor = new FacetValueJsonConverter();
         var actionParamConvertor = new ActionParamJsonConverter();
+        var enumConvertor = new JsonStringEnumConverter();
+
 
         s_options = Json.DefaultOptions();
         s_options.Converters.Add(facetConvertor);
         s_options.Converters.Add(actionParamConvertor);
+        s_options.Converters.Add(enumConvertor);
 
         s_optionsIndent = Json.DefaultOptions();
         s_optionsIndent.Converters.Add(facetConvertor);
         s_optionsIndent.Converters.Add(actionParamConvertor);
+        s_optionsIndent.Converters.Add(enumConvertor);
         s_optionsIndent.WriteIndented = true;
     }
 

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
-
 namespace TypeAgent.KnowPro.KnowledgeExtractor;
 
 public class KnowledgeExtractor : IKnowledgeExtractor
@@ -13,6 +11,7 @@ public class KnowledgeExtractor : IKnowledgeExtractor
     {
         ArgumentVerify.ThrowIfNull(chatModel, nameof(chatModel));
         _translator = CreateTranslator(chatModel);
+        Settings = new KnowledgeExtractorSettings();
     }
 
     public KnowledgeExtractorSettings Settings { get; }
@@ -47,12 +46,21 @@ public class KnowledgeExtractor : IKnowledgeExtractor
 
     private static JsonTranslator<ExtractedKnowledge> CreateTranslator(ILanguageModel model)
     {
-        JsonTranslator<ExtractedKnowledge> translator = new JsonTranslator<ExtractedKnowledge>(
-            model,
+        SchemaText schema = new SchemaText(
             SchemaLoader.LoadResource(
                 typeof(KnowledgeExtractor).Assembly,
                 "TypeAgent.KnowPro.KnowledgeExtractor.KnowledgeSchema.ts"
-            )
+            ),
+            SchemaText.Languages.Typescript
+        );
+
+        var typeValidator = new JsonSerializerTypeValidator<ExtractedKnowledge>(
+            schema,
+            Serializer.s_options
+        );
+        var translator = new JsonTranslator<ExtractedKnowledge>(
+            model,
+            typeValidator
         );
         translator.Prompts = new KnowledgeExtractorPrompts();
         return translator;

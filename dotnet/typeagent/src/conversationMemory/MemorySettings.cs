@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.KnowledgeExtractor;
+
 namespace TypeAgent.ConversationMemory;
 
 public class MemorySettings
@@ -23,6 +25,7 @@ public class MemorySettings
         ChatModel = chatModel ?? new OpenAIChatModel();
         EmbeddingModel = new TextEmbeddingModelWithCache(embeddingCacheSize);
         QueryTranslator = new SearchQueryTranslator(ChatModel);
+        KnowledgeExtractor = new KnowledgeExtractor(ChatModel);
     }
 
     public IChatModel ChatModel { get; }
@@ -32,4 +35,6 @@ public class MemorySettings
     public ConversationSettings ConversationSettings { get; }
 
     public ISearchQueryTranslator? QueryTranslator { get; set; }
+
+    public IKnowledgeExtractor KnowledgeExtractor { get; set; }
 }
