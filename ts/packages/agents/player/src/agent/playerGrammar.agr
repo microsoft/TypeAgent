@@ -32,7 +32,7 @@
             trackNumber: $(n)
         }
    }
-@ <PlayTrackAction> = play | joue | cue (up)?
+@ <PlayTrackAction> = play | joue | cue (up)? | jugar | start playing
 
 @ <NumberIndicator> = # | numero | number | no.
 @ <Item> = one | cut | <TrackTerm> 
