@@ -28,15 +28,15 @@ public struct KnowledgeType : IEquatable<KnowledgeType>
     /// </summary>
     public static readonly KnowledgeType STag = new("sTag");
 
-    internal const string EntityTypeName = "entity";
-    internal const string ActionTypeName = "action";
-    internal const string TopicTypeName = "topic";
-    internal const string TagTypeName = "tag";
-    internal const string STagTypeName = "sTag";
+    public const string EntityTypeName = "entity";
+    public const string ActionTypeName = "action";
+    public const string TopicTypeName = "topic";
+    public const string TagTypeName = "tag";
+    public const string STagTypeName = "sTag";
 
     public static bool IsKnowledgeType(string type)
     {
-        return 
+        return
             type == EntityTypeName ||
             type == ActionTypeName ||
             type == TopicTypeName ||

@@ -124,7 +124,12 @@ public class TestCommands : ICommandModule
             null,
             cancellationToken
         );
-        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults);
+        await KnowProWriter.WriteConversationSearchResultsAsync(
+            conversation,
+            searchResults,
+            true,
+            true
+        );
 
         DateRange? conversationDateRange = await conversation.GetDateRangeAsync();
         if (conversationDateRange is not null)
@@ -148,7 +153,7 @@ public class TestCommands : ICommandModule
             },
             cancellationToken
         );
-        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults, true);
+        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, searchResults, true, true);
     }
 
     private Command TestEmbeddingsDef()
@@ -280,7 +285,7 @@ public class TestCommands : ICommandModule
             cancellationToken
         ).ConfigureAwait(false);
 
-        KnowProWriter.WriteKnowledgeSearchResults(_kpContext.Conversation!, results);
+        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results);
     }
 
     private Command SearchQueryTermsDef()
@@ -334,9 +339,14 @@ public class TestCommands : ICommandModule
         if (conversation is IMemory memory)
         {
             IList<ConversationSearchResult> results = await memory.SearchAsync(query, null, null, null, cancellationToken);
-            foreach(var result in results)
+            foreach (var result in results)
             {
-                await KnowProWriter.WriteConversationSearchResultsAsync(conversation, result);
+                await KnowProWriter.WriteConversationSearchResultsAsync(
+                    conversation,
+                    result,
+                    true,
+                    false
+                );
             }
         }
     }

@@ -74,6 +74,37 @@ public partial class Action
     {
         return !string.IsNullOrEmpty(value) && value != NoneEntityName;
     }
+
+    public override string ToString()
+    {
+        StringBuilder text = new StringBuilder();
+
+        AppendEntityName(text, SubjectEntityName);
+
+        text.Append($" [{VerbString()}]");
+
+        AppendEntityName(text, ObjectEntityName);
+        AppendEntityName(text, IndirectObjectEntityName);
+
+        text.Append($" {{{VerbTense}}}");
+
+        if (SubjectEntityFacet is not null)
+        {
+            text.Append($" <{SubjectEntityFacet.ToString()}>");
+        }
+        return text.ToString();
+    }
+
+    private void AppendEntityName(StringBuilder text, string? name)
+    {
+        if (text.Length > 0)
+        {
+            text.Append(' ');
+        }
+        text.Append(IsDefined(name)
+            ? $"<{name}>"
+            : "<>");
+    }
 }
 
 public partial class Topic
@@ -165,10 +196,7 @@ public partial class KnowledgeResponse
             if (action.SubjectEntityFacet is not null)
             {
                 ConcreteEntity? entity = Array.Find(Entities, (c) => c.Name == action.SubjectEntityName);
-                if (entity is not null)
-                {
-                    entity.MergeEntityFacet(action.SubjectEntityFacet);
-                }
+                entity?.MergeEntityFacet(action.SubjectEntityFacet);
                 action.SubjectEntityFacet = null;
             }
         }

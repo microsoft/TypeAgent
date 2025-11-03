@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Threading.Tasks;
 using TypeAgent.ExamplesLib.CommandLine;
 
 namespace TypeAgent.ExamplesLib;
@@ -35,16 +36,16 @@ public class KnowProWriter : ConsoleWriter
         }
     }
 
-public static async Task WriteMessagesAsync(IConversation conversation)
-{
-    await foreach (var message in conversation.Messages)
+    public static async Task WriteMessagesAsync(IConversation conversation)
     {
-        WriteMessage(message);
-        WriteLine();
+        await foreach (var message in conversation.Messages)
+        {
+            WriteMessage(message);
+            WriteLine();
+        }
     }
-}
 
-public static void WriteMessage(IMessage message)
+    public static void WriteMessage(IMessage message)
     {
         PushColor(ConsoleColor.Cyan);
         WriteNameValue("Timestamp", message.Timestamp);
@@ -71,7 +72,7 @@ public static void WriteMessage(IMessage message)
         }
     }
 
-public static void WriteEntity(ConcreteEntity? entity)
+    public static void WriteEntity(ConcreteEntity? entity)
     {
         if (entity is not null)
         {
@@ -85,10 +86,36 @@ public static void WriteEntity(ConcreteEntity? entity)
         }
     }
 
+    public static void WriteAction(TypeAgent.KnowPro.Action? action)
+    {
+        if (action is not null)
+        {
+            WriteLine(action.ToString());
+        }
+    }
+
+    public static void WriteTopic(Topic? topic)
+    {
+        if (topic is not null)
+        {
+            WriteLine(topic.Text);
+        }
+    }
+
+    public static void WriteTag(Tag tag)
+    {
+        if (tag is not null)
+        {
+            WriteLine(tag.Text);
+        }
+    }
+
     public static async Task WriteConversationSearchResultsAsync(
-        IConversation conversation,
-        ConversationSearchResult? searchResult,
-        bool verbose = false
+            IConversation conversation,
+            ConversationSearchResult? searchResult,
+            bool showKnowledge,
+            bool showMessages,
+            bool verbose = false
     )
     {
         if (searchResult is null)
@@ -118,7 +145,7 @@ public static void WriteEntity(ConcreteEntity? entity)
         if (!searchResult.KnowledgeMatches.IsNullOrEmpty())
         {
             WriteLineHeading("Knowledge");
-            WriteKnowledgeSearchResults(conversation, searchResult.KnowledgeMatches);
+            await WriteKnowledgeSearchResultsAsync(conversation, searchResult.KnowledgeMatches);
         }
     }
 
@@ -131,9 +158,11 @@ public static void WriteEntity(ConcreteEntity? entity)
         WriteJson(messageOrdinals);
     }
 
-    public static void WriteKnowledgeSearchResults(
+    public static async Task WriteKnowledgeSearchResultsAsync(
         IConversation conversation,
-        IDictionary<KnowledgeType, SemanticRefSearchResult>? results
+        IDictionary<KnowledgeType, SemanticRefSearchResult>? results,
+        int? maxToDisplay = null,
+        bool isAsc = false
     )
     {
         if (results.IsNullOrEmpty())
@@ -144,15 +173,17 @@ public static void WriteEntity(ConcreteEntity? entity)
 
         foreach (var kv in results!)
         {
-            WriteKnowledgeSearchResult(conversation, kv.Key, kv.Value);
+            await WriteKnowledgeSearchResultAsync(conversation, kv.Key, kv.Value, maxToDisplay, isAsc);
             WriteLine();
         }
     }
 
-    public static void WriteKnowledgeSearchResult(
+    public static async Task WriteKnowledgeSearchResultAsync(
         IConversation conversation,
         KnowledgeType kType,
-        SemanticRefSearchResult result
+        SemanticRefSearchResult result,
+        int? maxToDisplay = null,
+        bool isAsc = false
     )
     {
         WriteLineUnderline(kType.ToString().ToUpper());
@@ -162,7 +193,81 @@ public static void WriteEntity(ConcreteEntity? entity)
             ListType.Ol)
         );
         WriteLine($"{result.SemanticRefMatches.Count} matches");
-        WriteJson(result.SemanticRefMatches);
+        await WriteScoredSemanticRefsAsync(
+            result.SemanticRefMatches,
+            conversation.SemanticRefs,
+            maxToDisplay is not null ? maxToDisplay.Value : result.SemanticRefMatches.Count,
+            isAsc
+        );
+    }
+
+    public static void WriteSemanticRef(SemanticRef sr)
+    {
+        switch (sr.KnowledgeType)
+        {
+            default:
+                break;
+
+            case KnowledgeType.EntityTypeName:
+            case KnowledgeType.STagTypeName:
+                WriteEntity(sr.AsEntity());
+                break;
+
+            case KnowledgeType.ActionTypeName:
+                WriteAction(sr.AsAction());
+                break;
+
+            case KnowledgeType.TopicTypeName:
+                WriteTopic(sr.AsTopic());
+                break;
+
+            case KnowledgeType.TagTypeName:
+                WriteTag(sr.AsTag());
+                break;
+        }
+    }
+
+    public static async Task WriteScoredSemanticRefsAsync(
+        IList<ScoredSemanticRefOrdinal> semanticRefMatches,
+        ISemanticRefCollection semanticRefCollection,
+        int maxToDisplay,
+        bool isAsc = true
+    )
+    {
+        if (isAsc)
+        {
+            WriteLine("Sorted in ascending order(lowest first)");
+        }
+
+        var matchesToDisplay = semanticRefMatches.Slice(0, maxToDisplay);
+        WriteLine($"Displaying {matchesToDisplay.Count} matches of total {semanticRefMatches.Count}");
+
+        IList<SemanticRef> semanticRefs = await semanticRefCollection.GetAsync(matchesToDisplay);
+        for (int i = 0; i < matchesToDisplay.Count; ++i)
+        {
+            var pos = isAsc ? matchesToDisplay.Count - (i + 1) : i;
+            WriteScoredRef(
+                pos,
+                matchesToDisplay.Count,
+                matchesToDisplay[pos],
+                semanticRefs[pos]
+            );
+        }
+    }
+
+    public static void WriteScoredRef(
+        int matchNumber,
+        int totalMatches,
+        ScoredSemanticRefOrdinal scoredRef,
+        SemanticRef semanticRef
+    )
+    {
+        WriteLine(
+            ConsoleColor.Green,
+            $"#{matchNumber + 1} / {totalMatches}: <{scoredRef.SemanticRefOrdinal}::{semanticRef.Range.Start.MessageOrdinal}> {semanticRef.KnowledgeType} [{scoredRef.Score}]"
+        );
+        WriteSemanticRef(semanticRef);
+        WriteLine();
     }
 
     public static void WriteDataFileStats<TMessage>(ConversationData<TMessage> data)
