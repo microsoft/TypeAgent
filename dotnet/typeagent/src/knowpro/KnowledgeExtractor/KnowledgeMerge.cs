@@ -9,7 +9,13 @@ public static class KnowledgeMergeExtensions
 
 internal class MergedKnowledge
 {
-    HashSet<int>? SourceMessageOrdinals { get; set; } = null;
+    public HashSet<int>? SourceMessageOrdinals { get; set; } = null;
+
+    public void MergeMessageOrdinals(SemanticRef sr)
+    {
+        SourceMessageOrdinals ??= [];
+        SourceMessageOrdinals.Add(sr.Range.Start.MessageOrdinal);
+    }
 
 }
 
@@ -36,6 +42,45 @@ internal class MergedEntity : MergedKnowledge
         to.Type = [.. to.Type.Union(other.Type)];
         to.Facets = MergedFacets.Union(to.Facets, other.Facets);
         return false;
+    }
+
+    public static Dictionary<string, Scored<MergedEntity>> MergeScoredEntities(
+        IEnumerable<Scored<SemanticRef>> scoredEntities,
+        bool mergeOrdinals
+    )
+    {
+        Dictionary<string, Scored<MergedEntity>> mergedEntities = [];
+
+        foreach (var scoredEntity in scoredEntities)
+        {
+            MergedEntity mergedEntity = scoredEntity.Item.AsEntity().ToMerged();
+            Scored<MergedEntity>? target = null;
+            if (mergedEntities.TryGetValue(mergedEntity.Name, out var existing))
+            {
+                if (MergedEntity.Union(existing.Item, mergedEntity))
+                {
+                    if (existing.Score < scoredEntity.Score)
+                    {
+                        existing.Score = scoredEntity.Score;
+                    }
+                    target = existing;
+                }
+                else
+                {
+                    target = null;
+                }
+            }
+            else
+            {
+                target = new Scored<MergedEntity>(mergedEntity, scoredEntity.Score);
+            }
+            if (target is not null && mergeOrdinals)
+            {
+                target.Value.Item.MergeMessageOrdinals(scoredEntity);
+            }
+        }
+
+        return mergedEntities;
     }
 }
 
