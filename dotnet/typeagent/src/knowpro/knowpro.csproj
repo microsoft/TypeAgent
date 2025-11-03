@@ -10,11 +10,13 @@
 
   <ItemGroup>
     <None Remove="dateTimeSchema.ts" />
+    <None Remove="KnowledgeExtractor\KnowledgeSchema.ts" />
     <None Remove="Lang\langSearchNoise.txt" />
     <None Remove="Lang\searchQuerySchema.ts" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="KnowledgeExtractor\KnowledgeSchema.ts" />
     <EmbeddedResource Include="Lang\langSearchNoise.txt" />
     <EmbeddedResource Include="Lang\searchQuerySchema.ts">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
@@ -29,7 +31,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Knowledge\" />
     <Folder Include="Answer\" />
   </ItemGroup>
 

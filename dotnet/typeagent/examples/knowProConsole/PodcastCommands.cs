@@ -129,7 +129,6 @@ public class PodcastCommands : ICommandModule
         }
     }
 
-
     private Podcast CreatePodcast(string name, bool createNew)
     {
         MemorySettings settings = new MemorySettings();

@@ -32,6 +32,11 @@ public class JsonTranslator<T> : IJsonTranslator
     private readonly TranslationSettings _translationSettings;
     private int _maxRepairAttempts;
 
+    public JsonTranslator(ILanguageModel model, string schema)
+    : this(model, new SchemaText(schema, SchemaText.Languages.Typescript))
+    {
+    }
+
     /// <summary>
     /// Creates a new JsonTranslator that translates natural language requests into objects of type T
     /// </summary>

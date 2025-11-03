@@ -31,7 +31,7 @@ public partial class ConcreteEntity
 
 public partial class Action
 {
-    const string NoneEntityName = "none";
+    public const string NoneEntityName = "none";
 
     public Action()
     {
