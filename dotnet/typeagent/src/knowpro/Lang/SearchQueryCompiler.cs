@@ -1,18 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Net.Http.Headers;
 using TypeAgent.KnowPro.Query;
 
 namespace TypeAgent.KnowPro.Lang;
 
 internal class SearchQueryCompiler
 {
-    static HashSet<string> s_noiseText;
+    static NoiseText s_noiseText;
 
     static SearchQueryCompiler()
     {
-        s_noiseText = [];
-        s_noiseText.LoadFromResource(typeof(SearchQueryCompiler).Assembly, "TypeAgent.KnowPro.Lang.langSearchNoise.txt");
+        s_noiseText = new NoiseText(
+            typeof(SearchQueryCompiler).Assembly,
+            "TypeAgent.KnowPro.Lang.langSearchNoise.txt"
+        );
     }
 
     private PropertyTermSet _entityTermsAdded;
@@ -599,7 +602,7 @@ internal class SearchQueryCompiler
         return isSearchable;
     }
 
-    private bool IsNoiseTerm(string value) => s_noiseText.Contains(value.ToLower());
+    private bool IsNoiseTerm(string value) => s_noiseText.IsNoise(value);
 
     private bool ShouldAddScope(ActionTerm actionTerm)
     {

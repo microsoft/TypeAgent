@@ -7,7 +7,7 @@ public class SearchOptions
 {
     public SearchOptions()
     {
-        ExactMatch = false;
+        InitDefault();
     }
 
     public SearchOptions(SearchOptions options)
@@ -36,6 +36,19 @@ public class SearchOptions
 
     public double? ThresholdScore { get; set; }
 
+    public virtual void InitDefault()
+    {
+        ExactMatch = false;
+    }
+
+    public virtual void InitTypical()
+    {
+        InitDefault();
+
+        MaxKnowledgeMatches = 50;
+        MaxMessageMatches = 25;
+    }
+
     public static SearchOptions CreateDefault()
     {
         return new SearchOptions();
@@ -43,9 +56,8 @@ public class SearchOptions
 
     public static SearchOptions CreateTypical()
     {
-        var options = CreateDefault();
-        options.MaxKnowledgeMatches = 50;
-        options.MaxMessageMatches = 25;
+        var options = new SearchOptions();
+        options.InitTypical();
         return options;
     }
 }

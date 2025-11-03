@@ -16,20 +16,11 @@ public class SearchQueryTranslator : ISearchQueryTranslator
 {
     JsonTranslator<SearchQuery> _translator;
 
-    public SearchQueryTranslator(ILanguageModel languageModel)
-        : this(
-              languageModel,
-              SchemaLoader.LoadResource(typeof(SearchQuery).Assembly, "TypeAgent.KnowPro.Lang.searchQuerySchema.ts")
-        )
+    public SearchQueryTranslator(IChatModel model)
     {
-
-    }
-
-    public SearchQueryTranslator(ILanguageModel languageModel, string schema)
-    {
-        _translator = new JsonTranslator<SearchQuery>(
-            languageModel,
-            new SchemaText(schema, SchemaText.Languages.Typescript)
+        _translator = JsonTranslatorFactory.CreateTranslator<SearchQuery>(
+            model,
+            "TypeAgent.KnowPro.Lang.searchQuerySchema.ts"
         );
     }
 

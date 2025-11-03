@@ -21,6 +21,16 @@ public static class ListExtensions
         return list is not null ? list.Count : 0;
     }
 
+    public static void AddRange<T>(this IList<T> list, IEnumerable<T> items)
+    {
+        ArgumentVerify.ThrowIfNull(items, nameof(items));
+
+        foreach (var item in items)
+        {
+            list.Add(item);
+        }
+    }
+
     public static void Shift<T>(this IList<T> list)
     {
         if (list.Count > 0)

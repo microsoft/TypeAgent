@@ -295,7 +295,7 @@ public class TestCommands : ICommandModule
 
     private async Task SearchQueryTermsAsync(ParseResult args, CancellationToken cancellationToken)
     {
-       // IConversation conversation = EnsureConversation();
+        // IConversation conversation = EnsureConversation();
 
         NamedArgs namedArgs = new NamedArgs(args);
         var query = namedArgs.Get("query");
@@ -308,6 +308,30 @@ public class TestCommands : ICommandModule
         var result = await translator.TranslateAsync(query, null, cancellationToken);
         KnowProWriter.WriteJson(result);
     }
+
+    private Command SearchLangDef()
+    {
+        Command cmd = new("kpTestSearchLang")
+        {
+            Args.Arg<string>("query")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.SearchLangAsync);
+        return cmd;
+    }
+
+    private async Task SearchLangAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        var query = namedArgs.Get("query");
+        if (string.IsNullOrEmpty(query))
+        {
+            return;
+        }
+    }
+
 
     private Command KnowledgeDef()
     {

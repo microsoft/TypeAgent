@@ -11,6 +11,16 @@ public class LangQueryCompilerSettings
         ExactScope = false;
         VerbScope = true;
     }
+
+    public LangQueryCompilerSettings(LangQueryCompilerSettings src)
+    {
+        ArgumentVerify.ThrowIfNull(src, nameof(src));
+        ApplyScope = src.ApplyScope;
+        ExactScope = src.ExactScope;
+        VerbScope = src.VerbScope;
+        TermFilter = src.TermFilter;
+    }
+
     /// <summary>
     /// Is fuzzy matching enabled when applying scope?
     /// </summary>

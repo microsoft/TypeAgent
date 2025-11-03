@@ -3,7 +3,7 @@
 
 namespace TypeAgent.ExamplesLib.CommandLine;
 
-public class NamedArgs
+public class NamedArgs : INamedArgs
 {
     string _argPrefix;
     ParseResult _args;
