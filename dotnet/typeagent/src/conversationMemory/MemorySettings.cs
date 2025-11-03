@@ -16,7 +16,8 @@ public class MemorySettings
         ConversationSettings conversationSettings,
         int embeddingCacheSize = 64,
         IChatModel? chatModel = null,
-        ITextEmbeddingModel? embeddingModel = null
+        ITextEmbeddingModel? embeddingModel = null,
+        NoiseText? noiseTerms = null
     )
     {
         ArgumentVerify.ThrowIfNull(conversationSettings, nameof(conversationSettings));
@@ -26,6 +27,12 @@ public class MemorySettings
         EmbeddingModel = new TextEmbeddingModelWithCache(embeddingCacheSize);
         QueryTranslator = new SearchQueryTranslator(ChatModel);
         KnowledgeExtractor = new KnowledgeExtractor(ChatModel);
+
+        NoiseTerms = noiseTerms ?? new NoiseText(
+            typeof(MemorySettings).Assembly,
+            "TypeAgent.ConversationMemory.noiseTerms.txt"
+        );
+
     }
 
     public IChatModel ChatModel { get; }
@@ -37,4 +44,9 @@ public class MemorySettings
     public ISearchQueryTranslator? QueryTranslator { get; set; }
 
     public IKnowledgeExtractor KnowledgeExtractor { get; set; }
+
+    public NoiseText? NoiseTerms { get; set; }
+
+    // Setting this to true leverages Structured Tags
+    public bool? UseScopedSearch { get; set; } = null;
 }

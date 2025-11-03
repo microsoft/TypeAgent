@@ -5,6 +5,20 @@ namespace TypeAgent.KnowPro.Lang;
 
 public class LangSearchRagOptions
 {
+    public LangSearchRagOptions()
+    {
+
+    }
+
+    public LangSearchRagOptions(LangSearchRagOptions src)
+    {
+        ArgumentVerify.ThrowIfNull(src, nameof(src));
+
+        MaxMessageMatches = src.MaxMessageMatches;
+        ExactMatch = src.ExactMatch;
+        MaxCharsInBudget = src.MaxCharsInBudget;
+    }
+
     public int? MaxMessageMatches { get; set; }
 
     public bool? ExactMatch { get; set; }

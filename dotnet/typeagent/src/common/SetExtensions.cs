@@ -5,6 +5,11 @@ namespace TypeAgent.Common;
 
 public static class SetExtensions
 {
+    public static bool IsNullOrEmpty<T>(this ISet<T> set)
+    {
+        return set is null || set.Count == 0;
+    }
+
     public static void LoadFromFile(this HashSet<string> set, string filePath)
     {
         foreach(var line in File.ReadLines(filePath))

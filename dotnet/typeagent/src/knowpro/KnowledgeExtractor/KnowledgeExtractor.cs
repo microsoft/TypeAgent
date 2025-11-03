@@ -44,23 +44,11 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         return knowledgeResponse;
     }
 
-    private static JsonTranslator<ExtractedKnowledge> CreateTranslator(ILanguageModel model)
+    private static JsonTranslator<ExtractedKnowledge> CreateTranslator(IChatModel model)
     {
-        SchemaText schema = new SchemaText(
-            SchemaLoader.LoadResource(
-                typeof(KnowledgeExtractor).Assembly,
-                "TypeAgent.KnowPro.KnowledgeExtractor.KnowledgeSchema.ts"
-            ),
-            SchemaText.Languages.Typescript
-        );
-
-        var typeValidator = new JsonSerializerTypeValidator<ExtractedKnowledge>(
-            schema,
-            Serializer.s_options
-        );
-        var translator = new JsonTranslator<ExtractedKnowledge>(
+        var translator = JsonTranslatorFactory.CreateTranslator<ExtractedKnowledge>(
             model,
-            typeValidator
+            "TypeAgent.KnowPro.KnowledgeExtractor.KnowledgeSchema.ts"
         );
         translator.Prompts = new KnowledgeExtractorPrompts();
         return translator;

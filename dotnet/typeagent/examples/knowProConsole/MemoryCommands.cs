@@ -19,6 +19,7 @@ public class MemoryCommands : ICommandModule
             SearchTermsDef(),
             MessagesDef(),
             AliasesDef(),
+            SearchDef(),
             SearchRagDef()
         ];
     }
@@ -106,6 +107,22 @@ public class MemoryCommands : ICommandModule
                 relatedTerms!.ForEach(KnowProWriter.WriteTerm);
             }
         }
+    }
+
+    private Command SearchDef()
+    {
+        Command command = new("kpSearch")
+        {
+            Options.Arg<string>("query"),
+        };
+        command.SetAction(this.SearchAsync);
+        return command;
+    }
+    private Task SearchAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+        KnowProWriter.WriteError("Not impl");
+        return Task.CompletedTask;
     }
 
     private Command SearchRagDef()

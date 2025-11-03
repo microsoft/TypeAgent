@@ -9,6 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="noiseTerms.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="noiseTerms.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\aiclient\aiclient.csproj" />
     <ProjectReference Include="..\common\common.csproj" />
     <ProjectReference Include="..\knowpro\knowpro.csproj" />
