@@ -25,7 +25,7 @@ internal static class LangSearch
 {
     public static async ValueTask<LangQueryExpr> SearchQueryExprFromLangAsync(
         this IConversation conversation,
-        SearchQueryTranslator translator,
+        ISearchQueryTranslator translator,
         string queryText,
         LangSearchOptions? options = null,
         LangSearchFilter? langSearchFilter = null,
@@ -33,6 +33,8 @@ internal static class LangSearch
         CancellationToken cancellationToken = default
     )
     {
+        ArgumentVerify.ThrowIfNull(translator, nameof(translator));
+
         var query = await conversation.SearchQueryFromLangAsync(
             translator,
             queryText,
@@ -50,7 +52,8 @@ internal static class LangSearch
             options,
             langSearchFilter
         );
-        return new LangQueryExpr{
+        return new LangQueryExpr
+        {
             QueryText = queryText,
             Query = query,
             QueryExpressions = queryExpressions,
@@ -59,7 +62,7 @@ internal static class LangSearch
 
     public static async ValueTask<SearchQuery> SearchQueryFromLangAsync(
         this IConversation conversation,
-        SearchQueryTranslator queryTranslator,
+        ISearchQueryTranslator queryTranslator,
         string text,
         IList<PromptSection>? promptPreamble,
         CancellationToken cancellationToken = default
@@ -72,7 +75,7 @@ internal static class LangSearch
             cancellationToken
         ).ConfigureAwait(false);
 
-        Prompt queryContext = new Prompt();
+        Prompt queryContext = [];
         if (!promptPreamble.IsNullOrEmpty())
         {
             queryContext.AddRange(promptPreamble);

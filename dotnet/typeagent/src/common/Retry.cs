@@ -15,6 +15,12 @@ public class RetrySettings
         JitterRange = 0.5;
     }
 
+    public RetrySettings(int maxRetries)
+    {
+        ArgumentVerify.ThrowIfLessThan(maxRetries, 1, nameof(maxRetries));
+        MaxRetries = maxRetries;
+    }
+
     public int MaxRetries { get; set; }
 
     public int RetryPauseMs { get; set; }

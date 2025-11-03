@@ -9,6 +9,7 @@ global using System.Text;
 global using System.Text.Json;
 global using System.Text.Json.Serialization;
 global using Microsoft.Data.Sqlite;
+
 global using TypeAgent.Common;
 global using TypeAgent.KnowPro;
 global using TypeAgent.Vector;

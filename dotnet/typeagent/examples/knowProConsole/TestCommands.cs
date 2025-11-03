@@ -22,6 +22,7 @@ public class TestCommands : ICommandModule
             SearchMessagesTermsDef(),
             TestEmbeddingsDef(),
             SearchQueryTermsDef(),
+            KnowledgeDef(),
             BuildIndexDef(),
         ];
     }
@@ -306,6 +307,36 @@ public class TestCommands : ICommandModule
         SearchQueryTranslator translator = new SearchQueryTranslator(model);
         var result = await translator.TranslateAsync(query, null, cancellationToken);
         KnowProWriter.WriteJson(result);
+    }
+
+    private Command KnowledgeDef()
+    {
+        Command cmd = new("kpTestKnowledge")
+        {
+            Args.Arg<string>("text")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.KnowledgeAsync);
+        return cmd;
+    }
+
+    private async Task KnowledgeAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        // IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        var text = namedArgs.Get("text");
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+        var model = new OpenAIChatModel();
+        KnowledgeExtractor exctractor = new KnowledgeExtractor(model);
+        var result = await exctractor.ExtractAsync(text, cancellationToken);
+        if (result is not null)
+        {
+            KnowProWriter.WriteJson(result);
+        }
     }
 
     private IConversation EnsureConversation()

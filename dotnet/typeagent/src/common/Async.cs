@@ -21,9 +21,10 @@ public static class Async
     public static async Task<List<TResult>> MapAsync<T, TResult>(
         this IList<T> list,
         int concurrency,
-        Func<T, Task<TResult>> processor,
+        Func<T, CancellationToken, Task<TResult>> processor,
         Action<BatchProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentVerify.ThrowIfNullOrEmpty(list, nameof(list));
         ArgumentVerify.ThrowIfLessThanEqualZero(concurrency, nameof(concurrency));
@@ -36,7 +37,7 @@ public static class Async
 
     private static async Task<List<TResult>> MapSequentialAsync<T, TResult>(
         IList<T> list,
-        Func<T, Task<TResult>> processor,
+        Func<T, CancellationToken, Task<TResult>> processor,
         Action<BatchProgress>? progress,
         CancellationToken cancellationToken
     )
@@ -46,7 +47,7 @@ public static class Async
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = await processor(list[i]);
+            var result = await processor(list[i], cancellationToken);
             results.Add(result);
             if (progress is not null)
             {
@@ -59,7 +60,7 @@ public static class Async
     private static async Task<List<TResult>> MapConcurrentAsync<T, TResult>(
         IList<T> list,
         int concurrency,
-        Func<T, Task<TResult>> processor,
+        Func<T, CancellationToken, Task<TResult>> processor,
         Action<BatchProgress>? progress,
         CancellationToken cancellationToken
     )
@@ -72,7 +73,7 @@ public static class Async
 
             int batchSize = Math.Min(concurrency, totalCount - startAt);
             var batch = list.Slice(startAt, batchSize);
-            var tasks = batch.Map<T, Task<TResult>>(processor);
+            var tasks = batch.Map<T, Task<TResult>>((t) => processor(t, cancellationToken));
 
             var batchResults = await Task.WhenAll(tasks);
 

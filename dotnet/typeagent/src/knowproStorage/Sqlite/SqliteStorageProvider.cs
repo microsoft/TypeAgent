@@ -21,6 +21,21 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
         ConversationSettings settings,
         string dirPath,
         string baseFileName,
+        bool createNew = false
+    )
+        : this(
+              settings,
+              dirPath,
+              baseFileName,
+              createNew ? SqliteProviderCreateMode.CreateNew : SqliteProviderCreateMode.Load
+        )
+    {
+    }
+
+    public SqliteStorageProvider(
+        ConversationSettings settings,
+        string dirPath,
+        string baseFileName,
         SqliteProviderCreateMode mode = SqliteProviderCreateMode.Load
     )
         : this(settings, Path.Join(dirPath, baseFileName + ".db"), mode)
@@ -55,6 +70,10 @@ public class SqliteStorageProvider<TMessage, TMeta> : IStorageProvider<TMessage>
             ? new NullMessageTextIndex()
             : new SqliteMessageTextIndex(_db, settings.MessageTextIndexSettings.EmbeddingIndexSettings)
         );
+        if (settings.EmbeddingModel is TextEmbeddingCache cache)
+        {
+            cache.PersistentCache = GetEmbeddingCache();
+        }
     }
 
     public IMessageCollection<TMessage> TypedMessages { get; private set; }

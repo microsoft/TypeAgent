@@ -3,7 +3,16 @@
 
 namespace TypeAgent.KnowPro.Lang;
 
-public class SearchQueryTranslator
+public interface ISearchQueryTranslator
+{
+    ValueTask<SearchQuery> TranslateAsync(
+        string request,
+        IList<IPromptSection>? preamble = null,
+        CancellationToken cancellationToken = default
+    );
+}
+
+public class SearchQueryTranslator : ISearchQueryTranslator
 {
     JsonTranslator<SearchQuery> _translator;
 

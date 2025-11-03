@@ -146,7 +146,7 @@ VALUES(@term, @term_embedding)
         );
     }
 
-    private List<ScoredItem<int>> IndexesOfNearest(
+    private List<Scored<int>> IndexesOfNearest(
         NormalizedEmbedding embedding,
         int? maxMatches,
         double? minScore
@@ -175,7 +175,7 @@ VALUES(@term, @term_embedding)
     }
 
 
-    private List<Term> GetTerms(List<ScoredItem<int>> termIds)
+    private List<Term> GetTerms(List<Scored<int>> termIds)
     {
         var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(termIds.Count);
 

@@ -10,11 +10,13 @@
 
   <ItemGroup>
     <None Remove="dateTimeSchema.ts" />
+    <None Remove="KnowledgeExtractor\KnowledgeSchema.ts" />
     <None Remove="Lang\langSearchNoise.txt" />
     <None Remove="Lang\searchQuerySchema.ts" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="KnowledgeExtractor\KnowledgeSchema.ts" />
     <EmbeddedResource Include="Lang\langSearchNoise.txt" />
     <EmbeddedResource Include="Lang\searchQuerySchema.ts">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
@@ -26,6 +28,10 @@
     <ProjectReference Include="..\common\common.csproj" />
     <ProjectReference Include="..\typechat.schema\TypeChat.Schema.csproj" />
     <ProjectReference Include="..\typechat\TypeChat.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Answer\" />
   </ItemGroup>
 
 </Project>

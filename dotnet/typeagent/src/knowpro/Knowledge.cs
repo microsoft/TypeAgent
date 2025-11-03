@@ -56,6 +56,9 @@ public partial class Action : Knowledge
 
     [JsonPropertyName("params")]
     public IActionParam[]? Params { get; set; }
+
+    [JsonPropertyName("subjectEntityFacet")]
+    public Facet? SubjectEntityFacet { get; set; }
 }
 
 public partial class KnowledgeResponse

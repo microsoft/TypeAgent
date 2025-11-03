@@ -74,7 +74,7 @@ public static class ConversationSearch
     public static async ValueTask<IList<ConversationSearchResult>> SearchWithLanguageAsync(
         this IConversation conversation,
         string searchText,
-        SearchQueryTranslator queryTranslator,
+        ISearchQueryTranslator queryTranslator,
         LangSearchOptions? options = null,
         LangSearchFilter? langSearchFilter = null,
         LangSearchDebugContext? debugContext = null,

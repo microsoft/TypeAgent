@@ -24,8 +24,8 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
 {
     private readonly Dictionary<TKey, LinkedListNode<KeyValuePair<TKey, TValue>>> _index;
     private readonly LinkedList<KeyValuePair<TKey, TValue>> _itemList;
-    private readonly int _highWatermark;
-    private readonly int _lowWatermark;
+    private int _highWatermark;
+    private int _lowWatermark;
 
     public LRUCache(int maxEntries, IEqualityComparer<TKey> comparer = null)
         : this(maxEntries - 1, maxEntries, comparer)
@@ -47,7 +47,9 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
     }
 
     public int Count => _itemList.Count;
+
     public int HighWatermark => _highWatermark;
+
     public int LowWatermark => _lowWatermark;
 
     public event Action<KeyValuePair<TKey, TValue>> Purged;
@@ -132,6 +134,13 @@ public class LRUCache<TKey, TValue> : ICache<TKey, TValue>
     {
         _index.Clear();
         _itemList.Clear();
+    }
+
+    public void SetCount(int maxEntries)
+    {
+        _highWatermark = maxEntries;
+        _lowWatermark = maxEntries - 1;
+        Trim();
     }
 
     void MakeMRU(LinkedListNode<KeyValuePair<TKey, TValue>> node)
