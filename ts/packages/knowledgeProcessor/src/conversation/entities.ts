@@ -670,7 +670,7 @@ export function mergeEntityFacet(entity: ConcreteEntity, facet: Facet) {
     // Look for an equal facet
     for (const f of entity.facets) {
         if (facetMatch(f, facet)) {
-            return;
+            break;
         }
     }
     entity.facets.push(facet);
