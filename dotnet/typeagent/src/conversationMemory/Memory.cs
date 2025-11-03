@@ -3,7 +3,7 @@
 
 namespace TypeAgent.ConversationMemory;
 
-public class Memory<TMessage> : Conversation<TMessage>
+public class Memory<TMessage> : Conversation<TMessage>, IMemory
     where TMessage : class, IMessage, new()
 {
 
@@ -23,10 +23,11 @@ public class Memory<TMessage> : Conversation<TMessage>
 
     private bool UseScoped => Settings.UseScopedSearch is not null && Settings.UseScopedSearch.Value;
 
-    public ValueTask SearchWithLanguageAsync(
+    public async ValueTask<IList<ConversationSearchResult>> SearchAsync(
         string searchText,
         LangSearchOptions? options = null,
         LangSearchFilter? filter = null,
+        LangSearchDebugContext? debugContext = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -38,7 +39,15 @@ public class Memory<TMessage> : Conversation<TMessage>
         }
         else
         {
-            return this.SearchWithLanguageAsync(searchText, options, filter, cancellationToken);
+            IConversation conversation = this;
+            return await conversation.SearchAsync(
+                searchText,
+                Settings.QueryTranslator,
+                options,
+                filter,
+                debugContext,
+                cancellationToken
+            ).ConfigureAwait(false);
         }
     }
 

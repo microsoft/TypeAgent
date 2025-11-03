@@ -330,6 +330,14 @@ public class TestCommands : ICommandModule
         {
             return;
         }
+        if (conversation is IMemory memory)
+        {
+            IList<ConversationSearchResult> results = await memory.SearchAsync(query, null, null, null, cancellationToken);
+            foreach(var result in results)
+            {
+                await KnowProWriter.WriteConversationSearchResultsAsync(conversation, result);
+            }
+        }
     }
 
 

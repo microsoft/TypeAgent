@@ -71,7 +71,7 @@ public static class ConversationSearch
         return new ConversationSearchResult(context.KnowledgeMatches, messageOrdinals, rawSearchQuery);
     }
 
-    public static async ValueTask<IList<ConversationSearchResult>> SearchWithLanguageAsync(
+    public static async ValueTask<IList<ConversationSearchResult>> SearchAsync(
         this IConversation conversation,
         string searchText,
         ISearchQueryTranslator queryTranslator,
