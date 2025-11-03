@@ -32,32 +32,17 @@
             trackNumber: $(n)
         }
    }
-@ <PlayTrackAction> = play | joue | cue up
+@ <PlayTrackAction> = play | joue | cue (up)?
+
 @ <NumberIndicator> = # | numero | number | no.
 @ <Item> = one | cut | <TrackTerm> 
 @ <TrackTerm> = track | song
 
-@ <Cardinal> = 
-  $(x:number) 
-|   one -> 1
-|   two -> 2
-|   three -> 3
-|   four -> 4
-
-
-@ <Ordinal> = 
-    first -> 1
-|   second -> 2
-|   third -> 3
-|   troisiemme -> 3
-|   fourth -> 4
-
 @ <TrackPhrase> = ((the)? <TrackTerm>)? $(trackName:<TrackName>)
                 | $(trackName:<TrackName>) <TrackTerm>
-@ <PlaySpecificTrack> = play $(trackName:<TrackPhrase>) -> { actionName: "playTrack", parameters: { trackName: $(trackName) } }
-                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)] } }
-                      | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), albumName: $(albumName) } }
-                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)], albumName: $(albumName) } }                      
+@ <PlaySpecificTrack> = <PlayTrackAction> $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)] } }
+                      | <PlayTrackAction> $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), albumName: $(albumName) } }
+                      | <PlayTrackAction> $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)], albumName: $(albumName) } }                      
 
 @ <SelectDevice> = select $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | select (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
@@ -65,13 +50,170 @@
                  | switch to (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | use $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | use (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
-                 | play on $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
-                 | play on (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
 
-// TODO: wire up entity names
 @ <TrackName> = $(x:string)
 @ <ArtistName> = $(x:string)  
 @ <AlbumName> = $(x:string)
 @ <DeviceName> = $(x:MusicDevice)
 
+// number libraries
 
+@ <Cardinal> = $(x:number) | <EnglishCardinal> | <FrenchCardinal> | <SpanishCardinal>
+
+@ <EnglishCardinal> =
+    one -> 1
+|   two -> 2
+|   three -> 3
+|   four -> 4
+|   five -> 5
+|   six -> 6
+|   seven -> 7
+|   eight -> 8
+|   nine -> 9
+|   ten -> 10
+|   eleven -> 11
+|   twelve -> 12
+|   thirteen -> 13
+|   fourteen -> 14
+|   fifteen -> 15
+|   sixteen -> 16
+|   seventeen -> 17
+|   eighteen -> 18
+|   nineteen -> 19
+|   twenty -> 20
+
+@ <FrenchCardinal> =
+    un -> 1
+|   une -> 1
+|   deux -> 2
+|   trois -> 3
+|   quatre -> 4
+|   cinq -> 5
+|   six -> 6
+|   sept -> 7
+|   huit -> 8
+|   neuf -> 9
+|   dix -> 10
+|   onze -> 11
+|   douze -> 12
+|   treize -> 13
+|   quatorze -> 14
+|   quinze -> 15
+|   seize -> 16
+|   dix\-sept -> 17
+|   dix\-huit -> 18
+|   dix\-neuf -> 19
+|   vingt -> 20
+
+@ <SpanishCardinal> =
+    uno -> 1
+|   una -> 1
+|   dos -> 2
+|   tres -> 3
+|   cuatro -> 4
+|   cinco -> 5
+|   seis -> 6
+|   siete -> 7
+|   ocho -> 8
+|   nueve -> 9
+|   diez -> 10
+|   once -> 11
+|   doce -> 12
+|   trece -> 13
+|   catorce -> 14
+|   quince -> 15
+|   dieciséis -> 16
+|   diecisiete -> 17
+|   dieciocho -> 18
+|   diecinueve -> 19
+|   veinte -> 20
+
+
+@ <Ordinal> = <EnglishOrdinal> | <FrenchOrdinal> | <SpanishOrdinal>
+
+@ <EnglishOrdinal> =
+    first -> 1
+|   second -> 2
+|   third -> 3
+|   fourth -> 4
+|   fifth -> 5
+|   sixth -> 6
+|   seventh -> 7
+|   eighth -> 8
+|   ninth -> 9
+|   tenth -> 10
+|   eleventh -> 11
+|   twelfth -> 12
+|   thirteenth -> 13
+|   fourteenth -> 14
+|   fifteenth -> 15
+|   sixteenth -> 16
+|   seventeenth -> 17
+|   eighteenth -> 18
+|   nineteenth -> 19
+|   twentieth -> 20
+
+@ <FrenchOrdinal> =
+    premier -> 1
+|   première -> 1
+|   deuxième -> 2
+|   troisième -> 3
+|   quatrième -> 4
+|   cinquième -> 5
+|   sixième -> 6
+|   septième -> 7
+|   huitième -> 8
+|   neuvième -> 9
+|   dixième -> 10
+|   onzième -> 11
+|   douzième -> 12
+|   treizième -> 13
+|   quatorzième -> 14
+|   quinzième -> 15
+|   seizième -> 16
+|   dix\-septième -> 17
+|   dix\-huitième -> 18
+|   dix\-neuvième -> 19
+|   vingtième -> 20
+
+@ <SpanishOrdinal> =
+    primero -> 1
+|   primera -> 1
+|   segundo -> 2
+|   segunda -> 2
+|   tercero -> 3
+|   tercera -> 3
+|   cuarto -> 4
+|   cuarta -> 4
+|   quinto -> 5
+|   quinta -> 5
+|   sexto -> 6
+|   sexta -> 6
+|   séptimo -> 7
+|   séptima -> 7
+|   octavo -> 8
+|   octava -> 8
+|   noveno -> 9
+|   novena -> 9
+|   décimo -> 10
+|   décima -> 10
+|   undécimo -> 11
+|   undécima -> 11
+|   duodécimo -> 12
+|   duodécima -> 12
+|   decimotercero -> 13
+|   decimotercera -> 13
+|   decimocuarto -> 14
+|   decimocuarta -> 14
+|   decimoquinto -> 15
+|   decimoquinta -> 15
+|   decimosexto -> 16
+|   decimosexta -> 16
+|   decimoséptimo -> 17
+|   decimoséptima -> 17
+|   decimoctavo -> 18
+|   decimoctava -> 18
+|   decimonoveno -> 19
+|   decimonovena -> 19
+|   vigésimo -> 20
+|   vigésima -> 20
