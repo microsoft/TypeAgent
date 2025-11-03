@@ -7,7 +7,7 @@ public interface IKnowledgeExtractor
 {
     KnowledgeExtractorSettings Settings { get; }
 
-    JsonTranslator<KnowledgeResponse> Translator { get; set; }
+    JsonTranslator<ExtractedKnowledge> Translator { get; set; }
 
-    ValueTask<TypeAgent.KnowPro.KnowledgeResponse?> ExtractAsync(string message, CancellationToken cancellationToken= default);
+    ValueTask<KnowledgeResponse?> ExtractAsync(string message, CancellationToken cancellationToken= default);
 }

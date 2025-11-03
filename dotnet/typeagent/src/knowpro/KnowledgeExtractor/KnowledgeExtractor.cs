@@ -7,7 +7,7 @@ namespace TypeAgent.KnowPro.KnowledgeExtractor;
 
 public class KnowledgeExtractor : IKnowledgeExtractor
 {
-    JsonTranslator<KnowledgeResponse> _translator;
+    JsonTranslator<ExtractedKnowledge> _translator;
 
     public KnowledgeExtractor(IChatModel chatModel)
     {
@@ -17,7 +17,7 @@ public class KnowledgeExtractor : IKnowledgeExtractor
 
     public KnowledgeExtractorSettings Settings { get; }
 
-    public JsonTranslator<KnowledgeResponse> Translator
+    public JsonTranslator<ExtractedKnowledge> Translator
     {
         get => _translator;
         set
@@ -27,22 +27,22 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         }
     }
 
-    public async ValueTask<TypeAgent.KnowPro.KnowledgeResponse?> ExtractAsync(
+    public async ValueTask<KnowledgeResponse?> ExtractAsync(
         string message,
         CancellationToken cancellationToken = default
     )
     {
-        KnowledgeResponse response = await _translator.TranslateAsync(
+        ExtractedKnowledge extractedKnowledge = await _translator.TranslateAsync(
             message,
             cancellationToken
         ).ConfigureAwait(false);
 
-        return null;
+        return extractedKnowledge.ToKnowledgeResponse();
     }
 
-    private static JsonTranslator<KnowledgeResponse> CreateTranslator(ILanguageModel model)
+    private static JsonTranslator<ExtractedKnowledge> CreateTranslator(ILanguageModel model)
     {
-        JsonTranslator<KnowledgeResponse> translator = new JsonTranslator<KnowledgeResponse>(
+        JsonTranslator<ExtractedKnowledge> translator = new JsonTranslator<ExtractedKnowledge>(
             model,
             SchemaLoader.LoadResource(
                 typeof(KnowledgeExtractor).Assembly,

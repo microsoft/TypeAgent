@@ -3,12 +3,9 @@
 
 namespace TypeAgent.KnowPro.KnowledgeExtractor;
 
-public class Action : TypeAgent.KnowPro.Action
+public partial class ActionEx
 {
-    [JsonPropertyName("inverseVerbs")]
-    public string[]? InverseVerbs { get; set; }
-
-    public TypeAgent.KnowPro.Action? ToInverseAction()
+    public Action? ToInverseAction()
     {
         if (InverseVerbs.IsNullOrEmpty())
         {
@@ -56,16 +53,28 @@ public class Action : TypeAgent.KnowPro.Action
     }
 }
 
-public class KnowledgeResponse
+public partial class ExtractedKnowledge
 {
-    [JsonPropertyName("entities")]
-    [JsonRequired]
-    public ConcreteEntity[] Entities { get; set; }
+    public KnowledgeResponse ToKnowledgeResponse()
+    {
+        KnowledgeResponse response = new()
+        {
+            Entities = Entities,
+            Topics = Topics,
+            Actions = Actions,
+        };
+        List<Action>? inverseActions = null;
+        foreach (var actionex in Actions)
+        {
+            Action action = actionex.ToInverseAction();
+            if (action is not null)
+            {
+                inverseActions ??= [];
+                inverseActions.Add(action);
+            }
+        }
+        response.InverseActions = inverseActions?.ToArray();
 
-    [JsonPropertyName("actions")]
-    [JsonRequired]
-    public Action[] Actions { get; set; }
-
-    [JsonPropertyName("topics")]
-    public string[] Topics { get; set; }
+        return response;
+    }
 }
