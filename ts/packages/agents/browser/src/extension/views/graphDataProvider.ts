@@ -78,11 +78,6 @@ interface GraphDataProvider {
 
     // Hierarchical partitioned loading methods
     getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
-    getViewportBasedNeighborhood(
-        centerEntity: string,
-        viewportNodeNames: string[],
-        maxNodes?: number,
-    ): Promise<any>;
     getImportanceStatistics(): Promise<any>;
 
     // Validation and health checks
@@ -385,53 +380,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         } catch (error) {
             console.error(
                 "[GraphDataProvider] Error fetching global importance layer:",
-                error,
-            );
-            throw error;
-        }
-    }
-
-    async getViewportBasedNeighborhood(
-        centerEntity: string,
-        viewportNodeNames: string[],
-        maxNodes: number = 5000,
-    ): Promise<any> {
-        try {
-            const result = await this.baseService.getViewportBasedNeighborhood(
-                centerEntity,
-                viewportNodeNames,
-                maxNodes,
-                {
-                    importanceWeighting: true,
-                    includeGlobalContext: true,
-                    exploreFromAllViewportNodes: true,
-                    minDepthFromViewport: 1,
-                },
-            );
-
-            if (!result) {
-                console.warn(
-                    "[GraphDataProvider] Received null result from getViewportBasedNeighborhood service",
-                );
-                throw new Error("Service returned null result");
-            }
-
-            return {
-                entities: this.transformEntitiesToUIFormat(
-                    result.entities || [],
-                ),
-                relationships: this.transformRelationshipsToUIFormat(
-                    result.relationships || [],
-                ),
-                metadata: {
-                    ...result.metadata,
-                    source: "viewport_based_neighborhood",
-                    viewportAnchorCount: viewportNodeNames.length,
-                },
-            };
-        } catch (error) {
-            console.error(
-                "[GraphDataProvider] Error fetching viewport-based neighborhood:",
                 error,
             );
             throw error;

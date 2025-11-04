@@ -553,36 +553,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getViewportBasedNeighborhood(
-        centerEntity: string,
-        viewportNodeNames: string[],
-        maxNodes: number = 5000,
-        options: {
-            importanceWeighting?: boolean;
-            includeGlobalContext?: boolean;
-            exploreFromAllViewportNodes?: boolean;
-            minDepthFromViewport?: number;
-        } = {},
-    ): Promise<any> {
-        const {
-            importanceWeighting = true,
-            includeGlobalContext = true,
-            exploreFromAllViewportNodes = true,
-            minDepthFromViewport = 1,
-        } = options;
-
-        return this.sendMessage({
-            type: "getViewportBasedNeighborhood",
-            centerEntity,
-            viewportNodeNames,
-            maxNodes,
-            importanceWeighting,
-            includeGlobalContext,
-            exploreFromAllViewportNodes,
-            minDepthFromViewport,
-        });
-    }
-
     async getImportanceStatistics(): Promise<any> {
         return this.sendMessage({
             type: "getImportanceStatistics",
@@ -597,19 +567,6 @@ export abstract class ExtensionServiceBase {
             type: "getTopicImportanceLayer",
             maxNodes,
             minImportanceThreshold,
-        });
-    }
-
-    async getTopicViewportNeighborhood(
-        centerTopic: string,
-        viewportTopicIds: string[],
-        maxNodes: number,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "getTopicViewportNeighborhood",
-            centerTopic,
-            viewportTopicIds,
-            maxNodes,
         });
     }
 
