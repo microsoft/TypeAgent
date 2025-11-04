@@ -4,7 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
 import { searchByEntities } from "../../searchWebMemories.mjs";
-import { GraphCache, TopicGraphCache } from "../types/knowledgeTypes.mjs";
+import { TopicGraphCache } from "../types/knowledgeTypes.mjs";
 import { getPerformanceTracker } from "../utils/performanceInstrumentation.mjs";
 import {
     buildGraphologyGraph,
@@ -96,15 +96,6 @@ const debug = registerDebug("typeagent:browser:knowledge:graph");
 // ============================================================================
 // Cache Management Functions (moved up to avoid "Cannot find name" errors)
 // ============================================================================
-
-// Entity graph cache storage attached to websiteCollection
-function getGraphCache(websiteCollection: any): GraphCache | null {
-    return (websiteCollection as any).__graphCache || null;
-}
-
-function setGraphCache(websiteCollection: any, cache: GraphCache): void {
-    (websiteCollection as any).__graphCache = cache;
-}
 
 // Topic graph cache storage attached to websiteCollection
 function setTopicGraphCache(
@@ -253,170 +244,6 @@ function calculateEntityMetrics(
     return results;
 }
 
-// Ensure graph data is cached for fast access
-async function ensureGraphCache(websiteCollection: any): Promise<void> {
-    const cache = getGraphCache(websiteCollection);
-
-    // Check if cache is valid (no TTL - only invalidated on rebuild)
-    if (cache && cache.isValid) {
-        debug("[Knowledge Graph] Using valid cached graph data");
-        return;
-    }
-
-    debug("[Knowledge Graph] Building in-memory cache for graph data");
-
-    const tracker = getPerformanceTracker();
-    tracker.startOperation("ensureGraphCache");
-
-    try {
-        // Fetch raw data with instrumentation and batch optimization
-        tracker.startOperation("ensureGraphCache.getTopEntities");
-        const rawEntities =
-            (websiteCollection.knowledgeEntities as any)?.getTopEntities(
-                5000,
-            ) || [];
-        // Validate and clean entity data
-        const entities = rawEntities;
-
-        tracker.endOperation(
-            "ensureGraphCache.getTopEntities",
-            entities.length,
-            entities.length,
-        );
-
-        tracker.startOperation("ensureGraphCache.getAllRelationships");
-        const rawRelationships =
-            websiteCollection.relationships?.getAllRelationships() || [];
-
-        // Validate and clean relationship data
-        const relationships = rawRelationships;
-
-        tracker.endOperation(
-            "ensureGraphCache.getAllRelationships",
-            relationships.length,
-            relationships.length,
-        );
-
-        tracker.startOperation("ensureGraphCache.getAllCommunities");
-        const communities =
-            websiteCollection.communities?.getAllCommunities() || [];
-        tracker.endOperation(
-            "ensureGraphCache.getAllCommunities",
-            communities.length,
-            communities.length,
-        );
-
-        // Calculate metrics with instrumentation
-        tracker.startOperation("ensureGraphCache.calculateEntityMetrics");
-        const entityMetrics = calculateEntityMetrics(
-            entities,
-            relationships,
-            communities,
-        );
-        tracker.endOperation(
-            "ensureGraphCache.calculateEntityMetrics",
-            entities.length,
-            entityMetrics.length,
-        );
-
-        // Build graphology layout with overlap prevention
-        tracker.startOperation("ensureGraphCache.buildGraphologyLayout");
-        let presetLayout:
-            | {
-                  elements: any[];
-                  layoutDuration?: number;
-                  communityCount?: number;
-              }
-            | undefined;
-
-        try {
-            const layoutStart = Date.now();
-
-            // Convert entities to graph nodes
-            const graphNodes: GraphNode[] = entityMetrics.map(
-                (entity: any) => ({
-                    id: entity.name,
-                    name: entity.name,
-                    label: entity.name,
-                    community: entity.community || 0,
-                    importance: entity.importance || 0,
-                }),
-            );
-
-            // Convert relationships to graph edges
-            const graphEdges: GraphEdge[] = relationships.map((rel: any) => ({
-                from: rel.fromEntity,
-                to: rel.toEntity,
-                weight: rel.count || 1,
-            }));
-
-            debug(
-                `[Graphology] Building layout for ${graphNodes.length} nodes, ${graphEdges.length} edges`,
-            );
-
-            // Build graphology graph with ForceAtlas2 + noverlap
-            const graph = buildGraphologyGraph(graphNodes, graphEdges);
-            const cytoscapeElements = convertToCytoscapeElements(graph);
-
-            const layoutDuration = Date.now() - layoutStart;
-            const communityCount = new Set(
-                graphNodes.map((n: any) => n.community),
-            ).size;
-
-            presetLayout = {
-                elements: cytoscapeElements,
-                layoutDuration,
-                communityCount,
-            };
-
-            debug(
-                `[Graphology] Layout computed in ${layoutDuration}ms with ${communityCount} communities`,
-            );
-        } catch (error) {
-            console.error("[Graphology] Failed to build layout:", error);
-            // Continue without preset layout - visualizer will fall back to client-side layout
-        }
-
-        tracker.endOperation(
-            "ensureGraphCache.buildGraphologyLayout",
-            entityMetrics.length,
-            presetLayout?.elements?.length || 0,
-        );
-
-        // Store in cache
-        const newCache: GraphCache = {
-            entities: entities,
-            relationships: relationships,
-            communities: communities,
-            entityMetrics: entityMetrics,
-            presetLayout: presetLayout,
-            lastUpdated: Date.now(),
-            isValid: true,
-        };
-
-        setGraphCache(websiteCollection, newCache);
-
-        debug(
-            `[Knowledge Graph] Cached ${entities.length} entities, ${relationships.length} relationships, ${communities.length} communities`,
-        );
-
-        tracker.endOperation(
-            "ensureGraphCache",
-            entities.length + relationships.length + communities.length,
-            entityMetrics.length,
-        );
-        tracker.printReport("ensureGraphCache");
-    } catch (error) {
-        console.error("[Knowledge Graph] Failed to build cache:", error);
-        tracker.endOperation("ensureGraphCache", 0, 0);
-
-        // Mark cache as invalid but keep existing data if available
-        const existingCache = getGraphCache(websiteCollection);
-        if (existingCache) {
-            existingCache.isValid = false;
-        }
-    }
-}
 
 // ============================================================================
 // Storage Abstraction Layer
@@ -1430,10 +1257,11 @@ export async function getGlobalImportanceLayer(
     metadata: any;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
+        // Use JSON storage instead of SQLite cache
+        const { entityQueries } = await getGraphQueries(context);
 
-        if (!websiteCollection) {
-            console.log(`[ServerPerf] No website collection available`);
+        if (!entityQueries) {
+            console.log(`[ServerPerf] No JSON graph data available`);
             return {
                 entities: [],
                 relationships: [],
@@ -1443,57 +1271,35 @@ export async function getGlobalImportanceLayer(
                     coveragePercentage: 0,
                     importanceThreshold: 0,
                     layer: "global_importance",
+                    error: "No graph data available",
                 },
             };
         }
 
-        // Ensure cache is populated
-        await ensureGraphCache(websiteCollection);
-
-        // Get cached data
-        const cache = getGraphCache(websiteCollection);
-
-        if (!cache || !cache.isValid) {
-            console.log(
-                `[ServerPerf] Cache validation failed: ${JSON.stringify({
-                    hasCache: !!cache,
-                    isValid: cache?.isValid,
-                })}`,
-            );
-            return {
-                entities: [],
-                relationships: [],
-                metadata: {
-                    error: "Graph cache not available",
-                    layer: "global_importance",
-                },
-            };
-        }
-
-        // Get all entities and calculate metrics
-        const allEntities = cache.entityMetrics || [];
-        const allRelationships = cache.relationships || [];
-        const communities = cache.communities || [];
-
-        if (allEntities.length === 0) {
-            return {
-                entities: [],
-                relationships: [],
-                metadata: {
-                    totalEntitiesInSystem: 0,
-                    selectedEntityCount: 0,
-                    coveragePercentage: 0,
-                    importanceThreshold: 0,
-                    layer: "global_importance",
-                },
-            };
-        }
+        // Get all entities and relationships from JSON storage
+        const topEntities = entityQueries.getTopEntities(5000);
+        const allRelationships = entityQueries.getAllRelationships();
+        const allCommunities = entityQueries.getAllCommunities();
 
         const entitiesWithMetrics = calculateEntityMetrics(
-            allEntities,
+            topEntities,
             allRelationships,
-            communities,
+            allCommunities,
         );
+
+        if (entitiesWithMetrics.length === 0) {
+            return {
+                entities: [],
+                relationships: [],
+                metadata: {
+                    totalEntitiesInSystem: 0,
+                    selectedEntityCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
+                    layer: "global_importance",
+                },
+            };
+        }
 
         // Sort by importance and select top nodes
         const maxNodes = parameters.maxNodes || 500;
@@ -1522,10 +1328,10 @@ export async function getGlobalImportanceLayer(
         );
 
         const metadata = {
-            totalEntitiesInSystem: allEntities.length,
+            totalEntitiesInSystem: topEntities.length,
             selectedEntityCount: selectedEntities.length,
             coveragePercentage:
-                (selectedEntities.length / allEntities.length) * 100,
+                (selectedEntities.length / topEntities.length) * 100,
             importanceThreshold:
                 selectedEntities[selectedEntities.length - 1]?.importance || 0,
             connectedComponents: analyzeConnectivity(
@@ -1932,27 +1738,20 @@ export async function getImportanceStatistics(
     levelPreview: Array<{ level: number; nodeCount: number; coverage: number }>;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
+        // Use JSON storage instead of SQLite cache
+        const { entityQueries } = await getGraphQueries(context);
 
-        if (!websiteCollection) {
+        if (!entityQueries) {
             return { distribution: [], recommendedLevel: 1, levelPreview: [] };
         }
 
-        // Ensure cache is populated
-        await ensureGraphCache(websiteCollection);
-
-        // Get cached data
-        const cache = getGraphCache(websiteCollection);
-        if (!cache || !cache.isValid) {
-            return { distribution: [], recommendedLevel: 1, levelPreview: [] };
-        }
-
-        const entities = cache.entityMetrics || [];
-        const relationships = cache.relationships || [];
-        const communities = cache.communities || [];
+        // Get data from JSON storage
+        const topEntities = entityQueries.getTopEntities(5000);
+        const relationships = entityQueries.getAllRelationships();
+        const communities = entityQueries.getAllCommunities();
 
         const entitiesWithMetrics = calculateEntityMetrics(
-            entities,
+            topEntities,
             relationships,
             communities,
         );
@@ -1974,7 +1773,7 @@ export async function getImportanceStatistics(
         }));
 
         // Recommend level based on graph size
-        const totalNodes = entities.length;
+        const totalNodes = topEntities.length;
         const recommendedLevel =
             totalNodes > 25000
                 ? 1
@@ -2430,17 +2229,29 @@ export async function getEntityDetails(
             };
         }
 
-        await ensureGraphCache(websiteCollection);
-        const cache = getGraphCache(websiteCollection);
+        // Use JSON storage instead of SQLite cache
+        const { entityQueries } = await getGraphQueries(context);
 
-        if (!cache || !cache.isValid || !cache.entityMetrics) {
+        if (!entityQueries) {
             return {
                 success: false,
-                error: "Entity cache not available",
+                error: "Entity queries not available",
             };
         }
 
-        const entity = cache.entityMetrics.find(
+        // Get data from JSON storage
+        const topEntities = entityQueries.getTopEntities(5000); // Get entities with counts
+        const relationships = entityQueries.getAllRelationships();
+        const communities = entityQueries.getAllCommunities();
+
+        // Calculate entity metrics to get degree, importance, etc.
+        const entitiesWithMetrics = calculateEntityMetrics(
+            topEntities,
+            relationships,
+            communities,
+        );
+        
+        const entity = entitiesWithMetrics.find(
             (e: any) => e.name === parameters.entityName,
         );
 
