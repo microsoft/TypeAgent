@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.KnowledgeExtractor;
+
 namespace TypeAgent.KnowPro;
 
 public readonly struct CollectionRangeToIndex
@@ -208,7 +210,20 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
     )
     {
+        var settings = conversation.Settings.SemanticRefIndexSettings;
+        int concurrency = settings.Concurrency > 0 ? settings.Concurrency : 2;
+        int batchSize = settings.BatchSize > 0 ? settings.BatchSize : 4;
 
+        foreach (var (locations, chunks) in GetMessageChunkBatch(messageRange, messages, batchSize))
+        {
+            await settings.KnowledgeExtractor.ExtractWithRetryAsync(
+                chunks,
+                concurrency,
+                null,
+                null,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
     }
 
     internal static async ValueTask<CollectionRangeToIndex> GetMessageRangeToIndexAsync(
@@ -247,5 +262,35 @@ public static class ConversationIndexer
             maxOrdinal is not null ? maxOrdinal.Value + 1 : 0,
             count
         );
+    }
+
+    internal static IEnumerable<(List<TextLocation>, List<string>)> GetMessageChunkBatch(
+        CollectionRangeToIndex messageRange,
+        IList<IMessage> messages,
+        int batchSize
+    )
+    {
+        List<TextLocation> locations = [];
+        List<string> chunks = [];
+        int messageCount = messages.Count;
+        for (int messageOrdinal = 0; messageOrdinal < messageCount; ++messageOrdinal)
+        {
+            IMessage message = messages[messageOrdinal];
+            int chunkCount = message.TextChunks.Count;
+            for (int chunkOrdinal = 0; chunkOrdinal < chunkCount; ++chunkOrdinal)
+            {
+                locations.Add(new TextLocation(messageOrdinal + messageRange.OrdinalStartAt, chunkOrdinal));
+                chunks.Add(message.TextChunks[chunkOrdinal]);
+                if (locations.Count == batchSize)
+                {
+                    yield return (locations, chunks);
+                    locations = [];
+                }
+            }
+        }
+        if (locations.Count > 0)
+        {
+            yield return (locations, chunks);
+        }
     }
 }

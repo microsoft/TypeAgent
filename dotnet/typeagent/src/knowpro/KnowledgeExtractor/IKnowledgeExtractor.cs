@@ -14,10 +14,10 @@ public interface IKnowledgeExtractor
 
 public static class KnowledgeExtractorExtensions
 {
-    public static Task<KnowledgeResponse> ExtractAsync(
+    public static Task<KnowledgeResponse> ExtractWithRetryAsync(
         this IKnowledgeExtractor extractor,
         string message,
-        RetrySettings retry,
+        RetrySettings? retry = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -29,18 +29,18 @@ public static class KnowledgeExtractorExtensions
         );
     }
 
-    public static Task<List<KnowledgeResponse>> ExtractAsync(
+    public static Task<List<KnowledgeResponse>> ExtractWithRetryAsync(
         this IKnowledgeExtractor extractor,
         IList<string> messages,
-        int concurrency,
-        RetrySettings retry,
+        int concurrency = 2,
+        RetrySettings? retry = null,
         Action<BatchProgress>? progress = null,
         CancellationToken cancellationToken = default
     )
     {
         return messages.MapAsync(
             concurrency,
-            extractor.ExtractAsync,
+            (message, ct) => extractor.ExtractWithRetryAsync(message, retry, ct),
             progress,
             cancellationToken
         );
