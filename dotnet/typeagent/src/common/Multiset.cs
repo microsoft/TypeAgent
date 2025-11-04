@@ -73,6 +73,23 @@ public class Multiset<TKey, TValue> : Dictionary<TKey, List<TValue>>, IEnumerabl
         }
     }
 
+    public void AddUnique(TKey key, TValue value)
+    {
+        List<TValue>? values = Get(key);
+        if (values is null)
+        {
+            Add(key, value);
+        }
+        else
+        {
+            int pos = values.IndexOf(value);
+            if (pos < 0)
+            {
+                Add(key, value);
+            }
+        }
+    }
+
     public void Remove(TKey key, TValue value)
     {
         if (TryGetValue(key, out var valueList))

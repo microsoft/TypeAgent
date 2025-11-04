@@ -154,7 +154,12 @@ public class MemoryCommands : ICommandModule
             namedArgs.Get<int>("budget"),
             cancellationToken
         );
-        await KnowProWriter.WriteConversationSearchResultsAsync(conversation, matches, true);
+        await KnowProWriter.WriteConversationSearchResultsAsync(
+            conversation,
+            matches,
+            true,
+            true
+        );
     }
 
     private IConversation EnsureConversation()

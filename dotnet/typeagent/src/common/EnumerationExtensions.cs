@@ -78,4 +78,13 @@ public static class EnumerationExtensions
             yield return batch;
         }
     }
+
+    public static List<Scored<T>> GetTopK<T>(this IEnumerable<Scored<T>> items, int topk)
+    {
+        ArgumentVerify.ThrowIfNull(items, nameof(items));
+
+        var topNList = new TopNCollection<T>(topk);
+        topNList.Add(items);
+        return topNList.ByRankAndClear();
+    }
 }
