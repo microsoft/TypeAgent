@@ -193,9 +193,11 @@ public class KnowProWriter : ConsoleWriter
             ListType.Ol)
         );
         WriteLine($"{result.SemanticRefMatches.Count} matches");
+
         await WriteScoredSemanticRefsAsync(
             result.SemanticRefMatches,
             conversation.SemanticRefs,
+            kType,
             maxToDisplay is not null ? maxToDisplay.Value : result.SemanticRefMatches.Count,
             isAsc
         );
@@ -230,6 +232,7 @@ public class KnowProWriter : ConsoleWriter
     public static async Task WriteScoredSemanticRefsAsync(
         IList<ScoredSemanticRefOrdinal> semanticRefMatches,
         ISemanticRefCollection semanticRefCollection,
+        KnowledgeType kType,
         int maxToDisplay,
         bool isAsc = true
     )
@@ -242,17 +245,35 @@ public class KnowProWriter : ConsoleWriter
         var matchesToDisplay = semanticRefMatches.Slice(0, maxToDisplay);
         WriteLine($"Displaying {matchesToDisplay.Count} matches of total {semanticRefMatches.Count}");
 
-        IList<SemanticRef> semanticRefs = await semanticRefCollection.GetAsync(matchesToDisplay);
-        for (int i = 0; i < matchesToDisplay.Count; ++i)
+        if (kType == KnowledgeType.Entity)
         {
-            var pos = isAsc ? matchesToDisplay.Count - (i + 1) : i;
-            WriteScoredRef(
-                pos,
-                matchesToDisplay.Count,
-                matchesToDisplay[pos],
-                semanticRefs[pos]
-            );
+            IList<Scored<ConcreteEntity>> entities = await semanticRefCollection.GetDistinctEntitiesAsync(matchesToDisplay);
+            for (int i = 0; i < entities.Count; ++i)
+            {
+                var pos = isAsc ? matchesToDisplay.Count - (i + 1) : i;
+                WriteLine(
+                    ConsoleColor.Green,
+                    $"{pos + 1} / {matchesToDisplay.Count}: [{entities[i].Score}]"
+                );
+                WriteEntity(entities[i]);
+                WriteLine();
+            }
         }
+        else
+        {
+            IList<SemanticRef> semanticRefs = await semanticRefCollection.GetAsync(matchesToDisplay);
+            for (int i = 0; i < matchesToDisplay.Count; ++i)
+            {
+                var pos = isAsc ? matchesToDisplay.Count - (i + 1) : i;
+                WriteScoredRef(
+                    pos,
+                    matchesToDisplay.Count,
+                    matchesToDisplay[pos],
+                    semanticRefs[pos]
+                );
+            }
+        }
+
     }
 
     public static void WriteScoredRef(

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-namespace TypeAgent.KnowPro.KnowledgeExtractor;
+namespace TypeAgent.KnowPro;
 
 public static class KnowledgeMergeExtensions
 {
@@ -32,6 +32,20 @@ internal class MergedEntity : MergedKnowledge
 
     public MergedFacets? Facets { get; set; } = null;
 
+    public ConcreteEntity ToConcrete()
+    {
+        var entity = new ConcreteEntity
+        {
+            Name = Name,
+            Type = [.. Type],
+        };
+        if (!Facets.IsNullOrEmpty())
+        {
+            entity.Facets = [.. Facets.ToFacets()];
+        }
+        return entity;
+    }
+
     public static bool Union(MergedEntity to, MergedEntity other)
     {
         if (to.Name != other.Name)
@@ -53,11 +67,16 @@ internal class MergedEntity : MergedKnowledge
 
         foreach (var scoredEntity in scoredEntities)
         {
+            if (scoredEntity.Item.KnowledgeType != KnowledgeType.Entity)
+            {
+                continue;
+            }
+
             MergedEntity mergedEntity = scoredEntity.Item.AsEntity().ToMerged();
             Scored<MergedEntity>? target = null;
             if (mergedEntities.TryGetValue(mergedEntity.Name, out var existing))
             {
-                if (MergedEntity.Union(existing.Item, mergedEntity))
+                if (Union(existing.Item, mergedEntity))
                 {
                     if (existing.Score < scoredEntity.Score)
                     {
@@ -72,7 +91,9 @@ internal class MergedEntity : MergedKnowledge
             }
             else
             {
-                target = new Scored<MergedEntity>(mergedEntity, scoredEntity.Score);
+                var newMerged = new Scored<MergedEntity>(mergedEntity, scoredEntity.Score);
+                mergedEntities.Add(mergedEntity.Name, newMerged);
+                target = newMerged;
             }
             if (target is not null && mergeOrdinals)
             {
@@ -125,6 +146,20 @@ internal class MergedFacets : Multiset<string, string>
             }
         }
         return to;
-}
+    }
 
+    public IEnumerable<Facet> ToFacets()
+    {
+        foreach (KeyValuePair<string, List<string>> kv in this)
+        {
+            if (!kv.Value.IsNullOrEmpty())
+            {
+                yield return new Facet
+                {
+                    Name = kv.Key,
+                    Value = new StringFacetValue(string.Join("; ", kv.Value))
+                };
+            }
+        }
+    }
 }

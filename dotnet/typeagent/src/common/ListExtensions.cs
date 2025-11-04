@@ -140,13 +140,6 @@ public static class ListExtensions
         return lo;
     }
 
-    public static List<Scored<T>> GetTopK<T>(this IEnumerable<Scored<T>> list, int topK)
-    {
-        var topNList = new TopNCollection<T>(topK);
-        topNList.Add(list);
-        return topNList.ByRankAndClear();
-    }
-
     public static void Fill<T>(this IList<T> list, T value, int count)
     {
         for (int i = 0; i < count; ++i)
