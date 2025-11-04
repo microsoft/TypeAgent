@@ -4,6 +4,8 @@
 import { createRequire } from "module";
 import registerDebug from "debug";
 import type { HierarchicalTopicRecord, TopicRelationship } from "../tables.js";
+import type { TopicGraphJson } from "../storage/graphJsonStorage.js";
+import type { GraphJsonStorageManager } from "../storage/graphJsonStorage.js";
 
 const require = createRequire(import.meta.url);
 const Graph = require("graphology");
@@ -400,5 +402,161 @@ export class TopicGraphBuilder {
             flatGraph: this.flatGraph,
             hierarchicalGraph: this.hierarchicalGraph,
         };
+    }
+
+    /**
+     * Export topic graph data to JSON format for persistence
+     */
+    public exportToTopicGraphJson(): TopicGraphJson {
+        debug("Exporting topic graph to JSON format");
+
+        const now = new Date().toISOString();
+        const nodes: TopicGraphJson['nodes'] = [];
+        const edges: TopicGraphJson['edges'] = [];
+        const topicEntityRelations: TopicGraphJson['topicEntityRelations'] = [];
+        const metrics: TopicGraphJson['metrics'] = {};
+
+        // Export nodes from hierarchical graph
+        for (const nodeId of this.hierarchicalGraph.nodes()) {
+            const attrs = this.hierarchicalGraph.getNodeAttributes(nodeId);
+            
+            nodes.push({
+                id: nodeId,
+                name: attrs.topicName || nodeId,
+                level: attrs.level || 0,
+                parentId: attrs.parentTopicId,
+                confidence: attrs.confidence || 0.5,
+                metadata: {
+                    keywords: [], // Will be populated from source data if available
+                    sourceTopicNames: attrs.sourceTopicNames || [],
+                    domains: [], // Will be derived from URLs
+                    urls: [], // Will be aggregated from cooccurrence URLs
+                    extractionDate: now
+                }
+            });
+        }
+
+        // Export edges from hierarchical graph (cooccurrence relationships)
+        for (const edge of this.hierarchicalGraph.edges()) {
+            const attrs = this.hierarchicalGraph.getEdgeAttributes(edge);
+            if (attrs.type === "cooccurrence") {
+                const source = this.hierarchicalGraph.source(edge);
+                const target = this.hierarchicalGraph.target(edge);
+
+                edges.push({
+                    source,
+                    target,
+                    type: attrs.type,
+                    strength: attrs.strength || 0,
+                    metadata: {
+                        cooccurrenceCount: attrs.count || 0,
+                        sourceUrls: attrs.urls || [],
+                        updated: now
+                    }
+                });
+            }
+        }
+
+        // Include pending entity relations if available
+        const pendingEntityRelations = (this as any)._pendingEntityRelations || [];
+        topicEntityRelations.push(...pendingEntityRelations);
+
+        const entityCountByTopic = (this as any)._entityCountByTopic || new Map<string, number>();
+
+        // Calculate basic metrics for each topic
+        for (const node of nodes) {
+            const nodeRelationships = edges.filter(e => e.source === node.id || e.target === node.id);
+            const uniqueUrls = new Set<string>();
+            const uniqueDomains = new Set<string>();
+
+            // Aggregate URLs and domains from relationships
+            for (const rel of nodeRelationships) {
+                for (const url of rel.metadata.sourceUrls) {
+                    uniqueUrls.add(url);
+                    try {
+                        const domain = new URL(url).hostname;
+                        uniqueDomains.add(domain);
+                    } catch {
+                        // Skip invalid URLs
+                    }
+                }
+            }
+
+            // Update node metadata with aggregated data
+            const nodeData = nodes.find(n => n.id === node.id);
+            if (nodeData) {
+                nodeData.metadata.urls = Array.from(uniqueUrls);
+                nodeData.metadata.domains = Array.from(uniqueDomains);
+            }
+
+            // Calculate metrics
+            metrics[node.id] = {
+                topicId: node.id,
+                topicName: node.name,
+                documentCount: uniqueUrls.size,
+                domainCount: uniqueDomains.size,
+                degreeCentrality: nodeRelationships.length,
+                betweennessCentrality: 0, // Would need full graph analysis
+                activityPeriod: 0, // Would need temporal data
+                avgConfidence: node.confidence,
+                maxConfidence: node.confidence,
+                totalRelationships: nodeRelationships.length,
+                strongRelationships: nodeRelationships.filter(r => r.strength > 0.7).length,
+                entityCount: entityCountByTopic.get(node.id) || 0,
+                updated: now
+            };
+        }
+
+        debug(`Exported topic graph: ${nodes.length} nodes, ${edges.length} edges, ${Object.keys(metrics).length} metrics`);
+
+        return {
+            nodes,
+            edges,
+            topicEntityRelations, // Empty for now, will be populated by WebsiteCollection
+            metrics,
+            metadata: {
+                version: "1.0.0",
+                lastUpdated: now,
+                nodeCount: nodes.length,
+                edgeCount: edges.length,
+                relationshipCount: topicEntityRelations.length
+            }
+        };
+    }
+
+    /**
+     * Save topic graph to JSON storage
+     */
+    public async saveToJsonStorage(storage: GraphJsonStorageManager): Promise<void> {
+        debug("Saving topic graph to JSON storage");
+        
+        const jsonData = this.exportToTopicGraphJson();
+        await storage.saveTopicGraph(jsonData);
+        
+        debug("Topic graph saved successfully");
+    }
+
+    /**
+     * Update topic graph with entity relations and enhanced metrics
+     */
+    public updateTopicGraphWithEntityRelations(
+        entityRelations: TopicGraphJson['topicEntityRelations']
+    ): void {
+        debug(`Updating topic graph with ${entityRelations.length} entity relations`);
+        
+        // This method allows WebsiteCollection to add entity relation data
+        // after the basic graph structure is built
+        
+        // Update metrics with entity counts
+        const entityCountByTopic = new Map<string, number>();
+        for (const relation of entityRelations) {
+            const count = entityCountByTopic.get(relation.topicId) || 0;
+            entityCountByTopic.set(relation.topicId, count + 1);
+        }
+        
+        // This data will be included in the next export
+        // Store for use in exportToTopicGraphJson
+        (this as any)._pendingEntityRelations = entityRelations;
+        (this as any)._entityCountByTopic = entityCountByTopic;
     }
 }

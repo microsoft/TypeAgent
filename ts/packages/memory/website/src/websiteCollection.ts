@@ -39,6 +39,8 @@ import {
 } from "./tables.js";
 import { Website, WebsiteMeta } from "./websiteMeta.js";
 import { WebsiteDocPart } from "./websiteDocPart.js";
+import { TopicGraphBuilder, CooccurrenceData } from "./graph/topicGraphBuilder.js";
+import type { GraphJsonStorageManager } from "./storage/graphJsonStorage.js";
 import path from "node:path";
 import fs from "node:fs";
 import registerDebug from "debug";
@@ -130,6 +132,7 @@ export class WebsiteCollection
     private db: sqlite.Database | undefined = undefined;
     private dbPath: string = "";
     private graphStateManager: any = null;
+    private graphJsonStorage?: { manager: GraphJsonStorageManager };
 
     constructor(
         nameTag: string = "",
@@ -347,6 +350,14 @@ export class WebsiteCollection
      */
     public getWebsiteDocParts(): WebsiteDocPart[] {
         return this.messages.getAll() as WebsiteDocPart[];
+    }
+
+    /**
+     * Set the JSON graph storage manager for topic persistence
+     */
+    public setGraphJsonStorage(storage: { manager: GraphJsonStorageManager }): void {
+        this.graphJsonStorage = storage;
+        debug("[WebsiteCollection] JSON graph storage configured");
     }
 
     public addMetadataToIndex() {
@@ -2146,6 +2157,109 @@ export class WebsiteCollection
     /**
      * Update hierarchical topics when new websites are added
      */
+    /**
+     * Convert topic hierarchy to HierarchicalTopicRecord format for TopicGraphBuilder
+     */
+    private convertTopicHierarchyToRecords(
+        globalHierarchy: any,
+        websiteUrlMap: Map<string, { url: string; domain: string }>
+    ): HierarchicalTopicRecord[] {
+        const records: HierarchicalTopicRecord[] = [];
+        
+        const processTopicRecursive = (topic: any) => {
+            const urlInfo = websiteUrlMap.get(topic.id) || { url: "unknown", domain: "unknown" };
+            
+            const record: HierarchicalTopicRecord = {
+                url: urlInfo.url,
+                domain: urlInfo.domain,
+                topicId: topic.id,
+                topicName: topic.name,
+                level: topic.level,
+                parentTopicId: topic.parentId,
+                confidence: topic.confidence || 0.5,
+                keywords: JSON.stringify(topic.keywords || []),
+                sourceTopicNames: JSON.stringify(topic.sourceTopicNames || []),
+                extractionDate: new Date().toISOString()
+            };
+            
+            records.push(record);
+            
+            // Process children
+            if (topic.childIds) {
+                for (const childId of topic.childIds) {
+                    const childTopic = globalHierarchy.topicMap.get(childId);
+                    if (childTopic) {
+                        processTopicRecursive(childTopic);
+                    }
+                }
+            }
+        };
+
+        // Process all root topics
+        for (const rootTopic of globalHierarchy.rootTopics) {
+            processTopicRecursive(rootTopic);
+        }
+
+        debug(`[WebsiteCollection] Converted ${records.length} topics to HierarchicalTopicRecord format`);
+        return records;
+    }
+
+    /**
+     * Build cooccurrence data from flat topic relationships
+     */
+    private buildCooccurrenceData(
+        topicMap: Map<string, any>,
+        websiteUrlMap: Map<string, { url: string; domain: string }>
+    ): CooccurrenceData[] {
+        const cooccurrences: CooccurrenceData[] = [];
+        const urlTopicMap = new Map<string, string[]>();
+
+        // Group topics by URL
+        for (const [topicId, topic] of topicMap) {
+            const urlInfo = websiteUrlMap.get(topicId);
+            if (urlInfo) {
+                const url = urlInfo.url;
+                if (!urlTopicMap.has(url)) {
+                    urlTopicMap.set(url, []);
+                }
+                urlTopicMap.get(url)!.push(topic.name);
+            }
+        }
+
+        // Generate cooccurrences for topics that appear on the same URL
+        for (const [url, topicNames] of urlTopicMap) {
+            for (let i = 0; i < topicNames.length; i++) {
+                for (let j = i + 1; j < topicNames.length; j++) {
+                    const fromTopic = topicNames[i];
+                    const toTopic = topicNames[j];
+                    
+                    // Find existing cooccurrence or create new one
+                    let cooccurrence = cooccurrences.find(
+                        c => (c.fromTopic === fromTopic && c.toTopic === toTopic) ||
+                             (c.fromTopic === toTopic && c.toTopic === fromTopic)
+                    );
+                    
+                    if (cooccurrence) {
+                        cooccurrence.count++;
+                        if (!cooccurrence.urls.includes(url)) {
+                            cooccurrence.urls.push(url);
+                        }
+                    } else {
+                        cooccurrences.push({
+                            fromTopic,
+                            toTopic,
+                            count: 1,
+                            urls: [url]
+                        });
+                    }
+                }
+            }
+        }
+
+        debug(`[WebsiteCollection] Built ${cooccurrences.length} cooccurrence relationships`);
+        return cooccurrences;
+    }
+
     public async updateHierarchicalTopics(
         newWebsites: Website[],
     ): Promise<void> {
@@ -2159,6 +2273,7 @@ export class WebsiteCollection
             { url: string; domain: string }
         >();
 
+        // Extract and merge topic hierarchies from websites (existing logic)
         for (const website of newWebsites) {
             const docHierarchy = (website.knowledge as any)?.topicHierarchy as
                 | any
@@ -2210,22 +2325,45 @@ export class WebsiteCollection
         }
 
         if (!globalHierarchy) {
+            debug("[Knowledge Graph] No topic hierarchies found in websites");
             return;
         }
 
         try {
-            for (const rootTopic of globalHierarchy.rootTopics) {
-                await this.storeTopicHierarchyRecursive(
-                    rootTopic,
-                    globalHierarchy.topicMap,
-                    websiteUrlMap,
-                );
+            // NEW: Use TopicGraphBuilder with JSON storage instead of SQLite
+            if (this.graphJsonStorage?.manager) {
+                debug("[Knowledge Graph] Using JSON storage for topic persistence");
+                
+                // Convert to format expected by TopicGraphBuilder
+                const hierarchicalTopics = this.convertTopicHierarchyToRecords(globalHierarchy, websiteUrlMap);
+                const cooccurrences = this.buildCooccurrenceData(globalHierarchy.topicMap, websiteUrlMap);
+                
+                // Build graphs using TopicGraphBuilder
+                const builder = new TopicGraphBuilder();
+                builder.buildFromTopicHierarchy(hierarchicalTopics, cooccurrences);
+                
+                // TODO: Add entity relations if available
+                // This would integrate with entity extraction from the same websites
+                
+                // Save to JSON storage
+                await builder.saveToJsonStorage(this.graphJsonStorage.manager);
+                
+                debug("[Knowledge Graph] Topic hierarchy saved to JSON storage successfully");
+            } else {
+                // FALLBACK: Use existing SQLite storage (backward compatibility)
+                debug("[Knowledge Graph] JSON storage not available, falling back to SQLite");
+                
+                for (const rootTopic of globalHierarchy.rootTopics) {
+                    await this.storeTopicHierarchyRecursive(
+                        rootTopic,
+                        globalHierarchy.topicMap,
+                        websiteUrlMap,
+                    );
+                }
             }
         } catch (error) {
             debug(
                 `[Knowledge Graph] Error updating hierarchical topics: ${error}`,
-                // Note: Full document provenance is available via semanticRefIndex lookup
-                // Each topic has semanticRefs with range.start.messageOrdinal pointing to source documents
             );
         }
     }

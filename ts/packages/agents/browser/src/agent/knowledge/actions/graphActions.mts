@@ -254,7 +254,12 @@ function calculateEntityMetrics(
 }
 
 // Ensure graph data is cached for fast access - now loads from JSON storage
-async function ensureGraphCache(websiteCollection: any): Promise<void> {
+async function ensureGraphCache(context: SessionContext<BrowserActionContext>): Promise<void> {
+    const websiteCollection = context.agentContext.websiteCollection;
+    if (!websiteCollection) {
+        throw new Error("Website collection not available");
+    }
+    
     const cache = getGraphCache(websiteCollection);
 
     // Check if cache is valid (no TTL - only invalidated on rebuild)
@@ -270,7 +275,7 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
 
     try {
         // Get graph queries - this loads from JSON storage
-        const { entityQueries } = await getGraphQueries({ agentContext: { websiteCollection } } as any);
+        const { entityQueries } = await getGraphQueries(context);
         
         if (!entityQueries) {
             throw new Error("Could not initialize graph queries from JSON storage");
@@ -1418,7 +1423,7 @@ export async function getGlobalImportanceLayer(
             };
         }
 
-        await ensureGraphCache(websiteCollection);
+        await ensureGraphCache(context);
         const cache = getGraphCache(websiteCollection);
         
         if (!cache || !cache.isValid) {
@@ -1532,10 +1537,42 @@ export async function getGlobalImportanceLayer(
         const cacheKey = `entity_importance_${maxNodes}`;
         let cachedGraph = getGraphologyCache(cacheKey);
 
+        // Check if we already have a presetLayout from ensureGraphCache that we can reuse
+        if (!cachedGraph && cache.presetLayout && cache.presetLayout.elements && cache.presetLayout.elements.length > 0) {
+            console.log("[getGlobalImportanceLayer] Using presetLayout from cache:", {
+                elementsCount: cache.presetLayout.elements.length,
+                layoutDuration: cache.presetLayout.layoutDuration,
+                communityCount: cache.presetLayout.communityCount
+            });
+            
+            // Create a fake graphology cache object from the existing presetLayout
+            cachedGraph = {
+                graph: null, // We don't need the graph object for rendering
+                cytoscapeElements: cache.presetLayout.elements,
+                metadata: {
+                    nodeCount: cache.presetLayout.elements.filter(el => !el.data?.source).length,
+                    edgeCount: cache.presetLayout.elements.filter(el => el.data?.source).length,
+                    layoutTimestamp: Date.now(),
+                    layoutDuration: cache.presetLayout.layoutDuration || 0,
+                    avgSpacing: 50, // Default value
+                    communityCount: cache.presetLayout.communityCount || 0
+                },
+                lastUpdated: Date.now(),
+                isValid: true
+            };
+            
+            setGraphologyCache(cacheKey, cachedGraph!);
+        }
+
         if (!cachedGraph) {
             debug(
                 "[Graphology] Building layout for entity importance layer...",
             );
+            console.log("[getGlobalImportanceLayer] Building new graphology layout:", {
+                optimizedEntitiesCount: optimizedEntities.length,
+                optimizedRelationshipsCount: optimizedRelationships.length,
+                maxNodes: maxNodes
+            });
             const layoutStart = performance.now();
 
             const graphNodes: GraphNode[] = optimizedEntities.map(
@@ -1559,13 +1596,32 @@ export async function getGlobalImportanceLayer(
                 }),
             );
 
+            console.log("[getGlobalImportanceLayer] About to call buildGraphologyGraph:", {
+                graphNodesCount: graphNodes.length,
+                graphEdgesCount: graphEdges.length,
+                sampleNodes: graphNodes.slice(0, 3),
+                sampleEdges: graphEdges.slice(0, 3)
+            });
+
             const graph = buildGraphologyGraph(graphNodes, graphEdges, {
                 nodeLimit: maxNodes * 2,
                 minEdgeConfidence: 0.2,
                 denseClusterThreshold: 100,
             });
 
+            console.log("[getGlobalImportanceLayer] buildGraphologyGraph result:", {
+                graphOrder: graph?.order,
+                graphSize: graph?.size,
+                graphType: typeof graph
+            });
+
             const cytoscapeElements = convertToCytoscapeElements(graph, 2000);
+            console.log("[getGlobalImportanceLayer] convertToCytoscapeElements result:", {
+                elementsCount: cytoscapeElements?.length,
+                elementsType: typeof cytoscapeElements,
+                firstElement: cytoscapeElements?.[0]
+            });
+            
             const layoutMetrics = calculateLayoutQualityMetrics(graph);
             const layoutDuration = performance.now() - layoutStart;
 
@@ -1590,12 +1646,40 @@ export async function getGlobalImportanceLayer(
 
         // Enrich entities with graphology colors and sizes
         // Only include entities that have corresponding graph elements (filter out isolated nodes)
+        if (!cachedGraph) {
+            console.log("[getGlobalImportanceLayer] ERROR - No cached graph available after all attempts");
+            return {
+                entities: optimizedEntities,
+                relationships: optimizedRelationships,
+                metadata: {
+                    ...metadata,
+                    error: "No graphology layout available"
+                },
+            };
+        }
+        
+        console.log("[getGlobalImportanceLayer] DEBUG - Entity matching:");
+        console.log("- First 5 optimizedEntities:", optimizedEntities.slice(0, 5).map((e: any) => ({ id: e.id, name: e.name })));
+        console.log("- First 5 graph elements:", cachedGraph!.cytoscapeElements.filter((el: any) => el.data && !el.data.source).slice(0, 5).map((el: any) => ({ id: el.data.id, label: el.data.label, name: el.data.name })));
+        
+        // Debug the actual matching process
+        console.log("- Detailed matching debug for first entity:");
+        if (optimizedEntities.length > 0) {
+            const firstEntity = optimizedEntities[0];
+            console.log("  Entity:", { id: firstEntity.id, name: firstEntity.name });
+            const matchByID = cachedGraph!.cytoscapeElements.find((el: any) => el.data?.id === firstEntity.id);
+            const matchByLabel = cachedGraph!.cytoscapeElements.find((el: any) => el.data?.label === firstEntity.name);
+            const matchByName = cachedGraph!.cytoscapeElements.find((el: any) => el.data?.name === firstEntity.name);
+            console.log("  Matches - byID:", matchByID?.data?.id, "byLabel:", matchByLabel?.data?.id, "byName:", matchByName?.data?.id);
+        }
+
         const enrichedEntities = optimizedEntities
             .map((entity: any) => {
                 const graphElement = cachedGraph!.cytoscapeElements.find(
                     (el: any) =>
                         el.data?.id === entity.id ||
-                        el.data?.label === entity.name,
+                        el.data?.label === entity.name ||
+                        el.data?.name === entity.name,
                 );
                 if (graphElement?.data) {
                     return {
@@ -1700,7 +1784,7 @@ export async function getViewportBasedNeighborhood(
         }
 
         // Use cache for performance
-        await ensureGraphCache(websiteCollection);
+        await ensureGraphCache(context);
         const cache = getGraphCache(websiteCollection);
         
         if (!cache || !cache.isValid) {
@@ -1874,14 +1958,15 @@ export async function getTopicImportanceLayer(
     metadata: any;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
+        // Use JSON storage instead of SQLite
+        const { topicQueries } = await getGraphQueries(context);
 
-        if (!websiteCollection || !websiteCollection.hierarchicalTopics) {
+        if (!topicQueries) {
             return {
                 topics: [],
                 relationships: [],
                 metadata: {
-                    error: "Hierarchical topics not available",
+                    error: "Topic graph data not available",
                     layer: "topic_importance",
                 },
             };
@@ -1889,9 +1974,8 @@ export async function getTopicImportanceLayer(
 
         const maxNodes = parameters.maxNodes || 500;
 
-        // Get all topics from hierarchical topics table
-        const allTopics =
-            websiteCollection.hierarchicalTopics.getTopicHierarchy() || [];
+        // Get all topics from JSON storage
+        const allTopics = topicQueries.getTopicHierarchy() || [];
 
         if (allTopics.length === 0) {
             return {
@@ -1908,13 +1992,13 @@ export async function getTopicImportanceLayer(
         // Build child count map
         const childCountMap = new Map<string, number>();
         for (const topic of allTopics) {
-            childCountMap.set(topic.topicId, 0);
+            childCountMap.set(topic.id, 0);
         }
         for (const topic of allTopics) {
-            if (topic.parentTopicId) {
+            if (topic.parentId) {
                 const currentCount =
-                    childCountMap.get(topic.parentTopicId) || 0;
-                childCountMap.set(topic.parentTopicId, currentCount + 1);
+                    childCountMap.get(topic.parentId) || 0;
+                childCountMap.set(topic.parentId, currentCount + 1);
             }
         }
 
@@ -1922,65 +2006,63 @@ export async function getTopicImportanceLayer(
         // Sort by descendantCount as a proxy for importance if no explicit score
         const topicsWithCounts = allTopics.map((topic: any) => ({
             ...topic,
-            childCount: childCountMap.get(topic.topicId) || 0,
+            childCount: childCountMap.get(topic.id) || 0,
         }));
 
         // Simple selection: get top N topics by descendant count or importance
+        // Use metadata.urls.length as a proxy for importance (document count)
         const selectedTopics = topicsWithCounts
             .sort(
                 (a: any, b: any) =>
-                    (b.descendantCount || 0) - (a.descendantCount || 0),
+                    (b.metadata?.urls?.length || 0) - (a.metadata?.urls?.length || 0),
             )
             .slice(0, maxNodes * 2);
 
         const selectedTopicIds = new Set(
-            selectedTopics.map((t: any) => t.topicId),
+            selectedTopics.map((t: any) => t.id),
         );
 
         // Build hierarchical relationships
         const hierarchicalRelationships = selectedTopics
             .filter(
                 (t: any) =>
-                    t.parentTopicId && selectedTopicIds.has(t.parentTopicId),
+                    t.parentId && selectedTopicIds.has(t.parentId),
             )
             .map((t: any) => ({
-                from: t.parentTopicId,
-                to: t.topicId,
+                from: t.parentId,
+                to: t.id,
                 type: "parent-child",
                 strength: t.confidence || 0.8,
             }));
 
-        // Get lateral relationships if available
+        // Get lateral relationships from JSON storage
         let lateralRelationships: any[] = [];
-        if (websiteCollection.topicRelationships) {
-            const selectedTopicIdsArray = Array.from(selectedTopicIds);
-            const lateralRels =
-                websiteCollection.topicRelationships.getRelationshipsForTopicsOptimized(
-                    selectedTopicIdsArray,
-                    0.3,
-                );
+        const selectedTopicIdsArray = Array.from(selectedTopicIds);
+        const lateralRels = topicQueries.getRelationshipsForTopicsOptimized(
+            selectedTopicIdsArray,
+            0.3,
+        );
 
-            // Filter out sibling relationships
-            const parentMap = new Map<string, string>();
-            for (const topic of selectedTopics) {
-                if (topic.parentTopicId) {
-                    parentMap.set(topic.topicId, topic.parentTopicId);
-                }
+        // Filter out sibling relationships
+        const parentMap = new Map<string, string>();
+        for (const topic of selectedTopics) {
+            if (topic.parentId) {
+                parentMap.set(topic.id, topic.parentId);
             }
-
-            lateralRelationships = lateralRels
-                .filter((rel: any) => {
-                    const parentA = parentMap.get(rel.fromTopic);
-                    const parentB = parentMap.get(rel.toTopic);
-                    return !(parentA && parentB && parentA === parentB);
-                })
-                .map((rel: any) => ({
-                    from: rel.fromTopic,
-                    to: rel.toTopic,
-                    type: rel.relationshipType,
-                    strength: rel.strength,
-                }));
         }
+
+        lateralRelationships = lateralRels
+            .filter((rel: any) => {
+                const parentA = parentMap.get(rel.source);
+                const parentB = parentMap.get(rel.target);
+                return !(parentA && parentB && parentA === parentB);
+            })
+            .map((rel: any) => ({
+                from: rel.source,
+                to: rel.target,
+                type: rel.type,
+                strength: rel.strength,
+            }));
 
         const selectedRelationships = [
             ...hierarchicalRelationships,
@@ -1997,14 +2079,14 @@ export async function getTopicImportanceLayer(
 
             const graphNodes: GraphNode[] = selectedTopics.map(
                 (topic: any) => ({
-                    id: topic.topicId,
-                    name: topic.topicName,
+                    id: topic.id,
+                    name: topic.name,
                     type: "topic",
                     confidence: topic.confidence || 0.5,
-                    count: topic.descendantCount || 1,
-                    importance: (topic.descendantCount || 0) / 100, // Normalize
+                    count: topic.metadata?.urls?.length || 1,
+                    importance: (topic.metadata?.urls?.length || 0) / 100, // Normalize
                     level: topic.level || 0,
-                    parentId: topic.parentTopicId,
+                    parentId: topic.parentId,
                     childCount: topic.childCount || 0,
                 }),
             );
@@ -2089,7 +2171,7 @@ export async function getImportanceStatistics(
             return { distribution: [], recommendedLevel: 1, levelPreview: [] };
         }
 
-        await ensureGraphCache(websiteCollection);
+        await ensureGraphCache(context);
         const cache = getGraphCache(websiteCollection);
 
         if (!cache || !cache.isValid || !cache.entityMetrics) {
@@ -2572,7 +2654,7 @@ export async function getEntityDetails(
         }
 
         // Use cache for performance - loads from JSON storage if needed
-        await ensureGraphCache(websiteCollection);
+        await ensureGraphCache(context);
         const cache = getGraphCache(websiteCollection);
 
         if (!cache || !cache.isValid || !cache.entityMetrics) {
