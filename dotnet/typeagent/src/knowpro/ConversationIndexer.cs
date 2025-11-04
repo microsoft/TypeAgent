@@ -89,7 +89,9 @@ public static class ConversationIndexer
 
         if (addKnowledge)
         {
-            await conversation.AddMessageKnowledgeAsync(
+            // Messages can provide custom, pre-computed/pre-extracted knowledge.
+            // Add those to the SemanticRefs store for subsequent indexing
+            await conversation.AddCustomKnowledgeAsync(
                 messageRangeToIndex,
                 messagesToIndex,
                 cancellationToken
@@ -169,7 +171,7 @@ public static class ConversationIndexer
         }
     }
 
-    internal static async ValueTask AddMessageKnowledgeAsync(
+    internal static async ValueTask AddCustomKnowledgeAsync(
         this IConversation conversation,
         CollectionRangeToIndex messageRange,
         IList<IMessage> messages,
@@ -197,6 +199,16 @@ public static class ConversationIndexer
                 cancellationToken
             ).ConfigureAwait(false);
         }
+    }
+
+    internal static async ValueTask ExtractAndAddKnowledgeAsync(
+        this IConversation conversation,
+        CollectionRangeToIndex messageRange,
+        IList<IMessage> messages,
+        CancellationToken cancellationToken = default
+    )
+    {
+
     }
 
     internal static async ValueTask<CollectionRangeToIndex> GetMessageRangeToIndexAsync(

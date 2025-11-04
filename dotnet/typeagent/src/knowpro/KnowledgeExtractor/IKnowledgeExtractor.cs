@@ -21,7 +21,7 @@ public static class KnowledgeExtractorExtensions
         CancellationToken cancellationToken = default
     )
     {
-        return Async.CallWithRetryAsync<KnowledgeResponse>(
+        return Async.CallWithRetryAsync(
             (ct) => extractor.ExtractAsync(message, ct),
             retry,
             null,
@@ -38,8 +38,7 @@ public static class KnowledgeExtractorExtensions
         CancellationToken cancellationToken = default
     )
     {
-        return Async.MapAsync<string, KnowledgeResponse>(
-            messages,
+        return messages.MapAsync(
             concurrency,
             extractor.ExtractAsync,
             progress,

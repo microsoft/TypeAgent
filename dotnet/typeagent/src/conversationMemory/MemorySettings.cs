@@ -12,22 +12,20 @@ public class MemorySettings
     {
     }
 
+    public MemorySettings(IChatModel languageModel,  ITextEmbeddingModel embeddingModel)
+        : this(new ConversationSettings(languageModel, embeddingModel))
+    {
+    }
+
     public MemorySettings(
         ConversationSettings conversationSettings,
         int embeddingCacheSize = 64,
-        IChatModel? chatModel = null,
-        ITextEmbeddingModel? embeddingModel = null,
         NoiseText? noiseTerms = null
     )
     {
         ArgumentVerify.ThrowIfNull(conversationSettings, nameof(conversationSettings));
 
         ConversationSettings = conversationSettings;
-        ChatModel = chatModel ?? new OpenAIChatModel();
-        EmbeddingModel = new TextEmbeddingModelWithCache(embeddingCacheSize);
-        QueryTranslator = new SearchQueryTranslator(ChatModel);
-        KnowledgeExtractor = new KnowledgeExtractor(ChatModel);
-
         NoiseTerms = noiseTerms ?? new NoiseText(
             typeof(MemorySettings).Assembly,
             "TypeAgent.ConversationMemory.noiseTerms.txt"
@@ -35,15 +33,7 @@ public class MemorySettings
 
     }
 
-    public IChatModel ChatModel { get; }
-
-    public TextEmbeddingModelWithCache EmbeddingModel { get; }
-
     public ConversationSettings ConversationSettings { get; }
-
-    public ISearchQueryTranslator? QueryTranslator { get; set; }
-
-    public IKnowledgeExtractor KnowledgeExtractor { get; set; }
 
     public NoiseText? NoiseTerms { get; set; }
 

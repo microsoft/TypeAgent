@@ -74,7 +74,6 @@ public static class ConversationSearch
     public static async ValueTask<IList<ConversationSearchResult>> SearchAsync(
         this IConversation conversation,
         string searchText,
-        ISearchQueryTranslator queryTranslator,
         LangSearchOptions? options = null,
         LangSearchFilter? langSearchFilter = null,
         LangSearchDebugContext? debugContext = null,
@@ -82,11 +81,10 @@ public static class ConversationSearch
     )
     {
         ArgumentVerify.ThrowIfNullOrEmpty(searchText, nameof(searchText));
-        ArgumentVerify.ThrowIfNull(queryTranslator, nameof(queryTranslator));
 
         options ??= LangSearchOptions.CreateDefault();
         LangQueryExpr langQuery = await conversation.SearchQueryExprFromLangAsync(
-            queryTranslator,
+            conversation.Settings.QueryTranslator,
             searchText,
             options,
             langSearchFilter,

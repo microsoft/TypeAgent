@@ -1,24 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Lang;
 using TypeAgent.KnowPro.Query;
 
 namespace TypeAgent.KnowPro;
 
 public class ConversationSettings
 {
+    ISearchQueryTranslator _queryTranslator;
+
+    /// <summary>
+    /// By default, uses configured OpenAI language and embedding models
+    /// You can pass in alternatives using the other constructor
+    /// </summary>
     public ConversationSettings()
-        : this(new OpenAITextEmbeddingModel())
+        : this(new OpenAIChatModel(), new OpenAITextEmbeddingModel())
     {
     }
 
-    public ConversationSettings(ITextEmbeddingModel embeddingModel)
+    public ConversationSettings(
+        IChatModel languageModel,
+        ITextEmbeddingModel embeddingModel
+    )
     {
+        ArgumentVerify.ThrowIfNull(languageModel, nameof(languageModel));
         ArgumentVerify.ThrowIfNull(embeddingModel, nameof(embeddingModel));
 
         EmbeddingModel = embeddingModel;
-
-        QueryCompilerSettings = new QueryCompilerSettings();
+        LanguageModel = languageModel;
 
         // Warning: The 0.85 threshold is good for Ada002 only.
         // The threshold reduces match noise significantly
@@ -33,13 +43,36 @@ public class ConversationSettings
         MessageTextIndexSettings = new MessageTextIndexSettings(
             new TextEmbeddingIndexSettings(embeddingModel, 0.7)
         );
+
+        SemanticRefIndexSettings = new SemanticRefIndexSettings(
+            new KnowledgeExtractor.KnowledgeExtractor(languageModel)
+        );
+
+        QueryCompilerSettings = new QueryCompilerSettings();
+
+        QueryTranslator = new SearchQueryTranslator(languageModel);
     }
+
+    public IChatModel LanguageModel { get; }
 
     public ITextEmbeddingModel EmbeddingModel { get; }
 
-    public QueryCompilerSettings QueryCompilerSettings { get; private set; }
+    public SemanticRefIndexSettings SemanticRefIndexSettings { get; private set; }
 
     public TermToRelatedTermIndexSettings RelatedTermIndexSettings { get; private set; }
 
     public MessageTextIndexSettings MessageTextIndexSettings { get; private set; }
+
+    public QueryCompilerSettings QueryCompilerSettings { get; private set; }
+
+    public ISearchQueryTranslator QueryTranslator
+    {
+        get => _queryTranslator;
+        set
+        {
+            ArgumentVerify.ThrowIfNull(value, nameof(QueryTranslator));
+            _queryTranslator = value;
+        }
+    }
+
 }

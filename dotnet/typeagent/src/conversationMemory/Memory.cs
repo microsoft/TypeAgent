@@ -42,7 +42,6 @@ public class Memory<TMessage> : Conversation<TMessage>, IMemory
             IConversation conversation = this;
             return await conversation.SearchAsync(
                 searchText,
-                Settings.QueryTranslator,
                 options,
                 filter,
                 debugContext,
