@@ -423,47 +423,44 @@ async function ensureGraphCache(websiteCollection: any): Promise<void> {
 // ============================================================================
 
 /**
- * Get graph queries interface, preferring JSON storage over SQLite
+ * Get graph queries interface from JSON storage
  */
 async function getGraphQueries(context: SessionContext<BrowserActionContext>): Promise<{
     entityQueries?: EntityGraphQueries;
     topicQueries?: TopicGraphQueries;
     useJsonStorage: boolean;
 }> {
-    // Try JSON storage first
     const jsonStorage = context.agentContext.graphJsonStorage;
-    if (jsonStorage?.manager) {
-        try {
-            const entityGraph = await jsonStorage.manager.loadEntityGraph();
-            const topicGraph = await jsonStorage.manager.loadTopicGraph();
-            
-            return {
-                ...(entityGraph && { entityQueries: new EntityGraphQueries(entityGraph) }),
-                ...(topicGraph && { topicQueries: new TopicGraphQueries(topicGraph) }),
-                useJsonStorage: true
-            };
-        } catch (error) {
-            debug(`Error loading JSON graphs: ${error}`);
-        }
+    if (!jsonStorage?.manager) {
+        throw new Error("JSON storage not available - graph data cannot be accessed");
     }
-    
-    // Fallback to SQLite
-    return {
-        useJsonStorage: false
-    };
+
+    try {
+        const entityGraph = await jsonStorage.manager.loadEntityGraph();
+        const topicGraph = await jsonStorage.manager.loadTopicGraph();
+        
+        return {
+            ...(entityGraph && { entityQueries: new EntityGraphQueries(entityGraph) }),
+            ...(topicGraph && { topicQueries: new TopicGraphQueries(topicGraph) }),
+            useJsonStorage: true
+        };
+    } catch (error) {
+        debug(`Error loading JSON graphs: ${error}`);
+        throw new Error(`Failed to load graph data: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
 }
 
 /**
- * Get entity statistics from either JSON or SQLite storage
+ * Get entity statistics from JSON storage
  */
 async function getEntityStatistics(context: SessionContext<BrowserActionContext>): Promise<{
     entityCount: number;
     relationshipCount: number;
     communityCount: number;
 }> {
-    const { entityQueries, useJsonStorage } = await getGraphQueries(context);
+    const { entityQueries } = await getGraphQueries(context);
     
-    if (useJsonStorage && entityQueries) {
+    if (entityQueries) {
         const stats = entityQueries.getEntityStatistics();
         return {
             entityCount: stats.uniqueEntities,
@@ -472,43 +469,8 @@ async function getEntityStatistics(context: SessionContext<BrowserActionContext>
         };
     }
     
-    // Fallback to SQLite
-    const websiteCollection = context.agentContext.websiteCollection;
-    if (!websiteCollection) {
-        return { entityCount: 0, relationshipCount: 0, communityCount: 0 };
-    }
-    
-    let entityCount = 0;
-    let relationshipCount = 0;
-    let communityCount = 0;
-    
-    try {
-        if (websiteCollection.knowledgeEntities) {
-            entityCount = (websiteCollection.knowledgeEntities as any).getUniqueEntityCount();
-        }
-    } catch (error) {
-        console.warn("Failed to get entity count from SQLite:", error);
-    }
-    
-    try {
-        if (websiteCollection.relationships) {
-            const relationships = websiteCollection.relationships.getAllRelationships();
-            relationshipCount = relationships.length;
-        }
-    } catch (error) {
-        console.warn("Failed to get relationship count from SQLite:", error);
-    }
-    
-    try {
-        if (websiteCollection.communities) {
-            const communities = websiteCollection.communities.getAllCommunities();
-            communityCount = communities.length;
-        }
-    } catch (error) {
-        console.warn("Failed to get community count from SQLite:", error);
-    }
-    
-    return { entityCount, relationshipCount, communityCount };
+    // No data available
+    return { entityCount: 0, relationshipCount: 0, communityCount: 0 };
 }
 
 // ============================================================================
@@ -570,27 +532,28 @@ export async function buildKnowledgeGraph(
     };
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                success: false,
-                error: "Website collection not available",
-            };
-        }
-
         debug(
-            "[Knowledge Graph] Starting knowledge graph build with parameters:",
+            "[Knowledge Graph] Starting JSON-based knowledge graph build with parameters:",
             parameters,
         );
 
         const startTime = Date.now();
-        await websiteCollection.buildGraph();
+        
+        // Get JSON storage manager directly
+        const jsonStorage = context.agentContext.graphJsonStorage;
+        if (!jsonStorage?.manager) {
+            return {
+                success: false,
+                error: "Graph storage manager not available",
+            };
+        }
+
+        // Build the graph using JSON storage
+        await jsonStorage.manager.buildGraph();
         const timeElapsed = Date.now() - startTime;
 
-        // Get stats directly from websiteCollection using existing status method
+        // Get stats from JSON storage
         const status = await getKnowledgeGraphStatus({}, context);
-
         const stats = {
             entitiesFound: status.entityCount,
             relationshipsCreated: status.relationshipCount,
@@ -598,18 +561,7 @@ export async function buildKnowledgeGraph(
             timeElapsed: timeElapsed,
         };
 
-        debug("[Knowledge Graph] Build completed:", stats);
-
-        // Invalidate caches after graph build
-        setGraphCache(websiteCollection, {
-            entities: [],
-            relationships: [],
-            communities: [],
-            entityMetrics: [],
-            lastUpdated: 0,
-            isValid: false,
-        });
-        invalidateTopicCache(websiteCollection);
+        debug("[Knowledge Graph] JSON build completed:", stats);
 
         return {
             success: true,
@@ -634,62 +586,32 @@ export async function rebuildKnowledgeGraph(
     error?: string;
 }> {
     try {
-        const websiteCollection = context.agentContext.websiteCollection;
+        debug("[Knowledge Graph] Starting JSON-based knowledge graph rebuild");
 
-        if (!websiteCollection) {
+        // Get JSON storage manager directly  
+        const jsonStorage = context.agentContext.graphJsonStorage;
+        if (!jsonStorage?.manager) {
             return {
                 success: false,
-                error: "Website collection not available",
+                error: "Graph storage manager not available",
             };
         }
 
-        // Clear existing graph data and rebuild
+        // Clear existing JSON graph data and rebuild
         try {
-            // Clear existing graph tables if they exist
-            if (websiteCollection.relationships) {
-                websiteCollection.relationships.clear();
-            }
-            if (websiteCollection.communities) {
-                websiteCollection.communities.clear();
-            }
+            await jsonStorage.manager.clearGraph();
+            debug("[Knowledge Graph] Cleared existing JSON graph data");
         } catch (clearError) {
-            // Continue even if clearing fails, as the rebuild might overwrite
-            console.warn("Warning: Failed to clear existing graph data:", clearError);
+            console.warn("Warning: Failed to clear existing JSON graph data:", clearError);
         }
 
-        // Rebuild the graph
-        await websiteCollection.buildGraph();
-
-        // Invalidate caches after graph build (both SQLite and JSON caches)
-        try {
-            setGraphCache(websiteCollection, {
-                entities: [],
-                relationships: [],
-                communities: [],
-                entityMetrics: [],
-                lastUpdated: 0,
-                isValid: false,
-            });
-            invalidateTopicCache(websiteCollection);
-        } catch (cacheError) {
-            console.warn("Warning: Failed to invalidate cache:", cacheError);
-        }
-        
-        // Invalidate JSON storage caches
-        const jsonStorage = context.agentContext.graphJsonStorage;
-        if (jsonStorage?.manager) {
-            try {
-                // Trigger re-migration after graph rebuild
-                debug("[Knowledge Graph] Triggering JSON storage update after graph build");
-                // The migration will happen automatically on next access
-            } catch (error) {
-                debug(`[Knowledge Graph] Warning: Failed to update JSON storage: ${error}`);
-            }
-        }
+        // Rebuild the graph using JSON storage
+        await jsonStorage.manager.buildGraph();
+        debug("[Knowledge Graph] JSON graph rebuild completed");
 
         return {
             success: true,
-            message: "Knowledge graph rebuilt successfully",
+            message: "Knowledge graph rebuilt successfully using JSON storage",
         };
     } catch (error) {
         console.error("Error rebuilding knowledge graph:", error);
@@ -992,51 +914,20 @@ export async function getAllRelationships(
     error?: string;
 }> {
     try {
-        // Try JSON storage first
-        const { entityQueries, useJsonStorage } = await getGraphQueries(context);
+        const { entityQueries } = await getGraphQueries(context);
         
-        if (useJsonStorage && entityQueries) {
-            const relationships = entityQueries.getAllRelationships();
-            
-            // Apply same optimization as getGlobalImportanceLayer for consistency
-            const optimizedRelationships = relationships.map((rel: any) => ({
-                rowId: rel.id || rel.rowId,
-                fromEntity: rel.fromEntity,
-                toEntity: rel.toEntity,
-                relationshipType: rel.relationshipType,
-                confidence: rel.confidence,
-                // Deduplicate sources using Set, then limit to first 3 entries
-                sources: rel.sources
-                    ? typeof rel.sources === "string"
-                        ? Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3)
-                        : Array.isArray(rel.sources)
-                          ? Array.from(new Set(rel.sources)).slice(0, 3)
-                          : rel.sources
-                    : undefined,
-                count: rel.count,
-            }));
-
-            return {
-                relationships: optimizedRelationships,
-            };
-        }
-        
-        // Fallback to SQLite
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        if (!entityQueries) {
             return {
                 relationships: [],
-                error: "Website collection not available",
+                error: "No graph data available",
             };
         }
 
-        const relationships =
-            websiteCollection.relationships?.getAllRelationships() || [];
-
-        // Apply same optimization as getGlobalImportanceLayer for consistency
+        const relationships = entityQueries.getAllRelationships();
+        
+        // Apply optimization for consistency
         const optimizedRelationships = relationships.map((rel: any) => ({
-            rowId: rel.rowId,
+            rowId: rel.id || rel.rowId,
             fromEntity: rel.fromEntity,
             toEntity: rel.toEntity,
             relationshipType: rel.relationshipType,
@@ -1072,29 +963,16 @@ export async function getAllCommunities(
     error?: string;
 }> {
     try {
-        // Try JSON storage first
-        const { entityQueries, useJsonStorage } = await getGraphQueries(context);
+        const { entityQueries } = await getGraphQueries(context);
         
-        if (useJsonStorage && entityQueries) {
-            const communities = entityQueries.getAllCommunities();
-            return {
-                communities: communities,
-            };
-        }
-        
-        // Fallback to SQLite
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        if (!entityQueries) {
             return {
                 communities: [],
-                error: "Website collection not available",
+                error: "No graph data available",
             };
         }
 
-        const communities =
-            websiteCollection.communities?.getAllCommunities() || [];
-
+        const communities = entityQueries.getAllCommunities();
         return {
             communities: communities,
         };
@@ -1115,99 +993,28 @@ export async function getAllEntitiesWithMetrics(
     error?: string;
 }> {
     try {
-        // Try JSON storage first
-        const { entityQueries, useJsonStorage } = await getGraphQueries(context);
+        const { entityQueries } = await getGraphQueries(context);
         
-        if (useJsonStorage && entityQueries) {
-            const entities = entityQueries.getAllEntities();
-            
-            // Apply entity optimization similar to getGlobalImportanceLayer
-            const optimizedEntities = entities.map((entity: any) => ({
-                id: entity.id || entity.name,
-                name: entity.name,
-                type: entity.type || "entity",
-                confidence: entity.confidence || 0.5,
-                count: entity.count,
-                degree: entity.degree || 0,
-                importance: entity.importance || 0,
-                communityId: entity.communityId,
-                size: entity.size || entity.count || 1,
-            }));
-
-            return {
-                entities: optimizedEntities,
-            };
-        }
-        
-        // Fallback to SQLite
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        if (!entityQueries) {
             return {
                 entities: [],
-                error: "Website collection not available",
+                error: "No graph data available",
             };
         }
 
-        // Ensure cache is populated
-        await ensureGraphCache(websiteCollection);
-
-        // Get cached data
-        const cache = getGraphCache(websiteCollection);
-        if (cache && cache.isValid && cache.entityMetrics.length > 0) {
-            debug(
-                `[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`,
-            );
-
-            // Apply entity optimization similar to getGlobalImportanceLayer
-            const optimizedEntities = cache.entityMetrics.map(
-                (entity: any) => ({
-                    id: entity.id || entity.name,
-                    name: entity.name,
-                    type: entity.type || "entity",
-                    confidence: entity.confidence || 0.5,
-                    count: entity.count,
-                    degree: entity.degree,
-                    importance: entity.importance,
-                    communityId: entity.communityId,
-                    size: entity.size,
-                }),
-            );
-
-            return {
-                entities: optimizedEntities,
-            };
-        }
-
-        // Fallback to live computation if no cache
-        debug(
-            "[Knowledge Graph] Cache not available, computing entities with metrics",
-        );
-        const entities =
-            (websiteCollection.knowledgeEntities as any)?.getTopEntities(
-                5000,
-            ) || [];
-        const relationships =
-            websiteCollection.relationships?.getAllRelationships() || [];
-        const communities =
-            websiteCollection.communities?.getAllCommunities() || [];
-
-        const entityMetrics = calculateEntityMetrics(
-            entities,
-            relationships,
-            communities,
-        );
-
-        const optimizedEntities = entityMetrics.map((entity: any) => ({
+        const entities = entityQueries.getAllEntities();
+        
+        // Apply entity optimization for consistency
+        const optimizedEntities = entities.map((entity: any) => ({
             id: entity.id || entity.name,
             name: entity.name,
             type: entity.type || "entity",
             confidence: entity.confidence || 0.5,
             count: entity.count,
-            degree: entity.degree,
-            importance: entity.importance,
+            degree: entity.degree || 0,
+            importance: entity.importance || 0,
             communityId: entity.communityId,
-            size: entity.size,
+            size: entity.size || entity.count || 1,
         }));
 
         return {
@@ -1243,138 +1050,25 @@ export async function getEntityNeighborhood(
 }> {
     try {
         const { entityId, depth = 2, maxNodes = 100 } = parameters;
-
-        // Try JSON storage first
-        const { entityQueries, useJsonStorage } = await getGraphQueries(context);
+        const { entityQueries } = await getGraphQueries(context);
         
-        if (useJsonStorage && entityQueries) {
-            debug(
-                `[Knowledge Graph] Using JSON storage for entity neighborhood "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
-            );
-
-            // For now, use basic neighbor lookup - full neighborhood search will be implemented later
-            const neighbors = entityQueries.getNeighbors(entityId);
-            const centerEntity = entityQueries.getEntityByName(entityId);
-            
-            if (!centerEntity) {
-                const searchNeighbors = await searchByEntities(
-                    { entities: [entityId], maxResults: 20 },
-                    context,
-                );
-
-                if (searchNeighbors) {
-                    return {
-                        centerEntity: {
-                            id: entityId,
-                            name: entityId,
-                            type: "entity",
-                            confidence: 0.5,
-                            count: 1,
-                        },
-                        neighbors: searchNeighbors.relatedEntities || [],
-                        relationships: [],
-                        searchData: {
-                            relatedEntities: searchNeighbors?.relatedEntities || [],
-                            topTopics: searchNeighbors?.topTopics || [],
-                            websites: searchNeighbors?.websites || [],
-                        },
-                        metadata: {
-                            source: "json_storage",
-                            queryDepth: depth,
-                            maxNodes: maxNodes,
-                            actualNodes: (searchNeighbors?.relatedEntities?.length || 0) + 1,
-                            actualEdges: 0,
-                        },
-                    };
-                } else {
-                    return {
-                        neighbors: [],
-                        relationships: [],
-                        error: `Entity "${entityId}" not found`,
-                    };
-                }
-            }
-
-            // Get related entities from neighbors
-            const relatedEntities = neighbors.slice(0, maxNodes).map(rel => ({
-                id: rel.target === entityId ? rel.source : rel.target,
-                name: rel.target === entityId ? rel.source : rel.target,
-                type: "entity",
-                confidence: rel.confidence,
-                count: rel.metadata.count || 1,
-            }));
-
-            return {
-                centerEntity: {
-                    id: centerEntity.id,
-                    name: centerEntity.name,
-                    type: centerEntity.type,
-                    confidence: centerEntity.confidence,
-                    count: centerEntity.metadata.urls.length,
-                },
-                neighbors: relatedEntities,
-                relationships: neighbors.map(rel => ({
-                    rowId: `${rel.source}-${rel.target}`,
-                    fromEntity: rel.source,
-                    toEntity: rel.target,
-                    relationshipType: rel.type,
-                    confidence: rel.confidence,
-                    sources: rel.metadata.sources?.slice(0, 3) || [],
-                    count: rel.metadata.count || 1,
-                })),
-                searchData: {
-                    relatedEntities: [],
-                    topTopics: [],
-                    websites: [],
-                },
-                metadata: {
-                    source: "json_storage",
-                    queryDepth: depth,
-                    maxNodes: maxNodes,
-                    actualNodes: relatedEntities.length + 1,
-                    actualEdges: neighbors.length,
-                },
-            };
-        }
-        
-        // Fallback to SQLite with cache
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
+        if (!entityQueries) {
             return {
                 neighbors: [],
                 relationships: [],
-                error: "Website collection not available",
-            };
-        }
-
-        // Ensure cache is populated
-        await ensureGraphCache(websiteCollection);
-
-        // Get cached data
-        const cache = getGraphCache(websiteCollection);
-        if (!cache || !cache.isValid) {
-            return {
-                neighbors: [],
-                relationships: [],
-                error: "Graph cache not available",
+                error: "No graph data available",
             };
         }
 
         debug(
-            `[Knowledge Graph] Performing BFS for entity "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
+            `[Knowledge Graph] Using JSON storage for entity neighborhood "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
         );
 
-        // Perform BFS to find neighborhood
-        const neighborhoodResult = performBFS(
-            entityId,
-            cache.entityMetrics,
-            cache.relationships,
-            depth,
-            maxNodes,
-        );
-
-        if (!neighborhoodResult.centerEntity) {
+        // Get the center entity
+        const centerEntity = entityQueries.getEntityByName(entityId);
+        
+        if (!centerEntity) {
+            // Try to find through search if direct lookup fails
             const searchNeighbors = await searchByEntities(
                 { entities: [entityId], maxResults: 20 },
                 context,
@@ -1397,7 +1091,7 @@ export async function getEntityNeighborhood(
                         websites: searchNeighbors?.websites || [],
                     },
                     metadata: {
-                        source: "in_memory_cache",
+                        source: "json_storage",
                         queryDepth: depth,
                         maxNodes: maxNodes,
                         actualNodes: (searchNeighbors?.relatedEntities?.length || 0) + 1,
@@ -1413,162 +1107,50 @@ export async function getEntityNeighborhood(
             }
         }
 
-        // Get search enrichment for topics and related entities
-        let searchData: any = null;
-        try {
-            const searchResults = await searchByEntities(
-                { entities: [entityId], maxResults: 20 },
-                context,
-            );
-
-            if (searchResults) {
-                searchData = {
-                    websites: searchResults.websites?.slice(0, 15) || [],
-                    relatedEntities: searchResults.relatedEntities?.slice(0, 15) || [],
-                    topTopics: searchResults.topTopics?.slice(0, 10) || [],
-                };
-
-                debug(
-                    `[Knowledge Graph] Search enrichment found: ${searchData.websites.length} websites, ${searchData.relatedEntities.length} related entities, ${searchData.topTopics.length} topics`,
-                );
-            }
-        } catch (searchError) {
-            console.warn(
-                `[Knowledge Graph] Search enrichment failed:`,
-                searchError,
-            );
-        }
-
-        // Optimize relationships (same as other functions)
-        const optimizedRelationships = neighborhoodResult.relationships.map(
-            (rel: any) => ({
-                rowId: rel.rowId,
-                fromEntity: rel.fromEntity,
-                toEntity: rel.toEntity,
-                relationshipType: rel.relationshipType,
-                confidence: rel.confidence,
-                sources: rel.sources
-                    ? typeof rel.sources === "string"
-                        ? Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3)
-                        : Array.isArray(rel.sources)
-                          ? Array.from(new Set(rel.sources)).slice(0, 3)
-                          : rel.sources
-                    : undefined,
-                count: rel.count,
-            }),
-        );
-
-        // Optimize entities (centerEntity and neighbors)
-        const optimizeEntity = (entity: any) =>
-            entity
-                ? {
-                      id: entity.id || entity.name,
-                      name: entity.name,
-                      type: entity.type || "entity",
-                      confidence: entity.confidence || 0.5,
-                      count: entity.count,
-                      degree: entity.degree,
-                      importance: entity.importance,
-                      communityId: entity.communityId,
-                      size: entity.size,
-                  }
-                : null;
-
-        const optimizedResult = {
-            centerEntity: optimizeEntity(neighborhoodResult.centerEntity),
-            neighbors: neighborhoodResult.neighbors.map(optimizeEntity),
-            relationships: optimizedRelationships,
-            searchData: {
-                relatedEntities: searchData?.relatedEntities || [],
-                topTopics: searchData?.topTopics || [],
-                websites: searchData?.websites || [],
-            },
-            metadata: {
-                source: "in_memory_cache",
-                queryDepth: depth,
-                maxNodes: maxNodes,
-                actualNodes: neighborhoodResult.neighbors.length + 1,
-                actualEdges: neighborhoodResult.relationships.length,
-                searchEnrichment: {
-                    relatedEntities: searchData?.relatedEntities?.length || 0,
-                    topTopics: searchData?.topTopics?.length || 0,
-                    websites: searchData?.websites?.length || 0,
-                },
-            },
-        };
-
-        const cacheKey = `entity_neighborhood_${entityId}_${depth}_${maxNodes}`;
-        let cachedGraph = getGraphologyCache(cacheKey);
-
-        if (!cachedGraph) {
-            debug("[Graphology] Building layout for entity neighborhood...");
-            const layoutStart = performance.now();
-
-            const allEntities = [
-                optimizedResult.centerEntity,
-                ...optimizedResult.neighbors,
-            ].filter((e) => e !== null);
-
-            const graphNodes: GraphNode[] = allEntities.map((entity: any) => ({
-                id: entity.id,
-                name: entity.name,
-                type: entity.type,
-                confidence: entity.confidence || 0.5,
-                count: entity.count || 1,
-                importance: entity.importance || entity.degree || 0,
-            }));
-
-            const graphEdges: GraphEdge[] = optimizedResult.relationships.map(
-                (rel: any) => ({
-                    from: rel.fromEntity,
-                    to: rel.toEntity,
-                    type: rel.relationshipType,
-                    confidence: rel.confidence || 0.5,
-                    strength: rel.confidence || 0.5,
-                }),
-            );
-
-            const graph = buildGraphologyGraph(graphNodes, graphEdges, {
-                nodeLimit: maxNodes * 2,
-                minEdgeConfidence: 0.2,
-                denseClusterThreshold: 50,
-                forceAtlas2Iterations: 100,
-                noverlapIterations: 300,
-            });
-
-            const cytoscapeElements = convertToCytoscapeElements(graph, 1500);
-            const layoutMetrics = calculateLayoutQualityMetrics(graph);
-            const layoutDuration = performance.now() - layoutStart;
-
-            cachedGraph = createGraphologyCache(
-                graph,
-                cytoscapeElements,
-                layoutDuration,
-                layoutMetrics.avgSpacing,
-            );
-
-            setGraphologyCache(cacheKey, cachedGraph);
-
-            debug(
-                `[Graphology] Layout complete in ${layoutDuration.toFixed(2)}ms`,
-            );
-            debug(
-                `[Graphology] Average node spacing: ${layoutMetrics.avgSpacing.toFixed(2)}`,
-            );
-        } else {
-            debug("[Graphology] Using cached layout");
-        }
+        // Get neighbors from the graph
+        const neighbors = entityQueries.getNeighbors(entityId);
+        
+        // Limit to maxNodes
+        const limitedNeighbors = neighbors.slice(0, maxNodes);
+        
+        // Get related entities from neighbors
+        const relatedEntities = limitedNeighbors.map(rel => ({
+            id: rel.target === entityId ? rel.source : rel.target,
+            name: rel.target === entityId ? rel.source : rel.target,
+            type: "entity",
+            confidence: rel.confidence,
+            count: rel.metadata.count || 1,
+        }));
 
         return {
-            ...optimizedResult,
+            centerEntity: {
+                id: centerEntity.id,
+                name: centerEntity.name,
+                type: centerEntity.type,
+                confidence: centerEntity.confidence,
+                count: centerEntity.metadata.urls.length,
+            },
+            neighbors: relatedEntities,
+            relationships: limitedNeighbors.map(rel => ({
+                rowId: `${rel.source}-${rel.target}`,
+                fromEntity: rel.source,
+                toEntity: rel.target,
+                relationshipType: rel.type,
+                confidence: rel.confidence,
+                sources: rel.metadata.sources?.slice(0, 3) || [],
+                count: rel.metadata.count || 1,
+            })),
+            searchData: {
+                relatedEntities: [],
+                topTopics: [],
+                websites: [],
+            },
             metadata: {
-                ...optimizedResult.metadata,
-                graphologyLayout: {
-                    elements: cachedGraph.cytoscapeElements,
-                    layoutDuration: cachedGraph.metadata.layoutDuration,
-                    avgSpacing: cachedGraph.metadata.avgSpacing,
-                    communityCount: cachedGraph.metadata.communityCount,
-                },
+                source: "json_storage",
+                queryDepth: depth,
+                maxNodes: maxNodes,
+                actualNodes: relatedEntities.length + 1,
+                actualEdges: limitedNeighbors.length,
             },
         };
     } catch (error) {
@@ -2447,139 +2029,6 @@ const IMPORTANCE_LEVELS: ImportanceLevelConfig[] = [
         description: "Complete Graph",
     },
 ];
-
-// BFS implementation for finding entity neighborhood
-function performBFS(
-    entityId: string,
-    entities: any[],
-    relationships: any[],
-    maxDepth: number,
-    maxNodes: number,
-): {
-    centerEntity?: any;
-    neighbors: any[];
-    relationships: any[];
-} {
-    // Find center entity (case insensitive)
-    const centerEntity = entities.find(
-        (e) =>
-            e.name?.toLowerCase() === entityId.toLowerCase() ||
-            e.id?.toLowerCase() === entityId.toLowerCase(),
-    );
-
-    if (!centerEntity) {
-        return { neighbors: [], relationships: [] };
-    }
-
-    // Build adjacency map for fast lookups
-    const adjacencyMap = new Map<string, any[]>();
-    const relationshipMap = new Map<string, any>();
-
-    relationships.forEach((rel) => {
-        const fromName = rel.fromEntity || rel.from;
-        const toName = rel.toEntity || rel.to;
-
-        if (fromName && toName) {
-            // Normalize entity names for lookup
-            const fromKey = fromName.toLowerCase();
-            const toKey = toName.toLowerCase();
-
-            if (!adjacencyMap.has(fromKey)) adjacencyMap.set(fromKey, []);
-            if (!adjacencyMap.has(toKey)) adjacencyMap.set(toKey, []);
-
-            adjacencyMap.get(fromKey)!.push(toKey);
-            adjacencyMap.get(toKey)!.push(fromKey);
-
-            const relKey = `${fromKey}-${toKey}`;
-            const relKey2 = `${toKey}-${fromKey}`;
-            relationshipMap.set(relKey, rel);
-            relationshipMap.set(relKey2, rel);
-        }
-    });
-
-    // BFS traversal
-    const visited = new Set<string>();
-    const queue: Array<{ entityName: string; depth: number }> = [];
-    const result = {
-        neighbors: [] as any[],
-        relationships: [] as any[],
-    };
-
-    const centerKey =
-        centerEntity.name?.toLowerCase() || centerEntity.id?.toLowerCase();
-    queue.push({ entityName: centerKey, depth: 0 });
-    visited.add(centerKey);
-
-    while (queue.length > 0 && result.neighbors.length < maxNodes) {
-        const current = queue.shift()!;
-
-        if (current.depth > 0) {
-            // Find the actual entity object
-            const entity = entities.find(
-                (e) =>
-                    e.name?.toLowerCase() === current.entityName ||
-                    e.id?.toLowerCase() === current.entityName,
-            );
-
-            if (entity) {
-                result.neighbors.push(entity);
-            }
-        }
-
-        if (current.depth < maxDepth) {
-            const neighbors = adjacencyMap.get(current.entityName) || [];
-
-            for (const neighborKey of neighbors) {
-                if (
-                    !visited.has(neighborKey) &&
-                    result.neighbors.length < maxNodes
-                ) {
-                    visited.add(neighborKey);
-                    queue.push({
-                        entityName: neighborKey,
-                        depth: current.depth + 1,
-                    });
-
-                    // Add relationship
-                    const relKey = `${current.entityName}-${neighborKey}`;
-                    const relationship = relationshipMap.get(relKey);
-                    if (
-                        relationship &&
-                        !result.relationships.find(
-                            (r) => r.rowId === relationship.rowId,
-                        )
-                    ) {
-                        result.relationships.push(relationship);
-                    }
-                }
-            }
-        }
-    }
-
-    // add relationships between neighbors
-    for (let i = 0; i < result.neighbors.length; i++) {
-        for (let j = i + 1; j < result.neighbors.length; j++) {
-            const neighborA = result.neighbors[i];
-            const neighborB = result.neighbors[j];
-            const relKey = `${neighborA.name?.toLowerCase() || neighborA.id?.toLowerCase()}-${neighborB.name?.toLowerCase() || neighborB.id?.toLowerCase()}`;
-            const relationship = relationshipMap.get(relKey);
-            if (
-                relationship &&
-                !result.relationships.find(
-                    (r) => r.rowId === relationship.rowId,
-                )
-            ) {
-                result.relationships.push(relationship);
-            }
-        }
-    }
-
-    return {
-        centerEntity,
-        neighbors: result.neighbors,
-        relationships: result.relationships,
-    };
-}
 
 // Importance levels for hierarchical loading
 interface ImportanceLevelConfig {
