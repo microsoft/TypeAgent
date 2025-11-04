@@ -70,7 +70,7 @@ public static class ConversationIndexer
     /// <returns></returns>
     public static async ValueTask UpdateMessageIndexAsync(
         this IConversation conversation,
-        bool addKnowledge,
+        bool updateKnowledge,
         CancellationToken cancellationToken = default
     )
     {
@@ -89,11 +89,9 @@ public static class ConversationIndexer
             cancellationToken
         ).ConfigureAwait(false);
 
-        if (addKnowledge)
+        if (updateKnowledge)
         {
-            // Messages can provide custom, pre-computed/pre-extracted knowledge.
-            // Add those to the SemanticRefs store for subsequent indexing
-            await conversation.AddCustomKnowledgeAsync(
+            await conversation.UpdateKnowledgeAsync(
                 messageRangeToIndex,
                 messagesToIndex,
                 cancellationToken
@@ -105,7 +103,6 @@ public static class ConversationIndexer
             messageRangeToIndex.OrdinalStartAt,
             cancellationToken
         ).ConfigureAwait(false);
-
     }
 
     /// <summary>
@@ -173,6 +170,29 @@ public static class ConversationIndexer
         }
     }
 
+    internal static async ValueTask UpdateKnowledgeAsync(
+        this IConversation conversation,
+        CollectionRangeToIndex messageRange,
+        IList<IMessage> messages,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await conversation.AddCustomKnowledgeAsync(
+            messageRange,
+            messages,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (conversation.Settings.SemanticRefIndexSettings.AutoExtractKnowledge)
+        {
+            await conversation.ExtractAndAddKnowledgeAsync(
+                messageRange,
+                messages,
+                cancellationToken
+            );
+        }
+    }
+
     internal static async ValueTask AddCustomKnowledgeAsync(
         this IConversation conversation,
         CollectionRangeToIndex messageRange,
@@ -211,18 +231,37 @@ public static class ConversationIndexer
     )
     {
         var settings = conversation.Settings.SemanticRefIndexSettings;
-        int concurrency = settings.Concurrency > 0 ? settings.Concurrency : 2;
-        int batchSize = settings.BatchSize > 0 ? settings.BatchSize : 4;
-
-        foreach (var (locations, chunks) in GetMessageChunkBatch(messageRange, messages, batchSize))
+        foreach (var (locations, chunks) in GetMessageChunkBatch(
+            messageRange,
+            messages, settings.BatchSize > 0 ? settings.BatchSize : 4
+            )
+        )
         {
-            await settings.KnowledgeExtractor.ExtractWithRetryAsync(
+            List<KnowledgeResponse> responses = await settings.KnowledgeExtractor.ExtractWithRetryAsync(
                 chunks,
-                concurrency,
-                null,
+                settings.Concurrency > 0 ? settings.Concurrency : 2,
+                settings.Retry,
                 null,
                 cancellationToken
             ).ConfigureAwait(false);
+
+            List<SemanticRef> semanticRefs = [];
+            int count = chunks.Count;
+            for (int i = 0; i < count; ++i)
+            {
+                semanticRefs.AddRange(responses[i].ToSemanticRefs(
+                    new TextRange(locations[i])
+                    )
+                );
+            }
+
+            if (!semanticRefs.IsNullOrEmpty())
+            {
+                await conversation.SemanticRefs.AppendAsync(
+                    semanticRefs,
+                    cancellationToken
+                ).ConfigureAwait(false);
+            }
         }
     }
 

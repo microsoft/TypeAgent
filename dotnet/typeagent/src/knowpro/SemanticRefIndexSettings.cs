@@ -15,12 +15,13 @@ public class SemanticRefIndexSettings
         BatchSize = 4;
         Concurrency = 2;
         AutoExtractKnowledge = true;
-
     }
 
     public int BatchSize { get; set; }
 
     public int Concurrency { get; set; }
+
+    public RetrySettings? Retry { get; set; }
 
     public bool AutoExtractKnowledge { get; set; }
 
