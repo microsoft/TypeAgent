@@ -237,11 +237,8 @@ public static class ConversationIndexer
             )
         )
         {
-            List<KnowledgeResponse> responses = await settings.KnowledgeExtractor.ExtractWithRetryAsync(
+            IList<KnowledgeResponse> responses = await settings.KnowledgeExtractor.ExtractAsync(
                 chunks,
-                settings.Concurrency > 0 ? settings.Concurrency : 2,
-                settings.Retry,
-                null,
                 cancellationToken
             ).ConfigureAwait(false);
 

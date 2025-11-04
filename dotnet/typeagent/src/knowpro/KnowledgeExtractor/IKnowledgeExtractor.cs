@@ -9,40 +9,10 @@ public interface IKnowledgeExtractor
 
     JsonTranslator<ExtractedKnowledge> Translator { get; set; }
 
-    Task<KnowledgeResponse?> ExtractAsync(string message, CancellationToken cancellationToken = default);
+    Task<KnowledgeResponse> ExtractAsync(string message, CancellationToken cancellationToken = default);
+
+    Task<IList<KnowledgeResponse>> ExtractAsync(IList<string> messages, CancellationToken cancellationToken = default);
+
+    event Action<BatchProgress> OnExtracted;
 }
 
-public static class KnowledgeExtractorExtensions
-{
-    public static Task<KnowledgeResponse> ExtractWithRetryAsync(
-        this IKnowledgeExtractor extractor,
-        string message,
-        RetrySettings? retry = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return Async.CallWithRetryAsync(
-            (ct) => extractor.ExtractAsync(message, ct),
-            retry,
-            null,
-            cancellationToken
-        );
-    }
-
-    public static Task<List<KnowledgeResponse>> ExtractWithRetryAsync(
-        this IKnowledgeExtractor extractor,
-        IList<string> messages,
-        int concurrency = 2,
-        RetrySettings? retry = null,
-        Action<BatchProgress>? progress = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return messages.MapAsync(
-            concurrency,
-            (message, ct) => extractor.ExtractWithRetryAsync(message, retry, ct),
-            progress,
-            cancellationToken
-        );
-    }
-}
