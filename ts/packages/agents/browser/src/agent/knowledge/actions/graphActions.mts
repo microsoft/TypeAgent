@@ -20,7 +20,7 @@ import {
     invalidateAllGraphologyCaches,
 } from "../utils/graphologyCache.mjs";
 // JSON Storage imports
-import { EntityGraphQueries, TopicGraphQueries } from "website-memory";
+import { EntityGraphQueries, TopicGraphQueries, SqliteToJsonConverter } from "website-memory";
 import registerDebug from "debug";
 import { openai as ai } from "aiclient";
 import { createJsonTranslator } from "typechat";
@@ -502,13 +502,22 @@ export async function buildKnowledgeGraph(
 }> {
     try {
         debug(
-            "[Knowledge Graph] Starting JSON-based knowledge graph build with parameters:",
+            "[Knowledge Graph] Starting knowledge graph build with parameters:",
             parameters,
         );
 
         const startTime = Date.now();
         
-        // Get JSON storage manager directly
+        // Get website collection for actual graph building
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        // Get JSON storage manager for saving results
         const jsonStorage = context.agentContext.graphJsonStorage;
         if (!jsonStorage?.manager) {
             return {
@@ -517,24 +526,36 @@ export async function buildKnowledgeGraph(
             };
         }
 
-        // Build the graph using JSON storage
-        await jsonStorage.manager.buildGraph();
+        // Build the graph using websiteCollection (this does the actual computation)
+        debug("[Knowledge Graph] Building graph from website collection...");
+        await websiteCollection.buildGraph();
+        debug("[Knowledge Graph] Graph build from website collection completed");
+
+        // Convert SQLite results to JSON format and save
+        debug("[Knowledge Graph] Converting to JSON format and saving...");
+        const converter = new SqliteToJsonConverter(websiteCollection as any);
+        const entityGraph = await converter.convertEntityGraph();
+        const topicGraph = await converter.convertTopicGraph();
+        
+        // Save the converted graphs to JSON storage
+        await jsonStorage.manager.saveEntityGraph(entityGraph);
+        await jsonStorage.manager.saveTopicGraph(topicGraph);
+        
         const timeElapsed = Date.now() - startTime;
 
-        // Get stats from JSON storage
-        const status = await getKnowledgeGraphStatus({}, context);
+        // Get stats from the built graphs
         const stats = {
-            entitiesFound: status.entityCount,
-            relationshipsCreated: status.relationshipCount,
-            communitiesDetected: status.communityCount,
+            entitiesFound: entityGraph.nodes.length,
+            relationshipsCreated: entityGraph.edges.length,
+            communitiesDetected: entityGraph.communities.length,
             timeElapsed: timeElapsed,
         };
 
-        debug("[Knowledge Graph] JSON build completed:", stats);
+        debug("[Knowledge Graph] Build and JSON conversion completed:", stats);
 
         return {
             success: true,
-            message: `Knowledge graph build completed in ${timeElapsed}ms`,
+            message: `Knowledge graph built and saved in ${timeElapsed}ms`,
             stats,
         };
     } catch (error) {
@@ -566,7 +587,7 @@ export async function rebuildKnowledgeGraph(
             };
         }
 
-        // Get JSON storage manager for saving results
+        // Get JSON storage manager for cleaning up persisted files
         const jsonStorage = context.agentContext.graphJsonStorage;
         if (!jsonStorage?.manager) {
             return {
@@ -575,7 +596,7 @@ export async function rebuildKnowledgeGraph(
             };
         }
 
-        // Create backup of existing JSON files
+        // Create backup of existing JSON files before clearing
         try {
             await jsonStorage.manager.createBackup();
             debug("[Knowledge Graph] Created backup of existing JSON graph data");
@@ -583,22 +604,49 @@ export async function rebuildKnowledgeGraph(
             console.warn("Warning: Failed to create backup:", backupError);
         }
 
-        // Rebuild the graph from SQLite data using websiteCollection
+        // Clear existing graph data and rebuild
+        try {
+            // Clear existing SQLite graph tables if they exist
+            if (websiteCollection.relationships) {
+                websiteCollection.relationships.clear();
+            }
+            if (websiteCollection.communities) {
+                websiteCollection.communities.clear();
+            }
+            debug("[Knowledge Graph] Cleared existing SQLite graph data");
+        } catch (clearError) {
+            // Continue even if clearing fails, as the rebuild might overwrite
+            console.warn("Failed to clear existing graph data:", clearError);
+        }
+
+        // Rebuild the knowledge graph using websiteCollection
         debug("[Knowledge Graph] Building graph from SQLite data...");
         await websiteCollection.buildGraph();
         debug("[Knowledge Graph] Graph build from SQLite completed");
 
-        // Convert to JSON format and save
+        // Convert SQLite results to JSON format and save (replacing old JSON files)
         debug("[Knowledge Graph] Converting to JSON format and saving...");
         const converter = new SqliteToJsonConverter(websiteCollection as any);
         const entityGraph = await converter.convertEntityGraph();
         const topicGraph = await converter.convertTopicGraph();
         
-        // Save the converted graphs
+        // Save the converted graphs to JSON storage (this will overwrite existing files)
         await jsonStorage.manager.saveEntityGraph(entityGraph);
         await jsonStorage.manager.saveTopicGraph(topicGraph);
-        
-        debug("[Knowledge Graph] JSON graph rebuild completed successfully");
+        debug("[Knowledge Graph] Updated JSON graph files");
+
+        // Invalidate caches after graph rebuild
+        setGraphCache(websiteCollection, {
+            entities: [],
+            relationships: [],
+            communities: [],
+            entityMetrics: [],
+            lastUpdated: 0,
+            isValid: false,
+        });
+        invalidateTopicCache(websiteCollection);
+
+        debug("[Knowledge Graph] Knowledge graph rebuild completed successfully");
 
         return {
             success: true,
