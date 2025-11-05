@@ -21,6 +21,7 @@ import {
 } from "../utils/graphologyCache.mjs";
 // JSON Storage imports
 import { EntityGraphQueries, TopicGraphQueries, SqliteToJsonConverter } from "website-memory";
+import { createGraphologyPersistenceManager } from "../utils/graphologyPersistence.mjs";
 import registerDebug from "debug";
 import { openai as ai } from "aiclient";
 import { createJsonTranslator } from "typechat";
@@ -96,6 +97,87 @@ const debug = registerDebug("typeagent:browser:knowledge:graph");
 // ============================================================================
 // Cache Management Functions (moved up to avoid "Cannot find name" errors)
 // ============================================================================
+
+// Graphology Integration Helper Functions
+async function cacheGraphologyGraphs(
+    websiteCollection: any,
+    entityGraph: any,
+    topicGraph: any,
+    metadata: any
+): Promise<void> {
+    // Convert Graphology graphs to Cytoscape elements for caching
+    const entityElements = convertToCytoscapeElements(entityGraph);
+    const topicElements = convertToCytoscapeElements(topicGraph);
+    
+    // Create cache entries with proper parameters
+    const entityCache = createGraphologyCache(entityGraph, entityElements, metadata.buildTime || 0, 100);
+    const topicCache = createGraphologyCache(topicGraph, topicElements, metadata.buildTime || 0, 100);
+    
+    // Store in cache with appropriate keys
+    setGraphologyCache('entity_default', entityCache);
+    setGraphologyCache('topic_default', topicCache);
+    
+    debug("[Graphology Cache] Cached entity graph with", entityGraph.order, "nodes", entityGraph.size, "edges");
+    debug("[Graphology Cache] Cached topic graph with", topicGraph.order, "nodes", topicGraph.size, "edges");
+}
+
+function extractEntitiesFromGraphology(entityGraph: any): any[] {
+    const entities: any[] = [];
+    
+    // Extract entity nodes from Graphology graph
+    entityGraph.forEachNode((nodeId: string, attributes: any) => {
+        if (attributes.type === 'entity') {
+            entities.push({
+                name: attributes.name || nodeId,
+                entityType: attributes.entityType || 'unknown',
+                frequency: attributes.frequency || 0,
+                websites: attributes.websites || [],
+                confidence: attributes.confidence || 1.0
+            });
+        }
+    });
+    
+    return entities;
+}
+
+function extractRelationshipsFromGraphology(entityGraph: any): any[] {
+    const relationships: any[] = [];
+    
+    // Extract relationship edges from Graphology graph
+    entityGraph.forEachEdge((edgeId: string, attributes: any, source: string, target: string) => {
+        if (attributes.relationshipType === 'co_occurs') {
+            relationships.push({
+                entity1: source,
+                entity2: target,
+                strength: attributes.weight || 1.0,
+                confidence: attributes.confidence || 1.0,
+                cooccurrenceCount: attributes.cooccurrenceCount || 1
+            });
+        }
+    });
+    
+    return relationships;
+}
+
+function extractCommunitiesFromGraphology(entityGraph: any): any[] {
+    const communities: any[] = [];
+    
+    // Extract community nodes from Graphology graph
+    entityGraph.forEachNode((nodeId: string, attributes: any) => {
+        if (attributes.type === 'community') {
+            communities.push({
+                id: nodeId,
+                name: attributes.name || `Community ${nodeId}`,
+                entities: attributes.entities || [],
+                size: attributes.size || 0,
+                coherence: attributes.coherence || 0.0,
+                importance: attributes.importance || 0.0
+            });
+        }
+    });
+    
+    return communities;
+}
 
 // Entity graph cache storage attached to websiteCollection
 function getGraphCache(websiteCollection: any): GraphCache | null {
@@ -392,7 +474,7 @@ async function ensureGraphCache(context: SessionContext<BrowserActionContext>): 
 // ============================================================================
 
 /**
- * Get graph queries interface from JSON storage
+ * Get graph queries interface from JSON storage (legacy)
  */
 async function getGraphQueries(context: SessionContext<BrowserActionContext>): Promise<{
     entityQueries?: EntityGraphQueries;
@@ -416,6 +498,97 @@ async function getGraphQueries(context: SessionContext<BrowserActionContext>): P
     } catch (error) {
         debug(`Error loading JSON graphs: ${error}`);
         throw new Error(`Failed to load graph data: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+}
+
+/**
+ * Get Graphology graphs from cache or persistence (new primary method)
+ */
+async function getGraphologyGraphs(context: SessionContext<BrowserActionContext>): Promise<{
+    entityGraph?: any;
+    topicGraph?: any;
+    useGraphology: boolean;
+}> {
+    const websiteCollection = context.agentContext.websiteCollection;
+    if (!websiteCollection) {
+        throw new Error("Website collection not available");
+    }
+
+    try {
+        // Try to get from memory cache first (fastest)
+        const entityCache = getGraphologyCache('entity_default');
+        const topicCache = getGraphologyCache('topic_default');
+        
+        if (entityCache?.graph && topicCache?.graph) {
+            debug("[Graphology] Using memory-cached Graphology graphs");
+            return {
+                entityGraph: entityCache.graph,
+                topicGraph: topicCache.graph,
+                useGraphology: true
+            };
+        }
+        
+        // Try to load from disk persistence (fast)
+        debug("[Graphology] Memory cache miss, trying disk persistence...");
+        const jsonStorage = context.agentContext.graphJsonStorage;
+        if (jsonStorage?.manager) {
+            const storagePath = jsonStorage.manager.getStoragePath();
+            const persistenceManager = createGraphologyPersistenceManager(storagePath);
+            
+            const entityResult = await persistenceManager.loadEntityGraph();
+            const topicResult = await persistenceManager.loadTopicGraph();
+            
+            if (entityResult?.graph && topicResult?.graph) {
+                debug("[Graphology] Loaded graphs from disk persistence");
+                
+                // Cache in memory for next time
+                await cacheGraphologyGraphs(websiteCollection, entityResult.graph, topicResult.graph, {
+                    buildTime: entityResult.metadata?.buildTime || 0,
+                    loadedFromDisk: true
+                });
+                
+                return {
+                    entityGraph: entityResult.graph,
+                    topicGraph: topicResult.graph,
+                    useGraphology: true
+                };
+            }
+        }
+        
+        // If no cache or persistence, rebuild graphs (slowest)
+        debug("[Graphology] No cached graphs found, rebuilding from source...");
+        const buildResult = await websiteCollection.buildGraph();
+        
+        if (buildResult?.entityGraph && buildResult?.topicGraph) {
+            // Cache in memory
+            await cacheGraphologyGraphs(websiteCollection, buildResult.entityGraph, buildResult.topicGraph, buildResult.metadata);
+            
+            // Persist to disk for next time
+            if (jsonStorage?.manager) {
+                const storagePath = jsonStorage.manager.getStoragePath();
+                const persistenceManager = createGraphologyPersistenceManager(storagePath);
+                
+                try {
+                    await persistenceManager.saveEntityGraph(buildResult.entityGraph, buildResult.metadata);
+                    await persistenceManager.saveTopicGraph(buildResult.topicGraph, buildResult.metadata);
+                    debug("[Graphology] Saved graphs to disk persistence");
+                } catch (persistError) {
+                    debug(`[Graphology] Failed to persist graphs: ${persistError}`);
+                    // Continue anyway since we have the graphs in memory
+                }
+            }
+            
+            return {
+                entityGraph: buildResult.entityGraph,
+                topicGraph: buildResult.topicGraph,
+                useGraphology: true
+            };
+        }
+        
+        throw new Error("Failed to build Graphology graphs");
+    } catch (error) {
+        debug(`Error getting Graphology graphs: ${error}`);
+        throw new Error(`Failed to get Graphology graphs: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
 }
 
@@ -619,38 +792,67 @@ export async function rebuildKnowledgeGraph(
             console.warn("Failed to clear existing graph data:", clearError);
         }
 
-        // Rebuild the knowledge graph using websiteCollection
-        debug("[Knowledge Graph] Building graph from SQLite data...");
-        await websiteCollection.buildGraph();
-        debug("[Knowledge Graph] Graph build from SQLite completed");
+        // Rebuild the knowledge graph using websiteCollection - now returns Graphology graphs directly
+        debug("[Knowledge Graph] Building Graphology graphs directly from cache...");
+        const buildResult = await websiteCollection.buildGraph();
+        debug("[Knowledge Graph] Direct Graphology graph build completed");
 
-        // Convert SQLite results to JSON format and save (replacing old JSON files)
-        debug("[Knowledge Graph] Converting to JSON format and saving...");
-        const converter = new SqliteToJsonConverter(websiteCollection as any);
-        const entityGraph = await converter.convertEntityGraph();
-        const topicGraph = await converter.convertTopicGraph();
-        
-        // Save the converted graphs to JSON storage (this will overwrite existing files)
-        await jsonStorage.manager.saveEntityGraph(entityGraph);
-        await jsonStorage.manager.saveTopicGraph(topicGraph);
-        debug("[Knowledge Graph] Updated JSON graph files");
+        // Check if we got Graphology graphs
+        if (!buildResult?.entityGraph || !buildResult?.topicGraph) {
+            throw new Error("Failed to build Graphology graphs from website collection");
+        }
 
-        // Invalidate caches after graph rebuild
+        const { entityGraph, topicGraph, metadata } = buildResult;
+
+        // Cache the Graphology graphs directly (bypassing JSON conversion)
+        debug("[Knowledge Graph] Caching Graphology graphs directly...");
+        await cacheGraphologyGraphs(websiteCollection, entityGraph, topicGraph, metadata);
+
+        // Clear any old persistence cache since we have new data
+        if (jsonStorage?.manager) {
+            const storagePath = jsonStorage.manager.getStoragePath();
+            const persistenceManager = createGraphologyPersistenceManager(storagePath);
+            
+            try {
+                await persistenceManager.clearCache();
+                debug("[Knowledge Graph] Cleared old Graphology persistence cache");
+            } catch (clearError) {
+                debug(`[Knowledge Graph] Failed to clear persistence cache: ${clearError}`);
+                // Continue since this is not critical
+            }
+        }
+
+        // Update traditional caches to maintain compatibility
         setGraphCache(websiteCollection, {
-            entities: [],
-            relationships: [],
-            communities: [],
+            entities: extractEntitiesFromGraphology(entityGraph),
+            relationships: extractRelationshipsFromGraphology(entityGraph),
+            communities: extractCommunitiesFromGraphology(entityGraph),
             entityMetrics: [],
-            lastUpdated: 0,
-            isValid: false,
+            lastUpdated: Date.now(),
+            isValid: true,
         });
-        invalidateTopicCache(websiteCollection);
+        
+        // Also create JSON backup for compatibility (optional step)
+        debug("[Knowledge Graph] Creating JSON backup for compatibility...");
+        try {
+            const converter = new SqliteToJsonConverter(websiteCollection as any);
+            const entityGraphJson = await converter.convertEntityGraph();
+            const topicGraphJson = await converter.convertTopicGraph();
+            
+            // Save the converted graphs to JSON storage
+            await jsonStorage.manager.saveEntityGraph(entityGraphJson);
+            await jsonStorage.manager.saveTopicGraph(topicGraphJson);
+            debug("[Knowledge Graph] JSON backup created successfully");
+        } catch (jsonError) {
+            console.warn("Warning: Failed to create JSON backup:", jsonError);
+            // Continue since we have the Graphology graphs cached
+        }
 
         debug("[Knowledge Graph] Knowledge graph rebuild completed successfully");
 
         return {
             success: true,
-            message: `Knowledge graph rebuilt successfully. Entity graph: ${entityGraph.nodes.length} nodes, ${entityGraph.edges.length} edges. Topic graph: ${topicGraph.nodes.length} nodes, ${topicGraph.edges.length} edges.`,
+            message: `Knowledge graph rebuilt successfully using Graphology. Entity graph: ${entityGraph.order} nodes, ${entityGraph.size} edges. Topic graph: ${topicGraph.order} nodes, ${topicGraph.size} edges. Build time: ${metadata?.buildTime || 0}ms`,
         };
     } catch (error) {
         console.error("Error rebuilding knowledge graph:", error);
@@ -953,6 +1155,36 @@ export async function getAllRelationships(
     error?: string;
 }> {
     try {
+        // Try Graphology first (new primary method)
+        try {
+            const { entityGraph } = await getGraphologyGraphs(context);
+            
+            if (entityGraph) {
+                debug("[Graphology] Getting relationships from Graphology graph");
+                const relationships = extractRelationshipsFromGraphology(entityGraph);
+                
+                // Apply optimization for consistency
+                const optimizedRelationships = relationships.map((rel: any, index: number) => ({
+                    rowId: index + 1, // Generate rowId since Graphology doesn't have one
+                    fromEntity: rel.entity1,
+                    toEntity: rel.entity2,
+                    relationshipType: "co_occurs",
+                    confidence: rel.confidence,
+                    sources: [], // TODO: Extract sources from edge attributes if available
+                    count: rel.cooccurrenceCount,
+                    weight: rel.strength
+                }));
+                
+                debug(`[Graphology] Returning ${optimizedRelationships.length} relationships`);
+                return { relationships: optimizedRelationships };
+            }
+        } catch (graphologyError) {
+            debug(`[Graphology] Failed to get relationships from Graphology: ${graphologyError}`);
+            // Fall back to JSON approach
+        }
+        
+        // Fallback to JSON storage (legacy method)
+        debug("[JSON Fallback] Using JSON storage for relationships");
         const { entityQueries } = await getGraphQueries(context);
         
         if (!entityQueries) {
@@ -1002,6 +1234,24 @@ export async function getAllCommunities(
     error?: string;
 }> {
     try {
+        // Try Graphology first (new primary method)
+        try {
+            const { entityGraph } = await getGraphologyGraphs(context);
+            
+            if (entityGraph) {
+                debug("[Graphology] Getting communities from Graphology graph");
+                const communities = extractCommunitiesFromGraphology(entityGraph);
+                
+                debug(`[Graphology] Returning ${communities.length} communities`);
+                return { communities };
+            }
+        } catch (graphologyError) {
+            debug(`[Graphology] Failed to get communities from Graphology: ${graphologyError}`);
+            // Fall back to JSON approach
+        }
+        
+        // Fallback to JSON storage (legacy method)
+        debug("[JSON Fallback] Using JSON storage for communities");
         const { entityQueries } = await getGraphQueries(context);
         
         if (!entityQueries) {
@@ -1032,6 +1282,44 @@ export async function getAllEntitiesWithMetrics(
     error?: string;
 }> {
     try {
+        // Try Graphology first (new primary method)
+        try {
+            const { entityGraph } = await getGraphologyGraphs(context);
+            
+            if (entityGraph) {
+                debug("[Graphology] Getting entities from Graphology graph");
+                const entities = extractEntitiesFromGraphology(entityGraph);
+                
+                // Add degree calculations for each entity
+                const entitiesWithMetrics = entities.map((entity: any) => {
+                    const degree = entityGraph.hasNode(entity.name) ? entityGraph.degree(entity.name) : 0;
+                    const neighbors = entityGraph.hasNode(entity.name) ? entityGraph.neighbors(entity.name) : [];
+                    
+                    return {
+                        id: entity.name,
+                        name: entity.name,
+                        type: entity.entityType || "entity",
+                        confidence: entity.confidence || 0.5,
+                        count: entity.frequency || 0,
+                        degree: degree,
+                        importance: degree * (entity.confidence || 0.5), // Simple importance calculation
+                        communityId: entityGraph.hasNode(entity.name) ? 
+                            entityGraph.getNodeAttribute(entity.name, 'community') : undefined,
+                        websites: entity.websites || [],
+                        neighbors: neighbors.slice(0, 5) // Limit to first 5 neighbors
+                    };
+                });
+                
+                debug(`[Graphology] Returning ${entitiesWithMetrics.length} entities with metrics`);
+                return { entities: entitiesWithMetrics };
+            }
+        } catch (graphologyError) {
+            debug(`[Graphology] Failed to get entities from Graphology: ${graphologyError}`);
+            // Fall back to JSON approach
+        }
+        
+        // Fallback to JSON storage (legacy method)
+        debug("[JSON Fallback] Using JSON storage for entities");
         const { entityQueries } = await getGraphQueries(context);
         
         if (!entityQueries) {
@@ -2567,6 +2855,44 @@ export async function getTopicMetrics(
     error?: string;
 }> {
     try {
+        // Try Graphology first (new primary method)
+        try {
+            const { topicGraph } = await getGraphologyGraphs(context);
+            
+            if (topicGraph && topicGraph.hasNode(parameters.topicId)) {
+                debug("[Graphology] Getting topic metrics from Graphology graph");
+                
+                const nodeAttributes = topicGraph.getNodeAttributes(parameters.topicId);
+                const degree = topicGraph.degree(parameters.topicId);
+                const inDegree = topicGraph.inDegree(parameters.topicId);
+                const outDegree = topicGraph.outDegree(parameters.topicId);
+                
+                // Extract metrics from node attributes and graph structure
+                const metrics = {
+                    topicId: parameters.topicId,
+                    name: nodeAttributes.name || parameters.topicId,
+                    degree: degree,
+                    inDegree: inDegree,
+                    outDegree: outDegree,
+                    betweennessCentrality: nodeAttributes.betweennessCentrality || 0,
+                    degreeCentrality: nodeAttributes.degreeCentrality || (degree / Math.max(topicGraph.order - 1, 1)),
+                    community: nodeAttributes.community || null,
+                    importance: nodeAttributes.importance || degree * 0.1,
+                    coherence: nodeAttributes.coherence || 0.5,
+                    entityCount: nodeAttributes.entityCount || 0,
+                    websiteCount: nodeAttributes.websiteCount || 0
+                };
+                
+                debug(`[Graphology] Retrieved metrics for topic: ${parameters.topicId}`);
+                return { success: true, metrics };
+            }
+        } catch (graphologyError) {
+            debug(`[Graphology] Failed to get topic metrics from Graphology: ${graphologyError}`);
+            // Fall back to SQLite approach
+        }
+        
+        // Fallback to SQLite method (legacy)
+        debug("[SQLite Fallback] Using SQLite for topic metrics");
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection) {

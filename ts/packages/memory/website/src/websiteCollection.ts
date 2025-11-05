@@ -47,6 +47,10 @@ import fs from "node:fs";
 import registerDebug from "debug";
 import { createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const Graph = require("graphology");
 
 const debug = registerDebug("typeagent:memory:websiteCollection");
 
@@ -1632,7 +1636,17 @@ export class WebsiteCollection
     /**
      * Build knowledge graph from existing website data
      */
-    public async buildGraph(options?: { urlLimit?: number }): Promise<void> {
+    public async buildGraph(options?: { urlLimit?: number }): Promise<{
+        entityGraph?: any; // Graphology Graph
+        topicGraph?: any;  // Graphology Graph
+        metadata?: {
+            buildTime: number;
+            entityCount: number;
+            relationshipCount: number;
+            communityCount: number;
+            topicCount: number;
+        };
+    }> {
         const urlLimit = options?.urlLimit;
         const isMinimalMode = urlLimit !== undefined;
 
@@ -1671,32 +1685,73 @@ export class WebsiteCollection
             `[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - startTime}ms`,
         );
 
+        // PHASE 1: CREATE GRAPHOLOGY GRAPHS DIRECTLY
+        debug(`[Knowledge Graph] Building Graphology graphs directly...`);
+        const graphologyStartTime = Date.now();
+        const entityGraph = new Graph({ type: "undirected" });
+        const topicGraph = new Graph({ type: "directed" });
+
+        // Build entity graph directly
+        const entityGraphStart = Date.now();
+        await this.buildEntityGraphDirect(entityGraph, cacheManager, websitesToProcess);
+        const graphologyEntityTime = Date.now() - entityGraphStart;
+        debug(`[Knowledge Graph] Direct entity graph built in ${graphologyEntityTime}ms`);
+
+        // Build entity relationships directly
+        const relationshipDirectStart = Date.now();
+        await this.buildRelationshipsDirect(entityGraph, cacheManager);
+        const graphologyRelationshipTime = Date.now() - relationshipDirectStart;
+        debug(`[Knowledge Graph] Direct relationships built in ${graphologyRelationshipTime}ms`);
+
+        // Detect communities directly on graph
+        const communityDirectStart = Date.now();
+        await this.detectCommunitiesDirect(entityGraph, algorithms);
+        const graphologyCommunityTime = Date.now() - communityDirectStart;
+        debug(`[Knowledge Graph] Direct communities detected in ${graphologyCommunityTime}ms`);
+
+        // Build topic graph directly
+        const topicDirectStart = Date.now();
+        await this.buildTopicGraphDirect(topicGraph, cacheManager, urlLimit);
+        const graphologyTopicTime = Date.now() - topicDirectStart;
+        debug(`[Knowledge Graph] Direct topic graph built in ${graphologyTopicTime}ms`);
+
+        const graphologyTotalTime = Date.now() - graphologyStartTime;
+
+        // PARALLEL: ALSO RUN ORIGINAL SQLITE APPROACH FOR VALIDATION
+        debug(`[Knowledge Graph] Running original SQLite approach for validation...`);
+        const sqliteStartTime = Date.now();
+        
         // Store entities in knowledge entities table
+        const sqliteEntityStart = Date.now();
         await this.storeEntitiesInDatabase(cacheManager, websitesToProcess);
-        debug(`[Knowledge Graph] Stored entities in database`);
+        const sqliteEntityTime = Date.now() - sqliteEntityStart;
+        debug(`[Knowledge Graph] Stored entities in database in ${sqliteEntityTime}ms`);
 
         // Build relationships between entities using cache-based approach
         const relationshipStartTime = Date.now();
         await this.buildRelationships(cacheManager);
         const relationshipCount =
             cacheManager.getAllEntityRelationships().length;
+        const sqliteRelationshipTime = Date.now() - relationshipStartTime;
         debug(
-            `[Knowledge Graph] Built ${relationshipCount} relationships in ${Date.now() - relationshipStartTime}ms`,
+            `[Knowledge Graph] Built ${relationshipCount} relationships in ${sqliteRelationshipTime}ms`,
         );
 
         // Detect communities using algorithms
         const communityStartTime = Date.now();
         await this.detectCommunities(entities, algorithms);
         const communities = (await this.communities?.getAllCommunities()) || [];
+        const sqliteCommunityTime = Date.now() - communityStartTime;
         debug(
-            `[Knowledge Graph] Detected ${communities.length} communities in ${Date.now() - communityStartTime}ms`,
+            `[Knowledge Graph] Detected ${communities.length} communities in ${sqliteCommunityTime}ms`,
         );
 
         // Build hierarchical topics from flat topics
         const topicStartTime = Date.now();
         await this.buildHierarchicalTopics(urlLimit);
+        const sqliteTopicTime = Date.now() - topicStartTime;
         debug(
-            `[Knowledge Graph] Built hierarchical topics in ${Date.now() - topicStartTime}ms`,
+            `[Knowledge Graph] Built hierarchical topics in ${sqliteTopicTime}ms`,
         );
 
         // Build topic relationships and metrics using Graphology-based graph builder
@@ -1712,14 +1767,179 @@ export class WebsiteCollection
             this.topicRelationships,
             this.topicMetrics,
         );
+        const sqliteTopicGraphTime = Date.now() - topicGraphStart;
         debug(
-            `[Knowledge Graph] Completed topic graph build in ${Date.now() - topicGraphStart}ms`,
+            `[Knowledge Graph] Completed topic graph build in ${sqliteTopicGraphTime}ms`,
         );
+
+        const sqliteTotalTime = Date.now() - sqliteStartTime;
 
         const totalTime = Date.now() - startTime;
         debug(
             `[Knowledge Graph] Graph build completed in ${totalTime}ms with ${entities.length} entities`,
         );
+
+        // COMPARISON ANALYSIS: Graphology vs SQLite approaches
+        debug(`[Comparison] Starting detailed analysis of both approaches...`);
+
+        // Calculate Graphology graph metrics
+        const graphologyEntityNodes = entityGraph.nodes().filter((nodeId: string) => 
+            entityGraph.getNodeAttribute(nodeId, 'type') === 'entity');
+        const graphologyCommunityNodes = entityGraph.nodes().filter((nodeId: string) => 
+            entityGraph.getNodeAttribute(nodeId, 'type') === 'community');
+        const graphologyRelationshipEdges = entityGraph.edges().filter((edgeId: string) => 
+            entityGraph.getEdgeAttribute(edgeId, 'relationshipType') === 'co_occurs');
+
+        const graphologyMetrics = {
+            entityCount: graphologyEntityNodes.length,
+            relationshipCount: graphologyRelationshipEdges.length,
+            communityCount: graphologyCommunityNodes.length,
+            topicCount: topicGraph.order,
+            totalNodes: entityGraph.order,
+            totalEdges: entityGraph.size
+        };
+
+        // Calculate SQLite database metrics for comparison
+        const sqliteEntityCount = await this.getEntityCount();
+        const sqliteRelationshipCount = this.relationships ? 
+            (await this.relationships.getAllRelationships()).length : 0;
+        const sqliteCommunityCount = this.communities ? 
+            (await this.communities.getAllCommunities()).length : 0;
+        const sqliteTopicCount = this.hierarchicalTopics ? 
+            (await this.hierarchicalTopics.getTopicHierarchy()).length : 0;
+
+        const sqliteMetrics = {
+            entityCount: sqliteEntityCount,
+            relationshipCount: sqliteRelationshipCount,
+            communityCount: sqliteCommunityCount,
+            topicCount: sqliteTopicCount
+        };
+
+        // Detailed comparison logging
+        debug(`[Comparison] Graphology Approach Results:`, graphologyMetrics);
+        debug(`[Comparison] SQLite Approach Results:`, sqliteMetrics);
+
+        // PERFORMANCE COMPARISON
+        debug(`[Performance] Timing Comparison:`);
+        debug(`[Performance]   Graphology Total: ${graphologyTotalTime}ms`);
+        debug(`[Performance]   SQLite Total: ${sqliteTotalTime}ms`);
+        debug(`[Performance]   Speedup: ${(sqliteTotalTime / graphologyTotalTime).toFixed(2)}x ${graphologyTotalTime < sqliteTotalTime ? 'FASTER' : 'SLOWER'}`);
+        
+        debug(`[Performance] Detailed Phase Timing:`);
+        debug(`[Performance]   Entity Building - Graphology: ${graphologyEntityTime}ms, SQLite: ${sqliteEntityTime}ms`);
+        debug(`[Performance]   Relationships - Graphology: ${graphologyRelationshipTime}ms, SQLite: ${sqliteRelationshipTime}ms`);
+        debug(`[Performance]   Communities - Graphology: ${graphologyCommunityTime}ms, SQLite: ${sqliteCommunityTime}ms`);
+        debug(`[Performance]   Topics - Graphology: ${graphologyTopicTime}ms, SQLite: ${sqliteTopicTime + sqliteTopicGraphTime}ms`);
+
+        const graphologyEfficiency = graphologyMetrics.entityCount / Math.max(graphologyTotalTime, 1);
+        const sqliteEfficiency = sqliteMetrics.entityCount / Math.max(sqliteTotalTime, 1);
+        debug(`[Performance] Efficiency (entities/ms): Graphology: ${graphologyEfficiency.toFixed(3)}, SQLite: ${sqliteEfficiency.toFixed(3)}`);
+
+        // Calculate differences and percentages
+        const entityDiff = graphologyMetrics.entityCount - sqliteMetrics.entityCount;
+        const relationshipDiff = graphologyMetrics.relationshipCount - sqliteMetrics.relationshipCount;
+        const communityDiff = graphologyMetrics.communityCount - sqliteMetrics.communityCount;
+        const topicDiff = graphologyMetrics.topicCount - sqliteMetrics.topicCount;
+
+        const entityPercent = sqliteMetrics.entityCount > 0 ? 
+            ((entityDiff / sqliteMetrics.entityCount) * 100).toFixed(2) : 'N/A';
+        const relationshipPercent = sqliteMetrics.relationshipCount > 0 ? 
+            ((relationshipDiff / sqliteMetrics.relationshipCount) * 100).toFixed(2) : 'N/A';
+        const communityPercent = sqliteMetrics.communityCount > 0 ? 
+            ((communityDiff / sqliteMetrics.communityCount) * 100).toFixed(2) : 'N/A';
+        const topicPercent = sqliteMetrics.topicCount > 0 ? 
+            ((topicDiff / sqliteMetrics.topicCount) * 100).toFixed(2) : 'N/A';
+
+        debug(`[Comparison] Differences (Graphology - SQLite):`);
+        debug(`[Comparison]   Entities: ${entityDiff} (${entityPercent}%)`);
+        debug(`[Comparison]   Relationships: ${relationshipDiff} (${relationshipPercent}%)`);
+        debug(`[Comparison]   Communities: ${communityDiff} (${communityPercent}%)`);
+        debug(`[Comparison]   Topics: ${topicDiff} (${topicPercent}%)`);
+
+        // Flag significant discrepancies
+        const entityDiscrepancy = Math.abs(entityDiff) > Math.max(1, sqliteMetrics.entityCount * 0.05); // 5% threshold
+        const relationshipDiscrepancy = Math.abs(relationshipDiff) > Math.max(1, sqliteMetrics.relationshipCount * 0.1); // 10% threshold
+        const communityDiscrepancy = Math.abs(communityDiff) > Math.max(1, sqliteMetrics.communityCount * 0.2); // 20% threshold
+        const topicDiscrepancy = Math.abs(topicDiff) > Math.max(1, sqliteMetrics.topicCount * 0.1); // 10% threshold
+
+        if (entityDiscrepancy || relationshipDiscrepancy || communityDiscrepancy || topicDiscrepancy) {
+            debug(`[Comparison] ⚠️  SIGNIFICANT DISCREPANCIES DETECTED:`);
+            if (entityDiscrepancy) debug(`[Comparison]   Entity count difference exceeds 5% threshold`);
+            if (relationshipDiscrepancy) debug(`[Comparison]   Relationship count difference exceeds 10% threshold`);
+            if (communityDiscrepancy) debug(`[Comparison]   Community count difference exceeds 20% threshold`);
+            if (topicDiscrepancy) debug(`[Comparison]   Topic count difference exceeds 10% threshold`);
+        } else {
+            debug(`[Comparison] ✅ Results are within acceptable variance thresholds`);
+        }
+
+        // Sample entity comparison for quality validation
+        if (graphologyEntityNodes.length > 0 && sqliteMetrics.entityCount > 0) {
+            debug(`[Comparison] Sample entity validation:`);
+            const sampleSize = Math.min(5, graphologyEntityNodes.length);
+            const sampleEntities = graphologyEntityNodes.slice(0, sampleSize);
+            
+            // Get all SQLite entities for comparison
+            const allSqliteEntities = await this.extractEntities(undefined);
+            const sqliteEntityNames = new Set(allSqliteEntities);
+            
+            for (const entityId of sampleEntities) {
+                const graphologyEntity = {
+                    name: entityGraph.getNodeAttribute(entityId, 'name'),
+                    type: entityGraph.getNodeAttribute(entityId, 'entityType'),
+                    frequency: entityGraph.getNodeAttribute(entityId, 'frequency') || 0,
+                    websites: entityGraph.getNodeAttribute(entityId, 'websites') || []
+                };
+                
+                // Check if this entity exists in SQLite
+                const foundInSqlite = sqliteEntityNames.has(entityId);
+                
+                if (foundInSqlite) {
+                    debug(`[Comparison]   Entity '${entityId}': ✅ Found in both`);
+                    debug(`[Comparison]     Graphology frequency: ${graphologyEntity.frequency}`);
+                } else {
+                    debug(`[Comparison]   Entity '${entityId}': ⚠️  Only in Graphology`);
+                }
+            }
+        }
+
+        // Return metadata based on Graphology results (the new primary approach)
+        const metadata = {
+            buildTime: totalTime,
+            entityCount: graphologyMetrics.entityCount,
+            relationshipCount: graphologyMetrics.relationshipCount,
+            communityCount: graphologyMetrics.communityCount,
+            topicCount: graphologyMetrics.topicCount,
+            // Include comparison data for debugging
+            comparison: {
+                graphology: graphologyMetrics,
+                sqlite: sqliteMetrics,
+                differences: {
+                    entities: entityDiff,
+                    relationships: relationshipDiff,
+                    communities: communityDiff,
+                    topics: topicDiff
+                },
+                hasDiscrepancies: entityDiscrepancy || relationshipDiscrepancy || communityDiscrepancy || topicDiscrepancy
+            }
+        };
+
+        debug(`[Knowledge Graph] Graphology graphs created with comparison analysis:`, metadata);
+
+        // FINAL SUMMARY
+        const speedupText = graphologyTotalTime < sqliteTotalTime ? 
+            `🚀 ${(sqliteTotalTime / graphologyTotalTime).toFixed(2)}x FASTER` : 
+            `⚠️  ${(graphologyTotalTime / sqliteTotalTime).toFixed(2)}x SLOWER`;
+        
+        const accuracyText = metadata.comparison.hasDiscrepancies ? 
+            '⚠️  HAS DISCREPANCIES' : '✅ ACCURATE';
+
+        debug(`[SUMMARY] 📊 Parallel Construction Results:`);
+        debug(`[SUMMARY]   Performance: Graphology (${graphologyTotalTime}ms) vs SQLite (${sqliteTotalTime}ms) = ${speedupText}`);
+        debug(`[SUMMARY]   Accuracy: ${accuracyText}`);
+        debug(`[SUMMARY]   Entities: ${graphologyMetrics.entityCount} vs ${sqliteMetrics.entityCount} (diff: ${entityDiff})`);
+        debug(`[SUMMARY]   Relationships: ${graphologyMetrics.relationshipCount} vs ${sqliteMetrics.relationshipCount} (diff: ${relationshipDiff})`);
+
+        return { entityGraph, topicGraph, metadata };
     }
 
     /**
@@ -3706,5 +3926,279 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         }
 
         return relationships;
+    }
+
+    // ============================================================================
+    // DIRECT GRAPHOLOGY CONSTRUCTION METHODS
+    // ============================================================================
+
+    /**
+     * Build entity graph directly in Graphology format (Phase 1 implementation)
+     * Replaces storeEntitiesInDatabase() with direct graph construction
+     */
+    private async buildEntityGraphDirect(
+        entityGraph: any, // Graph type
+        cacheManager: any,
+        websitesToProcess: Website[]
+    ): Promise<void> {
+        debug(`[Direct Build] Adding entities to Graphology graph`);
+        
+        const extractionDate = new Date().toISOString();
+        let entityCount = 0;
+
+        // Use cache manager for efficient access to entities (same logic as before)
+        for (const website of websitesToProcess) {
+            if (!website.knowledge) continue;
+            const url = website.metadata.url;
+
+            // Get entities from cache
+            const entities = cacheManager.getEntitiesForWebsite(url);
+            for (const entityName of entities) {
+                // Add entity node directly to Graphology graph instead of SQLite
+                if (!entityGraph.hasNode(entityName)) {
+                    entityGraph.addNode(entityName, {
+                        name: entityName,
+                        type: "entity",
+                        entityType: "unknown", // Could be enhanced with type detection
+                        confidence: 0.8,
+                        domains: [website.metadata.domain],
+                        urls: [url],
+                        extractionDate,
+                        // Additional metadata for graph algorithms
+                        importance: 0,
+                        community: -1
+                    });
+                } else {
+                    // Update existing node with additional domains/URLs
+                    const existingDomains = entityGraph.getNodeAttribute(entityName, 'domains') || [];
+                    const existingUrls = entityGraph.getNodeAttribute(entityName, 'urls') || [];
+                    
+                    entityGraph.setNodeAttribute(entityName, 'domains', 
+                        [...new Set([...existingDomains, website.metadata.domain])]);
+                    entityGraph.setNodeAttribute(entityName, 'urls', 
+                        [...new Set([...existingUrls, url])]);
+                }
+                entityCount++;
+            }
+        }
+
+        debug(`[Direct Build] Added ${entityCount} entity occurrences as ${entityGraph.order} unique nodes`);
+    }
+
+    /**
+     * Build entity relationships directly in Graphology format (Phase 1 implementation)
+     * Replaces buildRelationships() with direct graph construction
+     */
+    private async buildRelationshipsDirect(
+        entityGraph: any, // Graph type
+        cacheManager: any
+    ): Promise<void> {
+        debug(`[Direct Build] Adding relationships to Graphology graph`);
+
+        // Get cached relationships (same logic as buildRelationships)
+        const cachedRelationships = cacheManager.getAllEntityRelationships();
+        debug(`[Direct Build] Found ${cachedRelationships.length} cached relationships`);
+
+        let storedCount = 0;
+        for (const cachedRel of cachedRelationships) {
+            const confidence = Math.min(cachedRel.count / 10, 1.0); // Normalize to 0-1
+
+            // Only add if both nodes exist in the graph
+            if (entityGraph.hasNode(cachedRel.fromEntity) && entityGraph.hasNode(cachedRel.toEntity)) {
+                // Avoid duplicate edges
+                if (!entityGraph.hasEdge(cachedRel.fromEntity, cachedRel.toEntity)) {
+                    entityGraph.addEdge(cachedRel.fromEntity, cachedRel.toEntity, {
+                        relationshipType: "co_occurs",
+                        confidence,
+                        count: cachedRel.count,
+                        sources: cachedRel.sources,
+                        updated: new Date().toISOString()
+                    });
+                    storedCount++;
+                }
+            }
+
+            if (storedCount % 100 === 0 || storedCount === cachedRelationships.length) {
+                debug(`[Direct Build] Added ${storedCount}/${cachedRelationships.length} relationship edges`);
+            }
+        }
+
+        debug(`[Direct Build] Finished adding ${storedCount} relationship edges to graph`);
+    }
+
+    /**
+     * Detect communities directly on Graphology graph (Phase 1 implementation)
+     * Replaces detectCommunities() with direct graph analysis
+     */
+    private async detectCommunitiesDirect(
+        entityGraph: any, // Graph type
+        algorithms: any
+    ): Promise<void> {
+        debug(`[Direct Build] Detecting communities on Graphology graph`);
+
+        // Convert Graphology graph to format expected by algorithms
+        const entities = entityGraph.nodes();
+        const relationships = entityGraph.edges().map((edgeId: string) => ({
+            fromEntity: entityGraph.source(edgeId),
+            toEntity: entityGraph.target(edgeId),
+            confidence: entityGraph.getEdgeAttribute(edgeId, 'confidence') || 0.5
+        }));
+
+        // Use existing algorithms for community detection
+        const graphMetrics = algorithms.calculateAllMetrics(entities, relationships);
+        const communities = graphMetrics.communities;
+
+        debug(`[Direct Build] Detected ${communities.length} communities using algorithms`);
+
+        // Store community info directly in the graph instead of separate SQLite table
+        let storedCount = 0;
+        for (const community of communities) {
+            // Add community as a virtual node in the graph
+            const communityId = `community_${community.id}`;
+            entityGraph.addNode(communityId, {
+                type: "community",
+                id: community.id,
+                entities: community.nodes,
+                size: community.nodes.length,
+                density: community.density,
+                updated: new Date().toISOString()
+            });
+
+            // Update entity nodes with community membership
+            for (const entityName of community.nodes) {
+                if (entityGraph.hasNode(entityName)) {
+                    entityGraph.setNodeAttribute(entityName, 'community', community.id);
+                }
+            }
+
+            // Add edges from community to member entities for graph traversal
+            for (const entityName of community.nodes) {
+                if (entityGraph.hasNode(entityName)) {
+                    entityGraph.addEdge(communityId, entityName, {
+                        type: "membership",
+                        strength: 1.0
+                    });
+                }
+            }
+
+            storedCount++;
+            if (storedCount % 10 === 0 || storedCount === communities.length) {
+                debug(`[Direct Build] Processed ${storedCount}/${communities.length} communities`);
+            }
+        }
+
+        debug(`[Direct Build] Finished adding ${storedCount} communities to graph`);
+    }
+
+    /**
+     * Build topic graph directly in Graphology format (Phase 1 implementation)
+     * Replaces hierarchical topics SQLite storage with direct graph construction
+     */
+    private async buildTopicGraphDirect(
+        topicGraph: any, // Graph type
+        cacheManager: any,
+        urlLimit?: number
+    ): Promise<void> {
+        debug(`[Direct Build] Building topic graph directly`);
+
+        // Build hierarchical topics (reuse existing logic for now)
+        const hierarchicalTopics = await this.buildHierarchicalTopicsDirect(cacheManager, urlLimit);
+
+        // Add topic nodes to graph
+        for (const topic of hierarchicalTopics) {
+            topicGraph.addNode(topic.topicId, {
+                type: "topic",
+                name: topic.topicName,
+                parentId: topic.parentTopicId,
+                level: topic.level,
+                url: topic.url,
+                domain: topic.domain,
+                relevance: 0.8,
+                extractionDate: new Date().toISOString()
+            });
+        }
+
+        // Add hierarchy edges (parent-child relationships)
+        for (const topic of hierarchicalTopics) {
+            if (topic.parentTopicId && topicGraph.hasNode(topic.parentTopicId)) {
+                topicGraph.addEdge(topic.parentTopicId, topic.topicId, {
+                    type: "parent_child",
+                    strength: 1.0
+                });
+            }
+        }
+
+        // Build topic relationships using existing Graphology-based approach
+        await this.buildTopicRelationshipsDirect(topicGraph, hierarchicalTopics, cacheManager);
+
+        debug(`[Direct Build] Built topic graph with ${topicGraph.order} nodes`);
+    }
+
+    /**
+     * Build hierarchical topics with minimal SQLite dependency (Phase 1 implementation)
+     * Modified version that returns data instead of storing in SQLite
+     */
+    private async buildHierarchicalTopicsDirect(
+        cacheManager: any,
+        urlLimit?: number
+    ): Promise<HierarchicalTopicRecord[]> {
+        debug(`[Direct Build] Building hierarchical topics data`);
+
+        // Reuse existing buildHierarchicalTopics logic but return data instead of storing
+        // For now, delegate to existing method and read back the results
+        // TODO: In Phase 3, refactor this to be purely in-memory
+        await this.buildHierarchicalTopics(urlLimit);
+        
+        const hierarchicalTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
+        debug(`[Direct Build] Retrieved ${hierarchicalTopics.length} hierarchical topics`);
+        
+        return hierarchicalTopics;
+    }
+
+    /**
+     * Build topic relationships directly on topic graph (Phase 1 implementation)
+     * Modified version of buildTopicGraphWithGraphology approach
+     */
+    private async buildTopicRelationshipsDirect(
+        topicGraph: any, // Graph type
+        hierarchicalTopics: HierarchicalTopicRecord[],
+        cacheManager: any
+    ): Promise<void> {
+        debug(`[Direct Build] Building topic relationships on graph`);
+
+        // Extract co-occurrence data from cache
+        const cooccurrences = this.extractCooccurrencesFromCache(cacheManager);
+        debug(`[Direct Build] Extracted ${cooccurrences.length} topic co-occurrences`);
+
+        // Add co-occurrence edges between topics
+        for (const cooccurrence of cooccurrences) {
+            if (topicGraph.hasNode(cooccurrence.fromTopic) && 
+                topicGraph.hasNode(cooccurrence.toTopic) &&
+                !topicGraph.hasEdge(cooccurrence.fromTopic, cooccurrence.toTopic)) {
+                
+                topicGraph.addEdge(cooccurrence.fromTopic, cooccurrence.toTopic, {
+                    type: "topic_cooccurrence",
+                    strength: Math.min(cooccurrence.count / 5, 1.0), // Normalize
+                    count: cooccurrence.count,
+                    urls: cooccurrence.urls || []
+                });
+            }
+        }
+
+        debug(`[Direct Build] Added topic relationship edges to graph`);
+    }
+
+    /**
+     * Extract topic co-occurrence data from cache manager
+     */
+    private extractCooccurrencesFromCache(cacheManager: any): CooccurrenceData[] {
+        // Get topic relationships from cache (same as buildTopicGraphWithGraphology)
+        const cachedRelationships = cacheManager.getAllTopicRelationships?.() || [];
+        return cachedRelationships.map((rel: any) => ({
+            fromTopic: rel.fromTopic,
+            toTopic: rel.toTopic,
+            count: rel.count,
+            urls: rel.sources || [],
+        }));
     }
 }
