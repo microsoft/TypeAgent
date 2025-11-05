@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.KnowledgeExtractor;
+
 namespace TypeAgent.KnowPro;
 
 public readonly struct CollectionRangeToIndex
@@ -68,7 +70,7 @@ public static class ConversationIndexer
     /// <returns></returns>
     public static async ValueTask UpdateMessageIndexAsync(
         this IConversation conversation,
-        bool addKnowledge,
+        bool updateKnowledge,
         CancellationToken cancellationToken = default
     )
     {
@@ -87,9 +89,9 @@ public static class ConversationIndexer
             cancellationToken
         ).ConfigureAwait(false);
 
-        if (addKnowledge)
+        if (updateKnowledge)
         {
-            await conversation.AddMessageKnowledgeAsync(
+            await conversation.UpdateKnowledgeAsync(
                 messageRangeToIndex,
                 messagesToIndex,
                 cancellationToken
@@ -101,7 +103,6 @@ public static class ConversationIndexer
             messageRangeToIndex.OrdinalStartAt,
             cancellationToken
         ).ConfigureAwait(false);
-
     }
 
     /// <summary>
@@ -169,7 +170,30 @@ public static class ConversationIndexer
         }
     }
 
-    internal static async ValueTask AddMessageKnowledgeAsync(
+    internal static async ValueTask UpdateKnowledgeAsync(
+        this IConversation conversation,
+        CollectionRangeToIndex messageRange,
+        IList<IMessage> messages,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await conversation.AddCustomKnowledgeAsync(
+            messageRange,
+            messages,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (conversation.Settings.SemanticRefIndexSettings.AutoExtractKnowledge)
+        {
+            await conversation.ExtractAndAddKnowledgeAsync(
+                messageRange,
+                messages,
+                cancellationToken
+            );
+        }
+    }
+
+    internal static async ValueTask AddCustomKnowledgeAsync(
         this IConversation conversation,
         CollectionRangeToIndex messageRange,
         IList<IMessage> messages,
@@ -196,6 +220,50 @@ public static class ConversationIndexer
                 semanticRefs,
                 cancellationToken
             ).ConfigureAwait(false);
+        }
+    }
+
+    internal static async ValueTask ExtractAndAddKnowledgeAsync(
+        this IConversation conversation,
+        CollectionRangeToIndex messageRange,
+        IList<IMessage> messages,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var settings = conversation.Settings.SemanticRefIndexSettings;
+        int countCompleted = 0;
+        foreach (var (locations, chunks) in GetMessageChunkBatch(
+            messageRange,
+            messages, settings.BatchSize > 0 ? settings.BatchSize : 4
+            )
+        )
+        {
+            IList<KnowledgeResponse> responses = await settings.KnowledgeExtractor.ExtractAsync(
+                chunks,
+                cancellationToken
+            ).ConfigureAwait(false);
+
+            countCompleted += responses.Count;
+            conversation.SemanticRefs.NotifyKnowledgeProgress(new BatchProgress(countCompleted, messages.Count));
+
+            List<SemanticRef> semanticRefs = [];
+            int count = chunks.Count;
+            for (int i = 0; i < count; ++i)
+            {
+                semanticRefs.AddRange(responses[i].ToSemanticRefs(
+                    new TextRange(locations[i])
+                    )
+                );
+            }
+
+
+            if (!semanticRefs.IsNullOrEmpty())
+            {
+                await conversation.SemanticRefs.AppendAsync(
+                    semanticRefs,
+                    cancellationToken
+                ).ConfigureAwait(false);
+            }
         }
     }
 
@@ -235,5 +303,36 @@ public static class ConversationIndexer
             maxOrdinal is not null ? maxOrdinal.Value + 1 : 0,
             count
         );
+    }
+
+    internal static IEnumerable<(List<TextLocation>, List<string>)> GetMessageChunkBatch(
+        CollectionRangeToIndex messageRange,
+        IList<IMessage> messages,
+        int batchSize
+    )
+    {
+        List<TextLocation> locations = [];
+        List<string> chunks = [];
+        int messageCount = messages.Count;
+        for (int messageOrdinal = 0; messageOrdinal < messageCount; ++messageOrdinal)
+        {
+            IMessage message = messages[messageOrdinal];
+            int chunkCount = message.TextChunks.Count;
+            for (int chunkOrdinal = 0; chunkOrdinal < chunkCount; ++chunkOrdinal)
+            {
+                locations.Add(new TextLocation(messageOrdinal + messageRange.OrdinalStartAt, chunkOrdinal));
+                chunks.Add(message.TextChunks[chunkOrdinal]);
+                if (locations.Count == batchSize)
+                {
+                    yield return (locations, chunks);
+                    locations = [];
+                    chunks = [];
+                }
+            }
+        }
+        if (locations.Count > 0)
+        {
+            yield return (locations, chunks);
+        }
     }
 }

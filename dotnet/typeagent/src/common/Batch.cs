@@ -5,6 +5,11 @@ namespace TypeAgent.Common;
 
 public readonly struct BatchProgress
 {
+    public BatchProgress()
+        : this(1, 1)
+    {
+    }
+
     public BatchProgress(int countCompleted, int count)
     {
         CountCompleted = countCompleted;

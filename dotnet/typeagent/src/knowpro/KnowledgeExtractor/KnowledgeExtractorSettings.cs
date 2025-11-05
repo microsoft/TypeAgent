@@ -11,9 +11,14 @@ public class KnowledgeExtractorSettings
 
         MaxContextLength = maxCharsPerChunk;
         MergeEntityFacets = true;
+        Concurrency = 2;
     }
 
     public int MaxContextLength { get; set; }
 
     public bool MergeEntityFacets { get; set; }
+
+    public RetrySettings? Retry { get; set; }
+
+    public int Concurrency { get; set; }
 };

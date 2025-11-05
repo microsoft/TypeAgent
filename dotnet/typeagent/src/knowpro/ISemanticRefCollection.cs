@@ -10,6 +10,10 @@ public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 
     ValueTask<KnowledgeType> GetKnowledgeTypeAsync(int ordinal, CancellationToken cancellation = default);
     ValueTask<IList<KnowledgeType>> GetKnowledgeTypeAsync(IList<int> ordinal, CancellationToken cancellation = default);
+
+    event Action<BatchProgress> OnKnowledgeExtracted;
+    void NotifyKnowledgeProgress(BatchProgress progress);
+
 }
 
 public static class SemanticRefCollectionExtensions

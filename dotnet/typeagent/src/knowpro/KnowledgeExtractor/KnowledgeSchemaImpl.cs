@@ -5,6 +5,19 @@ namespace TypeAgent.KnowPro.KnowledgeExtractor;
 
 public partial class ActionEx
 {
+    public Action ToAction()
+    {
+        return new()
+        {
+            Verbs = Verbs,
+            VerbTense = VerbTense,
+            SubjectEntityName = SubjectEntityName,
+            ObjectEntityName = ObjectEntityName,
+            IndirectObjectEntityName = IndirectObjectEntityName,
+            SubjectEntityFacet = SubjectEntityFacet,
+        };
+    }
+
     public Action? ToInverseAction()
     {
         if (InverseVerbs.IsNullOrEmpty())
@@ -61,7 +74,7 @@ public partial class ExtractedKnowledge
         {
             Entities = Entities,
             Topics = Topics,
-            Actions = Actions,
+            Actions = [.. Actions.Map((a) => a.ToAction())]
         };
         List<Action>? inverseActions = null;
         foreach (var actionex in Actions)

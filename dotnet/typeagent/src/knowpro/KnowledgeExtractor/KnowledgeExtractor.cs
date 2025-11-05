@@ -26,9 +26,56 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         }
     }
 
-    public async Task<KnowledgeResponse?> ExtractAsync(
+    public async Task<KnowledgeResponse> ExtractAsync(
         string message,
         CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(message, nameof(message));
+
+        var knowledgeResponse = await GetKnowledgeResponseWithRetryAsync(message, cancellationToken);
+
+        return knowledgeResponse;
+    }
+
+    public async Task<IList<KnowledgeResponse>> ExtractAsync(
+        IList<string> messages,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(messages, nameof(messages));
+
+        return (IList<KnowledgeResponse>) await messages.MapAsync(
+            Settings.Concurrency,
+            GetKnowledgeResponseWithRetryAsync,
+            null,
+            cancellationToken
+        );
+    }
+
+    private static JsonTranslator<ExtractedKnowledge> CreateTranslator(IChatModel model)
+    {
+        var translator = JsonTranslatorFactory.CreateTranslator<ExtractedKnowledge>(
+            model,
+            "TypeAgent.KnowPro.KnowledgeExtractor.KnowledgeSchema.ts"
+        );
+        translator.Prompts = new KnowledgeExtractorPrompts();
+        return translator;
+    }
+
+    private Task<KnowledgeResponse> GetKnowledgeResponseWithRetryAsync(string message, CancellationToken cancellationToken)
+    {
+        return Async.CallWithRetryAsync(
+            (ct) => GetResponseAsync(message, ct),
+            Settings.Retry,
+            null,
+            cancellationToken
+        );
+    }
+
+    private async Task<KnowledgeResponse> GetResponseAsync(
+        string message,
+        CancellationToken cancellationToken
     )
     {
         ExtractedKnowledge extractedKnowledge = await _translator.TranslateAsync(
@@ -41,17 +88,8 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         {
             knowledgeResponse.MergeActionKnowledge();
         }
-        return knowledgeResponse;
-    }
 
-    private static JsonTranslator<ExtractedKnowledge> CreateTranslator(IChatModel model)
-    {
-        var translator = JsonTranslatorFactory.CreateTranslator<ExtractedKnowledge>(
-            model,
-            "TypeAgent.KnowPro.KnowledgeExtractor.KnowledgeSchema.ts"
-        );
-        translator.Prompts = new KnowledgeExtractorPrompts();
-        return translator;
+        return knowledgeResponse;
     }
 }
 

@@ -24,6 +24,14 @@ public class Message<TMeta> : IMessageEx where TMeta : IMessageMetadata
     {
     }
 
+    public Message(string text, TMeta meta)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
+
+        TextChunks = [text];
+        Metadata = meta;
+    }
+
     [JsonPropertyName("textChunks")]
     public IList<string> TextChunks { get; set; } = [];
 

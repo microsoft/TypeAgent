@@ -19,6 +19,7 @@ public class ConversationEventHandler
         var secondaryIndexes = conversation.SecondaryIndexes;
         secondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.OnIndexed += this.FuzzyIndex_OnIndexed;
         secondaryIndexes.MessageIndex.OnIndexed += this.Message_OnIndexed;
+        conversation.SemanticRefs.OnKnowledgeExtracted += this.KnowledgeExtractor_OnExtracted;
     }
 
     public void Unsubscribe(IConversation conversation)
@@ -26,6 +27,7 @@ public class ConversationEventHandler
         var secondaryIndexes = conversation.SecondaryIndexes;
         secondaryIndexes.TermToRelatedTermsIndex.FuzzyIndex.OnIndexed -= this.FuzzyIndex_OnIndexed;
         secondaryIndexes.MessageIndex.OnIndexed -= this.Message_OnIndexed;
+        conversation.SemanticRefs.OnKnowledgeExtracted -= this.KnowledgeExtractor_OnExtracted;
     }
 
     private void FuzzyIndex_OnIndexed(BatchProgress item)
@@ -36,6 +38,11 @@ public class ConversationEventHandler
     private void Message_OnIndexed(BatchProgress item)
     {
         WriteProgress(item, "Message");
+    }
+
+    private void KnowledgeExtractor_OnExtracted(BatchProgress item)
+    {
+        WriteProgress(item, "Knowledge");
     }
 
     private void WriteProgress(BatchProgress progress, string label)

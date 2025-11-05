@@ -247,15 +247,15 @@ public class KnowProWriter : ConsoleWriter
 
         if (kType == KnowledgeType.Entity)
         {
-            IList<Scored<ConcreteEntity>> entities = await semanticRefCollection.GetDistinctEntitiesAsync(matchesToDisplay);
-            for (int i = 0; i < entities.Count; ++i)
+            IList<Scored<ConcreteEntity>> distinctEntities = await semanticRefCollection.GetDistinctEntitiesAsync(matchesToDisplay);
+            for (int i = 0; i < distinctEntities.Count; ++i)
             {
                 var pos = isAsc ? matchesToDisplay.Count - (i + 1) : i;
                 WriteLine(
                     ConsoleColor.Green,
-                    $"{pos + 1} / {matchesToDisplay.Count}: [{entities[i].Score}]"
+                    $"{pos + 1} / {distinctEntities.Count}: [{distinctEntities[i].Score}]"
                 );
-                WriteEntity(entities[i]);
+                WriteEntity(distinctEntities[i]);
                 WriteLine();
             }
         }

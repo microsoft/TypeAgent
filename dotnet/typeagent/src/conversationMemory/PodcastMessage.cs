@@ -6,6 +6,15 @@ namespace TypeAgent.ConversationMemory;
 
 public class PodcastMessageMeta : MessageMetadata
 {
+    public PodcastMessageMeta()
+    {
+    }
+
+    public PodcastMessageMeta(string? speaker)
+    {
+        Speaker = speaker;
+    }
+
     [JsonPropertyName("speaker")]
     public string? Speaker { get; set; }
 
@@ -16,8 +25,17 @@ public class PodcastMessageMeta : MessageMetadata
     public override IList<string>? Dest => Listeners;
 }
 
-public class PodcastMessage : Message<PodcastMessageMeta>
+public class PodcastMessage : Message<PodcastMessageMeta>, ITranscriptMessage
 {
+    public PodcastMessage()
+    {
+    }
+
+    public PodcastMessage(string text, string speaker)
+        : base(text, new PodcastMessageMeta(speaker))
+    {
+    }
+
     public override KnowledgeResponse? GetKnowledge()
     {
         PodcastMessageMeta metadata = this.Metadata;
@@ -35,5 +53,25 @@ public class PodcastMessage : Message<PodcastMessageMeta>
             }
         }
         return new KnowledgeResponse { Entities = [.. entities] };
+    }
+
+    public void AddContent(string content, int chunkOrdinal)
+    {
+        if (chunkOrdinal > TextChunks.Count - 1)
+        {
+            TextChunks.Add(content);
+        }
+        else
+        {
+            TextChunks[chunkOrdinal] += content;
+        }
+    }
+
+    public static (IList<PodcastMessage>, ISet<string>) ParseTranscript(string transcriptText)
+    {
+        return Transcript.Parse(
+            transcriptText,
+            (speaker, speech) => new PodcastMessage(speech, speaker)
+        );
     }
 }

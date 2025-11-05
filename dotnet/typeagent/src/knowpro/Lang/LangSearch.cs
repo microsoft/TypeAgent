@@ -71,16 +71,21 @@ internal static class LangSearch
         ArgumentVerify.ThrowIfNull(queryTranslator, nameof(queryTranslator));
         ArgumentVerify.ThrowIfNullOrEmpty(text, nameof(text));
 
+        Prompt? queryContext = null;
+        if (!promptPreamble.IsNullOrEmpty())
+        {
+            queryContext = [];
+            queryContext.AddRange(promptPreamble);
+        }
+
         var timeRange = await conversation.GetTimeRangePromptSectionAsync(
             cancellationToken
         ).ConfigureAwait(false);
-
-        Prompt queryContext = [];
-        if (!promptPreamble.IsNullOrEmpty())
+        if (timeRange is not null)
         {
-            queryContext.AddRange(promptPreamble);
+            queryContext ??= [];
+            queryContext.Add(timeRange);
         }
-        queryContext.Add(timeRange);
 
         var result = await queryTranslator.TranslateAsync(
             text,

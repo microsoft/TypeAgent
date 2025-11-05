@@ -6,7 +6,6 @@ namespace TypeAgent.ConversationMemory;
 public class Memory<TMessage> : Conversation<TMessage>, IMemory
     where TMessage : class, IMessage, new()
 {
-
     public Memory(MemorySettings settings, IStorageProvider<TMessage> storageProvider)
         : base(settings.ConversationSettings, storageProvider)
     {
@@ -42,7 +41,6 @@ public class Memory<TMessage> : Conversation<TMessage>, IMemory
             IConversation conversation = this;
             return await conversation.SearchAsync(
                 searchText,
-                Settings.QueryTranslator,
                 options,
                 filter,
                 debugContext,
