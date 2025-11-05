@@ -9,7 +9,7 @@ public partial class ActionEx
     {
         return new()
         {
-            Verbs = InverseVerbs,
+            Verbs = Verbs,
             VerbTense = VerbTense,
             SubjectEntityName = SubjectEntityName,
             ObjectEntityName = ObjectEntityName,

@@ -30,12 +30,19 @@ public partial class ConcreteEntity
 
     public void MergeEntityFacet(Facet facet)
     {
-        // Look for an equal facet
-        foreach (var f in Facets)
+        if (Facets.IsNullOrEmpty())
         {
-            if (f.Match(facet))
+            Facets = [];
+        }
+        else
+        {
+            // Look for an equal facet
+            foreach (var f in Facets)
             {
-                return;
+                if (f.Match(facet))
+                {
+                    return;
+                }
             }
         }
         Facets = Facets.Append(facet);
