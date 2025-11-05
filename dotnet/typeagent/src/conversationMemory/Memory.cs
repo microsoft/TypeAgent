@@ -6,7 +6,6 @@ namespace TypeAgent.ConversationMemory;
 public class Memory<TMessage> : Conversation<TMessage>, IMemory
     where TMessage : class, IMessage, new()
 {
-
     public Memory(MemorySettings settings, IStorageProvider<TMessage> storageProvider)
         : base(settings.ConversationSettings, storageProvider)
     {
