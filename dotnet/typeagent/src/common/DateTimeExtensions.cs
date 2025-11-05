@@ -7,6 +7,6 @@ public static class DateTimeExtensions
 {
     public static string ToISOString(this DateTimeOffset dt)
     {
-        return dt.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+        return dt.ToString("o");
     }
 }

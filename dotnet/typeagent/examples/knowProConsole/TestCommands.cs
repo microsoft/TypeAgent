@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
 
 namespace KnowProConsole;
@@ -25,6 +26,7 @@ public class TestCommands : ICommandModule
             SearchLangDef(),
             KnowledgeDef(),
             BuildIndexDef(),
+            AnswerDef()
         ];
     }
 
@@ -351,7 +353,6 @@ public class TestCommands : ICommandModule
         }
     }
 
-
     private Command KnowledgeDef()
     {
         Command cmd = new("kpTestKnowledge")
@@ -380,6 +381,45 @@ public class TestCommands : ICommandModule
         {
             KnowProWriter.WriteJson(result);
         }
+    }
+
+    private Command AnswerDef()
+    {
+        Command cmd = new("kpTestAnswer")
+        {
+            Args.Arg<string>("text")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.AnswerAsync);
+        return cmd;
+    }
+
+    private async Task AnswerAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        AnswerContext context = new AnswerContext();
+
+        List<ConcreteEntity> entities = await conversation.SemanticRefs.SelectAsync<SemanticRef, ConcreteEntity>(
+            (sr) => sr.KnowledgeType == KnowledgeType.Entity ? sr.AsEntity() : null,
+            cancellationToken
+        );
+        entities = [.. entities.ToDistinct()];
+
+        List<Topic> topics = await conversation.SemanticRefs.SelectAsync<SemanticRef, Topic>(
+            (sr) => sr.KnowledgeType == KnowledgeType.Topic ? sr.AsTopic() : null,
+            cancellationToken
+        );
+        topics = [.. topics.ToDistinct()];
+
+        context.Entities = entities.Map((e) => new RelevantEntity { Entity = e });
+        context.Topics = topics.Map((t) => new RelevantTopic { Topic = t });
+
+        List<IMessage> messages = await conversation.Messages.GetAllAsync(cancellationToken);
+        context.Messages = messages.Map((m) => new RelevantMessage(m));
+        string prompt = context.ToPromptString();
+        ConsoleWriter.WriteLine(prompt);
     }
 
     private IConversation EnsureConversation()

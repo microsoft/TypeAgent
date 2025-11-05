@@ -17,6 +17,7 @@ public partial class ConcreteEntity
         this.Type = [type];
     }
 
+    [JsonIgnore]
     public override KnowledgeType KnowledgeType => KnowledgeType.Entity;
 
     [JsonIgnore]
@@ -90,6 +91,7 @@ public partial class Action
         IndirectObjectEntityName = NoneEntityName;
     }
 
+    [JsonIgnore]
     public override KnowledgeType KnowledgeType => KnowledgeType.Action;
 
     [JsonIgnore]
@@ -155,7 +157,16 @@ public partial class Topic
         Text = text;
     }
 
+    [JsonIgnore]
     public override KnowledgeType KnowledgeType => KnowledgeType.Topic;
+
+    internal MergedTopic ToMerged()
+    {
+        return new MergedTopic
+        {
+            Topic = this.Text
+        };
+    }
 
     public static implicit operator string(Topic topic)
     {
@@ -165,6 +176,7 @@ public partial class Topic
 
 public partial class Tag
 {
+    [JsonIgnore]
     public override KnowledgeType KnowledgeType => KnowledgeType.Tag;
 
     public static implicit operator string(Tag tag)
@@ -175,6 +187,7 @@ public partial class Tag
 
 public partial class StructuredTag
 {
+    [JsonIgnore]
     public override KnowledgeType KnowledgeType => KnowledgeType.STag;
 }
 
@@ -236,5 +249,18 @@ public partial class KnowledgeResponse
                 action.SubjectEntityFacet = null;
             }
         }
+    }
+}
+
+public static class KnowledgeExtensions
+{
+    public static IEnumerable<ConcreteEntity> ToDistinct(this IEnumerable<ConcreteEntity> entities)
+    {
+        return MergedEntity.Merge(entities);
+    }
+
+    public static IEnumerable<Topic> ToDistinct(this IEnumerable<Topic> topics)
+    {
+        return MergedTopic.Merge(topics);
     }
 }

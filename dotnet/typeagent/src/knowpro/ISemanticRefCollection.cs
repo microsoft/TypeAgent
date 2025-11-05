@@ -11,6 +11,10 @@ public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
     ValueTask<KnowledgeType> GetKnowledgeTypeAsync(int ordinal, CancellationToken cancellation = default);
     ValueTask<IList<KnowledgeType>> GetKnowledgeTypeAsync(IList<int> ordinal, CancellationToken cancellation = default);
 
+    // TODO
+    // Add methods to enumerate by knowledge Type, casting appropriately.
+    // More efficient than looping over all 
+
     event Action<BatchProgress> OnKnowledgeExtracted;
     void NotifyKnowledgeProgress(BatchProgress progress);
 
@@ -18,6 +22,14 @@ public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 
 public static class SemanticRefCollectionExtensions
 {
+    public static ValueTask<List<SemanticRef>> GetAllAsync<TMessage>(
+        this ISemanticRefCollection semanticRefs,
+        CancellationToken cancellationToken
+    )
+    {
+        return semanticRefs.ToListAsync(cancellationToken);
+    }
+
     //
     // These methods use IAsyncCollectionReader because then they also work
     // with Caches...see ConversationCache.cs
@@ -68,7 +80,7 @@ public static class SemanticRefCollectionExtensions
             semanticRefMatches
         ).ConfigureAwait(false);
 
-        Dictionary<string, Scored<MergedEntity>> mergedEntities = MergedEntity.MergeScoredEntities(scoredEntities, false);
+        Dictionary<string, Scored<MergedEntity>> mergedEntities = MergedEntity.MergeScored(scoredEntities, false);
         IEnumerable<Scored<ConcreteEntity>> entitites = mergedEntities.Values.Select((v) =>
         {
             return new Scored<ConcreteEntity>(v.Item.ToConcrete(), v.Score);

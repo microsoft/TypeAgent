@@ -22,6 +22,22 @@ public interface IMessageCollection : IReadOnlyAsyncCollection<IMessage>
 
 public static class MessageCollectionExtensions
 {
+    public static ValueTask<List<TMessage>> GetAllAsync<TMessage>(
+        this IMessageCollection<TMessage> messages,
+        CancellationToken cancellationToken
+    )
+        where TMessage : IMessage
+    {
+        return messages.ToListAsync(cancellationToken);
+    }
+    public static ValueTask<List<IMessage>> GetAllAsync(
+        this IMessageCollection messages,
+        CancellationToken cancellationToken
+    )
+    {
+        return messages.ToListAsync(cancellationToken);
+    }
+
     internal static async ValueTask<int> GetCountInCharBudgetAsync(
         this IMessageCollection messages,
         IList<int> messageOrdinals,
