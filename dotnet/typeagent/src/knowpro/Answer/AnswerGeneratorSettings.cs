@@ -53,9 +53,4 @@ public sealed class AnswerGeneratorSettings
     /// Additional instructions (prompt sections) prepended when invoking the model.
     /// </summary>
     public IList<PromptSection>? ModelInstructions { get; set; }
-
-    /// <summary>
-    /// Include the context schema (if applicable) in the prompt.
-    /// </summary>
-    public bool? IncludeContextSchema { get; set; }
 }

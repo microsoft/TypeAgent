@@ -13,17 +13,20 @@ public class Serializer
         var facetConvertor = new FacetValueJsonConverter();
         var actionParamConvertor = new ActionParamJsonConverter();
         var enumConvertor = new JsonStringEnumConverter();
-
+        var oneOrManyConvertor = new OneOrManyJsonConverter<string>();
 
         s_options = Json.DefaultOptions();
         s_options.Converters.Add(facetConvertor);
         s_options.Converters.Add(actionParamConvertor);
         s_options.Converters.Add(enumConvertor);
+        s_options.Converters.Add(oneOrManyConvertor);
 
         s_optionsIndent = Json.DefaultOptions();
         s_optionsIndent.Converters.Add(facetConvertor);
         s_optionsIndent.Converters.Add(actionParamConvertor);
         s_optionsIndent.Converters.Add(enumConvertor);
+        s_optionsIndent.Converters.Add(oneOrManyConvertor);
+
         s_optionsIndent.WriteIndented = true;
     }
 
