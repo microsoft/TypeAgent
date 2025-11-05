@@ -17,7 +17,7 @@ public static partial class Transcript
     //  ALICE: Hello there
     //  BOB:
     //  (continuation line) more text
-    [GeneratedRegex(@"^(?:(?<speaker>[A-Z0-9]+):)?(?<speech>.*)$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^(?:(?<speaker>[A-Z0-9 ]+):)?(?<speech>.*)$", RegexOptions.Compiled)]
     private static partial Regex s_turnParserRegex();
 
     private static readonly Regex s_turnParser = s_turnParserRegex();

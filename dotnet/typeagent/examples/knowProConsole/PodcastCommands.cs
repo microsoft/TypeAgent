@@ -75,6 +75,8 @@ public class PodcastCommands : ICommandModule
         Command cmd = new("kpPodcastImportIndex", "Import existing podcast memory index")
         {
             Args.Arg<string>("filePath", "Path to existing podcast index"),
+            Options.Arg<string>("startAt", "ISO date: When the podcast occurred"),
+            Options.Arg<int>("length", "In minutes")
         };
         cmd.SetAction(this.PodcastImportIndexAsync);
         return cmd;
@@ -84,6 +86,41 @@ public class PodcastCommands : ICommandModule
     {
         NamedArgs namedArgs = new(args);
         string? filePath = namedArgs.Get("filePath");
+        if (string.IsNullOrEmpty(filePath))
+        {
+            return;
+        }
+        string ext = Path.GetExtension(filePath);
+        string podcastName = Path.GetFileNameWithoutExtension(filePath);
+        if (ext.Equals("json", StringComparison.OrdinalIgnoreCase))
+        {
+            await ImportExistingIndexAsync(namedArgs, filePath, podcastName, cancellationToken);
+        }
+        else
+        {
+            await ImportTranscriptAsync(namedArgs, filePath, podcastName, cancellationToken);
+        }
+    }
+
+    private async Task ImportTranscriptAsync(NamedArgs namedArgs, string filePath, string podcastName, CancellationToken cancellationToken)
+    {
+        UnloadCurrent();
+        Podcast podcast = CreatePodcast(podcastName, true);
+        SetCurrent(podcast);
+
+        string? startAt = namedArgs.Get<string>("startAt");
+        DateTimeOffset? startDate = !string.IsNullOrEmpty(startAt) ? DateTimeOffset.Parse(startAt) : null;
+
+        await podcast.ImportTranscriptAsync(
+            filePath,
+            podcastName,
+            startDate,
+            namedArgs.Get<int>("length")
+        );
+    }
+
+    private async Task ImportExistingIndexAsync(NamedArgs namedArgs, string filePath, string podcastName, CancellationToken cancellationToken)
+    {
         var data = ConversationJsonSerializer.ReadFromFile<PodcastMessage>(filePath!);
         if (data is null)
         {
@@ -94,7 +131,6 @@ public class PodcastCommands : ICommandModule
 
         UnloadCurrent();
 
-        string? podcastName = Path.GetFileNameWithoutExtension(filePath) ?? throw new NotSupportedException();
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Importing {podcastName}");
         var podcast = CreatePodcast(podcastName, true);
         try
@@ -128,6 +164,7 @@ public class PodcastCommands : ICommandModule
             throw;
         }
     }
+
 
     private Podcast CreatePodcast(string name, bool createNew)
     {

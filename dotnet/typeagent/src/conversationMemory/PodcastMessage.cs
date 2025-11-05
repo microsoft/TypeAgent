@@ -10,9 +10,8 @@ public class PodcastMessageMeta : MessageMetadata
     {
     }
 
-    public PodcastMessageMeta(string speaker)
+    public PodcastMessageMeta(string? speaker)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(speaker, nameof(speaker));
         Speaker = speaker;
     }
 
