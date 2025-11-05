@@ -26,8 +26,6 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         }
     }
 
-    public event Action<BatchProgress> OnExtracted;
-
     public async Task<KnowledgeResponse> ExtractAsync(
         string message,
         CancellationToken cancellationToken = default
@@ -36,8 +34,6 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         ArgumentVerify.ThrowIfNullOrEmpty(message, nameof(message));
 
         var knowledgeResponse = await GetKnowledgeResponseWithRetryAsync(message, cancellationToken);
-
-        NotifyProgress(new BatchProgress());
 
         return knowledgeResponse;
     }
@@ -52,7 +48,7 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         return (IList<KnowledgeResponse>) await messages.MapAsync(
             Settings.Concurrency,
             GetKnowledgeResponseWithRetryAsync,
-            OnExtracted,
+            null,
             cancellationToken
         );
     }
@@ -94,11 +90,6 @@ public class KnowledgeExtractor : IKnowledgeExtractor
         }
 
         return knowledgeResponse;
-    }
-
-    private void NotifyProgress(BatchProgress progress)
-    {
-        OnExtracted.SafeInvoke(progress);
     }
 }
 

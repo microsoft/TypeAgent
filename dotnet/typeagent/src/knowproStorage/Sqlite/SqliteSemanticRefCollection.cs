@@ -242,6 +242,13 @@ ORDER BY semref_id");
         return ValueTask.FromResult(GetSlice(startOrdinal, endOrdinal));
     }
 
+    public event Action<BatchProgress> OnKnowledgeExtracted;
+
+    public void NotifyKnowledgeProgress(BatchProgress progress)
+    {
+        OnKnowledgeExtracted.SafeInvoke(progress);
+    }
+
     int GetNextSemanicRefId()
     {
         return GetCount();

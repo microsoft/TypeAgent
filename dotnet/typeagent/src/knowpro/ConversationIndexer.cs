@@ -231,6 +231,7 @@ public static class ConversationIndexer
     )
     {
         var settings = conversation.Settings.SemanticRefIndexSettings;
+        int countCompleted = 0;
         foreach (var (locations, chunks) in GetMessageChunkBatch(
             messageRange,
             messages, settings.BatchSize > 0 ? settings.BatchSize : 4
@@ -242,6 +243,9 @@ public static class ConversationIndexer
                 cancellationToken
             ).ConfigureAwait(false);
 
+            countCompleted += responses.Count;
+            conversation.SemanticRefs.NotifyKnowledgeProgress(new BatchProgress(countCompleted, messages.Count));
+
             List<SemanticRef> semanticRefs = [];
             int count = chunks.Count;
             for (int i = 0; i < count; ++i)
@@ -251,6 +255,7 @@ public static class ConversationIndexer
                     )
                 );
             }
+
 
             if (!semanticRefs.IsNullOrEmpty())
             {

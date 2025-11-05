@@ -76,7 +76,8 @@ public class PodcastCommands : ICommandModule
         {
             Args.Arg<string>("filePath", "Path to existing podcast index"),
             Options.Arg<string>("startAt", "ISO date: When the podcast occurred"),
-            Options.Arg<int>("length", "In minutes")
+            Options.Arg<int>("length", "In minutes"),
+            Options.Arg<bool>("buildIndex", "Also build index", true)
         };
         cmd.SetAction(this.PodcastImportIndexAsync);
         return cmd;
@@ -117,6 +118,11 @@ public class PodcastCommands : ICommandModule
             startDate,
             namedArgs.Get<int>("length")
         );
+
+        if (namedArgs.Get<bool>("buildIndex"))
+        {
+            await podcast.UpdateIndexAsync(cancellationToken);
+        }
     }
 
     private async Task ImportExistingIndexAsync(NamedArgs namedArgs, string filePath, string podcastName, CancellationToken cancellationToken)

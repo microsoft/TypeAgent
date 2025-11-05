@@ -11,8 +11,9 @@ public interface IKnowledgeExtractor
 
     Task<KnowledgeResponse> ExtractAsync(string message, CancellationToken cancellationToken = default);
 
-    Task<IList<KnowledgeResponse>> ExtractAsync(IList<string> messages, CancellationToken cancellationToken = default);
-
-    event Action<BatchProgress> OnExtracted;
+    Task<IList<KnowledgeResponse>> ExtractAsync(
+        IList<string> messages,
+        CancellationToken cancellationToken = default
+    );
 }
 
