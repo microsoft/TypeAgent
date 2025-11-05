@@ -50,7 +50,7 @@ public partial class AnswerContext
             text.Append(",\n");
         }
         var json = Serializer.ToJson(value);
-        text.Append($"{name}: { json}");
+        text.Append($"{name}: {json}");
         return propertyCount + 1;
     }
 }

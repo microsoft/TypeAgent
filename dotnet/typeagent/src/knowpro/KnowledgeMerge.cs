@@ -21,10 +21,7 @@ internal class MergedKnowledge
 
 internal class MergedEntity : MergedKnowledge
 {
-    public MergedEntity()
-    {
-
-    }
+    public MergedEntity() { }
 
     public string Name { get; set; }
 
@@ -58,7 +55,7 @@ internal class MergedEntity : MergedKnowledge
         return false;
     }
 
-    public static IEnumerable<ConcreteEntity> MergeEntities(IEnumerable<ConcreteEntity> entities)
+    public static IEnumerable<ConcreteEntity> Merge(IEnumerable<ConcreteEntity> entities)
     {
         Dictionary<string, MergedEntity> mergedEntities = [];
 
@@ -78,14 +75,14 @@ internal class MergedEntity : MergedKnowledge
         return mergedEntities.Values.Select((m) => m.ToConcrete());
     }
 
-    public static Dictionary<string, Scored<MergedEntity>> MergeScoredEntities(
-        IEnumerable<Scored<SemanticRef>> scoredEntities,
+    public static Dictionary<string, Scored<MergedEntity>> MergeScored(
+        IEnumerable<Scored<SemanticRef>> semanticRefs,
         bool mergeOrdinals
     )
     {
         Dictionary<string, Scored<MergedEntity>> mergedEntities = [];
 
-        foreach (var scoredEntity in scoredEntities)
+        foreach (var scoredEntity in semanticRefs)
         {
             if (scoredEntity.Item.KnowledgeType != KnowledgeType.Entity)
             {
@@ -127,7 +124,60 @@ internal class MergedEntity : MergedKnowledge
 
 internal class MergedTopic : MergedKnowledge
 {
-    public Topic Topic { get; set; }
+    public string Topic { get; set; }
+
+    public Topic ToTopic() => new Topic(Topic);
+
+    public static IEnumerable<Topic> Merge(IEnumerable<Topic> topics)
+    {
+        ArgumentVerify.ThrowIfNull(topics, nameof(topics));
+
+        Dictionary<string, Topic> distinct = new Dictionary<string, Topic>();
+        foreach (Topic topic in topics)
+        {
+            distinct.TryAdd(topic.Text.ToLower(), topic);
+        }
+        return distinct.Values;
+    }
+
+    public static Dictionary<string, Scored<MergedTopic>> Merge(
+        IEnumerable<Scored<SemanticRef>> semanticRefs,
+        bool mergeOrdinals
+    )
+    {
+        Dictionary<string, Scored<MergedTopic>> mergedTopics = [];
+
+        foreach (var scoredTopic in semanticRefs)
+        {
+            if (scoredTopic.Item.KnowledgeType != KnowledgeType.Topic)
+            {
+                continue;
+            }
+
+            MergedTopic mergedTopic = scoredTopic.Item.AsTopic().ToMerged();
+            Scored<MergedTopic>? target = null;
+            if (mergedTopics.TryGetValue(mergedTopic.Topic, out var existing))
+            {
+                if (existing.Score < scoredTopic.Score)
+                {
+                    existing.Score = scoredTopic.Score;
+                }
+            }
+            else
+            {
+                var newMerged = new Scored<MergedTopic>(mergedTopic, scoredTopic.Score);
+                mergedTopics.Add(mergedTopic.Topic, newMerged);
+                target = newMerged;
+            }
+            if (target is not null && mergeOrdinals)
+            {
+                target.Value.Item.MergeMessageOrdinals(scoredTopic);
+            }
+        }
+
+        return mergedTopics;
+    }
+
 }
 
 internal class MergedFacets : Multiset<string, string>

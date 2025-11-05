@@ -80,7 +80,7 @@ public static class SemanticRefCollectionExtensions
             semanticRefMatches
         ).ConfigureAwait(false);
 
-        Dictionary<string, Scored<MergedEntity>> mergedEntities = MergedEntity.MergeScoredEntities(scoredEntities, false);
+        Dictionary<string, Scored<MergedEntity>> mergedEntities = MergedEntity.MergeScored(scoredEntities, false);
         IEnumerable<Scored<ConcreteEntity>> entitites = mergedEntities.Values.Select((v) =>
         {
             return new Scored<ConcreteEntity>(v.Item.ToConcrete(), v.Score);

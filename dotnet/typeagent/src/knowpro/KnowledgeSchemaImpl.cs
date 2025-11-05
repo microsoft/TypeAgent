@@ -160,6 +160,14 @@ public partial class Topic
     [JsonIgnore]
     public override KnowledgeType KnowledgeType => KnowledgeType.Topic;
 
+    internal MergedTopic ToMerged()
+    {
+        return new MergedTopic
+        {
+            Topic = this.Text
+        };
+    }
+
     public static implicit operator string(Topic topic)
     {
         return topic.Text;
@@ -248,6 +256,11 @@ public static class KnowledgeExtensions
 {
     public static IEnumerable<ConcreteEntity> ToDistinct(this IEnumerable<ConcreteEntity> entities)
     {
-        return MergedEntity.MergeEntities(entities);
+        return MergedEntity.Merge(entities);
+    }
+
+    public static IEnumerable<Topic> ToDistinct(this IEnumerable<Topic> topics)
+    {
+        return MergedTopic.Merge(topics);
     }
 }
