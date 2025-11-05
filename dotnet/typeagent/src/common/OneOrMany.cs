@@ -1,18 +1,43 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 namespace TypeAgent.Common;
 
-[JsonConverter(typeof(OneOrManyJsonConverterFactory))]
-public abstract class OneOrManyItem<T>
+public abstract class OneOrManyItem
 {
     [JsonIgnore]
     public abstract bool IsSingle { get; }
+
+    public static OneOrManyItem<T>? Create<T>(T? value)
+    {
+        return value is not null ? new SingleItem<T>(value) : null;
+    }
+
+    public static OneOrManyItem<T>? Create<T>(IList<T>? value)
+    {
+        return value.IsNullOrEmpty()
+            ? null
+            : value.Count == 1
+            ? new SingleItem<T>(value[0])
+            : new ListItem<T>(value);
+    }
+}
+
+[JsonConverter(typeof(OneOrManyJsonConverterFactory))]
+public abstract class OneOrManyItem<T> : OneOrManyItem
+{
 }
 
 public class SingleItem<T> : OneOrManyItem<T>
 {
+    public SingleItem() { }
+
+    public SingleItem(T value)
+    {
+        Value = value;
+    }
+
+    [JsonIgnore]
     public override bool IsSingle => true;
 
     public T Value { get; set; }
@@ -25,14 +50,20 @@ public class SingleItem<T> : OneOrManyItem<T>
 
 public class ListItem<T> : OneOrManyItem<T>
 {
+    public ListItem()
+    {
+
+    }
+
+    public ListItem(IList<T> value)
+    {
+        Value = value;
+    }
+
+    [JsonIgnore]
     public override bool IsSingle => false;
 
-    public List<T> Value { get; set; }
-
-    public static implicit operator List<T>(ListItem<T> item)
-    {
-        return item.Value;
-    }
+    public IList<T> Value { get; set; }
 }
 
 public class OneOrManyJsonConverterFactory : JsonConverterFactory

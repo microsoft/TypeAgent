@@ -58,6 +58,26 @@ internal class MergedEntity : MergedKnowledge
         return false;
     }
 
+    public static IEnumerable<ConcreteEntity> MergeEntities(IEnumerable<ConcreteEntity> entities)
+    {
+        Dictionary<string, MergedEntity> mergedEntities = [];
+
+        foreach (var entity in entities)
+        {
+            MergedEntity mergedEntity = entity.ToMerged();
+            if (mergedEntities.TryGetValue(mergedEntity.Name, out var existing))
+            {
+                Union(existing, mergedEntity);
+            }
+            else
+            {
+                mergedEntities.Add(mergedEntity.Name, mergedEntity);
+            }
+        }
+
+        return mergedEntities.Values.Select((m) => m.ToConcrete());
+    }
+
     public static Dictionary<string, Scored<MergedEntity>> MergeScoredEntities(
         IEnumerable<Scored<SemanticRef>> scoredEntities,
         bool mergeOrdinals

@@ -30,7 +30,7 @@ public class RelevantEntity : RelevantKnowledge
     public ConcreteEntity? Entity { get; set; }
 }
 
-public class RelevantMessage
+public partial class RelevantMessage
 {
     [JsonPropertyName("from")]
     public OneOrManyItem<string>? From { get; set; }
@@ -45,7 +45,7 @@ public class RelevantMessage
     public OneOrManyItem<string>? MessageText { get; set; }
 }
 
-public class AnswerContext
+public partial class AnswerContext
 {
     // Relevant entities
     // Use the 'name' and 'type' properties of entities to PRECISELY identify those that answer the user question.
