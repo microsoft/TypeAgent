@@ -326,6 +326,7 @@ public static class ConversationIndexer
                 {
                     yield return (locations, chunks);
                     locations = [];
+                    chunks = [];
                 }
             }
         }
