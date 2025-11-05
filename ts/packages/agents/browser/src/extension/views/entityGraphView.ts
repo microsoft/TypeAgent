@@ -5,10 +5,6 @@
 import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
 import { createExtensionService } from "./knowledgeUtilities";
-import {
-    GraphDataProvider,
-    GraphDataProviderImpl,
-} from "./graphDataProvider.js";
 
 /**
  * Main class for the Entity Graph View page
@@ -32,7 +28,6 @@ class EntityGraphView {
     private extensionService: any;
     private currentEntity: string | null = null;
     private currentViewMode: ViewMode = { type: "global" };
-    private graphDataProvider: GraphDataProvider;
 
     // Navigation history management
     private navigationHistory: NavigationState[] = [];
@@ -46,10 +41,6 @@ class EntityGraphView {
             // Initialize services with appropriate extension service based on environment
             this.extensionService = createExtensionService();
 
-            // Initialize Graph data provider for direct storage access
-            this.graphDataProvider = new GraphDataProviderImpl(
-                this.extensionService,
-            );
             console.log(
                 "Services initialized with Chrome extension connection",
             );
@@ -78,8 +69,7 @@ class EntityGraphView {
             console.log("Creating visualizer...");
             this.visualizer = new EntityGraphVisualizer(graphContainer);
 
-            // Set up hierarchical loading
-            this.visualizer.setGraphDataProvider(this.graphDataProvider);
+            // Hierarchical loading now handled by processed API endpoints
 
             // Set up UI callbacks
             this.visualizer.setInstanceChangeCallback(() => {
@@ -749,12 +739,11 @@ class EntityGraphView {
     }
 
     private async loadGlobalGraphData(): Promise<any> {
-        // Use Graph data provider for direct storage access
-        const globalGraphResult =
-            await this.graphDataProvider.getGlobalGraphData();
+        // Use the processed API that includes proper relationship types and filtering
+        const globalGraphResult = await this.extensionService.getGlobalImportanceLayer();
 
-        // Process communities for color assignment
-        const processedCommunities = globalGraphResult.communities.map(
+        // Process communities for color assignment (if they exist)
+        const processedCommunities = (globalGraphResult.communities || []).map(
             (c: any) => ({
                 ...c,
                 entities:
@@ -781,10 +770,9 @@ class EntityGraphView {
             relationships: globalGraphResult.relationships,
             topics: [],
             statistics: {
-                totalEntities: globalGraphResult.statistics.totalEntities,
-                totalRelationships:
-                    globalGraphResult.statistics.totalRelationships,
-                totalCommunities: globalGraphResult.statistics.communities,
+                totalEntities: globalGraphResult.entities.length,
+                totalRelationships: globalGraphResult.relationships.length,
+                totalCommunities: processedCommunities.length,
             },
         };
     }
@@ -1048,15 +1036,15 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Load entity graph using HybridGraph data provider
+            // Load entity graph using processed API
             let graphData;
             try {
                 const neighborhoodResult =
-                    await this.graphDataProvider.getEntityNeighborhood(
-                        entityName,
-                        2,
-                        50,
-                    );
+                    await this.extensionService.getEntityNeighborhood({
+                        entityId: entityName,
+                        depth: 2,
+                        maxNodes: 50,
+                    });
 
                 // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
                 let searchData: any = null;
@@ -1219,8 +1207,16 @@ class EntityGraphView {
                     const from =
                         r.from || (r as any).relatedEntity || "Unknown";
                     const to = r.to || graphData.centerEntity || "Unknown";
-                    const type =
-                        r.type || (r as any).relationshipType || "related";
+                    
+                    // STRICT validation - no fallbacks for relationship type
+                    const type = r.type || (r as any).relationshipType;
+                    if (!type) {
+                        console.error(`[ENTITY GRAPH VIEW] ERROR: Missing relationship type in input:`, r);
+                        continue; // Skip this relationship rather than crashing
+                    }
+                    
+                    // Log relationship type resolution for debugging
+                    console.log(`[ENTITY GRAPH VIEW] RELATIONSHIP: "${r.type}" / "${(r as any).relationshipType}" → "${type}"`);
 
                     // Check if both entities exist in the graph
                     if (!entityNames.has(from) || !entityNames.has(to)) {
@@ -1360,11 +1356,11 @@ class EntityGraphView {
 
             // Refresh data by re-fetching entity neighborhood
             const refreshedEntity =
-                await this.graphDataProvider.getEntityNeighborhood(
-                    entityName,
-                    2,
-                    50,
-                );
+                await this.extensionService.getEntityNeighborhood({
+                    entityId: entityName,
+                    depth: 2,
+                    maxNodes: 50,
+                });
 
             if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
                 await this.loadRealEntityData(entityName);
@@ -1473,41 +1469,27 @@ class EntityGraphView {
 
             // Get importance layer data (top 1000 most important nodes)
             const importanceData =
-                await this.graphDataProvider.getGlobalImportanceLayer(1000);
-
-            if (importanceData.entities.length === 0) {
-                this.hideGraphLoading();
-                this.showGraphEmpty();
-                return;
-            }
+                await this.extensionService.getGlobalImportanceLayer({
+                    maxNodes: 1000,
+                });
 
             // Check if graphology layout is available
             const hasGraphologyLayout =
                 importanceData.metadata?.graphologyLayout;
 
-            // Transform data to expected format for visualizer
-            const transformedData: any = {
-                // Only enhance for LoD if graphology layout is NOT available
-                // This preserves community colors and sizes from graphology
-                entities: hasGraphologyLayout
-                    ? importanceData.entities // Use entities as-is (preserves graphology data)
-                    : this.enhanceEntitiesForLoD(importanceData.entities), // Fallback to blue gradient
-                relationships: importanceData.relationships,
-                communities: [],
-                topics: [],
-                statistics: {
-                    totalEntities: importanceData.entities.length,
-                    totalRelationships: importanceData.relationships.length,
-                    totalCommunities: 0,
-                },
-                metadata: importanceData.metadata,
-            };
+            if (!hasGraphologyLayout) {
+                this.hideGraphLoading();
+                this.showGraphEmpty();
+                return;
+            }
 
-            if (hasGraphologyLayout) {
+            
+
+            
                 console.log(
                     `[EntityGraphView] Using graphology preset layout with community colors (${importanceData.metadata.graphologyLayout.elements?.length || 0} elements)`,
                 );
-                transformedData.presetLayout = {
+                const presetLayout = {
                     elements: importanceData.metadata.graphologyLayout.elements,
                     layoutDuration:
                         importanceData.metadata.graphologyLayout.layoutDuration,
@@ -1516,9 +1498,9 @@ class EntityGraphView {
                     communityCount:
                         importanceData.metadata.graphologyLayout.communityCount,
                 };
-            }
+            
 
-            await this.visualizer.loadGlobalGraph(transformedData);
+            await this.visualizer.loadGlobalGraph(presetLayout);
             this.hideGraphLoading();
         } catch (error) {
             console.error(

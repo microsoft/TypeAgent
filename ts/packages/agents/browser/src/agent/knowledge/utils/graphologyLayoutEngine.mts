@@ -91,9 +91,27 @@ export function buildGraphologyGraph(
         `Building graphology graph: ${nodes.length} nodes, ${edges.length} edges`,
     );
 
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 4A - buildGraphologyGraph input:`, {
+        inputNodes: nodes.length,
+        inputEdges: edges.length,
+        nodeLimit: opts.nodeLimit,
+        willSliceNodesTo: Math.min(nodes.length, opts.nodeLimit)
+    });
+
     const graph = new Graph({ type: "undirected" });
 
-    for (const node of nodes.slice(0, opts.nodeLimit)) {
+    const nodesToAdd = nodes.slice(0, opts.nodeLimit);
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 4A - Adding ${nodesToAdd.length} nodes (sliced from ${nodes.length} to nodeLimit ${opts.nodeLimit})`);
+    console.log(`[graphologyLayoutEngine] Sample of 10 nodes being added:`, 
+        nodesToAdd.slice(0, 10).map(n => ({ id: n.id, name: n.name, type: n.type }))
+    );
+    if (nodes.length > opts.nodeLimit) {
+        console.log(`[graphologyLayoutEngine] Sample of 10 nodes being filtered out:`, 
+            nodes.slice(opts.nodeLimit, opts.nodeLimit + 10).map(n => ({ id: n.id, name: n.name, type: n.type }))
+        );
+    }
+
+    for (const node of nodesToAdd) {
         const { id, ...nodeProps } = node;
         graph.addNode(id, {
             ...nodeProps,
@@ -110,13 +128,137 @@ export function buildGraphologyGraph(
     const nodeSet = new Set(graph.nodes());
     const edgeSet = new Set<string>();
     let edgeCount = 0;
+    let sampleCount = 0;
+    
+    // Track filtering reasons
+    let selfReferentialEdges = 0;
+    let missingNodeEdges = 0;
+    let duplicateEdges = 0;
+    let lowConfidenceEdges = 0;
+    let missingTypeEdges = 0;
+    let addErrorEdges = 0;
+
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 4B - Processing ${edges.length} input edges`);
+    
+    // Analyze confidence distribution to help determine threshold
+    const confidenceValues = edges
+        .filter(e => e.confidence !== undefined && e.confidence !== null)
+        .map(e => e.confidence!)
+        .sort((a, b) => a - b);
+    
+    if (confidenceValues.length > 0) {
+        const p10 = confidenceValues[Math.floor(confidenceValues.length * 0.1)];
+        const p25 = confidenceValues[Math.floor(confidenceValues.length * 0.25)];
+        const p50 = confidenceValues[Math.floor(confidenceValues.length * 0.5)];
+        const p75 = confidenceValues[Math.floor(confidenceValues.length * 0.75)];
+        const p90 = confidenceValues[Math.floor(confidenceValues.length * 0.9)];
+        const min = confidenceValues[0];
+        const max = confidenceValues[confidenceValues.length - 1];
+        
+        console.log(`[graphologyLayoutEngine] CONFIDENCE ANALYSIS:`, {
+            totalEdgesWithConfidence: confidenceValues.length,
+            min: min,
+            p10: p10,
+            p25: p25,
+            median: p50,
+            p75: p75,
+            p90: p90,
+            max: max,
+            currentThreshold: 0.2,
+            wouldBeFilteredAt02: confidenceValues.filter(c => c < 0.2).length,
+            wouldBeFilteredAt01: confidenceValues.filter(c => c < 0.1).length,
+            wouldBeFilteredAt05: confidenceValues.filter(c => c < 0.05).length
+        });
+        
+        // Show samples of edges in different confidence ranges
+        const veryLowConfidenceEdges = edges.filter(e => e.confidence !== undefined && e.confidence < 0.1);
+        const lowConfidenceEdges = edges.filter(e => e.confidence !== undefined && e.confidence >= 0.1 && e.confidence < 0.2);
+        const mediumConfidenceEdges = edges.filter(e => e.confidence !== undefined && e.confidence >= 0.2 && e.confidence < 0.5);
+        const highConfidenceEdges = edges.filter(e => e.confidence !== undefined && e.confidence >= 0.5);
+        
+        console.log(`[graphologyLayoutEngine] CONFIDENCE RANGE SAMPLES:`);
+        if (veryLowConfidenceEdges.length > 0) {
+            console.log(`  Very Low (< 0.1): ${veryLowConfidenceEdges.length} edges, samples:`, 
+                veryLowConfidenceEdges.slice(0, 3).map(e => ({ from: e.from, to: e.to, type: e.type, confidence: e.confidence }))
+            );
+        }
+        if (lowConfidenceEdges.length > 0) {
+            console.log(`  Low (0.1-0.2): ${lowConfidenceEdges.length} edges, samples:`, 
+                lowConfidenceEdges.slice(0, 3).map(e => ({ from: e.from, to: e.to, type: e.type, confidence: e.confidence }))
+            );
+        }
+        if (mediumConfidenceEdges.length > 0) {
+            console.log(`  Medium (0.2-0.5): ${mediumConfidenceEdges.length} edges, samples:`, 
+                mediumConfidenceEdges.slice(0, 3).map(e => ({ from: e.from, to: e.to, type: e.type, confidence: e.confidence }))
+            );
+        }
+        if (highConfidenceEdges.length > 0) {
+            console.log(`  High (0.5+): ${highConfidenceEdges.length} edges, samples:`, 
+                highConfidenceEdges.slice(0, 3).map(e => ({ from: e.from, to: e.to, type: e.type, confidence: e.confidence }))
+            );
+        }
+        
+        // Analyze relationship types being filtered at current threshold (0.2)
+        const edgesToBeFiltered = edges.filter(e => 
+            e.type !== "parent" && 
+            e.type !== "parent-child" && 
+            (e.confidence || 1) < 0.2
+        );
+        
+        const typeCountsFiltered = edgesToBeFiltered.reduce((counts: Record<string, number>, edge) => {
+            const type = edge.type || 'undefined';
+            counts[type] = (counts[type] || 0) + 1;
+            return counts;
+        }, {});
+        
+        const typeCountsKept = edges.filter(e => 
+            e.type === "parent" || 
+            e.type === "parent-child" || 
+            (e.confidence || 1) >= 0.2
+        ).reduce((counts: Record<string, number>, edge) => {
+            const type = edge.type || 'undefined';
+            counts[type] = (counts[type] || 0) + 1;
+            return counts;
+        }, {});
+        
+        console.log(`[graphologyLayoutEngine] RELATIONSHIP TYPE ANALYSIS - Will be FILTERED (confidence < 0.2):`, {
+            totalFiltered: edgesToBeFiltered.length,
+            byType: Object.entries(typeCountsFiltered)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 10)
+                .map(([type, count]) => ({ type, count, percentage: ((count / edgesToBeFiltered.length) * 100).toFixed(1) + '%' }))
+        });
+        
+        console.log(`[graphologyLayoutEngine] RELATIONSHIP TYPE ANALYSIS - Will be KEPT (confidence >= 0.2 or parent types):`, {
+            totalKept: edges.length - edgesToBeFiltered.length,
+            byType: Object.entries(typeCountsKept)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 10)
+                .map(([type, count]) => ({ type, count, percentage: ((count / (edges.length - edgesToBeFiltered.length)) * 100).toFixed(1) + '%' }))
+        });
+    }
 
     for (const edge of edges) {
-        if (edge.from === edge.to) continue;
-        if (!nodeSet.has(edge.from) || !nodeSet.has(edge.to)) continue;
+        // Log first 5 edges to see their complete structure
+        if (sampleCount < 5) {
+            debug(`Edge sample ${sampleCount + 1}:`, JSON.stringify(edge, null, 2));
+            sampleCount++;
+        }
+        
+        if (edge.from === edge.to) {
+            selfReferentialEdges++;
+            continue;
+        }
+        if (!nodeSet.has(edge.from) || !nodeSet.has(edge.to)) {
+            missingNodeEdges++;
+            continue;
+        }
 
         const edgeKey = [edge.from, edge.to].sort().join("|");
-        if (edgeSet.has(edgeKey)) continue;
+        if (edgeSet.has(edgeKey)) {
+            duplicateEdges++;
+            continue;
+        }
 
         // Filter edges with confidence < 0.2 (except parent relationships)
         if (
@@ -124,26 +266,61 @@ export function buildGraphologyGraph(
             edge.type !== "parent-child" &&
             (edge.confidence || 1) < 0.2
         ) {
+            lowConfidenceEdges++;
+            
+            // Log detailed information for first 20 low-confidence edges to help determine threshold
+            if (lowConfidenceEdges <= 20) {
+                console.log(`[graphologyLayoutEngine] LOW CONFIDENCE EDGE #${lowConfidenceEdges}:`, {
+                    from: edge.from,
+                    to: edge.to,
+                    type: edge.type,
+                    confidence: edge.confidence,
+                    strength: edge.strength,
+                    reason: `type="${edge.type}" has confidence ${edge.confidence} < 0.2 threshold`,
+                    allFields: JSON.stringify(edge, null, 2)
+                });
+            }
+            
             continue;
         }
 
         edgeSet.add(edgeKey);
         try {
+            // STRICT validation - no fallbacks for edge type
+            if (!edge.type) {
+                debug(`Warning: Edge missing type, skipping: ${edge.from} -> ${edge.to}`);
+                missingTypeEdges++;
+                continue;
+            }
+            
             graph.addEdge(edge.from, edge.to, {
-                type: edge.type || "related",
+                type: edge.type,
                 confidence: edge.confidence || 0.5,
                 strength: edge.strength || edge.confidence || 0.5,
             });
             edgeCount++;
         } catch (error) {
             debug(`Warning: Could not add edge ${edge.from} -> ${edge.to}`);
+            addErrorEdges++;
         }
     }
 
     debug(`Added ${edgeCount} edges to graph`);
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 4B RESULT - Edge filtering summary:`, {
+        inputEdges: edges.length,
+        addedEdges: edgeCount,
+        selfReferential: selfReferentialEdges,
+        missingNodes: missingNodeEdges,
+        duplicates: duplicateEdges,
+        lowConfidence: lowConfidenceEdges,
+        missingType: missingTypeEdges,
+        addErrors: addErrorEdges,
+        totalFiltered: edges.length - edgeCount
+    });
 
     // Remove isolated nodes (nodes with no edges)
     const isolatedNodes: string[] = [];
+    const nodesBeforeIsolatedRemoval = graph.order;
     for (const node of graph.nodes()) {
         if (graph.degree(node) === 0) {
             isolatedNodes.push(node);
@@ -152,16 +329,23 @@ export function buildGraphologyGraph(
 
     if (isolatedNodes.length > 0) {
         debug(`Removing ${isolatedNodes.length} isolated nodes (no edges)`);
+        console.log(`[graphologyLayoutEngine] FILTERING STEP 4C - Removing ${isolatedNodes.length} isolated nodes:`, 
+            isolatedNodes.slice(0, 10)
+        );
         for (const node of isolatedNodes) {
             graph.dropNode(node);
         }
     }
+    
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 4C RESULT - Nodes after isolated removal: ${nodesBeforeIsolatedRemoval} → ${graph.order} (removed ${isolatedNodes.length})`);
 
     calculateNodeImportance(graph);
     assignNodeSizes(graph);
     detectCommunities(graph);
     assignCommunityColors(graph);
     applyMultiPhaseLayout(graph, opts);
+
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 4 FINAL - buildGraphologyGraph returning graph with ${graph.order} nodes and ${graph.size} edges`);
 
     return graph;
 }
@@ -425,6 +609,12 @@ export function convertToCytoscapeElements(
 ): CytoscapeElement[] {
     debug("Converting to Cytoscape format...");
 
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 5 - convertToCytoscapeElements:`, {
+        inputGraphNodes: graph.order,
+        inputGraphEdges: graph.size,
+        targetViewportSize
+    });
+
     const elements: CytoscapeElement[] = [];
 
     let minX = Infinity,
@@ -524,6 +714,15 @@ export function convertToCytoscapeElements(
     debug(
         `Converted ${graph.order} nodes and ${graph.size} edges to Cytoscape format`,
     );
+    
+    const nodeElements = elements.filter(el => !el.data.source && !el.data.target);
+    const edgeElements = elements.filter(el => el.data.source || el.data.target);
+    console.log(`[graphologyLayoutEngine] FILTERING STEP 5 RESULT - convertToCytoscapeElements produced:`, {
+        totalElements: elements.length,
+        nodeElements: nodeElements.length, 
+        edgeElements: edgeElements.length,
+        nodesWithInvalidPositions
+    });
 
     return elements;
 }

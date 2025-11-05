@@ -83,6 +83,14 @@ export class EntityGraphQueries {
 
         // Relationship index
         this.relationshipMap = new Map();
+        
+        // Log sample edges from disk data
+        const sampleEdges = this.jsonData.edges.slice(0, 10);
+        debug(`[ENTITY GRAPH LOADING] Sample ${sampleEdges.length} edges from disk:`);
+        sampleEdges.forEach((edge, i) => {
+            debug(`  ${i+1}. ${edge.source} -[${edge.type}]-> ${edge.target} (confidence: ${edge.confidence})`);
+        });
+        
         for (const edge of this.jsonData.edges) {
             // Index by source
             if (!this.relationshipMap.has(edge.source)) {

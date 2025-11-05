@@ -183,8 +183,8 @@ function calculateEntityMetrics(
 
     tracker.startOperation("calculateEntityMetrics.calculateDegrees");
     relationships.forEach((rel) => {
-        const from = rel.fromEntity;
-        const to = rel.toEntity;
+        const from = rel.source || rel.fromEntity;
+        const to = rel.target || rel.toEntity;
 
         if (degreeMap.has(from)) {
             degreeMap.set(from, degreeMap.get(from)! + 1);
@@ -315,12 +315,24 @@ async function ensureGraphCache(context: SessionContext<BrowserActionContext>): 
                 importance: entity.importance || 0,
             }));
 
-            // Convert relationships to graph edges
+            // Convert relationships to graph edges - match getGlobalImportanceLayer format
             const graphEdges: GraphEdge[] = relationships.map((rel: any) => ({
                 from: rel.source || rel.fromEntity,
                 to: rel.target || rel.toEntity,
-                weight: rel.confidence || rel.count || 1,
+                type: rel.type || rel.relationshipType,
+                confidence: rel.confidence || 0.5,
+                strength: rel.confidence || 0.5,
             }));
+
+            // Debug: Check for graphEdges without types in ensureGraphCache
+            const edgesWithoutType = graphEdges.filter(edge => !edge.type);
+            if (edgesWithoutType.length > 0) {
+                console.log("[ensureGraphCache] Found graphEdges without type:", {
+                    count: edgesWithoutType.length,
+                    total: graphEdges.length,
+                    samples: edgesWithoutType.slice(0, 3)
+                });
+            }
 
             debug(`[Graphology] Building layout for ${graphNodes.length} nodes, ${graphEdges.length} edges`);
 
@@ -545,7 +557,16 @@ export async function rebuildKnowledgeGraph(
     try {
         debug("[Knowledge Graph] Starting JSON-based knowledge graph rebuild");
 
-        // Get JSON storage manager directly  
+        // Get website collection to rebuild from SQLite
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            return {
+                success: false,
+                error: "Website collection not available",
+            };
+        }
+
+        // Get JSON storage manager for saving results
         const jsonStorage = context.agentContext.graphJsonStorage;
         if (!jsonStorage?.manager) {
             return {
@@ -554,21 +575,34 @@ export async function rebuildKnowledgeGraph(
             };
         }
 
-        // Clear existing JSON graph data and rebuild
+        // Create backup of existing JSON files
         try {
-            await jsonStorage.manager.clearGraph();
-            debug("[Knowledge Graph] Cleared existing JSON graph data");
-        } catch (clearError) {
-            console.warn("Warning: Failed to clear existing JSON graph data:", clearError);
+            await jsonStorage.manager.createBackup();
+            debug("[Knowledge Graph] Created backup of existing JSON graph data");
+        } catch (backupError) {
+            console.warn("Warning: Failed to create backup:", backupError);
         }
 
-        // Rebuild the graph using JSON storage
-        await jsonStorage.manager.buildGraph();
-        debug("[Knowledge Graph] JSON graph rebuild completed");
+        // Rebuild the graph from SQLite data using websiteCollection
+        debug("[Knowledge Graph] Building graph from SQLite data...");
+        await websiteCollection.buildGraph();
+        debug("[Knowledge Graph] Graph build from SQLite completed");
+
+        // Convert to JSON format and save
+        debug("[Knowledge Graph] Converting to JSON format and saving...");
+        const converter = new SqliteToJsonConverter(websiteCollection as any);
+        const entityGraph = await converter.convertEntityGraph();
+        const topicGraph = await converter.convertTopicGraph();
+        
+        // Save the converted graphs
+        await jsonStorage.manager.saveEntityGraph(entityGraph);
+        await jsonStorage.manager.saveTopicGraph(topicGraph);
+        
+        debug("[Knowledge Graph] JSON graph rebuild completed successfully");
 
         return {
             success: true,
-            message: "Knowledge graph rebuilt successfully using JSON storage",
+            message: `Knowledge graph rebuilt successfully. Entity graph: ${entityGraph.nodes.length} nodes, ${entityGraph.edges.length} edges. Topic graph: ${topicGraph.nodes.length} nodes, ${topicGraph.edges.length} edges.`,
         };
     } catch (error) {
         console.error("Error rebuilding knowledge graph:", error);
@@ -885,19 +919,19 @@ export async function getAllRelationships(
         // Apply optimization for consistency
         const optimizedRelationships = relationships.map((rel: any) => ({
             rowId: rel.id || rel.rowId,
-            fromEntity: rel.fromEntity,
-            toEntity: rel.toEntity,
-            relationshipType: rel.relationshipType,
+            fromEntity: rel.source || rel.fromEntity,
+            toEntity: rel.target || rel.toEntity,
+            relationshipType: rel.type || rel.relationshipType,
             confidence: rel.confidence,
             // Deduplicate sources using Set, then limit to first 3 entries
-            sources: rel.sources
-                ? typeof rel.sources === "string"
-                    ? Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3)
-                    : Array.isArray(rel.sources)
-                      ? Array.from(new Set(rel.sources)).slice(0, 3)
-                      : rel.sources
+            sources: rel.sources || rel.metadata?.sources
+                ? typeof (rel.sources || rel.metadata?.sources) === "string"
+                    ? Array.from(new Set(JSON.parse(rel.sources || rel.metadata?.sources))).slice(0, 3)
+                    : Array.isArray(rel.sources || rel.metadata?.sources)
+                      ? Array.from(new Set(rel.sources || rel.metadata?.sources)).slice(0, 3)
+                      : rel.sources || rel.metadata?.sources
                 : undefined,
-            count: rel.count,
+            count: rel.count || rel.metadata?.count,
         }));
 
         return {
@@ -1210,8 +1244,8 @@ export async function discoverRelatedKnowledge(
                         const relationships =
                             neighborhoodResult.relationships?.filter(
                                 (r: any) =>
-                                    r.toEntity === neighbor.name ||
-                                    r.fromEntity === neighbor.name,
+                                    (r.target || r.toEntity) === neighbor.name ||
+                                    (r.source || r.fromEntity) === neighbor.name,
                             ) || [];
 
                         const distance = relationships.length > 0 ? 1 : depth;
@@ -1465,14 +1499,33 @@ export async function getGlobalImportanceLayer(
             (a, b) => (b.importance || 0) - (a.importance || 0),
         );
 
+        console.log(`[getGlobalImportanceLayer] FILTERING STEP 1 - Initial entity filtering:`, {
+            totalEntitiesFromStorage: entitiesWithMetrics.length,
+            maxNodesLimit: maxNodes,
+            aboutToSelectTop: maxNodes
+        });
+        console.log(`[getGlobalImportanceLayer] Sample of top 10 entities being kept:`, 
+            sortedEntities.slice(0, 10).map(e => ({ name: e.name, importance: e.importance }))
+        );
+        console.log(`[getGlobalImportanceLayer] Sample of bottom 10 entities being filtered out:`, 
+            sortedEntities.slice(-10).map(e => ({ name: e.name, importance: e.importance }))
+        );
+
         let selectedEntities = sortedEntities.slice(0, maxNodes);
+        console.log(`[getGlobalImportanceLayer] FILTERING STEP 1 RESULT: Selected ${selectedEntities.length} entities from ${entitiesWithMetrics.length} total`);
         // Ensure connectivity by adding bridge nodes if needed
         if (parameters.includeConnectivity !== false) {
+            const entitiesBeforeConnectivity = selectedEntities.length;
             selectedEntities = ensureGlobalConnectivity(
                 selectedEntities,
                 allRelationships,
                 maxNodes,
             );
+            console.log(`[getGlobalImportanceLayer] FILTERING STEP 2 - Connectivity adjustment:`, {
+                entitiesBeforeConnectivity,
+                entitiesAfterConnectivity: selectedEntities.length,
+                bridgeNodesAdded: selectedEntities.length - entitiesBeforeConnectivity
+            });
         }
 
         // Get all relationships between selected entities
@@ -1481,8 +1534,32 @@ export async function getGlobalImportanceLayer(
         );
         const selectedRelationships = allRelationships.filter(
             (rel: any) =>
-                selectedEntityNames.has(rel.fromEntity) &&
-                selectedEntityNames.has(rel.toEntity),
+                selectedEntityNames.has(rel.source || rel.fromEntity) &&
+                selectedEntityNames.has(rel.target || rel.toEntity),
+        );
+
+        console.log(`[getGlobalImportanceLayer] FILTERING STEP 3 - Relationship filtering:`, {
+            totalRelationshipsFromStorage: allRelationships.length,
+            relationshipsAfterEntityFilter: selectedRelationships.length,
+            filteredOutRelationships: allRelationships.length - selectedRelationships.length
+        });
+        console.log(`[getGlobalImportanceLayer] Sample of 10 kept relationships:`, 
+            selectedRelationships.slice(0, 10).map(r => ({ 
+                from: r.source || r.fromEntity, 
+                to: r.target || r.toEntity, 
+                type: r.type || r.relationshipType 
+            }))
+        );
+        console.log(`[getGlobalImportanceLayer] Sample of 10 filtered relationships (first entities not in selected set):`, 
+            allRelationships.filter(rel => 
+                !selectedEntityNames.has(rel.source || rel.fromEntity) ||
+                !selectedEntityNames.has(rel.target || rel.toEntity)
+            ).slice(0, 10).map(r => ({ 
+                from: r.source || r.fromEntity, 
+                to: r.target || r.toEntity, 
+                type: r.type || r.relationshipType,
+                reason: !selectedEntityNames.has(r.source || r.fromEntity) ? 'source not selected' : 'target not selected'
+            }))
         );
 
         const metadata = {
@@ -1499,25 +1576,35 @@ export async function getGlobalImportanceLayer(
             layer: "global_importance",
         };
 
+        // Debug: Check for relationships without types
+        const relationshipsWithoutType = selectedRelationships.filter((rel: any) => !rel.type && !rel.relationshipType);
+        if (relationshipsWithoutType.length > 0) {
+            console.log("[getGlobalImportanceLayer] Found relationships without type:", {
+                count: relationshipsWithoutType.length,
+                total: selectedRelationships.length,
+                samples: relationshipsWithoutType.slice(0, 3)
+            });
+        }
+
         const optimizedRelationships = selectedRelationships.map(
             (rel: any) => ({
                 rowId: rel.rowId,
-                fromEntity: rel.fromEntity,
-                toEntity: rel.toEntity,
-                relationshipType: rel.relationshipType,
+                fromEntity: rel.source || rel.fromEntity,
+                toEntity: rel.target || rel.toEntity,
+                relationshipType: rel.type || rel.relationshipType,
                 confidence: rel.confidence,
                 // Deduplicate sources using Set, then limit to first 3 entries
-                sources: rel.sources
-                    ? typeof rel.sources === "string"
-                        ? Array.from(new Set(JSON.parse(rel.sources))).slice(
+                sources: rel.sources || rel.metadata?.sources
+                    ? typeof (rel.sources || rel.metadata?.sources) === "string"
+                        ? Array.from(new Set(JSON.parse(rel.sources || rel.metadata?.sources))).slice(
                               0,
                               3,
                           )
-                        : Array.isArray(rel.sources)
-                          ? Array.from(new Set(rel.sources)).slice(0, 3)
-                          : rel.sources
+                        : Array.isArray(rel.sources || rel.metadata?.sources)
+                          ? Array.from(new Set(rel.sources || rel.metadata?.sources)).slice(0, 3)
+                          : rel.sources || rel.metadata?.sources
                     : undefined,
-                count: rel.count,
+                count: rel.count || rel.metadata?.count,
             }),
         );
 
@@ -1596,12 +1683,27 @@ export async function getGlobalImportanceLayer(
                 }),
             );
 
+            // Debug: Check for graphEdges without types
+            const edgesWithoutType = graphEdges.filter(edge => !edge.type);
+            if (edgesWithoutType.length > 0) {
+                console.log("[getGlobalImportanceLayer] Found graphEdges without type:", {
+                    count: edgesWithoutType.length,
+                    total: graphEdges.length,
+                    samples: edgesWithoutType.slice(0, 3)
+                });
+            }
+
             console.log("[getGlobalImportanceLayer] About to call buildGraphologyGraph:", {
                 graphNodesCount: graphNodes.length,
                 graphEdgesCount: graphEdges.length,
+                nodeLimit: maxNodes * 2,
+                minEdgeConfidence: 0.2,
+                denseClusterThreshold: 100,
                 sampleNodes: graphNodes.slice(0, 3),
                 sampleEdges: graphEdges.slice(0, 3)
             });
+
+            console.log(`[getGlobalImportanceLayer] FILTERING STEP 4 - About to call buildGraphologyGraph with ${graphNodes.length} nodes and ${graphEdges.length} edges`);
 
             const graph = buildGraphologyGraph(graphNodes, graphEdges, {
                 nodeLimit: maxNodes * 2,
@@ -1614,6 +1716,7 @@ export async function getGlobalImportanceLayer(
                 graphSize: graph?.size,
                 graphType: typeof graph
             });
+            console.log(`[getGlobalImportanceLayer] FILTERING STEP 4 RESULT - buildGraphologyGraph produced graph with ${graph?.order || 0} nodes and ${graph?.size || 0} edges`);
 
             const cytoscapeElements = convertToCytoscapeElements(graph, 2000);
             console.log("[getGlobalImportanceLayer] convertToCytoscapeElements result:", {
@@ -1621,6 +1724,23 @@ export async function getGlobalImportanceLayer(
                 elementsType: typeof cytoscapeElements,
                 firstElement: cytoscapeElements?.[0]
             });
+            console.log(`[getGlobalImportanceLayer] FILTERING STEP 5 - convertToCytoscapeElements produced ${cytoscapeElements?.length || 0} total elements`);
+            
+            // Count nodes vs edges in final elements
+            const nodeElements = cytoscapeElements?.filter(el => !el.data?.source && !el.data?.target) || [];
+            const edgeElements = cytoscapeElements?.filter(el => el.data?.source || el.data?.target) || [];
+            console.log(`[getGlobalImportanceLayer] FILTERING STEP 5 BREAKDOWN: ${nodeElements.length} nodes + ${edgeElements.length} edges = ${cytoscapeElements?.length || 0} total elements`);
+            
+            if (nodeElements.length > 0) {
+                console.log(`[getGlobalImportanceLayer] Sample of final 10 nodes:`, 
+                    nodeElements.slice(0, 10).map(el => ({ id: el.data?.id, name: el.data?.name }))
+                );
+            }
+            if (edgeElements.length > 0) {
+                console.log(`[getGlobalImportanceLayer] Sample of final 10 edges:`, 
+                    edgeElements.slice(0, 10).map(el => ({ source: el.data?.source, target: el.data?.target, type: el.data?.type }))
+                );
+            }
             
             const layoutMetrics = calculateLayoutQualityMetrics(graph);
             const layoutDuration = performance.now() - layoutStart;
@@ -1724,6 +1844,16 @@ export async function getGlobalImportanceLayer(
         );
 
         console.log("[getGlobalImportanceLayer] Cache key used:", cacheKey);
+
+        // FINAL FILTERING SUMMARY
+        console.log(`[getGlobalImportanceLayer] ===== COMPLETE FILTERING PIPELINE SUMMARY =====`);
+        console.log(`[getGlobalImportanceLayer] Step 1 - Initial entities: ${entitiesWithMetrics.length} → ${selectedEntities.length} (filtered: ${entitiesWithMetrics.length - selectedEntities.length})`);
+        console.log(`[getGlobalImportanceLayer] Step 2 - After connectivity: ${selectedEntities.length} entities`);
+        console.log(`[getGlobalImportanceLayer] Step 3 - Relationships: ${allRelationships.length} → ${optimizedRelationships.length} (filtered: ${allRelationships.length - optimizedRelationships.length})`);
+        console.log(`[getGlobalImportanceLayer] Step 4 - Graphology graph: ${optimizedEntities.length} nodes → ${cachedGraph.cytoscapeElements.filter((el: any) => el.data && !el.data.source).length} nodes`);
+        console.log(`[getGlobalImportanceLayer] Step 5 - Final elements: ${cachedGraph.cytoscapeElements.length} total elements (${cachedGraph.cytoscapeElements.filter((el: any) => el.data && !el.data.source).length} nodes + ${cachedGraph.cytoscapeElements.filter((el: any) => el.data && (el.data.source || el.data.target)).length} edges)`);
+        console.log(`[getGlobalImportanceLayer] Final result - Entities: ${enrichedEntities.length}, Relationships: ${optimizedRelationships.length}`);
+        console.log(`[getGlobalImportanceLayer] =================================================`);
 
         return {
             entities: enrichedEntities,
@@ -2294,9 +2424,11 @@ function findConnectedComponents(
     // Build adjacency list
     entities.forEach((entity) => adjacencyList.set(entity.name, []));
     relationships.forEach((rel) => {
-        if (entityNames.has(rel.fromEntity) && entityNames.has(rel.toEntity)) {
-            adjacencyList.get(rel.fromEntity)?.push(rel.toEntity);
-            adjacencyList.get(rel.toEntity)?.push(rel.fromEntity);
+        const fromEntity = rel.source || rel.fromEntity;
+        const toEntity = rel.target || rel.toEntity;
+        if (entityNames.has(fromEntity) && entityNames.has(toEntity)) {
+            adjacencyList.get(fromEntity)?.push(toEntity);
+            adjacencyList.get(toEntity)?.push(fromEntity);
         }
     });
 

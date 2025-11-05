@@ -51,6 +51,7 @@ export { GraphJsonStorageManager } from "./storage/graphJsonStorage.js";
 export { SqliteToJsonConverter } from "./converters/sqliteToJson.js";
 export { JsonToGraphologyConverter } from "./converters/jsonToGraphology.js";
 export { SqliteToJsonMigrator } from "./migration/sqliteToJsonMigrator.js";
+export { RelationshipStrengthMigration } from "./migration/relationshipStrengthMigration.js";
 export { EntityGraphQueries } from "./queries/entityGraphQueries.js";
 export { TopicGraphQueries } from "./queries/topicGraphQueries.js";
 

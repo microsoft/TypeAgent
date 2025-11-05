@@ -38,11 +38,10 @@ export class EntityGraphVisualizer {
     private container: HTMLElement;
     protected currentLayout: string = "force";
     private entityClickCallback: ((entity: EntityData) => void) | null = null;
+    private relationshipSampleCount: number = 0;
 
     // View mode and data management
     private viewMode: ViewMode = "global";
-    private currentEntity: string | null = null;
-    private entityGraphData: GraphData | null = null;
     private globalGraphData: any = null;
 
     // Single-instance (global only) - Phase 3: Detail view removed
@@ -98,7 +97,7 @@ export class EntityGraphVisualizer {
      */
     private getOptimalRendererConfig(): any {
         if (this.detectWebGLSupport()) {
-            const nodeCount = this.globalGraphData?.entities?.length || 0;
+            const nodeCount = this.globalGraphData?.elements?.length || 0;
 
             // Configure WebGL settings based on graph size
             let webglConfig = {
@@ -1019,12 +1018,12 @@ export class EntityGraphVisualizer {
     /**
      * Load global importance layer into global instance (Triple-Instance Architecture)
      */
-    public async loadGlobalGraph(graphData: any): Promise<void> {
+    public async loadGlobalGraph(presetLayout: any): Promise<void> {
         // Clear all neighborhood state when loading global data
         this.clearNeighborhoodState();
 
         // Require graphology preset layout - no fallback modes
-        if (!graphData.presetLayout?.elements) {
+        if (!presetLayout?.elements) {
             const errorMsg =
                 "Graphology layout data is required but not available";
             console.error(`[EntityGraphVisualizer] ${errorMsg}`);
@@ -1032,12 +1031,12 @@ export class EntityGraphVisualizer {
         }
 
         console.log(
-            `[EntityGraphVisualizer] Loading graph using graphology preset layout (${graphData.presetLayout.elements.length} elements)`,
+            `[EntityGraphVisualizer] Loading graph using graphology preset layout (${presetLayout.elements.length} elements)`,
         );
 
         // Clear existing elements and add graphology elements directly
         this.cy.elements().remove();
-        this.cy.add(graphData.presetLayout.elements);
+        this.cy.add(presetLayout.elements);
 
         // Apply preset layout to use the positions from graphology without any computation
         this.cy
@@ -1050,259 +1049,11 @@ export class EntityGraphVisualizer {
             .run();
 
         // Store global data reference
-        this.globalGraphData = graphData;
+        this.globalGraphData = presetLayout;
 
         console.log(
-            `[EntityGraphVisualizer] Loaded ${graphData.presetLayout.elements.length} pre-positioned elements from server`,
+            `[EntityGraphVisualizer] Loaded ${presetLayout.elements.length} pre-positioned elements from server`,
         );
-    }
-
-    /**
-     * Legacy loadGlobalGraph method - updated to use new triple-instance approach
-     */
-    async loadGlobalGraphLegacy(globalData: any): Promise<void> {
-        if (!this.cy) return;
-
-        // Store global data
-        this.globalGraphData = globalData;
-        this.entityGraphData = null;
-        this.currentEntity = null;
-
-        // Switch to global view (makes it visible)
-        this.switchToGlobalView();
-
-        // Check if global instance already has data
-        if (this.globalInstance.elements().length > 0) {
-            return;
-        }
-
-        // Load ALL data initially - style-based LOD will handle visibility
-        const allData = this.prepareAllDataWithImportance(globalData);
-
-        // Convert to Cytoscape elements
-        const elements = this.convertGlobalDataToElements(allData);
-
-        // Add elements to global instance
-        this.globalInstance.add(elements);
-
-        // Set active instance reference BEFORE setting up interactions
-        this.cy = this.globalInstance;
-        this.currentActiveView = "global";
-
-        // LoD system removed - using simple zoom-based opacity instead
-
-        this.setupZoomInteractions();
-        this.setupInteractions();
-
-        setTimeout(() => {
-            this.globalInstance.zoom(this.globalInstance.zoom() * 1.1);
-        }, 2000);
-
-        // Apply layout with cache
-        await this.applyLayoutWithCache("initial");
-
-        // Fit to view
-        this.globalInstance.fit({ maxZoom: 2.0 });
-
-        // LoD system removed - using simple zoom-based opacity instead
-    }
-
-    private async applyLayoutWithCache(cacheKey: string): Promise<void> {
-        if (!this.cy) return;
-
-        const nodeCount = this.cy.nodes().length;
-        const fullCacheKey = `${cacheKey}_${nodeCount}`;
-
-        // Check if we have cached positions
-        if (this.layoutCache.has(fullCacheKey)) {
-            console.time("[Perf] Apply cached layout");
-            const positions = this.layoutCache.get(fullCacheKey);
-
-            const layout = this.cy.layout({
-                name: "preset",
-                positions: (node: any) => positions[node.id()],
-                fit: false, // Prevent layout from fighting viewport control
-                animate: false, // No animation needed for preset positions
-                padding: 30,
-            });
-
-            // Handle layout completion to manually fit view
-            layout.one("layoutstop", () => {
-                console.log(`[Layout] Cached layout applied, fitting view`);
-                this.cy.fit({ maxZoom: 1.0 }); // Constrain fit zoom to normal size
-            });
-
-            layout.run();
-            console.timeEnd("[Perf] Apply cached layout");
-        } else {
-            console.time("[Perf] Calculate new layout");
-            await this.calculateAndCacheLayout(fullCacheKey);
-            console.timeEnd("[Perf] Calculate new layout");
-        }
-    }
-
-    private calculateAndCacheLayout(cacheKey: string): Promise<void> {
-        return new Promise((resolve) => {
-            if (!this.cy) {
-                resolve();
-                return;
-            }
-
-            const nodeCount = this.cy.nodes().length;
-            const edgeCount = this.cy.edges().length;
-
-            // Drastically reduce iterations for dense graphs
-            let iterations;
-            if (nodeCount < 100) {
-                iterations = 300;
-            } else if (nodeCount < 300) {
-                iterations = 200;
-            } else if (nodeCount < 800) {
-                iterations = 100;
-            } else {
-                iterations = 50; // Very few iterations for large graphs
-            }
-
-            // Further reduce if edge density is high
-            const edgeDensity = edgeCount / (nodeCount * nodeCount);
-            if (edgeDensity > 0.1) {
-                // Dense graph
-                iterations = Math.max(20, iterations / 2);
-            }
-
-            console.log(
-                `[Perf] Using ${iterations} iterations for ${nodeCount} nodes, ${edgeCount} edges (density: ${edgeDensity.toFixed(3)})`,
-            );
-
-            const layout = this.cy.layout({
-                name: "cose",
-                idealEdgeLength: 80,
-                nodeOverlap: 20,
-                refresh: 20,
-                fit: false, // Prevent layout from fighting viewport control
-                animate: "end", // Animate only at end to prevent viewport conflicts
-                padding: 30,
-                randomize: false,
-                componentSpacing: 100,
-                nodeRepulsion: (node: any) =>
-                    400000 * ((node.data("importance") || 0) + 0.1),
-                edgeElasticity: (edge: any) =>
-                    100 * (edge.data("strength") || 0.5),
-                nestingFactor: 5,
-                gravity: 80,
-                numIter: iterations,
-                initialTemp: 200,
-                coolingFactor: 0.95,
-                minTemp: 1.0,
-                stop: () => {
-                    // Cache positions after layout completes
-                    this.saveLayoutToCache(cacheKey);
-
-                    // Manually fit view after layout completion
-                    console.log(`[Layout] Cose layout completed, fitting view`);
-                    this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
-
-                    resolve();
-                },
-            });
-
-            layout.run();
-        });
-    }
-
-    private saveLayoutToCache(cacheKey: string): void {
-        if (!this.cy) return;
-
-        const positions: any = {};
-        this.cy.nodes().forEach((node: any) => {
-            positions[node.id()] = node.position();
-        });
-
-        this.layoutCache.set(cacheKey, positions);
-        console.log(
-            `[Perf] Cached layout for ${Object.keys(positions).length} nodes`,
-        );
-    }
-
-    private setupZoomInteractions(): void {
-        // Prevent duplicate event handler setup
-        if (this.zoomHandlersSetup) {
-            console.log(
-                "[Zoom] Zoom handlers already set up, skipping duplicate setup",
-            );
-            return;
-        }
-
-        console.log("[Zoom] Setting up zoom handlers for all instances");
-
-        this.setupZoomInteractionsForInstance(this.globalInstance);
-
-        this.zoomHandlersSetup = true;
-    }
-
-    private setupZoomInteractionsForInstance(instance: any): void {
-        if (!instance) return;
-
-        let instanceName = "unknown";
-        if (instance === this.globalInstance) {
-            instanceName = "global";
-        }
-
-        // Natural zoom event handling - trust Cytoscape.js defaults
-        instance.on("zoom", () => {
-            const zoom = instance.zoom();
-            this.zoomEventCount++;
-
-            // Only handle view transitions and LOD updates for the currently active instance
-            if (instance !== this.cy) {
-                return;
-            }
-
-            this.eventSequence.push({
-                event: "zoom",
-                time: Date.now(),
-                zoom: zoom,
-                details: {
-                    eventNumber: this.zoomEventCount,
-                    view: this.currentActiveView,
-                    instance: instanceName,
-                },
-            });
-
-            // Smooth 60fps LOD updates
-            clearTimeout(this.zoomTimer);
-            this.zoomTimer = setTimeout(async () => {
-                // LoD system removed - using simple zoom-based opacity instead
-
-                // PHASE 4: Dynamic spacing system removed - causes performance issues
-                // this.updateDynamicSpacing(zoom);
-
-                // Handle hierarchical loading based on zoom level
-                // Only process if not already loading
-                await this.handleHierarchicalZoomChange(zoom);
-            }, 16); // ~60fps update rate
-        });
-
-        // Set up event sequence analysis for this instance
-        ["pan", "viewport", "render"].forEach((eventType) => {
-            instance.on(eventType, () => {
-                // Only track events from the currently active instance
-                if (instance !== this.cy) return;
-
-                this.eventSequence.push({
-                    event: eventType,
-                    time: Date.now(),
-                    zoom: instance.zoom(),
-                });
-            });
-        });
-    }
-
-    /**
-     * Handle zoom-based hierarchical transitions with protection against multiple triggers
-     */
-    private async handleHierarchicalZoomChange(newZoom: number): Promise<void> {
-        // Neighborhood view removed - zoom-based transitions now handle global and detail views only
     }
 
     private setupContainerInteractions(): void {
@@ -1384,86 +1135,6 @@ export class EntityGraphVisualizer {
         );
     }
 
-    /**
-     * Get target visibility percentages based on zoom level
-     * Progressive disclosure: fewer items visible when zoomed out
-     */
-    private getVisibilityPercentages(zoom: number): {
-        nodeVisibilityPercentage: number;
-        edgeVisibilityPercentage: number;
-    } {
-        let nodeVisibilityPercentage: number;
-        let edgeVisibilityPercentage: number;
-
-        if (zoom < 0.3) {
-            // Very zoomed out - show top 10% of nodes, 5% of edges
-            nodeVisibilityPercentage = 0.1;
-            edgeVisibilityPercentage = 0.05;
-        } else if (zoom < 0.6) {
-            // Zoomed out - show top 30% of nodes, 20% of edges
-            nodeVisibilityPercentage = 0.3;
-            edgeVisibilityPercentage = 0.2;
-        } else if (zoom < 1.0) {
-            // Medium zoom - show top 60% of nodes, 50% of edges
-            nodeVisibilityPercentage = 0.6;
-            edgeVisibilityPercentage = 0.5;
-        } else if (zoom < 1.5) {
-            // Zoomed in - show top 85% of nodes, 80% of edges
-            nodeVisibilityPercentage = 0.85;
-            edgeVisibilityPercentage = 0.8;
-        } else {
-            // Very zoomed in - show 95% of nodes, 90% of edges
-            nodeVisibilityPercentage = 0.95;
-            edgeVisibilityPercentage = 0.9;
-        }
-
-        return { nodeVisibilityPercentage, edgeVisibilityPercentage };
-    }
-
-    /**
-     * Prepare all data with computed importance scores for style-based LOD
-     */
-    private prepareAllDataWithImportance(globalData: any): any {
-        const entities = globalData.entities || [];
-        const relationships = globalData.relationships || [];
-
-        // Compute importance scores for all entities
-        const entitiesWithImportance = entities.map((entity: any) => ({
-            ...entity,
-            computedImportance: this.calculateEntityImportance(entity),
-        }));
-
-        // Limit to reasonable amount for performance (style-based LOD can handle more than data-based)
-        const maxEntities = 1000; // Increased from 200 since style-based LOD is more efficient
-        const maxRelationships = 5000; // Increased from 300
-
-        const sortedEntities = entitiesWithImportance
-            .sort(
-                (a: any, b: any) => b.computedImportance - a.computedImportance,
-            )
-            .slice(0, maxEntities);
-
-        const entityIds = new Set(sortedEntities.map((e: any) => e.id));
-
-        // Filter relationships to those connecting loaded entities
-        // Support both transformed (from/to) and original (fromEntity/toEntity) field formats
-        const filteredRelationships = relationships
-            .filter((r: any) => {
-                const fromId = r.from || r.fromEntity;
-                const toId = r.to || r.toEntity;
-                return entityIds.has(fromId) && entityIds.has(toId);
-            })
-            .sort(
-                (a: any, b: any) =>
-                    (b.confidence || 0.5) - (a.confidence || 0.5),
-            )
-            .slice(0, maxRelationships);
-
-        return {
-            entities: sortedEntities,
-            relationships: filteredRelationships,
-        };
-    }
 
     // Storage for position comparison debugging
     private globalNodePositionsBeforeTransition: Map<
@@ -1785,295 +1456,15 @@ export class EntityGraphVisualizer {
         );
     }
 
-    /**
-     * Calculate entity importance from available metrics
-     */
-    private calculateEntityImportance(entity: any): number {
-        const importance = entity.importance || 0;
-        const degree = entity.degree || entity.degreeCount || 0;
-        const centrality = entity.centralityScore || 0;
-        const pagerank = entity.metrics?.pagerank || 0;
 
-        // If we have a valid backend importance, use it
-        if (importance > 0) {
-            return importance;
-        }
 
-        // Calculate degree-based importance if we have degree information
-        if (degree > 0) {
-            // Find the maximum degree from the current dataset for normalization
-            // This is a simple approach - in production, we might want to cache this
-            const maxDegree = 201; // Estimated max degree based on typical graphs
-            return Math.min(1.0, degree / maxDegree);
-        }
 
-        // Fall back to other signals
-        const otherSignals = Math.max(centrality, pagerank);
-        if (otherSignals > 0) {
-            return otherSignals;
-        }
 
-        // Only use minimum for truly unknown entities
-        return 0.1;
-    }
 
-    /**
-     * Load full global data when transitioning from direct entity view
-     */
-    private loadFullGlobalData(): void {
-        console.time("[Transition] Load global elements");
 
-        // Clear current elements and load global data
-        this.cy.elements().remove();
 
-        // Load all global data and apply style-based LOD
-        const allData = this.prepareAllDataWithImportance(this.globalGraphData);
-        const elements = this.convertGlobalDataToElements(allData);
 
-        this.cy.batch(() => {
-            this.cy.add(elements);
-        });
 
-        // LoD system removed - using simple zoom-based opacity instead
-
-        console.timeEnd("[Transition] Load global elements");
-    }
-
-    private calculatePercentiles(values: number[]): any {
-        if (values.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
-
-        const sorted = values.sort((a, b) => a - b);
-        const len = sorted.length;
-
-        return {
-            p25: sorted[Math.floor(len * 0.25)],
-            p50: sorted[Math.floor(len * 0.5)],
-            p75: sorted[Math.floor(len * 0.75)],
-            p90: sorted[Math.floor(len * 0.9)],
-        };
-    }
-
-    private getTypePriority(type: string): number {
-        const priorities: { [key: string]: number } = {
-            person: 3,
-            organization: 3,
-            product: 2,
-            concept: 2,
-            location: 2,
-            technology: 2,
-            event: 1,
-            document: 1,
-            website: 1,
-            topic: 1,
-            related_entity: 0,
-        };
-        return priorities[type] || 0;
-    }
-
-    private getEdgeTypeWeight(type: string): number {
-        const weights: { [key: string]: number } = {
-            contains: 2,
-            created_by: 2,
-            located_in: 2,
-            works_for: 2,
-            related: 1,
-            mentioned: 0,
-        };
-        return weights[type] || 1;
-    }
-
-    private isCommunityhub(node: any, communityId: string): boolean {
-        if (!this.cy) return false;
-
-        // Simple heuristic: node is a hub if it has connections to many other nodes in the community
-        const communityNodes = this.cy
-            .nodes()
-            .filter((n: any) => n.data("communityId") === communityId);
-        const nodeConnections = node.connectedEdges().length;
-        const avgConnections =
-            communityNodes
-                .map((n: any) => n.connectedEdges().length)
-                .reduce((a: number, b: number) => a + b, 0) /
-            communityNodes.length;
-
-        return nodeConnections > avgConnections * 1.5;
-    }
-
-    private getAdaptiveZoomThresholds(
-        zoom: number,
-        totalElements: number,
-    ): any {
-        // Dynamic thresholds based on zoom level and graph density
-        const densityFactor = Math.min(1, totalElements / 1000);
-
-        if (zoom < 0.3) {
-            return {
-                nodeThreshold: 6 + densityFactor * 2,
-                labelThreshold: 8,
-                edgeThreshold: 4 + densityFactor,
-            };
-        } else if (zoom < 0.6) {
-            return {
-                nodeThreshold: 4 + densityFactor,
-                labelThreshold: 6,
-                edgeThreshold: 3,
-            };
-        } else if (zoom < 1.0) {
-            return {
-                nodeThreshold: 2,
-                labelThreshold: 4,
-                edgeThreshold: 2,
-            };
-        } else {
-            return {
-                nodeThreshold: 0,
-                labelThreshold: 2,
-                edgeThreshold: 1,
-            };
-        }
-    }
-
-    private calculateLabelSize(score: number, zoom: number): number {
-        // Safety check for NaN values
-        if (!isFinite(score) || !isFinite(zoom)) {
-            console.warn("[LOD] Non-finite values in calculateLabelSize:", {
-                score,
-                zoom,
-            });
-            return 10; // Return safe default
-        }
-
-        const baseSize = 10;
-        const scoreMultiplier = Math.min(1.5, 1 + score * 0.1);
-        const zoomMultiplier = Math.min(1.3, zoom);
-        const result = Math.round(baseSize * scoreMultiplier * zoomMultiplier);
-
-        return isFinite(result) ? result : 10;
-    }
-
-    private calculateOpacity(score: number, zoom: number): number {
-        // Safety check for NaN values
-        if (!isFinite(score) || !isFinite(zoom)) {
-            console.warn("[LOD] Non-finite values in calculateOpacity:", {
-                score,
-                zoom,
-            });
-            return 0.8; // Return safe default
-        }
-
-        const baseOpacity = 0.6;
-        const scoreBonus = Math.min(0.4, score * 0.1);
-        const zoomBonus = Math.min(0.2, zoom * 0.2);
-        const result = Math.min(1, baseOpacity + scoreBonus + zoomBonus);
-
-        return isFinite(result) ? result : 0.8;
-    }
-
-    private convertGlobalDataToElements(globalData: any): any[] {
-        const elements: any[] = [];
-        const nodeIds = new Set<string>();
-
-        // Check if preset layout is available
-        const presetLayout = globalData.presetLayout?.elements;
-        const presetPositions = new Map<string, { x: number; y: number }>();
-
-        if (presetLayout) {
-            console.log(
-                `[Visualizer] Using preset layout with ${presetLayout.length} positioned elements`,
-            );
-            for (const element of presetLayout) {
-                if (element.position && element.data?.id) {
-                    presetPositions.set(element.data.id, element.position);
-                }
-                // Also try label-based lookup
-                if (element.position && element.data?.label) {
-                    presetPositions.set(element.data.label, element.position);
-                }
-            }
-        }
-
-        console.time("[Perf] Process nodes");
-        if (globalData.entities && globalData.entities.length > 0) {
-            globalData.entities.forEach((entity: any) => {
-                if (!nodeIds.has(entity.id)) {
-                    const nodeElement: any = {
-                        group: "nodes",
-                        data: {
-                            id: entity.id,
-                            name: entity.name,
-                            type: entity.type || "entity",
-                            size: entity.size || 12,
-                            importance:
-                                entity.importance ||
-                                entity.computedImportance ||
-                                0,
-                            degree: entity.degree || 0,
-                            communityId: entity.communityId,
-                            color: entity.color || "#999999",
-                            borderColor: entity.borderColor || "#333333",
-                        },
-                    };
-
-                    // Add preset position if available
-                    const presetPos =
-                        presetPositions.get(entity.id) ||
-                        presetPositions.get(entity.name);
-                    if (presetPos) {
-                        nodeElement.position = {
-                            x: presetPos.x,
-                            y: presetPos.y,
-                        };
-                    }
-
-                    elements.push(nodeElement);
-                    nodeIds.add(entity.id);
-                }
-            });
-        }
-        console.timeEnd("[Perf] Process nodes");
-        console.log(`[Perf] Created ${nodeIds.size} nodes`);
-
-        console.time("[Perf] Process edges");
-        if (globalData.relationships && globalData.relationships.length > 0) {
-            let validRelationships = 0;
-            let invalidRelationships = 0;
-
-            // NOTE: This function is only used in triple-instance mode now.
-            // In prototype mode, we use presetLayout.elements directly which are already consolidated.
-            // No artificial limit when data is already filtered
-            globalData.relationships.forEach((rel: any) => {
-                // Support both transformed (from/to) and original (fromEntity/toEntity) field formats
-                const sourceId = rel.from || rel.fromEntity;
-                const targetId = rel.to || rel.toEntity;
-                const relationType =
-                    rel.type || rel.relationshipType || "related";
-
-                if (nodeIds.has(sourceId) && nodeIds.has(targetId)) {
-                    elements.push({
-                        group: "edges",
-                        data: {
-                            id: `${sourceId}-${targetId}`,
-                            source: sourceId,
-                            target: targetId,
-                            type: relationType,
-                            strength: rel.confidence || 0.5,
-                            weight: rel.count || 1,
-                        },
-                    });
-                    validRelationships++;
-                } else {
-                    invalidRelationships++;
-                }
-            });
-
-            console.log(
-                `[Perf] Created ${validRelationships} valid edges, skipped ${invalidRelationships} invalid`,
-            );
-        }
-        console.timeEnd("[Perf] Process edges");
-
-        return elements;
-    }
 
     /**
      * Apply layout to the graph
@@ -2530,7 +1921,11 @@ export class EntityGraphVisualizer {
         const tooltip = this.getOrCreateTooltip();
 
         const strength = data.strength || 0;
-        const type = data.type || "related";
+        const type = data.type;
+        if (!type) {
+            console.error(`[ENTITY GRAPH VISUALIZER] ERROR: Edge missing type:`, data);
+            return;
+        }
 
         tooltip.innerHTML = `
             <div class="tooltip-header">${data.source} → ${data.target}</div>
@@ -2933,42 +2328,5 @@ export class EntityGraphVisualizer {
         }
     > = new Map();
 
-    /**
-     * Calculate distance from a point to the viewport boundary
-     */
-    private calculateDistanceToViewport(position: any, viewport: any): number {
-        const dx = Math.max(
-            viewport.x1 - position.x,
-            0,
-            position.x - viewport.x2,
-        );
-        const dy = Math.max(
-            viewport.y1 - position.y,
-            0,
-            position.y - viewport.y2,
-        );
-        return Math.sqrt(dx * dx + dy * dy);
-    }
 
-    /**
-     * Calculate the center point of anchor nodes
-     */
-    private calculateAnchorCenter(anchorNodes: any[]): {
-        x: number;
-        y: number;
-    } {
-        if (anchorNodes.length === 0) {
-            return { x: 0, y: 0 };
-        }
-
-        const positions = anchorNodes.map((node) => node.position());
-        return {
-            x:
-                positions.reduce((sum, pos) => sum + pos.x, 0) /
-                positions.length,
-            y:
-                positions.reduce((sum, pos) => sum + pos.y, 0) /
-                positions.length,
-        };
-    }
 }

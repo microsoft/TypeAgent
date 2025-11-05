@@ -356,7 +356,9 @@ export class TopicGraphBuilder {
     }
 
     private calculateStrength(count: number): number {
-        return Math.min(1.0, Math.log(count + 1) / Math.log(10));
+        // Use original linear relationship strengthening logic from SQLite version
+        // Starting at 0.1 and incrementing by 0.1 for each co-occurrence
+        return Math.min(count / 10, 1.0);
     }
 
     public exportToTopicRelationships(): TopicRelationship[] {

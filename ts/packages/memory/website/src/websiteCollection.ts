@@ -41,6 +41,7 @@ import { Website, WebsiteMeta } from "./websiteMeta.js";
 import { WebsiteDocPart } from "./websiteDocPart.js";
 import { TopicGraphBuilder, CooccurrenceData } from "./graph/topicGraphBuilder.js";
 import type { GraphJsonStorageManager } from "./storage/graphJsonStorage.js";
+import { RelationshipStrengthMigration } from "./migration/relationshipStrengthMigration.js";
 import path from "node:path";
 import fs from "node:fs";
 import registerDebug from "debug";
@@ -355,9 +356,29 @@ export class WebsiteCollection
     /**
      * Set the JSON graph storage manager for topic persistence
      */
-    public setGraphJsonStorage(storage: { manager: GraphJsonStorageManager }): void {
+    public async setGraphJsonStorage(storage: { manager: GraphJsonStorageManager }): Promise<void> {
         this.graphJsonStorage = storage;
         debug("[WebsiteCollection] JSON graph storage configured");
+        
+        // Run relationship strength migration to convert from logarithmic to linear scale
+        try {
+            const migration = new RelationshipStrengthMigration(storage.manager);
+            const dryRunResults = await migration.dryRun();
+            
+            if (dryRunResults.entityGraph.needsMigration || dryRunResults.topicGraph.needsMigration) {
+                debug("[WebsiteCollection] Running relationship strength migration...");
+                debug(`Entity graph: ${dryRunResults.entityGraph.estimatedChanges}/${dryRunResults.entityGraph.edgeCount} edges need migration`);
+                debug(`Topic graph: ${dryRunResults.topicGraph.estimatedChanges}/${dryRunResults.topicGraph.edgeCount} edges need migration`);
+                
+                const migrationResults = await migration.migrate();
+                debug(`[WebsiteCollection] Migration completed: entity=${migrationResults.entityGraph}, topic=${migrationResults.topicGraph}`);
+            } else {
+                debug("[WebsiteCollection] No relationship strength migration needed");
+            }
+        } catch (error) {
+            debug(`[WebsiteCollection] Migration warning: ${error}`);
+            // Don't fail initialization if migration has issues
+        }
     }
 
     public addMetadataToIndex() {
