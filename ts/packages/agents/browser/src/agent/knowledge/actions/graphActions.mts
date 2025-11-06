@@ -2249,9 +2249,6 @@ export async function getTopicImportanceLayer(
                 };
             }
 
-            const maxNodes = parameters.maxNodes || 500;
-            const minImportanceThreshold = parameters.minImportanceThreshold || 0;
-
             // Extract topics from Graphology topic graph
             const allTopics: any[] = [];
             topicGraph.forEachNode((nodeId: string, attributes: any) => {
@@ -2269,17 +2266,10 @@ export async function getTopicImportanceLayer(
 
             debug(`[getTopicImportanceLayer] Found ${allTopics.length} total topics in topic graph`);
 
-            // Filter topics by importance threshold
-            const filteredTopics = allTopics.filter(topic => 
-                topic.importance >= minImportanceThreshold
-            );
+            // Show the full topic graph - no filtering by importance or node count
+            const selectedTopics = allTopics;
 
-            // Sort by importance and limit
-            const selectedTopics = filteredTopics
-                .sort((a, b) => (b.importance || 0) - (a.importance || 0))
-                .slice(0, maxNodes);
-
-            debug(`[getTopicImportanceLayer] Selected ${selectedTopics.length} topics after filtering and limiting`);
+            debug(`[getTopicImportanceLayer] Using all ${selectedTopics.length} topics (full graph)`);
 
             // Create set of selected topic IDs for filtering relationships
             const selectedTopicIds = new Set(selectedTopics.map(t => t.id));
@@ -2323,12 +2313,37 @@ export async function getTopicImportanceLayer(
 
             debug(`[getTopicImportanceLayer] Building subgraph with ${graphNodes.length} nodes and ${graphEdges.length} edges`);
 
-            // Use buildGraphologyGraph to create a properly layouted graph
-            const layoutedGraph = buildGraphologyGraph(graphNodes, graphEdges);
+            // Build graphology layout using the same caching pipeline as entity layer
+            const cacheKey = `topic_importance_full`;
+            let cachedGraph = getGraphologyCache(cacheKey);
+            
+            if (!cachedGraph) {
+                debug("[Graphology] Building layout for topic importance layer...");
+                const layoutStart = performance.now();
 
-            // Convert subgraph to Cytoscape elements for UI rendering
-            const cytoscapeElements = convertToCytoscapeElements(layoutedGraph);
-            debug(`[getTopicImportanceLayer] Converted to ${cytoscapeElements.length} Cytoscape elements`);
+                // Use buildGraphologyGraph to create a properly layouted graph
+                const layoutedGraph = buildGraphologyGraph(graphNodes, graphEdges);
+
+                // Convert subgraph to Cytoscape elements for UI rendering
+                const cytoscapeElements = convertToCytoscapeElements(layoutedGraph);
+                debug(`[getTopicImportanceLayer] Converted to ${cytoscapeElements.length} Cytoscape elements`);
+                
+                const layoutMetrics = calculateLayoutQualityMetrics(layoutedGraph);
+                const layoutDuration = performance.now() - layoutStart;
+
+                cachedGraph = createGraphologyCache(
+                    layoutedGraph,
+                    cytoscapeElements,
+                    layoutDuration,
+                    layoutMetrics.avgSpacing,
+                );
+
+                setGraphologyCache(cacheKey, cachedGraph);
+
+                debug(`[Graphology] Topic layout complete in ${layoutDuration.toFixed(2)}ms`);
+            } else {
+                debug("[Graphology] Using cached topic layout");
+            }
 
             return {
                 topics: selectedTopics,
@@ -2339,9 +2354,9 @@ export async function getTopicImportanceLayer(
                     layer: "topic_importance_graphology",
                     useGraphology: true,
                     graphologyLayout: {
-                        elements: cytoscapeElements,
-                        layoutDuration: 0, // No layout computation time for this simple conversion
-                        avgSpacing: 100, // Default spacing
+                        elements: cachedGraph.cytoscapeElements,
+                        layoutDuration: cachedGraph.metadata.layoutDuration,
+                        avgSpacing: cachedGraph.metadata.avgSpacing,
                         communityCount: 1, // Single community for topic layer
                     },
                 },
