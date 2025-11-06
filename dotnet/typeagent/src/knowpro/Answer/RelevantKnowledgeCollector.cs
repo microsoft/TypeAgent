@@ -14,9 +14,8 @@ internal class RelevantKnowledgeCollector
         _metaMerger = new MetadataMerger();
     }
 
-    public async ValueTask<IList<RelevantEntity>> GetRelevantKnowledgeAsync(
+    public async ValueTask<IList<RelevantEntity>> GetRelevantEntitiesAsync(
         SemanticRefSearchResult searchResult,
-        KnowledgeType kType,
         int? topK = null,
         CancellationToken cancellationToken = default
     )
@@ -28,26 +27,25 @@ internal class RelevantKnowledgeCollector
 
         IList<Scored<SemanticRef>> semanticRefs = await _conversation.GetSemanticRefReader().GetScoredAsync(
             searchResult.SemanticRefMatches,
-            kType,
+            KnowledgeType.Entity,
             cancellationToken
         ).ConfigureAwait(false);
 
-        var mergedEntities = MergedEntity.MergeScored(semanticRefs, true);
+        var mergedEntities = MergedEntity.Merge(semanticRefs, true);
 
         List<Scored<MergedEntity>> candidateEntities = (topK is not null && topK.Value < mergedEntities.Count)
             ? mergedEntities.Values.GetTopK(topK.Value)
             : [.. mergedEntities.Values];
 
-        List<int> rangeOrdinals = MergedEntity.CollectOrdinals(candidateEntities);
         var (meta, timestamps) = await GetEnclosingMetadataAsync(
-            rangeOrdinals,
+            CollectOrdinals(candidateEntities),
             cancellationToken
         ).ConfigureAwait(false);
 
         List<RelevantEntity> relevantEntities = [];
         for (int i = 0; i < candidateEntities.Count; ++i)
         {
-            RelevantEntity relevantEntity = new RelevantEntity();
+            var relevantEntity = new RelevantEntity();
             int offset = i * 2;
             var (origin, audience) = _metaMerger.Collect(meta[offset], meta[offset + 1]);
             relevantEntity.Origin = OneOrManyItem.Create(origin);
@@ -55,6 +53,68 @@ internal class RelevantKnowledgeCollector
             relevantEntity.TimeRange = this.GetTimeRange(timestamps[offset], timestamps[offset + 1]);
         }
         return relevantEntities;
+    }
+
+    public async ValueTask<IList<RelevantTopic>> GetRelevantTopicsAsync(
+        SemanticRefSearchResult searchResult,
+        int? topK = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!searchResult.HasMatches)
+        {
+            return [];
+        }
+
+        IList<Scored<SemanticRef>> semanticRefs = await _conversation.GetSemanticRefReader().GetScoredAsync(
+            searchResult.SemanticRefMatches,
+            KnowledgeType.Entity,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        var mergedTopics
+            = MergedTopic.Merge(semanticRefs, true);
+
+        List<Scored<MergedTopic>> candidateTopics = (topK is not null && topK.Value < mergedTopics.Count)
+            ? mergedTopics.Values.GetTopK(topK.Value)
+            : [.. mergedTopics.Values];
+
+        var (meta, timestamps) = await GetEnclosingMetadataAsync(
+            CollectOrdinals(candidateTopics),
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        List<RelevantTopic> relevantTopics = [];
+        for (int i = 0; i < candidateTopics.Count; ++i)
+        {
+            var relevantTopic = new RelevantTopic();
+            int offset = i * 2;
+            var (origin, audience) = _metaMerger.Collect(meta[offset], meta[offset + 1]);
+            relevantTopic.Origin = OneOrManyItem.Create(origin);
+            relevantTopic.Audience = OneOrManyItem.Create(audience);
+            relevantTopic.TimeRange = this.GetTimeRange(timestamps[offset], timestamps[offset + 1]);
+        }
+        return relevantTopics;
+    }
+
+    private List<int> CollectOrdinals(IEnumerable<Scored<MergedEntity>> candidates)
+    {
+        List<int> rangeOrdinals = [];
+        foreach (var candidate in candidates)
+        {
+            candidate.Item.CollectOrdinals(rangeOrdinals);
+        }
+        return rangeOrdinals;
+    }
+
+    private List<int> CollectOrdinals(IEnumerable<Scored<MergedTopic>> candidates)
+    {
+        List<int> rangeOrdinals = [];
+        foreach (var candidate in candidates)
+        {
+            candidate.Item.CollectOrdinals(rangeOrdinals);
+        }
+        return rangeOrdinals;
     }
 
     private async ValueTask<(IList<IMessageMetadata>, IList<string>)> GetEnclosingMetadataAsync(

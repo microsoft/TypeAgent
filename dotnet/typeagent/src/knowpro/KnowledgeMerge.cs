@@ -82,7 +82,7 @@ internal class MergedEntity : MergedKnowledge
         return mergedEntities.Values.Select((m) => m.ToConcrete());
     }
 
-    public static Dictionary<string, Scored<MergedEntity>> MergeScored(
+    public static Dictionary<string, Scored<MergedEntity>> Merge(
         IEnumerable<Scored<SemanticRef>> semanticRefs,
         bool mergeOrdinals
     )
@@ -126,16 +126,6 @@ internal class MergedEntity : MergedKnowledge
         }
 
         return mergedEntities;
-    }
-
-    public static List<int> CollectOrdinals(IEnumerable<Scored<MergedEntity>> candidates)
-    {
-        List<int> rangeOrdinals = [];
-        foreach (var candidate in candidates)
-        {
-            candidate.Item.CollectOrdinals(rangeOrdinals);
-        }
-        return rangeOrdinals;
     }
 }
 
