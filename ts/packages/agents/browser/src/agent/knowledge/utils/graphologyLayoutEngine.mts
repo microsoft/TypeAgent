@@ -210,53 +210,45 @@ export function buildGraphologyGraph(
         if (veryLowConfidenceEdges.length > 0) {
             console.log(
                 `  Very Low (< 0.1): ${veryLowConfidenceEdges.length} edges, samples:`,
-                veryLowConfidenceEdges
-                    .slice(0, 3)
-                    .map((e) => ({
-                        from: e.from,
-                        to: e.to,
-                        type: e.type,
-                        confidence: e.confidence,
-                    })),
+                veryLowConfidenceEdges.slice(0, 3).map((e) => ({
+                    from: e.from,
+                    to: e.to,
+                    type: e.type,
+                    confidence: e.confidence,
+                })),
             );
         }
         if (lowConfidenceEdges.length > 0) {
             console.log(
                 `  Low (0.1-0.2): ${lowConfidenceEdges.length} edges, samples:`,
-                lowConfidenceEdges
-                    .slice(0, 3)
-                    .map((e) => ({
-                        from: e.from,
-                        to: e.to,
-                        type: e.type,
-                        confidence: e.confidence,
-                    })),
+                lowConfidenceEdges.slice(0, 3).map((e) => ({
+                    from: e.from,
+                    to: e.to,
+                    type: e.type,
+                    confidence: e.confidence,
+                })),
             );
         }
         if (mediumConfidenceEdges.length > 0) {
             console.log(
                 `  Medium (0.2-0.5): ${mediumConfidenceEdges.length} edges, samples:`,
-                mediumConfidenceEdges
-                    .slice(0, 3)
-                    .map((e) => ({
-                        from: e.from,
-                        to: e.to,
-                        type: e.type,
-                        confidence: e.confidence,
-                    })),
+                mediumConfidenceEdges.slice(0, 3).map((e) => ({
+                    from: e.from,
+                    to: e.to,
+                    type: e.type,
+                    confidence: e.confidence,
+                })),
             );
         }
         if (highConfidenceEdges.length > 0) {
             console.log(
                 `  High (0.5+): ${highConfidenceEdges.length} edges, samples:`,
-                highConfidenceEdges
-                    .slice(0, 3)
-                    .map((e) => ({
-                        from: e.from,
-                        to: e.to,
-                        type: e.type,
-                        confidence: e.confidence,
-                    })),
+                highConfidenceEdges.slice(0, 3).map((e) => ({
+                    from: e.from,
+                    to: e.to,
+                    type: e.type,
+                    confidence: e.confidence,
+                })),
             );
         }
 
