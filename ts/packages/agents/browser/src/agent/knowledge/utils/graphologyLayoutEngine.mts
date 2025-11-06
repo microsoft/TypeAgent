@@ -615,6 +615,24 @@ export function convertToCytoscapeElements(
         targetViewportSize
     });
 
+    // Initialize circular layout for nodes that don't have positions yet
+    // This should only happen if the graph was never processed by buildGraphologyGraph
+    let hasValidPositions = false;
+    for (const node of graph.nodes()) {
+        const x = graph.getNodeAttribute(node, "x");
+        const y = graph.getNodeAttribute(node, "y");
+        if (x !== undefined && y !== undefined && !isNaN(x) && !isNaN(y)) {
+            hasValidPositions = true;
+            break;
+        }
+    }
+    
+    if (!hasValidPositions) {
+        debug("No valid positions found, initializing emergency circular layout...");
+        debug("This suggests the graph was not processed through buildGraphologyGraph");
+        initializeCircularLayout(graph);
+    }
+
     const elements: CytoscapeElement[] = [];
 
     let minX = Infinity,

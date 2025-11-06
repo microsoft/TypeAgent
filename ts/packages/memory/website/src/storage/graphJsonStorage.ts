@@ -141,6 +141,13 @@ export class GraphJsonStorageManager {
     constructor(private basePath: string) {}
 
     /**
+     * Get the storage path for this manager
+     */
+    getStoragePath(): string {
+        return this.basePath;
+    }
+
+    /**
      * Save entity graph to JSON file
      */
     async saveEntityGraph(graph: EntityGraphJson): Promise<void> {

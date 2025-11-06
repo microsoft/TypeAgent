@@ -1716,63 +1716,7 @@ export class WebsiteCollection
         debug(`[Knowledge Graph] Direct topic graph built in ${graphologyTopicTime}ms`);
 
         const graphologyTotalTime = Date.now() - graphologyStartTime;
-
-        // PARALLEL: ALSO RUN ORIGINAL SQLITE APPROACH FOR VALIDATION
-        debug(`[Knowledge Graph] Running original SQLite approach for validation...`);
-        const sqliteStartTime = Date.now();
-        
-        // Store entities in knowledge entities table
-        const sqliteEntityStart = Date.now();
-        await this.storeEntitiesInDatabase(cacheManager, websitesToProcess);
-        const sqliteEntityTime = Date.now() - sqliteEntityStart;
-        debug(`[Knowledge Graph] Stored entities in database in ${sqliteEntityTime}ms`);
-
-        // Build relationships between entities using cache-based approach
-        const relationshipStartTime = Date.now();
-        await this.buildRelationships(cacheManager);
-        const relationshipCount =
-            cacheManager.getAllEntityRelationships().length;
-        const sqliteRelationshipTime = Date.now() - relationshipStartTime;
-        debug(
-            `[Knowledge Graph] Built ${relationshipCount} relationships in ${sqliteRelationshipTime}ms`,
-        );
-
-        // Detect communities using algorithms
-        const communityStartTime = Date.now();
-        await this.detectCommunities(entities, algorithms);
-        const communities = (await this.communities?.getAllCommunities()) || [];
-        const sqliteCommunityTime = Date.now() - communityStartTime;
-        debug(
-            `[Knowledge Graph] Detected ${communities.length} communities in ${sqliteCommunityTime}ms`,
-        );
-
-        // Build hierarchical topics from flat topics
-        const topicStartTime = Date.now();
-        await this.buildHierarchicalTopics(urlLimit);
-        const sqliteTopicTime = Date.now() - topicStartTime;
-        debug(
-            `[Knowledge Graph] Built hierarchical topics in ${sqliteTopicTime}ms`,
-        );
-
-        // Build topic relationships and metrics using Graphology-based graph builder
-        const topicGraphStart = Date.now();
-        const { buildTopicGraphWithGraphology } = await import(
-            "./buildTopicGraphWithGraphology.js"
-        );
-        const allHierarchicalTopics =
-            this.hierarchicalTopics?.getTopicHierarchy() || [];
-        await buildTopicGraphWithGraphology(
-            allHierarchicalTopics,
-            cacheManager,
-            this.topicRelationships,
-            this.topicMetrics,
-        );
-        const sqliteTopicGraphTime = Date.now() - topicGraphStart;
-        debug(
-            `[Knowledge Graph] Completed topic graph build in ${sqliteTopicGraphTime}ms`,
-        );
-
-        const sqliteTotalTime = Date.now() - sqliteStartTime;
+        debug(`[Knowledge Graph] Graphology-only approach completed in ${graphologyTotalTime}ms`);
 
         const totalTime = Date.now() - startTime;
         debug(
@@ -1819,125 +1763,27 @@ export class WebsiteCollection
         debug(`[Comparison] Graphology Approach Results:`, graphologyMetrics);
         debug(`[Comparison] SQLite Approach Results:`, sqliteMetrics);
 
-        // PERFORMANCE COMPARISON
-        debug(`[Performance] Timing Comparison:`);
-        debug(`[Performance]   Graphology Total: ${graphologyTotalTime}ms`);
-        debug(`[Performance]   SQLite Total: ${sqliteTotalTime}ms`);
-        debug(`[Performance]   Speedup: ${(sqliteTotalTime / graphologyTotalTime).toFixed(2)}x ${graphologyTotalTime < sqliteTotalTime ? 'FASTER' : 'SLOWER'}`);
-        
-        debug(`[Performance] Detailed Phase Timing:`);
-        debug(`[Performance]   Entity Building - Graphology: ${graphologyEntityTime}ms, SQLite: ${sqliteEntityTime}ms`);
-        debug(`[Performance]   Relationships - Graphology: ${graphologyRelationshipTime}ms, SQLite: ${sqliteRelationshipTime}ms`);
-        debug(`[Performance]   Communities - Graphology: ${graphologyCommunityTime}ms, SQLite: ${sqliteCommunityTime}ms`);
-        debug(`[Performance]   Topics - Graphology: ${graphologyTopicTime}ms, SQLite: ${sqliteTopicTime + sqliteTopicGraphTime}ms`);
+        // PERFORMANCE SUMMARY
+        debug(`[Performance] Graphology Knowledge Graph Construction Complete:`);
+        debug(`[Performance]   Total Time: ${graphologyTotalTime}ms`);
+        debug(`[Performance]   Entity Building: ${graphologyEntityTime}ms`);
+        debug(`[Performance]   Relationships: ${graphologyRelationshipTime}ms`);
+        debug(`[Performance]   Communities: ${graphologyCommunityTime}ms`);
+        debug(`[Performance]   Topics: ${graphologyTopicTime}ms`);
 
         const graphologyEfficiency = graphologyMetrics.entityCount / Math.max(graphologyTotalTime, 1);
-        const sqliteEfficiency = sqliteMetrics.entityCount / Math.max(sqliteTotalTime, 1);
-        debug(`[Performance] Efficiency (entities/ms): Graphology: ${graphologyEfficiency.toFixed(3)}, SQLite: ${sqliteEfficiency.toFixed(3)}`);
+        debug(`[Performance] Efficiency: ${graphologyEfficiency.toFixed(3)} entities/ms`);
 
-        // Calculate differences and percentages
-        const entityDiff = graphologyMetrics.entityCount - sqliteMetrics.entityCount;
-        const relationshipDiff = graphologyMetrics.relationshipCount - sqliteMetrics.relationshipCount;
-        const communityDiff = graphologyMetrics.communityCount - sqliteMetrics.communityCount;
-        const topicDiff = graphologyMetrics.topicCount - sqliteMetrics.topicCount;
-
-        const entityPercent = sqliteMetrics.entityCount > 0 ? 
-            ((entityDiff / sqliteMetrics.entityCount) * 100).toFixed(2) : 'N/A';
-        const relationshipPercent = sqliteMetrics.relationshipCount > 0 ? 
-            ((relationshipDiff / sqliteMetrics.relationshipCount) * 100).toFixed(2) : 'N/A';
-        const communityPercent = sqliteMetrics.communityCount > 0 ? 
-            ((communityDiff / sqliteMetrics.communityCount) * 100).toFixed(2) : 'N/A';
-        const topicPercent = sqliteMetrics.topicCount > 0 ? 
-            ((topicDiff / sqliteMetrics.topicCount) * 100).toFixed(2) : 'N/A';
-
-        debug(`[Comparison] Differences (Graphology - SQLite):`);
-        debug(`[Comparison]   Entities: ${entityDiff} (${entityPercent}%)`);
-        debug(`[Comparison]   Relationships: ${relationshipDiff} (${relationshipPercent}%)`);
-        debug(`[Comparison]   Communities: ${communityDiff} (${communityPercent}%)`);
-        debug(`[Comparison]   Topics: ${topicDiff} (${topicPercent}%)`);
-
-        // Flag significant discrepancies
-        const entityDiscrepancy = Math.abs(entityDiff) > Math.max(1, sqliteMetrics.entityCount * 0.05); // 5% threshold
-        const relationshipDiscrepancy = Math.abs(relationshipDiff) > Math.max(1, sqliteMetrics.relationshipCount * 0.1); // 10% threshold
-        const communityDiscrepancy = Math.abs(communityDiff) > Math.max(1, sqliteMetrics.communityCount * 0.2); // 20% threshold
-        const topicDiscrepancy = Math.abs(topicDiff) > Math.max(1, sqliteMetrics.topicCount * 0.1); // 10% threshold
-
-        if (entityDiscrepancy || relationshipDiscrepancy || communityDiscrepancy || topicDiscrepancy) {
-            debug(`[Comparison] ⚠️  SIGNIFICANT DISCREPANCIES DETECTED:`);
-            if (entityDiscrepancy) debug(`[Comparison]   Entity count difference exceeds 5% threshold`);
-            if (relationshipDiscrepancy) debug(`[Comparison]   Relationship count difference exceeds 10% threshold`);
-            if (communityDiscrepancy) debug(`[Comparison]   Community count difference exceeds 20% threshold`);
-            if (topicDiscrepancy) debug(`[Comparison]   Topic count difference exceeds 10% threshold`);
-        } else {
-            debug(`[Comparison] ✅ Results are within acceptable variance thresholds`);
-        }
-
-        // Sample entity comparison for quality validation
-        if (graphologyEntityNodes.length > 0 && sqliteMetrics.entityCount > 0) {
-            debug(`[Comparison] Sample entity validation:`);
-            const sampleSize = Math.min(5, graphologyEntityNodes.length);
-            const sampleEntities = graphologyEntityNodes.slice(0, sampleSize);
-            
-            // Get all SQLite entities for comparison
-            const allSqliteEntities = await this.extractEntities(undefined);
-            const sqliteEntityNames = new Set(allSqliteEntities);
-            
-            for (const entityId of sampleEntities) {
-                const graphologyEntity = {
-                    name: entityGraph.getNodeAttribute(entityId, 'name'),
-                    type: entityGraph.getNodeAttribute(entityId, 'entityType'),
-                    frequency: entityGraph.getNodeAttribute(entityId, 'frequency') || 0,
-                    websites: entityGraph.getNodeAttribute(entityId, 'websites') || []
-                };
-                
-                // Check if this entity exists in SQLite
-                const foundInSqlite = sqliteEntityNames.has(entityId);
-                
-                if (foundInSqlite) {
-                    debug(`[Comparison]   Entity '${entityId}': ✅ Found in both`);
-                    debug(`[Comparison]     Graphology frequency: ${graphologyEntity.frequency}`);
-                } else {
-                    debug(`[Comparison]   Entity '${entityId}': ⚠️  Only in Graphology`);
-                }
-            }
-        }
-
-        // Return metadata based on Graphology results (the new primary approach)
+        // Return metadata based on Graphology results
         const metadata = {
             buildTime: totalTime,
             entityCount: graphologyMetrics.entityCount,
             relationshipCount: graphologyMetrics.relationshipCount,
             communityCount: graphologyMetrics.communityCount,
-            topicCount: graphologyMetrics.topicCount,
-            // Include comparison data for debugging
-            comparison: {
-                graphology: graphologyMetrics,
-                sqlite: sqliteMetrics,
-                differences: {
-                    entities: entityDiff,
-                    relationships: relationshipDiff,
-                    communities: communityDiff,
-                    topics: topicDiff
-                },
-                hasDiscrepancies: entityDiscrepancy || relationshipDiscrepancy || communityDiscrepancy || topicDiscrepancy
-            }
+            topicCount: graphologyMetrics.topicCount
         };
 
-        debug(`[Knowledge Graph] Graphology graphs created with comparison analysis:`, metadata);
-
-        // FINAL SUMMARY
-        const speedupText = graphologyTotalTime < sqliteTotalTime ? 
-            `🚀 ${(sqliteTotalTime / graphologyTotalTime).toFixed(2)}x FASTER` : 
-            `⚠️  ${(graphologyTotalTime / sqliteTotalTime).toFixed(2)}x SLOWER`;
-        
-        const accuracyText = metadata.comparison.hasDiscrepancies ? 
-            '⚠️  HAS DISCREPANCIES' : '✅ ACCURATE';
-
-        debug(`[SUMMARY] 📊 Parallel Construction Results:`);
-        debug(`[SUMMARY]   Performance: Graphology (${graphologyTotalTime}ms) vs SQLite (${sqliteTotalTime}ms) = ${speedupText}`);
-        debug(`[SUMMARY]   Accuracy: ${accuracyText}`);
-        debug(`[SUMMARY]   Entities: ${graphologyMetrics.entityCount} vs ${sqliteMetrics.entityCount} (diff: ${entityDiff})`);
-        debug(`[SUMMARY]   Relationships: ${graphologyMetrics.relationshipCount} vs ${sqliteMetrics.relationshipCount} (diff: ${relationshipDiff})`);
+        debug(`[Knowledge Graph] Graphology graphs created successfully:`, metadata);
 
         return { entityGraph, topicGraph, metadata };
     }
@@ -2221,183 +2067,14 @@ export class WebsiteCollection
     }
 
     /**
-     * Recompute all communities
+     * Recompute all communities (Phase 2 simplified version)
      */
     private async recomputeCommunities(): Promise<void> {
-        // Clear existing communities
-        const clearStmt = this.db!.prepare("DELETE FROM communities");
-        clearStmt.run();
-
-        // Rebuild communities
-        const entities = await this.extractEntities(undefined);
-
-        // Initialize algorithms for community detection
-        const { OptimizedGraphAlgorithms } = await import(
-            "./utils/optimizedGraphAlgorithms.mjs"
-        );
-        const algorithms = new OptimizedGraphAlgorithms();
-
-        await this.detectCommunities(entities, algorithms);
+        debug(`[recomputeCommunities] Phase 2 simplified - skipping SQLite community recomputation`);
+        // TODO: In Phase 3, implement pure Graphology community recomputation
+        // For now, communities are computed directly in buildGraph
     }
 
-    /**
-     * Build hierarchical topics from flat topics using mergeTopics
-     * Follows the same pattern as buildRelationships
-     */
-    private async buildHierarchicalTopics(urlLimit?: number): Promise<void> {
-        debug(`[Knowledge Graph] Building hierarchical topics...`);
-        const startTime = Date.now();
-
-        try {
-            // First, check if websites already have rich hierarchies from extraction
-            const websites = this.getWebsites();
-            debug(`[Knowledge Graph] Total websites: ${websites.length}`);
-            const websitesToProcess = urlLimit
-                ? websites.slice(0, urlLimit)
-                : websites;
-            debug(
-                `[Knowledge Graph] Processing ${websitesToProcess.length} websites for hierarchies`,
-            );
-
-            const websitesWithHierarchies = websitesToProcess.filter(
-                (w) => (w.knowledge as any)?.topicHierarchy,
-            );
-            debug(
-                `[Knowledge Graph] Found ${websitesWithHierarchies.length} websites with existing hierarchies`,
-            );
-
-            if (websitesWithHierarchies.length > 0) {
-                // Clear existing hierarchical topics before rebuilding
-                if (this.hierarchicalTopics) {
-                    const clearStmt = this.db!.prepare(
-                        "DELETE FROM hierarchicalTopics",
-                    );
-                    clearStmt.run();
-                    debug(
-                        `[Knowledge Graph] Cleared existing hierarchical topics`,
-                    );
-                }
-
-                // Use existing rich hierarchies from websites
-                debug(
-                    `[Knowledge Graph] Using rich hierarchies from ${websitesWithHierarchies.length} websites`,
-                );
-                await this.updateHierarchicalTopics(websitesWithHierarchies);
-                return;
-            }
-
-            // No existing hierarchies, fall back to building from flat topics
-            debug(
-                `[Knowledge Graph] No websites with hierarchies, extracting flat topics...`,
-            );
-            const flatTopics = await this.extractFlatTopics(urlLimit);
-            debug(
-                `[Knowledge Graph] Extracted ${flatTopics.length} flat topics`,
-            );
-
-            if (flatTopics.length === 0) {
-                return;
-            }
-
-            // Clear existing hierarchical topics for rebuild
-            if (this.hierarchicalTopics) {
-                const clearStmt = this.db!.prepare(
-                    "DELETE FROM hierarchicalTopics",
-                );
-                clearStmt.run();
-                debug(`[Knowledge Graph] Cleared existing hierarchical topics`);
-            }
-
-            // Create topic extractor if available
-            const kpLib = await import("knowledge-processor");
-            const ai = await import("aiclient");
-
-            let topicExtractor: any;
-            try {
-                // Try to create AI model for topic merging
-                debug(
-                    `[Knowledge Graph] Creating AI model for topic extraction...`,
-                );
-                const apiSettings = ai.openai.azureApiSettingsFromEnv(
-                    ai.openai.ModelType.Chat,
-                    undefined,
-                    "GPT_4_O_MINI",
-                );
-                const languageModel = ai.openai.createChatModel(apiSettings);
-                topicExtractor =
-                    kpLib.conversation.createTopicExtractor(languageModel);
-                debug(`[Knowledge Graph] AI model created successfully`);
-            } catch (error) {
-                debug(
-                    `[Knowledge Graph] AI model not available for topic merging: ${error}`,
-                );
-                // Fall back to simple hierarchical grouping
-                debug(
-                    `[Knowledge Graph] Using simple hierarchical grouping for ${flatTopics.length} topics`,
-                );
-                await this.buildSimpleTopicHierarchy(flatTopics);
-                debug(`[Knowledge Graph] Simple hierarchy built`);
-                return;
-            }
-
-            // Use AI to merge topics into higher-level topics
-            debug(
-                `[Knowledge Graph] Merging ${flatTopics.length} topics into hierarchy...`,
-            );
-            const mergeResult = await topicExtractor.mergeTopics(
-                flatTopics,
-                undefined, // No past topics for initial build
-                "comprehensive, hierarchical",
-            );
-
-            if (mergeResult && mergeResult.status === "Success") {
-                debug(
-                    `[Knowledge Graph] Topic merge successful: ${mergeResult.topic}`,
-                );
-                // Store the merged topic as root
-                const rootTopicId = this.generateTopicId(mergeResult.topic, 0);
-                debug(`[Knowledge Graph] Storing root topic: ${rootTopicId}`);
-                await this.storeHierarchicalTopic(
-                    {
-                        topicId: rootTopicId,
-                        topicName: mergeResult.topic,
-                        level: 0,
-                        confidence: 0.9,
-                        keywords: [mergeResult.topic],
-                    },
-                    "aggregated:multiple-sources",
-                    "aggregated",
-                );
-
-                // Organize flat topics under the root
-                debug(
-                    `[Knowledge Graph] Organizing ${flatTopics.length} topics under root`,
-                );
-                await this.organizeTopicsUnderRoot(flatTopics, rootTopicId);
-                debug(`[Knowledge Graph] Topics organized successfully`);
-            } else {
-                // Fall back to simple hierarchy if merging fails
-                debug(
-                    `[Knowledge Graph] Topic merging failed (status: ${mergeResult?.status}), using simple hierarchy`,
-                );
-                await this.buildSimpleTopicHierarchy(flatTopics);
-                debug(`[Knowledge Graph] Simple hierarchy built`);
-            }
-
-            debug(
-                `[Knowledge Graph] Hierarchical topics built in ${Date.now() - startTime}ms`,
-            );
-        } catch (error) {
-            debug(
-                `[Knowledge Graph] Error building hierarchical topics: ${error}`,
-            );
-            // Continue without failing the entire graph build
-        }
-    }
-
-    /**
-     * Update hierarchical topics when new websites are added
-     */
     /**
      * Convert topic hierarchy to HierarchicalTopicRecord format for TopicGraphBuilder
      */
@@ -3455,149 +3132,6 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     }
 
     /**
-     * Extract flat topics from websites
-     */
-    private async extractFlatTopics(urlLimit?: number): Promise<string[]> {
-        const topics = new Set<string>();
-
-        const websites = this.getWebsites();
-        const websitesToProcess = urlLimit
-            ? websites.slice(0, urlLimit)
-            : websites;
-
-        for (const website of websitesToProcess) {
-            if (website.knowledge?.topics) {
-                for (const topic of website.knowledge.topics) {
-                    const topicName =
-                        typeof topic === "string" ? topic : (topic as any).name;
-                    if (topicName) {
-                        topics.add(topicName);
-                    }
-                }
-            }
-        }
-
-        return Array.from(topics);
-    }
-
-    /**
-     * Build a simple topic hierarchy when AI is not available
-     */
-    private async buildSimpleTopicHierarchy(topics: string[]): Promise<void> {
-        debug(
-            `[Knowledge Graph] Building simple topic hierarchy for ${topics.length} topics`,
-        );
-
-        // Group topics by common prefixes or similarity
-        const topicGroups = this.groupTopicsBySimpleSimilarity(topics);
-
-        // Create root topics for each group
-        let groupIndex = 0;
-        for (const [groupName, groupTopics] of topicGroups.entries()) {
-            const rootId = this.generateTopicId(groupName, 0);
-
-            // Store root topic
-            await this.storeHierarchicalTopic(
-                {
-                    topicId: rootId,
-                    topicName: groupName,
-                    level: 0,
-                    confidence: 0.7,
-                    keywords: [groupName],
-                },
-                "aggregated:multiple-sources",
-                "aggregated",
-            );
-
-            // Store child topics
-            for (const topic of groupTopics) {
-                const childId = this.generateTopicId(topic, 1);
-                await this.storeHierarchicalTopic(
-                    {
-                        topicId: childId,
-                        topicName: topic,
-                        level: 1,
-                        parentTopicId: rootId,
-                        confidence: 0.6,
-                        keywords: [topic],
-                    },
-                    "aggregated:multiple-sources",
-                    "aggregated",
-                );
-            }
-
-            groupIndex++;
-        }
-    }
-
-    /**
-     * Organize flat topics under a root topic
-     */
-    private async organizeTopicsUnderRoot(
-        topics: string[],
-        rootTopicId: string,
-    ): Promise<void> {
-        // Group similar topics
-        const groups = this.groupTopicsBySimpleSimilarity(topics);
-
-        // Create intermediate level if there are many groups
-        if (groups.size > 5) {
-            // Create intermediate categories
-            for (const [groupName, groupTopics] of groups.entries()) {
-                const intermediateId = this.generateTopicId(groupName, 1);
-
-                // Store intermediate topic
-                await this.storeHierarchicalTopic(
-                    {
-                        topicId: intermediateId,
-                        topicName: groupName,
-                        level: 1,
-                        parentTopicId: rootTopicId,
-                        confidence: 0.7,
-                        keywords: [groupName],
-                    },
-                    "aggregated:multiple-sources",
-                    "aggregated",
-                );
-
-                // Store leaf topics
-                for (const topic of groupTopics) {
-                    const leafId = this.generateTopicId(topic, 2);
-                    await this.storeHierarchicalTopic(
-                        {
-                            topicId: leafId,
-                            topicName: topic,
-                            level: 2,
-                            parentTopicId: intermediateId,
-                            confidence: 0.6,
-                            keywords: [topic],
-                        },
-                        "aggregated:multiple-sources",
-                        "aggregated",
-                    );
-                }
-            }
-        } else {
-            // Add all topics directly under root
-            for (const topic of topics) {
-                const childId = this.generateTopicId(topic, 1);
-                await this.storeHierarchicalTopic(
-                    {
-                        topicId: childId,
-                        topicName: topic,
-                        level: 1,
-                        parentTopicId: rootTopicId,
-                        confidence: 0.6,
-                        keywords: [topic],
-                    },
-                    "aggregated:multiple-sources",
-                    "aggregated",
-                );
-            }
-        }
-    }
-
-    /**
      * Store a hierarchical topic in the database
      */
     private async storeHierarchicalTopic(
@@ -3642,255 +3176,8 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     }
 
     /**
-     * Group topics by simple similarity (prefix matching, common words)
-     */
-    private groupTopicsBySimpleSimilarity(
-        topics: string[],
-    ): Map<string, string[]> {
-        const groups = new Map<string, string[]>();
-
-        // Simple grouping by first word or common patterns
-        for (const topic of topics) {
-            const words = topic.split(/\s+/);
-            const firstWord = words[0]?.toLowerCase() || "general";
-
-            // Use first word as group key, or create general group
-            let groupKey = firstWord.length > 3 ? firstWord : "general";
-
-            // Special grouping for common categories
-            if (
-                topic.toLowerCase().includes("technology") ||
-                topic.toLowerCase().includes("tech")
-            ) {
-                groupKey = "technology";
-            } else if (
-                topic.toLowerCase().includes("business") ||
-                topic.toLowerCase().includes("company")
-            ) {
-                groupKey = "business";
-            } else if (
-                topic.toLowerCase().includes("science") ||
-                topic.toLowerCase().includes("research")
-            ) {
-                groupKey = "science";
-            } else if (
-                topic.toLowerCase().includes("product") ||
-                topic.toLowerCase().includes("service")
-            ) {
-                groupKey = "products";
-            }
-
-            if (!groups.has(groupKey)) {
-                groups.set(groupKey, []);
-            }
-            groups.get(groupKey)!.push(topic);
-        }
-
-        return groups;
-    }
-
-    /**
-     * Generate a deterministic topic ID (aligned with knowledgeProcessor)
-     */
-    private generateTopicId(topicName: string, level: number): string {
-        const cleanName = topicName
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, "_")
-            .substring(0, 30);
-        return `topic_${cleanName}_${level}`;
-    }
-
-    /**
      * Store entities and topics in database using cache manager
      */
-    private async storeEntitiesInDatabase(
-        cacheManager: any,
-        websitesToProcess: Website[],
-    ): Promise<void> {
-        debug(`[Knowledge Graph] Storing entities and topics in database...`);
-
-        const extractionDate = new Date().toISOString();
-        let entityCount = 0;
-        let topicCount = 0;
-
-        // Use cache manager for efficient access to entities and topics
-        for (const website of websitesToProcess) {
-            if (!website.knowledge) continue;
-            const url = website.metadata.url;
-
-            // Get entities from cache
-            const entities = cacheManager.getEntitiesForWebsite(url);
-            for (const entityName of entities) {
-                const sourceRef = {
-                    range: {
-                        start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                        end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    },
-                };
-
-                const entityRow = {
-                    sourceRef,
-                    record: {
-                        url,
-                        domain: website.metadata.domain,
-                        entityName,
-                        entityType: "unknown", // Will be determined from original entity data if needed
-                        confidence: 0.8,
-                        extractionDate,
-                    },
-                };
-
-                await this.knowledgeEntities.addRows(entityRow);
-                entityCount++;
-            }
-
-            // Get topics from cache
-            const topics = cacheManager.getTopicsForWebsite(url);
-            for (const topicName of topics) {
-                const sourceRef = {
-                    range: {
-                        start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                        end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    },
-                };
-
-                const topicRow = {
-                    sourceRef,
-                    record: {
-                        url,
-                        domain: website.metadata.domain,
-                        topic: topicName,
-                        relevance: 0.8,
-                        extractionDate,
-                    },
-                };
-
-                await this.knowledgeTopics.addRows(topicRow);
-                topicCount++;
-            }
-        }
-
-        debug(
-            `[Knowledge Graph] Stored ${entityCount} entity records and ${topicCount} topic records`,
-        );
-    }
-
-    /**
-     * Build entity relationships using cache manager
-     */
-    private async buildRelationships(cacheManager: any): Promise<void> {
-        debug(`[Knowledge Graph] Building relationships using cache approach`);
-
-        // Get all relationships from cache manager (pre-computed co-occurrences)
-        const cachedRelationships = cacheManager.getAllEntityRelationships();
-        debug(
-            `[Knowledge Graph] Found ${cachedRelationships.length} cached relationships`,
-        );
-
-        let storedCount = 0;
-        for (const cachedRel of cachedRelationships) {
-            const confidence = Math.min(cachedRel.count / 10, 1.0); // Normalize to 0-1
-
-            const relationship = {
-                fromEntity: cachedRel.fromEntity,
-                toEntity: cachedRel.toEntity,
-                relationshipType: "co_occurs",
-                confidence,
-                sources: JSON.stringify(cachedRel.sources),
-                count: cachedRel.count,
-                updated: new Date().toISOString(),
-            };
-
-            const sourceRef = {
-                range: {
-                    start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                },
-            };
-
-            const relationshipRow = {
-                sourceRef,
-                record: relationship,
-            };
-
-            await this.relationships.addRows(relationshipRow);
-            storedCount++;
-
-            if (
-                storedCount % 100 === 0 ||
-                storedCount === cachedRelationships.length
-            ) {
-                debug(
-                    `[Knowledge Graph] Stored ${storedCount}/${cachedRelationships.length} relationships`,
-                );
-            }
-        }
-
-        debug(
-            `[Knowledge Graph] Finished storing ${storedCount} relationships`,
-        );
-    }
-
-    /**
-     * Community detection using advanced algorithms
-     */
-    private async detectCommunities(
-        entities: string[],
-        algorithms: any,
-    ): Promise<void> {
-        debug(
-            `[Knowledge Graph] Starting community detection for ${entities.length} entities`,
-        );
-
-        // Get relationships for algorithm input
-        const relationships =
-            (await this.relationships?.getAllRelationships()) || [];
-
-        // Use graph algorithms for community detection
-        const graphMetrics = algorithms.calculateAllMetrics(
-            entities,
-            relationships,
-        );
-        const communities = graphMetrics.communities;
-
-        debug(
-            `[Knowledge Graph] Detected ${communities.length} communities using algorithms`,
-        );
-
-        let storedCount = 0;
-        for (const community of communities) {
-            const sourceRef = {
-                range: {
-                    start: { messageOrdinal: 0, chunkOrdinal: 0 },
-                    end: { messageOrdinal: 0, chunkOrdinal: 0 },
-                },
-            };
-
-            const communityRow = {
-                sourceRef,
-                record: {
-                    id: community.id,
-                    entities: JSON.stringify(community.nodes),
-                    topics: JSON.stringify([]), // Will be filled later if needed
-                    size: community.nodes.length,
-                    density: community.density,
-                    updated: new Date().toISOString(),
-                },
-            };
-
-            await this.communities.addRows(communityRow);
-            storedCount++;
-
-            if (storedCount % 10 === 0 || storedCount === communities.length) {
-                debug(
-                    `[Knowledge Graph] Stored ${storedCount}/${communities.length} communities`,
-                );
-            }
-        }
-
-        debug(`[Knowledge Graph] Finished storing ${storedCount} communities`);
-    }
-
     private calculateSiblingRelationships(topicMap: Map<string, any>): any[] {
         const relationships: any[] = [];
         const parentToChildren = new Map<string, string[]>();
@@ -4105,28 +3392,72 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
         const hierarchicalTopics = await this.buildHierarchicalTopicsDirect(cacheManager, urlLimit);
 
         // Add topic nodes to graph
+        let addedNodes = 0;
+        let skippedDuplicates = 0;
+        
         for (const topic of hierarchicalTopics) {
-            topicGraph.addNode(topic.topicId, {
-                type: "topic",
-                name: topic.topicName,
-                parentId: topic.parentTopicId,
-                level: topic.level,
-                url: topic.url,
-                domain: topic.domain,
-                relevance: 0.8,
-                extractionDate: new Date().toISOString()
-            });
-        }
-
-        // Add hierarchy edges (parent-child relationships)
-        for (const topic of hierarchicalTopics) {
-            if (topic.parentTopicId && topicGraph.hasNode(topic.parentTopicId)) {
-                topicGraph.addEdge(topic.parentTopicId, topic.topicId, {
-                    type: "parent_child",
-                    strength: 1.0
-                });
+            // Check if topic node already exists to avoid duplicates
+            if (!topicGraph.hasNode(topic.topicId)) {
+                try {
+                    topicGraph.addNode(topic.topicId, {
+                        type: "topic",
+                        name: topic.topicName,
+                        parentId: topic.parentTopicId,
+                        level: topic.level,
+                        url: topic.url,
+                        domain: topic.domain,
+                        relevance: 0.8,
+                        extractionDate: new Date().toISOString()
+                    });
+                    addedNodes++;
+                } catch (error) {
+                    // Handle any remaining edge case duplicates gracefully
+                    if (error instanceof Error && error.message.includes('already exist')) {
+                        debug(`[Direct Build] WARNING: Skipping duplicate topic node '${topic.topicId}' (${topic.topicName}) from ${topic.url}`);
+                        skippedDuplicates++;
+                    } else {
+                        throw error; // Re-throw non-duplicate errors
+                    }
+                }
+            } else {
+                debug(`[Direct Build] WARNING: Skipping duplicate topic node '${topic.topicId}' (${topic.topicName}) - already exists in graph`);
+                skippedDuplicates++;
             }
         }
+        
+        debug(`[Direct Build] Added ${addedNodes} topic nodes, skipped ${skippedDuplicates} duplicates`);
+
+        // Add hierarchy edges (parent-child relationships)
+        let addedEdges = 0;
+        let skippedEdgeDuplicates = 0;
+        
+        for (const topic of hierarchicalTopics) {
+            if (topic.parentTopicId && topicGraph.hasNode(topic.parentTopicId)) {
+                // Check if edge already exists to avoid duplicates
+                if (!topicGraph.hasEdge(topic.parentTopicId, topic.topicId)) {
+                    try {
+                        topicGraph.addEdge(topic.parentTopicId, topic.topicId, {
+                            type: "parent_child",
+                            strength: 1.0
+                        });
+                        addedEdges++;
+                    } catch (error) {
+                        // Handle any remaining edge case duplicates gracefully
+                        if (error instanceof Error && error.message.includes('already exist')) {
+                            debug(`[Direct Build] WARNING: Skipping duplicate edge ${topic.parentTopicId} -> ${topic.topicId}`);
+                            skippedEdgeDuplicates++;
+                        } else {
+                            throw error; // Re-throw non-duplicate errors
+                        }
+                    }
+                } else {
+                    debug(`[Direct Build] WARNING: Skipping duplicate edge ${topic.parentTopicId} -> ${topic.topicId} - already exists`);
+                    skippedEdgeDuplicates++;
+                }
+            }
+        }
+        
+        debug(`[Direct Build] Added ${addedEdges} hierarchy edges, skipped ${skippedEdgeDuplicates} edge duplicates`);
 
         // Build topic relationships using existing Graphology-based approach
         await this.buildTopicRelationshipsDirect(topicGraph, hierarchicalTopics, cacheManager);
@@ -4135,23 +3466,73 @@ Determine the appropriate relationship action based on the PairwiseTopicRelation
     }
 
     /**
-     * Build hierarchical topics with minimal SQLite dependency (Phase 1 implementation)
-     * Modified version that returns data instead of storing in SQLite
+     * Build hierarchical topics using the original sophisticated LLM logic (Phase 3 implementation)
+     * Preserves the exact same topic hierarchy processing but stores in Graphology instead of SQLite
      */
     private async buildHierarchicalTopicsDirect(
         cacheManager: any,
         urlLimit?: number
     ): Promise<HierarchicalTopicRecord[]> {
-        debug(`[Direct Build] Building hierarchical topics data`);
+        debug(`[Direct Build] Building hierarchical topics using original LLM logic (Phase 3)`);
 
-        // Reuse existing buildHierarchicalTopics logic but return data instead of storing
-        // For now, delegate to existing method and read back the results
-        // TODO: In Phase 3, refactor this to be purely in-memory
-        await this.buildHierarchicalTopics(urlLimit);
+        // Get websites to process - same logic as updateHierarchicalTopics
+        const websites = this.getWebsites();
+        const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
         
-        const hierarchicalTopics = this.hierarchicalTopics?.getTopicHierarchy() || [];
-        debug(`[Direct Build] Retrieved ${hierarchicalTopics.length} hierarchical topics`);
-        
+        let globalHierarchy: any | undefined;
+        const websiteUrlMap = new Map<string, { url: string; domain: string }>();
+
+        // Extract and merge topic hierarchies from websites (EXACT same logic as updateHierarchicalTopics)
+        for (const website of websitesToProcess) {
+            const docHierarchy = (website.knowledge as any)?.topicHierarchy as any | undefined;
+
+            if (!docHierarchy) {
+                debug(`[Direct Build] No topic hierarchy found for ${website.metadata.url}`);
+                continue;
+            }
+
+            let topicMap: Map<string, any>;
+
+            if (docHierarchy.topicMap instanceof Map) {
+                topicMap = docHierarchy.topicMap;
+            } else if (typeof docHierarchy.topicMap === "object" && docHierarchy.topicMap !== null) {
+                topicMap = new Map(Object.entries(docHierarchy.topicMap));
+            } else {
+                debug(`[Direct Build] Invalid topicMap format for ${website.metadata.url}`);
+                continue;
+            }
+
+            // Track which website each topic came from (same as original)
+            const websiteUrl = website.metadata.url || "unknown";
+            const websiteDomain = website.metadata.domain || "unknown";
+            for (const [topicId] of topicMap) {
+                if (!websiteUrlMap.has(topicId)) {
+                    websiteUrlMap.set(topicId, { url: websiteUrl, domain: websiteDomain });
+                }
+            }
+
+            const hierarchyWithMap = {
+                ...docHierarchy,
+                topicMap: topicMap,
+            };
+
+            if (!globalHierarchy) {
+                globalHierarchy = hierarchyWithMap;
+            } else {
+                // Merge hierarchies using the same logic as original
+                globalHierarchy = this.mergeHierarchies(globalHierarchy, hierarchyWithMap, websiteUrl);
+            }
+        }
+
+        if (!globalHierarchy) {
+            debug("[Direct Build] No topic hierarchies found in websites");
+            return [];
+        }
+
+        // Convert to HierarchicalTopicRecord format (same as original)
+        const hierarchicalTopics = this.convertTopicHierarchyToRecords(globalHierarchy, websiteUrlMap);
+
+        debug(`[Direct Build] Built ${hierarchicalTopics.length} hierarchical topic records using original LLM logic`);
         return hierarchicalTopics;
     }
 

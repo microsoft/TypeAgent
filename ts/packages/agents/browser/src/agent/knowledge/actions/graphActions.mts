@@ -20,7 +20,7 @@ import {
     invalidateAllGraphologyCaches,
 } from "../utils/graphologyCache.mjs";
 // JSON Storage imports
-import { EntityGraphQueries, TopicGraphQueries, SqliteToJsonConverter } from "website-memory";
+import { EntityGraphQueries, TopicGraphQueries } from "website-memory";
 import { createGraphologyPersistenceManager } from "../utils/graphologyPersistence.mjs";
 import registerDebug from "debug";
 import { openai as ai } from "aiclient";
@@ -350,31 +350,76 @@ async function ensureGraphCache(context: SessionContext<BrowserActionContext>): 
         return;
     }
 
-    debug("[Knowledge Graph] Building in-memory cache from JSON storage");
+    debug("[Knowledge Graph] Building in-memory cache from Graphology data");
 
     const tracker = getPerformanceTracker();
     tracker.startOperation("ensureGraphCache");
 
     try {
-        // Get graph queries - this loads from JSON storage
-        const { entityQueries } = await getGraphQueries(context);
-        
-        if (!entityQueries) {
-            throw new Error("Could not initialize graph queries from JSON storage");
+        // Build the graph using websiteCollection - returns Graphology graphs directly
+        tracker.startOperation("ensureGraphCache.buildGraphologyGraphs");
+        const buildResult = await websiteCollection.buildGraph();
+        tracker.endOperation("ensureGraphCache.buildGraphologyGraphs", 1, buildResult ? 1 : 0);
+
+        if (!buildResult?.entityGraph || !buildResult?.topicGraph) {
+            throw new Error("Failed to build Graphology graphs from websiteCollection");
         }
 
-        // Fetch data from JSON storage with instrumentation
-        tracker.startOperation("ensureGraphCache.getTopEntities");
-        const rawEntities = entityQueries.getTopEntities(5000);
-        tracker.endOperation("ensureGraphCache.getTopEntities", rawEntities.length, rawEntities.length);
+        // Extract entities, relationships, and communities from Graphology graphs
+        tracker.startOperation("ensureGraphCache.extractFromGraphology");
+        
+        const entityGraph = buildResult.entityGraph;
+        const rawEntities: any[] = [];
+        const relationships: any[] = [];
+        const communities: any[] = [];
 
-        tracker.startOperation("ensureGraphCache.getAllRelationships");
-        const relationships = entityQueries.getAllRelationships();
-        tracker.endOperation("ensureGraphCache.getAllRelationships", relationships.length, relationships.length);
+        // Extract entities from Graphology graph
+        entityGraph.forEachNode((nodeId: string, attributes: any) => {
+            if (!attributes.type || attributes.type === 'entity') {
+                rawEntities.push({
+                    name: nodeId,
+                    id: nodeId,
+                    type: attributes.type || 'entity',
+                    confidence: attributes.confidence || 0.5,
+                    count: attributes.count || 1,
+                    importance: attributes.importance || 0,
+                    communityId: attributes.community || 0,
+                });
+            }
+        });
 
-        tracker.startOperation("ensureGraphCache.getAllCommunities");
-        const communities = entityQueries.getAllCommunities();
-        tracker.endOperation("ensureGraphCache.getAllCommunities", communities.length, communities.length);
+        // Extract relationships from Graphology graph
+        entityGraph.forEachEdge((edgeId: string, attributes: any, source: string, target: string) => {
+            relationships.push({
+                fromEntity: source,
+                toEntity: target,
+                source: source,
+                target: target,
+                relationshipType: attributes.type || 'related',
+                type: attributes.type || 'related',
+                confidence: attributes.confidence || 0.5,
+                count: attributes.count || 1,
+            });
+        });
+
+        // Extract communities (simplified approach)
+        const communityMap = new Map<number, { id: number; entities: string[] }>();
+        rawEntities.forEach(entity => {
+            const communityId = entity.communityId || 0;
+            if (!communityMap.has(communityId)) {
+                communityMap.set(communityId, { id: communityId, entities: [] });
+            }
+            communityMap.get(communityId)!.entities.push(entity.name);
+        });
+        communities.push(...Array.from(communityMap.values()));
+
+        tracker.endOperation("ensureGraphCache.extractFromGraphology", rawEntities.length, relationships.length);
+
+        console.log("[ensureGraphCache] Extracted from Graphology:", {
+            entities: rawEntities.length,
+            relationships: relationships.length, 
+            communities: communities.length
+        });
 
         // Calculate metrics with instrumentation
         tracker.startOperation("ensureGraphCache.calculateEntityMetrics");
@@ -569,11 +614,18 @@ async function getGraphologyGraphs(context: SessionContext<BrowserActionContext>
                 const persistenceManager = createGraphologyPersistenceManager(storagePath);
                 
                 try {
+                    debug(`[Graphology] Persisting entity graph with ${buildResult.entityGraph.order} nodes and ${buildResult.entityGraph.size} edges to ${storagePath}`);
                     await persistenceManager.saveEntityGraph(buildResult.entityGraph, buildResult.metadata);
+                    debug(`[Graphology] ✓ Entity graph saved to disk`);
+                    
+                    debug(`[Graphology] Persisting topic graph with ${buildResult.topicGraph.order} nodes and ${buildResult.topicGraph.size} edges to ${storagePath}`);
                     await persistenceManager.saveTopicGraph(buildResult.topicGraph, buildResult.metadata);
-                    debug("[Graphology] Saved graphs to disk persistence");
+                    debug(`[Graphology] ✓ Topic graph saved to disk`);
+                    
+                    debug("[Graphology] ✓ All graphs saved to disk persistence successfully");
                 } catch (persistError) {
-                    debug(`[Graphology] Failed to persist graphs: ${persistError}`);
+                    debug(`[Graphology] ❌ Failed to persist graphs: ${persistError}`);
+                    console.error(`[Graphology] Persistence error details:`, persistError);
                     // Continue anyway since we have the graphs in memory
                 }
             }
@@ -593,26 +645,53 @@ async function getGraphologyGraphs(context: SessionContext<BrowserActionContext>
 }
 
 /**
- * Get entity statistics from JSON storage
+ * Get entity statistics from Graphology cache
  */
 async function getEntityStatistics(context: SessionContext<BrowserActionContext>): Promise<{
     entityCount: number;
     relationshipCount: number;
     communityCount: number;
 }> {
-    const { entityQueries } = await getGraphQueries(context);
-    
-    if (entityQueries) {
-        const stats = entityQueries.getEntityStatistics();
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+        if (!websiteCollection) {
+            console.log("[getEntityStatistics] No websiteCollection available");
+            return { entityCount: 0, relationshipCount: 0, communityCount: 0 };
+        }
+
+        await ensureGraphCache(context);
+        const cache = getGraphCache(websiteCollection);
+        
+        console.log("[getEntityStatistics] Cache state:", {
+            cacheExists: !!cache,
+            isValid: cache?.isValid,
+            entityMetricsLength: cache?.entityMetrics?.length,
+            relationshipsLength: cache?.relationships?.length,
+            communitiesLength: cache?.communities?.length,
+            entityCount: cache?.entityMetrics?.length || 0,
+        });
+        
+        if (!cache || !cache.isValid) {
+            console.log("[getEntityStatistics] Cache invalid or missing");
+            return { entityCount: 0, relationshipCount: 0, communityCount: 0 };
+        }
+
+        // Get statistics from Graphology cache
+        const entityCount = cache.entityMetrics?.length || 0;
+        const relationshipCount = cache.relationships?.length || 0;
+        const communityCount = cache.communities?.length || 0;
+
+        console.log("[getEntityStatistics] Final counts:", { entityCount, relationshipCount, communityCount });
+
         return {
-            entityCount: stats.uniqueEntities,
-            relationshipCount: stats.totalRelationships,
-            communityCount: stats.totalCommunities
+            entityCount,
+            relationshipCount,
+            communityCount
         };
+    } catch (error) {
+        console.error("Error getting entity statistics from Graphology cache:", error);
+        return { entityCount: 0, relationshipCount: 0, communityCount: 0 };
     }
-    
-    // No data available
-    return { entityCount: 0, relationshipCount: 0, communityCount: 0 };
 }
 
 // ============================================================================
@@ -631,12 +710,17 @@ export async function getKnowledgeGraphStatus(
     error?: string;
 }> {
     try {
-        // Try JSON storage first, then fallback to SQLite
+        console.log("[getKnowledgeGraphStatus] Starting status check...");
+        
+        // Get statistics from Graphology cache
         const { entityCount, relationshipCount, communityCount } = await getEntityStatistics(context);
+        
+        console.log("[getKnowledgeGraphStatus] Retrieved statistics:", { entityCount, relationshipCount, communityCount });
         
         // Determine if graph exists based on actual data
         const hasGraph = relationshipCount > 0 || entityCount > 0;
 
+        console.log("[getKnowledgeGraphStatus] Final status:", { hasGraph, entityCount, relationshipCount, communityCount });
         debug(`Graph status: ${hasGraph ? 'exists' : 'not found'} - Entities: ${entityCount}, Relationships: ${relationshipCount}, Communities: ${communityCount}`);
 
         return {
@@ -647,7 +731,7 @@ export async function getKnowledgeGraphStatus(
             isBuilding: false,
         };
     } catch (error) {
-        console.error("Error getting knowledge graph status:", error);
+        console.error("[getKnowledgeGraphStatus] Error getting graph status:", error);
         return {
             hasGraph: false,
             entityCount: 0,
@@ -675,13 +759,13 @@ export async function buildKnowledgeGraph(
 }> {
     try {
         debug(
-            "[Knowledge Graph] Starting knowledge graph build with parameters:",
+            "[Knowledge Graph] Starting pure Graphology knowledge graph build with parameters:",
             parameters,
         );
 
         const startTime = Date.now();
         
-        // Get website collection for actual graph building
+        // Get website collection for building Graphology graphs
         const websiteCollection = context.agentContext.websiteCollection;
         if (!websiteCollection) {
             return {
@@ -690,45 +774,60 @@ export async function buildKnowledgeGraph(
             };
         }
 
-        // Get JSON storage manager for saving results
-        const jsonStorage = context.agentContext.graphJsonStorage;
-        if (!jsonStorage?.manager) {
-            return {
-                success: false,
-                error: "Graph storage manager not available",
-            };
+        // Build the graph using websiteCollection - returns Graphology graphs directly
+        debug("[Knowledge Graph] Building Graphology graphs from website collection...");
+        const buildResult = await websiteCollection.buildGraph();
+        debug("[Knowledge Graph] Graphology graph build completed");
+
+        // Check if we got Graphology graphs
+        if (!buildResult?.entityGraph || !buildResult?.topicGraph) {
+            throw new Error("Failed to build Graphology graphs from website collection");
         }
 
-        // Build the graph using websiteCollection (this does the actual computation)
-        debug("[Knowledge Graph] Building graph from website collection...");
-        await websiteCollection.buildGraph();
-        debug("[Knowledge Graph] Graph build from website collection completed");
+        const { entityGraph, topicGraph, metadata } = buildResult;
 
-        // Convert SQLite results to JSON format and save
-        debug("[Knowledge Graph] Converting to JSON format and saving...");
-        const converter = new SqliteToJsonConverter(websiteCollection as any);
-        const entityGraph = await converter.convertEntityGraph();
-        const topicGraph = await converter.convertTopicGraph();
-        
-        // Save the converted graphs to JSON storage
-        await jsonStorage.manager.saveEntityGraph(entityGraph);
-        await jsonStorage.manager.saveTopicGraph(topicGraph);
+        // Cache the Graphology graphs directly
+        debug("[Knowledge Graph] Caching Graphology graphs...");
+        await cacheGraphologyGraphs(websiteCollection, entityGraph, topicGraph, metadata);
+
+        // Persist Graphology graphs to disk
+        const jsonStorage = context.agentContext.graphJsonStorage;
+        if (jsonStorage?.manager) {
+            const storagePath = jsonStorage.manager.getStoragePath();
+            debug(`[Graphology Persistence] Storage path: ${storagePath}`);
+            const persistenceManager = createGraphologyPersistenceManager(storagePath);
+            
+            try {
+                debug("[Graphology Persistence] Saving entity graph...");
+                await persistenceManager.saveEntityGraph(entityGraph, metadata);
+                
+                debug("[Graphology Persistence] Saving topic graph...");
+                await persistenceManager.saveTopicGraph(topicGraph, metadata);
+                
+                debug("[Graphology Persistence] ✓ All graphs saved to disk");
+            } catch (persistError) {
+                debug(`[Graphology Persistence] ❌ Failed to persist graphs: ${persistError}`);
+                // Continue since we have graphs in memory
+            }
+        } else {
+            debug("[Graphology Persistence] ❌ No storage manager available");
+        }
         
         const timeElapsed = Date.now() - startTime;
 
-        // Get stats from the built graphs
+        // Get stats from the Graphology graphs
         const stats = {
-            entitiesFound: entityGraph.nodes.length,
-            relationshipsCreated: entityGraph.edges.length,
-            communitiesDetected: entityGraph.communities.length,
+            entitiesFound: entityGraph.order,
+            relationshipsCreated: entityGraph.size,
+            communitiesDetected: metadata?.communityCount || 0,
             timeElapsed: timeElapsed,
         };
 
-        debug("[Knowledge Graph] Build and JSON conversion completed:", stats);
+        debug("[Knowledge Graph] Pure Graphology build completed:", stats);
 
         return {
             success: true,
-            message: `Knowledge graph built and saved in ${timeElapsed}ms`,
+            message: `Graphology knowledge graph built in ${timeElapsed}ms. Entities: ${stats.entitiesFound}, Relationships: ${stats.relationshipsCreated}, Communities: ${stats.communitiesDetected}`,
             stats,
         };
     } catch (error) {
@@ -749,9 +848,9 @@ export async function rebuildKnowledgeGraph(
     error?: string;
 }> {
     try {
-        debug("[Knowledge Graph] Starting JSON-based knowledge graph rebuild");
+        debug("[Knowledge Graph] Starting Graphology-only knowledge graph rebuild");
 
-        // Get website collection to rebuild from SQLite
+        // Get website collection to rebuild from cache
         const websiteCollection = context.agentContext.websiteCollection;
         if (!websiteCollection) {
             return {
@@ -760,26 +859,8 @@ export async function rebuildKnowledgeGraph(
             };
         }
 
-        // Get JSON storage manager for cleaning up persisted files
-        const jsonStorage = context.agentContext.graphJsonStorage;
-        if (!jsonStorage?.manager) {
-            return {
-                success: false,
-                error: "Graph storage manager not available",
-            };
-        }
-
-        // Create backup of existing JSON files before clearing
+        // Clear existing SQLite graph tables if they exist
         try {
-            await jsonStorage.manager.createBackup();
-            debug("[Knowledge Graph] Created backup of existing JSON graph data");
-        } catch (backupError) {
-            console.warn("Warning: Failed to create backup:", backupError);
-        }
-
-        // Clear existing graph data and rebuild
-        try {
-            // Clear existing SQLite graph tables if they exist
             if (websiteCollection.relationships) {
                 websiteCollection.relationships.clear();
             }
@@ -792,7 +873,7 @@ export async function rebuildKnowledgeGraph(
             console.warn("Failed to clear existing graph data:", clearError);
         }
 
-        // Rebuild the knowledge graph using websiteCollection - now returns Graphology graphs directly
+        // Rebuild the knowledge graph using websiteCollection - returns Graphology graphs directly
         debug("[Knowledge Graph] Building Graphology graphs directly from cache...");
         const buildResult = await websiteCollection.buildGraph();
         debug("[Knowledge Graph] Direct Graphology graph build completed");
@@ -804,22 +885,28 @@ export async function rebuildKnowledgeGraph(
 
         const { entityGraph, topicGraph, metadata } = buildResult;
 
-        // Cache the Graphology graphs directly (bypassing JSON conversion)
+        // Cache the Graphology graphs directly in memory
         debug("[Knowledge Graph] Caching Graphology graphs directly...");
         await cacheGraphologyGraphs(websiteCollection, entityGraph, topicGraph, metadata);
 
-        // Clear any old persistence cache since we have new data
-        if (jsonStorage?.manager) {
-            const storagePath = jsonStorage.manager.getStoragePath();
-            const persistenceManager = createGraphologyPersistenceManager(storagePath);
+        // Persist Graphology graphs to disk in native format
+        const storagePath = `.scratch/storage`; // Use direct path instead of JSON storage manager
+        debug(`[Graphology Persistence] Using storage path: ${storagePath}`);
+        const persistenceManager = createGraphologyPersistenceManager(storagePath);
+        
+        try {
+            debug("[Graphology Persistence] Attempting to save entity graph to disk...");
+            await persistenceManager.saveEntityGraph(entityGraph, metadata);
+            debug("[Graphology Persistence] ✓ Entity graph saved to disk");
             
-            try {
-                await persistenceManager.clearCache();
-                debug("[Knowledge Graph] Cleared old Graphology persistence cache");
-            } catch (clearError) {
-                debug(`[Knowledge Graph] Failed to clear persistence cache: ${clearError}`);
-                // Continue since this is not critical
-            }
+            debug("[Graphology Persistence] Attempting to save topic graph to disk...");
+            await persistenceManager.saveTopicGraph(topicGraph, metadata);
+            debug("[Graphology Persistence] ✓ Topic graph saved to disk");
+            
+            debug("[Graphology Persistence] ✓ All Graphology graphs saved to disk successfully");
+        } catch (persistError) {
+            debug(`[Graphology Persistence] ❌ Failed to persist graphs: ${persistError}`);
+            // Continue anyway since we have the graphs in memory
         }
 
         // Update traditional caches to maintain compatibility
@@ -831,28 +918,12 @@ export async function rebuildKnowledgeGraph(
             lastUpdated: Date.now(),
             isValid: true,
         });
-        
-        // Also create JSON backup for compatibility (optional step)
-        debug("[Knowledge Graph] Creating JSON backup for compatibility...");
-        try {
-            const converter = new SqliteToJsonConverter(websiteCollection as any);
-            const entityGraphJson = await converter.convertEntityGraph();
-            const topicGraphJson = await converter.convertTopicGraph();
-            
-            // Save the converted graphs to JSON storage
-            await jsonStorage.manager.saveEntityGraph(entityGraphJson);
-            await jsonStorage.manager.saveTopicGraph(topicGraphJson);
-            debug("[Knowledge Graph] JSON backup created successfully");
-        } catch (jsonError) {
-            console.warn("Warning: Failed to create JSON backup:", jsonError);
-            // Continue since we have the Graphology graphs cached
-        }
 
-        debug("[Knowledge Graph] Knowledge graph rebuild completed successfully");
+        debug("[Knowledge Graph] Graphology-only knowledge graph rebuild completed successfully");
 
         return {
             success: true,
-            message: `Knowledge graph rebuilt successfully using Graphology. Entity graph: ${entityGraph.order} nodes, ${entityGraph.size} edges. Topic graph: ${topicGraph.order} nodes, ${topicGraph.size} edges. Build time: ${metadata?.buildTime || 0}ms`,
+            message: `Knowledge graph rebuilt successfully using Graphology-only architecture. Entity graph: ${entityGraph.order} nodes, ${entityGraph.size} edges. Topic graph: ${topicGraph.order} nodes, ${topicGraph.size} edges. Build time: ${metadata?.buildTime || 0}ms`,
         };
     } catch (error) {
         console.error("Error rebuilding knowledge graph:", error);
@@ -1757,29 +1828,12 @@ export async function getGlobalImportanceLayer(
     metadata: any;
 }> {
     try {
-        // Use JSON storage instead of SQLite cache
-        const { entityQueries } = await getGraphQueries(context);
-
-        if (!entityQueries) {
-            console.log(`[ServerPerf] No JSON graph data available`);
-            return {
-                entities: [],
-                relationships: [],
-                metadata: {
-                    totalEntitiesInSystem: 0,
-                    selectedEntityCount: 0,
-                    coveragePercentage: 0,
-                    importanceThreshold: 0,
-                    layer: "global_importance",
-                    error: "No graph data available",
-                },
-            };
-        }
-
-        // Use cache for performance - loads from JSON storage if needed
-        const websiteCollection = context.agentContext.websiteCollection;
+        // Use cache-based approach like main branch
+        console.log(`[getGlobalImportanceLayer] Loading data from cache...`);
         
+        const websiteCollection = context.agentContext.websiteCollection;
         if (!websiteCollection) {
+            console.log(`[getGlobalImportanceLayer] No website collection available`);
             return {
                 entities: [],
                 relationships: [],
@@ -1789,14 +1843,17 @@ export async function getGlobalImportanceLayer(
                     coveragePercentage: 0,
                     importanceThreshold: 0,
                     layer: "global_importance",
+                    error: "Website collection not available",
                 },
             };
         }
 
+        // Ensure cache is populated (this loads from Graphology and creates the cache)
         await ensureGraphCache(context);
         const cache = getGraphCache(websiteCollection);
-        
+
         if (!cache || !cache.isValid) {
+            console.log(`[getGlobalImportanceLayer] Cache validation failed`);
             return {
                 entities: [],
                 relationships: [],
@@ -1806,144 +1863,128 @@ export async function getGlobalImportanceLayer(
                     coveragePercentage: 0,
                     importanceThreshold: 0,
                     layer: "global_importance",
+                    error: "Graph cache not available",
                 },
             };
         }
 
-        const entitiesWithMetrics = cache.entityMetrics || [];
-
-        if (entitiesWithMetrics.length === 0) {
-            return {
-                entities: [],
-                relationships: [],
-                metadata: {
-                    totalEntitiesInSystem: 0,
-                    selectedEntityCount: 0,
-                    coveragePercentage: 0,
-                    importanceThreshold: 0,
-                    layer: "global_importance",
-                },
-            };
-        }
-
-        // Use cached relationships and communities
+        // Get all entities and relationships from cache (like main branch)
+        const allEntities = cache.entityMetrics || [];
         const allRelationships = cache.relationships || [];
+        const communities = cache.communities || [];
 
-        // Sort by importance and select top nodes
-        const maxNodes = parameters.maxNodes || 500;
-        const sortedEntities = entitiesWithMetrics.sort(
-            (a, b) => (b.importance || 0) - (a.importance || 0),
-        );
-
-        console.log(`[getGlobalImportanceLayer] FILTERING STEP 1 - Initial entity filtering:`, {
-            totalEntitiesFromStorage: entitiesWithMetrics.length,
-            maxNodesLimit: maxNodes,
-            aboutToSelectTop: maxNodes
-        });
-        console.log(`[getGlobalImportanceLayer] Sample of top 10 entities being kept:`, 
-            sortedEntities.slice(0, 10).map(e => ({ name: e.name, importance: e.importance }))
-        );
-        console.log(`[getGlobalImportanceLayer] Sample of bottom 10 entities being filtered out:`, 
-            sortedEntities.slice(-10).map(e => ({ name: e.name, importance: e.importance }))
-        );
-
-        let selectedEntities = sortedEntities.slice(0, maxNodes);
-        console.log(`[getGlobalImportanceLayer] FILTERING STEP 1 RESULT: Selected ${selectedEntities.length} entities from ${entitiesWithMetrics.length} total`);
-        // Ensure connectivity by adding bridge nodes if needed
-        if (parameters.includeConnectivity !== false) {
-            const entitiesBeforeConnectivity = selectedEntities.length;
-            selectedEntities = ensureGlobalConnectivity(
-                selectedEntities,
-                allRelationships,
-                maxNodes,
-            );
-            console.log(`[getGlobalImportanceLayer] FILTERING STEP 2 - Connectivity adjustment:`, {
-                entitiesBeforeConnectivity,
-                entitiesAfterConnectivity: selectedEntities.length,
-                bridgeNodesAdded: selectedEntities.length - entitiesBeforeConnectivity
-            });
+        if (allEntities.length === 0) {
+            return {
+                entities: [],
+                relationships: [],
+                metadata: {
+                    totalEntitiesInSystem: 0,
+                    selectedEntityCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
+                    layer: "global_importance",
+                },
+            };
         }
 
-        // Get all relationships between selected entities
-        const selectedEntityNames = new Set(
-            selectedEntities.map((e) => e.name),
-        );
-        const selectedRelationships = allRelationships.filter(
-            (rel: any) =>
-                selectedEntityNames.has(rel.source || rel.fromEntity) &&
-                selectedEntityNames.has(rel.target || rel.toEntity),
-        );
-
-        console.log(`[getGlobalImportanceLayer] FILTERING STEP 3 - Relationship filtering:`, {
-            totalRelationshipsFromStorage: allRelationships.length,
-            relationshipsAfterEntityFilter: selectedRelationships.length,
-            filteredOutRelationships: allRelationships.length - selectedRelationships.length
-        });
-        console.log(`[getGlobalImportanceLayer] Sample of 10 kept relationships:`, 
-            selectedRelationships.slice(0, 10).map(r => ({ 
-                from: r.source || r.fromEntity, 
-                to: r.target || r.toEntity, 
-                type: r.type || r.relationshipType 
+        console.log(`[getGlobalImportanceLayer] ✓ Using cache with ${allEntities.length} entities and ${allRelationships.length} relationships`);
+        
+        // Debug: Log first few entities to see their structure
+        console.log(`[getGlobalImportanceLayer] DEBUG - First 3 entities from cache:`, 
+            allEntities.slice(0, 3).map(e => ({
+                name: e.name,
+                type: e.type,
+                importance: e.importance,
+                hasImportance: 'importance' in e,
+                keys: Object.keys(e)
             }))
         );
-        console.log(`[getGlobalImportanceLayer] Sample of 10 filtered relationships (first entities not in selected set):`, 
-            allRelationships.filter(rel => 
-                !selectedEntityNames.has(rel.source || rel.fromEntity) ||
-                !selectedEntityNames.has(rel.target || rel.toEntity)
-            ).slice(0, 10).map(r => ({ 
-                from: r.source || r.fromEntity, 
-                to: r.target || r.toEntity, 
-                type: r.type || r.relationshipType,
-                reason: !selectedEntityNames.has(r.source || r.fromEntity) ? 'source not selected' : 'target not selected'
+        
+        // Calculate entity metrics if not already calculated
+        const entitiesWithMetrics = allEntities.length > 0 && allEntities[0].importance !== undefined
+            ? allEntities
+            : calculateEntityMetrics(allEntities, allRelationships, communities);
+
+        console.log(`[getGlobalImportanceLayer] DEBUG - After calculateEntityMetrics: ${entitiesWithMetrics.length} entities`);
+        console.log(`[getGlobalImportanceLayer] DEBUG - First 3 entities with metrics:`, 
+            entitiesWithMetrics.slice(0, 3).map(e => ({
+                name: e.name,
+                type: e.type,
+                importance: e.importance,
+                hasImportance: 'importance' in e,
+                keys: Object.keys(e)
             }))
         );
 
-        const metadata = {
-            totalEntitiesInSystem: entitiesWithMetrics.length,
-            selectedEntityCount: selectedEntities.length,
-            coveragePercentage:
-                (selectedEntities.length / entitiesWithMetrics.length) * 100,
-            importanceThreshold:
-                selectedEntities[selectedEntities.length - 1]?.importance || 0,
-            connectedComponents: analyzeConnectivity(
-                selectedEntities,
-                selectedRelationships,
-            ),
-            layer: "global_importance",
-        };
-
-        // Debug: Check for relationships without types
-        const relationshipsWithoutType = selectedRelationships.filter((rel: any) => !rel.type && !rel.relationshipType);
-        if (relationshipsWithoutType.length > 0) {
-            console.log("[getGlobalImportanceLayer] Found relationships without type:", {
-                count: relationshipsWithoutType.length,
-                total: selectedRelationships.length,
-                samples: relationshipsWithoutType.slice(0, 3)
-            });
+        // Apply filtering (importance threshold, max nodes) 
+        const { maxNodes = 500, minImportanceThreshold } = parameters;
+        let filteredEntities = entitiesWithMetrics;
+        
+        console.log(`[getGlobalImportanceLayer] DEBUG - Filtering parameters:`, {
+            maxNodes,
+            maxNodesType: typeof maxNodes,
+            maxNodesValue: maxNodes,
+            minImportanceThreshold,
+            parametersReceived: parameters
+        });
+        
+        // Ensure maxNodes is a valid number
+        const maxNodesNumber = typeof maxNodes === 'number' ? maxNodes : 500;
+        console.log(`[getGlobalImportanceLayer] DEBUG - Using maxNodes: ${maxNodesNumber}`);
+        
+        if (minImportanceThreshold && minImportanceThreshold > 0) {
+            const beforeFilter = filteredEntities.length;
+            filteredEntities = entitiesWithMetrics.filter(e => (e.importance || 0) >= minImportanceThreshold);
+            debug(`[getGlobalImportanceLayer] Filtered by importance (${minImportanceThreshold}): ${beforeFilter} -> ${filteredEntities.length}`);
+            console.log(`[getGlobalImportanceLayer] Importance filter: ${beforeFilter} -> ${filteredEntities.length}`);
+            
+            if (filteredEntities.length === 0) {
+                console.log(`[getGlobalImportanceLayer] DEBUG - All entities filtered by importance! First 5 rejected entities:`,
+                    entitiesWithMetrics.slice(0, 5).map(e => ({
+                        name: e.name,
+                        importance: e.importance,
+                        threshold: minImportanceThreshold,
+                        passes: (e.importance || 0) >= minImportanceThreshold
+                    }))
+                );
+            }
         }
-
-        const optimizedRelationships = selectedRelationships.map(
-            (rel: any) => ({
-                rowId: rel.rowId,
-                fromEntity: rel.source || rel.fromEntity,
-                toEntity: rel.target || rel.toEntity,
-                relationshipType: rel.type || rel.relationshipType,
-                confidence: rel.confidence,
-                // Deduplicate sources using Set, then limit to first 3 entries
-                sources: rel.sources || rel.metadata?.sources
-                    ? typeof (rel.sources || rel.metadata?.sources) === "string"
-                        ? Array.from(new Set(JSON.parse(rel.sources || rel.metadata?.sources))).slice(
-                              0,
-                              3,
-                          )
-                        : Array.isArray(rel.sources || rel.metadata?.sources)
-                          ? Array.from(new Set(rel.sources || rel.metadata?.sources)).slice(0, 3)
-                          : rel.sources || rel.metadata?.sources
-                    : undefined,
-                count: rel.count || rel.metadata?.count,
-            }),
+        
+        // Sort by importance and limit to maxNodes
+        console.log(`[getGlobalImportanceLayer] DEBUG - Before sorting: ${filteredEntities.length} entities`);
+        const sortedEntities = filteredEntities.sort((a, b) => (b.importance || 0) - (a.importance || 0));
+        console.log(`[getGlobalImportanceLayer] DEBUG - After sorting: ${sortedEntities.length} entities, top 3 importance values:`,
+            sortedEntities.slice(0, 3).map(e => ({ name: e.name, importance: e.importance }))
         );
-
+        
+        let selectedEntities = sortedEntities.slice(0, maxNodesNumber);
+        
+        debug(`[getGlobalImportanceLayer] After limiting: ${selectedEntities.length} entities remaining`);
+        console.log(`[getGlobalImportanceLayer] After limiting to ${maxNodesNumber}: ${selectedEntities.length} entities remaining`);
+        
+        // Get relationships between selected entities
+        const selectedEntityNames = new Set(selectedEntities.map(e => e.name));
+        console.log(`[getGlobalImportanceLayer] DEBUG - Selected entity names sample:`, Array.from(selectedEntityNames).slice(0, 5));
+        
+        const selectedRelationships = allRelationships.filter((rel: any) =>
+            selectedEntityNames.has(rel.fromEntity) && selectedEntityNames.has(rel.toEntity) &&
+            rel.fromEntity && rel.toEntity && rel.fromEntity.trim() !== '' && rel.toEntity.trim() !== ''
+        );
+        
+        console.log(`[getGlobalImportanceLayer] DEBUG - Relationship filtering details:`);
+        console.log(`  Total relationships: ${allRelationships.length}`);
+        console.log(`  Selected entities: ${selectedEntityNames.size}`);
+        console.log(`  First 3 relationships:`, allRelationships.slice(0, 3).map(r => ({
+            fromEntity: r.fromEntity,
+            toEntity: r.toEntity,
+            hasFromInSet: selectedEntityNames.has(r.fromEntity),
+            hasToInSet: selectedEntityNames.has(r.toEntity),
+            hasValidNames: r.fromEntity && r.toEntity && r.fromEntity.trim() !== '' && r.toEntity.trim() !== ''
+        })));
+        
+        console.log(`[getGlobalImportanceLayer] Filtered to ${selectedEntities.length} entities and ${selectedRelationships.length} relationships`);
+        
+        // Optimize entities format (like main branch)
         const optimizedEntities = selectedEntities.map((entity: any) => ({
             id: entity.id || entity.name,
             name: entity.name,
@@ -1956,46 +1997,22 @@ export async function getGlobalImportanceLayer(
             size: entity.size,
         }));
 
-        // Build graphology layout for entities
-        const cacheKey = `entity_importance_${maxNodes}`;
+        // Optimize relationships format (like main branch)
+        const optimizedRelationships = selectedRelationships.map((rel: any) => ({
+            rowId: rel.id || rel.rowId || `${rel.fromEntity}-${rel.toEntity}`,
+            fromEntity: rel.fromEntity,
+            toEntity: rel.toEntity,
+            relationshipType: rel.relationshipType || rel.type || "co_occurs",
+            confidence: rel.confidence || 0.5,
+            count: rel.count || 1,
+        }));
+
+        // Build graphology layout using the same pipeline as main branch
+        const cacheKey = `entity_importance_${maxNodesNumber}`;
         let cachedGraph = getGraphologyCache(cacheKey);
-
-        // Check if we already have a presetLayout from ensureGraphCache that we can reuse
-        if (!cachedGraph && cache.presetLayout && cache.presetLayout.elements && cache.presetLayout.elements.length > 0) {
-            console.log("[getGlobalImportanceLayer] Using presetLayout from cache:", {
-                elementsCount: cache.presetLayout.elements.length,
-                layoutDuration: cache.presetLayout.layoutDuration,
-                communityCount: cache.presetLayout.communityCount
-            });
-            
-            // Create a fake graphology cache object from the existing presetLayout
-            cachedGraph = {
-                graph: null, // We don't need the graph object for rendering
-                cytoscapeElements: cache.presetLayout.elements,
-                metadata: {
-                    nodeCount: cache.presetLayout.elements.filter(el => !el.data?.source).length,
-                    edgeCount: cache.presetLayout.elements.filter(el => el.data?.source).length,
-                    layoutTimestamp: Date.now(),
-                    layoutDuration: cache.presetLayout.layoutDuration || 0,
-                    avgSpacing: 50, // Default value
-                    communityCount: cache.presetLayout.communityCount || 0
-                },
-                lastUpdated: Date.now(),
-                isValid: true
-            };
-            
-            setGraphologyCache(cacheKey, cachedGraph!);
-        }
-
+        
         if (!cachedGraph) {
-            debug(
-                "[Graphology] Building layout for entity importance layer...",
-            );
-            console.log("[getGlobalImportanceLayer] Building new graphology layout:", {
-                optimizedEntitiesCount: optimizedEntities.length,
-                optimizedRelationshipsCount: optimizedRelationships.length,
-                maxNodes: maxNodes
-            });
+            debug("[Graphology] Building layout for entity importance layer...");
             const layoutStart = performance.now();
 
             const graphNodes: GraphNode[] = optimizedEntities.map(
@@ -2019,65 +2036,17 @@ export async function getGlobalImportanceLayer(
                 }),
             );
 
-            // Debug: Check for graphEdges without types
-            const edgesWithoutType = graphEdges.filter(edge => !edge.type);
-            if (edgesWithoutType.length > 0) {
-                console.log("[getGlobalImportanceLayer] Found graphEdges without type:", {
-                    count: edgesWithoutType.length,
-                    total: graphEdges.length,
-                    samples: edgesWithoutType.slice(0, 3)
-                });
-            }
-
-            console.log("[getGlobalImportanceLayer] About to call buildGraphologyGraph:", {
-                graphNodesCount: graphNodes.length,
-                graphEdgesCount: graphEdges.length,
-                nodeLimit: maxNodes * 2,
-                minEdgeConfidence: 0.2,
-                denseClusterThreshold: 100,
-                sampleNodes: graphNodes.slice(0, 3),
-                sampleEdges: graphEdges.slice(0, 3)
-            });
-
-            console.log(`[getGlobalImportanceLayer] FILTERING STEP 4 - About to call buildGraphologyGraph with ${graphNodes.length} nodes and ${graphEdges.length} edges`);
+            debug(`[getGlobalImportanceLayer] Building graphology graph with ${graphNodes.length} nodes and ${graphEdges.length} edges`);
+            console.log(`[getGlobalImportanceLayer] Building graphology graph with ${graphNodes.length} nodes and ${graphEdges.length} edges`);
 
             const graph = buildGraphologyGraph(graphNodes, graphEdges, {
-                nodeLimit: maxNodes * 2,
+                nodeLimit: maxNodesNumber * 2,
                 minEdgeConfidence: 0.2,
                 denseClusterThreshold: 100,
             });
 
-            console.log("[getGlobalImportanceLayer] buildGraphologyGraph result:", {
-                graphOrder: graph?.order,
-                graphSize: graph?.size,
-                graphType: typeof graph
-            });
-            console.log(`[getGlobalImportanceLayer] FILTERING STEP 4 RESULT - buildGraphologyGraph produced graph with ${graph?.order || 0} nodes and ${graph?.size || 0} edges`);
-
             const cytoscapeElements = convertToCytoscapeElements(graph, 2000);
-            console.log("[getGlobalImportanceLayer] convertToCytoscapeElements result:", {
-                elementsCount: cytoscapeElements?.length,
-                elementsType: typeof cytoscapeElements,
-                firstElement: cytoscapeElements?.[0]
-            });
-            console.log(`[getGlobalImportanceLayer] FILTERING STEP 5 - convertToCytoscapeElements produced ${cytoscapeElements?.length || 0} total elements`);
-            
-            // Count nodes vs edges in final elements
-            const nodeElements = cytoscapeElements?.filter(el => !el.data?.source && !el.data?.target) || [];
-            const edgeElements = cytoscapeElements?.filter(el => el.data?.source || el.data?.target) || [];
-            console.log(`[getGlobalImportanceLayer] FILTERING STEP 5 BREAKDOWN: ${nodeElements.length} nodes + ${edgeElements.length} edges = ${cytoscapeElements?.length || 0} total elements`);
-            
-            if (nodeElements.length > 0) {
-                console.log(`[getGlobalImportanceLayer] Sample of final 10 nodes:`, 
-                    nodeElements.slice(0, 10).map(el => ({ id: el.data?.id, name: el.data?.name }))
-                );
-            }
-            if (edgeElements.length > 0) {
-                console.log(`[getGlobalImportanceLayer] Sample of final 10 edges:`, 
-                    edgeElements.slice(0, 10).map(el => ({ source: el.data?.source, target: el.data?.target, type: el.data?.type }))
-                );
-            }
-            
+            debug(`[getGlobalImportanceLayer] convertToCytoscapeElements produced ${cytoscapeElements.length} elements`);
             const layoutMetrics = calculateLayoutQualityMetrics(graph);
             const layoutDuration = performance.now() - layoutStart;
 
@@ -2090,52 +2059,21 @@ export async function getGlobalImportanceLayer(
 
             setGraphologyCache(cacheKey, cachedGraph);
 
-            debug(
-                `[Graphology] Entity layout complete in ${layoutDuration.toFixed(2)}ms`,
-            );
-            debug(
-                `[Graphology] Average node spacing: ${layoutMetrics.avgSpacing.toFixed(2)}`,
-            );
+            debug(`[Graphology] Entity layout complete in ${layoutDuration.toFixed(2)}ms`);
         } else {
             debug("[Graphology] Using cached entity layout");
         }
-
-        // Enrich entities with graphology colors and sizes
-        // Only include entities that have corresponding graph elements (filter out isolated nodes)
-        if (!cachedGraph) {
-            console.log("[getGlobalImportanceLayer] ERROR - No cached graph available after all attempts");
-            return {
-                entities: optimizedEntities,
-                relationships: optimizedRelationships,
-                metadata: {
-                    ...metadata,
-                    error: "No graphology layout available"
-                },
-            };
-        }
         
-        console.log("[getGlobalImportanceLayer] DEBUG - Entity matching:");
-        console.log("- First 5 optimizedEntities:", optimizedEntities.slice(0, 5).map((e: any) => ({ id: e.id, name: e.name })));
-        console.log("- First 5 graph elements:", cachedGraph!.cytoscapeElements.filter((el: any) => el.data && !el.data.source).slice(0, 5).map((el: any) => ({ id: el.data.id, label: el.data.label, name: el.data.name })));
-        
-        // Debug the actual matching process
-        console.log("- Detailed matching debug for first entity:");
-        if (optimizedEntities.length > 0) {
-            const firstEntity = optimizedEntities[0];
-            console.log("  Entity:", { id: firstEntity.id, name: firstEntity.name });
-            const matchByID = cachedGraph!.cytoscapeElements.find((el: any) => el.data?.id === firstEntity.id);
-            const matchByLabel = cachedGraph!.cytoscapeElements.find((el: any) => el.data?.label === firstEntity.name);
-            const matchByName = cachedGraph!.cytoscapeElements.find((el: any) => el.data?.name === firstEntity.name);
-            console.log("  Matches - byID:", matchByID?.data?.id, "byLabel:", matchByLabel?.data?.id, "byName:", matchByName?.data?.id);
-        }
+        debug(`[getGlobalImportanceLayer] cachedGraph.cytoscapeElements length: ${cachedGraph?.cytoscapeElements?.length || 0}`);
+        debug(`[getGlobalImportanceLayer] selectedEntities length: ${selectedEntities.length}`);
 
+        // Enrich entities with graphology colors and sizes (like main branch)
         const enrichedEntities = optimizedEntities
             .map((entity: any) => {
                 const graphElement = cachedGraph!.cytoscapeElements.find(
                     (el: any) =>
                         el.data?.id === entity.id ||
-                        el.data?.label === entity.name ||
-                        el.data?.name === entity.name,
+                        el.data?.label === entity.name,
                 );
                 if (graphElement?.data) {
                     return {
@@ -2148,49 +2086,18 @@ export async function getGlobalImportanceLayer(
                 return null;
             })
             .filter((entity: any) => entity !== null);
-
-        // Debug logging to verify entity vs topic data
-        console.log(
-            "[getGlobalImportanceLayer] DEBUG - First 10 entities:",
-            enrichedEntities.slice(0, 10).map((e: any) => ({
-                name: e.name,
-                type: e.type,
-                hasLevel: "level" in e,
-                hasChildCount: "childCount" in e,
-                hasParentId: "parentId" in e,
-                hasDegree: "degree" in e,
-                hasCommunityId: "communityId" in e,
-            })),
-        );
-
-        console.log(
-            "[getGlobalImportanceLayer] DEBUG - First 10 graphology nodes:",
-            cachedGraph.cytoscapeElements
-                .filter((el: any) => el.data && !el.data.source)
-                .slice(0, 10)
-                .map((el: any) => ({
-                    id: el.data.id,
-                    name: el.data.name,
-                    type: el.data.type,
-                    nodeType: el.data.nodeType,
-                    hasLevel: "level" in el.data,
-                    hasChildCount: "childCount" in el.data,
-                    hasParentId: "parentId" in el.data,
-                })),
-        );
-
-        console.log("[getGlobalImportanceLayer] Cache key used:", cacheKey);
-
-        // FINAL FILTERING SUMMARY
-        console.log(`[getGlobalImportanceLayer] ===== COMPLETE FILTERING PIPELINE SUMMARY =====`);
-        console.log(`[getGlobalImportanceLayer] Step 1 - Initial entities: ${entitiesWithMetrics.length} → ${selectedEntities.length} (filtered: ${entitiesWithMetrics.length - selectedEntities.length})`);
-        console.log(`[getGlobalImportanceLayer] Step 2 - After connectivity: ${selectedEntities.length} entities`);
-        console.log(`[getGlobalImportanceLayer] Step 3 - Relationships: ${allRelationships.length} → ${optimizedRelationships.length} (filtered: ${allRelationships.length - optimizedRelationships.length})`);
-        console.log(`[getGlobalImportanceLayer] Step 4 - Graphology graph: ${optimizedEntities.length} nodes → ${cachedGraph.cytoscapeElements.filter((el: any) => el.data && !el.data.source).length} nodes`);
-        console.log(`[getGlobalImportanceLayer] Step 5 - Final elements: ${cachedGraph.cytoscapeElements.length} total elements (${cachedGraph.cytoscapeElements.filter((el: any) => el.data && !el.data.source).length} nodes + ${cachedGraph.cytoscapeElements.filter((el: any) => el.data && (el.data.source || el.data.target)).length} edges)`);
-        console.log(`[getGlobalImportanceLayer] Final result - Entities: ${enrichedEntities.length}, Relationships: ${optimizedRelationships.length}`);
-        console.log(`[getGlobalImportanceLayer] =================================================`);
-
+        
+        const metadata = {
+            totalEntitiesInSystem: allEntities.length,
+            selectedEntityCount: enrichedEntities.length,
+            totalRelationships: allRelationships.length,
+            selectedRelationships: optimizedRelationships.length,
+            coveragePercentage: Math.round((enrichedEntities.length / allEntities.length) * 100),
+            importanceThreshold: minImportanceThreshold || 0,
+            layer: "global_importance_graphology",
+            useGraphology: true,
+        };
+        
         return {
             entities: enrichedEntities,
             relationships: optimizedRelationships,
@@ -2205,13 +2112,17 @@ export async function getGlobalImportanceLayer(
             },
         };
     } catch (error) {
-        console.error("Error getting global importance layer:", error);
+        console.error("[getGlobalImportanceLayer] Error:", error);
         return {
             entities: [],
             relationships: [],
             metadata: {
-                error: error instanceof Error ? error.message : "Unknown error",
+                totalEntitiesInSystem: 0,
+                selectedEntityCount: 0,
+                coveragePercentage: 0,
+                importanceThreshold: 0,
                 layer: "global_importance",
+                error: error instanceof Error ? error.message : "Unknown error",
             },
         };
     }
@@ -2725,104 +2636,6 @@ interface ImportanceLevelConfig {
     threshold: number;
     maxNodes: number;
     description: string;
-}
-
-function ensureGlobalConnectivity(
-    importantEntities: any[],
-    allRelationships: any[],
-    maxNodes: number,
-): any[] {
-    const components = findConnectedComponents(
-        importantEntities,
-        allRelationships,
-    );
-
-    // If multiple components, add bridge nodes to connect them
-    if (components.length > 1) {
-        const bridgeNodes = findBridgeNodes(
-            components,
-            allRelationships,
-            maxNodes - importantEntities.length,
-        );
-        return [...importantEntities, ...bridgeNodes];
-    }
-
-    return importantEntities;
-}
-
-function findConnectedComponents(
-    entities: any[],
-    relationships: any[],
-): any[][] {
-    const entityNames = new Set(entities.map((e) => e.name));
-    const adjacencyList = new Map<string, string[]>();
-
-    // Build adjacency list
-    entities.forEach((entity) => adjacencyList.set(entity.name, []));
-    relationships.forEach((rel) => {
-        const fromEntity = rel.source || rel.fromEntity;
-        const toEntity = rel.target || rel.toEntity;
-        if (entityNames.has(fromEntity) && entityNames.has(toEntity)) {
-            adjacencyList.get(fromEntity)?.push(toEntity);
-            adjacencyList.get(toEntity)?.push(fromEntity);
-        }
-    });
-
-    const visited = new Set<string>();
-    const components: any[][] = [];
-
-    entities.forEach((entity) => {
-        if (!visited.has(entity.name)) {
-            const component: any[] = [];
-            const stack = [entity.name];
-
-            while (stack.length > 0) {
-                const current = stack.pop()!;
-                if (visited.has(current)) continue;
-
-                visited.add(current);
-                const currentEntity = entities.find((e) => e.name === current);
-                if (currentEntity) component.push(currentEntity);
-
-                const neighbors = adjacencyList.get(current) || [];
-                neighbors.forEach((neighbor) => {
-                    if (!visited.has(neighbor)) {
-                        stack.push(neighbor);
-                    }
-                });
-            }
-
-            if (component.length > 0) {
-                components.push(component);
-            }
-        }
-    });
-
-    return components;
-}
-
-function findBridgeNodes(
-    components: any[][],
-    allRelationships: any[],
-    maxBridgeNodes: number,
-): any[] {
-    // Find nodes that connect different components
-    const bridgeNodes: any[] = [];
-    // Note: Bridge detection algorithm can be implemented here in the future
-
-    // For now, return empty array - can be enhanced with actual bridge detection
-    return bridgeNodes;
-}
-
-function analyzeConnectivity(entities: any[], relationships: any[]): any {
-    const components = findConnectedComponents(entities, relationships);
-    return {
-        componentCount: components.length,
-        largestComponentSize: Math.max(...components.map((c) => c.length)),
-        averageComponentSize:
-            components.reduce((sum, c) => sum + c.length, 0) /
-            components.length,
-    };
 }
 
 function calculateDistributionPercentiles(
