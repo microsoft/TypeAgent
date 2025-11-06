@@ -3,15 +3,54 @@
 
 namespace TypeAgent.KnowPro.Answer;
 
-internal class RelevantKnowledgeCollector
+internal class AnswerContextBuilder
 {
     IConversation _conversation;
     MetadataMerger _metaMerger;
 
-    public RelevantKnowledgeCollector(IConversation conversation)
+    public AnswerContextBuilder(IConversation conversation)
     {
+        ArgumentVerify.ThrowIfNull(conversation, nameof(conversation));
+
         _conversation = conversation;
         _metaMerger = new MetadataMerger();
+    }
+
+    public async ValueTask<AnswerContext> FromSearchResultAsync(
+        ConversationSearchResult searchResult,
+        AnswerContextOptions? options,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNull(searchResult, nameof(searchResult));
+
+        if (!searchResult.HasResults)
+        {
+            throw new KnowProException(KnowProException.ErrorCode.EmptySearchResults);
+        }
+
+        AnswerContext context = new AnswerContext();
+
+        foreach (var resultForType in searchResult.KnowledgeMatches)
+        {
+            if (resultForType.Key == KnowledgeType.Topic)
+            {
+                context.Topics = await GetRelevantTopicsAsync(
+                    resultForType.Value,
+                    options?.TopicsTopK,
+                    cancellationToken
+                ).ConfigureAwait(false);
+            }
+            else if (resultForType.Key == KnowledgeType.Entity)
+            {
+                context.Entities = await GetRelevantEntitiesAsync(
+                    resultForType.Value,
+                    options?.EntitiesTopK,
+                    cancellationToken
+                ).ConfigureAwait(false);
+            }
+        }
+        return context;
     }
 
     public async ValueTask<IList<RelevantEntity>> GetRelevantEntitiesAsync(

@@ -5,5 +5,4 @@ namespace TypeAgent.KnowPro.Answer;
 
 public static class ConversationExtensions
 {
-
 }

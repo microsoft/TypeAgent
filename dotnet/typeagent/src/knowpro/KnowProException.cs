@@ -13,6 +13,7 @@ public class KnowProException : TypeAgentException<KnowProException.ErrorCode>
         InvalidKnowledgeTypeMismatch,
         KnowledgeTypeMismatch,
         StorageProviderDataNotFound,
+        EmptySearchResults,
         EmptyContext,
         EmptyPrompt
     }
