@@ -592,8 +592,12 @@ async function playRandomAction(
         if (quantity > 0) {
             savedTracks.splice(quantity);
         }
-
-        const tracks = randomShuffle(savedTracks.map((track) => track.track));
+        const rawTracks = savedTracks.map((track) => track.track);
+        const uniqueTracks = new Map<string, SpotifyApi.TrackObjectFull>();
+        for (const track of rawTracks) {
+            uniqueTracks.set(track.id, track);
+        }
+        const tracks = randomShuffle(Array.from(uniqueTracks.values()));
         const collection = new TrackCollection(tracks);
         return playTrackCollection(collection, clientContext);
     }
