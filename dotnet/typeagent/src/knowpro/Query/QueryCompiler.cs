@@ -157,7 +157,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm.Clone());
+                    compiledTerms[0].Terms.Add(searchTerm);
                     break;
 
             }
@@ -215,7 +215,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm.Clone());
+                    compiledTerms[0].Terms.Add(searchTerm);
                     break;
             }
         }
@@ -275,10 +275,12 @@ internal class QueryCompiler
                         propertyTerm.PropertyValue.Term.Weight ??= Settings.EntityTermMatchWeight;
                     }
                     return new MatchPropertySearchTermExpr(propertyTerm);
+
                 case "tag":
+                    return new MatchKnowledgeTypeExpr(propertyTerm.PropertyValue, KnowledgeType.Tag);
+
                 case "topic":
-                    // TODO
-                    throw new NotImplementedException();
+                    return new MatchKnowledgeTypeExpr(propertyTerm.PropertyValue, KnowledgeType.Topic);
             }
         }
         else
@@ -372,7 +374,8 @@ internal class QueryCompiler
         QueryOpExpr<MessageAccumulator> srcExpr,
         string? rawQueryText,
         SearchOptions? options
-    ) {
+    )
+    {
         var messageIndex = _conversation.SecondaryIndexes.MessageIndex;
         int messageCount = await messageIndex.GetCountAsync(
             _cancellationToken

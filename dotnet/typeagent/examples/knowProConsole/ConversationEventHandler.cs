@@ -6,6 +6,7 @@ namespace KnowProConsole;
 public class ConversationEventHandler
 {
     InplaceText _inplaceUpdate;
+    string _prevEventType = string.Empty;
 
     public ConversationEventHandler()
     {
@@ -47,6 +48,11 @@ public class ConversationEventHandler
 
     private void WriteProgress(BatchProgress progress, string label)
     {
+        if (_prevEventType != label)
+        {
+            ConsoleWriter.WriteLine();
+            _prevEventType = label;
+        }
         _inplaceUpdate.Write($"[{label}: {progress.CountCompleted} / {progress.Count}]");
     }
 }

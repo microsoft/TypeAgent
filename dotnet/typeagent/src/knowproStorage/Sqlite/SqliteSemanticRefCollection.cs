@@ -242,6 +242,60 @@ ORDER BY semref_id");
         return ValueTask.FromResult(GetSlice(startOrdinal, endOrdinal));
     }
 
+    public IList<SemanticRef> GetAll(KnowledgeType? kType = null)
+    {
+        return kType is null
+            ? _db.GetList(
+                "SELECT * FROM SemanticRefs",
+                ReadSemanticRef
+            )
+            : _db.GetList(
+@"SELECT * from SemanticRefs
+WHERE knowledge_type = @kType",
+            (cmd) => cmd.AddParameter("@kType", kType.ToString()),
+            ReadSemanticRef
+        );
+    }
+
+    public ValueTask<IList<SemanticRef>> GetAllAsync(KnowledgeType? kType = null, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetAll());
+    }
+
+    public IList<ScoredSemanticRefOrdinal> GetAllOrdinals(KnowledgeType? kType = null)
+    {
+        return kType is null
+            ? _db.GetList(
+                "SELECT semref_id, 1.0 FROM SemanticRefs",
+                (reader) =>
+                {
+                    return new ScoredSemanticRefOrdinal
+                    {
+                        SemanticRefOrdinal = reader.GetInt32(0),
+                        Score = reader.GetInt32(1)
+                    };
+                }
+            )
+            : _db.GetList(
+@"SELECT semref_id, 1.0 from SemanticRefs
+WHERE knowledge_type = @kType",
+            (cmd) => cmd.AddParameter("@kType", kType.ToString()),
+                (reader) =>
+                {
+                    return new ScoredSemanticRefOrdinal
+                    {
+                        SemanticRefOrdinal = reader.GetInt32(0),
+                        Score = reader.GetInt32(1)
+                    };
+                }
+        );
+    }
+
+    public ValueTask<IList<ScoredSemanticRefOrdinal>> GetAllOrdinalsAsync(KnowledgeType? kType = null, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetAllOrdinals(kType));
+    }
+
     public event Action<BatchProgress> OnKnowledgeExtracted;
 
     public void NotifyKnowledgeProgress(BatchProgress progress)

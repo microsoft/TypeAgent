@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace TypeAgent.Common;
 
-public static partial class StringExtensions 
+public static partial class StringExtensions
 {
     /// <summary>
     /// Splits an enumerable of strings into chunks, each chunk containing up to maxChunkLength strings and

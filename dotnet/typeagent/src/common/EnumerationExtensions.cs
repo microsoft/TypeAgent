@@ -87,4 +87,52 @@ public static class EnumerationExtensions
         topNList.Add(items);
         return topNList.ByRankAndClear();
     }
+
+    public static async ValueTask<List<T>> ToListAsync<T>(
+        this IAsyncEnumerable<T> source,
+        CancellationToken cancellationToken = default)
+    {
+        List<T> list = [];
+        await foreach (var item in source.WithCancellation(cancellationToken))
+        {
+            list.Add(item);
+        }
+        return list;
+    }
+
+    public static async ValueTask<List<TSelect>> SelectAsync<T, TSelect>(
+        this IAsyncEnumerable<T> source,
+        Func<T, TSelect?> selector,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentVerify.ThrowIfNull(selector, nameof(selector));
+
+        List<TSelect> list = [];
+        await foreach (var item in source.WithCancellation(cancellationToken))
+        {
+            TSelect? selected = selector(item);
+            if (selected is not null)
+            {
+                list.Add(selected);
+            }
+        }
+        return list;
+    }
+
+    public static async Task<List<T>> WhereAsync<T>(
+        this IAsyncEnumerable<T> source,
+        Func<T, bool> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentVerify.ThrowIfNull(predicate, nameof(predicate));
+        var list = new List<T>();
+        await foreach (var item in source.WithCancellation(cancellationToken))
+        {
+            if (predicate(item))
+            {
+                list.Add(item);
+            }
+        }
+        return list;
+    }
 }
