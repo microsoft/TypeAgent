@@ -15,7 +15,7 @@ public partial class RelevantKnowledge
 
     // Time period during which this knowledge was gathered
     [JsonPropertyName("timeRange")]
-    public DateRange? TimeRange { get; set; }
+    public TimestampRange? TimeRange { get; set; }
 };
 
 public partial class RelevantTopic : RelevantKnowledge
