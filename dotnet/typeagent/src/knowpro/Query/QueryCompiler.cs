@@ -275,10 +275,12 @@ internal class QueryCompiler
                         propertyTerm.PropertyValue.Term.Weight ??= Settings.EntityTermMatchWeight;
                     }
                     return new MatchPropertySearchTermExpr(propertyTerm);
+
                 case "tag":
+                    return new MatchKnowledgeTypeExpr(propertyTerm.PropertyValue, KnowledgeType.Tag);
+
                 case "topic":
-                    // TODO
-                    throw new NotImplementedException();
+                    return new MatchKnowledgeTypeExpr(propertyTerm.PropertyValue, KnowledgeType.Topic);
             }
         }
         else

@@ -130,4 +130,38 @@ internal static class LookupExtensions
         }
         return scoredRefs;
     }
+
+    public static async ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupAllAsync(
+        this ISemanticRefCollection semanticRefs,
+        QueryEvalContext context,
+        KnowledgeType knowledgeType,
+        TextRangesInScope? rangesInScope,
+        ScoreBooster? scoreBooster = null
+    )
+    {
+        IList<ScoredSemanticRefOrdinal> scoredOrdinals = await semanticRefs.GetAllOrdinalsAsync(
+            knowledgeType
+        ).ConfigureAwait(false);
+
+        if (rangesInScope is null)
+        {
+            return scoredOrdinals;
+        }
+
+        // TODO: avoid this double alloction
+        IList<TextRange> ranges = await semanticRefs.GetTextRangeAsync(
+            scoredOrdinals.ToOrdinals()
+        ).ConfigureAwait(false);
+
+        List<ScoredSemanticRefOrdinal> scoredRefs = [];
+        int count = ranges.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            if (rangesInScope.IsRangeInScope(ranges[i]))
+            {
+                scoredRefs.Add(scoredOrdinals[i]);
+            }
+        }
+        return scoredRefs;
+    }
 }
