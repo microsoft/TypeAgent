@@ -33,7 +33,7 @@ export type BrowserActionContext = {
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
     websiteCollection?: website.WebsiteCollection | undefined;
-    graphJsonStorage?: any | undefined; // GraphJsonStorageManager - will import when used
+    graphJsonStorage?: any | undefined; // GraphologyPersistenceManager - field name maintained for compatibility
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
