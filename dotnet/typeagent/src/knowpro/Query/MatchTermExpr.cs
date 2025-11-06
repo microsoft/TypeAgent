@@ -115,7 +115,7 @@ internal class MatchSearchTermExpr : MatchTermExpr
         }
     }
 
-    private ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
+    protected virtual ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
     {
         return context.SemanticRefIndex.LookupTermAsync(
             context,
@@ -289,6 +289,39 @@ internal class MatchPropertySearchTermExpr : MatchTermExpr
             propertyName,
             propertyValue,
             context.TextRangesInScope
+        );
+    }
+}
+
+internal class MatchKnowledgeTypeExpr : MatchSearchTermExpr
+{
+    KnowledgeType _kType;
+
+
+    public MatchKnowledgeTypeExpr(SearchTerm searchTerm, KnowledgeType kType)
+        : base(searchTerm)
+    {
+        _kType = kType;
+    }
+
+    protected override ValueTask<IList<ScoredSemanticRefOrdinal>?> LookupTermAsync(QueryEvalContext context, Term term)
+    {
+        if (SearchTerm.IsWildcard())
+        {
+            return context.Conversation.SemanticRefs.LookupAllAsync(
+                context,
+                _kType,
+                context.TextRangesInScope,
+                ScoreBooster
+            );
+        }
+
+        return context.SemanticRefIndex.LookupTermAsync(
+            context,
+            term,
+            context.TextRangesInScope,
+            _kType,
+            ScoreBooster
         );
     }
 }

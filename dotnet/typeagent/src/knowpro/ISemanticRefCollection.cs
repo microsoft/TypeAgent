@@ -6,14 +6,16 @@ namespace TypeAgent.KnowPro;
 public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 {
     ValueTask<TextRange> GetTextRangeAsync(int ordinal, CancellationToken cancellationToken = default);
+
     ValueTask<IList<TextRange>> GetTextRangeAsync(IList<int> ordinals, CancellationToken cancellationToken = default);
 
     ValueTask<KnowledgeType> GetKnowledgeTypeAsync(int ordinal, CancellationToken cancellation = default);
+
     ValueTask<IList<KnowledgeType>> GetKnowledgeTypeAsync(IList<int> ordinal, CancellationToken cancellation = default);
 
-    // TODO
-    // Add methods to enumerate by knowledge Type, casting appropriately.
-    // More efficient than looping over all 
+    ValueTask<IList<SemanticRef>> GetAllAsync(KnowledgeType? kType = null, CancellationToken cancellationToken = default);
+
+    ValueTask<IList<ScoredSemanticRefOrdinal>> GetAllOrdinalsAsync(KnowledgeType? kType = null, CancellationToken cancellationToken = default);
 
     event Action<BatchProgress> OnKnowledgeExtracted;
     void NotifyKnowledgeProgress(BatchProgress progress);
@@ -89,5 +91,31 @@ public static class SemanticRefCollectionExtensions
         return (topK is not null)
             ? entitites.GetTopK(topK.Value)
             : [.. entitites];
+    }
+
+    public static async ValueTask<IList<ConcreteEntity>> GetAllEntitiesAsync(
+        this ISemanticRefCollection semanticRefs,
+        CancellationToken cancellation = default
+    )
+    {
+        var list = await semanticRefs.GetAllAsync(
+            KnowledgeType.Entity,
+            cancellation
+        ).ConfigureAwait(false);
+
+        return [.. list.Select((sr) => sr.AsEntity())];
+    }
+
+    public static async ValueTask<IList<Topic>> GetAllTopicsAsync(
+        this ISemanticRefCollection semanticRefs,
+        CancellationToken cancellation = default
+    )
+    {
+        var list = await semanticRefs.GetAllAsync(
+            KnowledgeType.Topic,
+            cancellation
+        ).ConfigureAwait(false);
+
+        return [.. list.Select((sr) => sr.AsTopic())];
     }
 }

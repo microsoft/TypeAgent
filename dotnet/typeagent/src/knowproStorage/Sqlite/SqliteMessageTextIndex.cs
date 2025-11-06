@@ -208,7 +208,7 @@ public class SqliteMessageTextIndex : IMessageTextIndex
             string[] placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var rows = _db.Enumerate(
                 $@"
-SELECT msg_id, embedding FROM MessageTextIndex
+SELECT msg_id, embedding
 FROM MessageTextIndex WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ORDER BY msg_id",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),

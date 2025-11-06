@@ -401,16 +401,10 @@ public class TestCommands : ICommandModule
         NamedArgs namedArgs = new NamedArgs(args);
         AnswerContext context = new AnswerContext();
 
-        List<ConcreteEntity> entities = await conversation.SemanticRefs.SelectAsync<SemanticRef, ConcreteEntity>(
-            (sr) => sr.KnowledgeType == KnowledgeType.Entity ? sr.AsEntity() : null,
-            cancellationToken
-        );
+        IList<ConcreteEntity> entities = await conversation.SemanticRefs.GetAllEntitiesAsync(cancellationToken);
         entities = [.. entities.ToDistinct()];
 
-        List<Topic> topics = await conversation.SemanticRefs.SelectAsync<SemanticRef, Topic>(
-            (sr) => sr.KnowledgeType == KnowledgeType.Topic ? sr.AsTopic() : null,
-            cancellationToken
-        );
+        IList<Topic> topics = await conversation.SemanticRefs.GetAllTopicsAsync(cancellationToken);
         topics = [.. topics.ToDistinct()];
 
         context.Entities = entities.Map((e) => new RelevantEntity { Entity = e });

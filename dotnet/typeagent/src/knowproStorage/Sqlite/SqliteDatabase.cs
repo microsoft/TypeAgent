@@ -71,6 +71,20 @@ public class SqliteDatabase : IDisposable
         return reader.GetList<T>(cb);
     }
 
+    public List<T> GetList<T>(string commandText, Action<SqliteCommand> addParams, Func<SqliteDataReader, T> cb)
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
+
+        using var command = CreateCommand(commandText);
+        if (addParams is not null)
+        {
+            addParams(command);
+        }
+        using var reader = command.ExecuteReader();
+
+        return reader.GetList<T>(cb);
+    }
+
     public List<T>? GetListOrNull<T>(string commandText, Func<SqliteDataReader, T> cb)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(commandText, nameof(commandText));
