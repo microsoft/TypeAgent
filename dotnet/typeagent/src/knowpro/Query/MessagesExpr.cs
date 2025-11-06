@@ -147,7 +147,9 @@ internal class MatchMessagesBySimilarityExpr : QueryOpExpr<IList<ScoredMessageOr
     {
         if (GetScopeExpr is not null)
         {
-            context.TextRangesInScope = await GetScopeExpr.EvalAsync(context);
+            context.TextRangesInScope = await GetScopeExpr.EvalAsync(
+                context
+            ).ConfigureAwait(false);
         }
 
         var rangesInScope = context.TextRangesInScope;

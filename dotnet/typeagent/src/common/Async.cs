@@ -31,8 +31,19 @@ public static class Async
         ArgumentVerify.ThrowIfNull(processor, nameof(processor));
 
         return concurrency <= 1
-            ? await MapSequentialAsync(list, processor, progress, cancellationToken)
-            : await MapConcurrentAsync(list, concurrency, processor, progress, cancellationToken);
+            ? await MapSequentialAsync(
+                list,
+                processor,
+                progress,
+                cancellationToken
+            ).ConfigureAwait(false)
+            : await MapConcurrentAsync(
+                list,
+                concurrency,
+                processor,
+                progress,
+                cancellationToken
+            ).ConfigureAwait(false);
     }
 
     private static async Task<List<TResult>> MapSequentialAsync<T, TResult>(
@@ -47,7 +58,7 @@ public static class Async
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = await processor(list[i], cancellationToken);
+            var result = await processor(list[i], cancellationToken).ConfigureAwait(false);
             results.Add(result);
             if (progress is not null)
             {
@@ -75,7 +86,7 @@ public static class Async
             var batch = list.Slice(startAt, batchSize);
             var tasks = batch.Map<T, Task<TResult>>((t) => processor(t, cancellationToken));
 
-            var batchResults = await Task.WhenAll(tasks);
+            var batchResults = await Task.WhenAll(tasks).ConfigureAwait(false);
 
             results.AddRange(batchResults);
             if (progress is not null)

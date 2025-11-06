@@ -387,7 +387,7 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestAnswer")
         {
-            Args.Arg<string>("text")
+            Args.Arg<string>("question")
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.AnswerAsync);
@@ -399,6 +399,20 @@ public class TestCommands : ICommandModule
         IConversation conversation = EnsureConversation();
 
         NamedArgs namedArgs = new NamedArgs(args);
+        string? question = namedArgs.Get<string>("question");
+        if (string.IsNullOrEmpty(question))
+        {
+            return;
+        }
+        IList<AnswerResponse> answers = await conversation.AnswerQuestionAsync(
+            question,
+            null,
+            null,
+            null,
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
+        /*
         AnswerContext context = new AnswerContext();
 
         IList<ConcreteEntity> entities = await conversation.SemanticRefs.GetAllEntitiesAsync(cancellationToken);
@@ -414,6 +428,7 @@ public class TestCommands : ICommandModule
         context.Messages = messages.Map((m) => new RelevantMessage(m));
         string prompt = context.ToPromptString();
         ConsoleWriter.WriteLine(prompt);
+        */
     }
 
     private IConversation EnsureConversation()

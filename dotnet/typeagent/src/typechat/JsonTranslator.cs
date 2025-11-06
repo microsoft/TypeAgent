@@ -178,7 +178,7 @@ public class JsonTranslator<T> : IJsonTranslator
     /// <returns></returns>
     public async Task<object> TranslateToObjectAsync(string request, CancellationToken cancelToken)
     {
-        return await TranslateAsync(request, cancelToken);
+        return await TranslateAsync(request, cancelToken).ConfigureAwait(false);
     }
 
     /// <summary>

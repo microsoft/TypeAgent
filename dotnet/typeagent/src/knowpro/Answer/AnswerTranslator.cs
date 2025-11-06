@@ -19,6 +19,11 @@ public class AnswerTranslator : IAnswerTranslator
 
     public async ValueTask<AnswerResponse> TranslateAsync(string request, IList<IPromptSection>? preamble = null, CancellationToken cancellationToken = default)
     {
-        return await _translator.TranslateAsync(request, preamble, null, cancellationToken);
+        return await _translator.TranslateAsync(
+            request,
+            preamble,
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 }

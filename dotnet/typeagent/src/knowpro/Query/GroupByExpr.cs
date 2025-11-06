@@ -26,7 +26,9 @@ internal class GroupByKnowledgeTypeExpr : QueryOpExpr<IDictionary<KnowledgeType,
         {
             // TODO: SemanticRefs are cached during processing.
             // But we could also just get knowledgeTypes directly from the storage provider
-            var semanticRef = await context.SemanticRefs.GetAsync(match.Value);
+            var semanticRef = await context.SemanticRefs.GetAsync(
+                match.Value
+            ).ConfigureAwait(false);
             var group = groups.GetValueOrDefault(semanticRef.KnowledgeType);
             if (group is null)
             {

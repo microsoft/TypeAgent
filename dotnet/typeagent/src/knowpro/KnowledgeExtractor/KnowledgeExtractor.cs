@@ -33,7 +33,10 @@ public class KnowledgeExtractor : IKnowledgeExtractor
     {
         ArgumentVerify.ThrowIfNullOrEmpty(message, nameof(message));
 
-        var knowledgeResponse = await GetKnowledgeResponseWithRetryAsync(message, cancellationToken);
+        var knowledgeResponse = await GetKnowledgeResponseWithRetryAsync(
+            message,
+            cancellationToken
+        ).ConfigureAwait(false);
 
         return knowledgeResponse;
     }
@@ -50,7 +53,7 @@ public class KnowledgeExtractor : IKnowledgeExtractor
             GetKnowledgeResponseWithRetryAsync,
             null,
             cancellationToken
-        );
+        ).ConfigureAwait(false);
     }
 
     private static JsonTranslator<ExtractedKnowledge> CreateTranslator(IChatModel model)

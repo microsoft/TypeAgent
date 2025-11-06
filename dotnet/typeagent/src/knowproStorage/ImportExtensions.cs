@@ -55,7 +55,11 @@ public static class ImportExtensions
         {
             if (!indexItem.SemanticRefOrdinals.IsNullOrEmpty())
             {
-                await semanticRefIndex.AddEntriesAsync(indexItem.Term, indexItem.SemanticRefOrdinals, cancellationToken).ConfigureAwait(false);
+                await semanticRefIndex.AddEntriesAsync(
+                    indexItem.Term,
+                    indexItem.SemanticRefOrdinals,
+                    cancellationToken
+                ).ConfigureAwait(false);
             }
         }
     }
@@ -89,11 +93,17 @@ public static class ImportExtensions
         }
         if (!data.SemanticRefs.IsNullOrEmpty())
         {
-            await conversation.ImportSemanticRefsAsync(data.SemanticRefs, cancellationToken).ConfigureAwait(false);
+            await conversation.ImportSemanticRefsAsync(
+                data.SemanticRefs,
+                cancellationToken
+            ).ConfigureAwait(false);
         }
         if (data.SemanticIndexData is not null)
         {
-            await conversation.ImportTermToSemanticRefIndexAsync(data.SemanticIndexData.Items, cancellationToken).ConfigureAwait(false);
+            await conversation.ImportTermToSemanticRefIndexAsync(
+                data.SemanticIndexData.Items,
+                cancellationToken
+            ).ConfigureAwait(false);
         }
     }
 }
