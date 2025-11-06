@@ -46,11 +46,10 @@ internal class RelevantKnowledgeCollector
         for (int i = 0; i < candidateEntities.Count; ++i)
         {
             var relevantEntity = new RelevantEntity();
-            int offset = i * 2;
-            var (origin, audience) = _metaMerger.Collect(meta[offset], meta[offset + 1]);
-            relevantEntity.Origin = OneOrManyItem.Create(origin);
-            relevantEntity.Audience = OneOrManyItem.Create(audience);
-            relevantEntity.TimeRange = this.GetTimeRange(timestamps[offset], timestamps[offset + 1]);
+            int minOffset = i * 2;
+            relevantEntity.Entity = candidateEntities[i].Item.ToConcrete();
+            SetMetadata(relevantEntity, meta, timestamps, minOffset, minOffset + 1);
+            relevantEntities.Add(relevantEntity);
         }
         return relevantEntities;
     }
@@ -68,7 +67,7 @@ internal class RelevantKnowledgeCollector
 
         IList<Scored<SemanticRef>> semanticRefs = await _conversation.GetSemanticRefReader().GetScoredAsync(
             searchResult.SemanticRefMatches,
-            KnowledgeType.Entity,
+            KnowledgeType.Topic,
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -88,13 +87,25 @@ internal class RelevantKnowledgeCollector
         for (int i = 0; i < candidateTopics.Count; ++i)
         {
             var relevantTopic = new RelevantTopic();
-            int offset = i * 2;
-            var (origin, audience) = _metaMerger.Collect(meta[offset], meta[offset + 1]);
-            relevantTopic.Origin = OneOrManyItem.Create(origin);
-            relevantTopic.Audience = OneOrManyItem.Create(audience);
-            relevantTopic.TimeRange = this.GetTimeRange(timestamps[offset], timestamps[offset + 1]);
+            int minOffset = i * 2;
+            relevantTopic.Topic = candidateTopics[i].Item.Topic;
+            SetMetadata(relevantTopic, meta, timestamps, minOffset, minOffset + 1);
         }
         return relevantTopics;
+    }
+
+    private void SetMetadata(
+        RelevantKnowledge knowledge,
+        IList<IMessageMetadata> meta,
+        IList<string> timestamps,
+        int min,
+        int max
+    )
+    {
+        var (origin, audience) = _metaMerger.Collect(meta[min], meta[max]);
+        knowledge.Origin = OneOrManyItem.Create(origin);
+        knowledge.Audience = OneOrManyItem.Create(audience);
+        knowledge.TimeRange = this.GetTimeRange(timestamps[min], timestamps[max]);
     }
 
     private List<int> CollectOrdinals(IEnumerable<Scored<MergedEntity>> candidates)
