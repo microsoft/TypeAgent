@@ -8,7 +8,7 @@ name: build-package-shell
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "dev/robgruen/upload_artifact"]
   pull_request:
     branches: ["main"]
   merge_group:
@@ -87,3 +87,12 @@ jobs:
         working-directory: ts
         shell: bash
         run: pnpm run shell:package
+      
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        name: Upload build artifact
+        with:
+          name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }} 
+          path: dist/**                             # files/dirs to include
+          retention-days: 7
+
