@@ -3,7 +3,33 @@
 
 import { createRequire } from "module";
 import registerDebug from "debug";
-import type { HierarchicalTopicRecord, TopicRelationship } from "../tables.js";
+
+// Local interfaces for removed SQLite table types
+interface HierarchicalTopicRecord {
+    url: string;
+    domain: string;
+    topicId: string;
+    topicName: string;
+    level: number;
+    parentTopicId?: string;
+    confidence: number;
+    keywords?: string;
+    sourceTopicNames?: string;
+    extractionDate: string;
+}
+
+interface TopicRelationship {
+    fromTopic: string;
+    toTopic: string;
+    relationshipType: string;
+    strength: number;
+    metadata?: string;
+    sourceUrls?: string;
+    cooccurrenceCount?: number;
+    firstSeen?: string;
+    lastSeen?: string;
+    updated: string;
+}
 
 const require = createRequire(import.meta.url);
 const Graph = require("graphology");

@@ -3,7 +3,40 @@
 
 import { createRequire } from "module";
 import registerDebug from "debug";
-import type { HierarchicalTopicRecord, TopicMetrics } from "../tables.js";
+
+// Local interfaces for removed SQLite table types  
+interface HierarchicalTopicRecord {
+    url: string;
+    domain: string;
+    topicId: string;
+    topicName: string;
+    level: number;
+    parentTopicId?: string;
+    confidence: number;
+    keywords?: string;
+    sourceTopicNames?: string;
+    extractionDate: string;
+}
+
+interface TopicMetrics {
+    topicId: string;
+    topicName: string;
+    documentCount: number;
+    domainCount: number;
+    degreeCentrality: number;
+    betweennessCentrality: number;
+    firstSeen?: string;
+    lastSeen?: string;
+    activityPeriod: number;
+    avgConfidence: number;
+    maxConfidence: number;
+    totalRelationships: number;
+    strongRelationships: number;
+    entityCount: number;
+    topEntities?: string;
+    updated: string;
+}
+
 import { MetricsCalculator } from "./metricsCalculator.js";
 import type { CooccurrenceData } from "./topicGraphBuilder.js";
 
