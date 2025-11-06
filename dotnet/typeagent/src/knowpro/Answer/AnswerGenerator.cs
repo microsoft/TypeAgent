@@ -6,6 +6,11 @@ namespace TypeAgent.KnowPro.Answer;
 
 public class AnswerGenerator : IAnswerGenerator
 {
+    public AnswerGenerator(IChatModel model)
+        : this(new AnswerGeneratorSettings(model))
+    {
+    }
+
     public AnswerGenerator(AnswerGeneratorSettings settings)
     {
         ArgumentVerify.ThrowIfNull(settings, nameof(settings));
