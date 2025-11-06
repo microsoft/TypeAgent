@@ -492,12 +492,16 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
         // DEBUG: Log sample relationships before transformation
         const sampleRels = hybridRelationships.slice(0, 10);
-        console.log(`[GRAPH DATA PROVIDER] Sample ${sampleRels.length} relationships before transformation:`);
+        console.log(
+            `[GRAPH DATA PROVIDER] Sample ${sampleRels.length} relationships before transformation:`,
+        );
         sampleRels.forEach((rel, i) => {
             const from = rel.fromEntity || rel.source || rel.from;
             const to = rel.toEntity || rel.target || rel.to;
             const type = rel.relationshipType || rel.type;
-            console.log(`  ${i+1}. ${from} -[${type}]-> ${to} (confidence: ${rel.confidence})`);
+            console.log(
+                `  ${i + 1}. ${from} -[${type}]-> ${to} (confidence: ${rel.confidence})`,
+            );
         });
 
         const transformed = hybridRelationships
@@ -515,24 +519,38 @@ class GraphDataProviderImpl implements GraphDataProvider {
             .filter((rel) => rel !== null)
             .filter((rel) => rel!.from !== rel!.to) as RelationshipEdge[]; // Filter out self-referential edges
 
-        console.log(`[GRAPH DATA PROVIDER] Filtered out self-referential edges: ${hybridRelationships.length} -> ${transformed.length}`);
+        console.log(
+            `[GRAPH DATA PROVIDER] Filtered out self-referential edges: ${hybridRelationships.length} -> ${transformed.length}`,
+        );
 
         // DEBUG: Log sample relationships after transformation
         const sampleTransformed = transformed.slice(0, 10);
-        console.log(`[GRAPH DATA PROVIDER] Sample ${sampleTransformed.length} relationships after transformation:`);
+        console.log(
+            `[GRAPH DATA PROVIDER] Sample ${sampleTransformed.length} relationships after transformation:`,
+        );
         sampleTransformed.forEach((rel, i) => {
-            console.log(`  ${i+1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`);
+            console.log(
+                `  ${i + 1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`,
+            );
         });
 
         // DEBUG: Log sample non-self-referential relationships after transformation
-        const nonSelfTransformed = transformed.filter(rel => rel.from !== rel.to).slice(0, 10);
+        const nonSelfTransformed = transformed
+            .filter((rel) => rel.from !== rel.to)
+            .slice(0, 10);
         if (nonSelfTransformed.length > 0) {
-            console.log(`[GRAPH DATA PROVIDER] Sample ${nonSelfTransformed.length} non-self-referential relationships after transformation:`);
+            console.log(
+                `[GRAPH DATA PROVIDER] Sample ${nonSelfTransformed.length} non-self-referential relationships after transformation:`,
+            );
             nonSelfTransformed.forEach((rel, i) => {
-                console.log(`  ${i+1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`);
+                console.log(
+                    `  ${i + 1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`,
+                );
             });
         } else {
-            console.log(`[GRAPH DATA PROVIDER] No non-self-referential relationships found in sample.`);
+            console.log(
+                `[GRAPH DATA PROVIDER] No non-self-referential relationships found in sample.`,
+            );
         }
 
         return transformed;
@@ -544,21 +562,29 @@ class GraphDataProviderImpl implements GraphDataProvider {
             this.transformSampleCount = 0;
         }
         if (this.transformSampleCount < 10) {
-            console.log(`[GRAPH DATA PROVIDER] INPUT SAMPLE ${this.transformSampleCount + 1}:`, JSON.stringify(hybridRel, null, 2));
+            console.log(
+                `[GRAPH DATA PROVIDER] INPUT SAMPLE ${this.transformSampleCount + 1}:`,
+                JSON.stringify(hybridRel, null, 2),
+            );
             this.transformSampleCount++;
         }
-        
+
         // Handle the actual backend relationship field structure
         const fromEntity =
             hybridRel.fromEntity || hybridRel.from || hybridRel.source || "";
         const toEntity =
             hybridRel.toEntity || hybridRel.to || hybridRel.target || "";
-        
+
         // STRICT validation - no fallbacks for relationship type
         const relType = hybridRel.relationshipType || hybridRel.type;
         if (!relType) {
-            console.error(`[GRAPH DATA PROVIDER] ERROR: Missing relationship type in input:`, hybridRel);
-            throw new Error(`Relationship missing required type field: ${JSON.stringify(hybridRel)}`);
+            console.error(
+                `[GRAPH DATA PROVIDER] ERROR: Missing relationship type in input:`,
+                hybridRel,
+            );
+            throw new Error(
+                `Relationship missing required type field: ${JSON.stringify(hybridRel)}`,
+            );
         }
 
         const strength = this.normalizeStrength(

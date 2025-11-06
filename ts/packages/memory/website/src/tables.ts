@@ -385,10 +385,6 @@ export class ActionKnowledgeCorrelationTable extends ms.sqlite.SqliteDataFrame {
     }
 }
 
-
-
-
-
 // Topic-to-entity relationships table
 export interface TopicEntityRelation {
     topicId: string;
@@ -463,74 +459,85 @@ export class TopicEntityRelationTable extends ms.sqlite.SqliteDataFrame {
 }
 
 /**
- * Cleanup function to drop deprecated SQLite tables and their indexes from existing databases.
- * These tables were used for graph storage but are now replaced with Graphology.
+ * Cleanup function to drop legacy SQLite tables and their indexes from existing databases.
  * Call this function after database initialization to clean up legacy data.
  */
 export function dropDeprecatedTables(db: sqlite.Database): void {
     try {
-        console.log("[dropDeprecatedTables] Cleaning up deprecated SQLite tables...");
+        console.log(
+            "[dropDeprecatedTables] Cleaning up legacy SQLite tables...",
+        );
 
-        // Drop deprecated tables in order (relationships first to avoid foreign key issues)
-        const deprecatedTables = [
+        // Drop legacy tables in order
+        const legacyTables = [
             "relationships",
-            "communities", 
+            "communities",
             "hierarchicalTopics",
             "topicRelationships",
-            "topicMetrics"
+            "topicMetrics",
         ];
 
-        for (const tableName of deprecatedTables) {
+        for (const tableName of legacyTables) {
             try {
                 // Check if table exists before dropping
                 const tableExists = db
-                    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+                    .prepare(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    )
                     .get(tableName);
-                
+
                 if (tableExists) {
                     db.exec(`DROP TABLE IF EXISTS ${tableName}`);
-                    console.log(`[dropDeprecatedTables] Dropped table: ${tableName}`);
+                    console.log(
+                        `[dropDeprecatedTables] Dropped table: ${tableName}`,
+                    );
                 }
             } catch (error) {
-                console.warn(`[dropDeprecatedTables] Warning dropping table ${tableName}:`, error);
+                console.warn(
+                    `[dropDeprecatedTables] Warning dropping table ${tableName}:`,
+                    error,
+                );
             }
         }
 
         // Drop associated indexes that may still exist
-        const deprecatedIndexes = [
+        const legacyIndexes = [
             "idx_relationships_from",
-            "idx_relationships_to", 
+            "idx_relationships_to",
             "idx_relationships_strength",
             "idx_relationships_from_strength",
             "idx_relationships_to_strength",
             "idx_topicrels_fromtopic",
             "idx_topicrels_totopic",
-            "idx_topicrels_strength", 
+            "idx_topicrels_strength",
             "idx_topicrels_from_strength",
-            "idx_topicrels_to_strength"
+            "idx_topicrels_to_strength",
         ];
 
-        for (const indexName of deprecatedIndexes) {
+        for (const indexName of legacyIndexes) {
             try {
                 const indexExists = db
-                    .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?")
+                    .prepare(
+                        "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
+                    )
                     .get(indexName);
-                
+
                 if (indexExists) {
                     db.exec(`DROP INDEX IF EXISTS ${indexName}`);
-                    console.log(`[dropDeprecatedTables] Dropped index: ${indexName}`);
+                    console.log(
+                        `[dropDeprecatedTables] Dropped index: ${indexName}`,
+                    );
                 }
             } catch (error) {
-                console.warn(`[dropDeprecatedTables] Warning dropping index ${indexName}:`, error);
+                console.warn(
+                    `[dropDeprecatedTables] Warning dropping index ${indexName}:`,
+                    error,
+                );
             }
         }
 
-        console.log("[dropDeprecatedTables] Cleanup complete. Graph storage now uses pure Graphology.");
+        console.log("[dropDeprecatedTables] Cleanup complete.");
     } catch (error) {
         console.error("[dropDeprecatedTables] Error during cleanup:", error);
     }
 }
-
-
-
-

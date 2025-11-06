@@ -740,7 +740,8 @@ class EntityGraphView {
 
     private async loadGlobalGraphData(): Promise<any> {
         // Use the processed API that includes proper relationship types and filtering
-        const globalGraphResult = await this.extensionService.getGlobalImportanceLayer();
+        const globalGraphResult =
+            await this.extensionService.getGlobalImportanceLayer();
 
         // Process communities for color assignment (if they exist)
         const processedCommunities = (globalGraphResult.communities || []).map(
@@ -1207,16 +1208,21 @@ class EntityGraphView {
                     const from =
                         r.from || (r as any).relatedEntity || "Unknown";
                     const to = r.to || graphData.centerEntity || "Unknown";
-                    
+
                     // STRICT validation - no fallbacks for relationship type
                     const type = r.type || (r as any).relationshipType;
                     if (!type) {
-                        console.error(`[ENTITY GRAPH VIEW] ERROR: Missing relationship type in input:`, r);
+                        console.error(
+                            `[ENTITY GRAPH VIEW] ERROR: Missing relationship type in input:`,
+                            r,
+                        );
                         continue; // Skip this relationship rather than crashing
                     }
-                    
+
                     // Log relationship type resolution for debugging
-                    console.log(`[ENTITY GRAPH VIEW] RELATIONSHIP: "${r.type}" / "${(r as any).relationshipType}" → "${type}"`);
+                    console.log(
+                        `[ENTITY GRAPH VIEW] RELATIONSHIP: "${r.type}" / "${(r as any).relationshipType}" → "${type}"`,
+                    );
 
                     // Check if both entities exist in the graph
                     if (!entityNames.has(from) || !entityNames.has(to)) {
@@ -1483,22 +1489,17 @@ class EntityGraphView {
                 return;
             }
 
-            
-
-            
-                console.log(
-                    `[EntityGraphView] Using graphology preset layout with community colors (${importanceData.metadata.graphologyLayout.elements?.length || 0} elements)`,
-                );
-                const presetLayout = {
-                    elements: importanceData.metadata.graphologyLayout.elements,
-                    layoutDuration:
-                        importanceData.metadata.graphologyLayout.layoutDuration,
-                    avgSpacing:
-                        importanceData.metadata.graphologyLayout.avgSpacing,
-                    communityCount:
-                        importanceData.metadata.graphologyLayout.communityCount,
-                };
-            
+            console.log(
+                `[EntityGraphView] Using graphology preset layout with community colors (${importanceData.metadata.graphologyLayout.elements?.length || 0} elements)`,
+            );
+            const presetLayout = {
+                elements: importanceData.metadata.graphologyLayout.elements,
+                layoutDuration:
+                    importanceData.metadata.graphologyLayout.layoutDuration,
+                avgSpacing: importanceData.metadata.graphologyLayout.avgSpacing,
+                communityCount:
+                    importanceData.metadata.graphologyLayout.communityCount,
+            };
 
             await this.visualizer.loadGlobalGraph(presetLayout);
             this.hideGraphLoading();

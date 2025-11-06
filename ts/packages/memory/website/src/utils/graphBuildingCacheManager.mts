@@ -6,7 +6,6 @@
  * Reduces database queries by caching frequently accessed data during graph construction
  */
 
-// Local interface for removed SQLite table type
 interface Relationship {
     id: string;
     fromEntity: string;

@@ -4,7 +4,6 @@
 import { createRequire } from "module";
 import registerDebug from "debug";
 
-// Local interface for removed SQLite table type
 interface HierarchicalTopicRecord {
     url: string;
     domain: string;

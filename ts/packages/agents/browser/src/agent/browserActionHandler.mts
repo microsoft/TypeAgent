@@ -792,10 +792,10 @@ async function initializeWebsiteIndex(
                     websiteIndexes[0].path,
                     "index",
                 );
-            
+
             // Initialize JSON storage alongside SQLite
             await initializeGraphologyStorage(context, websiteIndexes[0].path);
-            
+
             debug(
                 `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
             );
@@ -853,7 +853,10 @@ async function initializeWebsiteIndex(
                                 };
 
                                 // Initialize JSON storage and perform migration if needed
-                                await initializeGraphologyStorage(context, indexPath);
+                                await initializeGraphologyStorage(
+                                    context,
+                                    indexPath,
+                                );
 
                                 debug(
                                     `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
@@ -933,23 +936,25 @@ async function initializeWebsiteIndex(
  */
 async function initializeGraphologyStorage(
     context: SessionContext<BrowserActionContext>,
-    indexPath: string
+    indexPath: string,
 ): Promise<void> {
     try {
         debug("Initializing Graphology storage");
-        
+
         // Create storage path for Graphology files
         const graphologyStoragePath = path.join(indexPath, "storage");
-        
+
         // Create Graphology persistence manager
-        const persistenceManager = createGraphologyPersistenceManager(graphologyStoragePath);
-        
+        const persistenceManager = createGraphologyPersistenceManager(
+            graphologyStoragePath,
+        );
+
         // Store reference in context for later use (maintaining compatibility)
         if (!context.agentContext.graphJsonStorage) {
             context.agentContext.graphJsonStorage = {
                 manager: persistenceManager,
                 lastEntityGraphUpdate: null,
-                lastTopicGraphUpdate: null
+                lastTopicGraphUpdate: null,
             };
         }
 

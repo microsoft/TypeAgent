@@ -288,9 +288,10 @@ class TopicGraphView {
             );
 
             // TODO: Implement topic viewport neighborhood functionality
-            console.warn("[TopicGraphView] Topic viewport neighborhood not implemented - returning empty data");
+            console.warn(
+                "[TopicGraphView] Topic viewport neighborhood not implemented - returning empty data",
+            );
             return { topics: [], relationships: [], maxDepth: 0 };
-
         } catch (error) {
             console.error(
                 "[TopicGraphView] Error fetching neighborhood:",

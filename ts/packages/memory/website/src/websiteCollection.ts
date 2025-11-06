@@ -1537,8 +1537,11 @@ export class WebsiteCollection
             // Check for common Graphology persistence patterns
             // This could be expanded based on how the graphs are actually persisted
             const baseDir = path.dirname(this.dbPath || ".");
-            const baseName = path.basename(this.dbPath || "graph", path.extname(this.dbPath || ""));
-            
+            const baseName = path.basename(
+                this.dbPath || "graph",
+                path.extname(this.dbPath || ""),
+            );
+
             // Common patterns for Graphology persistence files
             const possibleGraphFiles = [
                 path.join(baseDir, `${baseName}_entity_graph.json`),
@@ -1549,12 +1552,14 @@ export class WebsiteCollection
                 path.join(baseDir, "entity_graph.json"),
                 path.join(baseDir, "topic_graph.json"),
             ];
-            
+
             // Check if any of the expected graph files exist
             for (const filePath of possibleGraphFiles) {
                 try {
                     if (fs.existsSync(filePath)) {
-                        debug(`[Knowledge Graph] Found existing graph file: ${filePath}`);
+                        debug(
+                            `[Knowledge Graph] Found existing graph file: ${filePath}`,
+                        );
                         return true;
                     }
                 } catch (error) {
@@ -1562,7 +1567,7 @@ export class WebsiteCollection
                     continue;
                 }
             }
-            
+
             debug(`[Knowledge Graph] No existing graph files found`);
             return false;
         } catch (error) {
@@ -1576,7 +1581,7 @@ export class WebsiteCollection
      */
     public async buildGraph(options?: { urlLimit?: number }): Promise<{
         entityGraph?: any; // Graphology Graph
-        topicGraph?: any;  // Graphology Graph
+        topicGraph?: any; // Graphology Graph
         metadata?: {
             buildTime: number;
             entityCount: number;
@@ -1619,7 +1624,7 @@ export class WebsiteCollection
             `[Knowledge Graph] Extracted ${entities.length} unique entities in ${Date.now() - startTime}ms`,
         );
 
-        // PHASE 1: CREATE GRAPHOLOGY GRAPHS DIRECTLY
+        // CREATE GRAPHOLOGY GRAPHS DIRECTLY
         debug(`[Knowledge Graph] Building Graphology graphs directly...`);
         const graphologyStartTime = Date.now();
         const entityGraph = new Graph({ type: "undirected" });
@@ -1627,30 +1632,44 @@ export class WebsiteCollection
 
         // Build entity graph directly
         const entityGraphStart = Date.now();
-        await this.buildEntityGraphDirect(entityGraph, cacheManager, websitesToProcess);
+        await this.buildEntityGraph(
+            entityGraph,
+            cacheManager,
+            websitesToProcess,
+        );
         const graphologyEntityTime = Date.now() - entityGraphStart;
-        debug(`[Knowledge Graph] Direct entity graph built in ${graphologyEntityTime}ms`);
+        debug(
+            `[Knowledge Graph] Entity graph built in ${graphologyEntityTime}ms`,
+        );
 
         // Build entity relationships directly
         const relationshipDirectStart = Date.now();
-        await this.buildRelationshipsDirect(entityGraph, cacheManager);
+        await this.buildRelationships(entityGraph, cacheManager);
         const graphologyRelationshipTime = Date.now() - relationshipDirectStart;
-        debug(`[Knowledge Graph] Direct relationships built in ${graphologyRelationshipTime}ms`);
+        debug(
+            `[Knowledge Graph] Entity relationships built in ${graphologyRelationshipTime}ms`,
+        );
 
         // Detect communities directly on graph
         const communityDirectStart = Date.now();
-        await this.detectCommunitiesDirect(entityGraph, null);
+        await this.detectCommunities(entityGraph, null);
         const graphologyCommunityTime = Date.now() - communityDirectStart;
-        debug(`[Knowledge Graph] Direct communities detected in ${graphologyCommunityTime}ms`);
+        debug(
+            `[Knowledge Graph] Communities detected in ${graphologyCommunityTime}ms`,
+        );
 
         // Build topic graph directly
         const topicDirectStart = Date.now();
-        await this.buildTopicGraphDirect(topicGraph, cacheManager, urlLimit);
+        await this.buildTopicGraph(topicGraph, cacheManager, urlLimit);
         const graphologyTopicTime = Date.now() - topicDirectStart;
-        debug(`[Knowledge Graph] Direct topic graph built in ${graphologyTopicTime}ms`);
+        debug(
+            `[Knowledge Graph] Topic graph built in ${graphologyTopicTime}ms`,
+        );
 
         const graphologyTotalTime = Date.now() - graphologyStartTime;
-        debug(`[Knowledge Graph] Graphology-only approach completed in ${graphologyTotalTime}ms`);
+        debug(
+            `[Knowledge Graph] Graphology-only approach completed in ${graphologyTotalTime}ms`,
+        );
 
         const totalTime = Date.now() - startTime;
         debug(
@@ -1661,12 +1680,26 @@ export class WebsiteCollection
         debug(`[Comparison] Starting detailed analysis of both approaches...`);
 
         // Calculate Graphology graph metrics
-        const graphologyEntityNodes = entityGraph.nodes().filter((nodeId: string) => 
-            entityGraph.getNodeAttribute(nodeId, 'type') === 'entity');
-        const graphologyCommunityNodes = entityGraph.nodes().filter((nodeId: string) => 
-            entityGraph.getNodeAttribute(nodeId, 'type') === 'community');
-        const graphologyRelationshipEdges = entityGraph.edges().filter((edgeId: string) => 
-            entityGraph.getEdgeAttribute(edgeId, 'relationshipType') === 'co_occurs');
+        const graphologyEntityNodes = entityGraph
+            .nodes()
+            .filter(
+                (nodeId: string) =>
+                    entityGraph.getNodeAttribute(nodeId, "type") === "entity",
+            );
+        const graphologyCommunityNodes = entityGraph
+            .nodes()
+            .filter(
+                (nodeId: string) =>
+                    entityGraph.getNodeAttribute(nodeId, "type") ===
+                    "community",
+            );
+        const graphologyRelationshipEdges = entityGraph
+            .edges()
+            .filter(
+                (edgeId: string) =>
+                    entityGraph.getEdgeAttribute(edgeId, "relationshipType") ===
+                    "co_occurs",
+            );
 
         const graphologyMetrics = {
             entityCount: graphologyEntityNodes.length,
@@ -1674,7 +1707,7 @@ export class WebsiteCollection
             communityCount: graphologyCommunityNodes.length,
             topicCount: topicGraph.order,
             totalNodes: entityGraph.order,
-            totalEdges: entityGraph.size
+            totalEdges: entityGraph.size,
         };
 
         // Return metadata based on Graphology results
@@ -1683,10 +1716,13 @@ export class WebsiteCollection
             entityCount: graphologyMetrics.entityCount,
             relationshipCount: graphologyMetrics.relationshipCount,
             communityCount: graphologyMetrics.communityCount,
-            topicCount: graphologyMetrics.topicCount
+            topicCount: graphologyMetrics.topicCount,
         };
 
-        debug(`[Knowledge Graph] Graphology graphs created successfully:`, metadata);
+        debug(
+            `[Knowledge Graph] Graphology graphs created successfully:`,
+            metadata,
+        );
 
         return { entityGraph, topicGraph, metadata };
     }
@@ -1699,54 +1735,28 @@ export class WebsiteCollection
         debug(
             `Graph update requested for ${newWebsites.length} new websites - delegating to buildGraph()`,
         );
-        
+
         // With pure Graphology architecture, we rebuild the entire graph
         // as it's now fast enough and avoids SQLite dependency
         await this.buildGraph();
-        
+
         debug(`Graph update completed for ${newWebsites.length} new websites`);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     // ============================================================================
     // DIRECT GRAPHOLOGY CONSTRUCTION METHODS
     // ============================================================================
 
     /**
-     * Build entity graph directly in Graphology format (Phase 1 implementation)
-     * Replaces storeEntitiesInDatabase() with direct graph construction
+     * Build entity graph in Graphology format
      */
-    private async buildEntityGraphDirect(
+    private async buildEntityGraph(
         entityGraph: any, // Graph type
         cacheManager: any,
-        websitesToProcess: Website[]
+        websitesToProcess: Website[],
     ): Promise<void> {
         debug(`[Direct Build] Adding entities to Graphology graph`);
-        
+
         const extractionDate = new Date().toISOString();
         let entityCount = 0;
 
@@ -1770,86 +1780,116 @@ export class WebsiteCollection
                         extractionDate,
                         // Additional metadata for graph algorithms
                         importance: 0,
-                        community: -1
+                        community: -1,
                     });
                 } else {
                     // Update existing node with additional domains/URLs
-                    const existingDomains = entityGraph.getNodeAttribute(entityName, 'domains') || [];
-                    const existingUrls = entityGraph.getNodeAttribute(entityName, 'urls') || [];
-                    
-                    entityGraph.setNodeAttribute(entityName, 'domains', 
-                        [...new Set([...existingDomains, website.metadata.domain])]);
-                    entityGraph.setNodeAttribute(entityName, 'urls', 
-                        [...new Set([...existingUrls, url])]);
+                    const existingDomains =
+                        entityGraph.getNodeAttribute(entityName, "domains") ||
+                        [];
+                    const existingUrls =
+                        entityGraph.getNodeAttribute(entityName, "urls") || [];
+
+                    entityGraph.setNodeAttribute(entityName, "domains", [
+                        ...new Set([
+                            ...existingDomains,
+                            website.metadata.domain,
+                        ]),
+                    ]);
+                    entityGraph.setNodeAttribute(entityName, "urls", [
+                        ...new Set([...existingUrls, url]),
+                    ]);
                 }
                 entityCount++;
             }
         }
 
-        debug(`[Direct Build] Added ${entityCount} entity occurrences as ${entityGraph.order} unique nodes`);
+        debug(
+            `[Direct Build] Added ${entityCount} entity occurrences as ${entityGraph.order} unique nodes`,
+        );
     }
 
     /**
-     * Build entity relationships directly in Graphology format (Phase 1 implementation)
-     * Replaces buildRelationships() with direct graph construction
+     * Build entity relationships in Graphology format
      */
-    private async buildRelationshipsDirect(
+    private async buildRelationships(
         entityGraph: any, // Graph type
-        cacheManager: any
+        cacheManager: any,
     ): Promise<void> {
         debug(`[Direct Build] Adding relationships to Graphology graph`);
 
         // Get cached relationships (same logic as buildRelationships)
         const cachedRelationships = cacheManager.getAllEntityRelationships();
-        debug(`[Direct Build] Found ${cachedRelationships.length} cached relationships`);
+        debug(
+            `[Direct Build] Found ${cachedRelationships.length} cached relationships`,
+        );
 
         let storedCount = 0;
         for (const cachedRel of cachedRelationships) {
             const confidence = Math.min(cachedRel.count / 10, 1.0); // Normalize to 0-1
 
             // Only add if both nodes exist in the graph
-            if (entityGraph.hasNode(cachedRel.fromEntity) && entityGraph.hasNode(cachedRel.toEntity)) {
+            if (
+                entityGraph.hasNode(cachedRel.fromEntity) &&
+                entityGraph.hasNode(cachedRel.toEntity)
+            ) {
                 // Avoid duplicate edges
-                if (!entityGraph.hasEdge(cachedRel.fromEntity, cachedRel.toEntity)) {
-                    entityGraph.addEdge(cachedRel.fromEntity, cachedRel.toEntity, {
-                        relationshipType: "co_occurs",
-                        confidence,
-                        count: cachedRel.count,
-                        sources: cachedRel.sources,
-                        updated: new Date().toISOString()
-                    });
+                if (
+                    !entityGraph.hasEdge(
+                        cachedRel.fromEntity,
+                        cachedRel.toEntity,
+                    )
+                ) {
+                    entityGraph.addEdge(
+                        cachedRel.fromEntity,
+                        cachedRel.toEntity,
+                        {
+                            relationshipType: "co_occurs",
+                            confidence,
+                            count: cachedRel.count,
+                            sources: cachedRel.sources,
+                            updated: new Date().toISOString(),
+                        },
+                    );
                     storedCount++;
                 }
             }
 
-            if (storedCount % 100 === 0 || storedCount === cachedRelationships.length) {
-                debug(`[Direct Build] Added ${storedCount}/${cachedRelationships.length} relationship edges`);
+            if (
+                storedCount % 100 === 0 ||
+                storedCount === cachedRelationships.length
+            ) {
+                debug(
+                    `[Direct Build] Added ${storedCount}/${cachedRelationships.length} relationship edges`,
+                );
             }
         }
 
-        debug(`[Direct Build] Finished adding ${storedCount} relationship edges to graph`);
+        debug(
+            `[Direct Build] Finished adding ${storedCount} relationship edges to graph`,
+        );
     }
 
     /**
-     * Detect communities directly on Graphology graph (Phase 1 implementation)
-     * Replaces detectCommunities() with direct graph analysis
+     * Detect communities on Graphology graph
      */
-    private async detectCommunitiesDirect(
+    private async detectCommunities(
         entityGraph: any, // Graph type
-        algorithms: any
+        algorithms: any,
     ): Promise<void> {
-        debug(`[Direct Build] Detecting communities on Graphology graph using MetricsCalculator`);
+        debug(
+            `[Direct Build] Detecting communities on Graphology graph using MetricsCalculator`,
+        );
 
-        // Use MetricsCalculator for community detection instead of OptimizedGraphAlgorithms
-        const { MetricsCalculator } = await import("./graph/metricsCalculator.js");
-        const metricsCalculator = new MetricsCalculator();
-        
-        // MetricsCalculator expects a hierarchical graph, but we can use our entity graph
+        const { MetricsCalculator } = await import(
+            "./graph/metricsCalculator.js"
+        );
+        const metricsCalculator = new MetricsCalculator(); // MetricsCalculator expects a hierarchical graph, but we can use our entity graph
         const { communities } = metricsCalculator.calculateMetrics(entityGraph);
 
-        // Convert MetricsCalculator output (Map<nodeId, communityId>) to grouped communities
+        // Convert community output to grouped communities
         const communityGroups = new Map<number, string[]>();
-        
+
         for (const [nodeId, communityId] of communities) {
             if (!communityGroups.has(communityId)) {
                 communityGroups.set(communityId, []);
@@ -1857,7 +1897,9 @@ export class WebsiteCollection
             communityGroups.get(communityId)!.push(nodeId);
         }
 
-        debug(`[Direct Build] Detected ${communityGroups.size} communities using MetricsCalculator`);
+        debug(
+            `[Direct Build] Detected ${communityGroups.size} communities using MetricsCalculator`,
+        );
 
         // Convert to format expected by the rest of the method
         const communityList = Array.from(communityGroups.entries())
@@ -1865,10 +1907,10 @@ export class WebsiteCollection
             .map(([communityIndex, nodes]) => ({
                 id: communityIndex.toString(),
                 nodes: nodes,
-                density: 0.5 // Default density since MetricsCalculator doesn't provide it
+                density: 0.5, // Default density
             }));
 
-        debug(`[Direct Build] Detected ${communityList.length} communities using MetricsCalculator`);
+        debug(`[Direct Build] Detected ${communityList.length} communities`);
 
         // Store community info directly in the graph instead of separate SQLite table
         let storedCount = 0;
@@ -1881,13 +1923,17 @@ export class WebsiteCollection
                 entities: community.nodes,
                 size: community.nodes.length,
                 density: community.density,
-                updated: new Date().toISOString()
+                updated: new Date().toISOString(),
             });
 
             // Update entity nodes with community membership
             for (const entityName of community.nodes) {
                 if (entityGraph.hasNode(entityName)) {
-                    entityGraph.setNodeAttribute(entityName, 'community', community.id);
+                    entityGraph.setNodeAttribute(
+                        entityName,
+                        "community",
+                        community.id,
+                    );
                 }
             }
 
@@ -1896,7 +1942,7 @@ export class WebsiteCollection
                 if (entityGraph.hasNode(entityName)) {
                     entityGraph.addEdge(communityId, entityName, {
                         type: "membership",
-                        strength: 1.0
+                        strength: 1.0,
                     });
                 }
             }
@@ -1907,27 +1953,31 @@ export class WebsiteCollection
             }
         }
 
-        debug(`[Direct Build] Finished adding ${storedCount} communities to graph`);
+        debug(
+            `[Direct Build] Finished adding ${storedCount} communities to graph`,
+        );
     }
 
     /**
-     * Build topic graph directly in Graphology format (Phase 1 implementation)
-     * Preserves hierarchical topic construction but stores in Graphology instead of SQLite
+     * Build topic graph in Graphology format
      */
-    private async buildTopicGraphDirect(
+    private async buildTopicGraph(
         topicGraph: any, // Graph type
         cacheManager: any,
-        urlLimit?: number
+        urlLimit?: number,
     ): Promise<void> {
         debug(`[Direct Build] Building topic graph directly`);
 
         // Build hierarchical topics using the original LLM logic but store in Graphology
-        const hierarchicalTopics = await this.buildHierarchicalTopicsForGraph(cacheManager, urlLimit);
+        const hierarchicalTopics = await this.buildHierarchicalTopicsForGraph(
+            cacheManager,
+            urlLimit,
+        );
 
         // Add topic nodes to graph
         let addedNodes = 0;
         let skippedDuplicates = 0;
-        
+
         for (const topic of hierarchicalTopics) {
             // Check if topic node already exists to avoid duplicates
             if (!topicGraph.hasNode(topic.topicId)) {
@@ -1943,62 +1993,89 @@ export class WebsiteCollection
                         keywords: topic.keywords,
                         sourceTopicNames: topic.sourceTopicNames,
                         relevance: 0.8,
-                        extractionDate: topic.extractionDate
+                        extractionDate: topic.extractionDate,
                     });
                     addedNodes++;
                 } catch (error) {
                     // Handle any remaining edge case duplicates gracefully
-                    if (error instanceof Error && error.message.includes('already exist')) {
-                        debug(`[Direct Build] WARNING: Skipping duplicate topic node '${topic.topicId}' (${topic.topicName}) from ${topic.url}`);
+                    if (
+                        error instanceof Error &&
+                        error.message.includes("already exist")
+                    ) {
+                        debug(
+                            `[Direct Build] WARNING: Skipping duplicate topic node '${topic.topicId}' (${topic.topicName}) from ${topic.url}`,
+                        );
                         skippedDuplicates++;
                     } else {
                         throw error; // Re-throw non-duplicate errors
                     }
                 }
             } else {
-                debug(`[Direct Build] WARNING: Skipping duplicate topic node '${topic.topicId}' (${topic.topicName}) - already exists in graph`);
+                debug(
+                    `[Direct Build] WARNING: Skipping duplicate topic node '${topic.topicId}' (${topic.topicName}) - already exists in graph`,
+                );
                 skippedDuplicates++;
             }
         }
-        
-        debug(`[Direct Build] Added ${addedNodes} topic nodes, skipped ${skippedDuplicates} duplicates`);
+
+        debug(
+            `[Direct Build] Added ${addedNodes} topic nodes, skipped ${skippedDuplicates} duplicates`,
+        );
 
         // Add hierarchy edges (parent-child relationships)
         let addedEdges = 0;
         let skippedEdgeDuplicates = 0;
-        
+
         for (const topic of hierarchicalTopics) {
-            if (topic.parentTopicId && topicGraph.hasNode(topic.parentTopicId)) {
+            if (
+                topic.parentTopicId &&
+                topicGraph.hasNode(topic.parentTopicId)
+            ) {
                 // Check if edge already exists to avoid duplicates
                 if (!topicGraph.hasEdge(topic.parentTopicId, topic.topicId)) {
                     try {
                         topicGraph.addEdge(topic.parentTopicId, topic.topicId, {
                             type: "parent_child",
-                            strength: 1.0
+                            strength: 1.0,
                         });
                         addedEdges++;
                     } catch (error) {
                         // Handle any remaining edge case duplicates gracefully
-                        if (error instanceof Error && error.message.includes('already exist')) {
-                            debug(`[Direct Build] WARNING: Skipping duplicate edge ${topic.parentTopicId} -> ${topic.topicId}`);
+                        if (
+                            error instanceof Error &&
+                            error.message.includes("already exist")
+                        ) {
+                            debug(
+                                `[Direct Build] WARNING: Skipping duplicate edge ${topic.parentTopicId} -> ${topic.topicId}`,
+                            );
                             skippedEdgeDuplicates++;
                         } else {
                             throw error; // Re-throw non-duplicate errors
                         }
                     }
                 } else {
-                    debug(`[Direct Build] WARNING: Skipping duplicate edge ${topic.parentTopicId} -> ${topic.topicId} - already exists`);
+                    debug(
+                        `[Direct Build] WARNING: Skipping duplicate edge ${topic.parentTopicId} -> ${topic.topicId} - already exists`,
+                    );
                     skippedEdgeDuplicates++;
                 }
             }
         }
-        
-        debug(`[Direct Build] Added ${addedEdges} hierarchy edges, skipped ${skippedEdgeDuplicates} edge duplicates`);
+
+        debug(
+            `[Direct Build] Added ${addedEdges} hierarchy edges, skipped ${skippedEdgeDuplicates} edge duplicates`,
+        );
 
         // Build topic relationships using existing Graphology-based approach
-        await this.buildTopicRelationshipsForGraph(topicGraph, hierarchicalTopics, cacheManager);
+        await this.buildTopicRelationshipsForGraph(
+            topicGraph,
+            hierarchicalTopics,
+            cacheManager,
+        );
 
-        debug(`[Direct Build] Built topic graph with ${topicGraph.order} nodes`);
+        debug(
+            `[Direct Build] Built topic graph with ${topicGraph.order} nodes`,
+        );
     }
 
     /**
@@ -2006,20 +2083,27 @@ export class WebsiteCollection
      */
     private async buildHierarchicalTopicsForGraph(
         cacheManager: any,
-        urlLimit?: number
+        urlLimit?: number,
     ): Promise<any[]> {
         debug(`[Direct Build] Building hierarchical topics for graph`);
 
         // Get websites to process - same logic as original updateHierarchicalTopics
         const websites = this.getWebsites();
-        const websitesToProcess = urlLimit ? websites.slice(0, urlLimit) : websites;
-        
+        const websitesToProcess = urlLimit
+            ? websites.slice(0, urlLimit)
+            : websites;
+
         let globalHierarchy: any | undefined;
-        const websiteUrlMap = new Map<string, { url: string; domain: string }>();
+        const websiteUrlMap = new Map<
+            string,
+            { url: string; domain: string }
+        >();
 
         // Extract and merge topic hierarchies from websites (EXACT same logic as original)
         for (const website of websitesToProcess) {
-            const docHierarchy = (website.knowledge as any)?.topicHierarchy as any | undefined;
+            const docHierarchy = (website.knowledge as any)?.topicHierarchy as
+                | any
+                | undefined;
 
             if (!docHierarchy) {
                 continue;
@@ -2029,7 +2113,10 @@ export class WebsiteCollection
 
             if (docHierarchy.topicMap instanceof Map) {
                 topicMap = docHierarchy.topicMap;
-            } else if (typeof docHierarchy.topicMap === "object" && docHierarchy.topicMap !== null) {
+            } else if (
+                typeof docHierarchy.topicMap === "object" &&
+                docHierarchy.topicMap !== null
+            ) {
                 topicMap = new Map(Object.entries(docHierarchy.topicMap));
             } else {
                 continue;
@@ -2040,7 +2127,10 @@ export class WebsiteCollection
             const websiteDomain = website.metadata.domain || "unknown";
             for (const [topicId] of topicMap) {
                 if (!websiteUrlMap.has(topicId)) {
-                    websiteUrlMap.set(topicId, { url: websiteUrl, domain: websiteDomain });
+                    websiteUrlMap.set(topicId, {
+                        url: websiteUrl,
+                        domain: websiteDomain,
+                    });
                 }
             }
 
@@ -2053,7 +2143,10 @@ export class WebsiteCollection
                 globalHierarchy = hierarchyWithMap;
             } else {
                 // Merge hierarchies using simplified logic (no SQLite relationships)
-                globalHierarchy = this.mergeHierarchiesForGraph(globalHierarchy, hierarchyWithMap);
+                globalHierarchy = this.mergeHierarchiesForGraph(
+                    globalHierarchy,
+                    hierarchyWithMap,
+                );
             }
         }
 
@@ -2063,19 +2156,21 @@ export class WebsiteCollection
         }
 
         // Convert to hierarchical topic records for graph storage
-        const hierarchicalTopics = this.convertTopicHierarchyForGraph(globalHierarchy, websiteUrlMap);
+        const hierarchicalTopics = this.convertTopicHierarchyForGraph(
+            globalHierarchy,
+            websiteUrlMap,
+        );
 
-        debug(`[Direct Build] Built ${hierarchicalTopics.length} hierarchical topic records`);
+        debug(
+            `[Direct Build] Built ${hierarchicalTopics.length} hierarchical topic records`,
+        );
         return hierarchicalTopics;
     }
 
     /**
      * Merge hierarchies for graph (simplified version without SQLite relationships)
      */
-    private mergeHierarchiesForGraph(
-        existing: any,
-        newHierarchy: any
-    ): any {
+    private mergeHierarchiesForGraph(existing: any, newHierarchy: any): any {
         // Convert existing topicMap to Map if it's a plain object (from deserialization)
         const existingTopicMap =
             existing.topicMap instanceof Map
@@ -2131,13 +2226,16 @@ export class WebsiteCollection
      */
     private convertTopicHierarchyForGraph(
         globalHierarchy: any,
-        websiteUrlMap: Map<string, { url: string; domain: string }>
+        websiteUrlMap: Map<string, { url: string; domain: string }>,
     ): any[] {
         const records: any[] = [];
-        
+
         const processTopicRecursive = (topic: any) => {
-            const urlInfo = websiteUrlMap.get(topic.id) || { url: "unknown", domain: "unknown" };
-            
+            const urlInfo = websiteUrlMap.get(topic.id) || {
+                url: "unknown",
+                domain: "unknown",
+            };
+
             const record = {
                 url: urlInfo.url,
                 domain: urlInfo.domain,
@@ -2148,11 +2246,11 @@ export class WebsiteCollection
                 confidence: topic.confidence || 0.5,
                 keywords: topic.keywords || [],
                 sourceTopicNames: topic.sourceTopicNames || [],
-                extractionDate: new Date().toISOString()
+                extractionDate: new Date().toISOString(),
             };
-            
+
             records.push(record);
-            
+
             // Process children
             if (topic.childIds) {
                 for (const childId of topic.childIds) {
@@ -2169,7 +2267,9 @@ export class WebsiteCollection
             processTopicRecursive(rootTopic);
         }
 
-        debug(`[Direct Build] Converted ${records.length} topics to graph format`);
+        debug(
+            `[Direct Build] Converted ${records.length} topics to graph format`,
+        );
         return records;
     }
 
@@ -2179,26 +2279,36 @@ export class WebsiteCollection
     private async buildTopicRelationshipsForGraph(
         topicGraph: any,
         hierarchicalTopics: any[],
-        cacheManager: any
+        cacheManager: any,
     ): Promise<void> {
         debug(`[Direct Build] Building topic relationships on graph`);
 
         // Extract co-occurrence data from cache
         const cooccurrences = this.extractCooccurrencesForGraph(cacheManager);
-        debug(`[Direct Build] Extracted ${cooccurrences.length} topic co-occurrences`);
+        debug(
+            `[Direct Build] Extracted ${cooccurrences.length} topic co-occurrences`,
+        );
 
         // Add co-occurrence edges between topics
         for (const cooccurrence of cooccurrences) {
-            if (topicGraph.hasNode(cooccurrence.fromTopic) && 
+            if (
+                topicGraph.hasNode(cooccurrence.fromTopic) &&
                 topicGraph.hasNode(cooccurrence.toTopic) &&
-                !topicGraph.hasEdge(cooccurrence.fromTopic, cooccurrence.toTopic)) {
-                
-                topicGraph.addEdge(cooccurrence.fromTopic, cooccurrence.toTopic, {
-                    type: "topic_cooccurrence",
-                    strength: Math.min(cooccurrence.count / 5, 1.0), // Normalize
-                    count: cooccurrence.count,
-                    urls: cooccurrence.urls || []
-                });
+                !topicGraph.hasEdge(
+                    cooccurrence.fromTopic,
+                    cooccurrence.toTopic,
+                )
+            ) {
+                topicGraph.addEdge(
+                    cooccurrence.fromTopic,
+                    cooccurrence.toTopic,
+                    {
+                        type: "topic_cooccurrence",
+                        strength: Math.min(cooccurrence.count / 5, 1.0), // Normalize
+                        count: cooccurrence.count,
+                        urls: cooccurrence.urls || [],
+                    },
+                );
             }
         }
 
@@ -2210,7 +2320,8 @@ export class WebsiteCollection
      */
     private extractCooccurrencesForGraph(cacheManager: any): any[] {
         // Get topic relationships from cache (same as original buildTopicGraphWithGraphology)
-        const cachedRelationships = cacheManager.getAllTopicRelationships?.() || [];
+        const cachedRelationships =
+            cacheManager.getAllTopicRelationships?.() || [];
         return cachedRelationships.map((rel: any) => ({
             fromTopic: rel.fromTopic,
             toTopic: rel.toTopic,
@@ -2231,8 +2342,10 @@ export class WebsiteCollection
 
         // Extract and merge topic hierarchies from websites
         for (const website of websites) {
-            const docHierarchy = (website.knowledge as any)?.topicHierarchy as any | undefined;
-            
+            const docHierarchy = (website.knowledge as any)?.topicHierarchy as
+                | any
+                | undefined;
+
             if (!docHierarchy) {
                 continue;
             }
@@ -2240,7 +2353,10 @@ export class WebsiteCollection
             let topicMap: Map<string, any>;
             if (docHierarchy.topicMap instanceof Map) {
                 topicMap = docHierarchy.topicMap;
-            } else if (typeof docHierarchy.topicMap === "object" && docHierarchy.topicMap !== null) {
+            } else if (
+                typeof docHierarchy.topicMap === "object" &&
+                docHierarchy.topicMap !== null
+            ) {
                 topicMap = new Map(Object.entries(docHierarchy.topicMap));
             } else {
                 continue;
@@ -2254,7 +2370,10 @@ export class WebsiteCollection
             if (!globalHierarchy) {
                 globalHierarchy = hierarchyWithMap;
             } else {
-                globalHierarchy = this.mergeHierarchiesForGraph(globalHierarchy, hierarchyWithMap);
+                globalHierarchy = this.mergeHierarchiesForGraph(
+                    globalHierarchy,
+                    hierarchyWithMap,
+                );
             }
         }
 
@@ -2273,11 +2392,11 @@ export class WebsiteCollection
                 confidence: topic.confidence || 0.5,
                 keywords: topic.keywords || [],
                 sourceTopicNames: topic.sourceTopicNames || [],
-                extractionDate: new Date().toISOString()
+                extractionDate: new Date().toISOString(),
             };
-            
+
             records.push(record);
-            
+
             // Process children
             if (topic.childIds) {
                 for (const childId of topic.childIds) {
@@ -2305,8 +2424,8 @@ export class WebsiteCollection
         try {
             // Get hierarchy to find the topic
             const hierarchy = this.getTopicHierarchy();
-            const topic = hierarchy.find(t => t.topicId === topicId);
-            
+            const topic = hierarchy.find((t) => t.topicId === topicId);
+
             if (!topic) {
                 return null;
             }
@@ -2324,16 +2443,20 @@ export class WebsiteCollection
                 descendantCount: 0, // Total descendants
                 lastUpdated: topic.extractionDate || new Date().toISOString(),
                 keywords: topic.keywords || [],
-                sourceTopicNames: topic.sourceTopicNames || []
+                sourceTopicNames: topic.sourceTopicNames || [],
             };
 
             // Count children from hierarchy
-            const children = hierarchy.filter(t => t.parentTopicId === topicId);
+            const children = hierarchy.filter(
+                (t) => t.parentTopicId === topicId,
+            );
             metrics.childCount = children.length;
 
             // Count all descendants recursively
             const countDescendants = (parentId: string): number => {
-                const directChildren = hierarchy.filter(t => t.parentTopicId === parentId);
+                const directChildren = hierarchy.filter(
+                    (t) => t.parentTopicId === parentId,
+                );
                 let count = directChildren.length;
                 for (const child of directChildren) {
                     count += countDescendants(child.topicId);
@@ -2347,7 +2470,12 @@ export class WebsiteCollection
             let websiteCount = 0;
             for (const website of websites) {
                 const topics = (website.knowledge as any)?.topics || [];
-                if (topics.some((t: any) => t.id === topicId || t.name === topic.topicName)) {
+                if (
+                    topics.some(
+                        (t: any) =>
+                            t.id === topicId || t.name === topic.topicName,
+                    )
+                ) {
                     websiteCount++;
                 }
             }
@@ -2355,10 +2483,13 @@ export class WebsiteCollection
 
             // TODO: If we have access to Graphology graphs, compute more advanced metrics
             // For now, return basic metrics that should satisfy browser agent needs
-            
+
             return metrics;
         } catch (error) {
-            console.warn(`Failed to compute metrics for topic ${topicId}:`, error);
+            console.warn(
+                `Failed to compute metrics for topic ${topicId}:`,
+                error,
+            );
             return null;
         }
     }
@@ -2368,11 +2499,13 @@ export class WebsiteCollection
      * Uses existing hierarchy logic but operates on current data
      */
     public async mergeTopicHierarchiesWithLLM(
-        analyzeFunc: (hierarchies: any[]) => Promise<any>
+        analyzeFunc: (hierarchies: any[]) => Promise<any>,
     ): Promise<{ mergeCount: number; changes?: any[] }> {
         try {
-            console.log("[Merge] Starting topic hierarchy merge with LLM analysis...");
-            
+            console.log(
+                "[Merge] Starting topic hierarchy merge with LLM analysis...",
+            );
+
             // Get current hierarchy data
             const currentHierarchy = this.getTopicHierarchy();
             if (currentHierarchy.length === 0) {
@@ -2382,7 +2515,7 @@ export class WebsiteCollection
 
             // Use LLM to analyze topic relationships and suggest merges
             const analysisResult = await analyzeFunc(currentHierarchy);
-            
+
             if (!analysisResult || !analysisResult.suggestedMerges) {
                 console.log("[Merge] No merge suggestions from LLM analysis");
                 return { mergeCount: 0 };
@@ -2395,24 +2528,27 @@ export class WebsiteCollection
             let mergeCount = 0;
 
             for (const merge of analysisResult.suggestedMerges) {
-                if (merge.confidence > 0.7) { // Only apply high-confidence merges
+                if (merge.confidence > 0.7) {
+                    // Only apply high-confidence merges
                     changes.push({
                         action: "merge",
                         sourceTopic: merge.sourceTopic,
                         targetTopic: merge.targetTopic,
-                        confidence: merge.confidence
+                        confidence: merge.confidence,
                     });
                     mergeCount++;
                 }
             }
 
-            console.log(`[Merge] Applied ${mergeCount} topic merges based on LLM analysis`);
-            
+            console.log(
+                `[Merge] Applied ${mergeCount} topic merges based on LLM analysis`,
+            );
+
             // TODO: In a full implementation, this would:
             // 1. Update the website knowledge data with merged topics
             // 2. Rebuild the topic graph with the new hierarchy
             // 3. Update any cached data structures
-            
+
             return { mergeCount, changes };
         } catch (error) {
             console.error("Error in mergeTopicHierarchiesWithLLM:", error);
@@ -2426,21 +2562,25 @@ export class WebsiteCollection
      */
     public async updateHierarchicalTopics(websites: any[]): Promise<void> {
         try {
-            console.log(`[Hierarchy Update] Processing ${websites.length} websites for topic hierarchy update`);
-            
+            console.log(
+                `[Hierarchy Update] Processing ${websites.length} websites for topic hierarchy update`,
+            );
+
             // For now, this is a simplified implementation
-            // In the original SQLite version, this would update the hierarchicalTopics table
+            // Store hierarchical topics directly
             // Here we ensure the websites are properly integrated into the collection
-            
+
             // Add or update websites in the collection
             for (const website of websites) {
                 this.addWebsiteWithDeduplication(website);
             }
-            
+
             // The hierarchy will be rebuilt on-demand when getTopicHierarchy() is called
             // This matches the new architecture where we don't cache hierarchy in SQLite
-            
-            console.log(`[Hierarchy Update] Completed processing ${websites.length} websites`);
+
+            console.log(
+                `[Hierarchy Update] Completed processing ${websites.length} websites`,
+            );
         } catch (error) {
             console.error("Error in updateHierarchicalTopics:", error);
             throw error;
@@ -2453,21 +2593,25 @@ export class WebsiteCollection
      */
     public async updateGraphIncremental(websites: any[]): Promise<void> {
         try {
-            console.log(`[Graph Incremental] Processing ${websites.length} websites for incremental graph update`);
-            
+            console.log(
+                `[Graph Incremental] Processing ${websites.length} websites for incremental graph update`,
+            );
+
             // Add or update websites in the collection
             for (const website of websites) {
                 this.addWebsiteWithDeduplication(website);
             }
-            
+
             // In the new architecture, we use buildGraph() for full rebuilds
             // For incremental updates, we could optimize by checking if a graph already exists
             // and only rebuilding if necessary, but for now we keep it simple
-            
+
             // The graph will be rebuilt on-demand when needed
             // This matches the new architecture where graphs are built from current data
-            
-            console.log(`[Graph Incremental] Completed processing ${websites.length} websites`);
+
+            console.log(
+                `[Graph Incremental] Completed processing ${websites.length} websites`,
+            );
         } catch (error) {
             console.error("Error in updateGraphIncremental:", error);
             throw error;

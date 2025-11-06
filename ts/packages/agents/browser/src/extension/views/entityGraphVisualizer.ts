@@ -1135,7 +1135,6 @@ export class EntityGraphVisualizer {
         );
     }
 
-
     // Storage for position comparison debugging
     private globalNodePositionsBeforeTransition: Map<
         string,
@@ -1455,16 +1454,6 @@ export class EntityGraphVisualizer {
             "[DEBUG-VIEWPORT] ================================================",
         );
     }
-
-
-
-
-
-
-
-
-
-
 
     /**
      * Apply layout to the graph
@@ -1923,7 +1912,10 @@ export class EntityGraphVisualizer {
         const strength = data.strength || 0;
         const type = data.type;
         if (!type) {
-            console.error(`[ENTITY GRAPH VISUALIZER] ERROR: Edge missing type:`, data);
+            console.error(
+                `[ENTITY GRAPH VISUALIZER] ERROR: Edge missing type:`,
+                data,
+            );
             return;
         }
 
@@ -2327,6 +2319,4 @@ export class EntityGraphVisualizer {
             neighborhoodViewport?: any;
         }
     > = new Map();
-
-
 }

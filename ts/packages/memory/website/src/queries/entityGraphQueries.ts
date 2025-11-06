@@ -70,7 +70,9 @@ export class EntityGraphQueries {
      * Build internal indexes for fast queries
      */
     private buildIndexes(): void {
-        debug(`Building indexes for ${this.jsonData.metadata.nodeCount} entities`);
+        debug(
+            `Building indexes for ${this.jsonData.metadata.nodeCount} entities`,
+        );
 
         // Node indexes
         this.nodeMap = new Map();
@@ -95,14 +97,18 @@ export class EntityGraphQueries {
 
         // Relationship index
         this.relationshipMap = new Map();
-        
+
         // Log sample edges from disk data
         const sampleEdges = this.jsonData.edges.slice(0, 10);
-        debug(`[ENTITY GRAPH LOADING] Sample ${sampleEdges.length} edges from disk:`);
+        debug(
+            `[ENTITY GRAPH LOADING] Sample ${sampleEdges.length} edges from disk:`,
+        );
         sampleEdges.forEach((edge, i) => {
-            debug(`  ${i+1}. ${edge.source} -[${edge.type}]-> ${edge.target} (confidence: ${edge.confidence})`);
+            debug(
+                `  ${i + 1}. ${edge.source} -[${edge.type}]-> ${edge.target} (confidence: ${edge.confidence})`,
+            );
         });
-        
+
         for (const edge of this.jsonData.edges) {
             // Index by source
             if (!this.relationshipMap.has(edge.source)) {
@@ -123,7 +129,9 @@ export class EntityGraphQueries {
             this.communityMap.set(community.id, community);
         }
 
-        debug(`Indexes built: ${this.nodeMap.size} nodes, ${this.relationshipMap.size} relationship entries, ${this.communityMap.size} communities`);
+        debug(
+            `Indexes built: ${this.nodeMap.size} nodes, ${this.relationshipMap.size} relationship entries, ${this.communityMap.size} communities`,
+        );
     }
 
     /**
@@ -137,13 +145,18 @@ export class EntityGraphQueries {
     /**
      * Get top entities by frequency (mirrors KnowledgeEntityTable.getTopEntities)
      */
-    getTopEntities(limit: number = 20): Array<{ entityName: string; count: number }> {
+    getTopEntities(
+        limit: number = 20,
+    ): Array<{ entityName: string; count: number }> {
         const entityCounts = new Map<string, number>();
 
         // Count entity occurrences across domains/URLs
         for (const node of this.jsonData.nodes) {
             const count = node.metadata.urls.length; // Use URL count as proxy for frequency
-            entityCounts.set(node.name, (entityCounts.get(node.name) || 0) + count);
+            entityCounts.set(
+                node.name,
+                (entityCounts.get(node.name) || 0) + count,
+            );
         }
 
         return Array.from(entityCounts.entries())
@@ -156,7 +169,9 @@ export class EntityGraphQueries {
      * Get entities by names (mirrors KnowledgeEntityTable.getEntitiesByNames)
      */
     getEntitiesByNames(entityNames: string[]): EntityNode[] {
-        const validNames = entityNames.filter(name => name && name.trim() !== "");
+        const validNames = entityNames.filter(
+            (name) => name && name.trim() !== "",
+        );
         const entities: EntityNode[] = [];
 
         for (const name of validNames) {
@@ -172,13 +187,19 @@ export class EntityGraphQueries {
     /**
      * Get entity counts with aggregated metrics (mirrors KnowledgeEntityTable.getEntityCounts)
      */
-    getEntityCounts(entityNames: string[]): Array<{ 
-        entityName: string; 
-        count: number; 
-        avgConfidence: number 
+    getEntityCounts(entityNames: string[]): Array<{
+        entityName: string;
+        count: number;
+        avgConfidence: number;
     }> {
-        const validNames = entityNames.filter(name => name && name.trim() !== "");
-        const results: Array<{ entityName: string; count: number; avgConfidence: number }> = [];
+        const validNames = entityNames.filter(
+            (name) => name && name.trim() !== "",
+        );
+        const results: Array<{
+            entityName: string;
+            count: number;
+            avgConfidence: number;
+        }> = [];
 
         for (const name of validNames) {
             const entity = this.nodeMap.get(name);
@@ -186,7 +207,7 @@ export class EntityGraphQueries {
                 results.push({
                     entityName: entity.name,
                     count: entity.metadata.urls.length,
-                    avgConfidence: entity.confidence
+                    avgConfidence: entity.confidence,
                 });
             }
         }
@@ -213,18 +234,21 @@ export class EntityGraphQueries {
      * Get unique entity count (mirrors KnowledgeEntityTable.getUniqueEntityCount)
      */
     getUniqueEntityCount(): number {
-        return new Set(this.jsonData.nodes.map(node => node.name)).size;
+        return new Set(this.jsonData.nodes.map((node) => node.name)).size;
     }
 
     /**
      * Get neighbors for an entity (mirrors RelationshipTable.getNeighbors)
      */
-    getNeighbors(entityName: string, minConfidence: number = 0.3): Relationship[] {
+    getNeighbors(
+        entityName: string,
+        minConfidence: number = 0.3,
+    ): Relationship[] {
         if (!entityName || entityName.trim() === "") return [];
 
         const relationships = this.relationshipMap.get(entityName) || [];
         return relationships
-            .filter(rel => rel.confidence >= minConfidence)
+            .filter((rel) => rel.confidence >= minConfidence)
             .sort((a, b) => b.confidence - a.confidence);
     }
 
@@ -232,33 +256,44 @@ export class EntityGraphQueries {
      * Get relationships for multiple entities (mirrors RelationshipTable.getRelationshipsForEntities)
      */
     getRelationshipsForEntities(entities: string[]): Relationship[] {
-        const validEntities = entities.filter(entity => entity && entity.trim() !== "");
+        const validEntities = entities.filter(
+            (entity) => entity && entity.trim() !== "",
+        );
         if (validEntities.length === 0) return [];
 
         const relationships = new Set<Relationship>();
-        
+
         for (const entity of validEntities) {
             const entityRels = this.relationshipMap.get(entity) || [];
-            entityRels.forEach(rel => relationships.add(rel));
+            entityRels.forEach((rel) => relationships.add(rel));
         }
 
-        return Array.from(relationships).sort((a, b) => b.confidence - a.confidence);
+        return Array.from(relationships).sort(
+            (a, b) => b.confidence - a.confidence,
+        );
     }
 
     /**
      * Get relationships between specific entities (mirrors RelationshipTable.getRelationshipsBetweenEntities)
      */
-    getRelationshipsBetweenEntities(entities: string[], minConfidence: number = 0.3): Relationship[] {
-        const validEntities = entities.filter(entity => entity && entity.trim() !== "");
+    getRelationshipsBetweenEntities(
+        entities: string[],
+        minConfidence: number = 0.3,
+    ): Relationship[] {
+        const validEntities = entities.filter(
+            (entity) => entity && entity.trim() !== "",
+        );
         if (validEntities.length === 0) return [];
 
         const entitySet = new Set(validEntities);
         const relationships: Relationship[] = [];
 
         for (const edge of this.jsonData.edges) {
-            if (edge.confidence >= minConfidence &&
-                entitySet.has(edge.source) && 
-                entitySet.has(edge.target)) {
+            if (
+                edge.confidence >= minConfidence &&
+                entitySet.has(edge.source) &&
+                entitySet.has(edge.target)
+            ) {
                 relationships.push(edge);
             }
         }
@@ -269,25 +304,34 @@ export class EntityGraphQueries {
     /**
      * Get neighbors for multiple entities (mirrors RelationshipTable.getNeighborsForEntities)
      */
-    getNeighborsForEntities(entityNames: string[], minConfidence: number = 0.3): Relationship[] {
-        const validNames = entityNames.filter(entity => entity && entity.trim() !== "");
+    getNeighborsForEntities(
+        entityNames: string[],
+        minConfidence: number = 0.3,
+    ): Relationship[] {
+        const validNames = entityNames.filter(
+            (entity) => entity && entity.trim() !== "",
+        );
         if (validNames.length === 0) return [];
 
         const relationships = new Set<Relationship>();
-        
+
         for (const entity of validNames) {
             const neighbors = this.getNeighbors(entity, minConfidence);
-            neighbors.forEach(rel => relationships.add(rel));
+            neighbors.forEach((rel) => relationships.add(rel));
         }
 
-        return Array.from(relationships).sort((a, b) => b.confidence - a.confidence);
+        return Array.from(relationships).sort(
+            (a, b) => b.confidence - a.confidence,
+        );
     }
 
     /**
      * Get all relationships (mirrors RelationshipTable.getAllRelationships)
      */
     getAllRelationships(): Relationship[] {
-        return [...this.jsonData.edges].sort((a, b) => b.confidence - a.confidence);
+        return [...this.jsonData.edges].sort(
+            (a, b) => b.confidence - a.confidence,
+        );
     }
 
     /**
@@ -297,10 +341,10 @@ export class EntityGraphQueries {
         if (entityNames.length === 0) return [];
 
         const communities: Community[] = [];
-        
+
         for (const community of this.jsonData.communities) {
-            const hasAnyEntity = entityNames.some(name => 
-                community.entities.includes(name)
+            const hasAnyEntity = entityNames.some((name) =>
+                community.entities.includes(name),
             );
             if (hasAnyEntity) {
                 communities.push(community);
@@ -346,7 +390,9 @@ export class EntityGraphQueries {
      * Get all entities (for compatibility with graphActions)
      */
     getAllEntities(): EntityNode[] {
-        return [...this.jsonData.nodes].sort((a, b) => b.confidence - a.confidence);
+        return [...this.jsonData.nodes].sort(
+            (a, b) => b.confidence - a.confidence,
+        );
     }
 
     /**
@@ -363,7 +409,10 @@ export class EntityGraphQueries {
         // Domain statistics
         const domainCounts = new Map<string, number>();
         for (const node of this.jsonData.nodes) {
-            domainCounts.set(node.metadata.domain, (domainCounts.get(node.metadata.domain) || 0) + 1);
+            domainCounts.set(
+                node.metadata.domain,
+                (domainCounts.get(node.metadata.domain) || 0) + 1,
+            );
         }
 
         // Type statistics
@@ -384,7 +433,7 @@ export class EntityGraphQueries {
             topTypes: Array.from(typeCounts.entries())
                 .map(([type, count]) => ({ type, count }))
                 .sort((a, b) => b.count - a.count)
-                .slice(0, 10)
+                .slice(0, 10),
         };
     }
 }

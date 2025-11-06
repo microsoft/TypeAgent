@@ -4,7 +4,6 @@
 import { createRequire } from "module";
 import registerDebug from "debug";
 
-// Local interfaces for removed SQLite table types
 interface HierarchicalTopicRecord {
     url: string;
     domain: string;
@@ -380,8 +379,6 @@ export class TopicGraphBuilder {
     }
 
     private calculateStrength(count: number): number {
-        // Use original linear relationship strengthening logic from SQLite version
-        // Starting at 0.1 and incrementing by 0.1 for each co-occurrence
         return Math.min(count / 10, 1.0);
     }
 
@@ -449,7 +446,10 @@ export class TopicGraphBuilder {
         debug(`Extracted ${cooccurrences.length} cooccurrences from cache`);
 
         // Build the graphs
-        const graphs = this.buildFromTopicHierarchy(hierarchicalTopics, cooccurrences);
+        const graphs = this.buildFromTopicHierarchy(
+            hierarchicalTopics,
+            cooccurrences,
+        );
 
         debug(
             `Graphs built: flat=${graphs.flatGraph.order} nodes, hierarchical=${graphs.hierarchicalGraph.order} nodes`,
@@ -458,7 +458,9 @@ export class TopicGraphBuilder {
         // Store relationships in database if table provided
         if (topicRelationshipsTable) {
             const relationships = this.exportToTopicRelationships();
-            debug(`Exporting ${relationships.length} topic relationships to database`);
+            debug(
+                `Exporting ${relationships.length} topic relationships to database`,
+            );
 
             for (const rel of relationships) {
                 topicRelationshipsTable.upsertRelationship(rel);
@@ -467,9 +469,11 @@ export class TopicGraphBuilder {
 
         // Calculate and store metrics if table provided
         if (topicMetricsTable) {
-            const { MetricsCalculator } = await import("./metricsCalculator.js");
+            const { MetricsCalculator } = await import(
+                "./metricsCalculator.js"
+            );
             const metricsCalculator = new MetricsCalculator();
-            
+
             const topicCounts = metricsCalculator.calculateTopicCounts(
                 hierarchicalTopics.map((t) => ({
                     topicId: t.topicId,
@@ -497,7 +501,9 @@ export class TopicGraphBuilder {
     /**
      * Extract cooccurrences from cache manager (moved from buildTopicGraphWithGraphology)
      */
-    private extractCooccurrencesFromCache(cacheManager: any): CooccurrenceData[] {
+    private extractCooccurrencesFromCache(
+        cacheManager: any,
+    ): CooccurrenceData[] {
         const cachedRelationships = cacheManager.getAllTopicRelationships();
         return cachedRelationships.map((rel: any) => ({
             fromTopic: rel.fromTopic,
