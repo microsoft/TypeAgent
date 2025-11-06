@@ -27,7 +27,10 @@ public class AnswerGenerator : IAnswerGenerator
         ArgumentVerify.ThrowIfNullOrEmpty(context, nameof(context));
 
         context = context.Trim(Settings.MaxCharsInBudget);
-        ArgumentVerify.ThrowIfNullOrEmpty(context, nameof(context));
+        if (string.IsNullOrEmpty(context))
+        {
+            throw new KnowProException(KnowProException.ErrorCode.EmptyContext);
+        }
 
         string[] prompt = [
             CreateQuestionPrompt(question),
@@ -44,7 +47,16 @@ public class AnswerGenerator : IAnswerGenerator
 
     public Task<AnswerResponse> GenerateAsync(string question, AnswerContext context, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        ArgumentVerify.ThrowIfNullOrEmpty(question, nameof(question));
+        ArgumentVerify.ThrowIfNull(context, nameof(context));
+
+        string contextContent = context.ToPromptString();
+        if (string.IsNullOrEmpty(contextContent))
+        {
+            throw new KnowProException(KnowProException.ErrorCode.EmptyContext);
+        }
+
+        return GenerateAsync(question, contextContent, cancellationToken);
     }
 
     public Task<AnswerResponse> CombinePartialAsync(string question, IList<AnswerResponse> responses, CancellationToken cancellationToken = default)
