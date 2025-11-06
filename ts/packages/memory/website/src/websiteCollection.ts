@@ -1596,12 +1596,8 @@ export class WebsiteCollection
         const { GraphBuildingCacheManager } = await import(
             "./utils/graphBuildingCacheManager.mjs"
         );
-        const { OptimizedGraphAlgorithms } = await import(
-            "./utils/optimizedGraphAlgorithms.mjs"
-        );
 
         const cacheManager = new GraphBuildingCacheManager();
-        const algorithms = new OptimizedGraphAlgorithms();
 
         const startTime = Date.now();
 
@@ -1643,7 +1639,7 @@ export class WebsiteCollection
 
         // Detect communities directly on graph
         const communityDirectStart = Date.now();
-        await this.detectCommunitiesDirect(entityGraph, algorithms);
+        await this.detectCommunitiesDirect(entityGraph, null);
         const graphologyCommunityTime = Date.now() - communityDirectStart;
         debug(`[Knowledge Graph] Direct communities detected in ${graphologyCommunityTime}ms`);
 
@@ -1842,25 +1838,41 @@ export class WebsiteCollection
         entityGraph: any, // Graph type
         algorithms: any
     ): Promise<void> {
-        debug(`[Direct Build] Detecting communities on Graphology graph`);
+        debug(`[Direct Build] Detecting communities on Graphology graph using MetricsCalculator`);
 
-        // Convert Graphology graph to format expected by algorithms
-        const entities = entityGraph.nodes();
-        const relationships = entityGraph.edges().map((edgeId: string) => ({
-            fromEntity: entityGraph.source(edgeId),
-            toEntity: entityGraph.target(edgeId),
-            confidence: entityGraph.getEdgeAttribute(edgeId, 'confidence') || 0.5
-        }));
+        // Use MetricsCalculator for community detection instead of OptimizedGraphAlgorithms
+        const { MetricsCalculator } = await import("./graph/metricsCalculator.js");
+        const metricsCalculator = new MetricsCalculator();
+        
+        // MetricsCalculator expects a hierarchical graph, but we can use our entity graph
+        const { communities } = metricsCalculator.calculateMetrics(entityGraph);
 
-        // Use existing algorithms for community detection
-        const graphMetrics = algorithms.calculateAllMetrics(entities, relationships);
-        const communities = graphMetrics.communities;
+        // Convert MetricsCalculator output (Map<nodeId, communityId>) to grouped communities
+        const communityGroups = new Map<number, string[]>();
+        
+        for (const [nodeId, communityId] of communities) {
+            if (!communityGroups.has(communityId)) {
+                communityGroups.set(communityId, []);
+            }
+            communityGroups.get(communityId)!.push(nodeId);
+        }
 
-        debug(`[Direct Build] Detected ${communities.length} communities using algorithms`);
+        debug(`[Direct Build] Detected ${communityGroups.size} communities using MetricsCalculator`);
+
+        // Convert to format expected by the rest of the method
+        const communityList = Array.from(communityGroups.entries())
+            .filter(([, nodes]) => nodes.length > 1) // Only communities with multiple nodes
+            .map(([communityIndex, nodes]) => ({
+                id: communityIndex.toString(),
+                nodes: nodes,
+                density: 0.5 // Default density since MetricsCalculator doesn't provide it
+            }));
+
+        debug(`[Direct Build] Detected ${communityList.length} communities using MetricsCalculator`);
 
         // Store community info directly in the graph instead of separate SQLite table
         let storedCount = 0;
-        for (const community of communities) {
+        for (const community of communityList) {
             // Add community as a virtual node in the graph
             const communityId = `community_${community.id}`;
             entityGraph.addNode(communityId, {
@@ -1890,8 +1902,8 @@ export class WebsiteCollection
             }
 
             storedCount++;
-            if (storedCount % 10 === 0 || storedCount === communities.length) {
-                debug(`[Direct Build] Processed ${storedCount}/${communities.length} communities`);
+            if (storedCount % 10 === 0) {
+                debug(`[Direct Build] Processed ${storedCount} communities`);
             }
         }
 
