@@ -28,7 +28,6 @@ import {
     getKnowledgeGraphStatus,
     buildKnowledgeGraph,
     rebuildKnowledgeGraph,
-    testMergeTopicHierarchies,
     mergeTopicHierarchies,
     getAllRelationships,
     getAllCommunities,
@@ -94,8 +93,6 @@ export async function handleKnowledgeAction(
             return await buildKnowledgeGraph(parameters, context);
         case "rebuildKnowledgeGraph":
             return await rebuildKnowledgeGraph(parameters, context);
-        case "testMergeTopicHierarchies":
-            return await testMergeTopicHierarchies(parameters, context);
         case "mergeTopicHierarchies":
             return await mergeTopicHierarchies(parameters, context);
         case "getAllRelationships":

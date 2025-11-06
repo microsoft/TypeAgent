@@ -656,7 +656,6 @@ async function processBrowserAgentMessage(
         case "getTopicMetrics":
         case "getTopicTimelines":
         case "getViewportBasedNeighborhood":
-        case "testMergeTopicHierarchies":
         case "mergeTopicHierarchies":
         case "discoverRelatedKnowledge":
         case "getTopicDetails":

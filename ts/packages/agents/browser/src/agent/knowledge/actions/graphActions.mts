@@ -833,20 +833,6 @@ export async function rebuildKnowledgeGraph(
             };
         }
 
-        // Clear existing SQLite graph tables if they exist
-        try {
-            if (websiteCollection.relationships) {
-                websiteCollection.relationships.clear();
-            }
-            if (websiteCollection.communities) {
-                websiteCollection.communities.clear();
-            }
-            debug("[Knowledge Graph] Cleared existing SQLite graph data");
-        } catch (clearError) {
-            // Continue even if clearing fails, as the rebuild might overwrite
-            console.warn("Failed to clear existing graph data:", clearError);
-        }
-
         // Rebuild the knowledge graph using websiteCollection - returns Graphology graphs directly
         debug("[Knowledge Graph] Building Graphology graphs directly from cache...");
         const buildResult = await websiteCollection.buildGraph();
@@ -1092,58 +1078,6 @@ For each topic, determine the appropriate action based on the TopicRelationshipA
     } catch (error) {
         console.error("[LLM Topic Analysis] Batch error:", error);
         return relationshipMap;
-    }
-}
-
-export async function testMergeTopicHierarchies(
-    parameters: {},
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    success: boolean;
-    mergeCount: number;
-    message?: string;
-    changes?: Array<{
-        action: string;
-        sourceTopic: string;
-        targetTopic?: string;
-    }>;
-    error?: string;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                success: false,
-                mergeCount: 0,
-                error: "Website collection not available",
-            };
-        }
-
-        console.log(
-            "[Test Merge] Running preview mode - NO CHANGES WILL BE SAVED",
-        );
-
-        const result = await websiteCollection.testMergeTopicHierarchies(
-            analyzeTopicRelationshipsWithLLM,
-        );
-
-        const message = `⚠️ Preview completed: ${result.mergeCount} potential changes found. Use 'mergeTopicHierarchies' action to apply changes.`;
-        console.log(`[Test Merge] ${message}`);
-
-        return {
-            success: true,
-            mergeCount: result.mergeCount,
-            message,
-            changes: result.changes,
-        };
-    } catch (error) {
-        console.error("Error testing topic merge:", error);
-        return {
-            success: false,
-            mergeCount: 0,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
     }
 }
 
@@ -2570,14 +2504,7 @@ export async function getTopicMetrics(
             };
         }
 
-        if (!websiteCollection.topicMetrics) {
-            return {
-                success: false,
-                error: "Topic metrics not available",
-            };
-        }
-
-        const metrics = websiteCollection.topicMetrics.getMetrics(
+        const metrics = websiteCollection.getTopicMetrics(
             parameters.topicId,
         );
 
@@ -2636,15 +2563,15 @@ export async function getTopicDetails(
             };
         }
 
-        if (!websiteCollection.hierarchicalTopics) {
+        const allTopics = websiteCollection.getTopicHierarchy() || [];
+        
+        if (allTopics.length === 0) {
             return {
                 success: false,
                 error: "Hierarchical topics not available",
             };
         }
 
-        const allTopics =
-            websiteCollection.hierarchicalTopics.getTopicHierarchy() || [];
         const topic = allTopics.find(
             (t: any) => t.topicId === parameters.topicId,
         );
@@ -3046,24 +2973,21 @@ export async function getUrlContentBreakdown(
 
         // Count topics per URL
         tracker.startOperation("getUrlContentBreakdown.countTopics");
-        if (websiteCollection.hierarchicalTopics) {
-            try {
-                const topics =
-                    websiteCollection.hierarchicalTopics.getTopicHierarchy() ||
-                    [];
-                for (const topic of topics) {
-                    const url = topic.url;
-                    if (!urlStats.has(url)) {
-                        urlStats.set(url, {
-                            topicCount: 0,
-                            entityCount: 0,
-                            semanticRefCount: 0,
-                            relationshipCount: 0,
-                        });
-                    }
-                    urlStats.get(url)!.topicCount++;
+        try {
+            const topics = websiteCollection.getTopicHierarchy() || [];
+            for (const topic of topics) {
+                const url = topic.url;
+                if (!urlStats.has(url)) {
+                    urlStats.set(url, {
+                        topicCount: 0,
+                        entityCount: 0,
+                        semanticRefCount: 0,
+                        relationshipCount: 0,
+                    });
                 }
-                tracker.endOperation(
+                urlStats.get(url)!.topicCount++;
+            }
+            tracker.endOperation(
                     "getUrlContentBreakdown.countTopics",
                     topics.length,
                     urlStats.size,
@@ -3076,7 +3000,6 @@ export async function getUrlContentBreakdown(
                     0,
                 );
             }
-        }
 
         // Count entities per URL
         tracker.startOperation("getUrlContentBreakdown.countEntities");
@@ -3131,46 +3054,9 @@ export async function getUrlContentBreakdown(
             0,
         );
 
-        // Count relationships per URL
+        // Note: Relationship counting removed - relationships now computed from Graphology graphs
         tracker.startOperation("getUrlContentBreakdown.countRelationships");
-        if (websiteCollection.relationships) {
-            try {
-                const relationships =
-                    websiteCollection.relationships.getAllRelationships() || [];
-                for (const rel of relationships) {
-                    const sources = rel.sources || [];
-                    const sourceUrls =
-                        typeof sources === "string"
-                            ? JSON.parse(sources)
-                            : Array.isArray(sources)
-                              ? sources
-                              : [];
-                    for (const url of sourceUrls) {
-                        if (!urlStats.has(url)) {
-                            urlStats.set(url, {
-                                topicCount: 0,
-                                entityCount: 0,
-                                semanticRefCount: 0,
-                                relationshipCount: 0,
-                            });
-                        }
-                        urlStats.get(url)!.relationshipCount++;
-                    }
-                }
-                tracker.endOperation(
-                    "getUrlContentBreakdown.countRelationships",
-                    relationships.length,
-                    urlStats.size,
-                );
-            } catch (error) {
-                console.warn("Failed to count relationships per URL:", error);
-                tracker.endOperation(
-                    "getUrlContentBreakdown.countRelationships",
-                    0,
-                    0,
-                );
-            }
-        }
+        tracker.endOperation("getUrlContentBreakdown.countRelationships", 0, 0);
 
         // Build breakdown array
         const breakdown = Array.from(urlStats.entries())

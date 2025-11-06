@@ -484,19 +484,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async testMergeTopicHierarchies(): Promise<{
-        mergeCount: number;
-        changes?: Array<{
-            action: string;
-            sourceTopic: string;
-            targetTopic?: string;
-        }>;
-    }> {
-        return this.sendMessage({
-            type: "testMergeTopicHierarchies",
-        });
-    }
-
     async mergeTopicHierarchies(): Promise<{
         success: boolean;
         mergeCount: number;
