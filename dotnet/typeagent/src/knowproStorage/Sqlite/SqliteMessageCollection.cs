@@ -306,11 +306,33 @@ public class SqliteMessageCollection : IMessageCollection
         return ValueTask.FromResult(lengths);
     }
 
-    public string? GetMessageTimestamp(int messageOrdinal) => MessagesTable.GetMessageTimestamp(_db, messageOrdinal);
+    public string? GetTimestamp(int messageOrdinal) => MessagesTable.GetTimestamp(_db, messageOrdinal);
 
-    public ValueTask<string?> GetMessageTimestampAsync(int messageOrdinal, CancellationToken cancellationToken = default)
+    public ValueTask<string?> GetTimestampAsync(int messageOrdinal, CancellationToken cancellationToken = default)
     {
-        return ValueTask.FromResult(GetMessageTimestamp(messageOrdinal));
+        return ValueTask.FromResult(GetTimestamp(messageOrdinal));
+    }
+
+    public IList<string?> GetTimestamp(IList<int> messageOrdinals) => [.. MessagesTable.GetTimestamp(_db, messageOrdinals)];
+
+    public ValueTask<IList<string?>> GetTimestampAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
+    {
+        return ValueTask.FromResult(GetTimestamp(messageOrdinals));
+    }
+
+    public ValueTask<IList<IMessageMetadata>> GetMetadataAsync(
+        IList<int> messageOrdinals,
+        CancellationToken cancellationToken = default
+    )
+    {
+        IList<IMessageMetadata> meta = [];
+
+        foreach (var json in MessagesTable.GetMetadata(_db, messageOrdinals))
+        {
+            meta.Add(FromMetadataJson(json));
+        }
+
+        return ValueTask.FromResult(meta);
     }
 
     IMessage FromMessageRow(MessageRow messageRow)
@@ -320,7 +342,7 @@ public class SqliteMessageCollection : IMessageCollection
         message.TextChunks = StorageSerializer.FromJsonArray<string>(messageRow.ChunksJson);
         message.Tags = StorageSerializer.FromJsonArray<string>(messageRow.TagsJson);
         message.Timestamp = messageRow.StartTimestamp;
-        message.Metadata = (IMessageMetadata)StorageSerializer.FromJson(messageRow.MetadataJson, _metadataType);
+        message.Metadata = FromMetadataJson(messageRow.MetadataJson);
 
         // Set extra fields if any (only works for public settable properties)
         if (messageRow.ExtraJson is not null && message is IMessageEx messageEx)
@@ -330,6 +352,12 @@ public class SqliteMessageCollection : IMessageCollection
 
         return message;
     }
+
+    IMessageMetadata FromMetadataJson(string json)
+    {
+        return (IMessageMetadata)StorageSerializer.FromJson(json, _metadataType);
+    }
+
 }
 
 
@@ -365,7 +393,7 @@ FROM Messages WHERE msg_id = @msg_id",
                 $@"
 SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
-ORDER BY msg_id",
+",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 ReadMessageRow
             );
@@ -401,7 +429,7 @@ FROM Messages WHERE msg_id = @msg_id",
                 $@"
 SELECT message_length
 FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
-ORDER BY msg_id",
+",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 (reader) => reader.GetInt32(0)
             );
@@ -412,7 +440,7 @@ ORDER BY msg_id",
         }
     }
 
-    public static string? GetMessageTimestamp(SqliteDatabase db, int msgId)
+    public static string? GetTimestamp(SqliteDatabase db, int msgId)
     {
         KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
 
@@ -454,6 +482,46 @@ ORDER BY msg_id",
             },
             ReadMessageRow
         );
+    }
+
+    public static IEnumerable<string> GetMetadata(SqliteDatabase db, IList<int> messageOrdinals)
+    {
+        foreach (var batch in messageOrdinals.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
+
+            var list = db.Enumerate(@$"
+SELECT metadata FROM Messages
+FROM Messages WHERE msg_id IN({SqliteDatabase.MakeInStatement(placeholderIds)})",
+                (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
+                (reader) => reader.GetString(0)
+            );
+
+            foreach (var item in list)
+            {
+                yield return item;
+            }
+        }
+    }
+
+    public static IEnumerable<string?> GetTimestamp(SqliteDatabase db, IList<int> messageOrdinals)
+    {
+        foreach (var batch in messageOrdinals.Batch(SqliteDatabase.MaxBatchSize))
+        {
+            var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
+
+            var list = db.Enumerate(@$"
+SELECT start_timestamp
+FROM Messages WHERE msg_id IN({SqliteDatabase.MakeInStatement(placeholderIds)})",
+                (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
+                (reader) => reader.GetStringOrNull(0)
+            );
+
+            foreach (var item in list)
+            {
+                yield return item;
+            }
+        }
     }
 
     public static MessageRow ReadMessageRow(SqliteDataReader reader)

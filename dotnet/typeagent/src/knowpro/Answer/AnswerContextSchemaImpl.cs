@@ -3,6 +3,16 @@
 
 namespace TypeAgent.KnowPro.Answer;
 
+public partial class RelevantKnowledge
+{
+    public RelevantKnowledge() { }
+}
+
+public partial class RelevantEntity
+{
+    public RelevantEntity() { }
+}
+
 public partial class RelevantMessage
 {
     public RelevantMessage() { }

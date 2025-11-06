@@ -51,22 +51,26 @@ public static class SemanticRefCollectionExtensions
     }
 
     public static async ValueTask<IList<Scored<SemanticRef>>> GetScoredAsync(
-        this IAsyncCollectionReader<SemanticRef> semanticRefs,
+        this IAsyncCollectionReader<SemanticRef> semanticRefReader,
         IList<ScoredSemanticRefOrdinal> scoredOrdinals,
+        KnowledgeType? kType = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentVerify.ThrowIfNull(scoredOrdinals, nameof(scoredOrdinals));
 
-        IList<SemanticRef> refs = await semanticRefs.GetAsync(
+        IList<SemanticRef> semanticRefs = await semanticRefReader.GetAsync(
             scoredOrdinals,
             cancellationToken
         ).ConfigureAwait(false);
 
-        List<Scored<SemanticRef>> scored = new List<Scored<SemanticRef>>(refs.Count);
+        List<Scored<SemanticRef>> scored = new List<Scored<SemanticRef>>(semanticRefs.Count);
         int count = scoredOrdinals.Count;
         for (int i = 0; i < count; ++i)
         {
-            scored.Add(new Scored<SemanticRef>(refs[i], scoredOrdinals[i].Score));
+            if (kType is null || semanticRefs[i].KnowledgeType == kType)
+            {
+                scored.Add(new Scored<SemanticRef>(semanticRefs[i], scoredOrdinals[i].Score));
+            }
         }
 
         return scored;

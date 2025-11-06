@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Immutable;
+
 namespace TypeAgent.KnowPro;
 
 public static class KnowledgeMergeExtensions
@@ -9,7 +11,7 @@ public static class KnowledgeMergeExtensions
 
 internal class MergedKnowledge
 {
-    public HashSet<int>? SourceMessageOrdinals { get; set; } = null;
+    public SortedSet<int>? SourceMessageOrdinals { get; set; } = null;
 
     public void MergeMessageOrdinals(SemanticRef sr)
     {
@@ -17,6 +19,11 @@ internal class MergedKnowledge
         SourceMessageOrdinals.Add(sr.Range.Start.MessageOrdinal);
     }
 
+    public void CollectOrdinals(List<int> ordinals)
+    {
+        ordinals.Add(SourceMessageOrdinals.Min);
+        ordinals.Add(SourceMessageOrdinals.Max);
+    }
 }
 
 internal class MergedEntity : MergedKnowledge
@@ -120,6 +127,16 @@ internal class MergedEntity : MergedKnowledge
 
         return mergedEntities;
     }
+
+    public static List<int> CollectOrdinals(IEnumerable<Scored<MergedEntity>> candidates)
+    {
+        List<int> rangeOrdinals = [];
+        foreach (var candidate in candidates)
+        {
+            candidate.Item.CollectOrdinals(rangeOrdinals);
+        }
+        return rangeOrdinals;
+    }
 }
 
 internal class MergedTopic : MergedKnowledge
@@ -132,7 +149,7 @@ internal class MergedTopic : MergedKnowledge
     {
         ArgumentVerify.ThrowIfNull(topics, nameof(topics));
 
-        Dictionary<string, Topic> distinct = new Dictionary<string, Topic>();
+        Dictionary<string, Topic> distinct = [];
         foreach (Topic topic in topics)
         {
             distinct.TryAdd(topic.Text.ToLower(), topic);

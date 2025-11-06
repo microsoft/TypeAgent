@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro.Answer;
 
-public class RelevantKnowledge
+public partial class RelevantKnowledge
 {
     // Entity or entities who mentioned the knowledge
     [JsonPropertyName("origin")]
@@ -18,13 +18,13 @@ public class RelevantKnowledge
     public DateRange? TimeRange { get; set; }
 };
 
-public class RelevantTopic : RelevantKnowledge
+public partial class RelevantTopic : RelevantKnowledge
 {
     [JsonPropertyName("knowledge")]
     public string? Topic { get; set; }
 }
 
-public class RelevantEntity : RelevantKnowledge
+public partial class RelevantEntity : RelevantKnowledge
 {
     [JsonPropertyName("knowledge")]
     public ConcreteEntity? Entity { get; set; }

@@ -5,6 +5,16 @@ namespace TypeAgent.KnowPro;
 
 public static class ConversationExtensions
 {
+    public static IAsyncCollectionReader<SemanticRef> GetSemanticRefReader(this IConversation conversation)
+    {
+        return conversation.Cache?.SemanticRefs ?? conversation.SemanticRefs;
+    }
+
+    public static IAsyncCollectionReader<IMessage> GetMessageReader(this IConversation conversation)
+    {
+        return conversation.Cache?.Messages ?? conversation.Messages;
+    }
+
     public static async ValueTask<DateRange?> GetDateRangeAsync(this IConversation conversation)
     {
         var timestampRange = await conversation.GetStartTimestampRangeAsync().ConfigureAwait(false);
@@ -18,8 +28,8 @@ public static class ConversationExtensions
         var messageCount = await conversation.Messages.GetCountAsync().ConfigureAwait(false);
         if (messageCount > 0)
         {
-            var start = await conversation.Messages.GetMessageTimestampAsync(1).ConfigureAwait(false);
-            var end = await conversation.Messages.GetMessageTimestampAsync(messageCount - 1).ConfigureAwait(false);
+            var start = await conversation.Messages.GetTimestampAsync(1).ConfigureAwait(false);
+            var end = await conversation.Messages.GetTimestampAsync(messageCount - 1).ConfigureAwait(false);
             if (start is not null)
             {
                 return new TimestampRange
