@@ -3,21 +3,14 @@
 
 namespace TypeAgent.KnowPro.Lang;
 
-public interface ISearchQueryTranslator
-{
-    ValueTask<SearchQuery> TranslateAsync(
-        string request,
-        IList<IPromptSection>? preamble = null,
-        CancellationToken cancellationToken = default
-    );
-}
-
 public class SearchQueryTranslator : ISearchQueryTranslator
 {
     JsonTranslator<SearchQuery> _translator;
 
     public SearchQueryTranslator(IChatModel model)
     {
+        ArgumentVerify.ThrowIfNull(model, nameof(model));
+
         _translator = JsonTranslatorFactory.CreateTranslator<SearchQuery>(
             model,
             "TypeAgent.KnowPro.Lang.searchQuerySchema.ts"
@@ -30,6 +23,11 @@ public class SearchQueryTranslator : ISearchQueryTranslator
         CancellationToken cancellationToken = default
     )
     {
-        return await _translator.TranslateAsync(request, preamble, null, cancellationToken);
+        return await _translator.TranslateAsync(
+            request,
+            preamble,
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 }

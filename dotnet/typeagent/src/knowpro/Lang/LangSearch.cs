@@ -64,7 +64,7 @@ internal static class LangSearch
         this IConversation conversation,
         ISearchQueryTranslator queryTranslator,
         string text,
-        IList<PromptSection>? promptPreamble,
+        IList<IPromptSection>? promptPreamble,
         CancellationToken cancellationToken = default
     )
     {

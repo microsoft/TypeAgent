@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Answer\AnswerResponseSchema.ts" />
+    <EmbeddedResource Include="Answer\answerResponseSchema.ts" />
     <EmbeddedResource Include="KnowledgeExtractor\KnowledgeSchema.ts" />
     <EmbeddedResource Include="Lang\langSearchNoise.txt" />
     <EmbeddedResource Include="Lang\searchQuerySchema.ts">
