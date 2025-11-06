@@ -93,6 +93,6 @@ jobs:
         name: Upload build artifact
         with:
           name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }} 
-          path: ts/packages/shelldist/**                             # files/dirs to include
+          path: ts/packages/shell/dist/**                             # files/dirs to include
           retention-days: 7
 
