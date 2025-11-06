@@ -910,14 +910,23 @@ export async function rebuildKnowledgeGraph(
         }
 
         // Update traditional caches to maintain compatibility
+        const entities = extractEntitiesFromGraphology(entityGraph);
+        const relationships = extractRelationshipsFromGraphology(entityGraph);
+        const communities = extractCommunitiesFromGraphology(entityGraph);
+        
+        // Calculate entity metrics properly to avoid 0 entity count issue
+        const entityMetrics = calculateEntityMetrics(entities, relationships, communities);
+        
         setGraphCache(websiteCollection, {
-            entities: extractEntitiesFromGraphology(entityGraph),
-            relationships: extractRelationshipsFromGraphology(entityGraph),
-            communities: extractCommunitiesFromGraphology(entityGraph),
-            entityMetrics: [],
+            entities,
+            relationships,
+            communities,
+            entityMetrics,
             lastUpdated: Date.now(),
             isValid: true,
         });
+        
+        debug(`[Knowledge Graph] Traditional cache updated with ${entityMetrics.length} entity metrics`);
 
         debug("[Knowledge Graph] Graphology-only knowledge graph rebuild completed successfully");
 
