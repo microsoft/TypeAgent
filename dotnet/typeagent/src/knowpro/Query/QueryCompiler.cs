@@ -157,7 +157,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm.Clone());
+                    compiledTerms[0].Terms.Add(searchTerm);
                     break;
 
             }
@@ -215,7 +215,7 @@ internal class QueryCompiler
                         matchFilter
                     );
                     termExpressions.Add(searchTermExpr);
-                    compiledTerms[0].Terms.Add(searchTerm.Clone());
+                    compiledTerms[0].Terms.Add(searchTerm);
                     break;
             }
         }
@@ -372,7 +372,8 @@ internal class QueryCompiler
         QueryOpExpr<MessageAccumulator> srcExpr,
         string? rawQueryText,
         SearchOptions? options
-    ) {
+    )
+    {
         var messageIndex = _conversation.SecondaryIndexes.MessageIndex;
         int messageCount = await messageIndex.GetCountAsync(
             _cancellationToken

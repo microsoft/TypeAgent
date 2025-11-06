@@ -40,7 +40,7 @@ public class EnvVars
 
     public static int GetInt(string key, string? keySuffix = null, int? defaultValue = null)
     {
-        var numString = Get(key, keySuffix, string.Empty);
+        var numString = Get(key, keySuffix, defaultValue?.ToString());
         if (string.IsNullOrEmpty(numString) && defaultValue is not null)
         {
             return defaultValue.Value;

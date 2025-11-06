@@ -61,16 +61,16 @@ public class SearchTerm : ISearchTerm
 
     internal bool RelatedTermsRequired { get; set; }
 
+    /*
     internal SearchTerm Clone()
     {
         return new SearchTerm(Term);
     }
-
+    */
     internal SearchTerm ToRequired()
     {
-        var copy = this.Clone();
-        copy.RelatedTermsRequired = true;
-        return copy;
+        RelatedTermsRequired = true;
+        return this;
     }
 
     public static implicit operator SearchTerm(string value)
