@@ -145,15 +145,20 @@ function extractRelationshipsFromGraphology(entityGraph: any): any[] {
     
     // Extract relationship edges from Graphology graph
     entityGraph.forEachEdge((edgeId: string, attributes: any, source: string, target: string) => {
-        if (attributes.relationshipType === 'co_occurs') {
-            relationships.push({
-                entity1: source,
-                entity2: target,
-                strength: attributes.weight || 1.0,
-                confidence: attributes.confidence || 1.0,
-                cooccurrenceCount: attributes.cooccurrenceCount || 1
-            });
-        }
+        relationships.push({
+            id: edgeId,
+            rowId: edgeId,
+            fromEntity: source,
+            toEntity: target,
+            source: source,
+            target: target,
+            relationshipType: attributes.relationshipType || attributes.type || 'co_occurs',
+            type: attributes.relationshipType || attributes.type || 'co_occurs',
+            strength: attributes.weight || attributes.strength || 1.0,
+            confidence: attributes.confidence || 1.0,
+            count: attributes.cooccurrenceCount || attributes.count || 1,
+            cooccurrenceCount: attributes.cooccurrenceCount || attributes.count || 1
+        });
     });
     
     return relationships;
@@ -1235,7 +1240,7 @@ export async function getAllRelationships(
     error?: string;
 }> {
     try {
-        // Try Graphology first (new primary method)
+        // Try Graphology first
         try {
             const { entityGraph } = await getGraphologyGraphs(context);
             
@@ -1246,8 +1251,8 @@ export async function getAllRelationships(
                 // Apply optimization for consistency
                 const optimizedRelationships = relationships.map((rel: any, index: number) => ({
                     rowId: index + 1, // Generate rowId since Graphology doesn't have one
-                    fromEntity: rel.entity1,
-                    toEntity: rel.entity2,
+                    fromEntity: rel.source || rel.fromEntity,
+                    toEntity: rel.target || rel.toEntity,
                     relationshipType: "co_occurs",
                     confidence: rel.confidence,
                     sources: [], // TODO: Extract sources from edge attributes if available
