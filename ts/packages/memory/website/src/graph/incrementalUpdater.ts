@@ -3,7 +3,39 @@
 
 import { createRequire } from "module";
 import registerDebug from "debug";
-import type { HierarchicalTopicRecord, TopicMetrics } from "../tables.js";
+
+interface HierarchicalTopicRecord {
+    url: string;
+    domain: string;
+    topicId: string;
+    topicName: string;
+    level: number;
+    parentTopicId?: string;
+    confidence: number;
+    keywords?: string;
+    sourceTopicNames?: string;
+    extractionDate: string;
+}
+
+interface TopicMetrics {
+    topicId: string;
+    topicName: string;
+    documentCount: number;
+    domainCount: number;
+    degreeCentrality: number;
+    betweennessCentrality: number;
+    firstSeen?: string;
+    lastSeen?: string;
+    activityPeriod: number;
+    avgConfidence: number;
+    maxConfidence: number;
+    totalRelationships: number;
+    strongRelationships: number;
+    entityCount: number;
+    topEntities?: string;
+    updated: string;
+}
+
 import { MetricsCalculator } from "./metricsCalculator.js";
 import type { CooccurrenceData } from "./topicGraphBuilder.js";
 
@@ -442,7 +474,7 @@ export class IncrementalGraphUpdater {
     }
 
     private calculateStrength(count: number): number {
-        return Math.min(1.0, Math.log(count + 1) / Math.log(10));
+        return Math.min(count / 10, 1.0);
     }
 
     public getCachedMetrics(): Map<string, TopicMetrics> | null {

@@ -78,11 +78,6 @@ interface GraphDataProvider {
 
     // Hierarchical partitioned loading methods
     getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
-    getViewportBasedNeighborhood(
-        centerEntity: string,
-        viewportNodeNames: string[],
-        maxNodes?: number,
-    ): Promise<any>;
     getImportanceStatistics(): Promise<any>;
 
     // Validation and health checks
@@ -95,6 +90,7 @@ interface GraphDataProvider {
 
 class GraphDataProviderImpl implements GraphDataProvider {
     private baseService: any;
+    private transformSampleCount: number = 0;
 
     constructor(baseService: any) {
         this.baseService = baseService;
@@ -391,53 +387,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         }
     }
 
-    async getViewportBasedNeighborhood(
-        centerEntity: string,
-        viewportNodeNames: string[],
-        maxNodes: number = 5000,
-    ): Promise<any> {
-        try {
-            const result = await this.baseService.getViewportBasedNeighborhood(
-                centerEntity,
-                viewportNodeNames,
-                maxNodes,
-                {
-                    importanceWeighting: true,
-                    includeGlobalContext: true,
-                    exploreFromAllViewportNodes: true,
-                    minDepthFromViewport: 1,
-                },
-            );
-
-            if (!result) {
-                console.warn(
-                    "[GraphDataProvider] Received null result from getViewportBasedNeighborhood service",
-                );
-                throw new Error("Service returned null result");
-            }
-
-            return {
-                entities: this.transformEntitiesToUIFormat(
-                    result.entities || [],
-                ),
-                relationships: this.transformRelationshipsToUIFormat(
-                    result.relationships || [],
-                ),
-                metadata: {
-                    ...result.metadata,
-                    source: "viewport_based_neighborhood",
-                    viewportAnchorCount: viewportNodeNames.length,
-                },
-            };
-        } catch (error) {
-            console.error(
-                "[GraphDataProvider] Error fetching viewport-based neighborhood:",
-                error,
-            );
-            throw error;
-        }
-    }
-
     async getImportanceStatistics(): Promise<any> {
         try {
             const result = await this.baseService.getImportanceStatistics();
@@ -541,6 +490,20 @@ class GraphDataProviderImpl implements GraphDataProvider {
             return [];
         }
 
+        // DEBUG: Log sample relationships before transformation
+        const sampleRels = hybridRelationships.slice(0, 10);
+        console.log(
+            `[GRAPH DATA PROVIDER] Sample ${sampleRels.length} relationships before transformation:`,
+        );
+        sampleRels.forEach((rel, i) => {
+            const from = rel.fromEntity || rel.source || rel.from;
+            const to = rel.toEntity || rel.target || rel.to;
+            const type = rel.relationshipType || rel.type;
+            console.log(
+                `  ${i + 1}. ${from} -[${type}]-> ${to} (confidence: ${rel.confidence})`,
+            );
+        });
+
         const transformed = hybridRelationships
             .map((rel) => {
                 try {
@@ -553,19 +516,76 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     return null;
                 }
             })
-            .filter((rel) => rel !== null) as RelationshipEdge[];
+            .filter((rel) => rel !== null)
+            .filter((rel) => rel!.from !== rel!.to) as RelationshipEdge[]; // Filter out self-referential edges
+
+        console.log(
+            `[GRAPH DATA PROVIDER] Filtered out self-referential edges: ${hybridRelationships.length} -> ${transformed.length}`,
+        );
+
+        // DEBUG: Log sample relationships after transformation
+        const sampleTransformed = transformed.slice(0, 10);
+        console.log(
+            `[GRAPH DATA PROVIDER] Sample ${sampleTransformed.length} relationships after transformation:`,
+        );
+        sampleTransformed.forEach((rel, i) => {
+            console.log(
+                `  ${i + 1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`,
+            );
+        });
+
+        // DEBUG: Log sample non-self-referential relationships after transformation
+        const nonSelfTransformed = transformed
+            .filter((rel) => rel.from !== rel.to)
+            .slice(0, 10);
+        if (nonSelfTransformed.length > 0) {
+            console.log(
+                `[GRAPH DATA PROVIDER] Sample ${nonSelfTransformed.length} non-self-referential relationships after transformation:`,
+            );
+            nonSelfTransformed.forEach((rel, i) => {
+                console.log(
+                    `  ${i + 1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`,
+                );
+            });
+        } else {
+            console.log(
+                `[GRAPH DATA PROVIDER] No non-self-referential relationships found in sample.`,
+            );
+        }
 
         return transformed;
     }
 
     private transformRelationshipToUIFormat(hybridRel: any): RelationshipEdge {
+        // Log complete input object for analysis (first 10 samples only)
+        if (!this.transformSampleCount) {
+            this.transformSampleCount = 0;
+        }
+        if (this.transformSampleCount < 10) {
+            console.log(
+                `[GRAPH DATA PROVIDER] INPUT SAMPLE ${this.transformSampleCount + 1}:`,
+                JSON.stringify(hybridRel, null, 2),
+            );
+            this.transformSampleCount++;
+        }
+
         // Handle the actual backend relationship field structure
         const fromEntity =
             hybridRel.fromEntity || hybridRel.from || hybridRel.source || "";
         const toEntity =
             hybridRel.toEntity || hybridRel.to || hybridRel.target || "";
-        const relType =
-            hybridRel.relationshipType || hybridRel.type || "connected";
+
+        // STRICT validation - no fallbacks for relationship type
+        const relType = hybridRel.relationshipType || hybridRel.type;
+        if (!relType) {
+            console.error(
+                `[GRAPH DATA PROVIDER] ERROR: Missing relationship type in input:`,
+                hybridRel,
+            );
+            throw new Error(
+                `Relationship missing required type field: ${JSON.stringify(hybridRel)}`,
+            );
+        }
 
         const strength = this.normalizeStrength(
             hybridRel.confidence ||
