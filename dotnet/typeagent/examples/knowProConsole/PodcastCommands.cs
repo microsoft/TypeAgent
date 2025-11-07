@@ -70,7 +70,7 @@ public class PodcastCommands : ICommandModule
         SetCurrent(podcast);
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Loaded {name}");
 
-        await podcast.BuildSecondaryIndexesAsync();
+        //await podcast.BuildSecondaryIndexesAsync();
     }
 
     private Command PodcastImportIndexDef()
