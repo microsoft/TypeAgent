@@ -88,11 +88,11 @@ jobs:
         shell: bash
         run: pnpm run shell:package
       
-      - uses: actions/upload-artifact@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        name: Upload build artifact
-        with:
-          name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }} 
-          path: ts/packages/shell/dist/**                             # files/dirs to include
-          retention-days: 7
+      # - uses: actions/upload-artifact@v4
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+      #   name: Upload build artifact
+      #   with:
+      #     name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }} 
+      #     path: ts/packages/shell/dist/**                             # files/dirs to include
+      #     retention-days: 7
 
