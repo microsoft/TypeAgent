@@ -7,11 +7,9 @@ public interface IAnswerGenerator
 {
     AnswerGeneratorSettings Settings { get; }
 
-    Task<AnswerResponse> GenerateAsync(
-        string question,
-        AnswerContext context,
-        CancellationToken cancellationToken = default
-    );
+    Task<AnswerResponse> GenerateAsync(string question, string context, CancellationToken cancellationToken = default);
+
+    Task<AnswerResponse> GenerateAsync(string question, AnswerContext context, CancellationToken cancellationToken = default);
 
     Task<AnswerResponse> CombinePartialAsync(
         string question,

@@ -3,7 +3,32 @@
 
 import { createRequire } from "module";
 import registerDebug from "debug";
-import type { HierarchicalTopicRecord, TopicRelationship } from "../tables.js";
+
+interface HierarchicalTopicRecord {
+    url: string;
+    domain: string;
+    topicId: string;
+    topicName: string;
+    level: number;
+    parentTopicId?: string;
+    confidence: number;
+    keywords?: string;
+    sourceTopicNames?: string;
+    extractionDate: string;
+}
+
+interface TopicRelationship {
+    fromTopic: string;
+    toTopic: string;
+    relationshipType: string;
+    strength: number;
+    metadata?: string;
+    sourceUrls?: string;
+    cooccurrenceCount?: number;
+    firstSeen?: string;
+    lastSeen?: string;
+    updated: string;
+}
 
 const require = createRequire(import.meta.url);
 const Graph = require("graphology");
@@ -354,7 +379,7 @@ export class TopicGraphBuilder {
     }
 
     private calculateStrength(count: number): number {
-        return Math.min(1.0, Math.log(count + 1) / Math.log(10));
+        return Math.min(count / 10, 1.0);
     }
 
     public exportToTopicRelationships(): TopicRelationship[] {
@@ -400,5 +425,91 @@ export class TopicGraphBuilder {
             flatGraph: this.flatGraph,
             hierarchicalGraph: this.hierarchicalGraph,
         };
+    }
+
+    /**
+     * Build topic graphs and store results in database tables (moved from buildTopicGraphWithGraphology)
+     * This combines the graph building with database storage for complete topic graph processing
+     */
+    public async buildAndStoreComplete(
+        hierarchicalTopics: HierarchicalTopicRecord[],
+        cacheManager: any,
+        topicRelationshipsTable?: any,
+        topicMetricsTable?: any,
+    ): Promise<TopicGraphs> {
+        debug(
+            `Building and storing topic graph for ${hierarchicalTopics.length} hierarchical topics`,
+        );
+
+        // Extract cooccurrences from cache
+        const cooccurrences = this.extractCooccurrencesFromCache(cacheManager);
+        debug(`Extracted ${cooccurrences.length} cooccurrences from cache`);
+
+        // Build the graphs
+        const graphs = this.buildFromTopicHierarchy(
+            hierarchicalTopics,
+            cooccurrences,
+        );
+
+        debug(
+            `Graphs built: flat=${graphs.flatGraph.order} nodes, hierarchical=${graphs.hierarchicalGraph.order} nodes`,
+        );
+
+        // Store relationships in database if table provided
+        if (topicRelationshipsTable) {
+            const relationships = this.exportToTopicRelationships();
+            debug(
+                `Exporting ${relationships.length} topic relationships to database`,
+            );
+
+            for (const rel of relationships) {
+                topicRelationshipsTable.upsertRelationship(rel);
+            }
+        }
+
+        // Calculate and store metrics if table provided
+        if (topicMetricsTable) {
+            const { MetricsCalculator } = await import(
+                "./metricsCalculator.js"
+            );
+            const metricsCalculator = new MetricsCalculator();
+
+            const topicCounts = metricsCalculator.calculateTopicCounts(
+                hierarchicalTopics.map((t) => ({
+                    topicId: t.topicId,
+                    url: t.url,
+                    domain: t.domain,
+                })),
+            );
+
+            const { topicMetrics } = metricsCalculator.calculateMetrics(
+                graphs.hierarchicalGraph,
+                topicCounts,
+            );
+
+            debug(`Calculated metrics for ${topicMetrics.size} topics`);
+
+            for (const [, metrics] of topicMetrics) {
+                topicMetricsTable.upsertMetrics(metrics);
+            }
+        }
+
+        debug(`Topic graph build and store complete`);
+        return graphs;
+    }
+
+    /**
+     * Extract cooccurrences from cache manager (moved from buildTopicGraphWithGraphology)
+     */
+    private extractCooccurrencesFromCache(
+        cacheManager: any,
+    ): CooccurrenceData[] {
+        const cachedRelationships = cacheManager.getAllTopicRelationships();
+        return cachedRelationships.map((rel: any) => ({
+            fromTopic: rel.fromTopic,
+            toTopic: rel.toTopic,
+            count: rel.count,
+            urls: rel.sources || [],
+        }));
     }
 }

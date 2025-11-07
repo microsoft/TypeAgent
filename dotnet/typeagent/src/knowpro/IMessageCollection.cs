@@ -17,7 +17,11 @@ public interface IMessageCollection : IReadOnlyAsyncCollection<IMessage>
 
     ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
 
-    ValueTask<string?> GetMessageTimestampAsync(int messageOrdinal, CancellationToken cancellationToken = default);
+    ValueTask<IList<IMessageMetadata>> GetMetadataAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
+
+    ValueTask<string?> GetTimestampAsync(int messageOrdinal, CancellationToken cancellationToken = default);
+
+    ValueTask<IList<string>> GetTimestampAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default);
 }
 
 public static class MessageCollectionExtensions
@@ -30,6 +34,7 @@ public static class MessageCollectionExtensions
     {
         return messages.ToListAsync(cancellationToken);
     }
+
     public static ValueTask<List<IMessage>> GetAllAsync(
         this IMessageCollection messages,
         CancellationToken cancellationToken

@@ -53,6 +53,7 @@ import registerDebug from "debug";
 
 import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
+import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
 import {
@@ -655,7 +656,6 @@ async function processBrowserAgentMessage(
         case "getTopicMetrics":
         case "getTopicTimelines":
         case "getViewportBasedNeighborhood":
-        case "testMergeTopicHierarchies":
         case "mergeTopicHierarchies":
         case "discoverRelatedKnowledge":
         case "getTopicDetails":
@@ -792,6 +792,10 @@ async function initializeWebsiteIndex(
                     websiteIndexes[0].path,
                     "index",
                 );
+
+            // Initialize JSON storage alongside SQLite
+            await initializeGraphologyStorage(context, websiteIndexes[0].path);
+
             debug(
                 `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
             );
@@ -848,6 +852,12 @@ async function initializeWebsiteIndex(
                                     sizeOnDisk: 0,
                                 };
 
+                                // Initialize JSON storage and perform migration if needed
+                                await initializeGraphologyStorage(
+                                    context,
+                                    indexPath,
+                                );
+
                                 debug(
                                     `Loaded existing website collection with ${websiteCollection.messages.length} websites from ${indexPath}`,
                                 );
@@ -891,6 +901,9 @@ async function initializeWebsiteIndex(
                         sizeOnDisk: 0,
                     };
 
+                    // Initialize JSON storage for new index
+                    await initializeGraphologyStorage(context, indexPath);
+
                     debug(
                         `Index will be created at ${indexPath} when first page is indexed`,
                     );
@@ -915,6 +928,40 @@ async function initializeWebsiteIndex(
         context.agentContext.websiteCollection =
             new website.WebsiteCollection();
         context.agentContext.index = undefined;
+    }
+}
+
+/**
+ * Initialize Graphology storage for pure Graphology architecture
+ */
+async function initializeGraphologyStorage(
+    context: SessionContext<BrowserActionContext>,
+    indexPath: string,
+): Promise<void> {
+    try {
+        debug("Initializing Graphology storage");
+
+        // Create storage path for Graphology files
+        const graphologyStoragePath = path.join(indexPath, "storage");
+
+        // Create Graphology persistence manager
+        const persistenceManager = createGraphologyPersistenceManager(
+            graphologyStoragePath,
+        );
+
+        // Store reference in context for later use (maintaining compatibility)
+        if (!context.agentContext.graphJsonStorage) {
+            context.agentContext.graphJsonStorage = {
+                manager: persistenceManager,
+                lastEntityGraphUpdate: null,
+                lastTopicGraphUpdate: null,
+            };
+        }
+
+        debug("Graphology storage initialization complete");
+    } catch (error) {
+        debug(`Error initializing Graphology storage: ${error}`);
+        // Don't throw - this should not break the main initialization
     }
 }
 

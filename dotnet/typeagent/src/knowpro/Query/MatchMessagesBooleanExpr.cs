@@ -61,6 +61,7 @@ internal class MatchMessagesBooleanExpr : QueryOpExpr<MessageAccumulator>
         IList<SemanticRef> semanticRefs = await context.SemanticRefs.GetAsync(
             semanticRefMatches.ToOrdinals()
         ).ConfigureAwait(false);
+
         int i = 0;
         foreach (var match in semanticRefMatches.GetMatches())
         {
@@ -85,13 +86,18 @@ internal class MatchMessagesOrExpr : MatchMessagesBooleanExpr
         MessageAccumulator? allMatches = null;
         foreach (var termExpr in TermExpressions)
         {
-            var matches = await termExpr.GetResultAsync(context).ConfigureAwait(false);
+            var matches = await termExpr.GetResultAsync(
+                context
+            ).ConfigureAwait(false);
             if (matches is null)
             {
                 continue;
             }
 
-            MessageAccumulator? messageMatches = await AccumulateMessagesAsync(context, matches).ConfigureAwait(false);
+            MessageAccumulator? messageMatches = await AccumulateMessagesAsync(
+                context,
+                matches
+            ).ConfigureAwait(false);
             if (messageMatches is not null)
             {
                 if (allMatches is not null)

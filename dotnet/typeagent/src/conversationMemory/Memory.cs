@@ -49,7 +49,7 @@ public class Memory<TMessage> : Conversation<TMessage>, IMemory
         }
     }
 
-    public virtual IList<PromptSection>? GetModelInstructions()
+    public virtual IList<IPromptSection>? GetModelInstructions()
     {
         return null;
     }
@@ -80,5 +80,14 @@ public class Memory<TMessage> : Conversation<TMessage>, IMemory
         };
 
         return options;
+    }
+
+    protected void BeginIndexing()
+    {
+    }
+
+    protected void EndIndexing()
+    {
+
     }
 }

@@ -69,8 +69,8 @@ internal class QueryCompiler
         bool exactMatch = (searchOptions?.ExactMatch is not null) && searchOptions.ExactMatch.Value;
         if (!exactMatch)
         {
-            await ResolveRelatedTermsAsync(_allSearchTerms, true);
-            await ResolveRelatedTermsAsync(_allScopeSearchTerms, false);
+            await ResolveRelatedTermsAsync(_allSearchTerms, true).ConfigureAwait(false);
+            await ResolveRelatedTermsAsync(_allScopeSearchTerms, false).ConfigureAwait(false);
         }
 
         return resultExpr;
@@ -108,7 +108,11 @@ internal class QueryCompiler
     )
     {
         IMessageTextIndex messageIndex = _conversation.SecondaryIndexes.MessageIndex;
-        GetScopeExpr? scopeExpr = await CompileScopeAsync(null, whenFilter);
+        GetScopeExpr? scopeExpr = await CompileScopeAsync(
+            null,
+            whenFilter
+        ).ConfigureAwait(false);
+
         return CompileMessageSimilarity(query, scopeExpr, options);
     }
 
@@ -509,6 +513,7 @@ internal class QueryCompiler
             null,
             _cancellationToken
         ).ConfigureAwait(false);
+
         for (int i = 0; i < termsNeedingRelated.Count; ++i)
         {
             termsNeedingRelated[i].RelatedTerms = relatedTermsFuzzy[i];

@@ -74,7 +74,7 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
     )
     {
-        var messageRangeToIndex = await conversation.GetMessageRangeToIndexAsync(
+        CollectionRangeToIndex messageRangeToIndex = await conversation.GetMessageRangeToIndexAsync(
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -83,7 +83,7 @@ public static class ConversationIndexer
             return;
         }
 
-        var messagesToIndex = await conversation.Messages.GetSliceAsync(
+        IList<IMessage> messagesToIndex = await conversation.Messages.GetSliceAsync(
             messageRangeToIndex.OrdinalStartAt,
             messageRangeToIndex.Count,
             cancellationToken
@@ -148,6 +148,36 @@ public static class ConversationIndexer
         ).ConfigureAwait(false);
     }
 
+    public static ValueTask UpdateAliasesAsync(
+        this IConversation conversation,
+        IList<TermSynonym> synonyms,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNullOrEmpty(synonyms, nameof(synonyms));
+        AliasMap aliasMap = new AliasMap(synonyms);
+        return conversation.UpdateAliasesAsync(aliasMap, cancellationToken);
+    }
+
+    public static async ValueTask UpdateAliasesAsync(
+        this IConversation conversation,
+        AliasMap aliasMap,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNull(aliasMap, nameof(aliasMap));
+
+        var aliases = conversation.SecondaryIndexes.TermToRelatedTermsIndex.Aliases;
+        foreach (var map in aliasMap)
+        {
+            await aliases.AddTermAsync(
+                map.Key,
+                map.Value,
+                cancellationToken
+            ).ConfigureAwait(false);
+        }
+    }
+
     public static async ValueTask RebuildRelatedTermsIndexAsync(
         this IConversation conversation,
         CancellationToken cancellationToken = default
@@ -189,7 +219,7 @@ public static class ConversationIndexer
                 messageRange,
                 messages,
                 cancellationToken
-            );
+            ).ConfigureAwait(false);
         }
     }
 

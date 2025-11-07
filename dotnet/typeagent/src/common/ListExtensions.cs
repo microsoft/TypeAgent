@@ -21,6 +21,12 @@ public static class ListExtensions
         return list is not null ? list.Count : 0;
     }
 
+    public static T? GetOrNull<T>(this IList<T> list, int index)
+        where T : class
+    {
+        return (index < list.Count) ? list[index] : null;
+    }
+
     public static void AddRange<T>(this IList<T> list, IEnumerable<T> items)
     {
         ArgumentVerify.ThrowIfNull(items, nameof(items));

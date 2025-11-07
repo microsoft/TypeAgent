@@ -10,10 +10,12 @@
 
   <ItemGroup>
     <None Remove="noiseTerms.txt" />
+    <None Remove="podcastVerbs.json" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="noiseTerms.txt" />
+    <EmbeddedResource Include="podcastVerbs.json" />
   </ItemGroup>
 
   <ItemGroup>

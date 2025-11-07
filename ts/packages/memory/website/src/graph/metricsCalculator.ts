@@ -3,7 +3,25 @@
 
 import { createRequire } from "module";
 import registerDebug from "debug";
-import type { TopicMetrics } from "../tables.js";
+
+interface TopicMetrics {
+    topicId: string;
+    topicName: string;
+    documentCount: number;
+    domainCount: number;
+    degreeCentrality: number;
+    betweennessCentrality: number;
+    firstSeen?: string;
+    lastSeen?: string;
+    activityPeriod: number;
+    avgConfidence: number;
+    maxConfidence: number;
+    totalRelationships: number;
+    strongRelationships: number;
+    entityCount: number;
+    topEntities?: string;
+    updated: string;
+}
 
 const require = createRequire(import.meta.url);
 const Graph = require("graphology");
