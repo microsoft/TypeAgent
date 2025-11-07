@@ -52,5 +52,5 @@ public sealed class AnswerGeneratorSettings
     /// <summary>
     /// Additional instructions (prompt sections) prepended when invoking the model.
     /// </summary>
-    public IList<PromptSection>? ModelInstructions { get; set; }
+    public IList<IPromptSection>? ModelInstructions { get; set; }
 }

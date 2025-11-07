@@ -48,7 +48,7 @@ public class TextEmbeddingModelWithCache : ITextEmbeddingModel
                     return result;
                 },
                 cancellationToken
-            );
+            ).ConfigureAwait(false);
         }
         return await InnerModel.GenerateAsync(text, cancellationToken).ConfigureAwait(false);
     }
@@ -60,7 +60,7 @@ public class TextEmbeddingModelWithCache : ITextEmbeddingModel
                 texts,
                 async (t, ct) =>
                 {
-                    var results = await InnerModel.GenerateAsync(t, ct);
+                    var results = await InnerModel.GenerateAsync(t, ct).ConfigureAwait(false);
                     return results;
                 },
                 cancellationToken

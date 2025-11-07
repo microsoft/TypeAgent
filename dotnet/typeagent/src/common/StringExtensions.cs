@@ -8,6 +8,16 @@ namespace TypeAgent.Common;
 
 public static partial class StringExtensions
 {
+    public static string Trim(this string text, int maxLength)
+    {
+        text = text.Trim();
+        if (maxLength > 0 && text.Length > maxLength)
+        {
+            text = text[0..maxLength];
+        }
+        return text;
+    }
+
     /// <summary>
     /// Splits an enumerable of strings into chunks, each chunk containing up to maxChunkLength strings and
     /// no more than maxCharsPerChunk total characters. Strings longer than maxCharsPerChunk are truncated.
@@ -67,6 +77,7 @@ public static partial class StringExtensions
     public static IList<string> SplitLines(this string text, StringSplitOptions options = default)
         => text.Split(s_lineSplitter, options);
 
+    // Split using a Regex
     public static IList<string> Split(this string text, Regex regex, StringSplitOptions options = default)
     {
         ArgumentVerify.ThrowIfNull(regex, nameof(regex));

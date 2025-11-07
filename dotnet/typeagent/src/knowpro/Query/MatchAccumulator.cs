@@ -198,7 +198,7 @@ internal class MatchAccumulator<T>
 
         if (maxMatches > 0)
         {
-            var topList = new TopNCollection<Match<T>>(maxMatches);
+            var topList = TopNCollection.Create<Match<T>>(maxMatches);
             foreach (var match in MatchesWithMinHitCount(minHitCount))
             {
                 topList.Add(match, match.Score);

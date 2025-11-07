@@ -74,7 +74,7 @@ public static class ConversationIndexer
         CancellationToken cancellationToken = default
     )
     {
-        var messageRangeToIndex = await conversation.GetMessageRangeToIndexAsync(
+        CollectionRangeToIndex messageRangeToIndex = await conversation.GetMessageRangeToIndexAsync(
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -83,7 +83,7 @@ public static class ConversationIndexer
             return;
         }
 
-        var messagesToIndex = await conversation.Messages.GetSliceAsync(
+        IList<IMessage> messagesToIndex = await conversation.Messages.GetSliceAsync(
             messageRangeToIndex.OrdinalStartAt,
             messageRangeToIndex.Count,
             cancellationToken
@@ -189,7 +189,7 @@ public static class ConversationIndexer
                 messageRange,
                 messages,
                 cancellationToken
-            );
+            ).ConfigureAwait(false);
         }
     }
 

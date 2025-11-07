@@ -19,7 +19,7 @@ public class LangSearchOptions : SearchOptions
             ? new LangSearchRagOptions(src.FallbackRagOptions)
             : null;
         ModelInstructions = (src.ModelInstructions is not null)
-            ? new List<PromptSection>(src.ModelInstructions)
+            ? new List<IPromptSection>(src.ModelInstructions)
             : null;
     }
 
@@ -27,7 +27,7 @@ public class LangSearchOptions : SearchOptions
 
     public LangSearchRagOptions? FallbackRagOptions { get; set; }
 
-    public IList<PromptSection>? ModelInstructions { get; set; }
+    public IList<IPromptSection>? ModelInstructions { get; set; }
 
     internal SearchOptions CreateTextQueryOptions()
     {
