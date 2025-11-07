@@ -49,11 +49,14 @@ public partial class AnswerContext
 {
     // Relevant entities
     // Use the 'name' and 'type' properties of entities to PRECISELY identify those that answer the user question.
+    [JsonPropertyName("entities")]
     public IList<RelevantEntity>? Entities { get; set; }
 
     // Relevant topics
+    [JsonPropertyName("topics")]
     public IList<RelevantTopic> Topics { get; set; }
 
     // Relevant messages
+    [JsonPropertyName("messages")]
     public IList<RelevantMessage>? Messages { get; set; }
 };

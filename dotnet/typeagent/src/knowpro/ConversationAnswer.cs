@@ -9,22 +9,13 @@ namespace TypeAgent.KnowPro;
 public static class ConversationAnswer
 {
     public static async ValueTask<AnswerResponse> AnswerQuestionAsync(
-        this IConversation conversation,
-        string question,
-        ConversationSearchResult searchResult,
-        AnswerContextOptions? contextOptions = null,
-        CancellationToken cancellationToken = default
+    this IConversation conversation,
+    string question,
+    AnswerContext context,
+    CancellationToken cancellationToken = default
     )
     {
-        ArgumentVerify.ThrowIfNull(searchResult, nameof(searchResult));
-
-        AnswerContextBuilder contextBuilder = new AnswerContextBuilder(conversation);
-
-        AnswerContext context = await contextBuilder.FromSearchResultAsync(
-            searchResult,
-            contextOptions,
-            cancellationToken
-        ).ConfigureAwait(false);
+        ArgumentVerify.ThrowIfNull(context, nameof(context));
 
         IAnswerGenerator generator = conversation.Settings.AnswerGenerator;
 
@@ -45,6 +36,30 @@ public static class ConversationAnswer
         }
 
         throw new NotImplementedException("Answer chunking");
+    }
+
+
+    public static async ValueTask<AnswerResponse> AnswerQuestionAsync(
+        this IConversation conversation,
+        string question,
+        ConversationSearchResult searchResult,
+        AnswerContextOptions? contextOptions = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentVerify.ThrowIfNull(searchResult, nameof(searchResult));
+        AnswerContext context = await AnswerContext.FromSearchResultAsync(
+            conversation,
+            searchResult,
+            contextOptions,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        return await conversation.AnswerQuestionAsync(
+            question,
+            context,
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 
     public static async ValueTask<IList<AnswerResponse>> AnswerQuestionAsync(
@@ -87,5 +102,4 @@ public static class ConversationAnswer
 
         return answerResponses;
     }
-
 }
