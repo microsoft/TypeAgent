@@ -14,4 +14,16 @@ public static class DictionaryExtensions
     {
         return dictionary.TryGetValue(key, out TValue? value) ? value : defaultValue;
     }
+
+    // Gets values in the same order as the keys
+    public static IEnumerable<TValue> GetValues<TKey, TValue>(
+        this IDictionary<TKey,TValue> dictionary,
+        IEnumerable<TKey> keysInOrder
+    )
+    {
+        foreach (TKey key in keysInOrder)
+        {
+            yield return dictionary[key];
+        }
+    }
 }

@@ -118,6 +118,29 @@ public class SqliteDatabase : IDisposable
         return Enumerate<T>(sql, null, rowDeserializer);
     }
 
+    public Dictionary<TKey, TValue> GetKeyValues<TKey, TValue>(
+        string sql,
+        Action<SqliteCommand> addParams,
+        Func<SqliteDataReader, KeyValuePair<TKey, TValue>> rowDeserializer,
+        Dictionary<TKey, TValue>? keyValues = null
+    )
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = sql;
+        if (addParams is not null)
+        {
+            addParams(cmd);
+        }
+        using var reader = cmd.ExecuteReader();
+        keyValues ??= [];
+        while (reader.Read())
+        {
+            var kv = rowDeserializer(reader);
+            keyValues.Add(kv.Key, kv.Value);
+        }
+        return keyValues;
+    }
+
     public IEnumerable<KeyValuePair<int, NormalizedEmbeddingB>> EnumerateEmbeddings(string sql)
     {
         return Enumerate<KeyValuePair<int, NormalizedEmbeddingB>>(

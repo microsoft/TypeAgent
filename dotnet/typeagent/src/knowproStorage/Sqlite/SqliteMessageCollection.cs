@@ -129,7 +129,8 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
         return ValueTask.FromResult(GetMessageLength(messageOrdinal));
     }
 
-    public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals) => MessagesTable.GetMessageLengths(_db, messageOrdinals);
+    public IEnumerable<int> GetMessageLengths(IList<int> messageOrdinals)
+        => MessagesTable.GetMessageLengths(_db, messageOrdinals);
 
     public ValueTask<IList<int>> GetMessageLengthAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
     {
@@ -314,7 +315,8 @@ public class SqliteMessageCollection : IMessageCollection
         return ValueTask.FromResult(GetTimestamp(messageOrdinal));
     }
 
-    public IList<string?> GetTimestamp(IList<int> messageOrdinals) => [.. MessagesTable.GetTimestamp(_db, messageOrdinals)];
+    public IList<string?> GetTimestamp(IList<int> messageOrdinals)
+        => [.. MessagesTable.GetTimestamp(_db, messageOrdinals)];
 
     public ValueTask<IList<string?>> GetTimestampAsync(IList<int> messageOrdinals, CancellationToken cancellationToken = default)
     {
@@ -422,23 +424,25 @@ FROM Messages WHERE msg_id = @msg_id",
 
     public static IEnumerable<int> GetMessageLengths(SqliteDatabase db, IList<int> messageIds)
     {
+        Dictionary<int, int> messageLengths = [];
+        // Sqlite does not guarantee ordering for "IN" clauses
+        // We need to return values in the order they were asked for
         foreach (var batch in messageIds.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
 
-            var lengths = db.Enumerate(
+            db.GetKeyValues(
                 $@"
-SELECT message_length
+SELECT msg_id, message_length
 FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                (reader) => reader.GetInt32(0)
+                (reader) => new KeyValuePair<int, int>(reader.GetInt32(0), reader.GetInt32(1)),
+                messageLengths
             );
-            foreach (var length in lengths)
-            {
-                yield return length;
-            }
         }
+        // Return values in order
+        return messageLengths.GetValues(messageIds);
     }
 
     public static string? GetTimestamp(SqliteDatabase db, int msgId)
@@ -516,22 +520,22 @@ FROM Messages ORDER BY msg_id",
 
     public static IEnumerable<string?> GetTimestamp(SqliteDatabase db, IList<int> messageOrdinals)
     {
+        Dictionary<int, string> messageTimestamps = [];
         foreach (var batch in messageOrdinals.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
 
-            var list = db.Enumerate(@$"
-SELECT start_timestamp
+            db.GetKeyValues(@$"
+SELECT msg_id, start_timestamp
 FROM Messages WHERE msg_id IN({SqliteDatabase.MakeInStatement(placeholderIds)})",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                (reader) => reader.GetStringOrNull(0)
+                (reader) => new KeyValuePair<int, string>(reader.GetInt32(0), reader.GetStringOrNull(1)),
+                messageTimestamps
             );
-
-            foreach (var item in list)
-            {
-                yield return item;
-            }
         }
+        // Sqlite does not guarantee order of values returned
+        // But we need to return values in exactly the order they were requested
+        return messageTimestamps.GetValues(messageOrdinals);
     }
 
     public static MessageRow ReadMessageRow(SqliteDataReader reader)
