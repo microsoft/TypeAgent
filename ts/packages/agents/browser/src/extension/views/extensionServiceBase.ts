@@ -508,27 +508,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getAllRelationships(): Promise<any[]> {
-        const result = await this.sendMessage<{ relationships?: any[] }>({
-            type: "getAllRelationships",
-        });
-        return result?.relationships || [];
-    }
-
-    async getAllCommunities(): Promise<any[]> {
-        const result = await this.sendMessage<{ communities?: any[] }>({
-            type: "getAllCommunities",
-        });
-        return result?.communities || [];
-    }
-
-    async getAllEntitiesWithMetrics(): Promise<any[]> {
-        const result = await this.sendMessage<{ entities?: any[] }>({
-            type: "getAllEntitiesWithMetrics",
-        });
-        return result?.entities || [];
-    }
-
     async getGlobalGraphLayoutData(parameters: {
         maxNodes?: number;
         includeConnectivity?: boolean;
@@ -549,6 +528,19 @@ export abstract class ExtensionServiceBase {
         return this.sendMessage({
             type: "getEntityNeighborhood",
             ...parameters,
+        });
+    }
+
+    async getEntityNeighborhoodLayoutData(
+        entityId: string,
+        depth?: number,
+        maxNodes?: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getEntityNeighborhoodLayoutData",
+            entityId,
+            depth,
+            maxNodes,
         });
     }
 

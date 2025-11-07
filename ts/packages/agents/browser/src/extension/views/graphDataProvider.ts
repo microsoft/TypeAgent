@@ -91,6 +91,24 @@ interface TopicGraphLayoutResult {
     };
 }
 
+interface EntityNeighborhoodLayoutResult {
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        entityId: string;
+        queryDepth: number;
+        maxNodes: number;
+        actualNodes: number;
+        actualEdges: number;
+        layer: string;
+        source: string;
+    };
+}
+
 // ===================================================================
 // DATA PROVIDER INTERFACE
 // ===================================================================
@@ -106,7 +124,7 @@ interface GraphDataProvider {
         maxNodes: number,
     ): Promise<EntityNeighborhoodResult>;
 
-    // Phase 3: Layout-only neighborhood data
+    // Phase 3: Layout-only neighborhood data (legacy)
     getEntityNeighborhoodLayoutData(
         entityId: string,
         depth: number,
@@ -120,6 +138,9 @@ interface GraphDataProvider {
     getGlobalImportanceLayer(maxNodes?: number): Promise<GraphLayoutResult>;
     getGlobalImportanceLayoutData(maxNodes?: number): Promise<GraphLayoutResult>;
     getTopicImportanceLayoutData(maxNodes?: number): Promise<TopicGraphLayoutResult>;
+
+    // Phase 2: Optimized entity neighborhood method
+    getEntityNeighborhoodLayoutDataOptimized(entityId: string, depth: number, maxNodes: number): Promise<EntityNeighborhoodLayoutResult>;
 
     // Hierarchical partitioned loading methods (legacy)
     getViewportBasedNeighborhood(
@@ -419,6 +440,29 @@ class GraphDataProviderImpl implements GraphDataProvider {
         }
     }
 
+    async getEntityNeighborhoodLayoutDataOptimized(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<EntityNeighborhoodLayoutResult> {
+        try {
+            const result = await this.baseService.getEntityNeighborhoodLayoutData(
+                entityId,
+                depth,
+                maxNodes,
+            );
+
+            // Server returns optimized layout-only contract: {graphologyLayout, metadata}
+            return result;
+        } catch (error) {
+            console.error(
+                "[GraphDataProvider] Error fetching optimized entity neighborhood layout:",
+                error,
+            );
+            throw error;
+        }
+    }
+
     async getViewportBasedNeighborhood(
         centerEntity: string,
         viewportNodeNames: string[],
@@ -696,5 +740,6 @@ export {
     GraphStatistics,
     GraphLayoutResult,
     TopicGraphLayoutResult,
+    EntityNeighborhoodLayoutResult,
     GraphLayoutData,
 };

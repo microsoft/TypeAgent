@@ -600,182 +600,6 @@ export async function mergeTopicHierarchies(
 }
 
 // ============================================================================
-// Graph Data Retrieval Functions
-// ============================================================================
-
-export async function getAllRelationships(
-    parameters: {},
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    relationships: any[];
-    error?: string;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                relationships: [],
-                error: "Website collection not available",
-            };
-        }
-
-        const relationships =
-            websiteCollection.relationships?.getAllRelationships() || [];
-
-        // Apply same optimization as getGlobalImportanceLayer for consistency
-        const optimizedRelationships = relationships.map((rel: any) => ({
-            rowId: rel.rowId,
-            fromEntity: rel.fromEntity,
-            toEntity: rel.toEntity,
-            relationshipType: rel.relationshipType,
-            confidence: rel.confidence,
-            // Deduplicate sources using Set, then limit to first 3 entries
-            sources: rel.sources
-                ? typeof rel.sources === "string"
-                    ? Array.from(new Set(JSON.parse(rel.sources))).slice(0, 3)
-                    : Array.isArray(rel.sources)
-                      ? Array.from(new Set(rel.sources)).slice(0, 3)
-                      : rel.sources
-                : undefined,
-            count: rel.count,
-        }));
-
-        return {
-            relationships: optimizedRelationships,
-        };
-    } catch (error) {
-        console.error("Error getting all relationships:", error);
-        return {
-            relationships: [],
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-export async function getAllCommunities(
-    parameters: {},
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    communities: any[];
-    error?: string;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                communities: [],
-                error: "Website collection not available",
-            };
-        }
-
-        const communities =
-            websiteCollection.communities?.getAllCommunities() || [];
-
-        return {
-            communities: communities,
-        };
-    } catch (error) {
-        console.error("Error getting all communities:", error);
-        return {
-            communities: [],
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-export async function getAllEntitiesWithMetrics(
-    parameters: {},
-    context: SessionContext<BrowserActionContext>,
-): Promise<{
-    entities: any[];
-    error?: string;
-}> {
-    try {
-        const websiteCollection = context.agentContext.websiteCollection;
-
-        if (!websiteCollection) {
-            return {
-                entities: [],
-                error: "Website collection not available",
-            };
-        }
-
-        // Ensure cache is populated
-        await ensureGraphCache(websiteCollection);
-
-        // Get cached data
-        const cache = getGraphCache(websiteCollection);
-        if (cache && cache.isValid && cache.entityMetrics.length > 0) {
-            debug(
-                `[Knowledge Graph] Using cached entity data: ${cache.entityMetrics.length} entities`,
-            );
-
-            // Apply entity optimization similar to getGlobalImportanceLayer
-            const optimizedEntities = cache.entityMetrics.map(
-                (entity: any) => ({
-                    id: entity.id || entity.name,
-                    name: entity.name,
-                    type: entity.type || "entity",
-                    confidence: entity.confidence || 0.5,
-                    count: entity.count,
-                    degree: entity.degree,
-                    importance: entity.importance,
-                    communityId: entity.communityId,
-                    size: entity.size,
-                }),
-            );
-
-            return {
-                entities: optimizedEntities,
-            };
-        }
-
-        // Fallback to live computation if no cache
-        debug(
-            "[Knowledge Graph] Cache not available, computing entities with metrics",
-        );
-        const entities =
-            (websiteCollection.knowledgeEntities as any)?.getTopEntities(
-                5000,
-            ) || [];
-        const relationships =
-            websiteCollection.relationships?.getAllRelationships() || [];
-        const communities =
-            websiteCollection.communities?.getAllCommunities() || [];
-
-        const entityMetrics = calculateEntityMetrics(
-            entities,
-            relationships,
-            communities,
-        );
-
-        const optimizedEntities = entityMetrics.map((entity: any) => ({
-            id: entity.id || entity.name,
-            name: entity.name,
-            type: entity.type || "entity",
-            confidence: entity.confidence || 0.5,
-            count: entity.count,
-            degree: entity.degree,
-            importance: entity.importance,
-            communityId: entity.communityId,
-            size: entity.size,
-        }));
-
-        return {
-            entities: optimizedEntities,
-        };
-    } catch (error) {
-        console.error("Error getting all entities with metrics:", error);
-        return {
-            entities: [],
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-// ============================================================================
 // Graph Exploration Functions
 // ============================================================================
 
@@ -1005,6 +829,272 @@ export async function getEntityNeighborhood(
             neighbors: [],
             relationships: [],
             error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+/**
+ * Get entity neighborhood layout data only (Phase 2 optimization)
+ * Returns only the graphology layout without raw neighbors/relationships
+ */
+export async function getEntityNeighborhoodLayoutData(
+    parameters: {
+        entityId: string;
+        depth?: number;
+        maxNodes?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        entityId: string;
+        queryDepth: number;
+        maxNodes: number;
+        actualNodes: number;
+        actualEdges: number;
+        layer: string;
+        source: string;
+    };
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
+                metadata: {
+                    entityId: parameters.entityId,
+                    queryDepth: parameters.depth || 2,
+                    maxNodes: parameters.maxNodes || 100,
+                    actualNodes: 0,
+                    actualEdges: 0,
+                    layer: "entity_neighborhood",
+                    source: "graphology",
+                },
+            };
+        }
+
+        const { entityId, depth = 2, maxNodes = 100 } = parameters;
+
+        // Ensure cache is populated
+        await ensureGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getGraphCache(websiteCollection);
+        if (!cache || !cache.isValid) {
+            return {
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
+                metadata: {
+                    entityId: entityId,
+                    queryDepth: depth,
+                    maxNodes: maxNodes,
+                    actualNodes: 0,
+                    actualEdges: 0,
+                    layer: "entity_neighborhood",
+                    source: "graphology",
+                },
+            };
+        }
+
+        try {
+            // Get entities and relationships from the cache
+            const { entities, relationships: cacheRelationships } = cache;
+
+            // Build entity graph from cache data
+            const graphNodes = entities.map((entity: any) => ({
+                id: entity.id || entity.name,
+                name: entity.name,
+                type: entity.type || "entity",
+                confidence: entity.confidence || 0.5,
+                count: entity.count || 1,
+                importance: entity.importance || 0.5,
+            }));
+
+            const graphEdges = cacheRelationships.map((rel: any) => ({
+                from: rel.fromEntity,
+                to: rel.toEntity,
+                type: rel.relationshipType || "co_occurs",
+                confidence: rel.confidence || 0.5,
+                strength: rel.confidence || 0.5,
+            }));
+
+            // Build graphology graph for neighborhood exploration
+            const entityGraph = buildGraphologyGraph(graphNodes, graphEdges);
+
+            if (!entityGraph.hasNode(entityId)) {
+                return {
+                    graphologyLayout: {
+                        elements: [],
+                        layoutDuration: 0,
+                        avgSpacing: 0,
+                        communityCount: 0,
+                    },
+                    metadata: {
+                        entityId: entityId,
+                        queryDepth: depth,
+                        maxNodes: maxNodes,
+                        actualNodes: 0,
+                        actualEdges: 0,
+                        layer: "entity_neighborhood",
+                        source: "graphology",
+                    },
+                };
+            }
+
+            debug(
+                `[Knowledge Graph] Using Graphology for entity neighborhood layout "${entityId}" (depth: ${depth}, maxNodes: ${maxNodes})`,
+            );
+
+            // Get neighbors from Graphology
+            const neighbors = entityGraph.neighbors(entityId);
+            const limitedNeighbors = neighbors.slice(0, maxNodes);
+
+            // Get center entity attributes
+            const centerAttributes = entityGraph.getNodeAttributes(entityId);
+
+            // Build relationships for layout generation
+            const relationships = limitedNeighbors.map(
+                (neighborId: string, index: number) => {
+                    const edgeData = entityGraph.getEdgeAttributes(
+                        entityGraph.edge(entityId, neighborId),
+                    );
+                    return {
+                        from: entityId,
+                        to: neighborId,
+                        type: edgeData.type || "co_occurs",
+                        confidence: edgeData.confidence || 0.5,
+                        strength: edgeData.confidence || 0.5,
+                    };
+                },
+            );
+
+            // Build graphology layout for neighborhood visualization
+            debug(`[Knowledge Graph] Building optimized layout for entity neighborhood "${entityId}"`);
+            const layoutStart = performance.now();
+
+            // Create nodes for layout generation (center entity + neighbors)
+            const nodeMap = new Map<string, any>();
+            
+            // Add center entity first
+            nodeMap.set(entityId, {
+                id: entityId,
+                name: entityId,
+                type: centerAttributes.type || "entity", 
+                confidence: centerAttributes.confidence || 0.5,
+                count: centerAttributes.count || 1,
+                importance: 1.0, // Center entity has highest importance
+            });
+            
+            // Add neighbors, checking for duplicates
+            limitedNeighbors.forEach((neighborId: string) => {
+                if (!nodeMap.has(neighborId)) {
+                    const attrs = entityGraph.getNodeAttributes(neighborId);
+                    nodeMap.set(neighborId, {
+                        id: neighborId,
+                        name: neighborId,
+                        type: attrs.type || "entity",
+                        confidence: attrs.confidence || 0.5,
+                        count: attrs.count || 1,
+                        importance: 0.7, // Neighbors have lower importance
+                    });
+                }
+            });
+
+            const allNeighborhoodNodes = Array.from(nodeMap.values());
+
+            debug(`[Knowledge Graph] Layout-only neighborhood: ${allNeighborhoodNodes.length} unique nodes, ${relationships.length} edges`);
+
+            // Build the graphology graph with layout
+            const neighborhoodGraph = buildGraphologyGraph(allNeighborhoodNodes, relationships, {
+                nodeLimit: maxNodes + 1, // +1 for center entity
+                minEdgeConfidence: 0.1, // Lower threshold for neighborhood views
+                denseClusterThreshold: 50,
+                forceAtlas2Iterations: 100,
+                noverlapIterations: 500,
+                targetViewportSize: 1500,
+                skipEdgeFiltering: true, // Include all edges for entity neighborhoods
+            });
+
+            // Convert to Cytoscape elements for UI consumption
+            const cytoscapeElements = convertToCytoscapeElements(neighborhoodGraph, 1500);
+            const layoutMetrics = calculateLayoutQualityMetrics(neighborhoodGraph);
+            const layoutDuration = performance.now() - layoutStart;
+
+            debug(`[Knowledge Graph] Optimized neighborhood layout complete in ${layoutDuration.toFixed(2)}ms with ${cytoscapeElements.length} elements`);
+
+            return {
+                graphologyLayout: {
+                    elements: cytoscapeElements,
+                    layoutDuration: layoutDuration,
+                    avgSpacing: layoutMetrics.avgSpacing,
+                    communityCount: 1, // Neighborhood views typically have one community
+                },
+                metadata: {
+                    entityId: entityId,
+                    queryDepth: depth,
+                    maxNodes: maxNodes,
+                    actualNodes: allNeighborhoodNodes.length,
+                    actualEdges: relationships.length,
+                    layer: "entity_neighborhood",
+                    source: "graphology",
+                },
+            };
+        } catch (graphologyError) {
+            debug(
+                `[Graphology] Failed to get entity neighborhood layout: ${graphologyError}`,
+            );
+            
+            return {
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
+                metadata: {
+                    entityId: entityId,
+                    queryDepth: depth,
+                    maxNodes: maxNodes,
+                    actualNodes: 0,
+                    actualEdges: 0,
+                    layer: "entity_neighborhood",
+                    source: "graphology",
+                },
+            };
+        }
+    } catch (error) {
+        console.error("Error getting entity neighborhood layout:", error);
+        return {
+            graphologyLayout: {
+                elements: [],
+                layoutDuration: 0,
+                avgSpacing: 0,
+                communityCount: 0,
+            },
+            metadata: {
+                entityId: parameters.entityId,
+                queryDepth: parameters.depth || 2,
+                maxNodes: parameters.maxNodes || 100,
+                actualNodes: 0,
+                actualEdges: 0,
+                layer: "entity_neighborhood",
+                source: "graphology",
+            },
         };
     }
 }

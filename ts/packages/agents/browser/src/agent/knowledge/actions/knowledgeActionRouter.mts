@@ -30,9 +30,6 @@ import {
     rebuildKnowledgeGraph,
     testMergeTopicHierarchies,
     mergeTopicHierarchies,
-    getAllRelationships,
-    getAllCommunities,
-    getAllEntitiesWithMetrics,
     getEntityNeighborhood,
     getGlobalImportanceLayer,
     getTopicImportanceLayer,
@@ -97,12 +94,6 @@ export async function handleKnowledgeAction(
             return await testMergeTopicHierarchies(parameters, context);
         case "mergeTopicHierarchies":
             return await mergeTopicHierarchies(parameters, context);
-        case "getAllRelationships":
-            return await getAllRelationships(parameters, context);
-        case "getAllCommunities":
-            return await getAllCommunities(parameters, context);
-        case "getAllEntitiesWithMetrics":
-            return await getAllEntitiesWithMetrics(parameters, context);
         case "getEntityNeighborhood":
             return await getEntityNeighborhood(parameters, context);
         case "getGlobalImportanceLayer":

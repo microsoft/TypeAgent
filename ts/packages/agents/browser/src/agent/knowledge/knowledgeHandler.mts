@@ -29,9 +29,6 @@ import {
     getKnowledgeGraphStatus,
     buildKnowledgeGraph,
     rebuildKnowledgeGraph,
-    getAllRelationships,
-    getAllCommunities,
-    getAllEntitiesWithMetrics,
     getEntityNeighborhood,
     getGlobalImportanceLayer,
     getImportanceStatistics,
@@ -133,15 +130,6 @@ export async function handleKnowledgeAction(
 
         case "rebuildKnowledgeGraph":
             return await rebuildKnowledgeGraph(parameters, context);
-
-        case "getAllRelationships":
-            return await getAllRelationships(parameters, context);
-
-        case "getAllCommunities":
-            return await getAllCommunities(parameters, context);
-
-        case "getAllEntitiesWithMetrics":
-            return await getAllEntitiesWithMetrics(parameters, context);
 
         case "getEntityNeighborhood":
             return await getEntityNeighborhood(parameters, context);
