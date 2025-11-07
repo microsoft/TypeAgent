@@ -387,7 +387,7 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestAnswer")
         {
-            Args.Arg<string>("question")
+            Args.Arg<string>("query")
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.AnswerAsync);
@@ -399,19 +399,20 @@ public class TestCommands : ICommandModule
         IConversation conversation = EnsureConversation();
 
         NamedArgs namedArgs = new NamedArgs(args);
-        string? question = namedArgs.Get<string>("question");
-        if (string.IsNullOrEmpty(question))
+        string? query = namedArgs.Get<string>("query");
+        if (string.IsNullOrEmpty(query))
         {
             return;
         }
         IList<AnswerResponse> answers = await conversation.AnswerQuestionAsync(
-            question,
+            query,
             null,
             null,
             null,
             null,
             cancellationToken
         ).ConfigureAwait(false);
+        KnowProWriter.WriteJson(answers);
         /*
         AnswerContext context = new AnswerContext();
 

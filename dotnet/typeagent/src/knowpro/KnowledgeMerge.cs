@@ -11,18 +11,27 @@ public static class KnowledgeMergeExtensions
 
 internal class MergedKnowledge
 {
-    public SortedSet<int>? SourceMessageOrdinals { get; set; } = null;
-
     public void MergeMessageOrdinals(SemanticRef sr)
     {
-        SourceMessageOrdinals ??= [];
-        SourceMessageOrdinals.Add(sr.Range.Start.MessageOrdinal);
+        int ordinal = sr.Range.Start.MessageOrdinal;
+        if (ordinal < OrdinalMin)
+        {
+            OrdinalMin = ordinal;
+        }
+        if (ordinal > OrdinalMax)
+        {
+            OrdinalMax = ordinal;
+        }
     }
 
-    public void CollectOrdinals(List<int> ordinals)
+    public int OrdinalMin { get; private set; } = int.MaxValue;
+
+    public int OrdinalMax { get; private set; } = -1;
+
+    public void CollectOrdinals(HashSet<int> ordinals)
     {
-        ordinals.Add(SourceMessageOrdinals.Min);
-        ordinals.Add(SourceMessageOrdinals.Max);
+        ordinals.Add(OrdinalMin);
+        ordinals.Add(OrdinalMax);
     }
 }
 

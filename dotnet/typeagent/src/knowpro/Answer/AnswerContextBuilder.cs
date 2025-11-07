@@ -76,18 +76,21 @@ internal class AnswerContextBuilder
             ? mergedEntities.Values.GetTopK(topK.Value)
             : [.. mergedEntities.Values];
 
-        var (meta, timestamps) = await GetEnclosingMetadataAsync(
-            CollectOrdinals(candidateEntities),
+        // Unique list of ordinals
+        List<int> sortedOrdinals = CollectOrdinals(candidateEntities);
+
+        EnclosingMetadata enclosingMetadata = await GetEnclosingMetadataAsync(
+            sortedOrdinals,
             cancellationToken
         ).ConfigureAwait(false);
 
         List<RelevantEntity> relevantEntities = [];
         for (int i = 0; i < candidateEntities.Count; ++i)
         {
+            MergedEntity candidateEntity = candidateEntities[i].Item;
             var relevantEntity = new RelevantEntity();
-            int minOffset = i * 2;
-            relevantEntity.Entity = candidateEntities[i].Item.ToConcrete();
-            SetMetadata(relevantEntity, meta, timestamps, minOffset, minOffset + 1);
+            relevantEntity.Entity = candidateEntity.ToConcrete();
+            SetMetadata(relevantEntity, enclosingMetadata, candidateEntity.OrdinalMin, candidateEntity.OrdinalMax);
             relevantEntities.Add(relevantEntity);
         }
         return relevantEntities;
@@ -117,57 +120,63 @@ internal class AnswerContextBuilder
             ? mergedTopics.Values.GetTopK(topK.Value)
             : [.. mergedTopics.Values];
 
-        var (meta, timestamps) = await GetEnclosingMetadataAsync(
-            CollectOrdinals(candidateTopics),
+        // Unique list of ordinals
+        List<int> sortedOrdinals = CollectOrdinals(candidateTopics);
+
+        EnclosingMetadata enclosingMetadata = await GetEnclosingMetadataAsync(
+            sortedOrdinals,
             cancellationToken
         ).ConfigureAwait(false);
 
         List<RelevantTopic> relevantTopics = [];
         for (int i = 0; i < candidateTopics.Count; ++i)
         {
+            var candidateTopic = candidateTopics[i].Item;
             var relevantTopic = new RelevantTopic();
-            int minOffset = i * 2;
-            relevantTopic.Topic = candidateTopics[i].Item.Topic;
-            SetMetadata(relevantTopic, meta, timestamps, minOffset, minOffset + 1);
+            relevantTopic.Topic = candidateTopic.Topic;
+            SetMetadata(relevantTopic, enclosingMetadata, candidateTopic.OrdinalMin, candidateTopic.OrdinalMax);
+            relevantTopics.Add(relevantTopic);
         }
         return relevantTopics;
     }
 
     private void SetMetadata(
         RelevantKnowledge knowledge,
-        IList<IMessageMetadata> meta,
-        IList<string> timestamps,
+        EnclosingMetadata enclosingMetadata,
         int min,
         int max
     )
     {
-        var (origin, audience) = _metaMerger.Collect(meta[min], meta[max]);
+        int indexOfMin = enclosingMetadata.Ordinals.BinarySearch(min);
+        int indexOfMax = enclosingMetadata.Ordinals.BinarySearch(max);
+        Debug.Assert(indexOfMin >= 0);
+        Debug.Assert(indexOfMax >= 0);
+
+        var (origin, audience) = _metaMerger.Collect(
+            enclosingMetadata.Meta[indexOfMin],
+            enclosingMetadata.Meta[indexOfMax]
+        );
         knowledge.Origin = OneOrManyItem.Create(origin);
         knowledge.Audience = OneOrManyItem.Create(audience);
-        knowledge.TimeRange = this.GetTimeRange(timestamps[min], timestamps[max]);
+        knowledge.TimeRange = this.GetTimeRange(
+            enclosingMetadata.Timestamps[indexOfMin],
+            enclosingMetadata.Timestamps[indexOfMin]);
     }
 
-    private List<int> CollectOrdinals(IEnumerable<Scored<MergedEntity>> candidates)
+    private List<int> CollectOrdinals<T>(IEnumerable<Scored<T>> candidates)
+        where T : MergedKnowledge
     {
-        List<int> rangeOrdinals = [];
+        HashSet<int> uniqueOrdinals = [];
         foreach (var candidate in candidates)
         {
-            candidate.Item.CollectOrdinals(rangeOrdinals);
+            candidate.Item.CollectOrdinals(uniqueOrdinals);
         }
-        return rangeOrdinals;
+        List<int> ordinals = [.. uniqueOrdinals];
+        ordinals.Sort();
+        return ordinals;
     }
 
-    private List<int> CollectOrdinals(IEnumerable<Scored<MergedTopic>> candidates)
-    {
-        List<int> rangeOrdinals = [];
-        foreach (var candidate in candidates)
-        {
-            candidate.Item.CollectOrdinals(rangeOrdinals);
-        }
-        return rangeOrdinals;
-    }
-
-    private async ValueTask<(IList<IMessageMetadata>, IList<string>)> GetEnclosingMetadataAsync(
+    private async ValueTask<EnclosingMetadata> GetEnclosingMetadataAsync(
         List<int> rangeOrdinals,
         CancellationToken cancellationToken
     )
@@ -182,7 +191,17 @@ internal class AnswerContextBuilder
             cancellationToken
         ).ConfigureAwait(false);
 
-        return (meta, timestamps);
+        if (rangeOrdinals.Count != meta.Count || rangeOrdinals.Count != timestamps.Count)
+        {
+            throw new InvalidOperationException("ordinal list to meta list mismatch");
+        }
+
+        return new EnclosingMetadata
+        {
+            Ordinals = rangeOrdinals,
+            Meta = meta,
+            Timestamps = timestamps
+        };
     }
 
     private TimestampRange? GetTimeRange(string? min, string? max)
@@ -191,4 +210,14 @@ internal class AnswerContextBuilder
             ? new TimestampRange { StartTimestamp = min, EndTimestamp = max }
             : null;
     }
+
+    private struct EnclosingMetadata
+    {
+        public List<int> Ordinals { get; set; }
+
+        public IList<IMessageMetadata> Meta { get; set;}
+
+        public IList<string> Timestamps { get; set; }
+    }
+
 }

@@ -491,7 +491,7 @@ ORDER BY msg_id",
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
 
             var list = db.Enumerate(@$"
-SELECT metadata FROM Messages
+SELECT metadata
 FROM Messages WHERE msg_id IN({SqliteDatabase.MakeInStatement(placeholderIds)})",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
                 (reader) => reader.GetString(0)

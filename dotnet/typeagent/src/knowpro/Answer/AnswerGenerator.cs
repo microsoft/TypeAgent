@@ -42,7 +42,7 @@ public class AnswerGenerator : IAnswerGenerator
             CreateContextPrompt(context)
         ];
 
-        string promptText = string.Join("\n\n");
+        string promptText = string.Join("\n\n", prompt);
         return await Translator.TranslateAsync(
             promptText,
             Settings.ModelInstructions,

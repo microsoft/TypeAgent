@@ -68,7 +68,7 @@ public static class EmbeddingExtensions
     public static void IndexesOfNearest<T, TOther>(
         this IList<T> list,
         TOther embedding,
-        TopNCollection<int> matches,
+        ITopNCollection<int> matches,
         double minScore = double.MinValue
     )
         where TOther : ICosineSimilarity<T>
@@ -101,7 +101,7 @@ public static class EmbeddingExtensions
     )
         where TOther : ICosineSimilarity<T>
     {
-        TopNCollection<int> matches = new TopNCollection<int>(maxMatches);
+        ITopNCollection<int> matches = TopNCollection.Create<int>(maxMatches);
         list.IndexesOfNearest(embedding, matches, minScore);
         return matches.ByRankAndClear();
     }
@@ -117,7 +117,7 @@ public static class EmbeddingExtensions
     {
         ArgumentVerify.ThrowIfNull(filter, nameof(filter));
 
-        var matches = new TopNCollection<int>(maxMatches);
+        var matches = TopNCollection.Create<int>(maxMatches);
 
         int best = -1;
         double bestScore = double.MinValue;
@@ -156,7 +156,7 @@ public static class EmbeddingExtensions
     {
         ArgumentVerify.ThrowIfNull(ordinalsOfSubset, nameof(ordinalsOfSubset));
 
-        var matches = new TopNCollection<int>(maxMatches);
+        var matches = TopNCollection.Create<int>(maxMatches);
         for (int i = 0; i < ordinalsOfSubset.Count; ++i)
         {
             int idx = ordinalsOfSubset[i];
@@ -173,7 +173,7 @@ public static class EmbeddingExtensions
     public static void KeysOfNearest<T, TOther>(
         this IEnumerable<KeyValuePair<int, T>> list,
         TOther embedding,
-        TopNCollection<int> matches,
+        ITopNCollection<int> matches,
         double minScore = double.MinValue,
         Func<int, bool>? filter = null
     )
@@ -218,7 +218,7 @@ public static class EmbeddingExtensions
     )
         where TOther : ICosineSimilarity<T>
     {
-        TopNCollection<int> matches = new TopNCollection<int>(maxMatches);
+        ITopNCollection<int> matches = TopNCollection.Create<int>(maxMatches);
         list.KeysOfNearest(embedding, matches, minScore, filter);
         return matches.ByRankAndClear();
     }

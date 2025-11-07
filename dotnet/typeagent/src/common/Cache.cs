@@ -180,6 +180,11 @@ public class KeyValueCache<TKey, TValue> : Dictionary<TKey, TValue>, ICache<TKey
     public bool Contains(TKey key) => base.ContainsKey(key);
 
     public bool TryGet(TKey key, out TValue value) => base.TryGetValue(key, out value);
+
+    public new void Add(TKey key, TValue value)
+    {
+        TryAdd(key, value);
+    }
 }
 
 public static class Cache

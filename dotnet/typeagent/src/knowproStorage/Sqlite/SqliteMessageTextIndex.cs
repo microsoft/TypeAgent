@@ -230,7 +230,7 @@ ORDER BY msg_id",
     public ValueTask<int?> GetMaxOrdinalAsync(CancellationToken cancellationToken = default)
     {
         int? maxId = _db.Get(
-            "SELECT MAX(msg_id) from MessageTextIndex",
+            "SELECT MAX(msg_id) FROM MessageTextIndex",
             null,
             (reader) => reader.GetIntOrNull(0)
         );

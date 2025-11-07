@@ -3,7 +3,26 @@
 
 namespace TypeAgent.Common;
 
-public class TopNCollection<T>
+public interface ITopNCollection<T>
+{
+    int Count { get; }
+
+    void Add(T item, double score);
+    void Add(IEnumerable<Scored<T>> items);
+    List<Scored<T>> ByRankAndClear();
+}
+
+public static class TopNCollection
+{
+    public static ITopNCollection<T> Create<T>(int maxMatches)
+    {
+        return maxMatches > 0
+            ? new TopNCollection<T>(maxMatches)
+            : new CollectAllCollection<T>();
+    }
+}
+
+public class TopNCollection<T> : ITopNCollection<T>
 {
     private List<Scored<T>>? _items;
     private int _count; // Actual count, since items always ha a
@@ -168,5 +187,38 @@ public class TopNCollection<T>
         {
             throw new TypeAgentException("TopNCollection is empty");
         }
+    }
+}
+
+public class CollectAllCollection<T> : ITopNCollection<T>
+{
+    List<Scored<T>>? _items = null;
+
+    public CollectAllCollection()
+    {
+    }
+
+    public int Count => _items is not null
+            ? _items.Count :
+            0;
+
+    public void Add(T item, double score)
+    {
+        _items ??= [];
+        _items.Add(new Scored<T>(item, score));
+    }
+
+    public void Add(IEnumerable<Scored<T>> items)
+    {
+        _items ??= [];
+        _items.AddRange(items);
+    }
+
+    public List<Scored<T>> ByRankAndClear()
+    {
+        var results = _items ?? [];
+        results.Sort();
+        _items = null;
+        return results;
     }
 }
