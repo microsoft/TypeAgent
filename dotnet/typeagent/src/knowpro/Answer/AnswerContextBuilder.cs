@@ -50,22 +50,42 @@ internal class AnswerContextBuilder
                 ).ConfigureAwait(false);
             }
         }
+
+        context.Messages = await GetRelevantMessagesAsync(
+            searchResult.MessageMatches,
+            options?.MessagesTopK,
+            cancellationToken
+        ).ConfigureAwait(false);
+
         return context;
     }
 
-    public async ValueTask<IList<RelevantEntity>> GetRelevantEntitiesAsync(
+    public ValueTask<IList<RelevantEntity>> GetRelevantEntitiesAsync(
         SemanticRefSearchResult searchResult,
         int? topK = null,
         CancellationToken cancellationToken = default
     )
     {
-        if (!searchResult.HasMatches)
+        return GetRelevantEntitiesAsync(
+                searchResult.SemanticRefMatches,
+                topK,
+                cancellationToken
+                );
+    }
+
+    public async ValueTask<IList<RelevantEntity>> GetRelevantEntitiesAsync(
+        IList<ScoredSemanticRefOrdinal> semanticRefMatches,
+        int? topK = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (semanticRefMatches.IsNullOrEmpty())
         {
             return [];
         }
 
         IList<Scored<SemanticRef>> semanticRefs = await _conversation.GetSemanticRefReader().GetScoredAsync(
-            searchResult.SemanticRefMatches,
+            semanticRefMatches,
             KnowledgeType.Entity,
             cancellationToken
         ).ConfigureAwait(false);
@@ -96,19 +116,33 @@ internal class AnswerContextBuilder
         return relevantEntities;
     }
 
-    public async ValueTask<IList<RelevantTopic>> GetRelevantTopicsAsync(
+    public ValueTask<IList<RelevantTopic>> GetRelevantTopicsAsync(
         SemanticRefSearchResult searchResult,
         int? topK = null,
         CancellationToken cancellationToken = default
     )
     {
-        if (!searchResult.HasMatches)
+        return GetRelevantTopicsAsync(
+                searchResult.SemanticRefMatches,
+                topK,
+                cancellationToken
+                );
+
+    }
+
+    public async ValueTask<IList<RelevantTopic>> GetRelevantTopicsAsync(
+        IList<ScoredSemanticRefOrdinal> semanticRefMatches,
+        int? topK = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (semanticRefMatches.IsNullOrEmpty())
         {
             return [];
         }
 
         IList<Scored<SemanticRef>> semanticRefs = await _conversation.GetSemanticRefReader().GetScoredAsync(
-            searchResult.SemanticRefMatches,
+            semanticRefMatches,
             KnowledgeType.Topic,
             cancellationToken
         ).ConfigureAwait(false);
@@ -140,6 +174,30 @@ internal class AnswerContextBuilder
         return relevantTopics;
     }
 
+    public async ValueTask<IList<RelevantMessage>> GetRelevantMessagesAsync(
+        IList<ScoredMessageOrdinal> messageMatches,
+        int? topK = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (messageMatches.IsNullOrEmpty())
+        {
+            return [];
+        }
+        List<int> ordinals = messageMatches.ToMessageOrdinals(topK);
+        IList<IMessage> messages = await _conversation.GetMessageReader().GetAsync(
+            ordinals,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        List<RelevantMessage> relevantMessages = [];
+        foreach (var message in messages)
+        {
+            relevantMessages.Add(new RelevantMessage(message));
+        }
+        return relevantMessages;
+    }
+
     private void SetMetadata(
         RelevantKnowledge knowledge,
         EnclosingMetadata enclosingMetadata,
@@ -160,7 +218,8 @@ internal class AnswerContextBuilder
         knowledge.Audience = OneOrManyItem.Create(audience);
         knowledge.TimeRange = this.GetTimeRange(
             enclosingMetadata.Timestamps[indexOfMin],
-            enclosingMetadata.Timestamps[indexOfMin]);
+            enclosingMetadata.Timestamps[indexOfMax]
+        );
     }
 
     private List<int> CollectOrdinals<T>(IEnumerable<Scored<T>> candidates)
@@ -191,12 +250,9 @@ internal class AnswerContextBuilder
             cancellationToken
         ).ConfigureAwait(false);
 
-        if (rangeOrdinals.Count != meta.Count || rangeOrdinals.Count != timestamps.Count)
-        {
-            throw new InvalidOperationException("ordinal list to meta list mismatch");
-        }
-
-        return new EnclosingMetadata
+        return rangeOrdinals.Count != meta.Count || rangeOrdinals.Count != timestamps.Count
+            ? throw new InvalidOperationException("ordinal list to meta list mismatch")
+            : new EnclosingMetadata
         {
             Ordinals = rangeOrdinals,
             Meta = meta,

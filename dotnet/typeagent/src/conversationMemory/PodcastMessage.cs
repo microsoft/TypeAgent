@@ -23,6 +23,34 @@ public class PodcastMessageMeta : MessageMetadata
 
     public override string? Source => Speaker;
     public override IList<string>? Dest => Listeners;
+
+    internal void CollectAliases(AliasMap aliasMap)
+    {
+        CollectAlias(Speaker, aliasMap);
+        if (!Listeners.IsNullOrEmpty())
+        {
+            foreach (var listener in Listeners)
+            {
+                CollectAlias(listener, aliasMap);
+            }
+        }
+    }
+
+    private void CollectAlias(string? fullName, AliasMap aliasMap)
+    {
+        if (string.IsNullOrEmpty(fullName))
+        {
+            return;
+        }
+
+        PersonName person = new PersonName(fullName);
+        if (person.HasNames && person.Names.Count == 2)
+        {
+            // If participantName is a full name, then associate firstName with the full name
+            aliasMap.AddUnique(person.FirstName, fullName);
+            aliasMap.AddUnique(fullName, person.FirstName);
+        }
+    }
 }
 
 public class PodcastMessage : Message<PodcastMessageMeta>, ITranscriptMessage

@@ -22,9 +22,14 @@ public static class MessageExtensions
         return total;
     }
 
-    public static List<int> ToMessageOrdinals(this IList<ScoredMessageOrdinal> scoredOrdinals)
+    public static List<int> ToMessageOrdinals(
+        this IList<ScoredMessageOrdinal> scoredOrdinals,
+        int? topK = null
+    )
     {
-        return scoredOrdinals.Map((s) => s.MessageOrdinal);
+        return topK is not null && topK.Value < scoredOrdinals.Count
+            ? scoredOrdinals.Take(topK.Value).Map((s) => s.MessageOrdinal)
+            : scoredOrdinals.Map((s) => s.MessageOrdinal);
     }
 
     public static IEnumerable<int> AsMessageOrdinals(this IEnumerable<ScoredMessageOrdinal> scoredOrdinals)

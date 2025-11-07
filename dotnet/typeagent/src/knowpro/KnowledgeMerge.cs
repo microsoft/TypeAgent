@@ -196,7 +196,7 @@ internal class MergedTopic : MergedKnowledge
 
 }
 
-internal class MergedFacets : Multiset<string, string>
+internal class MergedFacets : MultiMap<string, string>
 {
     public MergedFacets()
         : base()

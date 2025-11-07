@@ -58,6 +58,15 @@ public static partial class StringExtensions
         }
     }
 
+    public static void ToLower(this IList<string> list)
+    {
+        int count = list.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            list[i] = list[i].ToLower();
+        }
+    }
+
     public static List<string> LowerAndSort(this List<string> list)
     {
         int count = list.Count;
@@ -76,6 +85,15 @@ public static partial class StringExtensions
 
     public static IList<string> SplitLines(this string text, StringSplitOptions options = default)
         => text.Split(s_lineSplitter, options);
+
+    [GeneratedRegex(@"(""[^""]+""|'[^']+'|\b\S+\b)")]
+    private static partial Regex s_wordBreakRegEx();
+
+    private static readonly Regex s_wordSplitter = s_wordBreakRegEx();
+
+    public static IList<string> SplitWords(this string text, StringSplitOptions options = default)
+    => text.Split(s_wordSplitter, options);
+
 
     // Split using a Regex
     public static IList<string> Split(this string text, Regex regex, StringSplitOptions options = default)

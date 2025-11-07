@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Threading.Tasks;
 using TypeAgent.KnowPro.Storage;
 
 namespace KnowProConsole;
@@ -48,11 +49,11 @@ public class PodcastCommands : ICommandModule
         {
             Args.Arg<string>("name", "Name of existing podcast index"),
         };
-        cmd.SetAction(this.PodcastLoad);
+        cmd.SetAction(this.PodcastLoadAsync);
         return cmd;
     }
 
-    private void PodcastLoad(ParseResult args)
+    private async Task PodcastLoadAsync(ParseResult args)
     {
         NamedArgs namedArgs = new(args);
         string name = namedArgs.GetRequired("name");
@@ -68,6 +69,8 @@ public class PodcastCommands : ICommandModule
 
         SetCurrent(podcast);
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Loaded {name}");
+
+        //await podcast.BuildSecondaryIndexesAsync();
     }
 
     private Command PodcastImportIndexDef()
@@ -121,7 +124,7 @@ public class PodcastCommands : ICommandModule
 
         if (namedArgs.Get<bool>("buildIndex"))
         {
-            await podcast.UpdateIndexAsync(cancellationToken);
+            await podcast.BuildIndexAsync(cancellationToken);
         }
     }
 

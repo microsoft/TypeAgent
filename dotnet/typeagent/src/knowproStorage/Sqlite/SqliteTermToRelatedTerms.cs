@@ -95,7 +95,7 @@ SELECT alias, score FROM RelatedTermsAliases WHERE term = @term"
         );
     }
 
-    public IDictionary<string, IList<Term>>? Lookup(IList<string> termTexts)
+    public AliasMap? Lookup(IList<string> termTexts)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(termTexts, nameof(termTexts));
 
@@ -112,8 +112,8 @@ WHERE term IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
                 return new KeyValuePair<string, Term>(reader.GetString(0), ReadTerm(reader, 1));
             }
         );
-        var results = new Multiset<string, Term>(rows);
-        return !results.IsNullOrEmpty() ? (IDictionary<string, IList<Term>>)results : null;
+        var results = new AliasMap(rows);
+        return !results.IsNullOrEmpty() ? results : null;
     }
 
     public ValueTask<IList<Term>?> LookupTermAsync(string text, CancellationToken cancellationToken = default)
@@ -121,7 +121,7 @@ WHERE term IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
         return ValueTask.FromResult(Lookup(text));
     }
 
-    public ValueTask<IDictionary<string, IList<Term>>?> LookupTermsAsync(IList<string> texts, CancellationToken cancellationToken = default)
+    public ValueTask<AliasMap?> LookupTermsAsync(IList<string> texts, CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult(Lookup(texts));
     }

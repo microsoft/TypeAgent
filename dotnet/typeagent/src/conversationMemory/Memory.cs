@@ -81,4 +81,13 @@ public class Memory<TMessage> : Conversation<TMessage>, IMemory
 
         return options;
     }
+
+    protected void BeginIndexing()
+    {
+    }
+
+    protected void EndIndexing()
+    {
+
+    }
 }

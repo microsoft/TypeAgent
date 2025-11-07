@@ -217,7 +217,7 @@ public class CollectAllCollection<T> : ITopNCollection<T>
     public List<Scored<T>> ByRankAndClear()
     {
         var results = _items ?? [];
-        results.Sort();
+        results.Sort((x, y) => x.CompareTo(y));
         _items = null;
         return results;
     }

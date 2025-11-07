@@ -6,11 +6,11 @@ namespace TypeAgent.Common;
 /// <summary>
 /// A dictionary that permits DUPLICATES.
 /// </summary>
-public class Multiset<TKey, TValue> : Dictionary<TKey, List<TValue>>, IEnumerable<TValue>
+public class MultiMap<TKey, TValue> : Dictionary<TKey, List<TValue>>, IEnumerable<TValue>
 {
     Func<List<TValue>> _allocator = NewList;
 
-    public Multiset(IEnumerable<KeyValuePair<TKey, TValue>>? values = null)
+    public MultiMap(IEnumerable<KeyValuePair<TKey, TValue>>? values = null)
         : base()
     {
         if (values is not null)
@@ -19,12 +19,12 @@ public class Multiset<TKey, TValue> : Dictionary<TKey, List<TValue>>, IEnumerabl
         }
     }
 
-    public Multiset(IEqualityComparer<TKey> comparer)
+    public MultiMap(IEqualityComparer<TKey> comparer)
         : base(comparer)
     {
     }
 
-    public Multiset(
+    public MultiMap(
         int capacity,
         IEqualityComparer<TKey> comparer,
         Func<List<TValue>>? allocator
