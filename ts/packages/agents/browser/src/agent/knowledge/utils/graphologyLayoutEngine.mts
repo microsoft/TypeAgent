@@ -101,7 +101,9 @@ export function buildGraphologyGraph(
             nodeLimit: opts.nodeLimit,
             willSliceNodesTo: Math.min(nodes.length, opts.nodeLimit),
             skipEdgeFiltering: opts.skipEdgeFiltering,
-            minEdgeConfidence: opts.skipEdgeFiltering ? "N/A (filtering disabled)" : opts.minEdgeConfidence,
+            minEdgeConfidence: opts.skipEdgeFiltering
+                ? "N/A (filtering disabled)"
+                : opts.minEdgeConfidence,
         },
     );
 
@@ -124,7 +126,7 @@ export function buildGraphologyGraph(
     const nodeSet = new Set(graph.nodes());
     const edgeSet = new Set<string>();
     let edgeCount = 0;
-    
+
     // Edge filtering counters
     let selfReferentialEdges = 0;
     let missingNodeEdges = 0;
@@ -179,12 +181,12 @@ export function buildGraphologyGraph(
         }
 
         edgeSet.add(edgeKey);
-        
+
         // Check for missing edge type
         if (!edge.type) {
             missingTypeEdges++;
         }
-        
+
         try {
             graph.addEdge(edge.from, edge.to, {
                 type: edge.type || "related",
@@ -194,7 +196,10 @@ export function buildGraphologyGraph(
             edgeCount++;
         } catch (error) {
             addErrorEdges++;
-            debug(`Warning: Could not add edge ${edge.from} -> ${edge.to}:`, error);
+            debug(
+                `Warning: Could not add edge ${edge.from} -> ${edge.to}:`,
+                error,
+            );
         }
     }
 
@@ -204,7 +209,9 @@ export function buildGraphologyGraph(
         {
             inputEdges: edges.length,
             addedEdges: edgeCount,
-            filteringMode: opts.skipEdgeFiltering ? "DISABLED - All edges included" : `ENABLED - Min confidence: ${opts.minEdgeConfidence}`,
+            filteringMode: opts.skipEdgeFiltering
+                ? "DISABLED - All edges included"
+                : `ENABLED - Min confidence: ${opts.minEdgeConfidence}`,
             selfReferential: selfReferentialEdges,
             missingNodes: missingNodeEdges,
             duplicates: duplicateEdges,

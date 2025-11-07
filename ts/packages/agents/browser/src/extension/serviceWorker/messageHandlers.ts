@@ -1356,7 +1356,10 @@ export async function handleMessage(
 
                 return result;
             } catch (error) {
-                console.error("Error getting entity neighborhood layout:", error);
+                console.error(
+                    "Error getting entity neighborhood layout:",
+                    error,
+                );
                 return {
                     graphologyLayout: {
                         elements: [],

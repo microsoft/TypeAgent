@@ -34,13 +34,13 @@ interface GraphStatistics {
 // Phase 3: Layout-only data contract interface
 interface GraphLayoutData {
     presetLayout: {
-        elements: any[];           // Cytoscape elements with positions
-        layoutDuration?: number;   // Server layout computation time
-        communityCount?: number;   // Number of communities detected
-        avgSpacing?: number;       // Average node spacing
-        metadata?: any;            // Additional layout metadata
+        elements: any[]; // Cytoscape elements with positions
+        layoutDuration?: number; // Server layout computation time
+        communityCount?: number; // Number of communities detected
+        avgSpacing?: number; // Average node spacing
+        metadata?: any; // Additional layout metadata
     };
-    centerEntity?: string;         // For focusing on specific entity
+    centerEntity?: string; // For focusing on specific entity
 }
 
 // ===================================================================
@@ -136,11 +136,19 @@ interface GraphDataProvider {
 
     // Phase 1: Optimized layout-only methods
     getGlobalImportanceLayer(maxNodes?: number): Promise<GraphLayoutResult>;
-    getGlobalImportanceLayoutData(maxNodes?: number): Promise<GraphLayoutResult>;
-    getTopicImportanceLayoutData(maxNodes?: number): Promise<TopicGraphLayoutResult>;
+    getGlobalImportanceLayoutData(
+        maxNodes?: number,
+    ): Promise<GraphLayoutResult>;
+    getTopicImportanceLayoutData(
+        maxNodes?: number,
+    ): Promise<TopicGraphLayoutResult>;
 
     // Phase 2: Optimized entity neighborhood method
-    getEntityNeighborhoodLayoutDataOptimized(entityId: string, depth: number, maxNodes: number): Promise<EntityNeighborhoodLayoutResult>;
+    getEntityNeighborhoodLayoutDataOptimized(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<EntityNeighborhoodLayoutResult>;
 
     // Hierarchical partitioned loading methods (legacy)
     getViewportBasedNeighborhood(
@@ -164,8 +172,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
     constructor(baseService: any) {
         this.baseService = baseService;
     }
-
-
 
     async getEntityNeighborhood(
         entityId: string,
@@ -323,36 +329,56 @@ class GraphDataProviderImpl implements GraphDataProvider {
     async getGlobalGraphLayoutData(): Promise<GraphLayoutData> {
         try {
             // Use the new optimized server method that returns only graphology layout
-            const layoutResult = await this.baseService.getGlobalGraphLayoutData({
-                maxNodes: 1000,
-                includeConnectivity: true
-            });
-            
-            if (!layoutResult.graphologyLayout || !layoutResult.graphologyLayout.elements) {
-                throw new Error("No graphology layout found in server response");
+            const layoutResult =
+                await this.baseService.getGlobalGraphLayoutData({
+                    maxNodes: 1000,
+                    includeConnectivity: true,
+                });
+
+            if (
+                !layoutResult.graphologyLayout ||
+                !layoutResult.graphologyLayout.elements
+            ) {
+                throw new Error(
+                    "No graphology layout found in server response",
+                );
             }
 
-            console.log(`[GraphDataProvider] Using optimized global graph layout: ${layoutResult.graphologyLayout.elements.length} elements`);
+            console.log(
+                `[GraphDataProvider] Using optimized global graph layout: ${layoutResult.graphologyLayout.elements.length} elements`,
+            );
 
             return {
                 presetLayout: {
                     elements: layoutResult.graphologyLayout.elements,
-                    layoutDuration: layoutResult.graphologyLayout.layoutDuration || 0,
-                    communityCount: layoutResult.graphologyLayout.communityCount || 0,
+                    layoutDuration:
+                        layoutResult.graphologyLayout.layoutDuration || 0,
+                    communityCount:
+                        layoutResult.graphologyLayout.communityCount || 0,
                     avgSpacing: layoutResult.graphologyLayout.avgSpacing || 100,
                     metadata: {
                         source: "server_graphology_optimized",
-                        algorithm: layoutResult.graphologyLayout.algorithm || "force-directed",
+                        algorithm:
+                            layoutResult.graphologyLayout.algorithm ||
+                            "force-directed",
                         timestamp: Date.now(),
-                        totalEntitiesInSystem: layoutResult.metadata.totalEntitiesInSystem,
-                        selectedEntityCount: layoutResult.metadata.selectedEntityCount,
-                        coveragePercentage: layoutResult.metadata.coveragePercentage
-                    }
-                }
+                        totalEntitiesInSystem:
+                            layoutResult.metadata.totalEntitiesInSystem,
+                        selectedEntityCount:
+                            layoutResult.metadata.selectedEntityCount,
+                        coveragePercentage:
+                            layoutResult.metadata.coveragePercentage,
+                    },
+                },
             };
         } catch (error) {
-            console.error("[GraphDataProvider] Failed to fetch optimized global graph layout:", error);
-            throw new Error(`Global graph layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+            console.error(
+                "[GraphDataProvider] Failed to fetch optimized global graph layout:",
+                error,
+            );
+            throw new Error(
+                `Global graph layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
         }
     }
 
@@ -363,16 +389,24 @@ class GraphDataProviderImpl implements GraphDataProvider {
     ): Promise<GraphLayoutData> {
         try {
             // Get the raw neighborhood data which should include graphologyLayout from server
-            const rawData = await this.getEntityNeighborhood(entityId, depth, maxNodes);
-            
+            const rawData = await this.getEntityNeighborhood(
+                entityId,
+                depth,
+                maxNodes,
+            );
+
             // Extract the pre-computed graphology layout
             const graphologyLayout = (rawData as any).graphologyLayout;
-            
+
             if (!graphologyLayout || !graphologyLayout.elements) {
-                throw new Error("No graphology layout found in neighborhood response - server may need to be updated");
+                throw new Error(
+                    "No graphology layout found in neighborhood response - server may need to be updated",
+                );
             }
 
-            console.log(`[GraphDataProvider] Using server-computed neighborhood layout: ${graphologyLayout.elements.length} elements`);
+            console.log(
+                `[GraphDataProvider] Using server-computed neighborhood layout: ${graphologyLayout.elements.length} elements`,
+            );
 
             return {
                 presetLayout: {
@@ -382,15 +416,21 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     avgSpacing: graphologyLayout.avgSpacing || 80,
                     metadata: {
                         source: "server_graphology",
-                        algorithm: graphologyLayout.algorithm || "force-directed",
-                        timestamp: Date.now()
-                    }
+                        algorithm:
+                            graphologyLayout.algorithm || "force-directed",
+                        timestamp: Date.now(),
+                    },
                 },
-                centerEntity: entityId
+                centerEntity: entityId,
             };
         } catch (error) {
-            console.error("[GraphDataProvider] Failed to fetch neighborhood layout:", error);
-            throw new Error(`Neighborhood layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+            console.error(
+                "[GraphDataProvider] Failed to fetch neighborhood layout:",
+                error,
+            );
+            throw new Error(
+                `Neighborhood layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
         }
     }
 
@@ -398,7 +438,9 @@ class GraphDataProviderImpl implements GraphDataProvider {
     // HIERARCHICAL PARTITIONED LOADING METHODS
     // ===================================================================
 
-    async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<GraphLayoutResult> {
+    async getGlobalImportanceLayer(
+        maxNodes: number = 5000,
+    ): Promise<GraphLayoutResult> {
         try {
             const result = await this.baseService.getGlobalImportanceLayer(
                 maxNodes,
@@ -407,7 +449,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
             // Server now returns layout-only contract: {graphologyLayout, metadata}
             // No need to transform entities/relationships as they're not included
-            
+
             return result;
         } catch (error) {
             console.error(
@@ -418,16 +460,19 @@ class GraphDataProviderImpl implements GraphDataProvider {
         }
     }
 
-    async getGlobalImportanceLayoutData(maxNodes: number = 5000): Promise<GraphLayoutResult> {
+    async getGlobalImportanceLayoutData(
+        maxNodes: number = 5000,
+    ): Promise<GraphLayoutResult> {
         // Alias for the optimized method - same implementation
         return this.getGlobalImportanceLayer(maxNodes);
     }
 
-    async getTopicImportanceLayoutData(maxNodes: number = 500): Promise<TopicGraphLayoutResult> {
+    async getTopicImportanceLayoutData(
+        maxNodes: number = 500,
+    ): Promise<TopicGraphLayoutResult> {
         try {
-            const result = await this.baseService.getTopicImportanceLayer(
-                maxNodes,
-            );
+            const result =
+                await this.baseService.getTopicImportanceLayer(maxNodes);
 
             // Server now returns layout-only contract: {graphologyLayout, metadata}
             return result;
@@ -446,11 +491,12 @@ class GraphDataProviderImpl implements GraphDataProvider {
         maxNodes: number,
     ): Promise<EntityNeighborhoodLayoutResult> {
         try {
-            const result = await this.baseService.getEntityNeighborhoodLayoutData(
-                entityId,
-                depth,
-                maxNodes,
-            );
+            const result =
+                await this.baseService.getEntityNeighborhoodLayoutData(
+                    entityId,
+                    depth,
+                    maxNodes,
+                );
 
             // Server returns optimized layout-only contract: {graphologyLayout, metadata}
             return result;

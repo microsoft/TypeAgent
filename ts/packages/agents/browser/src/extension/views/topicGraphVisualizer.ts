@@ -33,13 +33,13 @@ interface TopicGraphData {
 // Phase 3: Simplified layout-only data contract
 interface TopicGraphLayoutData {
     presetLayout: {
-        elements: any[];           // Cytoscape elements with positions
-        layoutDuration?: number;   // Server layout computation time
-        communityCount?: number;   // Number of communities detected
-        avgSpacing?: number;       // Average node spacing
-        metadata?: any;            // Additional layout metadata
+        elements: any[]; // Cytoscape elements with positions
+        layoutDuration?: number; // Server layout computation time
+        communityCount?: number; // Number of communities detected
+        avgSpacing?: number; // Average node spacing
+        metadata?: any; // Additional layout metadata
     };
-    centerTopic?: string;          // For focusing on specific topic
+    centerTopic?: string; // For focusing on specific topic
 }
 
 type TopicViewMode = "tree" | "radial" | "force" | "transitioning";
@@ -184,7 +184,7 @@ export class TopicGraphVisualizer {
         // Require server-side graphology layout - no client-side fallback
         if (!data.presetLayout?.elements) {
             throw new Error(
-                "Server-side graphology layout is required but not available"
+                "Server-side graphology layout is required but not available",
             );
         }
 
@@ -195,7 +195,7 @@ export class TopicGraphVisualizer {
             `[TopicGraphVisualizer] Layout computed in ${data.presetLayout.layoutDuration?.toFixed(0)}ms, ` +
                 `${data.presetLayout.communityCount} communities detected`,
         );
-        
+
         const elements = data.presetLayout.elements;
 
         // Use batch operations for better performance
@@ -245,8 +245,6 @@ export class TopicGraphVisualizer {
 
         return Math.min(1, Math.max(0.1, scaled));
     }
-
-
 
     /**
      * Get optimized Cytoscape style definitions with entity graph consistency
@@ -464,7 +462,7 @@ export class TopicGraphVisualizer {
                 fit: false,
                 animate: false,
             };
-            
+
             console.log(
                 "[TopicGraphVisualizer] Applying preset layout (using pre-computed positions)",
             );
@@ -569,15 +567,19 @@ export class TopicGraphVisualizer {
 
         const lowerQuery = query.toLowerCase();
         const results: TopicData[] = [];
-        
+
         // Search through Cytoscape elements instead of raw topic data
         this.cy.nodes('[nodeType="topic"]').forEach((node: any) => {
             const data = node.data();
             const name = data.label || data.name || "";
             const keywords = data.keywords || [];
-            
-            if (name.toLowerCase().includes(lowerQuery) ||
-                keywords.some((keyword: string) => keyword.toLowerCase().includes(lowerQuery))) {
+
+            if (
+                name.toLowerCase().includes(lowerQuery) ||
+                keywords.some((keyword: string) =>
+                    keyword.toLowerCase().includes(lowerQuery),
+                )
+            ) {
                 results.push({
                     id: data.id,
                     name: name,
@@ -586,11 +588,11 @@ export class TopicGraphVisualizer {
                     keywords: keywords,
                     entityReferences: data.entityReferences || [],
                     parentId: data.parentId,
-                    childCount: data.childCount || 0
+                    childCount: data.childCount || 0,
                 });
             }
         });
-        
+
         return results;
     }
 

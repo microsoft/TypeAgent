@@ -27,13 +27,13 @@ interface GraphData {
 // Simplified layout-only data contract
 interface GraphLayoutData {
     presetLayout: {
-        elements: any[];           // Cytoscape elements with positions
-        layoutDuration?: number;   // Server layout computation time
-        communityCount?: number;   // Number of communities detected
-        avgSpacing?: number;       // Average node spacing
-        metadata?: any;            // Additional layout metadata
+        elements: any[]; // Cytoscape elements with positions
+        layoutDuration?: number; // Server layout computation time
+        communityCount?: number; // Number of communities detected
+        avgSpacing?: number; // Average node spacing
+        metadata?: any; // Additional layout metadata
     };
-    centerEntity?: string;         // For focusing on specific entity
+    centerEntity?: string; // For focusing on specific entity
 }
 
 type ViewMode =
@@ -45,7 +45,7 @@ type ViewMode =
 
 /**
  * Entity Graph Visualizer using Cytoscape.js
-  */
+ */
 export class EntityGraphVisualizer {
     protected cy: any = null;
     private container: HTMLElement;
@@ -1026,23 +1026,30 @@ export class EntityGraphVisualizer {
      * Phase 3: Now accepts GraphLayoutData for optimized data transfer
      * Phase 3 Transition: Also supports legacy data format during migration
      */
-    public async loadGlobalGraph(graphData: GraphLayoutData | any): Promise<void> {
+    public async loadGlobalGraph(
+        graphData: GraphLayoutData | any,
+    ): Promise<void> {
         // Clear all neighborhood state when loading global data
         this.clearNeighborhoodState();
 
         // Phase 3 Transition: Handle both new layout-only format and legacy format
         let layoutData: GraphLayoutData;
-        
+
         if (graphData.presetLayout?.elements) {
             // New format: GraphLayoutData with presetLayout structure
             layoutData = graphData as GraphLayoutData;
         } else if (graphData.entities && graphData.relationships) {
             // Legacy format: Has raw entities/relationships but no preset layout
-            console.warn("[EntityGraphVisualizer] Received legacy data format - server should provide preset layout");
-            throw new Error("Legacy data format no longer supported - server must provide GraphLayoutData with presetLayout");
+            console.warn(
+                "[EntityGraphVisualizer] Received legacy data format - server should provide preset layout",
+            );
+            throw new Error(
+                "Legacy data format no longer supported - server must provide GraphLayoutData with presetLayout",
+            );
         } else {
             // Invalid format
-            const errorMsg = "Invalid data format - must provide GraphLayoutData with presetLayout.elements";
+            const errorMsg =
+                "Invalid data format - must provide GraphLayoutData with presetLayout.elements";
             console.error(`[EntityGraphVisualizer] ${errorMsg}`);
             throw new Error(errorMsg);
         }
@@ -1775,7 +1782,9 @@ export class EntityGraphVisualizer {
      * Change the current layout (simplified for preset-only)
      */
     changeLayout(layoutName: string): void {
-        console.log(`[Layout] Layout changes not supported with preset layouts from server`);
+        console.log(
+            `[Layout] Layout changes not supported with preset layouts from server`,
+        );
         this.cy?.fit();
     }
 
@@ -2152,7 +2161,7 @@ export class EntityGraphVisualizer {
 
         // Find the node by entity name
         const node = this.cy.getElementById(entityName);
-        
+
         if (node.length === 0) {
             console.warn(`Entity node "${entityName}" not found in graph`);
             return;

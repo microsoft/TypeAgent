@@ -721,23 +721,25 @@ export async function getEntityNeighborhood(
             );
 
             // Build graphology layout for neighborhood visualization
-            debug(`[Knowledge Graph] Building graphology layout for entity neighborhood "${entityId}"`);
+            debug(
+                `[Knowledge Graph] Building graphology layout for entity neighborhood "${entityId}"`,
+            );
             const layoutStart = performance.now();
 
             // Create nodes for layout generation (center entity + neighbors)
             // Use a Map to deduplicate nodes by ID to avoid duplicate node errors
             const nodeMap = new Map<string, any>();
-            
+
             // Add center entity first
             nodeMap.set(entityId, {
                 id: entityId,
                 name: entityId,
-                type: centerAttributes.type || "entity", 
+                type: centerAttributes.type || "entity",
                 confidence: centerAttributes.confidence || 0.5,
                 count: centerAttributes.count || 1,
                 importance: 1.0, // Center entity has highest importance
             });
-            
+
             // Add neighbors, checking for duplicates
             neighborEntities.forEach((neighbor: any) => {
                 if (!nodeMap.has(neighbor.id)) {
@@ -754,7 +756,9 @@ export async function getEntityNeighborhood(
 
             const allNeighborhoodNodes = Array.from(nodeMap.values());
 
-            debug(`[Knowledge Graph] Deduplicating neighborhood nodes: ${neighborEntities.length + 1} -> ${allNeighborhoodNodes.length} unique nodes`);
+            debug(
+                `[Knowledge Graph] Deduplicating neighborhood nodes: ${neighborEntities.length + 1} -> ${allNeighborhoodNodes.length} unique nodes`,
+            );
 
             // Create edges for layout generation
             const allNeighborhoodEdges = relationships.map((rel: any) => ({
@@ -766,22 +770,32 @@ export async function getEntityNeighborhood(
             }));
 
             // Build the graphology graph with layout
-            const neighborhoodGraph = buildGraphologyGraph(allNeighborhoodNodes, allNeighborhoodEdges, {
-                nodeLimit: maxNodes + 1, // +1 for center entity
-                minEdgeConfidence: 0.1, // Lower threshold for neighborhood views
-                denseClusterThreshold: 50,
-                forceAtlas2Iterations: 100,
-                noverlapIterations: 500,
-                targetViewportSize: 1500,
-                skipEdgeFiltering: true, // Include all edges for entity neighborhoods
-            });
+            const neighborhoodGraph = buildGraphologyGraph(
+                allNeighborhoodNodes,
+                allNeighborhoodEdges,
+                {
+                    nodeLimit: maxNodes + 1, // +1 for center entity
+                    minEdgeConfidence: 0.1, // Lower threshold for neighborhood views
+                    denseClusterThreshold: 50,
+                    forceAtlas2Iterations: 100,
+                    noverlapIterations: 500,
+                    targetViewportSize: 1500,
+                    skipEdgeFiltering: true, // Include all edges for entity neighborhoods
+                },
+            );
 
             // Convert to Cytoscape elements for UI consumption
-            const cytoscapeElements = convertToCytoscapeElements(neighborhoodGraph, 1500);
-            const layoutMetrics = calculateLayoutQualityMetrics(neighborhoodGraph);
+            const cytoscapeElements = convertToCytoscapeElements(
+                neighborhoodGraph,
+                1500,
+            );
+            const layoutMetrics =
+                calculateLayoutQualityMetrics(neighborhoodGraph);
             const layoutDuration = performance.now() - layoutStart;
 
-            debug(`[Knowledge Graph] Neighborhood layout complete in ${layoutDuration.toFixed(2)}ms with ${cytoscapeElements.length} elements`);
+            debug(
+                `[Knowledge Graph] Neighborhood layout complete in ${layoutDuration.toFixed(2)}ms with ${cytoscapeElements.length} elements`,
+            );
 
             return {
                 centerEntity: {
@@ -816,7 +830,7 @@ export async function getEntityNeighborhood(
             debug(
                 `[Graphology] Failed to get entity neighborhood: ${graphologyError}`,
             );
-            
+
             return {
                 neighbors: [],
                 relationships: [],
@@ -984,22 +998,24 @@ export async function getEntityNeighborhoodLayoutData(
             );
 
             // Build graphology layout for neighborhood visualization
-            debug(`[Knowledge Graph] Building optimized layout for entity neighborhood "${entityId}"`);
+            debug(
+                `[Knowledge Graph] Building optimized layout for entity neighborhood "${entityId}"`,
+            );
             const layoutStart = performance.now();
 
             // Create nodes for layout generation (center entity + neighbors)
             const nodeMap = new Map<string, any>();
-            
+
             // Add center entity first
             nodeMap.set(entityId, {
                 id: entityId,
                 name: entityId,
-                type: centerAttributes.type || "entity", 
+                type: centerAttributes.type || "entity",
                 confidence: centerAttributes.confidence || 0.5,
                 count: centerAttributes.count || 1,
                 importance: 1.0, // Center entity has highest importance
             });
-            
+
             // Add neighbors, checking for duplicates
             limitedNeighbors.forEach((neighborId: string) => {
                 if (!nodeMap.has(neighborId)) {
@@ -1017,25 +1033,37 @@ export async function getEntityNeighborhoodLayoutData(
 
             const allNeighborhoodNodes = Array.from(nodeMap.values());
 
-            debug(`[Knowledge Graph] Layout-only neighborhood: ${allNeighborhoodNodes.length} unique nodes, ${relationships.length} edges`);
+            debug(
+                `[Knowledge Graph] Layout-only neighborhood: ${allNeighborhoodNodes.length} unique nodes, ${relationships.length} edges`,
+            );
 
             // Build the graphology graph with layout
-            const neighborhoodGraph = buildGraphologyGraph(allNeighborhoodNodes, relationships, {
-                nodeLimit: maxNodes + 1, // +1 for center entity
-                minEdgeConfidence: 0.1, // Lower threshold for neighborhood views
-                denseClusterThreshold: 50,
-                forceAtlas2Iterations: 100,
-                noverlapIterations: 500,
-                targetViewportSize: 1500,
-                skipEdgeFiltering: true, // Include all edges for entity neighborhoods
-            });
+            const neighborhoodGraph = buildGraphologyGraph(
+                allNeighborhoodNodes,
+                relationships,
+                {
+                    nodeLimit: maxNodes + 1, // +1 for center entity
+                    minEdgeConfidence: 0.1, // Lower threshold for neighborhood views
+                    denseClusterThreshold: 50,
+                    forceAtlas2Iterations: 100,
+                    noverlapIterations: 500,
+                    targetViewportSize: 1500,
+                    skipEdgeFiltering: true, // Include all edges for entity neighborhoods
+                },
+            );
 
             // Convert to Cytoscape elements for UI consumption
-            const cytoscapeElements = convertToCytoscapeElements(neighborhoodGraph, 1500);
-            const layoutMetrics = calculateLayoutQualityMetrics(neighborhoodGraph);
+            const cytoscapeElements = convertToCytoscapeElements(
+                neighborhoodGraph,
+                1500,
+            );
+            const layoutMetrics =
+                calculateLayoutQualityMetrics(neighborhoodGraph);
             const layoutDuration = performance.now() - layoutStart;
 
-            debug(`[Knowledge Graph] Optimized neighborhood layout complete in ${layoutDuration.toFixed(2)}ms with ${cytoscapeElements.length} elements`);
+            debug(
+                `[Knowledge Graph] Optimized neighborhood layout complete in ${layoutDuration.toFixed(2)}ms with ${cytoscapeElements.length} elements`,
+            );
 
             return {
                 graphologyLayout: {
@@ -1058,7 +1086,7 @@ export async function getEntityNeighborhoodLayoutData(
             debug(
                 `[Graphology] Failed to get entity neighborhood layout: ${graphologyError}`,
             );
-            
+
             return {
                 graphologyLayout: {
                     elements: [],
@@ -1854,7 +1882,9 @@ export async function getGlobalGraphLayoutData(
 
             setGraphologyCache(cacheKey, cachedGraph);
 
-            console.log(`[Graphology] Global layout complete in ${layoutDuration.toFixed(2)}ms`);
+            console.log(
+                `[Graphology] Global layout complete in ${layoutDuration.toFixed(2)}ms`,
+            );
         } else {
             console.log("[Graphology] Using cached global layout");
         }
@@ -1869,9 +1899,15 @@ export async function getGlobalGraphLayoutData(
             metadata: {
                 totalEntitiesInSystem: allEntities.length,
                 selectedEntityCount: selectedEntities.length,
-                coveragePercentage: (selectedEntities.length / allEntities.length) * 100,
-                importanceThreshold: selectedEntities[selectedEntities.length - 1]?.importance || 0,
-                connectedComponents: analyzeConnectivity(selectedEntities, selectedRelationships),
+                coveragePercentage:
+                    (selectedEntities.length / allEntities.length) * 100,
+                importanceThreshold:
+                    selectedEntities[selectedEntities.length - 1]?.importance ||
+                    0,
+                connectedComponents: analyzeConnectivity(
+                    selectedEntities,
+                    selectedRelationships,
+                ),
                 layer: "global_graph_layout",
             },
         };
@@ -2986,47 +3022,55 @@ export async function getEntityDetails(
             }));
 
             const entityGraph = buildGraphologyGraph(graphNodes, graphEdges);
-            
+
             if (entityGraph && entityGraph.hasNode(entityName)) {
-                debug(`[getEntityDetails] Getting details for "${entityName}" from Graphology`);
-                
+                debug(
+                    `[getEntityDetails] Getting details for "${entityName}" from Graphology`,
+                );
+
                 // Get basic entity attributes from graph
-                const centerAttributes = entityGraph.getNodeAttributes(entityName);
-                
-                // Get neighbors for relationship context  
+                const centerAttributes =
+                    entityGraph.getNodeAttributes(entityName);
+
+                // Get neighbors for relationship context
                 const neighbors = entityGraph.neighbors(entityName);
                 const limitedNeighbors = neighbors.slice(0, 15); // Limit for sidebar
-                
+
                 // Build neighbor entities for relatedEntities
-                const neighborEntities = limitedNeighbors.map((neighborId: string) => {
-                    const attrs = entityGraph.getNodeAttributes(neighborId);
-                    return {
-                        id: neighborId,
-                        name: neighborId,
-                        type: attrs.type || "entity",
-                        confidence: attrs.confidence || 0.5,
-                        count: attrs.count || 1,
-                    };
-                });
+                const neighborEntities = limitedNeighbors.map(
+                    (neighborId: string) => {
+                        const attrs = entityGraph.getNodeAttributes(neighborId);
+                        return {
+                            id: neighborId,
+                            name: neighborId,
+                            type: attrs.type || "entity",
+                            confidence: attrs.confidence || 0.5,
+                            count: attrs.count || 1,
+                        };
+                    },
+                );
 
                 // Build relationships for context
-                const relationships = limitedNeighbors.map((neighborId: string) => {
-                    const edgeData = entityGraph.getEdgeAttributes(
-                        entityGraph.edge(entityName, neighborId),
-                    );
-                    return {
-                        rowId: `${entityName}-${neighborId}`,
-                        fromEntity: entityName,
-                        toEntity: neighborId,
-                        relationshipType: edgeData.type || "co_occurs",
-                        confidence: edgeData.confidence || 0.5,
-                        sources: [],
-                        count: edgeData.count || 1,
-                    };
-                });
+                const relationships = limitedNeighbors.map(
+                    (neighborId: string) => {
+                        const edgeData = entityGraph.getEdgeAttributes(
+                            entityGraph.edge(entityName, neighborId),
+                        );
+                        return {
+                            rowId: `${entityName}-${neighborId}`,
+                            fromEntity: entityName,
+                            toEntity: neighborId,
+                            relationshipType: edgeData.type || "co_occurs",
+                            confidence: edgeData.confidence || 0.5,
+                            sources: [],
+                            count: edgeData.count || 1,
+                        };
+                    },
+                );
 
                 // Get enrichment data using the existing search logic
-                const websiteCollection = context.agentContext.websiteCollection;
+                const websiteCollection =
+                    context.agentContext.websiteCollection;
                 const entityReferences: Set<string> = new Set();
                 const topics: Set<string> = new Set();
                 const websites: Set<string> = new Set();
@@ -3046,56 +3090,110 @@ export async function getEntityDetails(
                         );
 
                         const whenFilter = { knowledgeType: "entity" as const };
-                        const searchResult = await kp.searchConversationKnowledge(
-                            websiteCollection,
-                            searchTermGroup,
-                            whenFilter,
-                            { maxKnowledgeMatches: 100 },
-                        );
+                        const searchResult =
+                            await kp.searchConversationKnowledge(
+                                websiteCollection,
+                                searchTermGroup,
+                                whenFilter,
+                                { maxKnowledgeMatches: 100 },
+                            );
 
                         if (searchResult) {
                             for (const [, result] of searchResult) {
                                 if (result.semanticRefMatches) {
                                     for (const scoredRef of result.semanticRefMatches) {
-                                        const semanticRef = websiteCollection.semanticRefs.get(
-                                            scoredRef.semanticRefOrdinal,
-                                        );
+                                        const semanticRef =
+                                            websiteCollection.semanticRefs.get(
+                                                scoredRef.semanticRefOrdinal,
+                                            );
                                         if (semanticRef) {
-                                            const messageOrdinal = semanticRef.range.start.messageOrdinal;
+                                            const messageOrdinal =
+                                                semanticRef.range.start
+                                                    .messageOrdinal;
 
-                                            if (!processedMessages.has(messageOrdinal)) {
-                                                processedMessages.add(messageOrdinal);
+                                            if (
+                                                !processedMessages.has(
+                                                    messageOrdinal,
+                                                )
+                                            ) {
+                                                processedMessages.add(
+                                                    messageOrdinal,
+                                                );
 
-                                                const message = websiteCollection.messages.get(messageOrdinal);
+                                                const message =
+                                                    websiteCollection.messages.get(
+                                                        messageOrdinal,
+                                                    );
                                                 if (message) {
                                                     if (message.timestamp) {
-                                                        timestamps.push(message.timestamp);
+                                                        timestamps.push(
+                                                            message.timestamp,
+                                                        );
                                                     }
 
                                                     if ((message as any).url) {
-                                                        websites.add((message as any).url);
+                                                        websites.add(
+                                                            (message as any)
+                                                                .url,
+                                                        );
                                                     }
 
-                                                    const knowledge = message.knowledge;
+                                                    const knowledge =
+                                                        message.knowledge;
                                                     if (knowledge) {
-                                                        if (knowledge.entities && Array.isArray(knowledge.entities)) {
-                                                            knowledge.entities.forEach((e: any) => {
-                                                                if (e.name && e.name !== entityName) {
-                                                                    entityReferences.add(e.name);
-                                                                }
-                                                                // Extract facets if available
-                                                                if (e.name === entityName && e.facets) {
-                                                                    facets = [...facets, ...e.facets];
-                                                                }
-                                                            });
+                                                        if (
+                                                            knowledge.entities &&
+                                                            Array.isArray(
+                                                                knowledge.entities,
+                                                            )
+                                                        ) {
+                                                            knowledge.entities.forEach(
+                                                                (e: any) => {
+                                                                    if (
+                                                                        e.name &&
+                                                                        e.name !==
+                                                                            entityName
+                                                                    ) {
+                                                                        entityReferences.add(
+                                                                            e.name,
+                                                                        );
+                                                                    }
+                                                                    // Extract facets if available
+                                                                    if (
+                                                                        e.name ===
+                                                                            entityName &&
+                                                                        e.facets
+                                                                    ) {
+                                                                        facets =
+                                                                            [
+                                                                                ...facets,
+                                                                                ...e.facets,
+                                                                            ];
+                                                                    }
+                                                                },
+                                                            );
                                                         }
 
-                                                        if (knowledge.topics && Array.isArray(knowledge.topics)) {
-                                                            knowledge.topics.forEach((topic: any) => {
-                                                                if (typeof topic === "string") {
-                                                                    topics.add(topic);
-                                                                }
-                                                            });
+                                                        if (
+                                                            knowledge.topics &&
+                                                            Array.isArray(
+                                                                knowledge.topics,
+                                                            )
+                                                        ) {
+                                                            knowledge.topics.forEach(
+                                                                (
+                                                                    topic: any,
+                                                                ) => {
+                                                                    if (
+                                                                        typeof topic ===
+                                                                        "string"
+                                                                    ) {
+                                                                        topics.add(
+                                                                            topic,
+                                                                        );
+                                                                    }
+                                                                },
+                                                            );
                                                         }
                                                     }
                                                 }
@@ -3106,7 +3204,9 @@ export async function getEntityDetails(
                             }
                         }
                     } catch (enrichmentError) {
-                        debug(`[getEntityDetails] Warning - enrichment failed: ${enrichmentError}`);
+                        debug(
+                            `[getEntityDetails] Warning - enrichment failed: ${enrichmentError}`,
+                        );
                         // Continue without enrichment
                     }
                 }
@@ -3129,12 +3229,18 @@ export async function getEntityDetails(
                     confidence: centerAttributes.confidence || 0.5,
                     count: centerAttributes.count || 1,
                     degree: neighbors.length,
-                    importance: centerAttributes.importance || (neighbors.length > 0 ? neighbors.length * 0.1 : 0.1),
+                    importance:
+                        centerAttributes.importance ||
+                        (neighbors.length > 0 ? neighbors.length * 0.1 : 0.1),
                     source: "graphology",
                     facets: facets.length > 0 ? facets : [],
-                    topicAffinity: topics.size > 0 ? Array.from(topics).slice(0, 15) : [],
+                    topicAffinity:
+                        topics.size > 0 ? Array.from(topics).slice(0, 15) : [],
                     relatedEntities: neighborEntities.slice(0, 15),
-                    websites: websites.size > 0 ? Array.from(websites).slice(0, 15) : [],
+                    websites:
+                        websites.size > 0
+                            ? Array.from(websites).slice(0, 15)
+                            : [],
                     mentionCount: processedMessages.size,
                     relationships: relationships,
                     visitCount: websites.size, // Approximate as website count
@@ -3150,7 +3256,9 @@ export async function getEntityDetails(
                     },
                 };
 
-                debug(`[getEntityDetails] Successfully retrieved details for "${entityName}" with ${details.relatedEntities.length} related entities`);
+                debug(
+                    `[getEntityDetails] Successfully retrieved details for "${entityName}" with ${details.relatedEntities.length} related entities`,
+                );
 
                 return {
                     success: true,
@@ -3158,12 +3266,14 @@ export async function getEntityDetails(
                 };
             }
         } catch (graphologyError) {
-            debug(`[getEntityDetails] Graphology lookup failed: ${graphologyError}`);
+            debug(
+                `[getEntityDetails] Graphology lookup failed: ${graphologyError}`,
+            );
         }
 
         // Fallback to cache-based approach if Graphology fails
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return {
                 success: false,
@@ -3181,7 +3291,9 @@ export async function getEntityDetails(
             };
         }
 
-        const entity = cache.entityMetrics.find((e: any) => e.name === entityName);
+        const entity = cache.entityMetrics.find(
+            (e: any) => e.name === entityName,
+        );
 
         if (!entity) {
             return {

@@ -467,10 +467,12 @@ export async function searchWebMemories(
                         ] of searchResult.knowledgeMatches.entries()) {
                             // Skip undefined knowledgeTypes to prevent errors
                             if (!knowledgeType) {
-                                debug(`Warning: Found undefined knowledgeType in search result ${idx}`);
+                                debug(
+                                    `Warning: Found undefined knowledgeType in search result ${idx}`,
+                                );
                                 continue;
                             }
-                            
+
                             if (
                                 !combinedSemanticRefMatches.has(knowledgeType)
                             ) {
@@ -588,7 +590,9 @@ export async function searchWebMemories(
 
                             // Skip if semanticRef is undefined to prevent range access errors
                             if (!semanticRef || !semanticRef.range) {
-                                debug(`Warning: SemanticRef not found for ordinal ${scoredRef.semanticRefOrdinal}`);
+                                debug(
+                                    `Warning: SemanticRef not found for ordinal ${scoredRef.semanticRefOrdinal}`,
+                                );
                                 return; // Skip this iteration
                             }
 

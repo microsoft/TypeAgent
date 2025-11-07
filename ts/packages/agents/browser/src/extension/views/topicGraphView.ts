@@ -46,14 +46,16 @@ class TopicGraphView {
 
     private parseUrlParameters(): void {
         const urlParams = new URLSearchParams(window.location.search);
-        const topicParam = urlParams.get('topic');
-        
+        const topicParam = urlParams.get("topic");
+
         if (topicParam) {
             // Store the target topic to navigate to after data loads
             this.state.searchQuery = topicParam;
-            
+
             // Update the search input field to show the topic name
-            const searchInput = document.getElementById('topicSearch') as HTMLInputElement;
+            const searchInput = document.getElementById(
+                "topicSearch",
+            ) as HTMLInputElement;
             if (searchInput) {
                 searchInput.value = topicParam;
             }
@@ -200,12 +202,12 @@ class TopicGraphView {
             await this.visualizer?.init(topicData);
 
             this.updateGraphStats();
-            
+
             // Check if we need to navigate to a specific topic from URL parameter
             if (this.state.searchQuery.trim()) {
                 this.handleTopicNavigation(this.state.searchQuery.trim());
             }
-            
+
             this.hideLoading();
         } catch (error) {
             console.error("Failed to load topic data:", error);
@@ -233,7 +235,9 @@ class TopicGraphView {
                 return this.createEmptyTopicGraph();
             }
 
-            console.log(`[TopicGraphView] Fetched optimized layout-only importance layer with ${result.graphologyLayout.elements?.length || 0} elements`);
+            console.log(
+                `[TopicGraphView] Fetched optimized layout-only importance layer with ${result.graphologyLayout.elements?.length || 0} elements`,
+            );
             const transformedData = this.transformLayoutOnlyData(result);
             return transformedData;
         } catch (error) {
@@ -270,7 +274,7 @@ class TopicGraphView {
                 avgSpacing: data.graphologyLayout.avgSpacing,
                 communityCount: data.graphologyLayout.communityCount,
                 metadata: data.metadata,
-            }
+            },
         };
 
         return result;
@@ -1038,7 +1042,7 @@ class TopicGraphView {
         } else if (results.length > 1) {
             // Multiple results - just highlight and show count
             this.showNotification(
-                `Found ${results.length} topics matching "${query}". Click on a highlighted topic to view details.`
+                `Found ${results.length} topics matching "${query}". Click on a highlighted topic to view details.`,
             );
         } else {
             // No results found
@@ -1049,8 +1053,8 @@ class TopicGraphView {
     private clearUrlParameter(): void {
         // Clear the topic parameter from URL after successful navigation
         const url = new URL(window.location.href);
-        url.searchParams.delete('topic');
-        window.history.replaceState({}, '', url.toString());
+        url.searchParams.delete("topic");
+        window.history.replaceState({}, "", url.toString());
     }
 
     private findTopicByExactName(name: string): any | null {
@@ -1058,9 +1062,11 @@ class TopicGraphView {
 
         // Case-insensitive exact match
         const lowerName = name.toLowerCase();
-        return this.lastLoadedData.topics.find((topic: any) => 
-            topic.name.toLowerCase() === lowerName
-        ) || null;
+        return (
+            this.lastLoadedData.topics.find(
+                (topic: any) => topic.name.toLowerCase() === lowerName,
+            ) || null
+        );
     }
 
     private updateGraphStats(): void {
@@ -1188,7 +1194,7 @@ class TopicGraphView {
     private openSidebar(): void {
         this.state.sidebarOpen = true;
         this.sidebar.classList.remove("collapsed");
-        
+
         // Force resize to recalculate click coordinates after sidebar layout change
         if (this.visualizer) {
             setTimeout(() => {
@@ -1208,7 +1214,7 @@ class TopicGraphView {
     private closeSidebar(): void {
         this.state.sidebarOpen = false;
         this.sidebar.classList.add("collapsed");
-        
+
         // Force resize to recalculate click coordinates after sidebar layout change
         if (this.visualizer) {
             setTimeout(() => {

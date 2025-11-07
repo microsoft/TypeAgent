@@ -769,18 +769,19 @@ class EntityGraphView {
         }
     }
 
-
-
     /**
      * Phase 3: Load global graph using layout-only data contract
      */
     private async loadGlobalGraphLayoutData(): Promise<any> {
         try {
             // Use new layout-only data contract
-            const layoutData = await this.graphDataProvider.getGlobalGraphLayoutData();
-            
-            console.log(`[EntityGraphView] Loaded layout-only data: ${layoutData.presetLayout.elements.length} elements`);
-            
+            const layoutData =
+                await this.graphDataProvider.getGlobalGraphLayoutData();
+
+            console.log(
+                `[EntityGraphView] Loaded layout-only data: ${layoutData.presetLayout.elements.length} elements`,
+            );
+
             // Transform to format expected by EntityGraphVisualizer
             return {
                 presetLayout: layoutData.presetLayout,
@@ -788,14 +789,20 @@ class EntityGraphView {
                 // Include metadata for statistics display
                 statistics: {
                     totalElements: layoutData.presetLayout.elements.length,
-                    totalCommunities: layoutData.presetLayout.communityCount || 0,
+                    totalCommunities:
+                        layoutData.presetLayout.communityCount || 0,
                     layoutDuration: layoutData.presetLayout.layoutDuration || 0,
-                }
+                },
             };
         } catch (error) {
-            console.error("[EntityGraphView] Failed to load layout-only global data:", error);
+            console.error(
+                "[EntityGraphView] Failed to load layout-only global data:",
+                error,
+            );
             // Re-throw the error instead of falling back to raw data
-            throw new Error(`Failed to load global graph layout: ${error instanceof Error ? error.message : "Unknown error"}`);
+            throw new Error(
+                `Failed to load global graph layout: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
         }
     }
 
@@ -1348,7 +1355,8 @@ class EntityGraphView {
                 this.updateSidebarVisibility(true);
 
                 // Check if graphology layout is available and render the graph
-                const hasGraphologyLayout = graphData.metadata?.graphologyLayout;
+                const hasGraphologyLayout =
+                    graphData.metadata?.graphologyLayout;
 
                 if (hasGraphologyLayout) {
                     console.log(
@@ -1356,18 +1364,28 @@ class EntityGraphView {
                     );
                     const presetLayoutData = {
                         presetLayout: {
-                            elements: graphData.metadata.graphologyLayout.elements,
-                            layoutDuration: graphData.metadata.graphologyLayout.layoutDuration,
-                            avgSpacing: graphData.metadata.graphologyLayout.avgSpacing,
-                            communityCount: graphData.metadata.graphologyLayout.communityCount,
-                        }
+                            elements:
+                                graphData.metadata.graphologyLayout.elements,
+                            layoutDuration:
+                                graphData.metadata.graphologyLayout
+                                    .layoutDuration,
+                            avgSpacing:
+                                graphData.metadata.graphologyLayout.avgSpacing,
+                            communityCount:
+                                graphData.metadata.graphologyLayout
+                                    .communityCount,
+                        },
                     };
 
                     // Use loadGlobalGraph since it handles precomputed layouts
                     await this.visualizer.loadGlobalGraph(presetLayoutData);
-                    console.log(`[EntityGraphView] Entity graph rendered successfully for "${entityName}"`);
+                    console.log(
+                        `[EntityGraphView] Entity graph rendered successfully for "${entityName}"`,
+                    );
                 } else {
-                    console.warn(`[EntityGraphView] No graphology layout found in metadata for entity "${entityName}"`);
+                    console.warn(
+                        `[EntityGraphView] No graphology layout found in metadata for entity "${entityName}"`,
+                    );
                     // Could fall back to showing just the sidebar without the graph
                 }
 
@@ -1509,7 +1527,10 @@ class EntityGraphView {
             const layoutData =
                 await this.graphDataProvider.getGlobalImportanceLayer(1000);
 
-            if (!layoutData.graphologyLayout || layoutData.graphologyLayout.elements.length === 0) {
+            if (
+                !layoutData.graphologyLayout ||
+                layoutData.graphologyLayout.elements.length === 0
+            ) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
                 return;
@@ -1527,7 +1548,7 @@ class EntityGraphView {
                     avgSpacing: layoutData.graphologyLayout.avgSpacing,
                     communityCount: layoutData.graphologyLayout.communityCount,
                     metadata: layoutData.metadata,
-                }
+                },
             };
 
             await this.visualizer.loadGlobalGraph(layoutOnlyData);
