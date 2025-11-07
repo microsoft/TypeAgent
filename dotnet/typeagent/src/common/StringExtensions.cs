@@ -86,7 +86,7 @@ public static partial class StringExtensions
     public static IList<string> SplitLines(this string text, StringSplitOptions options = default)
         => text.Split(s_lineSplitter, options);
 
-    [GeneratedRegex(@"""[^""]+""|'[^']'|\b\S+\b")]
+    [GeneratedRegex(@"(""[^""]+""|'[^']+'|\b\S+\b)")]
     private static partial Regex s_wordBreakRegEx();
 
     private static readonly Regex s_wordSplitter = s_wordBreakRegEx();

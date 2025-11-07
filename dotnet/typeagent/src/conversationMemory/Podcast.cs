@@ -19,19 +19,25 @@ public class Podcast : Memory<PodcastMessage>
                 cancellationToken
             ).ConfigureAwait(false);
 
-            await BuildParticipantAliasesAsync(
+            await BuildSecondaryIndexesAsync(
                 cancellationToken
             ).ConfigureAwait(false);
-
-            await AddSynonymsAsync(
-                cancellationToken
-            ).ConfigureAwait(false);
-
         }
         finally
         {
             EndIndexing();
         }
+    }
+
+    public async ValueTask BuildSecondaryIndexesAsync(CancellationToken cancellationToken = default)
+    {
+        await BuildParticipantAliasesAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        await AddSynonymsAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
     }
 
     public async ValueTask ImportTranscriptAsync(

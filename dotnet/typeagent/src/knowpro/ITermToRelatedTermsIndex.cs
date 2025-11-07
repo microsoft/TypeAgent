@@ -7,7 +7,7 @@ public interface ITermToRelatedTermsLookup
 {
     ValueTask<IList<Term>?> LookupTermAsync(string text, CancellationToken cancellationToken = default);
 
-    ValueTask<IDictionary<string, IList<Term>>?> LookupTermsAsync(IList<string> texts, CancellationToken cancellationToken = default);
+    ValueTask<AliasMap?> LookupTermsAsync(IList<string> texts, CancellationToken cancellationToken = default);
 }
 
 public interface ITermToRelatedTermsIndex : ITermToRelatedTermsLookup

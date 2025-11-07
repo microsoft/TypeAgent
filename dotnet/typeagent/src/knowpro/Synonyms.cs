@@ -37,15 +37,20 @@ public class AliasMap : MultiMap<string, Term>
     {
     }
 
-    public AliasMap(IList<TermSynonym> synonyms)
-    : base()
+    public AliasMap(IEnumerable<TermSynonym> synonyms)
+        : base()
     {
         Add(synonyms);
     }
 
-    public void Add(IList<TermSynonym> synonyms)
+    public AliasMap(IEnumerable<KeyValuePair<string, Term>> aliases)
+        : base(aliases)
     {
-        ArgumentVerify.ThrowIfNullOrEmpty(synonyms, nameof(synonyms));
+    }
+
+    public void Add(IEnumerable<TermSynonym> synonyms)
+    {
+        ArgumentVerify.ThrowIfNull(synonyms, nameof(synonyms));
         //
         // We want to inject the primary term as an alias for each of its related terms
         // Basically flip the mapping
