@@ -19,7 +19,7 @@ public enum AnswerType
     Answered,
 }
 
-public sealed class AnswerResponse
+public partial class AnswerResponse
 {
     [JsonPropertyName("type")]
     [Comment("use \"NoAnswer\" if no highly relevant answer found in the [ANSWER CONTEXT]")]

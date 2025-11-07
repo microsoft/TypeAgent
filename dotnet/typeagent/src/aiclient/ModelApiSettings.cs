@@ -19,11 +19,21 @@ public class ModelApiSettings : ApiSettings
         ModelName = string.Empty;
     }
 
+    public ModelApiSettings(ModelApiSettings src)
+        : base(src.Endpoint, src.ApiKey)
+    {
+        Provider = src.Provider;
+        Type = src.Type;
+        ModelName = src.ModelName;
+    }
+
     public string ModelName { get; set; }
 
     public ApiProvider Provider { get; }
 
     public ModelType Type { get; }
+
+    public ModelApiSettings Clone() => new ModelApiSettings(this);
 
     public static ModelApiSettings FromEnv(ModelType modelType, string? endpointName = null)
     {

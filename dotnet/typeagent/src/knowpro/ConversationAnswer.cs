@@ -9,10 +9,10 @@ namespace TypeAgent.KnowPro;
 public static class ConversationAnswer
 {
     public static async ValueTask<AnswerResponse> AnswerQuestionAsync(
-    this IConversation conversation,
-    string question,
-    AnswerContext context,
-    CancellationToken cancellationToken = default
+        this IConversation conversation,
+        string question,
+        AnswerContext context,
+        CancellationToken cancellationToken = default
     )
     {
         ArgumentVerify.ThrowIfNull(context, nameof(context));
@@ -62,7 +62,7 @@ public static class ConversationAnswer
         ).ConfigureAwait(false);
     }
 
-    public static async ValueTask<IList<AnswerResponse>> AnswerQuestionAsync(
+    public static async ValueTask<AnswerResponse> AnswerQuestionAsync(
         this IConversation conversation,
         string question,
         LangSearchOptions? langSearchOptions = null,
@@ -82,16 +82,18 @@ public static class ConversationAnswer
 
         if (searchResults.IsNullOrEmpty())
         {
-            return [];
+            return AnswerResponse.NoAnswer();
         }
 
+        IAnswerGenerator generator = conversation.Settings.AnswerGenerator;
+        // Get answers for individual questions in parallel
         List<AnswerResponse> answerResponses = await searchResults.MapAsync(
-            conversation.Settings.AnswerGenerator.Settings.Concurrency,
-            async (sr, ct) =>
+            generator.Settings.Concurrency,
+            async (searchResult, ct) =>
             {
                 return await conversation.AnswerQuestionAsync(
                     question,
-                    sr,
+                    searchResult,
                     contextOptions,
                     cancellationToken
                 ).ConfigureAwait(false);
@@ -100,6 +102,15 @@ public static class ConversationAnswer
             cancellationToken
         ).ConfigureAwait(false);
 
-        return answerResponses;
+        if (answerResponses.Count == 1)
+        {
+            return answerResponses[0];
+        }
+        var combinedResponse = await generator.CombinePartialAsync(
+            question,
+            answerResponses,
+            cancellationToken
+        ).ConfigureAwait(false);
+        return combinedResponse;
     }
 }

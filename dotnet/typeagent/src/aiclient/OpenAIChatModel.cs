@@ -20,18 +20,51 @@ public class OpenAIChatModel : ModelApi, IChatModel
 
     public CompletionSettings CompletionSettings { get; }
 
-    public async Task<string> CompleteAsync(Prompt prompt, TranslationSettings? settings, CancellationToken cancellationToken)
+    public Task<string> CompleteAsync(
+        Prompt prompt,
+        TranslationSettings? translationSettings,
+        CancellationToken cancellationToken
+    )
     {
-        var request = Create(prompt);
-        if (settings is not null)
+        return CompleteAsync(
+            prompt,
+            translationSettings,
+            CompletionSettings.Format,
+            cancellationToken
+        );
+    }
+
+    public Task<string> CompleteTextAsync(
+        Prompt prompt,
+        TranslationSettings? translationSettings,
+        CancellationToken cancellationToken
+    )
+    {
+        return CompleteAsync(
+            prompt,
+            translationSettings,
+            AIClient.ResponseFormat.Text,
+            cancellationToken
+        );
+    }
+
+    public async Task<string> CompleteAsync(
+        Prompt prompt,
+        TranslationSettings? translationSettings,
+        AIClient.ResponseFormat? format,
+        CancellationToken cancellationToken
+    )
+    {
+        var request = Create(prompt, format);
+        if (translationSettings is not null)
         {
-            if (settings.Temperature > 0)
+            if (translationSettings.Temperature > 0)
             {
-                request.temperature = settings.Temperature;
+                request.temperature = translationSettings.Temperature;
             }
-            if (settings.MaxTokens > 0)
+            if (translationSettings.MaxTokens > 0)
             {
-                request.max_tokens = settings.MaxTokens;
+                request.max_tokens = translationSettings.MaxTokens;
             }
         }
         string? apiToken = Settings.ApiTokenProvider is not null
@@ -51,7 +84,7 @@ public class OpenAIChatModel : ModelApi, IChatModel
         return response.GetText();
     }
 
-    private Request Create(Prompt prompt)
+    private Request Create(Prompt prompt, AIClient.ResponseFormat? format)
     {
         var request = new Request
         {
@@ -61,7 +94,7 @@ public class OpenAIChatModel : ModelApi, IChatModel
             seed = CompletionSettings.Seed,
             top_p = CompletionSettings.TopP,
         };
-        if (CompletionSettings.Format == AIClient.ResponseFormat.Json)
+        if (format is not null && format.Value == AIClient.ResponseFormat.Json)
         {
             request.response_format = ResponseFormat.Json;
         }

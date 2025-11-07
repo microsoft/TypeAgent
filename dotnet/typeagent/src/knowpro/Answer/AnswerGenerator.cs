@@ -56,12 +56,9 @@ public class AnswerGenerator : IAnswerGenerator
         ArgumentVerify.ThrowIfNull(context, nameof(context));
 
         string contextContent = context.ToPromptString();
-        if (string.IsNullOrEmpty(contextContent))
-        {
-            throw new KnowProException(KnowProException.ErrorCode.EmptyContext);
-        }
-
-        return GenerateAsync(question, contextContent, cancellationToken);
+        return string.IsNullOrEmpty(contextContent)
+            ? throw new KnowProException(KnowProException.ErrorCode.EmptyContext)
+            : GenerateAsync(question, contextContent, cancellationToken);
     }
 
     public async Task<AnswerResponse> CombinePartialAsync(
@@ -102,7 +99,7 @@ public class AnswerGenerator : IAnswerGenerator
             if (answerCount > 1)
             {
                 answer = answer.Trim(Settings.MaxCharsInBudget);
-                answer = await Settings.CombinerModel.CompleteAsync(
+                answer = await Settings.CombinerModel.CompleteTextAsync(
                     CreateRewritePrompt(answer, question),
                     null,
                     cancellationToken
@@ -156,10 +153,10 @@ public class AnswerGenerator : IAnswerGenerator
     public static string CreateRewritePrompt(string text, string question)
     {
         string[] prompt = [
-            $"The following text answers the QUESTION \"{question}\".Rewrite it to ",
+            $"The following text answers the QUESTION \"{question}\". Rewrite it to ",
             "make it more readable, with better formatting (line breaks, bullet points, numbered lists etc).",
             "\n Remove all redundancy, duplication, contradiction, or anything that does not answer the question.",
-            $"\n\"\"\"\n${text}\n\"\"\"\n"
+            $"\n\"\"\"\n{text}\n\"\"\"\n"
         ];
         return string.Join(string.Empty, prompt);
     }
