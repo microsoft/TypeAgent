@@ -15,34 +15,16 @@ interface TopicData {
     childCount: number;
 }
 
-interface TopicRelationshipData {
-    from: string;
-    to: string;
-    type: "parent-child" | "related-to" | "derived-from" | "co_occurs";
-    strength: number;
-}
-
-// Legacy interface - kept for backward compatibility
-interface TopicGraphData {
-    centerTopic?: string;
-    topics: TopicData[];
-    relationships: TopicRelationshipData[];
-    maxDepth: number;
-}
-
-// Phase 3: Simplified layout-only data contract
 interface TopicGraphLayoutData {
     presetLayout: {
-        elements: any[]; // Cytoscape elements with positions
-        layoutDuration?: number; // Server layout computation time
-        communityCount?: number; // Number of communities detected
-        avgSpacing?: number; // Average node spacing
-        metadata?: any; // Additional layout metadata
+        elements: any[];
+        layoutDuration?: number;
+        communityCount?: number;
+        avgSpacing?: number;
+        metadata?: any;
     };
-    centerTopic?: string; // For focusing on specific topic
+    centerTopic?: string;
 }
-
-type TopicViewMode = "tree" | "radial" | "force" | "transitioning";
 
 export class TopicGraphVisualizer {
     protected cy: any = null;
@@ -51,19 +33,11 @@ export class TopicGraphVisualizer {
     private topicClickCallback: ((topic: TopicData) => void) | null = null;
 
     private currentTopic: string | null = null;
-    private topicGraphData: TopicGraphLayoutData | null = null; // Phase 3: Layout-only data
+    private topicGraphData: TopicGraphLayoutData | null = null;
 
     // Level of detail management
     private visibleLevels: Set<number> = new Set([0, 1, 2]); // Show first 3 levels by default
 
-    // LOD (Level of Detail) system for hierarchical zoom
-    private lodThresholds: Map<
-        number,
-        { nodeThreshold: number; edgeThreshold: number; visibleLevels: number }
-    > = new Map();
-    private currentZoom: number = 1.0;
-    private lastLodUpdate: number = 0;
-    private lodUpdateInterval: number = 33; // ~30fps (reduced from 16ms for better performance)
     private zoomHandlerSetup: boolean = false;
 
     // Graph data provider for API calls
@@ -217,33 +191,6 @@ export class TopicGraphVisualizer {
         } else {
             instance.fit();
         }
-    }
-
-    /**
-     * Calculate multi-factor importance for a topic
-     */
-    private calculateTopicImportance(topic: TopicData): number {
-        const baseConfidence = topic.confidence || 0.5;
-        const levelWeight = 1 / (topic.level + 1);
-        const childrenWeight = Math.min(1, topic.childCount * 0.1);
-        const entityRefWeight = Math.min(
-            1,
-            topic.entityReferences.length * 0.05,
-        );
-        const keywordWeight = Math.min(1, topic.keywords.length * 0.03);
-
-        const rawImportance =
-            baseConfidence * 0.4 +
-            levelWeight * 0.25 +
-            childrenWeight * 0.15 +
-            entityRefWeight * 0.15 +
-            keywordWeight * 0.05;
-
-        // Apply exponential scaling to increase variance
-        // This spreads out the importance values more dramatically
-        const scaled = Math.pow(rawImportance, 1.5);
-
-        return Math.min(1, Math.max(0.1, scaled));
     }
 
     /**

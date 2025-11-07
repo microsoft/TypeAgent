@@ -10,20 +10,6 @@ interface EntityData {
     confidence: number;
 }
 
-interface RelationshipData {
-    from: string;
-    to: string;
-    type: string;
-    strength: number;
-}
-
-// Legacy interface - kept for backward compatibility
-interface GraphData {
-    centerEntity?: string;
-    entities: EntityData[];
-    relationships: RelationshipData[];
-}
-
 // Simplified layout-only data contract
 interface GraphLayoutData {
     presetLayout: {
@@ -53,24 +39,16 @@ export class EntityGraphVisualizer {
 
     // View mode and data management
     private viewMode: ViewMode = "global";
-    private currentEntity: string | null = null;
-    private entityGraphData: GraphData | null = null; // Legacy compatibility
-    private globalGraphData: GraphLayoutData | null = null; // Phase 3: Layout-only data
+    private globalGraphData: GraphLayoutData | null = null; // Layout-only data
 
-    // Single-instance (global only) - Phase 3: Detail view removed
     private globalInstance: any = null;
     private currentActiveView: "global" = "global";
     private onInstanceChangeCallback?: () => void;
     private zoomHandlersSetup: boolean = false;
 
     private zoomTimer: any = null;
-    private isNodeBeingDragged: boolean = false;
     private selectedNodes: Set<string> = new Set();
     private contextMenu: HTMLElement | null = null;
-
-    // Cursor tracking for center node selection
-    private lastCursorPosition: { x: number; y: number } | null = null;
-    private isCursorOverMap: boolean = false;
 
     // Investigation tracking
     private zoomEventCount: number = 0;
@@ -410,9 +388,6 @@ export class EntityGraphVisualizer {
             clearTimeout(this.zoomTimer);
             this.zoomTimer = null;
         }
-
-        // Reset state flags
-        this.isNodeBeingDragged = false;
 
         // Clear cached data
         this.selectedNodes.clear();
@@ -885,15 +860,6 @@ export class EntityGraphVisualizer {
             this.hideNodeTooltip();
             this.clearNeighborhoodHighlights();
         });
-
-        // Node dragging with auto-layout
-        instance.on("grab", "node", () => {
-            this.isNodeBeingDragged = true;
-        });
-
-        instance.on("free", "node", () => {
-            this.isNodeBeingDragged = false;
-        });
     }
 
     private setupEdgeInteractions(): void {
@@ -1088,104 +1054,8 @@ export class EntityGraphVisualizer {
         );
     }
 
-    private setupZoomInteractions(): void {
-        // Prevent duplicate event handler setup
-        if (this.zoomHandlersSetup) {
-            console.log(
-                "[Zoom] Zoom handlers already set up, skipping duplicate setup",
-            );
-            return;
-        }
-
-        console.log("[Zoom] Setting up zoom handlers for all instances");
-
-        this.setupZoomInteractionsForInstance(this.globalInstance);
-
-        this.zoomHandlersSetup = true;
-    }
-
-    private setupZoomInteractionsForInstance(instance: any): void {
-        if (!instance) return;
-
-        let instanceName = "unknown";
-        if (instance === this.globalInstance) {
-            instanceName = "global";
-        }
-
-        // Natural zoom event handling - trust Cytoscape.js defaults
-        instance.on("zoom", () => {
-            const zoom = instance.zoom();
-            this.zoomEventCount++;
-
-            // Only handle view transitions and LOD updates for the currently active instance
-            if (instance !== this.cy) {
-                return;
-            }
-
-            this.eventSequence.push({
-                event: "zoom",
-                time: Date.now(),
-                zoom: zoom,
-                details: {
-                    eventNumber: this.zoomEventCount,
-                    view: this.currentActiveView,
-                    instance: instanceName,
-                },
-            });
-
-            // Smooth 60fps LOD updates
-            clearTimeout(this.zoomTimer);
-            this.zoomTimer = setTimeout(async () => {
-                // LoD system removed - using simple zoom-based opacity instead
-
-                // PHASE 4: Dynamic spacing system removed - causes performance issues
-                // this.updateDynamicSpacing(zoom);
-
-                // Handle hierarchical loading based on zoom level
-                // Only process if not already loading
-                await this.handleHierarchicalZoomChange(zoom);
-            }, 16); // ~60fps update rate
-        });
-
-        // Set up event sequence analysis for this instance
-        ["pan", "viewport", "render"].forEach((eventType) => {
-            instance.on(eventType, () => {
-                // Only track events from the currently active instance
-                if (instance !== this.cy) return;
-
-                this.eventSequence.push({
-                    event: eventType,
-                    time: Date.now(),
-                    zoom: instance.zoom(),
-                });
-            });
-        });
-    }
-
-    /**
-     * Handle zoom-based hierarchical transitions with protection against multiple triggers
-     */
-    private async handleHierarchicalZoomChange(newZoom: number): Promise<void> {
-        // Neighborhood view removed - zoom-based transitions now handle global and detail views only
-    }
-
     private setupContainerInteractions(): void {
         // Set up container-level interactions that apply to all instances
-
-        // Track cursor position and map hover state for smart center node selection
-        this.container.addEventListener("mousemove", (event) => {
-            // Store cursor position relative to container, not screen
-            const containerRect = this.container.getBoundingClientRect();
-            this.lastCursorPosition = {
-                x: event.clientX - containerRect.left,
-                y: event.clientY - containerRect.top,
-            };
-            this.isCursorOverMap = true;
-        });
-
-        this.container.addEventListener("mouseleave", () => {
-            this.isCursorOverMap = false;
-        });
 
         // Custom smooth zoom wheel handler to prevent abrupt zoom changes
         this.container.addEventListener(
@@ -1246,42 +1116,6 @@ export class EntityGraphVisualizer {
             },
             { passive: true },
         );
-    }
-
-    /**
-     * Get target visibility percentages based on zoom level
-     * Progressive disclosure: fewer items visible when zoomed out
-     */
-    private getVisibilityPercentages(zoom: number): {
-        nodeVisibilityPercentage: number;
-        edgeVisibilityPercentage: number;
-    } {
-        let nodeVisibilityPercentage: number;
-        let edgeVisibilityPercentage: number;
-
-        if (zoom < 0.3) {
-            // Very zoomed out - show top 10% of nodes, 5% of edges
-            nodeVisibilityPercentage = 0.1;
-            edgeVisibilityPercentage = 0.05;
-        } else if (zoom < 0.6) {
-            // Zoomed out - show top 30% of nodes, 20% of edges
-            nodeVisibilityPercentage = 0.3;
-            edgeVisibilityPercentage = 0.2;
-        } else if (zoom < 1.0) {
-            // Medium zoom - show top 60% of nodes, 50% of edges
-            nodeVisibilityPercentage = 0.6;
-            edgeVisibilityPercentage = 0.5;
-        } else if (zoom < 1.5) {
-            // Zoomed in - show top 85% of nodes, 80% of edges
-            nodeVisibilityPercentage = 0.85;
-            edgeVisibilityPercentage = 0.8;
-        } else {
-            // Very zoomed in - show 95% of nodes, 90% of edges
-            nodeVisibilityPercentage = 0.95;
-            edgeVisibilityPercentage = 0.9;
-        }
-
-        return { nodeVisibilityPercentage, edgeVisibilityPercentage };
     }
 
     // Storage for position comparison debugging
@@ -1605,183 +1439,9 @@ export class EntityGraphVisualizer {
     }
 
     /**
-     * Calculate entity importance from available metrics
-     */
-    private calculateEntityImportance(entity: any): number {
-        const importance = entity.importance || 0;
-        const degree = entity.degree || entity.degreeCount || 0;
-        const centrality = entity.centralityScore || 0;
-        const pagerank = entity.metrics?.pagerank || 0;
-
-        // If we have a valid backend importance, use it
-        if (importance > 0) {
-            return importance;
-        }
-
-        // Calculate degree-based importance if we have degree information
-        if (degree > 0) {
-            // Find the maximum degree from the current dataset for normalization
-            // This is a simple approach - in production, we might want to cache this
-            const maxDegree = 201; // Estimated max degree based on typical graphs
-            return Math.min(1.0, degree / maxDegree);
-        }
-
-        // Fall back to other signals
-        const otherSignals = Math.max(centrality, pagerank);
-        if (otherSignals > 0) {
-            return otherSignals;
-        }
-
-        // Only use minimum for truly unknown entities
-        return 0.1;
-    }
-
-    private calculatePercentiles(values: number[]): any {
-        if (values.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
-
-        const sorted = values.sort((a, b) => a - b);
-        const len = sorted.length;
-
-        return {
-            p25: sorted[Math.floor(len * 0.25)],
-            p50: sorted[Math.floor(len * 0.5)],
-            p75: sorted[Math.floor(len * 0.75)],
-            p90: sorted[Math.floor(len * 0.9)],
-        };
-    }
-
-    private getTypePriority(type: string): number {
-        const priorities: { [key: string]: number } = {
-            person: 3,
-            organization: 3,
-            product: 2,
-            concept: 2,
-            location: 2,
-            technology: 2,
-            event: 1,
-            document: 1,
-            website: 1,
-            topic: 1,
-            related_entity: 0,
-        };
-        return priorities[type] || 0;
-    }
-
-    private getEdgeTypeWeight(type: string): number {
-        const weights: { [key: string]: number } = {
-            contains: 2,
-            created_by: 2,
-            located_in: 2,
-            works_for: 2,
-            related: 1,
-            mentioned: 0,
-        };
-        return weights[type] || 1;
-    }
-
-    private isCommunityhub(node: any, communityId: string): boolean {
-        if (!this.cy) return false;
-
-        // Simple heuristic: node is a hub if it has connections to many other nodes in the community
-        const communityNodes = this.cy
-            .nodes()
-            .filter((n: any) => n.data("communityId") === communityId);
-        const nodeConnections = node.connectedEdges().length;
-        const avgConnections =
-            communityNodes
-                .map((n: any) => n.connectedEdges().length)
-                .reduce((a: number, b: number) => a + b, 0) /
-            communityNodes.length;
-
-        return nodeConnections > avgConnections * 1.5;
-    }
-
-    private getAdaptiveZoomThresholds(
-        zoom: number,
-        totalElements: number,
-    ): any {
-        // Dynamic thresholds based on zoom level and graph density
-        const densityFactor = Math.min(1, totalElements / 1000);
-
-        if (zoom < 0.3) {
-            return {
-                nodeThreshold: 6 + densityFactor * 2,
-                labelThreshold: 8,
-                edgeThreshold: 4 + densityFactor,
-            };
-        } else if (zoom < 0.6) {
-            return {
-                nodeThreshold: 4 + densityFactor,
-                labelThreshold: 6,
-                edgeThreshold: 3,
-            };
-        } else if (zoom < 1.0) {
-            return {
-                nodeThreshold: 2,
-                labelThreshold: 4,
-                edgeThreshold: 2,
-            };
-        } else {
-            return {
-                nodeThreshold: 0,
-                labelThreshold: 2,
-                edgeThreshold: 1,
-            };
-        }
-    }
-
-    private calculateLabelSize(score: number, zoom: number): number {
-        // Safety check for NaN values
-        if (!isFinite(score) || !isFinite(zoom)) {
-            console.warn("[LOD] Non-finite values in calculateLabelSize:", {
-                score,
-                zoom,
-            });
-            return 10; // Return safe default
-        }
-
-        const baseSize = 10;
-        const scoreMultiplier = Math.min(1.5, 1 + score * 0.1);
-        const zoomMultiplier = Math.min(1.3, zoom);
-        const result = Math.round(baseSize * scoreMultiplier * zoomMultiplier);
-
-        return isFinite(result) ? result : 10;
-    }
-
-    private calculateOpacity(score: number, zoom: number): number {
-        // Safety check for NaN values
-        if (!isFinite(score) || !isFinite(zoom)) {
-            console.warn("[LOD] Non-finite values in calculateOpacity:", {
-                score,
-                zoom,
-            });
-            return 0.8; // Return safe default
-        }
-
-        const baseOpacity = 0.6;
-        const scoreBonus = Math.min(0.4, score * 0.1);
-        const zoomBonus = Math.min(0.2, zoom * 0.2);
-        const result = Math.min(1, baseOpacity + scoreBonus + zoomBonus);
-
-        return isFinite(result) ? result : 0.8;
-    }
-
-    /**
-     * Apply layout to the graph
-     */
-    private applyLayout(layoutName: string): void {
-        if (!this.cy) return;
-
-        // Always use preset positions from graphology - no client-side layout computation
-        console.log(
-            "[EntityGraphVisualizer] Skipping layout calculation, using preset positions from graphology",
-        );
-    }
-
-    /**
      * Change the current layout (simplified for preset-only)
      */
-    changeLayout(layoutName: string): void {
+    changeLayout(): void {
         console.log(
             `[Layout] Layout changes not supported with preset layouts from server`,
         );
@@ -2639,43 +2299,4 @@ export class EntityGraphVisualizer {
             neighborhoodViewport?: any;
         }
     > = new Map();
-
-    /**
-     * Calculate distance from a point to the viewport boundary
-     */
-    private calculateDistanceToViewport(position: any, viewport: any): number {
-        const dx = Math.max(
-            viewport.x1 - position.x,
-            0,
-            position.x - viewport.x2,
-        );
-        const dy = Math.max(
-            viewport.y1 - position.y,
-            0,
-            position.y - viewport.y2,
-        );
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    /**
-     * Calculate the center point of anchor nodes
-     */
-    private calculateAnchorCenter(anchorNodes: any[]): {
-        x: number;
-        y: number;
-    } {
-        if (anchorNodes.length === 0) {
-            return { x: 0, y: 0 };
-        }
-
-        const positions = anchorNodes.map((node) => node.position());
-        return {
-            x:
-                positions.reduce((sum, pos) => sum + pos.x, 0) /
-                positions.length,
-            y:
-                positions.reduce((sum, pos) => sum + pos.y, 0) /
-                positions.length,
-        };
-    }
 }

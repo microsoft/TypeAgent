@@ -31,16 +31,15 @@ interface GraphStatistics {
     lastUpdated: number;
 }
 
-// Phase 3: Layout-only data contract interface
 interface GraphLayoutData {
     presetLayout: {
-        elements: any[]; // Cytoscape elements with positions
-        layoutDuration?: number; // Server layout computation time
-        communityCount?: number; // Number of communities detected
-        avgSpacing?: number; // Average node spacing
-        metadata?: any; // Additional layout metadata
+        elements: any[];
+        layoutDuration?: number;
+        communityCount?: number;
+        avgSpacing?: number;
+        metadata?: any;
     };
-    centerEntity?: string; // For focusing on specific entity
+    centerEntity?: string;
 }
 
 // ===================================================================
@@ -740,40 +739,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
         const num = parseFloat(value);
         if (isNaN(num)) return 0.5;
         return Math.max(0.0, Math.min(1.0, num));
-    }
-
-    private calculateStatistics(
-        entities: EntityNode[],
-        relationships: RelationshipEdge[],
-    ): GraphStatistics {
-        const totalEntities = entities.length;
-        const totalRelationships = relationships.length;
-
-        // Calculate average degree (edges per node)
-        const averageDegree =
-            totalEntities > 0 ? (totalRelationships * 2) / totalEntities : 0;
-
-        // Calculate graph density
-        const maxPossibleEdges = (totalEntities * (totalEntities - 1)) / 2;
-        const density =
-            maxPossibleEdges > 0 ? totalRelationships / maxPossibleEdges : 0;
-
-        // Count communities (from entity properties)
-        const communitySet = new Set();
-        entities.forEach((entity) => {
-            if (entity.properties.community) {
-                communitySet.add(entity.properties.community);
-            }
-        });
-
-        return {
-            totalEntities,
-            totalRelationships,
-            averageDegree,
-            density,
-            communities: communitySet.size,
-            lastUpdated: Date.now(),
-        };
     }
 }
 
