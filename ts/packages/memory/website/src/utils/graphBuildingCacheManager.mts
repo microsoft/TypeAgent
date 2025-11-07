@@ -6,7 +6,20 @@
  * Reduces database queries by caching frequently accessed data during graph construction
  */
 
-import { Relationship } from "../tables.js";
+interface Relationship {
+    id: string;
+    fromEntity: string;
+    toEntity: string;
+    relationshipType: string;
+    confidence: number;
+    metadata?: string;
+    cooccurrenceCount?: number;
+    extractionDate: string;
+    sources?: string;
+    strength?: number;
+    updated: string;
+}
+
 import { Website } from "../websiteMeta.js";
 
 export interface GraphBuildingCache {

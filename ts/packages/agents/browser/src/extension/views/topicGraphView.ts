@@ -293,43 +293,11 @@ class TopicGraphView {
                 `[TopicGraphView] Fetching neighborhood for ${centerTopic} with ${viewportTopicIds.length} viewport topics`,
             );
 
-            const result =
-                await this.extensionService.getTopicViewportNeighborhood(
-                    centerTopic,
-                    viewportTopicIds,
-                    maxNodes,
-                );
-
-            if (!result || !result.topics) {
-                console.warn("[TopicGraphView] No neighborhood data returned");
-                return { topics: [], relationships: [], maxDepth: 0 };
-            }
-
-            console.log(
-                `[TopicGraphView] Received neighborhood: ${result.topics.length} topics`,
+            // TODO: Implement topic viewport neighborhood functionality
+            console.warn(
+                "[TopicGraphView] Topic viewport neighborhood not implemented - returning empty data",
             );
-
-            // Transform to visualization format
-            const topics = result.topics.map((topic: any) => ({
-                id: topic.topicId,
-                name: topic.topicName,
-                level: topic.level,
-                parentId: topic.parentTopicId,
-                confidence: topic.confidence || 0.7,
-                keywords: this.parseKeywords(topic.keywords),
-                entityReferences: topic.entityReferences || [],
-                childCount: this.countChildren(topic.topicId, result.topics),
-            }));
-
-            const relationships = result.relationships || [];
-
-            return {
-                centerTopic: centerTopic,
-                topics,
-                relationships,
-                maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
-                metadata: result.metadata,
-            };
+            return { topics: [], relationships: [], maxDepth: 0 };
         } catch (error) {
             console.error(
                 "[TopicGraphView] Error fetching neighborhood:",
