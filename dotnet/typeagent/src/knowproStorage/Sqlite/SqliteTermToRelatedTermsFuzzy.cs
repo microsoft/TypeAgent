@@ -178,22 +178,19 @@ VALUES(@term, @term_embedding)
     private List<Term> GetTerms(List<Scored<int>> termIds)
     {
         var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(termIds.Count);
-
-        var rows = _db.Enumerate(
+        Dictionary<int, string> rows = _db.GetKeyValues(
             $@"
-SELECT term
-FROM RelatedTermsFuzzy WHERE term_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
-ORDER BY term_id",
+SELECT term_id, term
+FROM RelatedTermsFuzzy WHERE term_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})",
             (cmd) => cmd.AddPlaceholderParameters(placeholderIds, termIds.Map((t) => t.Item)),
-            (reader) => reader.GetString(0)
+            (reader) => new KeyValuePair<int, string>(reader.GetInt32(0), reader.GetString(1))
         );
-        int i = 0;
+
         List<Term> terms = new List<Term>(termIds.Count);
-        foreach (var term in rows)
+        // We need to return terms in the order they were requested
+        foreach (var scoredTermId in termIds)
         {
-            var scoredTermId = termIds[i];
-            terms.Add(new Term(term, (float)termIds[i].Score));
-            ++i;
+            terms.Add(new Term(rows[scoredTermId.Item], (float)scoredTermId.Score));
         }
         return terms;
     }
