@@ -387,14 +387,15 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestAnswer")
         {
-            Args.Arg<string>("query")
+            Args.Arg<string>("query"),
+            Options.Arg<bool>("debug", false)
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.AnswerAsync);
         return cmd;
     }
 
-    private async Task AnswerAsync(ParseResult args, CancellationToken cancellationToken)
+    private async Task AnswerAsync(ParseResult args)
     {
         IConversation conversation = EnsureConversation();
 
@@ -404,6 +405,7 @@ public class TestCommands : ICommandModule
         {
             return;
         }
+        /*
         IList<AnswerResponse> answers = await conversation.AnswerQuestionAsync(
             query,
             null,
@@ -413,23 +415,19 @@ public class TestCommands : ICommandModule
             cancellationToken
         ).ConfigureAwait(false);
         KnowProWriter.WriteJson(answers);
-        /*
-        AnswerContext context = new AnswerContext();
-
-        IList<ConcreteEntity> entities = await conversation.SemanticRefs.GetAllEntitiesAsync(cancellationToken);
-        entities = [.. entities.ToDistinct()];
-
-        IList<Topic> topics = await conversation.SemanticRefs.GetAllTopicsAsync(cancellationToken);
-        topics = [.. topics.ToDistinct()];
-
-        context.Entities = entities.Map((e) => new RelevantEntity { Entity = e });
-        context.Topics = topics.Map((t) => new RelevantTopic { Topic = t });
-
-        List<IMessage> messages = await conversation.Messages.GetAllAsync(cancellationToken);
-        context.Messages = messages.Map((m) => new RelevantMessage(m));
-        string prompt = context.ToPromptString();
-        ConsoleWriter.WriteLine(prompt);
         */
+        var searchResults = await conversation.SearchAsync(query);
+        foreach (var searchResult in searchResults)
+        {
+            AnswerContext context = await AnswerContext.FromSearchResultAsync(conversation, searchResult);
+            if (namedArgs.Get<bool>("debug"))
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, context.ToJson());
+            }
+
+            var answer = await conversation.AnswerQuestionAsync(query, context);
+            KnowProWriter.WriteJson(answer);
+        }
     }
 
     private IConversation EnsureConversation()

@@ -53,7 +53,7 @@ public class PodcastCommands : ICommandModule
         return cmd;
     }
 
-    private async Task PodcastLoadAsync(ParseResult args)
+    private Task PodcastLoadAsync(ParseResult args)
     {
         NamedArgs namedArgs = new(args);
         string name = namedArgs.GetRequired("name");
@@ -71,6 +71,7 @@ public class PodcastCommands : ICommandModule
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Loaded {name}");
 
         //await podcast.BuildSecondaryIndexesAsync();
+        return Task.CompletedTask;
     }
 
     private Command PodcastImportIndexDef()
@@ -164,6 +165,9 @@ public class PodcastCommands : ICommandModule
 
             count = await podcast.ImportPropertyIndexAsync(data.SemanticRefs, cancellationToken);
             KnowProWriter.WriteLine($"{count} properties imported");
+
+            await podcast.UpdateMessageIndexAsync(false, cancellationToken);
+            await podcast.BuildSecondaryIndexesAsync(cancellationToken);
 
             SetCurrent(podcast);
         }

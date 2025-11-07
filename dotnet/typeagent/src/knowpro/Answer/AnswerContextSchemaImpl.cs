@@ -30,6 +30,11 @@ public partial class RelevantMessage
 
 public partial class AnswerContext
 {
+    public string ToJson()
+    {
+        return Serializer.ToJsonIndented(this);
+    }
+
     public string ToPromptString()
     {
         var json = new StringBuilder();
@@ -51,6 +56,23 @@ public partial class AnswerContext
         json.Append("\n}");
 
         return json.ToString();
+    }
+
+    public static ValueTask<AnswerContext> FromSearchResultAsync(
+        IConversation conversation,
+        ConversationSearchResult searchResult,
+        AnswerContextOptions? contextOptions = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        AnswerContextBuilder contextBuilder = new AnswerContextBuilder(conversation);
+        return contextBuilder.FromSearchResultAsync(
+            searchResult,
+            contextOptions,
+            cancellationToken
+        );
+
+
     }
 
     private int AddPrompt(StringBuilder text, int propertyCount, string name, object value)
