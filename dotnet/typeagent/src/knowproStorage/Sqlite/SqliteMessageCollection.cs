@@ -194,9 +194,8 @@ internal class MessageRow
     public string? MetadataJson { get; set; }
     public string? ExtraJson { get; set; }
 
-    public MessageRow Read(SqliteDataReader reader)
+    public MessageRow Read(SqliteDataReader reader, int iCol = 0)
     {
-        int iCol = 0;
         ChunksJson = reader.GetStringOrNull(iCol++);
         ChunkUri = reader.GetStringOrNull(iCol++);
         MessageLength = reader.GetInt32(iCol++);
@@ -386,25 +385,26 @@ FROM Messages WHERE msg_id = @msg_id",
         );
     }
 
-    public static IEnumerable<MessageRow> GetMessages(SqliteDatabase db, IList<int> messageIds)
+    public static IEnumerable<MessageRow> GetMessages(SqliteDatabase db, IList<int> messageOrdinals)
     {
-        foreach (var batch in messageIds.Batch(SqliteDatabase.MaxBatchSize))
+        Dictionary<int, MessageRow> messageRows = [];
+
+        foreach (var batch in messageOrdinals.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
 
-            var rows = db.Enumerate(
+            db.GetKeyValues(
                 $@"
-SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
+SELECT msg_id, chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                ReadMessageRow
+                (reader) => new KeyValuePair<int, MessageRow>(reader.GetInt32(0), ReadMessageRow(reader, 1)),
+                messageRows
             );
-            foreach (var row in rows)
-            {
-                yield return row;
-            }
         }
+        // Return messages in the order they were requested
+        return messageRows.GetValues(messageOrdinals);
     }
 
     public static int GetMessageLength(SqliteDatabase db, int msgId)
@@ -538,7 +538,10 @@ FROM Messages WHERE msg_id IN({SqliteDatabase.MakeInStatement(placeholderIds)})"
     }
 
     public static MessageRow ReadMessageRow(SqliteDataReader reader)
+        => ReadMessageRow(reader, 0);
+
+    public static MessageRow ReadMessageRow(SqliteDataReader reader, int iCol)
     {
-        return new MessageRow().Read(reader);
+        return new MessageRow().Read(reader, iCol);
     }
 }

@@ -253,11 +253,11 @@ internal class AnswerContextBuilder
         return rangeOrdinals.Count != meta.Count || rangeOrdinals.Count != timestamps.Count
             ? throw new InvalidOperationException("ordinal list to meta list mismatch")
             : new EnclosingMetadata
-        {
-            Ordinals = rangeOrdinals,
-            Meta = meta,
-            Timestamps = timestamps
-        };
+            {
+                Ordinals = rangeOrdinals,
+                Meta = meta,
+                Timestamps = timestamps
+            };
     }
 
     private TimestampRange? GetTimeRange(string? min, string? max)
@@ -271,7 +271,7 @@ internal class AnswerContextBuilder
     {
         public List<int> Ordinals { get; set; }
 
-        public IList<IMessageMetadata> Meta { get; set;}
+        public IList<IMessageMetadata> Meta { get; set; }
 
         public IList<string> Timestamps { get; set; }
     }

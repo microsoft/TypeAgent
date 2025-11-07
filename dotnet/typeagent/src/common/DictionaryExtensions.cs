@@ -17,10 +17,12 @@ public static class DictionaryExtensions
 
     // Gets values in the same order as the keys
     public static IEnumerable<TValue> GetValues<TKey, TValue>(
-        this IDictionary<TKey,TValue> dictionary,
+        this IDictionary<TKey, TValue> dictionary,
         IEnumerable<TKey> keysInOrder
     )
     {
+        ArgumentVerify.ThrowIfNull(keysInOrder, nameof(keysInOrder));
+
         foreach (TKey key in keysInOrder)
         {
             yield return dictionary[key];
