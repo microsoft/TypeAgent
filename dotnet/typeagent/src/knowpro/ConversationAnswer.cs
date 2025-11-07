@@ -29,7 +29,8 @@ public static class ConversationAnswer
         IAnswerGenerator generator = conversation.Settings.AnswerGenerator;
 
         string contextContent = context.ToPromptString();
-        bool chunking = contextOptions?.Chunking ?? true;
+        //bool chunking = contextOptions?.Chunking ?? true;
+        bool chunking = false; // TODO: chunking not implemented yet
         if (
             contextContent.Length <= generator.Settings.MaxCharsInBudget ||
             !chunking

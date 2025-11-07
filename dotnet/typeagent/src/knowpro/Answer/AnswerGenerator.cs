@@ -64,9 +64,64 @@ public class AnswerGenerator : IAnswerGenerator
         return GenerateAsync(question, contextContent, cancellationToken);
     }
 
-    public Task<AnswerResponse> CombinePartialAsync(string question, IList<AnswerResponse> responses, CancellationToken cancellationToken = default)
+    public async Task<AnswerResponse> CombinePartialAsync(
+        string question,
+        IList<AnswerResponse> partialAnswers,
+        CancellationToken cancellationToken = default
+    )
     {
-        throw new NotImplementedException();
+        ArgumentVerify.ThrowIfNullOrEmpty(partialAnswers, nameof(partialAnswers));
+
+        if (partialAnswers.Count == 1)
+        {
+            return partialAnswers[0];
+        }
+
+        StringBuilder answerBuilder = new StringBuilder();
+        StringBuilder? whyNoAnswer = null;
+        int answerCount = 0;
+        foreach (AnswerResponse partialAnswer in partialAnswers)
+        {
+            if (partialAnswer.Type == AnswerType.Answered)
+            {
+                answerCount++;
+                answerBuilder.Append(partialAnswer.Answer);
+                answerBuilder.Append('\n');
+            }
+            else
+            {
+                whyNoAnswer ??= new StringBuilder();
+                whyNoAnswer.Append(partialAnswer.WhyNoAnswer);
+            }
+        }
+
+        // If we collected any useful partial answers, turn them into a combined answer
+        if (answerBuilder.Length > 0)
+        {
+            string answer = answerBuilder.ToString();
+            if (answerCount > 1)
+            {
+                answer = answer.Trim(Settings.MaxCharsInBudget);
+                answer = await Settings.CombinerModel.CompleteAsync(
+                    CreateRewritePrompt(answer, question),
+                    null,
+                    cancellationToken
+                ).ConfigureAwait(false);
+            }
+            return new AnswerResponse
+            {
+                Type = AnswerType.Answered,
+                Answer = answer,
+            };
+        }
+        // No valid partial answers at all
+        return new AnswerResponse
+        {
+            Type = AnswerType.NoAnswer,
+            Answer = whyNoAnswer is not null
+            ? whyNoAnswer.ToString()
+            : string.Empty
+        };
     }
 
     public static string CreateQuestionPrompt(string question)
@@ -90,7 +145,7 @@ public class AnswerGenerator : IAnswerGenerator
         return string.Join("\n", prompt);
     }
 
-    public string CreateContextPrompt(string context)
+    public static string CreateContextPrompt(string context)
     {
         ArgumentVerify.ThrowIfNullOrEmpty(context, nameof(context));
 
@@ -98,4 +153,14 @@ public class AnswerGenerator : IAnswerGenerator
         return content;
     }
 
+    public static string CreateRewritePrompt(string text, string question)
+    {
+        string[] prompt = [
+            $"The following text answers the QUESTION \"{question}\".Rewrite it to ",
+            "make it more readable, with better formatting (line breaks, bullet points, numbered lists etc).",
+            "\n Remove all redundancy, duplication, contradiction, or anything that does not answer the question.",
+            $"\n\"\"\"\n${text}\n\"\"\"\n"
+        ];
+        return string.Join(string.Empty, prompt);
+    }
 }
