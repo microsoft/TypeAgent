@@ -2329,8 +2329,14 @@ export class EntityGraphVisualizer {
      */
     resize(): void {
         if (this.cy) {
-            this.cy.resize();
-            // Don't call fit() here - it resets zoom when sidebar opens/closes
+            // Force DOM to update before resize
+            requestAnimationFrame(() => {
+                if (this.cy) {
+                    this.cy.resize();
+                    // Force coordinate system recalculation
+                    this.cy.forceRender();
+                }
+            });
         }
     }
 
@@ -2452,6 +2458,26 @@ export class EntityGraphVisualizer {
         );
 
         this.showLabelsForEntityNeighborhood(node.data("name"), 2);
+    }
+
+    /**
+     * Focus on a specific entity by name in the global view
+     */
+    focusOnEntityNode(entityName: string): void {
+        if (!this.cy) return;
+
+        // Find the node by entity name
+        const node = this.cy.getElementById(entityName);
+        
+        if (node.length === 0) {
+            console.warn(`Entity node "${entityName}" not found in graph`);
+            return;
+        }
+
+        console.log(`Focusing on entity node: ${entityName}`);
+
+        // Use the existing focusOnNode implementation
+        this.focusOnNode(node);
     }
 
     private showProgressiveNodeInfo(node: any, position: any): void {

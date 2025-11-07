@@ -36,9 +36,28 @@ class TopicGraphView {
         // Initialize extension service
         this.extensionService = createExtensionService();
 
+        // Check for topic parameter in URL
+        this.parseUrlParameters();
+
         this.initializeEventHandlers();
         this.initializeVisualizer();
         this.loadInitialData();
+    }
+
+    private parseUrlParameters(): void {
+        const urlParams = new URLSearchParams(window.location.search);
+        const topicParam = urlParams.get('topic');
+        
+        if (topicParam) {
+            // Store the target topic to navigate to after data loads
+            this.state.searchQuery = topicParam;
+            
+            // Update the search input field to show the topic name
+            const searchInput = document.getElementById('topicSearch') as HTMLInputElement;
+            if (searchInput) {
+                searchInput.value = topicParam;
+            }
+        }
     }
 
     private initializeEventHandlers(): void {
@@ -185,6 +204,12 @@ class TopicGraphView {
             await this.visualizer?.init(topicData);
 
             this.updateGraphStats();
+            
+            // Check if we need to navigate to a specific topic from URL parameter
+            if (this.state.searchQuery.trim()) {
+                this.handleTopicNavigation(this.state.searchQuery.trim());
+            }
+            
             this.hideLoading();
         } catch (error) {
             console.error("Failed to load topic data:", error);
@@ -852,6 +877,9 @@ class TopicGraphView {
 
         this.openSidebar();
 
+        // Focus on the clicked topic node
+        this.focusOnTopic(topic.id);
+
         const sidebarContent = document.getElementById("sidebarContent")!;
         sidebarContent.innerHTML = `
             <div class="topic-details">
@@ -1004,15 +1032,61 @@ class TopicGraphView {
             return;
         }
 
-        const results = this.visualizer.searchTopics(this.state.searchQuery);
+        this.handleTopicNavigation(this.state.searchQuery.trim());
+    }
+
+    private handleTopicNavigation(query: string): void {
+        if (!this.visualizer) return;
+
+        // First try to find exact match
+        const exactMatch = this.findTopicByExactName(query);
+        if (exactMatch) {
+            // Show details and focus on the exact match
+            this.showTopicDetails(exactMatch);
+            this.updateBreadcrumb(exactMatch);
+            this.showNotification(`Found topic: "${exactMatch.name}"`);
+            this.clearUrlParameter();
+            return;
+        }
+
+        // Fall back to search results
+        const results = this.visualizer.searchTopics(query);
         const topicIds = results.map((topic) => topic.id);
 
         this.visualizer.highlightSearchResults(topicIds);
 
-        // Show notification with results count
-        this.showNotification(
-            `Found ${results.length} topics matching "${this.state.searchQuery}"`,
-        );
+        if (results.length === 1) {
+            // If exactly one result, automatically show details and focus
+            this.showTopicDetails(results[0]);
+            this.updateBreadcrumb(results[0]);
+            this.showNotification(`Found topic: "${results[0].name}"`);
+            this.clearUrlParameter();
+        } else if (results.length > 1) {
+            // Multiple results - just highlight and show count
+            this.showNotification(
+                `Found ${results.length} topics matching "${query}". Click on a highlighted topic to view details.`
+            );
+        } else {
+            // No results found
+            this.showNotification(`No topics found matching "${query}"`);
+        }
+    }
+
+    private clearUrlParameter(): void {
+        // Clear the topic parameter from URL after successful navigation
+        const url = new URL(window.location.href);
+        url.searchParams.delete('topic');
+        window.history.replaceState({}, '', url.toString());
+    }
+
+    private findTopicByExactName(name: string): any | null {
+        if (!this.visualizer || !this.lastLoadedData?.topics) return null;
+
+        // Case-insensitive exact match
+        const lowerName = name.toLowerCase();
+        return this.lastLoadedData.topics.find((topic: any) => 
+            topic.name.toLowerCase() === lowerName
+        ) || null;
     }
 
     private updateGraphStats(): void {
@@ -1147,11 +1221,41 @@ class TopicGraphView {
     private openSidebar(): void {
         this.state.sidebarOpen = true;
         this.sidebar.classList.remove("collapsed");
+        
+        // Force resize to recalculate click coordinates after sidebar layout change
+        if (this.visualizer) {
+            setTimeout(() => {
+                if (this.visualizer) {
+                    this.visualizer.resize();
+                    // Force a second resize after DOM has fully updated
+                    setTimeout(() => {
+                        if (this.visualizer) {
+                            this.visualizer.resize();
+                        }
+                    }, 50);
+                }
+            }, 100);
+        }
     }
 
     private closeSidebar(): void {
         this.state.sidebarOpen = false;
         this.sidebar.classList.add("collapsed");
+        
+        // Force resize to recalculate click coordinates after sidebar layout change
+        if (this.visualizer) {
+            setTimeout(() => {
+                if (this.visualizer) {
+                    this.visualizer.resize();
+                    // Force a second resize after DOM has fully updated
+                    setTimeout(() => {
+                        if (this.visualizer) {
+                            this.visualizer.resize();
+                        }
+                    }, 50);
+                }
+            }, 100);
+        }
     }
 
     private escapeHtml(text: string): string {

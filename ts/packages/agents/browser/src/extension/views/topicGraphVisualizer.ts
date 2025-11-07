@@ -906,6 +906,22 @@ export class TopicGraphVisualizer {
     }
 
     /**
+     * Resize the graph container to handle layout changes
+     */
+    public resize(): void {
+        if (this.cy) {
+            // Force DOM to update before resize
+            requestAnimationFrame(() => {
+                if (this.cy) {
+                    this.cy.resize();
+                    // Force coordinate system recalculation
+                    this.cy.forceRender();
+                }
+            });
+        }
+    }
+
+    /**
      * Get current graph statistics
      */
     public getGraphStats(): any {

@@ -179,7 +179,10 @@ class EntityGraphView {
         // Entity click navigation
         this.visualizer.onEntityClick((entityData) => {
             if (this.currentViewMode.type === "global") {
+                // Show entity details in sidebar
                 this.showEntityDetails(entityData.name);
+                // Focus on the clicked node
+                this.focusOnEntity(entityData.name);
             } else {
                 this.navigateToEntity(entityData.name);
             }
@@ -512,10 +515,8 @@ class EntityGraphView {
         try {
             console.log(`Fetching details for entity: ${entityName}`);
 
-            const sidebarElement = document.getElementById("entitySidebar");
-            if (sidebarElement) {
-                sidebarElement.style.display = "flex";
-            }
+            // Show sidebar using proper visibility method to trigger resize
+            this.updateSidebarVisibility(true);
 
             const basicEntityData = {
                 name: entityName,
@@ -550,6 +551,20 @@ class EntityGraphView {
             }
         } catch (error) {
             console.error("Failed to load entity details:", error);
+        }
+    }
+
+    /**
+     * Focus on a specific entity node in the graph
+     */
+    private focusOnEntity(entityName: string): void {
+        try {
+            if (this.visualizer && this.currentViewMode.type === "global") {
+                console.log(`Focusing on entity: ${entityName}`);
+                this.visualizer.focusOnEntityNode(entityName);
+            }
+        } catch (error) {
+            console.error(`Failed to focus on entity ${entityName}:`, error);
         }
     }
 
@@ -689,7 +704,12 @@ class EntityGraphView {
             }
 
             if (this.visualizer) {
-                setTimeout(() => this.visualizer.resize(), 100);
+                // Force resize after layout changes to recalculate click coordinates
+                setTimeout(() => {
+                    this.visualizer.resize();
+                    // Force a second resize after DOM has fully updated
+                    setTimeout(() => this.visualizer.resize(), 50);
+                }, 100);
             }
         }
     }
@@ -1336,6 +1356,28 @@ class EntityGraphView {
 
                 // Show sidebar after successfully loading data
                 this.updateSidebarVisibility(true);
+
+                // Check if graphology layout is available and render the graph
+                const hasGraphologyLayout = graphData.metadata?.graphologyLayout;
+
+                if (hasGraphologyLayout) {
+                    console.log(
+                        `[EntityGraphView] Using graphology preset layout for entity "${entityName}" with ${graphData.metadata.graphologyLayout.elements?.length || 0} elements`,
+                    );
+                    const presetLayout = {
+                        elements: graphData.metadata.graphologyLayout.elements,
+                        layoutDuration: graphData.metadata.graphologyLayout.layoutDuration,
+                        avgSpacing: graphData.metadata.graphologyLayout.avgSpacing,
+                        communityCount: graphData.metadata.graphologyLayout.communityCount,
+                    };
+
+                    // Use loadGlobalGraph since it handles precomputed layouts
+                    await this.visualizer.loadGlobalGraph(presetLayout);
+                    console.log(`[EntityGraphView] Entity graph rendered successfully for "${entityName}"`);
+                } else {
+                    console.warn(`[EntityGraphView] No graphology layout found in metadata for entity "${entityName}"`);
+                    // Could fall back to showing just the sidebar without the graph
+                }
 
                 this.hideGraphLoading();
             } else {

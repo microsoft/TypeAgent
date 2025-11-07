@@ -57,6 +57,7 @@ export interface GraphologyLayoutOptions {
     forceAtlas2Iterations?: number;
     noverlapIterations?: number;
     targetViewportSize?: number;
+    skipEdgeFiltering?: boolean;
 }
 
 const DEFAULT_OPTIONS: Required<GraphologyLayoutOptions> = {
@@ -66,6 +67,7 @@ const DEFAULT_OPTIONS: Required<GraphologyLayoutOptions> = {
     forceAtlas2Iterations: 150,
     noverlapIterations: 1000,
     targetViewportSize: 2000,
+    skipEdgeFiltering: false,
 };
 
 const COMMUNITY_COLORS = [
@@ -91,6 +93,18 @@ export function buildGraphologyGraph(
         `Building graphology graph: ${nodes.length} nodes, ${edges.length} edges`,
     );
 
+    console.log(
+        `[graphologyLayoutEngine] FILTERING STEP 4A - buildGraphologyGraph input:`,
+        {
+            inputNodes: nodes.length,
+            inputEdges: edges.length,
+            nodeLimit: opts.nodeLimit,
+            willSliceNodesTo: Math.min(nodes.length, opts.nodeLimit),
+            skipEdgeFiltering: opts.skipEdgeFiltering,
+            minEdgeConfidence: opts.skipEdgeFiltering ? "N/A (filtering disabled)" : opts.minEdgeConfidence,
+        },
+    );
+
     const graph = new Graph({ type: "undirected" });
 
     for (const node of nodes.slice(0, opts.nodeLimit)) {
@@ -110,24 +124,67 @@ export function buildGraphologyGraph(
     const nodeSet = new Set(graph.nodes());
     const edgeSet = new Set<string>();
     let edgeCount = 0;
+    
+    // Edge filtering counters
+    let selfReferentialEdges = 0;
+    let missingNodeEdges = 0;
+    let duplicateEdges = 0;
+    let lowConfidenceEdges = 0;
+    let missingTypeEdges = 0;
+    let addErrorEdges = 0;
 
     for (const edge of edges) {
-        if (edge.from === edge.to) continue;
-        if (!nodeSet.has(edge.from) || !nodeSet.has(edge.to)) continue;
+        if (edge.from === edge.to) {
+            selfReferentialEdges++;
+            continue;
+        }
+        if (!nodeSet.has(edge.from) || !nodeSet.has(edge.to)) {
+            missingNodeEdges++;
+            continue;
+        }
 
         const edgeKey = [edge.from, edge.to].sort().join("|");
-        if (edgeSet.has(edgeKey)) continue;
+        if (edgeSet.has(edgeKey)) {
+            duplicateEdges++;
+            continue;
+        }
 
-        // Filter edges with confidence < 0.2 (except parent relationships)
+        // Filter edges with confidence < minEdgeConfidence (except parent relationships)
+        // Skip filtering entirely if skipEdgeFiltering is true
         if (
+            !opts.skipEdgeFiltering &&
             edge.type !== "parent" &&
             edge.type !== "parent-child" &&
-            (edge.confidence || 1) < 0.2
+            (edge.confidence || 1) < opts.minEdgeConfidence
         ) {
+            lowConfidenceEdges++;
+
+            // Log detailed information for first 20 low-confidence edges to help determine threshold
+            if (lowConfidenceEdges <= 20) {
+                console.log(
+                    `[graphologyLayoutEngine] LOW CONFIDENCE EDGE #${lowConfidenceEdges}:`,
+                    {
+                        from: edge.from,
+                        to: edge.to,
+                        type: edge.type,
+                        confidence: edge.confidence,
+                        strength: edge.strength,
+                        reason: `type="${edge.type}" has confidence ${edge.confidence} < ${opts.minEdgeConfidence} threshold`,
+                        allFields: JSON.stringify(edge, null, 2),
+                    },
+                );
+            }
+
             continue;
         }
 
         edgeSet.add(edgeKey);
+        
+        // Check for missing edge type
+        if (!edge.type) {
+            missingTypeEdges++;
+        }
+        
         try {
             graph.addEdge(edge.from, edge.to, {
                 type: edge.type || "related",
@@ -136,11 +193,27 @@ export function buildGraphologyGraph(
             });
             edgeCount++;
         } catch (error) {
-            debug(`Warning: Could not add edge ${edge.from} -> ${edge.to}`);
+            addErrorEdges++;
+            debug(`Warning: Could not add edge ${edge.from} -> ${edge.to}:`, error);
         }
     }
 
     debug(`Added ${edgeCount} edges to graph`);
+    console.log(
+        `[graphologyLayoutEngine] FILTERING STEP 4B RESULT - Edge filtering summary:`,
+        {
+            inputEdges: edges.length,
+            addedEdges: edgeCount,
+            filteringMode: opts.skipEdgeFiltering ? "DISABLED - All edges included" : `ENABLED - Min confidence: ${opts.minEdgeConfidence}`,
+            selfReferential: selfReferentialEdges,
+            missingNodes: missingNodeEdges,
+            duplicates: duplicateEdges,
+            lowConfidence: lowConfidenceEdges,
+            missingType: missingTypeEdges,
+            addErrors: addErrorEdges,
+            totalFiltered: edges.length - edgeCount,
+        },
+    );
 
     // Remove isolated nodes (nodes with no edges)
     const isolatedNodes: string[] = [];

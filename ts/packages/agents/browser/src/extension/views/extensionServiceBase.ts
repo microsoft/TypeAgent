@@ -530,15 +530,15 @@ export abstract class ExtensionServiceBase {
     }
 
     async getEntityNeighborhood(
-        entityId: string,
-        depth: number,
-        maxNodes: number,
+        parameters: {
+            entityId: string;
+            depth?: number;
+            maxNodes?: number;
+        },
     ): Promise<any> {
         return this.sendMessage({
             type: "getEntityNeighborhood",
-            entityId: entityId,
-            depth: depth,
-            maxNodes: maxNodes,
+            ...parameters,
         });
     }
 

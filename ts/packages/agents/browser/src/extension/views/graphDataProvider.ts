@@ -213,11 +213,11 @@ class GraphDataProviderImpl implements GraphDataProvider {
         try {
             // Use the proper service method for efficient neighborhood retrieval
             const neighborhoodData =
-                await this.baseService.getEntityNeighborhood(
+                await this.baseService.getEntityNeighborhood({
                     entityId,
                     depth,
                     maxNodes,
-                );
+                });
 
             if (!neighborhoodData || neighborhoodData.error) {
                 console.warn(
