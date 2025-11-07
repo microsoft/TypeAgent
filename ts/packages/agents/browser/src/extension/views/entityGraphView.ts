@@ -746,20 +746,21 @@ class EntityGraphView {
             console.log(
                 "[Navigation] Dual-instance not available - fetching data and building graph",
             );
-            const globalData = await this.loadGlobalGraphData();
+            const globalData = await this.loadGlobalGraphLayoutData();
 
-            if (globalData.statistics.totalEntities === 0) {
+            if (globalData.statistics?.totalElements === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
                 return;
             }
 
+            // Phase 3: Use layout-only data directly
             await this.visualizer.loadGlobalGraph(globalData);
 
             this.hideGraphLoading();
 
             console.log(
-                `Loaded global graph: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`,
+                `Loaded global graph: ${globalData.statistics?.totalElements} elements, ${globalData.statistics?.totalCommunities} communities (layout time: ${globalData.statistics?.layoutDuration}ms)`,
             );
         } catch (error) {
             console.error("Failed to load global view:", error);
@@ -807,6 +808,35 @@ class EntityGraphView {
                 totalCommunities: globalGraphResult.statistics.communities,
             },
         };
+    }
+
+    /**
+     * Phase 3: Load global graph using layout-only data contract
+     */
+    private async loadGlobalGraphLayoutData(): Promise<any> {
+        try {
+            // Use new layout-only data contract
+            const layoutData = await this.graphDataProvider.getGlobalGraphLayoutData();
+            
+            console.log(`[EntityGraphView] Loaded layout-only data: ${layoutData.presetLayout.elements.length} elements`);
+            
+            // Transform to format expected by EntityGraphVisualizer
+            return {
+                presetLayout: layoutData.presetLayout,
+                centerEntity: layoutData.centerEntity,
+                // Include metadata for statistics display
+                statistics: {
+                    totalElements: layoutData.presetLayout.elements.length,
+                    totalCommunities: layoutData.presetLayout.communityCount || 0,
+                    layoutDuration: layoutData.presetLayout.layoutDuration || 0,
+                }
+            };
+        } catch (error) {
+            console.error("[EntityGraphView] Failed to load layout-only global data:", error);
+            // Fallback to legacy method
+            console.log("[EntityGraphView] Falling back to legacy raw data method");
+            return this.loadGlobalGraphData();
+        }
     }
 
     /**
@@ -1364,15 +1394,17 @@ class EntityGraphView {
                     console.log(
                         `[EntityGraphView] Using graphology preset layout for entity "${entityName}" with ${graphData.metadata.graphologyLayout.elements?.length || 0} elements`,
                     );
-                    const presetLayout = {
-                        elements: graphData.metadata.graphologyLayout.elements,
-                        layoutDuration: graphData.metadata.graphologyLayout.layoutDuration,
-                        avgSpacing: graphData.metadata.graphologyLayout.avgSpacing,
-                        communityCount: graphData.metadata.graphologyLayout.communityCount,
+                    const presetLayoutData = {
+                        presetLayout: {
+                            elements: graphData.metadata.graphologyLayout.elements,
+                            layoutDuration: graphData.metadata.graphologyLayout.layoutDuration,
+                            avgSpacing: graphData.metadata.graphologyLayout.avgSpacing,
+                            communityCount: graphData.metadata.graphologyLayout.communityCount,
+                        }
                     };
 
                     // Use loadGlobalGraph since it handles precomputed layouts
-                    await this.visualizer.loadGlobalGraph(presetLayout);
+                    await this.visualizer.loadGlobalGraph(presetLayoutData);
                     console.log(`[EntityGraphView] Entity graph rendered successfully for "${entityName}"`);
                 } else {
                     console.warn(`[EntityGraphView] No graphology layout found in metadata for entity "${entityName}"`);
@@ -1549,18 +1581,29 @@ class EntityGraphView {
                 console.log(
                     `[EntityGraphView] Using graphology preset layout with community colors (${importanceData.metadata.graphologyLayout.elements?.length || 0} elements)`,
                 );
-                transformedData.presetLayout = {
-                    elements: importanceData.metadata.graphologyLayout.elements,
-                    layoutDuration:
-                        importanceData.metadata.graphologyLayout.layoutDuration,
-                    avgSpacing:
-                        importanceData.metadata.graphologyLayout.avgSpacing,
-                    communityCount:
-                        importanceData.metadata.graphologyLayout.communityCount,
+                // Phase 3: Use new GraphLayoutData structure
+                const layoutOnlyData = {
+                    presetLayout: {
+                        elements: importanceData.metadata.graphologyLayout.elements,
+                        layoutDuration:
+                            importanceData.metadata.graphologyLayout.layoutDuration,
+                        avgSpacing:
+                            importanceData.metadata.graphologyLayout.avgSpacing,
+                        communityCount:
+                            importanceData.metadata.graphologyLayout.communityCount,
+                    }
                 };
+                await this.visualizer.loadGlobalGraph(layoutOnlyData);
+            } else {
+                // Legacy: Add preset layout to existing data structure for backward compatibility
+                transformedData.presetLayout = {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                };
+                await this.visualizer.loadGlobalGraph(transformedData);
             }
-
-            await this.visualizer.loadGlobalGraph(transformedData);
             this.hideGraphLoading();
         } catch (error) {
             console.error(

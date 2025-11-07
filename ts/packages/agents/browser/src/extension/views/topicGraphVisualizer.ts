@@ -22,11 +22,24 @@ interface TopicRelationshipData {
     strength: number;
 }
 
+// Legacy interface - kept for backward compatibility
 interface TopicGraphData {
     centerTopic?: string;
     topics: TopicData[];
     relationships: TopicRelationshipData[];
     maxDepth: number;
+}
+
+// Phase 3: Simplified layout-only data contract
+interface TopicGraphLayoutData {
+    presetLayout: {
+        elements: any[];           // Cytoscape elements with positions
+        layoutDuration?: number;   // Server layout computation time
+        communityCount?: number;   // Number of communities detected
+        avgSpacing?: number;       // Average node spacing
+        metadata?: any;            // Additional layout metadata
+    };
+    centerTopic?: string;          // For focusing on specific topic
 }
 
 type TopicViewMode = "tree" | "radial" | "force" | "transitioning";
@@ -38,8 +51,7 @@ export class TopicGraphVisualizer {
     private topicClickCallback: ((topic: TopicData) => void) | null = null;
 
     private currentTopic: string | null = null;
-    private topicGraphData: TopicGraphData | null = null;
-    private expandedNodes: Set<string> = new Set();
+    private topicGraphData: TopicGraphLayoutData | null = null; // Phase 3: Layout-only data
 
     // Level of detail management
     private visibleLevels: Set<number> = new Set([0, 1, 2]); // Show first 3 levels by default
@@ -53,7 +65,6 @@ export class TopicGraphVisualizer {
     private lastLodUpdate: number = 0;
     private lodUpdateInterval: number = 33; // ~30fps (reduced from 16ms for better performance)
     private zoomHandlerSetup: boolean = false;
-    private prototypeModeEnabled: boolean = false;
 
     // Graph data provider for API calls
     private graphDataProvider: any = null;
@@ -82,7 +93,8 @@ export class TopicGraphVisualizer {
      */
     private getOptimalRendererConfig(): any {
         if (this.detectWebGLSupport()) {
-            const nodeCount = this.topicGraphData?.topics?.length || 0;
+            // Use preset layout element count instead of raw topic count
+            const nodeCount = this.cy ? this.cy.nodes().length : 0;
 
             // Configure WebGL settings based on graph size
             let webglConfig = {
@@ -119,8 +131,9 @@ export class TopicGraphVisualizer {
 
     /**
      * Initialize the topic graph with data
+     * Phase 3: Now accepts TopicGraphLayoutData for optimized data transfer
      */
-    public async init(data: TopicGraphData): Promise<void> {
+    public async init(data: TopicGraphLayoutData): Promise<void> {
         this.topicGraphData = data;
 
         if (!this.cy) {
@@ -133,6 +146,7 @@ export class TopicGraphVisualizer {
                 renderer: rendererConfig,
                 minZoom: 0.25,
                 maxZoom: 4.0,
+                wheelSensitivity: 0.15,
                 zoomingEnabled: true,
                 userZoomingEnabled: true,
                 panningEnabled: true,
@@ -156,7 +170,7 @@ export class TopicGraphVisualizer {
     /**
      * Load topic data into the graph
      */
-    private async loadData(data: TopicGraphData): Promise<void> {
+    private async loadData(data: TopicGraphLayoutData): Promise<void> {
         await this.loadDataIntoInstance(this.cy, data);
     }
 
@@ -165,27 +179,24 @@ export class TopicGraphVisualizer {
      */
     private async loadDataIntoInstance(
         instance: any,
-        data: any,
+        data: TopicGraphLayoutData,
     ): Promise<void> {
-        let elements: any[];
-        let usePresetLayout = false;
-
-        if (data.presetLayout?.elements) {
-            console.log(
-                `[TopicGraphVisualizer] Using graphology preset layout with ${data.presetLayout.elements.length} elements`,
+        // Require server-side graphology layout - no client-side fallback
+        if (!data.presetLayout?.elements) {
+            throw new Error(
+                "Server-side graphology layout is required but not available"
             );
-            console.log(
-                `[TopicGraphVisualizer] Layout computed in ${data.presetLayout.layoutDuration?.toFixed(0)}ms, ` +
-                    `${data.presetLayout.communityCount} communities detected`,
-            );
-            elements = data.presetLayout.elements;
-            usePresetLayout = true;
-        } else {
-            console.log(
-                "[TopicGraphVisualizer] No preset layout, will compute CoSE layout",
-            );
-            elements = this.convertToTopicElements(data);
         }
+
+        console.log(
+            `[TopicGraphVisualizer] Using graphology preset layout with ${data.presetLayout.elements.length} elements`,
+        );
+        console.log(
+            `[TopicGraphVisualizer] Layout computed in ${data.presetLayout.layoutDuration?.toFixed(0)}ms, ` +
+                `${data.presetLayout.communityCount} communities detected`,
+        );
+        
+        const elements = data.presetLayout.elements;
 
         // Use batch operations for better performance
         instance.batch(() => {
@@ -193,8 +204,8 @@ export class TopicGraphVisualizer {
             instance.add(elements);
         });
 
-        // Apply layout on this specific instance
-        await this.applyLayoutToInstance(instance, usePresetLayout);
+        // Apply preset layout - server-side layout is required
+        await this.applyPresetLayout(instance);
 
         // Focus on center topic if specified
         if (data.centerTopic) {
@@ -235,131 +246,7 @@ export class TopicGraphVisualizer {
         return Math.min(1, Math.max(0.1, scaled));
     }
 
-    /**
-     * Convert topic data to Cytoscape elements
-     */
-    private convertToTopicElements(data: TopicGraphData): any[] {
-        const elements: any[] = [];
 
-        // Add topic nodes
-        const nodeMap = new Map<string, any>();
-        for (const topic of data.topics) {
-            if (this.visibleLevels.has(topic.level)) {
-                // Use backend importance score if available, otherwise calculate locally
-                const computedImportance =
-                    (topic as any).importance !== undefined
-                        ? (topic as any).importance
-                        : this.calculateTopicImportance(topic);
-
-                const nodeElement = {
-                    data: {
-                        id: topic.id,
-                        label: topic.name,
-                        level: topic.level,
-                        confidence: topic.confidence,
-                        computedImportance: computedImportance,
-                        keywords: topic.keywords,
-                        entityReferences: topic.entityReferences,
-                        parentId: topic.parentId,
-                        childCount: topic.childCount,
-                        nodeType: "topic",
-                    },
-                    classes: this.getTopicClasses(topic),
-                };
-                elements.push(nodeElement);
-                nodeMap.set(topic.id, topic);
-            }
-        }
-
-        // Calculate dynamic co-occurrence threshold
-        const coOccursThreshold = this.calculateCoOccursThreshold(
-            data.relationships,
-        );
-
-        // Add relationship edges
-        for (const rel of data.relationships) {
-            // Only add edges if both nodes are visible
-            const sourceVisible = elements.some(
-                (el) => el.data.id === rel.from,
-            );
-            const targetVisible = elements.some((el) => el.data.id === rel.to);
-
-            if (sourceVisible && targetVisible) {
-                // Performance optimization: filter edges
-                // Only show top 20% strongest co_occurs edges
-                if (
-                    rel.type === "co_occurs" &&
-                    (rel.strength || 0) < coOccursThreshold
-                ) {
-                    continue;
-                }
-                // Also skip low-strength edges for cleaner visualization
-                if (rel.strength < 0.3) {
-                    continue;
-                }
-
-                elements.push({
-                    data: {
-                        id: `${rel.from}-${rel.to}`,
-                        source: rel.from,
-                        target: rel.to,
-                        relationship: rel.type,
-                        strength: rel.strength,
-                    },
-                    classes: `edge-${rel.type}`,
-                });
-            }
-        }
-
-        return elements;
-    }
-
-    /**
-     * Calculate dynamic threshold for co-occurrence edges based on strength distribution
-     * Returns the 80th percentile strength value (keeps top 20% of co_occurs edges)
-     */
-    private calculateCoOccursThreshold(
-        relationships: TopicRelationshipData[],
-    ): number {
-        const coOccursStrengths = relationships
-            .filter((rel) => rel.type === "co_occurs")
-            .map((rel) => rel.strength || 0)
-            .sort((a, b) => a - b);
-
-        if (coOccursStrengths.length === 0) {
-            return 0;
-        }
-
-        const percentile = 0.8;
-        const index = Math.floor(coOccursStrengths.length * percentile);
-        const threshold = coOccursStrengths[index];
-
-        console.log(
-            `[TopicGraphVisualizer] Co-occurrence threshold: ${threshold.toFixed(3)} ` +
-                `(80th percentile of ${coOccursStrengths.length} co_occurs edges, ` +
-                `will keep ${coOccursStrengths.length - index} edges)`,
-        );
-
-        return threshold;
-    }
-
-    /**
-     * Get CSS classes for topic nodes
-     */
-    private getTopicClasses(topic: TopicData): string {
-        const classes = ["topic-node"];
-
-        classes.push(`level-${topic.level}`);
-
-        if (topic.confidence > 0.8) classes.push("high-confidence");
-        else if (topic.confidence > 0.6) classes.push("medium-confidence");
-        else classes.push("low-confidence");
-
-        if (topic.childCount > 0) classes.push("has-children");
-        if (this.expandedNodes.has(topic.id)) classes.push("expanded");
-
-        return classes.join(" ");
-    }
 
     /**
      * Get optimized Cytoscape style definitions with entity graph consistency
@@ -568,115 +455,22 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Get layout options - now always returns optimized CoSE
+     * Apply preset layout to a specific instance
      */
-    private getLayoutOptions(): any {
-        return this.getOptimalCoSEConfig();
-    }
-
-    /**
-     * Get optimized CoSE layout configuration based on graph size
-     */
-    private getOptimalCoSEConfig(): any {
-        const nodeCount = this.topicGraphData?.topics?.length || 0;
-        const edgeCount = this.topicGraphData?.relationships?.length || 0;
-
-        // Drastically reduce iterations for performance - matching entity graph approach
-        let iterations;
-        if (nodeCount < 100) {
-            iterations = 300;
-        } else if (nodeCount < 300) {
-            iterations = 200;
-        } else if (nodeCount < 800) {
-            iterations = 100;
-        } else {
-            iterations = 50; // Very few iterations for large graphs
-        }
-
-        // Further reduce if edge density is high
-        const edgeDensity = edgeCount / (nodeCount * nodeCount);
-        if (edgeDensity > 0.1) {
-            // Dense graph
-            iterations = Math.max(20, iterations / 2);
-        }
-
-        console.log(
-            `[Perf] Using ${iterations} iterations for ${nodeCount} nodes, ${edgeCount} edges (density: ${edgeDensity.toFixed(3)})`,
-        );
-
-        const baseConfig = {
-            name: "cose",
-            idealEdgeLength: 80, // Reduced from 250 for faster layout
-            nodeOverlap: 20, // Reduced from 50
-            refresh: 20,
-            fit: false,
-            animate: "end",
-            padding: 30, // Reduced from 40
-            randomize: false,
-            componentSpacing: 100, // Reduced from 150
-            nodeRepulsion: (node: any) => {
-                const importance = node.data("computedImportance") || 0.5;
-                // Reduced repulsion for faster calculation
-                return 400000 * (importance + 0.1);
-            },
-            edgeElasticity: (edge: any) => {
-                const strength = edge.data("strength") || 0.5;
-                const type = edge.data("relationship");
-                // Simplified edge elasticity
-                if (type === "co_occurs") {
-                    return 50 * strength; // Reduced from 30
-                }
-                return 100 * strength; // Reduced from 50
-            },
-            nestingFactor: 5,
-            gravity: 80, // Increased from 40 for faster convergence
-            numIter: iterations,
-            initialTemp: 200, // Reduced from 300
-            coolingFactor: 0.95,
-            minTemp: 1.0,
-        };
-
-        return baseConfig;
-    }
-
-    /**
-     * Apply current layout
-     */
-    private async applyLayout(): Promise<void> {
-        await this.applyLayoutToInstance(this.cy);
-    }
-
-    /**
-     * Apply layout to a specific instance
-     */
-    private async applyLayoutToInstance(
-        instance: any,
-        usePreset: boolean = false,
-    ): Promise<void> {
+    private async applyPresetLayout(instance: any): Promise<void> {
         return new Promise((resolve) => {
-            let layoutConfig;
-
-            if (usePreset) {
-                layoutConfig = {
-                    name: "preset",
-                    fit: false,
-                    animate: false,
-                };
-                console.log(
-                    "[TopicGraphVisualizer] Applying preset layout (using pre-computed positions)",
-                );
-            } else {
-                layoutConfig = this.getLayoutOptions();
-                console.log(`[TopicGraphVisualizer] Computing CoSE layout...`);
-            }
+            const layoutConfig = {
+                name: "preset",
+                fit: false,
+                animate: false,
+            };
+            
+            console.log(
+                "[TopicGraphVisualizer] Applying preset layout (using pre-computed positions)",
+            );
 
             const layout = instance.layout(layoutConfig);
             layout.on("layoutstop", () => {
-                if (!usePreset) {
-                    console.log(
-                        "[TopicGraphVisualizer] CoSE layout computation complete",
-                    );
-                }
                 resolve();
             });
             layout.run();
@@ -697,12 +491,6 @@ export class TopicGraphVisualizer {
             }
 
             this.selectTopic(node.id());
-        });
-
-        // Double-click to expand/collapse
-        this.cy.on("dbltap", 'node[nodeType="topic"]', (event: any) => {
-            const node = event.target;
-            this.toggleTopicExpansion(node.id());
         });
     }
 
@@ -757,91 +545,6 @@ export class TopicGraphVisualizer {
     }
 
     /**
-     * Toggle expansion of a topic (show/hide children)
-     */
-    public toggleTopicExpansion(topicId: string): void {
-        if (this.expandedNodes.has(topicId)) {
-            this.expandedNodes.delete(topicId);
-            this.collapseTopicChildren(topicId);
-        } else {
-            this.expandedNodes.add(topicId);
-            this.expandTopicChildren(topicId);
-        }
-    }
-
-    /**
-     * Expand children of a topic
-     */
-    private expandTopicChildren(topicId: string): void {
-        if (!this.topicGraphData) return;
-
-        const childTopics = this.topicGraphData.topics.filter(
-            (topic) => topic.parentId === topicId,
-        );
-
-        // Add child elements to the graph
-        const newElements: any[] = [];
-        for (const topic of childTopics) {
-            if (!this.cy.getElementById(topic.id).length) {
-                const computedImportance = this.calculateTopicImportance(topic);
-
-                newElements.push({
-                    data: {
-                        id: topic.id,
-                        label: topic.name,
-                        level: topic.level,
-                        confidence: topic.confidence,
-                        computedImportance: computedImportance, // Add computed importance for dynamic nodes
-                        keywords: topic.keywords,
-                        entityReferences: topic.entityReferences,
-                        parentId: topic.parentId,
-                        childCount: topic.childCount,
-                        nodeType: "topic",
-                    },
-                    classes: this.getTopicClasses(topic),
-                });
-
-                // Add parent-child edge
-                newElements.push({
-                    data: {
-                        id: `${topicId}-${topic.id}`,
-                        source: topicId,
-                        target: topic.id,
-                        relationship: "parent-child",
-                        strength: 0.9,
-                    },
-                    classes: "edge-parent-child",
-                });
-            }
-        }
-
-        if (newElements.length > 0) {
-            // Use batch for adding new elements
-            this.cy.batch(() => {
-                this.cy.add(newElements);
-            });
-
-            this.applyLayout();
-        }
-    }
-
-    /**
-     * Collapse children of a topic with batch operations
-     */
-    private collapseTopicChildren(topicId: string): void {
-        const childNodes = this.cy.nodes().filter((node: any) => {
-            return node.data("parentId") === topicId;
-        });
-
-        if (childNodes.length > 0) {
-            // Use batch for removing elements
-            this.cy.batch(() => {
-                childNodes.remove();
-            });
-        }
-    }
-
-    /**
      * Set visible levels
      */
     public setVisibleLevels(levels: number[]): void {
@@ -862,16 +565,33 @@ export class TopicGraphVisualizer {
      * Search for topics by name or keyword
      */
     public searchTopics(query: string): TopicData[] {
-        if (!this.topicGraphData) return [];
+        if (!this.cy) return [];
 
         const lowerQuery = query.toLowerCase();
-        return this.topicGraphData.topics.filter(
-            (topic) =>
-                topic.name.toLowerCase().includes(lowerQuery) ||
-                topic.keywords.some((keyword) =>
-                    keyword.toLowerCase().includes(lowerQuery),
-                ),
-        );
+        const results: TopicData[] = [];
+        
+        // Search through Cytoscape elements instead of raw topic data
+        this.cy.nodes('[nodeType="topic"]').forEach((node: any) => {
+            const data = node.data();
+            const name = data.label || data.name || "";
+            const keywords = data.keywords || [];
+            
+            if (name.toLowerCase().includes(lowerQuery) ||
+                keywords.some((keyword: string) => keyword.toLowerCase().includes(lowerQuery))) {
+                results.push({
+                    id: data.id,
+                    name: name,
+                    level: data.level || 0,
+                    confidence: data.confidence || 0,
+                    keywords: keywords,
+                    entityReferences: data.entityReferences || [],
+                    parentId: data.parentId,
+                    childCount: data.childCount || 0
+                });
+            }
+        });
+        
+        return results;
     }
 
     /**
@@ -925,16 +645,14 @@ export class TopicGraphVisualizer {
      * Get current graph statistics
      */
     public getGraphStats(): any {
-        if (!this.topicGraphData) return null;
+        if (!this.cy) return null;
 
+        const topicNodes = this.cy.nodes('[nodeType="topic"]');
         return {
-            totalTopics: this.topicGraphData.topics.length,
-            visibleTopics: this.cy
-                ? this.cy.nodes('[nodeType="topic"]').length
-                : 0,
-            maxDepth: this.topicGraphData.maxDepth,
+            totalTopics: topicNodes.length,
+            visibleTopics: topicNodes.length,
+            maxDepth: 0, // Server handles depth calculation
             visibleLevels: Array.from(this.visibleLevels),
-            expandedNodes: Array.from(this.expandedNodes),
         };
     }
 
@@ -947,50 +665,6 @@ export class TopicGraphVisualizer {
             full: true,
             scale: 2,
         });
-    }
-
-    /**
-     * Enable or disable prototype rendering mode
-     * When enabled, disables LoD and shows all elements with simple styling
-     */
-    public setPrototypeMode(enabled: boolean): void {
-        if (!this.cy) {
-            console.warn(
-                "[TopicGraphVisualizer] No Cytoscape instance available",
-            );
-            return;
-        }
-
-        this.prototypeModeEnabled = enabled;
-
-        if (enabled) {
-            console.log(
-                "[TopicGraphVisualizer] Enabling prototype mode - disabling LoD, showing all elements",
-            );
-
-            this.cy.batch(() => {
-                this.cy.nodes().forEach((node: any) => {
-                    node.removeClass("hidden-at-zoom");
-                    node.addClass("visible-at-zoom");
-                    node.style("display", "element");
-                    node.style("events", "yes");
-                    node.style("text-opacity", 0);
-                });
-
-                this.cy.edges().forEach((edge: any) => {
-                    edge.removeClass("hidden-at-zoom");
-                    edge.addClass("visible-at-zoom");
-                    edge.style("display", "element");
-                    edge.style("events", "yes");
-                });
-            });
-
-            console.log(
-                `[TopicGraphVisualizer] Prototype mode enabled - ${this.cy.nodes().length} nodes, ${this.cy.edges().length} edges visible`,
-            );
-        } else {
-            console.log("[TopicGraphVisualizer] Disabling prototype mode");
-        }
     }
 
     /**

@@ -141,18 +141,14 @@ class TopicGraphView {
                 return;
             }
 
-            // Handle topic action buttons (expand/focus)
+            // Handle topic action buttons (focus only)
             const button = target.closest("[data-action]") as HTMLElement;
             if (button) {
                 const action = button.getAttribute("data-action");
                 const topicId = button.getAttribute("data-topic-id");
 
-                if (topicId) {
-                    if (action === "expand") {
-                        this.expandTopic(topicId);
-                    } else if (action === "focus") {
-                        this.focusOnTopic(topicId);
-                    }
+                if (topicId && action === "focus") {
+                    this.focusOnTopic(topicId);
                 }
             }
         });
@@ -918,9 +914,6 @@ class TopicGraphView {
                 </div>
 
                 <div class="topic-actions">
-                    <button class="btn btn-sm btn-primary" data-action="expand" data-topic-id="${topic.id}">
-                        <i class="bi bi-plus-square"></i> Expand
-                    </button>
                     <button class="btn btn-sm btn-outline-primary" data-action="focus" data-topic-id="${topic.id}">
                         <i class="bi bi-bullseye"></i> Focus
                     </button>
@@ -1099,8 +1092,6 @@ class TopicGraphView {
             stats.visibleTopics.toString();
         document.getElementById("maxDepth")!.textContent =
             stats.maxDepth.toString();
-        document.getElementById("expandedCount")!.textContent =
-            stats.expandedNodes.length.toString();
     }
 
     private updateBreadcrumb(topic: any): void {
@@ -1182,11 +1173,6 @@ class TopicGraphView {
         this.visualizer?.fitToView();
         this.state.currentTopic = null;
         this.updateBreadcrumb({ name: "All Topics" });
-    }
-
-    public expandTopic(topicId: string): void {
-        this.visualizer?.toggleTopicExpansion(topicId);
-        this.updateGraphStats();
     }
 
     public focusOnTopic(topicId: string): void {

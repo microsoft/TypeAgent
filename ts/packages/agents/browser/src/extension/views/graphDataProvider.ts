@@ -31,6 +31,18 @@ interface GraphStatistics {
     lastUpdated: number;
 }
 
+// Phase 3: Layout-only data contract interface
+interface GraphLayoutData {
+    presetLayout: {
+        elements: any[];           // Cytoscape elements with positions
+        layoutDuration?: number;   // Server layout computation time
+        communityCount?: number;   // Number of communities detected
+        avgSpacing?: number;       // Average node spacing
+        metadata?: any;            // Additional layout metadata
+    };
+    centerEntity?: string;         // For focusing on specific entity
+}
+
 // ===================================================================
 // RESULT INTERFACES
 // ===================================================================
@@ -63,15 +75,25 @@ interface EntityNeighborhoodResult {
 // ===================================================================
 
 interface GraphDataProvider {
-    // Global graph access
+    // Global graph access (legacy)
     getGlobalGraphData(): Promise<GlobalGraphResult>;
+    
+    // Phase 3: Layout-only data contracts
+    getGlobalGraphLayoutData(): Promise<GraphLayoutData>;
 
-    // Entity neighborhood queries
+    // Entity neighborhood queries (legacy)
     getEntityNeighborhood(
         entityId: string,
         depth: number,
         maxNodes: number,
     ): Promise<EntityNeighborhoodResult>;
+    
+    // Phase 3: Layout-only neighborhood data
+    getEntityNeighborhoodLayoutData(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<GraphLayoutData>;
 
     // Statistics and metadata
     getGraphStatistics(): Promise<GraphStatistics>;
@@ -349,6 +371,81 @@ class GraphDataProviderImpl implements GraphDataProvider {
                 error,
             );
             return false;
+        }
+    }
+
+    // ===================================================================
+    // PHASE 3: LAYOUT-ONLY DATA CONTRACT METHODS
+    // ===================================================================
+
+    async getGlobalGraphLayoutData(): Promise<GraphLayoutData> {
+        try {
+            // Get the raw data which already includes graphologyLayout from server
+            const rawData = await this.getGlobalGraphData();
+            
+            // Extract the pre-computed graphology layout that server already provides
+            const graphologyLayout = (rawData as any).graphologyLayout;
+            
+            if (!graphologyLayout || !graphologyLayout.elements) {
+                throw new Error("No graphology layout found in server response - server may need to be updated to provide pre-computed layouts");
+            }
+
+            console.log(`[GraphDataProvider] Using server-computed graphology layout: ${graphologyLayout.elements.length} elements`);
+
+            return {
+                presetLayout: {
+                    elements: graphologyLayout.elements,
+                    layoutDuration: graphologyLayout.layoutDuration || 0,
+                    communityCount: graphologyLayout.communityCount || rawData.communities.length,
+                    avgSpacing: graphologyLayout.avgSpacing || 100,
+                    metadata: {
+                        source: "server_graphology",
+                        algorithm: graphologyLayout.algorithm || "force-directed",
+                        timestamp: Date.now()
+                    }
+                }
+            };
+        } catch (error) {
+            console.error("[GraphDataProvider] Failed to fetch global graph layout:", error);
+            throw new Error(`Global graph layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
+    }
+
+    async getEntityNeighborhoodLayoutData(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<GraphLayoutData> {
+        try {
+            // Get the raw neighborhood data which should include graphologyLayout from server
+            const rawData = await this.getEntityNeighborhood(entityId, depth, maxNodes);
+            
+            // Extract the pre-computed graphology layout
+            const graphologyLayout = (rawData as any).graphologyLayout;
+            
+            if (!graphologyLayout || !graphologyLayout.elements) {
+                throw new Error("No graphology layout found in neighborhood response - server may need to be updated");
+            }
+
+            console.log(`[GraphDataProvider] Using server-computed neighborhood layout: ${graphologyLayout.elements.length} elements`);
+
+            return {
+                presetLayout: {
+                    elements: graphologyLayout.elements,
+                    layoutDuration: graphologyLayout.layoutDuration || 0,
+                    communityCount: 0, // Neighborhoods typically don't have communities
+                    avgSpacing: graphologyLayout.avgSpacing || 80,
+                    metadata: {
+                        source: "server_graphology",
+                        algorithm: graphologyLayout.algorithm || "force-directed",
+                        timestamp: Date.now()
+                    }
+                },
+                centerEntity: entityId
+            };
+        } catch (error) {
+            console.error("[GraphDataProvider] Failed to fetch neighborhood layout:", error);
+            throw new Error(`Neighborhood layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`);
         }
     }
 

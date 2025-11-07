@@ -17,10 +17,23 @@ interface RelationshipData {
     strength: number;
 }
 
+// Legacy interface - kept for backward compatibility
 interface GraphData {
     centerEntity?: string;
     entities: EntityData[];
     relationships: RelationshipData[];
+}
+
+// Simplified layout-only data contract
+interface GraphLayoutData {
+    presetLayout: {
+        elements: any[];           // Cytoscape elements with positions
+        layoutDuration?: number;   // Server layout computation time
+        communityCount?: number;   // Number of communities detected
+        avgSpacing?: number;       // Average node spacing
+        metadata?: any;            // Additional layout metadata
+    };
+    centerEntity?: string;         // For focusing on specific entity
 }
 
 type ViewMode =
@@ -32,18 +45,17 @@ type ViewMode =
 
 /**
  * Entity Graph Visualizer using Cytoscape.js
- */
+  */
 export class EntityGraphVisualizer {
     protected cy: any = null;
     private container: HTMLElement;
-    protected currentLayout: string = "force";
     private entityClickCallback: ((entity: EntityData) => void) | null = null;
 
     // View mode and data management
     private viewMode: ViewMode = "global";
     private currentEntity: string | null = null;
-    private entityGraphData: GraphData | null = null;
-    private globalGraphData: any = null;
+    private entityGraphData: GraphData | null = null; // Legacy compatibility
+    private globalGraphData: GraphLayoutData | null = null; // Phase 3: Layout-only data
 
     // Single-instance (global only) - Phase 3: Detail view removed
     private globalInstance: any = null;
@@ -51,10 +63,8 @@ export class EntityGraphVisualizer {
     private onInstanceChangeCallback?: () => void;
     private zoomHandlersSetup: boolean = false;
 
-    private layoutCache: Map<string, any> = new Map();
     private zoomTimer: any = null;
     private isNodeBeingDragged: boolean = false;
-    private layoutUpdateTimer: any = null;
     private selectedNodes: Set<string> = new Set();
     private contextMenu: HTMLElement | null = null;
 
@@ -98,7 +108,8 @@ export class EntityGraphVisualizer {
      */
     private getOptimalRendererConfig(): any {
         if (this.detectWebGLSupport()) {
-            const nodeCount = this.globalGraphData?.entities?.length || 0;
+            // Use preset layout element count instead of raw entity count
+            const nodeCount = this.cy ? this.cy.nodes().length : 0;
 
             // Configure WebGL settings based on graph size
             let webglConfig = {
@@ -399,16 +410,11 @@ export class EntityGraphVisualizer {
             clearTimeout(this.zoomTimer);
             this.zoomTimer = null;
         }
-        if (this.layoutUpdateTimer) {
-            clearTimeout(this.layoutUpdateTimer);
-            this.layoutUpdateTimer = null;
-        }
 
         // Reset state flags
         this.isNodeBeingDragged = false;
 
         // Clear cached data
-        this.layoutCache.clear();
         this.selectedNodes.clear();
 
         // Reset investigation tracking
@@ -887,7 +893,6 @@ export class EntityGraphVisualizer {
 
         instance.on("free", "node", () => {
             this.isNodeBeingDragged = false;
-            this.scheduleLayoutUpdate();
         });
     }
 
@@ -1018,13 +1023,32 @@ export class EntityGraphVisualizer {
 
     /**
      * Load global importance layer into global instance (Triple-Instance Architecture)
+     * Phase 3: Now accepts GraphLayoutData for optimized data transfer
+     * Phase 3 Transition: Also supports legacy data format during migration
      */
-    public async loadGlobalGraph(graphData: any): Promise<void> {
+    public async loadGlobalGraph(graphData: GraphLayoutData | any): Promise<void> {
         // Clear all neighborhood state when loading global data
         this.clearNeighborhoodState();
 
+        // Phase 3 Transition: Handle both new layout-only format and legacy format
+        let layoutData: GraphLayoutData;
+        
+        if (graphData.presetLayout?.elements) {
+            // New format: GraphLayoutData with presetLayout structure
+            layoutData = graphData as GraphLayoutData;
+        } else if (graphData.entities && graphData.relationships) {
+            // Legacy format: Has raw entities/relationships but no preset layout
+            console.warn("[EntityGraphVisualizer] Received legacy data format - server should provide preset layout");
+            throw new Error("Legacy data format no longer supported - server must provide GraphLayoutData with presetLayout");
+        } else {
+            // Invalid format
+            const errorMsg = "Invalid data format - must provide GraphLayoutData with presetLayout.elements";
+            console.error(`[EntityGraphVisualizer] ${errorMsg}`);
+            throw new Error(errorMsg);
+        }
+
         // Require graphology preset layout - no fallback modes
-        if (!graphData.presetLayout?.elements) {
+        if (!layoutData.presetLayout?.elements) {
             const errorMsg =
                 "Graphology layout data is required but not available";
             console.error(`[EntityGraphVisualizer] ${errorMsg}`);
@@ -1032,12 +1056,12 @@ export class EntityGraphVisualizer {
         }
 
         console.log(
-            `[EntityGraphVisualizer] Loading graph using graphology preset layout (${graphData.presetLayout.elements.length} elements)`,
+            `[EntityGraphVisualizer] Loading graph using graphology preset layout (${layoutData.presetLayout.elements.length} elements)`,
         );
 
         // Clear existing elements and add graphology elements directly
         this.cy.elements().remove();
-        this.cy.add(graphData.presetLayout.elements);
+        this.cy.add(layoutData.presetLayout.elements);
 
         // Apply preset layout to use the positions from graphology without any computation
         this.cy
@@ -1050,177 +1074,10 @@ export class EntityGraphVisualizer {
             .run();
 
         // Store global data reference
-        this.globalGraphData = graphData;
+        this.globalGraphData = layoutData;
 
         console.log(
-            `[EntityGraphVisualizer] Loaded ${graphData.presetLayout.elements.length} pre-positioned elements from server`,
-        );
-    }
-
-    /**
-     * Legacy loadGlobalGraph method - updated to use new triple-instance approach
-     */
-    async loadGlobalGraphLegacy(globalData: any): Promise<void> {
-        if (!this.cy) return;
-
-        // Store global data
-        this.globalGraphData = globalData;
-        this.entityGraphData = null;
-        this.currentEntity = null;
-
-        // Switch to global view (makes it visible)
-        this.switchToGlobalView();
-
-        // Check if global instance already has data
-        if (this.globalInstance.elements().length > 0) {
-            return;
-        }
-
-        // Load ALL data initially - style-based LOD will handle visibility
-        const allData = this.prepareAllDataWithImportance(globalData);
-
-        // Convert to Cytoscape elements
-        const elements = this.convertGlobalDataToElements(allData);
-
-        // Add elements to global instance
-        this.globalInstance.add(elements);
-
-        // Set active instance reference BEFORE setting up interactions
-        this.cy = this.globalInstance;
-        this.currentActiveView = "global";
-
-        // LoD system removed - using simple zoom-based opacity instead
-
-        this.setupZoomInteractions();
-        this.setupInteractions();
-
-        setTimeout(() => {
-            this.globalInstance.zoom(this.globalInstance.zoom() * 1.1);
-        }, 2000);
-
-        // Apply layout with cache
-        await this.applyLayoutWithCache("initial");
-
-        // Fit to view
-        this.globalInstance.fit({ maxZoom: 2.0 });
-
-        // LoD system removed - using simple zoom-based opacity instead
-    }
-
-    private async applyLayoutWithCache(cacheKey: string): Promise<void> {
-        if (!this.cy) return;
-
-        const nodeCount = this.cy.nodes().length;
-        const fullCacheKey = `${cacheKey}_${nodeCount}`;
-
-        // Check if we have cached positions
-        if (this.layoutCache.has(fullCacheKey)) {
-            console.time("[Perf] Apply cached layout");
-            const positions = this.layoutCache.get(fullCacheKey);
-
-            const layout = this.cy.layout({
-                name: "preset",
-                positions: (node: any) => positions[node.id()],
-                fit: false, // Prevent layout from fighting viewport control
-                animate: false, // No animation needed for preset positions
-                padding: 30,
-            });
-
-            // Handle layout completion to manually fit view
-            layout.one("layoutstop", () => {
-                console.log(`[Layout] Cached layout applied, fitting view`);
-                this.cy.fit({ maxZoom: 1.0 }); // Constrain fit zoom to normal size
-            });
-
-            layout.run();
-            console.timeEnd("[Perf] Apply cached layout");
-        } else {
-            console.time("[Perf] Calculate new layout");
-            await this.calculateAndCacheLayout(fullCacheKey);
-            console.timeEnd("[Perf] Calculate new layout");
-        }
-    }
-
-    private calculateAndCacheLayout(cacheKey: string): Promise<void> {
-        return new Promise((resolve) => {
-            if (!this.cy) {
-                resolve();
-                return;
-            }
-
-            const nodeCount = this.cy.nodes().length;
-            const edgeCount = this.cy.edges().length;
-
-            // Drastically reduce iterations for dense graphs
-            let iterations;
-            if (nodeCount < 100) {
-                iterations = 300;
-            } else if (nodeCount < 300) {
-                iterations = 200;
-            } else if (nodeCount < 800) {
-                iterations = 100;
-            } else {
-                iterations = 50; // Very few iterations for large graphs
-            }
-
-            // Further reduce if edge density is high
-            const edgeDensity = edgeCount / (nodeCount * nodeCount);
-            if (edgeDensity > 0.1) {
-                // Dense graph
-                iterations = Math.max(20, iterations / 2);
-            }
-
-            console.log(
-                `[Perf] Using ${iterations} iterations for ${nodeCount} nodes, ${edgeCount} edges (density: ${edgeDensity.toFixed(3)})`,
-            );
-
-            const layout = this.cy.layout({
-                name: "cose",
-                idealEdgeLength: 80,
-                nodeOverlap: 20,
-                refresh: 20,
-                fit: false, // Prevent layout from fighting viewport control
-                animate: "end", // Animate only at end to prevent viewport conflicts
-                padding: 30,
-                randomize: false,
-                componentSpacing: 100,
-                nodeRepulsion: (node: any) =>
-                    400000 * ((node.data("importance") || 0) + 0.1),
-                edgeElasticity: (edge: any) =>
-                    100 * (edge.data("strength") || 0.5),
-                nestingFactor: 5,
-                gravity: 80,
-                numIter: iterations,
-                initialTemp: 200,
-                coolingFactor: 0.95,
-                minTemp: 1.0,
-                stop: () => {
-                    // Cache positions after layout completes
-                    this.saveLayoutToCache(cacheKey);
-
-                    // Manually fit view after layout completion
-                    console.log(`[Layout] Cose layout completed, fitting view`);
-                    this.cy.fit({ maxZoom: 2.0 }); // Constrain fit zoom to prevent oscillation
-
-                    resolve();
-                },
-            });
-
-            layout.run();
-        });
-    }
-
-    private saveLayoutToCache(cacheKey: string): void {
-        if (!this.cy) return;
-
-        const positions: any = {};
-        this.cy.nodes().forEach((node: any) => {
-            positions[node.id()] = node.position();
-        });
-
-        this.layoutCache.set(cacheKey, positions);
-        console.log(
-            `[Perf] Cached layout for ${Object.keys(positions).length} nodes`,
+            `[EntityGraphVisualizer] Loaded ${layoutData.presetLayout.elements.length} pre-positioned elements from server`,
         );
     }
 
@@ -1418,51 +1275,6 @@ export class EntityGraphVisualizer {
         }
 
         return { nodeVisibilityPercentage, edgeVisibilityPercentage };
-    }
-
-    /**
-     * Prepare all data with computed importance scores for style-based LOD
-     */
-    private prepareAllDataWithImportance(globalData: any): any {
-        const entities = globalData.entities || [];
-        const relationships = globalData.relationships || [];
-
-        // Compute importance scores for all entities
-        const entitiesWithImportance = entities.map((entity: any) => ({
-            ...entity,
-            computedImportance: this.calculateEntityImportance(entity),
-        }));
-
-        // Limit to reasonable amount for performance (style-based LOD can handle more than data-based)
-        const maxEntities = 1000; // Increased from 200 since style-based LOD is more efficient
-        const maxRelationships = 5000; // Increased from 300
-
-        const sortedEntities = entitiesWithImportance
-            .sort(
-                (a: any, b: any) => b.computedImportance - a.computedImportance,
-            )
-            .slice(0, maxEntities);
-
-        const entityIds = new Set(sortedEntities.map((e: any) => e.id));
-
-        // Filter relationships to those connecting loaded entities
-        // Support both transformed (from/to) and original (fromEntity/toEntity) field formats
-        const filteredRelationships = relationships
-            .filter((r: any) => {
-                const fromId = r.from || r.fromEntity;
-                const toId = r.to || r.toEntity;
-                return entityIds.has(fromId) && entityIds.has(toId);
-            })
-            .sort(
-                (a: any, b: any) =>
-                    (b.confidence || 0.5) - (a.confidence || 0.5),
-            )
-            .slice(0, maxRelationships);
-
-        return {
-            entities: sortedEntities,
-            relationships: filteredRelationships,
-        };
     }
 
     // Storage for position comparison debugging
@@ -1817,28 +1629,6 @@ export class EntityGraphVisualizer {
         return 0.1;
     }
 
-    /**
-     * Load full global data when transitioning from direct entity view
-     */
-    private loadFullGlobalData(): void {
-        console.time("[Transition] Load global elements");
-
-        // Clear current elements and load global data
-        this.cy.elements().remove();
-
-        // Load all global data and apply style-based LOD
-        const allData = this.prepareAllDataWithImportance(this.globalGraphData);
-        const elements = this.convertGlobalDataToElements(allData);
-
-        this.cy.batch(() => {
-            this.cy.add(elements);
-        });
-
-        // LoD system removed - using simple zoom-based opacity instead
-
-        console.timeEnd("[Transition] Load global elements");
-    }
-
     private calculatePercentiles(values: number[]): any {
         if (values.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
 
@@ -1969,112 +1759,6 @@ export class EntityGraphVisualizer {
         return isFinite(result) ? result : 0.8;
     }
 
-    private convertGlobalDataToElements(globalData: any): any[] {
-        const elements: any[] = [];
-        const nodeIds = new Set<string>();
-
-        // Check if preset layout is available
-        const presetLayout = globalData.presetLayout?.elements;
-        const presetPositions = new Map<string, { x: number; y: number }>();
-
-        if (presetLayout) {
-            console.log(
-                `[Visualizer] Using preset layout with ${presetLayout.length} positioned elements`,
-            );
-            for (const element of presetLayout) {
-                if (element.position && element.data?.id) {
-                    presetPositions.set(element.data.id, element.position);
-                }
-                // Also try label-based lookup
-                if (element.position && element.data?.label) {
-                    presetPositions.set(element.data.label, element.position);
-                }
-            }
-        }
-
-        console.time("[Perf] Process nodes");
-        if (globalData.entities && globalData.entities.length > 0) {
-            globalData.entities.forEach((entity: any) => {
-                if (!nodeIds.has(entity.id)) {
-                    const nodeElement: any = {
-                        group: "nodes",
-                        data: {
-                            id: entity.id,
-                            name: entity.name,
-                            type: entity.type || "entity",
-                            size: entity.size || 12,
-                            importance:
-                                entity.importance ||
-                                entity.computedImportance ||
-                                0,
-                            degree: entity.degree || 0,
-                            communityId: entity.communityId,
-                            color: entity.color || "#999999",
-                            borderColor: entity.borderColor || "#333333",
-                        },
-                    };
-
-                    // Add preset position if available
-                    const presetPos =
-                        presetPositions.get(entity.id) ||
-                        presetPositions.get(entity.name);
-                    if (presetPos) {
-                        nodeElement.position = {
-                            x: presetPos.x,
-                            y: presetPos.y,
-                        };
-                    }
-
-                    elements.push(nodeElement);
-                    nodeIds.add(entity.id);
-                }
-            });
-        }
-        console.timeEnd("[Perf] Process nodes");
-        console.log(`[Perf] Created ${nodeIds.size} nodes`);
-
-        console.time("[Perf] Process edges");
-        if (globalData.relationships && globalData.relationships.length > 0) {
-            let validRelationships = 0;
-            let invalidRelationships = 0;
-
-            // NOTE: This function is only used in triple-instance mode now.
-            // In prototype mode, we use presetLayout.elements directly which are already consolidated.
-            // No artificial limit when data is already filtered
-            globalData.relationships.forEach((rel: any) => {
-                // Support both transformed (from/to) and original (fromEntity/toEntity) field formats
-                const sourceId = rel.from || rel.fromEntity;
-                const targetId = rel.to || rel.toEntity;
-                const relationType =
-                    rel.type || rel.relationshipType || "related";
-
-                if (nodeIds.has(sourceId) && nodeIds.has(targetId)) {
-                    elements.push({
-                        group: "edges",
-                        data: {
-                            id: `${sourceId}-${targetId}`,
-                            source: sourceId,
-                            target: targetId,
-                            type: relationType,
-                            strength: rel.confidence || 0.5,
-                            weight: rel.count || 1,
-                        },
-                    });
-                    validRelationships++;
-                } else {
-                    invalidRelationships++;
-                }
-            });
-
-            console.log(
-                `[Perf] Created ${validRelationships} valid edges, skipped ${invalidRelationships} invalid`,
-            );
-        }
-        console.timeEnd("[Perf] Process edges");
-
-        return elements;
-    }
-
     /**
      * Apply layout to the graph
      */
@@ -2088,19 +1772,19 @@ export class EntityGraphVisualizer {
     }
 
     /**
-     * Change the current layout
+     * Change the current layout (simplified for preset-only)
      */
     changeLayout(layoutName: string): void {
-        this.currentLayout = layoutName;
-        this.applyLayout(layoutName);
+        console.log(`[Layout] Layout changes not supported with preset layouts from server`);
+        this.cy?.fit();
     }
 
     /**
-     * Re-run the current layout algorithm
+     * Re-run the current layout algorithm (simplified to re-fit)
      */
     reRunLayout(): void {
-        console.log(`[Layout] Re-running ${this.currentLayout} layout`);
-        this.applyLayout(this.currentLayout);
+        console.log(`[Layout] Re-running layout simplified to fit view`);
+        this.cy?.fit();
     }
 
     /**
@@ -2309,7 +1993,7 @@ export class EntityGraphVisualizer {
         return {
             nodes: nodes,
             edges: edges,
-            layout: this.currentLayout,
+            layout: "preset",
             zoom: this.cy.zoom(),
             pan: { x: pan.x, y: pan.y },
             exportedAt: new Date().toISOString(),
@@ -2318,10 +2002,10 @@ export class EntityGraphVisualizer {
     }
 
     /**
-     * Get current layout
+     * Get current layout (always preset with server-side layouts)
      */
     getCurrentLayout(): string {
-        return this.currentLayout;
+        return "preset";
     }
 
     /**
@@ -2525,18 +2209,6 @@ export class EntityGraphVisualizer {
     private clearNeighborhoodHighlights(): void {
         if (!this.cy) return;
         this.cy.elements().removeClass("neighborhood");
-    }
-
-    private scheduleLayoutUpdate(): void {
-        if (this.layoutUpdateTimer) {
-            clearTimeout(this.layoutUpdateTimer);
-        }
-
-        this.layoutUpdateTimer = setTimeout(() => {
-            if (!this.isNodeBeingDragged) {
-                this.applyLayout(this.currentLayout);
-            }
-        }, 1000);
     }
 
     private highlightEdgePath(edge: any): void {
@@ -2744,7 +2416,7 @@ export class EntityGraphVisualizer {
             { label: "Fit to View", action: () => this.fitToView() },
             {
                 label: "Reset Layout",
-                action: () => this.applyLayout(this.currentLayout),
+                action: () => this.cy?.fit(),
             },
             { label: "Show All Nodes", action: () => this.showAllNodes() },
             { label: "Export View", action: () => this.takeScreenshot() },
