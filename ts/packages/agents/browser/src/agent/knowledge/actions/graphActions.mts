@@ -1271,9 +1271,20 @@ export async function getGlobalImportanceLayer(
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
-    entities: any[];
-    relationships: any[];
-    metadata: any;
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        totalEntitiesInSystem: number;
+        selectedEntityCount: number;
+        coveragePercentage: number;
+        importanceThreshold: number;
+        layer: string;
+        connectedComponents?: any;
+    };
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
@@ -1281,8 +1292,12 @@ export async function getGlobalImportanceLayer(
         if (!websiteCollection) {
             console.log(`[ServerPerf] No website collection available`);
             return {
-                entities: [],
-                relationships: [],
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
                 metadata: {
                     totalEntitiesInSystem: 0,
                     selectedEntityCount: 0,
@@ -1307,10 +1322,17 @@ export async function getGlobalImportanceLayer(
                 })}`,
             );
             return {
-                entities: [],
-                relationships: [],
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
                 metadata: {
-                    error: "Graph cache not available",
+                    totalEntitiesInSystem: 0,
+                    selectedEntityCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
                     layer: "global_importance",
                 },
             };
@@ -1323,8 +1345,12 @@ export async function getGlobalImportanceLayer(
 
         if (allEntities.length === 0) {
             return {
-                entities: [],
-                relationships: [],
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
                 metadata: {
                     totalEntitiesInSystem: 0,
                     selectedEntityCount: 0,
@@ -1529,25 +1555,35 @@ export async function getGlobalImportanceLayer(
         console.log("[getGlobalImportanceLayer] Cache key used:", cacheKey);
 
         return {
-            entities: enrichedEntities,
-            relationships: optimizedRelationships,
+            graphologyLayout: {
+                elements: cachedGraph.cytoscapeElements,
+                layoutDuration: cachedGraph.metadata.layoutDuration,
+                avgSpacing: cachedGraph.metadata.avgSpacing,
+                communityCount: cachedGraph.metadata.communityCount,
+            },
             metadata: {
-                ...metadata,
-                graphologyLayout: {
-                    elements: cachedGraph.cytoscapeElements,
-                    layoutDuration: cachedGraph.metadata.layoutDuration,
-                    avgSpacing: cachedGraph.metadata.avgSpacing,
-                    communityCount: cachedGraph.metadata.communityCount,
-                },
+                totalEntitiesInSystem: metadata.totalEntitiesInSystem,
+                selectedEntityCount: metadata.selectedEntityCount,
+                coveragePercentage: metadata.coveragePercentage,
+                importanceThreshold: metadata.importanceThreshold,
+                layer: "global_importance",
+                connectedComponents: metadata.connectedComponents,
             },
         };
     } catch (error) {
         console.error("Error getting global importance layer:", error);
         return {
-            entities: [],
-            relationships: [],
+            graphologyLayout: {
+                elements: [],
+                layoutDuration: 0,
+                avgSpacing: 0,
+                communityCount: 0,
+            },
             metadata: {
-                error: error instanceof Error ? error.message : "Unknown error",
+                totalEntitiesInSystem: 0,
+                selectedEntityCount: 0,
+                coveragePercentage: 0,
+                importanceThreshold: 0,
                 layer: "global_importance",
             },
         };
@@ -1570,7 +1606,6 @@ export async function getGlobalGraphLayoutData(
         layoutDuration: number;
         avgSpacing: number;
         communityCount: number;
-        algorithm?: string;
     };
     metadata: {
         totalEntitiesInSystem: number;
@@ -1740,7 +1775,6 @@ export async function getGlobalGraphLayoutData(
                 layoutDuration: cachedGraph.metadata.layoutDuration,
                 avgSpacing: cachedGraph.metadata.avgSpacing,
                 communityCount: cachedGraph.metadata.communityCount,
-                algorithm: "force-directed",
             },
             metadata: {
                 totalEntitiesInSystem: allEntities.length,
@@ -1782,19 +1816,32 @@ export async function getTopicImportanceLayer(
     },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
-    topics: any[];
-    relationships: any[];
-    metadata: any;
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        totalTopicsInSystem: number;
+        selectedTopicCount: number;
+        layer: string;
+    };
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
 
         if (!websiteCollection || !websiteCollection.hierarchicalTopics) {
             return {
-                topics: [],
-                relationships: [],
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
                 metadata: {
-                    error: "Hierarchical topics not available",
+                    totalTopicsInSystem: 0,
+                    selectedTopicCount: 0,
                     layer: "topic_importance",
                 },
             };
@@ -1808,8 +1855,12 @@ export async function getTopicImportanceLayer(
 
         if (allTopics.length === 0) {
             return {
-                topics: [],
-                relationships: [],
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
                 metadata: {
                     totalTopicsInSystem: 0,
                     selectedTopicCount: 0,
@@ -1959,27 +2010,30 @@ export async function getTopicImportanceLayer(
         }
 
         return {
-            topics: selectedTopics,
-            relationships: selectedRelationships,
+            graphologyLayout: {
+                elements: cachedGraph.cytoscapeElements,
+                layoutDuration: cachedGraph.metadata.layoutDuration,
+                avgSpacing: cachedGraph.metadata.avgSpacing,
+                communityCount: cachedGraph.metadata.communityCount,
+            },
             metadata: {
                 totalTopicsInSystem: allTopics.length,
                 selectedTopicCount: selectedTopics.length,
                 layer: "topic_importance",
-                graphologyLayout: {
-                    elements: cachedGraph.cytoscapeElements,
-                    layoutDuration: cachedGraph.metadata.layoutDuration,
-                    avgSpacing: cachedGraph.metadata.avgSpacing,
-                    communityCount: cachedGraph.metadata.communityCount,
-                },
             },
         };
     } catch (error) {
         console.error("Error getting topic importance layer:", error);
         return {
-            topics: [],
-            relationships: [],
+            graphologyLayout: {
+                elements: [],
+                layoutDuration: 0,
+                avgSpacing: 0,
+                communityCount: 0,
+            },
             metadata: {
-                error: error instanceof Error ? error.message : "Unknown error",
+                totalTopicsInSystem: 0,
+                selectedTopicCount: 0,
                 layer: "topic_importance",
             },
         };

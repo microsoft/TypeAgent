@@ -59,6 +59,38 @@ interface EntityNeighborhoodResult {
     };
 }
 
+// Phase 1: Layout-only data contracts for optimization
+interface GraphLayoutResult {
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        totalEntitiesInSystem: number;
+        selectedEntityCount: number;
+        coveragePercentage: number;
+        importanceThreshold: number;
+        layer: string;
+        connectedComponents?: any;
+    };
+}
+
+interface TopicGraphLayoutResult {
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        totalTopicsInSystem: number;
+        selectedTopicCount: number;
+        layer: string;
+    };
+}
+
 // ===================================================================
 // DATA PROVIDER INTERFACE
 // ===================================================================
@@ -73,7 +105,7 @@ interface GraphDataProvider {
         depth: number,
         maxNodes: number,
     ): Promise<EntityNeighborhoodResult>;
-    
+
     // Phase 3: Layout-only neighborhood data
     getEntityNeighborhoodLayoutData(
         entityId: string,
@@ -84,8 +116,12 @@ interface GraphDataProvider {
     // Statistics and metadata
     getGraphStatistics(): Promise<GraphStatistics>;
 
-    // Hierarchical partitioned loading methods
-    getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
+    // Phase 1: Optimized layout-only methods
+    getGlobalImportanceLayer(maxNodes?: number): Promise<GraphLayoutResult>;
+    getGlobalImportanceLayoutData(maxNodes?: number): Promise<GraphLayoutResult>;
+    getTopicImportanceLayoutData(maxNodes?: number): Promise<TopicGraphLayoutResult>;
+
+    // Hierarchical partitioned loading methods (legacy)
     getViewportBasedNeighborhood(
         centerEntity: string,
         viewportNodeNames: string[],
@@ -341,35 +377,42 @@ class GraphDataProviderImpl implements GraphDataProvider {
     // HIERARCHICAL PARTITIONED LOADING METHODS
     // ===================================================================
 
-    async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
+    async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<GraphLayoutResult> {
         try {
             const result = await this.baseService.getGlobalImportanceLayer(
                 maxNodes,
                 true,
             );
 
-            const transformedEntities = this.transformEntitiesToUIFormat(
-                result.entities || [],
-            );
-
-            const transformedRelationships =
-                this.transformRelationshipsToUIFormat(
-                    result.relationships || [],
-                );
-
-            const finalResult = {
-                entities: transformedEntities,
-                relationships: transformedRelationships,
-                metadata: {
-                    ...result.metadata,
-                    source: "global_importance_layer",
-                },
-            };
-
-            return finalResult;
+            // Server now returns layout-only contract: {graphologyLayout, metadata}
+            // No need to transform entities/relationships as they're not included
+            
+            return result;
         } catch (error) {
             console.error(
                 "[GraphDataProvider] Error fetching global importance layer:",
+                error,
+            );
+            throw error;
+        }
+    }
+
+    async getGlobalImportanceLayoutData(maxNodes: number = 5000): Promise<GraphLayoutResult> {
+        // Alias for the optimized method - same implementation
+        return this.getGlobalImportanceLayer(maxNodes);
+    }
+
+    async getTopicImportanceLayoutData(maxNodes: number = 500): Promise<TopicGraphLayoutResult> {
+        try {
+            const result = await this.baseService.getTopicImportanceLayer(
+                maxNodes,
+            );
+
+            // Server now returns layout-only contract: {graphologyLayout, metadata}
+            return result;
+        } catch (error) {
+            console.error(
+                "[GraphDataProvider] Error fetching topic importance layer:",
                 error,
             );
             throw error;
@@ -651,4 +694,7 @@ export {
     EntityNode,
     RelationshipEdge,
     GraphStatistics,
+    GraphLayoutResult,
+    TopicGraphLayoutResult,
+    GraphLayoutData,
 };

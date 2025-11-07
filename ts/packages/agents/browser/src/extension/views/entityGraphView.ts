@@ -1505,65 +1505,32 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Get importance layer data (top 1000 most important nodes)
-            const importanceData =
+            // Get importance layer data (layout-only contract)
+            const layoutData =
                 await this.graphDataProvider.getGlobalImportanceLayer(1000);
 
-            if (importanceData.entities.length === 0) {
+            if (!layoutData.graphologyLayout || layoutData.graphologyLayout.elements.length === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
                 return;
             }
 
-            // Check if graphology layout is available
-            const hasGraphologyLayout =
-                importanceData.metadata?.graphologyLayout;
+            console.log(
+                `[EntityGraphView] Using optimized layout-only contract with graphology preset layout (${layoutData.graphologyLayout.elements?.length || 0} elements)`,
+            );
 
-            // Transform data to expected format for visualizer
-            const transformedData: any = {
-                // Only enhance for LoD if graphology layout is NOT available
-                // This preserves community colors and sizes from graphology
-                entities: hasGraphologyLayout
-                    ? importanceData.entities // Use entities as-is (preserves graphology data)
-                    : this.enhanceEntitiesForLoD(importanceData.entities), // Fallback to blue gradient
-                relationships: importanceData.relationships,
-                communities: [],
-                topics: [],
-                statistics: {
-                    totalEntities: importanceData.entities.length,
-                    totalRelationships: importanceData.relationships.length,
-                    totalCommunities: 0,
-                },
-                metadata: importanceData.metadata,
+            // Phase 1: Use new optimized GraphLayoutResult structure
+            const layoutOnlyData = {
+                presetLayout: {
+                    elements: layoutData.graphologyLayout.elements,
+                    layoutDuration: layoutData.graphologyLayout.layoutDuration,
+                    avgSpacing: layoutData.graphologyLayout.avgSpacing,
+                    communityCount: layoutData.graphologyLayout.communityCount,
+                    metadata: layoutData.metadata,
+                }
             };
 
-            if (hasGraphologyLayout) {
-                console.log(
-                    `[EntityGraphView] Using graphology preset layout with community colors (${importanceData.metadata.graphologyLayout.elements?.length || 0} elements)`,
-                );
-                // Phase 3: Use new GraphLayoutData structure
-                const layoutOnlyData = {
-                    presetLayout: {
-                        elements: importanceData.metadata.graphologyLayout.elements,
-                        layoutDuration:
-                            importanceData.metadata.graphologyLayout.layoutDuration,
-                        avgSpacing:
-                            importanceData.metadata.graphologyLayout.avgSpacing,
-                        communityCount:
-                            importanceData.metadata.graphologyLayout.communityCount,
-                    }
-                };
-                await this.visualizer.loadGlobalGraph(layoutOnlyData);
-            } else {
-                // Legacy: Add preset layout to existing data structure for backward compatibility
-                transformedData.presetLayout = {
-                    elements: [],
-                    layoutDuration: 0,
-                    avgSpacing: 0,
-                    communityCount: 0,
-                };
-                await this.visualizer.loadGlobalGraph(transformedData);
-            }
+            await this.visualizer.loadGlobalGraph(layoutOnlyData);
             this.hideGraphLoading();
         } catch (error) {
             console.error(

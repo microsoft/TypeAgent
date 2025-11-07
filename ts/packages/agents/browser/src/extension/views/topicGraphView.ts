@@ -219,25 +219,22 @@ class TopicGraphView {
     private async fetchGlobalImportanceView(): Promise<any> {
         try {
             console.log(
-                "[TopicGraphView] Fetching global importance layer (top 500 topics)...",
+                "[TopicGraphView] Fetching global importance layer (top 500 topics) - layout-only contract...",
             );
             const result = await this.extensionService.getTopicImportanceLayer(
                 500,
                 0.0,
             );
 
-            if (!result) {
+            if (!result || !result.graphologyLayout) {
                 console.warn(
-                    "[TopicGraphView] No importance layer data available",
+                    "[TopicGraphView] No layout data available in importance layer",
                 );
                 return this.createEmptyTopicGraph();
             }
 
-            console.log(`[TopicGraphView] Fetched global importance layer`);
-            if (result.metadata) {
-                console.log(`[TopicGraphView] Metadata:`, result.metadata);
-            }
-            const transformedData = this.transformImportanceLayerData(result);
+            console.log(`[TopicGraphView] Fetched optimized layout-only importance layer with ${result.graphologyLayout.elements?.length || 0} elements`);
+            const transformedData = this.transformLayoutOnlyData(result);
             return transformedData;
         } catch (error) {
             console.error(
@@ -249,48 +246,32 @@ class TopicGraphView {
     }
 
     /**
-     * Transform importance layer data to visualization format
+     * Transform layout-only data to visualization format (Phase 1 optimization)
      */
-    private transformImportanceLayerData(data: any): any {
-        if (!data.topics) {
+    private transformLayoutOnlyData(data: any): any {
+        if (!data.graphologyLayout || !data.graphologyLayout.elements) {
             return this.createEmptyTopicGraph();
         }
 
-        const inputTopics = data.topics || [];
+        console.log(
+            `[TopicGraphView] Using optimized layout-only contract with graphology preset layout (${data.graphologyLayout.elements?.length || 0} elements)`,
+        );
 
-        const topics = inputTopics.map((topic: any) => ({
-            id: topic.topicId,
-            name: topic.topicName,
-            level: topic.level,
-            parentId: topic.parentTopicId,
-            confidence: topic.confidence || 0.7,
-            keywords: this.parseKeywords(topic.keywords),
-            entityReferences: topic.entityReferences || [],
-            childCount: this.countChildren(topic.topicId, inputTopics),
-            importance: topic.importance || 0.5,
-        }));
-
-        const relationships = data.relationships || [];
-
+        // Phase 1: Use layout-only data - no need to process raw topics/relationships
         const result: any = {
             centerTopic: null,
-            topics,
-            relationships,
-            maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
+            topics: [], // Empty as we rely on graphology elements
+            relationships: [], // Empty as we rely on graphology elements
+            maxDepth: 0,
             metadata: data.metadata,
+            presetLayout: {
+                elements: data.graphologyLayout.elements,
+                layoutDuration: data.graphologyLayout.layoutDuration,
+                avgSpacing: data.graphologyLayout.avgSpacing,
+                communityCount: data.graphologyLayout.communityCount,
+                metadata: data.metadata,
+            }
         };
-
-        if (data.metadata?.graphologyLayout) {
-            console.log(
-                `[TopicGraphView] Using graphology preset layout (${data.metadata.graphologyLayout.elements?.length || 0} elements)`,
-            );
-            result.presetLayout = {
-                elements: data.metadata.graphologyLayout.elements,
-                layoutDuration: data.metadata.graphologyLayout.layoutDuration,
-                avgSpacing: data.metadata.graphologyLayout.avgSpacing,
-                communityCount: data.metadata.graphologyLayout.communityCount,
-            };
-        }
 
         return result;
     }
