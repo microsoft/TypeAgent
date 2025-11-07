@@ -1342,6 +1342,34 @@ export async function handleMessage(
             }
         }
 
+        case "getGlobalGraphLayoutData": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getGlobalGraphLayoutData",
+                    parameters: message.parameters || {},
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Error getting global graph layout data:", error);
+                return {
+                    graphologyLayout: {
+                        elements: [],
+                        layoutDuration: 0,
+                        avgSpacing: 0,
+                        communityCount: 0,
+                    },
+                    metadata: {
+                        totalEntitiesInSystem: 0,
+                        selectedEntityCount: 0,
+                        coveragePercentage: 0,
+                        importanceThreshold: 0,
+                        layer: "global_graph_layout",
+                    },
+                };
+            }
+        }
+
         case "getEntityNeighborhood": {
             try {
                 const result = await sendActionToAgent({

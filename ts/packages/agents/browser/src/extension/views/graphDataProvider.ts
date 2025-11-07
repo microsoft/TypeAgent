@@ -47,17 +47,6 @@ interface GraphLayoutData {
 // RESULT INTERFACES
 // ===================================================================
 
-interface GlobalGraphResult {
-    entities: EntityNode[];
-    relationships: RelationshipEdge[];
-    communities: any[];
-    statistics: GraphStatistics;
-    metadata: {
-        source: "hybrid_storage";
-        timestamp: number;
-    };
-}
-
 interface EntityNeighborhoodResult {
     centerEntity: EntityNode;
     neighbors: EntityNode[];
@@ -75,9 +64,6 @@ interface EntityNeighborhoodResult {
 // ===================================================================
 
 interface GraphDataProvider {
-    // Global graph access (legacy)
-    getGlobalGraphData(): Promise<GlobalGraphResult>;
-    
     // Phase 3: Layout-only data contracts
     getGlobalGraphLayoutData(): Promise<GraphLayoutData>;
 
@@ -122,108 +108,7 @@ class GraphDataProviderImpl implements GraphDataProvider {
         this.baseService = baseService;
     }
 
-    async getGlobalGraphData(): Promise<GlobalGraphResult> {
-        const startTime = performance.now();
 
-        try {
-            // Use proper service methods instead of direct sendMessage calls
-            console.time("[GraphDataProvider] Get status");
-            const status = await this.baseService.getKnowledgeGraphStatus();
-            console.timeEnd("[GraphDataProvider] Get status");
-
-            const relationships = await this.baseService.getAllRelationships();
-            console.log(
-                `[GraphDataProvider] Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`,
-            );
-
-            console.time("[GraphDataProvider] Get communities");
-            const communities = await this.baseService.getAllCommunities();
-            console.timeEnd("[GraphDataProvider] Get communities");
-            console.log(
-                `[GraphDataProvider] Fetched ${Array.isArray(communities) ? communities.length : 0} communities`,
-            );
-
-            console.time("[GraphDataProvider] Get entities with metrics");
-            const entitiesWithMetrics =
-                await this.baseService.getAllEntitiesWithMetrics();
-            console.timeEnd("[GraphDataProvider] Get entities with metrics");
-            console.log(
-                `[GraphDataProvider] Fetched ${Array.isArray(entitiesWithMetrics) ? entitiesWithMetrics.length : 0} entities`,
-            );
-
-            if (!entitiesWithMetrics || !relationships) {
-                throw new Error(
-                    "Invalid global graph data received from backend APIs",
-                );
-            }
-
-            // Transform data to UI format using existing backend data structure
-            const entities =
-                this.transformEntitiesToUIFormat(entitiesWithMetrics);
-            const transformedRelationships =
-                this.transformRelationshipsToUIFormat(relationships);
-
-            // Process communities
-            const processedCommunities = Array.isArray(communities)
-                ? communities.map((c: any) => ({
-                      ...c,
-                      entities:
-                          typeof c.entities === "string"
-                              ? JSON.parse(c.entities || "[]")
-                              : c.entities || [],
-                      topics:
-                          typeof c.topics === "string"
-                              ? JSON.parse(c.topics || "[]")
-                              : c.topics || [],
-                  }))
-                : [];
-
-            // Create statistics
-            const statistics: GraphStatistics = {
-                totalEntities: status?.entityCount || entities.length,
-                totalRelationships:
-                    status?.relationshipCount ||
-                    transformedRelationships.length,
-                averageDegree:
-                    entities.length > 0
-                        ? (transformedRelationships.length * 2) /
-                          entities.length
-                        : 0,
-                density:
-                    entities.length > 1
-                        ? transformedRelationships.length /
-                          ((entities.length * (entities.length - 1)) / 2)
-                        : 0,
-                communities:
-                    status?.communityCount || processedCommunities.length,
-                lastUpdated: Date.now(),
-            };
-
-            const queryTime = performance.now() - startTime;
-            console.log(
-                `[GraphDataProvider] Global graph loaded: ${entities.length} entities, ${transformedRelationships.length} relationships (${queryTime.toFixed(1)}ms)`,
-            );
-
-            return {
-                entities,
-                relationships: transformedRelationships,
-                communities: processedCommunities,
-                statistics,
-                metadata: {
-                    source: "hybrid_storage",
-                    timestamp: Date.now(),
-                },
-            };
-        } catch (error) {
-            console.error(
-                "[GraphDataProvider] Failed to fetch global graph data:",
-                error,
-            );
-            throw new Error(
-                `Global graph data fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-            );
-        }
-    }
 
     async getEntityNeighborhood(
         entityId: string,
@@ -380,33 +265,36 @@ class GraphDataProviderImpl implements GraphDataProvider {
 
     async getGlobalGraphLayoutData(): Promise<GraphLayoutData> {
         try {
-            // Get the raw data which already includes graphologyLayout from server
-            const rawData = await this.getGlobalGraphData();
+            // Use the new optimized server method that returns only graphology layout
+            const layoutResult = await this.baseService.getGlobalGraphLayoutData({
+                maxNodes: 1000,
+                includeConnectivity: true
+            });
             
-            // Extract the pre-computed graphology layout that server already provides
-            const graphologyLayout = (rawData as any).graphologyLayout;
-            
-            if (!graphologyLayout || !graphologyLayout.elements) {
-                throw new Error("No graphology layout found in server response - server may need to be updated to provide pre-computed layouts");
+            if (!layoutResult.graphologyLayout || !layoutResult.graphologyLayout.elements) {
+                throw new Error("No graphology layout found in server response");
             }
 
-            console.log(`[GraphDataProvider] Using server-computed graphology layout: ${graphologyLayout.elements.length} elements`);
+            console.log(`[GraphDataProvider] Using optimized global graph layout: ${layoutResult.graphologyLayout.elements.length} elements`);
 
             return {
                 presetLayout: {
-                    elements: graphologyLayout.elements,
-                    layoutDuration: graphologyLayout.layoutDuration || 0,
-                    communityCount: graphologyLayout.communityCount || rawData.communities.length,
-                    avgSpacing: graphologyLayout.avgSpacing || 100,
+                    elements: layoutResult.graphologyLayout.elements,
+                    layoutDuration: layoutResult.graphologyLayout.layoutDuration || 0,
+                    communityCount: layoutResult.graphologyLayout.communityCount || 0,
+                    avgSpacing: layoutResult.graphologyLayout.avgSpacing || 100,
                     metadata: {
-                        source: "server_graphology",
-                        algorithm: graphologyLayout.algorithm || "force-directed",
-                        timestamp: Date.now()
+                        source: "server_graphology_optimized",
+                        algorithm: layoutResult.graphologyLayout.algorithm || "force-directed",
+                        timestamp: Date.now(),
+                        totalEntitiesInSystem: layoutResult.metadata.totalEntitiesInSystem,
+                        selectedEntityCount: layoutResult.metadata.selectedEntityCount,
+                        coveragePercentage: layoutResult.metadata.coveragePercentage
                     }
                 }
             };
         } catch (error) {
-            console.error("[GraphDataProvider] Failed to fetch global graph layout:", error);
+            console.error("[GraphDataProvider] Failed to fetch optimized global graph layout:", error);
             throw new Error(`Global graph layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`);
         }
     }
@@ -759,7 +647,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
 export {
     GraphDataProvider as GraphDataProvider,
     GraphDataProviderImpl as GraphDataProviderImpl,
-    GlobalGraphResult,
     EntityNeighborhoodResult,
     EntityNode,
     RelationshipEdge,

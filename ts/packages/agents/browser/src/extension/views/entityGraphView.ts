@@ -769,46 +769,7 @@ class EntityGraphView {
         }
     }
 
-    private async loadGlobalGraphData(): Promise<any> {
-        // Use Graph data provider for direct storage access
-        const globalGraphResult =
-            await this.graphDataProvider.getGlobalGraphData();
 
-        // Process communities for color assignment
-        const processedCommunities = globalGraphResult.communities.map(
-            (c: any) => ({
-                ...c,
-                entities:
-                    typeof c.entities === "string"
-                        ? JSON.parse(c.entities || "[]")
-                        : c.entities || [],
-                topics:
-                    typeof c.topics === "string"
-                        ? JSON.parse(c.topics || "[]")
-                        : c.topics || [],
-            }),
-        );
-
-        // Assign community colors to entities
-        const entitiesWithColors = this.assignCommunityColors(
-            globalGraphResult.entities,
-            processedCommunities,
-        );
-
-        // Return data in format expected by existing UI components
-        return {
-            communities: processedCommunities,
-            entities: entitiesWithColors,
-            relationships: globalGraphResult.relationships,
-            topics: [],
-            statistics: {
-                totalEntities: globalGraphResult.statistics.totalEntities,
-                totalRelationships:
-                    globalGraphResult.statistics.totalRelationships,
-                totalCommunities: globalGraphResult.statistics.communities,
-            },
-        };
-    }
 
     /**
      * Phase 3: Load global graph using layout-only data contract
@@ -833,9 +794,8 @@ class EntityGraphView {
             };
         } catch (error) {
             console.error("[EntityGraphView] Failed to load layout-only global data:", error);
-            // Fallback to legacy method
-            console.log("[EntityGraphView] Falling back to legacy raw data method");
-            return this.loadGlobalGraphData();
+            // Re-throw the error instead of falling back to raw data
+            throw new Error(`Failed to load global graph layout: ${error instanceof Error ? error.message : "Unknown error"}`);
         }
     }
 

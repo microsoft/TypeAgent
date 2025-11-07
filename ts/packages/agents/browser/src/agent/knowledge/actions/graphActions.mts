@@ -1555,6 +1555,223 @@ export async function getGlobalImportanceLayer(
 }
 
 /**
+ * Get global graph layout data only (optimized for Phase 3)
+ * Returns only the graphology layout without raw entities/relationships
+ */
+export async function getGlobalGraphLayoutData(
+    parameters: {
+        maxNodes?: number;
+        includeConnectivity?: boolean;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+        algorithm?: string;
+    };
+    metadata: {
+        totalEntitiesInSystem: number;
+        selectedEntityCount: number;
+        coveragePercentage: number;
+        importanceThreshold: number;
+        layer: string;
+        connectedComponents?: any;
+    };
+}> {
+    try {
+        const websiteCollection = context.agentContext.websiteCollection;
+
+        if (!websiteCollection) {
+            return {
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
+                metadata: {
+                    totalEntitiesInSystem: 0,
+                    selectedEntityCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
+                    layer: "global_graph_layout",
+                },
+            };
+        }
+
+        // Ensure cache is populated
+        await ensureGraphCache(websiteCollection);
+
+        // Get cached data
+        const cache = getGraphCache(websiteCollection);
+
+        if (!cache || !cache.isValid) {
+            return {
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
+                metadata: {
+                    totalEntitiesInSystem: 0,
+                    selectedEntityCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
+                    layer: "global_graph_layout",
+                },
+            };
+        }
+
+        const allEntities = cache.entityMetrics || [];
+        const allRelationships = cache.relationships || [];
+        const communities = cache.communities || [];
+
+        if (allEntities.length === 0) {
+            return {
+                graphologyLayout: {
+                    elements: [],
+                    layoutDuration: 0,
+                    avgSpacing: 0,
+                    communityCount: 0,
+                },
+                metadata: {
+                    totalEntitiesInSystem: 0,
+                    selectedEntityCount: 0,
+                    coveragePercentage: 0,
+                    importanceThreshold: 0,
+                    layer: "global_graph_layout",
+                },
+            };
+        }
+
+        const entitiesWithMetrics = calculateEntityMetrics(
+            allEntities,
+            allRelationships,
+            communities,
+        );
+
+        // Sort by importance and select top nodes
+        const maxNodes = parameters.maxNodes || 1000;
+        const sortedEntities = entitiesWithMetrics.sort(
+            (a, b) => (b.importance || 0) - (a.importance || 0),
+        );
+
+        let selectedEntities = sortedEntities.slice(0, maxNodes);
+
+        // Ensure connectivity by adding bridge nodes if needed
+        if (parameters.includeConnectivity !== false) {
+            selectedEntities = ensureGlobalConnectivity(
+                selectedEntities,
+                allRelationships,
+                maxNodes,
+            );
+        }
+
+        // Get relationships between selected entities
+        const selectedEntityNames = new Set(
+            selectedEntities.map((e) => e.name),
+        );
+        const selectedRelationships = allRelationships.filter(
+            (rel: any) =>
+                selectedEntityNames.has(rel.fromEntity) &&
+                selectedEntityNames.has(rel.toEntity),
+        );
+
+        // Build graphology layout for the selected entities
+        const cacheKey = `global_layout_${maxNodes}`;
+        let cachedGraph = getGraphologyCache(cacheKey);
+
+        if (!cachedGraph) {
+            console.log("[Graphology] Building global graph layout...");
+            const layoutStart = performance.now();
+
+            const graphNodes: GraphNode[] = selectedEntities.map(
+                (entity: any) => ({
+                    id: entity.id || entity.name,
+                    name: entity.name,
+                    type: entity.type || "entity",
+                    confidence: entity.confidence || 0.5,
+                    count: entity.count || 1,
+                    importance: entity.importance || 0,
+                }),
+            );
+
+            const graphEdges: GraphEdge[] = selectedRelationships.map(
+                (rel: any) => ({
+                    from: rel.fromEntity,
+                    to: rel.toEntity,
+                    type: rel.relationshipType,
+                    confidence: rel.confidence || 0.5,
+                    strength: rel.confidence || 0.5,
+                }),
+            );
+
+            const graph = buildGraphologyGraph(graphNodes, graphEdges, {
+                nodeLimit: maxNodes * 2,
+                minEdgeConfidence: 0.2,
+                denseClusterThreshold: 100,
+            });
+
+            const cytoscapeElements = convertToCytoscapeElements(graph, 2000);
+            const layoutMetrics = calculateLayoutQualityMetrics(graph);
+            const layoutDuration = performance.now() - layoutStart;
+
+            cachedGraph = createGraphologyCache(
+                graph,
+                cytoscapeElements,
+                layoutDuration,
+                layoutMetrics.avgSpacing,
+            );
+
+            setGraphologyCache(cacheKey, cachedGraph);
+
+            console.log(`[Graphology] Global layout complete in ${layoutDuration.toFixed(2)}ms`);
+        } else {
+            console.log("[Graphology] Using cached global layout");
+        }
+
+        return {
+            graphologyLayout: {
+                elements: cachedGraph.cytoscapeElements,
+                layoutDuration: cachedGraph.metadata.layoutDuration,
+                avgSpacing: cachedGraph.metadata.avgSpacing,
+                communityCount: cachedGraph.metadata.communityCount,
+                algorithm: "force-directed",
+            },
+            metadata: {
+                totalEntitiesInSystem: allEntities.length,
+                selectedEntityCount: selectedEntities.length,
+                coveragePercentage: (selectedEntities.length / allEntities.length) * 100,
+                importanceThreshold: selectedEntities[selectedEntities.length - 1]?.importance || 0,
+                connectedComponents: analyzeConnectivity(selectedEntities, selectedRelationships),
+                layer: "global_graph_layout",
+            },
+        };
+    } catch (error) {
+        console.error("Error getting global graph layout data:", error);
+        return {
+            graphologyLayout: {
+                elements: [],
+                layoutDuration: 0,
+                avgSpacing: 0,
+                communityCount: 0,
+            },
+            metadata: {
+                totalEntitiesInSystem: 0,
+                selectedEntityCount: 0,
+                coveragePercentage: 0,
+                importanceThreshold: 0,
+                layer: "global_graph_layout",
+            },
+        };
+    }
+}
+
+/**
  * Get topic graph data with graphology layout
  * Simplified version that returns topics with pre-computed graphology positions
  */

@@ -529,6 +529,16 @@ export abstract class ExtensionServiceBase {
         return result?.entities || [];
     }
 
+    async getGlobalGraphLayoutData(parameters: {
+        maxNodes?: number;
+        includeConnectivity?: boolean;
+    }): Promise<any> {
+        return this.sendMessage({
+            type: "getGlobalGraphLayoutData",
+            parameters,
+        });
+    }
+
     async getEntityNeighborhood(
         parameters: {
             entityId: string;
