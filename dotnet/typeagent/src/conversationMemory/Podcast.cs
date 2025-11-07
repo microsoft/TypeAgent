@@ -10,6 +10,30 @@ public class Podcast : Memory<PodcastMessage>
     {
     }
 
+    public async ValueTask BuildIndexAsync(CancellationToken cancellationToken)
+    {
+        BeginIndexing();
+        try
+        {
+            await this.UpdateIndexAsync(
+                cancellationToken
+            ).ConfigureAwait(false);
+
+            await BuildParticipantAliasesAsync(
+                cancellationToken
+            ).ConfigureAwait(false);
+
+            await AddSynonymsAsync(
+                cancellationToken
+            ).ConfigureAwait(false);
+
+        }
+        finally
+        {
+            EndIndexing();
+        }
+    }
+
     public async ValueTask ImportTranscriptAsync(
         string filePath,
         string? name = null,
@@ -33,6 +57,42 @@ public class Podcast : Memory<PodcastMessage>
         await Messages.AppendAsync(
             messages
         ).ConfigureAwait(false);
+    }
+
+    private async ValueTask AddSynonymsAsync(CancellationToken cancellationToken)
+    {
+        AliasMap aliases = AliasMap.LoadResource(
+            typeof(Podcast).Assembly,
+            "TypeAgent.ConversationMemory.podcastVerbs.json"
+        );
+
+        await SecondaryIndexes.TermToRelatedTermsIndex.Aliases.AddAsync(
+            aliases,
+            cancellationToken
+        ).ConfigureAwait(false);
+    }
+
+    private async ValueTask BuildParticipantAliasesAsync(CancellationToken cancellationToken = default)
+    {
+        var aliases = await CollectParticipantAliasesAsync(
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        await SecondaryIndexes.TermToRelatedTermsIndex.Aliases.AddAsync(
+            aliases,
+            cancellationToken
+        ).ConfigureAwait(false);
+    }
+
+    private async ValueTask<AliasMap> CollectParticipantAliasesAsync(CancellationToken cancellationToken = default)
+    {
+        AliasMap aliases = [];
+        await foreach (var message in Messages)
+        {
+            PodcastMessageMeta metadata = message.Metadata;
+            metadata.CollectAliases(aliases);
+        }
+        return aliases;
     }
 
     private void AssignMessageListeners(IList<PodcastMessage> messages, ISet<string> participants)

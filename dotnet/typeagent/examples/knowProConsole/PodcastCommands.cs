@@ -121,7 +121,7 @@ public class PodcastCommands : ICommandModule
 
         if (namedArgs.Get<bool>("buildIndex"))
         {
-            await podcast.UpdateIndexAsync(cancellationToken);
+            await podcast.BuildIndexAsync(cancellationToken);
         }
     }
 

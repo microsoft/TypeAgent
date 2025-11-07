@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 
+using System.Collections;
 using System.Text.Json.Nodes;
 
 namespace TypeAgent.KnowPro.Storage.Sqlite;
@@ -502,6 +503,15 @@ FROM Messages WHERE msg_id IN({SqliteDatabase.MakeInStatement(placeholderIds)})"
                 yield return item;
             }
         }
+    }
+
+    public static IList<string> GetAllMetadata(SqliteDatabase db)
+    {
+        return db.GetList<string>(@"
+SELECT metadata
+FROM Messages ORDER BY msg_id",
+            (reader) => reader.GetString(0)
+        );
     }
 
     public static IEnumerable<string?> GetTimestamp(SqliteDatabase db, IList<int> messageOrdinals)

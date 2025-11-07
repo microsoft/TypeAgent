@@ -57,4 +57,6 @@ public class Term : IEquatable<Term>
     {
         return other is not null && Text == other.Text;
     }
+
+    public override int GetHashCode() => Text.GetHashCode();
 }

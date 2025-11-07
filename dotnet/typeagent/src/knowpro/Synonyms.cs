@@ -59,4 +59,9 @@ public class AliasMap : MultiMap<string, Term>
             }
         }
     }
+
+    public static AliasMap LoadResource(System.Reflection.Assembly assembly, string name)
+    {
+        return new AliasMap(TermSynonym.LoadResource(assembly, name));
+    }
 }
