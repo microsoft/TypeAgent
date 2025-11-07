@@ -441,7 +441,7 @@ FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
                 messageLengths
             );
         }
-        // Return values in order
+        // Return values in the order they were asked for
         return messageLengths.GetValues(messageIds);
     }
 
@@ -491,22 +491,21 @@ ORDER BY msg_id",
 
     public static IEnumerable<string> GetMetadata(SqliteDatabase db, IList<int> messageOrdinals)
     {
+        Dictionary<int, string> messageMetadata = [];
         foreach (var batch in messageOrdinals.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
 
-            var list = db.Enumerate(@$"
-SELECT metadata
+            db.GetKeyValues(@$"
+SELECT msg_id, metadata
 FROM Messages WHERE msg_id IN({SqliteDatabase.MakeInStatement(placeholderIds)})",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                (reader) => reader.GetString(0)
+                (reader) => new KeyValuePair<int, string>(reader.GetInt32(0), reader.GetString(1)),
+                messageMetadata
             );
-
-            foreach (var item in list)
-            {
-                yield return item;
-            }
         }
+        // Return values in the order they were asked for
+        return messageMetadata.GetValues(messageOrdinals);
     }
 
     public static IList<string> GetAllMetadata(SqliteDatabase db)
