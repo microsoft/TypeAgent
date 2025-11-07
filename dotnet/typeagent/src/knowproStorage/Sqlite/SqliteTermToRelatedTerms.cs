@@ -112,7 +112,7 @@ WHERE term IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
                 return new KeyValuePair<string, Term>(reader.GetString(0), ReadTerm(reader, 1));
             }
         );
-        var results = new Multiset<string, Term>(rows);
+        var results = new MultiMap<string, Term>(rows);
         return !results.IsNullOrEmpty() ? (IDictionary<string, IList<Term>>)results : null;
     }
 

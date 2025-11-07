@@ -3,7 +3,7 @@
 
 namespace TypeAgent.KnowPro;
 
-public class Term
+public class Term : IEquatable<Term>
 {
     public Term(string termText, float? weight = null)
     {
@@ -46,5 +46,15 @@ public class Term
     {
         termText = termText.Trim();
         return termText.ToLower();
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is not null && Equals(obj as Term);
+    }
+
+    public bool Equals(Term? other)
+    {
+        return other is not null && Text == other.Text;
     }
 }

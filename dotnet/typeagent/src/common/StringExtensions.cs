@@ -58,6 +58,15 @@ public static partial class StringExtensions
         }
     }
 
+    public static void ToLower(this IList<string> list)
+    {
+        int count = list.Count;
+        for (int i = 0; i < count; ++i)
+        {
+            list[i] = list[i].ToLower();
+        }
+    }
+
     public static List<string> LowerAndSort(this List<string> list)
     {
         int count = list.Count;
