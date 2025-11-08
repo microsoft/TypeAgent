@@ -144,22 +144,25 @@ FROM SemanticRefs WHERE semref_id = @semref_id",
     {
         ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
 
-        List<TextRange> ranges = new(semanticRefIds.Count);
+        Dictionary<int, TextRange> rangeRows = [];
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var sql = $@"
-SELECT range_json
-FROM SemanticRefs WHERE semref_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
-ORDER BY semref_id";
-            var rows = _db.Enumerate(
+SELECT semref_id, range_json
+FROM SemanticRefs WHERE semref_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})";
+            _db.GetKeyValues(
                 sql,
                 cmd => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                (reader) => StorageSerializer.FromJson<TextRange>(reader.GetString(0))
+                (reader) => new KeyValuePair<int, TextRange>(
+                    reader.GetInt32(0),
+                    StorageSerializer.FromJson<TextRange>(reader.GetString(1))
+                    ),
+                rangeRows
                );
-            ranges.AddRange(rows);
         }
-        return ValueTask.FromResult((IList<TextRange>)ranges);
+
+        return ValueTask.FromResult((IList<TextRange>)rangeRows.GetValues(semanticRefIds));
     }
 
     public KnowledgeType GetKnowledgeType(int semanticRefId)

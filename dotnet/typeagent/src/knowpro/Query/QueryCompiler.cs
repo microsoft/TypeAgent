@@ -204,9 +204,8 @@ internal class QueryCompiler
                     break;
 
                 case SearchTermGroup subGroup:
-                    var (nestedTerms, groupExpr) = CompileSearchGroupTerms(
+                    var (nestedTerms, groupExpr) = CompileMessageSearchGroup(
                         subGroup,
-                        null,  // Apply scopes on the outermost expression only
                         matchFilter
                     );
                     compiledTerms.AddRange(nestedTerms);
