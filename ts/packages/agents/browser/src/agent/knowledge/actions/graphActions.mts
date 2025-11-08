@@ -2087,16 +2087,19 @@ export async function getGlobalImportanceLayer(
         );
 
         // Debug: Check for entities with empty names before sorting
-        const entitiesWithEmptyNames = entitiesWithMetrics.filter((e: any) => !e.name || !e.name.trim());
+        const entitiesWithEmptyNames = entitiesWithMetrics.filter(
+            (e: any) => !e.name || !e.name.trim(),
+        );
         if (entitiesWithEmptyNames.length > 0) {
-            console.warn(`[getGlobalImportanceLayer] Found ${entitiesWithEmptyNames.length} entities with empty names:`, 
-                entitiesWithEmptyNames.slice(0, 5).map((e: any) => ({ 
-                    id: e.id, 
-                    name: e.name, 
+            console.warn(
+                `[getGlobalImportanceLayer] Found ${entitiesWithEmptyNames.length} entities with empty names:`,
+                entitiesWithEmptyNames.slice(0, 5).map((e: any) => ({
+                    id: e.id,
+                    name: e.name,
                     type: e.type,
                     hasId: !!e.id,
-                    hasName: !!e.name
-                }))
+                    hasName: !!e.name,
+                })),
             );
         }
 
@@ -2187,7 +2190,12 @@ export async function getGlobalImportanceLayer(
             const layoutStart = performance.now();
 
             const graphNodes: GraphNode[] = optimizedEntities
-                .filter((entity: any) => entity.name && entity.name.trim() && (entity.id || entity.name)) // Ensure valid ID and name
+                .filter(
+                    (entity: any) =>
+                        entity.name &&
+                        entity.name.trim() &&
+                        (entity.id || entity.name),
+                ) // Ensure valid ID and name
                 .map((entity: any) => ({
                     id: entity.id || entity.name,
                     name: entity.name,
@@ -2198,10 +2206,13 @@ export async function getGlobalImportanceLayer(
                 }));
 
             const graphEdges: GraphEdge[] = optimizedRelationships
-                .filter((rel: any) => 
-                    rel.fromEntity && rel.fromEntity.trim() && 
-                    rel.toEntity && rel.toEntity.trim() &&
-                    rel.fromEntity !== rel.toEntity // Filter out self-referential edges
+                .filter(
+                    (rel: any) =>
+                        rel.fromEntity &&
+                        rel.fromEntity.trim() &&
+                        rel.toEntity &&
+                        rel.toEntity.trim() &&
+                        rel.fromEntity !== rel.toEntity, // Filter out self-referential edges
                 )
                 .map((rel: any) => ({
                     from: rel.fromEntity,
@@ -2626,7 +2637,7 @@ export async function getTopicImportanceLayer(
         // Extract relationships only between selected topics
         const relationships: any[] = [];
         const relationshipTypes = new Map<string, number>(); // Track relationship type counts
-        
+
         topicGraph.forEachEdge(
             (
                 edgeId: string,
@@ -2640,8 +2651,11 @@ export async function getTopicImportanceLayer(
                     selectedTopicIds.has(target)
                 ) {
                     const relType = attributes.type || "unknown";
-                    relationshipTypes.set(relType, (relationshipTypes.get(relType) || 0) + 1);
-                    
+                    relationshipTypes.set(
+                        relType,
+                        (relationshipTypes.get(relType) || 0) + 1,
+                    );
+
                     relationships.push({
                         from: source,
                         to: target,
@@ -2656,10 +2670,11 @@ export async function getTopicImportanceLayer(
         debug(
             `[getTopicImportanceLayer] Filtered ${relationships.length} relationships between selected topics`,
         );
-        
+
         // Debug: Log relationship type distribution
-        console.log("[getTopicImportanceLayer] Relationship type distribution:", 
-            Object.fromEntries(relationshipTypes)
+        console.log(
+            "[getTopicImportanceLayer] Relationship type distribution:",
+            Object.fromEntries(relationshipTypes),
         );
 
         // Create a subgraph with only selected topics and their relationships for Cytoscape conversion

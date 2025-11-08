@@ -252,7 +252,7 @@ function initializeCircularLayout(graph: Graph): void {
 
     let nodesWithMissingPositions = 0;
     const nodes = graph.nodes();
-    
+
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         const pos = positions[node];
@@ -267,13 +267,13 @@ function initializeCircularLayout(graph: Graph): void {
                 `[POSITION-ERROR] Node ${node} has invalid position from circular layout: ${JSON.stringify(pos)}`,
             );
             nodesWithMissingPositions++;
-            
+
             // Use fallback random positioning instead of all nodes at (0,0)
             const angle = (i / nodes.length) * 2 * Math.PI;
             const radius = 100 + (Math.random() - 0.5) * 20; // Add some randomness
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
-            
+
             graph.setNodeAttribute(node, "x", x);
             graph.setNodeAttribute(node, "y", y);
         } else {
@@ -377,13 +377,13 @@ function applyMultiPhaseLayout(
                 `[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y}), applying fallback`,
             );
             invalidAfterFA2++;
-            
+
             // Apply fallback positioning similar to initial layout
             const angle = (i / nodes.length) * 2 * Math.PI;
             const radius = 150 + (Math.random() - 0.5) * 30;
             const fallbackX = Math.cos(angle) * radius;
             const fallbackY = Math.sin(angle) * radius;
-            
+
             graph.setNodeAttribute(node, "x", fallbackX);
             graph.setNodeAttribute(node, "y", fallbackY);
         }
@@ -533,11 +533,11 @@ export function convertToCytoscapeElements(
         minY = Infinity,
         maxY = -Infinity;
     let validPositionCount = 0;
-    
+
     for (const node of graph.nodes()) {
         const x = graph.getNodeAttribute(node, "x") as number;
         const y = graph.getNodeAttribute(node, "y") as number;
-        
+
         if (x !== undefined && y !== undefined && !isNaN(x) && !isNaN(y)) {
             minX = Math.min(minX, x);
             maxX = Math.max(maxX, x);
@@ -549,17 +549,22 @@ export function convertToCytoscapeElements(
 
     const targetMin = -targetViewportSize;
     const targetMax = targetViewportSize;
-    
+
     // If no valid positions found or all positions are the same, use default scaling
-    let scaleX = 1, scaleY = 1;
+    let scaleX = 1,
+        scaleY = 1;
     if (validPositionCount > 0 && (maxX - minX > 0 || maxY - minY > 0)) {
-        scaleX = maxX - minX === 0 ? 1 : (targetMax - targetMin) / (maxX - minX);
-        scaleY = maxY - minY === 0 ? 1 : (targetMax - targetMin) / (maxY - minY);
+        scaleX =
+            maxX - minX === 0 ? 1 : (targetMax - targetMin) / (maxX - minX);
+        scaleY =
+            maxY - minY === 0 ? 1 : (targetMax - targetMin) / (maxY - minY);
     }
 
     debug(`Scaling factors: X=${scaleX.toFixed(2)}, Y=${scaleY.toFixed(2)}`);
     debug(`Target viewport: [${targetMin}, ${targetMax}]`);
-    debug(`Position bounds: X=[${minX.toFixed(2)}, ${maxX.toFixed(2)}], Y=[${minY.toFixed(2)}, ${maxY.toFixed(2)}]`);
+    debug(
+        `Position bounds: X=[${minX.toFixed(2)}, ${maxX.toFixed(2)}], Y=[${minY.toFixed(2)}, ${maxY.toFixed(2)}]`,
+    );
     debug(`Valid positions: ${validPositionCount}/${graph.order}`);
 
     let nodesWithInvalidPositions = 0;
