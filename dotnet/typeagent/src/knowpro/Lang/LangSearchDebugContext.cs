@@ -15,4 +15,9 @@ public class LangSearchDebugContext
 
     // Indicates per expression whether similarity fallback was used
     public List<bool>? UsedSimilarityFallback { get; set; }
+
+    public string ToJson()
+    {
+        return Serializer.ToJsonIndented(this);
+    }
 }

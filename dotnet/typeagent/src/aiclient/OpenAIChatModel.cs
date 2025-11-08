@@ -58,7 +58,7 @@ public class OpenAIChatModel : ModelApi, IChatModel
         var request = Create(prompt, format);
         if (translationSettings is not null)
         {
-            if (translationSettings.Temperature > 0)
+            if (translationSettings.Temperature >= 0)
             {
                 request.temperature = translationSettings.Temperature;
             }
