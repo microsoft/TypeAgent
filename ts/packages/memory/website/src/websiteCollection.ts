@@ -2283,36 +2283,140 @@ export class WebsiteCollection
     ): Promise<void> {
         debug(`[Direct Build] Building topic relationships on graph`);
 
+        // Build mapping from topic display names to topic IDs
+        const nameToIdMap = new Map<string, string>();
+        for (const topic of hierarchicalTopics) {
+            if (topic.topicName && topic.topicId) {
+                
+                // Map the hierarchical topic name to its ID
+                nameToIdMap.set(topic.topicName, topic.topicId);
+                
+                // Also map any source topic names to this ID
+                if (topic.sourceTopicNames && Array.isArray(topic.sourceTopicNames)) {
+                    for (const sourceName of topic.sourceTopicNames) {
+                        if (sourceName && typeof sourceName === 'string') {
+                            nameToIdMap.set(sourceName, topic.topicId);
+                        }
+                    }
+                }
+            }
+        }
+        debug(`[Direct Build] Built name-to-ID mapping for ${nameToIdMap.size} topics`);
+        
+        // Log samples of hierarchical topics to understand their structure
+        if (hierarchicalTopics.length > 0) {
+            debug(`[Direct Build] Sample hierarchical topics (first 3):`);
+            for (let i = 0; i < Math.min(3, hierarchicalTopics.length); i++) {
+                const topic = hierarchicalTopics[i];
+                debug(`  ${i + 1}. ID: "${topic.topicId}", Name: "${topic.topicName}", Level: ${topic.level}`);
+                if (topic.sourceTopicNames && topic.sourceTopicNames.length > 0) {
+                    debug(`     Source topic names: [${topic.sourceTopicNames.map((n: any) => `"${n}"`).join(', ')}]`);
+                }
+                if (topic.keywords && topic.keywords.length > 0) {
+                    debug(`     Keywords: [${topic.keywords.map((k: any) => `"${k}"`).join(', ')}]`);
+                }
+            }
+        }
+        
+        // Log a few samples of the mapping
+        let mapSampleCount = 0;
+        for (const [name, id] of nameToIdMap.entries()) {
+            if (mapSampleCount < 5) {
+                debug(`  Mapping sample ${mapSampleCount + 1}: "${name}" -> "${id}"`);
+                mapSampleCount++;
+            } else {
+                break;
+            }
+        }
+
         // Extract co-occurrence data from cache
         const cooccurrences = this.extractCooccurrencesForGraph(cacheManager);
         debug(
             `[Direct Build] Extracted ${cooccurrences.length} topic co-occurrences`,
         );
 
-        // Add co-occurrence edges between topics
-        for (const cooccurrence of cooccurrences) {
-            if (
-                topicGraph.hasNode(cooccurrence.fromTopic) &&
-                topicGraph.hasNode(cooccurrence.toTopic) &&
-                !topicGraph.hasEdge(
-                    cooccurrence.fromTopic,
-                    cooccurrence.toTopic,
-                )
-            ) {
-                topicGraph.addEdge(
-                    cooccurrence.fromTopic,
-                    cooccurrence.toTopic,
-                    {
-                        type: "topic_cooccurrence",
-                        strength: Math.min(cooccurrence.count / 5, 1.0), // Normalize
-                        count: cooccurrence.count,
-                        urls: cooccurrence.urls || [],
-                    },
-                );
+        // Log samples of extracted co-occurrences for debugging
+        if (cooccurrences.length > 0) {
+            debug(`[Direct Build] Sample co-occurrence links (first 5):`);
+            for (let i = 0; i < Math.min(5, cooccurrences.length); i++) {
+                const cooc = cooccurrences[i];
+                debug(`  ${i + 1}. "${cooc.fromTopic}" <-> "${cooc.toTopic}" (count: ${cooc.count}, strength: ${Math.min(cooc.count / 5, 1.0).toFixed(2)})`);
+                if (cooc.urls && cooc.urls.length > 0) {
+                    debug(`     URLs: ${cooc.urls.slice(0, 2).join(', ')}${cooc.urls.length > 2 ? '...' : ''}`);
+                }
             }
         }
 
+        // Add co-occurrence edges between topics
+        let addedCooccurrenceEdges = 0;
+        let skippedNoFromNode = 0;
+        let skippedNoToNode = 0;
+        let skippedDuplicate = 0;
+        let skippedNoMapping = 0;
+        
+        for (const cooccurrence of cooccurrences) {
+            // Convert display names to topic IDs
+            const fromTopicId = nameToIdMap.get(cooccurrence.fromTopic);
+            const toTopicId = nameToIdMap.get(cooccurrence.toTopic);
+            
+            if (!fromTopicId) {
+                skippedNoMapping++;
+                if (skippedNoMapping <= 3) {
+                    debug(`  No ID mapping for fromTopic: "${cooccurrence.fromTopic}"`);
+                }
+                continue;
+            }
+            if (!toTopicId) {
+                skippedNoMapping++;
+                if (skippedNoMapping <= 3) {
+                    debug(`  No ID mapping for toTopic: "${cooccurrence.toTopic}"`);
+                }
+                continue;
+            }
+            
+            if (!topicGraph.hasNode(fromTopicId)) {
+                skippedNoFromNode++;
+                continue;
+            }
+            if (!topicGraph.hasNode(toTopicId)) {
+                skippedNoToNode++;
+                continue;
+            }
+            if (topicGraph.hasEdge(fromTopicId, toTopicId)) {
+                skippedDuplicate++;
+                continue;
+            }
+            
+            topicGraph.addEdge(
+                fromTopicId,
+                toTopicId,
+                {
+                    type: "co_occurs",
+                    strength: Math.min(cooccurrence.count / 5, 1.0), // Normalize
+                    count: cooccurrence.count,
+                    urls: cooccurrence.urls || [],
+                },
+            );
+            addedCooccurrenceEdges++;
+        }
+
         debug(`[Direct Build] Added topic relationship edges to graph`);
+        debug(`[Direct Build] Co-occurrence edge summary: added ${addedCooccurrenceEdges}, skipped ${skippedNoMapping} (no name mapping), skipped ${skippedNoFromNode} (no from-node), skipped ${skippedNoToNode} (no to-node), skipped ${skippedDuplicate} (duplicates)`);
+        
+        if (addedCooccurrenceEdges === 0 && cooccurrences.length > 0) {
+            debug(`[Direct Build] WARNING: No co-occurrence edges were added despite having ${cooccurrences.length} co-occurrences!`);
+            // Log first few co-occurrences that failed to be added
+            for (let i = 0; i < Math.min(3, cooccurrences.length); i++) {
+                const cooc = cooccurrences[i];
+                const fromTopicId = nameToIdMap.get(cooc.fromTopic);
+                const toTopicId = nameToIdMap.get(cooc.toTopic);
+                debug(`  Failed co-occurrence ${i + 1}: "${cooc.fromTopic}" -> "${cooc.toTopic}"`);
+                debug(`    From topic name "${cooc.fromTopic}" maps to ID: ${fromTopicId}`);
+                debug(`    To topic name "${cooc.toTopic}" maps to ID: ${toTopicId}`);
+                if (fromTopicId) debug(`    From node exists: ${topicGraph.hasNode(fromTopicId)}`);
+                if (toTopicId) debug(`    To node exists: ${topicGraph.hasNode(toTopicId)}`);
+            }
+        }
     }
 
     /**
@@ -2322,12 +2426,33 @@ export class WebsiteCollection
         // Get topic relationships from cache (same as original buildTopicGraphWithGraphology)
         const cachedRelationships =
             cacheManager.getAllTopicRelationships?.() || [];
-        return cachedRelationships.map((rel: any) => ({
+            
+        debug(`[Direct Build] extractCooccurrencesForGraph: found ${cachedRelationships.length} cached relationships`);
+        
+        if (cachedRelationships.length > 0) {
+            debug(`[Direct Build] Sample cached relationships (first 3):`);
+            for (let i = 0; i < Math.min(3, cachedRelationships.length); i++) {
+                const rel = cachedRelationships[i];
+                debug(`  ${i + 1}. Raw: ${JSON.stringify(rel)}`);
+            }
+        }
+        
+        const mappedRelationships = cachedRelationships.map((rel: any) => ({
             fromTopic: rel.fromTopic,
             toTopic: rel.toTopic,
             count: rel.count,
             urls: rel.sources || [],
         }));
+        
+        if (mappedRelationships.length > 0) {
+            debug(`[Direct Build] Sample mapped co-occurrences (first 3):`);
+            for (let i = 0; i < Math.min(3, mappedRelationships.length); i++) {
+                const mapped = mappedRelationships[i];
+                debug(`  ${i + 1}. Mapped: ${JSON.stringify(mapped)}`);
+            }
+        }
+        
+        return mappedRelationships;
     }
 
     /**

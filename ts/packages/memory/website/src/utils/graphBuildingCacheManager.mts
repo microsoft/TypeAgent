@@ -247,11 +247,14 @@ export class GraphBuildingCacheManager {
                     sourcesB.includes(url),
                 );
 
+                // Remove duplicate URLs using Set
+                const uniqueSources = Array.from(new Set(commonSources));
+
                 relationships.push({
                     fromTopic: topicA,
                     toTopic: topicB,
                     count,
-                    sources: commonSources,
+                    sources: uniqueSources,
                 });
             }
         }

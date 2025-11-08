@@ -251,7 +251,10 @@ function initializeCircularLayout(graph: Graph): void {
     const positions = circular(graph, { scale: 100 });
 
     let nodesWithMissingPositions = 0;
-    for (const node of graph.nodes()) {
+    const nodes = graph.nodes();
+    
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         const pos = positions[node];
         if (
             !pos ||
@@ -264,8 +267,15 @@ function initializeCircularLayout(graph: Graph): void {
                 `[POSITION-ERROR] Node ${node} has invalid position from circular layout: ${JSON.stringify(pos)}`,
             );
             nodesWithMissingPositions++;
-            graph.setNodeAttribute(node, "x", 0);
-            graph.setNodeAttribute(node, "y", 0);
+            
+            // Use fallback random positioning instead of all nodes at (0,0)
+            const angle = (i / nodes.length) * 2 * Math.PI;
+            const radius = 100 + (Math.random() - 0.5) * 20; // Add some randomness
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            
+            graph.setNodeAttribute(node, "x", x);
+            graph.setNodeAttribute(node, "y", y);
         } else {
             graph.setNodeAttribute(node, "x", pos.x);
             graph.setNodeAttribute(node, "y", pos.y);
@@ -274,7 +284,7 @@ function initializeCircularLayout(graph: Graph): void {
 
     if (nodesWithMissingPositions > 0) {
         debug(
-            `[POSITION-ERROR] ${nodesWithMissingPositions} nodes had invalid positions from circular layout`,
+            `[POSITION-ERROR] ${nodesWithMissingPositions} nodes had invalid positions from circular layout, used fallback positioning`,
         );
     }
 }
@@ -355,21 +365,32 @@ function applyMultiPhaseLayout(
         },
     });
 
-    // Check for invalid positions after ForceAtlas2
+    // Check for invalid positions after ForceAtlas2 and fix them
     let invalidAfterFA2 = 0;
-    for (const node of graph.nodes()) {
+    const nodes = graph.nodes();
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         const x = graph.getNodeAttribute(node, "x");
         const y = graph.getNodeAttribute(node, "y");
         if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) {
             debug(
-                `[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y})`,
+                `[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y}), applying fallback`,
             );
             invalidAfterFA2++;
+            
+            // Apply fallback positioning similar to initial layout
+            const angle = (i / nodes.length) * 2 * Math.PI;
+            const radius = 150 + (Math.random() - 0.5) * 30;
+            const fallbackX = Math.cos(angle) * radius;
+            const fallbackY = Math.sin(angle) * radius;
+            
+            graph.setNodeAttribute(node, "x", fallbackX);
+            graph.setNodeAttribute(node, "y", fallbackY);
         }
     }
     if (invalidAfterFA2 > 0) {
         debug(
-            `[POSITION-ERROR] ${invalidAfterFA2} nodes have invalid positions after ForceAtlas2`,
+            `[POSITION-ERROR] Fixed ${invalidAfterFA2} nodes with invalid positions after ForceAtlas2`,
         );
     }
 
@@ -511,24 +532,35 @@ export function convertToCytoscapeElements(
         maxX = -Infinity,
         minY = Infinity,
         maxY = -Infinity;
+    let validPositionCount = 0;
+    
     for (const node of graph.nodes()) {
         const x = graph.getNodeAttribute(node, "x") as number;
         const y = graph.getNodeAttribute(node, "y") as number;
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
+        
+        if (x !== undefined && y !== undefined && !isNaN(x) && !isNaN(y)) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+            validPositionCount++;
+        }
     }
 
     const targetMin = -targetViewportSize;
     const targetMax = targetViewportSize;
-    const scaleX =
-        maxX - minX === 0 ? 1 : (targetMax - targetMin) / (maxX - minX);
-    const scaleY =
-        maxY - minY === 0 ? 1 : (targetMax - targetMin) / (maxY - minY);
+    
+    // If no valid positions found or all positions are the same, use default scaling
+    let scaleX = 1, scaleY = 1;
+    if (validPositionCount > 0 && (maxX - minX > 0 || maxY - minY > 0)) {
+        scaleX = maxX - minX === 0 ? 1 : (targetMax - targetMin) / (maxX - minX);
+        scaleY = maxY - minY === 0 ? 1 : (targetMax - targetMin) / (maxY - minY);
+    }
 
     debug(`Scaling factors: X=${scaleX.toFixed(2)}, Y=${scaleY.toFixed(2)}`);
     debug(`Target viewport: [${targetMin}, ${targetMax}]`);
+    debug(`Position bounds: X=[${minX.toFixed(2)}, ${maxX.toFixed(2)}], Y=[${minY.toFixed(2)}, ${maxY.toFixed(2)}]`);
+    debug(`Valid positions: ${validPositionCount}/${graph.order}`);
 
     let nodesWithInvalidPositions = 0;
     for (const node of graph.nodes()) {
@@ -550,8 +582,15 @@ export function convertToCytoscapeElements(
             x = 0;
             y = 0;
         } else {
-            x = (attr.x - minX) * scaleX + targetMin;
-            y = (attr.y - minY) * scaleY + targetMin;
+            // Only apply scaling if we have valid scaling factors
+            if (validPositionCount > 0 && !isNaN(scaleX) && !isNaN(scaleY)) {
+                x = (attr.x - minX) * scaleX + targetMin;
+                y = (attr.y - minY) * scaleY + targetMin;
+            } else {
+                // Fallback: use positions as-is if scaling failed
+                x = attr.x;
+                y = attr.y;
+            }
         }
 
         const nodeData: any = {
