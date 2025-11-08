@@ -18,6 +18,6 @@ public class LangSearchDebugContext
 
     public string ToJson()
     {
-        return Serializer.ToJson(this);
+        return Serializer.ToJsonIndented(this);
     }
 }
