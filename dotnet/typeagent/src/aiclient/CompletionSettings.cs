@@ -11,6 +11,20 @@ namespace TypeAgent.AIClient;
 /// </summary>
 public class CompletionSettings
 {
+    public CompletionSettings() { }
+
+    public CompletionSettings(CompletionSettings src)
+    {
+        ArgumentVerify.ThrowIfNull(src, nameof(src));
+
+        Temperature = src.Temperature;
+        MaxTokens = src.MaxTokens;
+        NumMatches = src.NumMatches;
+        Format = src.Format;
+        Seed = src.Seed;
+        TopP = src.TopP;
+    }
+
     public double Temperature { get; set; } = 0;
 
     public int? MaxTokens { get; set; }
@@ -23,13 +37,23 @@ public class CompletionSettings
 
     public int? TopP { get; set; }
 
-    public static CompletionSettings CreateDefault()
+    public CompletionSettings Clone(ResponseFormat? format = null)
+    {
+        CompletionSettings copy = new CompletionSettings(this);
+        if (format is not null)
+        {
+            copy.Format = format;
+        }
+        return copy;
+    }
+
+    public static CompletionSettings CreateDefault(ResponseFormat format = ResponseFormat.Json)
     {
         return new CompletionSettings()
         {
             NumMatches = 1,
             Temperature = 0,
-            Format = ResponseFormat.Json
+            Format = format
         };
     }
 }

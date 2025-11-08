@@ -405,27 +405,30 @@ public class TestCommands : ICommandModule
         {
             return;
         }
-        /*
-        IList<AnswerResponse> answers = await conversation.AnswerQuestionAsync(
-            query,
-            null,
-            null,
-            null,
-            null,
-            cancellationToken
-        ).ConfigureAwait(false);
-        KnowProWriter.WriteJson(answers);
-        */
-        var searchResults = await conversation.SearchAsync(query);
-        foreach (var searchResult in searchResults)
+        if (namedArgs.Get<bool>("debug"))
         {
-            AnswerContext context = await AnswerContext.FromSearchResultAsync(conversation, searchResult);
-            if (namedArgs.Get<bool>("debug"))
+            var searchResults = await conversation.SearchAsync(query);
+            foreach (var searchResult in searchResults)
             {
-                KnowProWriter.WriteLine(ConsoleColor.Cyan, context.ToJson());
-            }
+                AnswerContext context = await AnswerContext.FromSearchResultAsync(conversation, searchResult);
+                if (namedArgs.Get<bool>("debug"))
+                {
+                    KnowProWriter.WriteLine(ConsoleColor.Cyan, context.ToJson());
+                }
 
-            var answer = await conversation.AnswerQuestionAsync(query, context);
+                var answer = await conversation.AnswerQuestionAsync(query, context);
+                KnowProWriter.WriteJson(answer);
+            }
+        }
+        else
+        {
+            AnswerResponse answer = await conversation.AnswerQuestionAsync(
+                query,
+                null,
+                null,
+                null,
+                null
+            ).ConfigureAwait(false);
             KnowProWriter.WriteJson(answer);
         }
     }
