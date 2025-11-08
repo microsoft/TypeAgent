@@ -36,9 +36,30 @@ class TopicGraphView {
         // Initialize extension service
         this.extensionService = createExtensionService();
 
+        // Check for topic parameter in URL
+        this.parseUrlParameters();
+
         this.initializeEventHandlers();
         this.initializeVisualizer();
         this.loadInitialData();
+    }
+
+    private parseUrlParameters(): void {
+        const urlParams = new URLSearchParams(window.location.search);
+        const topicParam = urlParams.get("topic");
+
+        if (topicParam) {
+            // Store the target topic to navigate to after data loads
+            this.state.searchQuery = topicParam;
+
+            // Update the search input field to show the topic name
+            const searchInput = document.getElementById(
+                "topicSearch",
+            ) as HTMLInputElement;
+            if (searchInput) {
+                searchInput.value = topicParam;
+            }
+        }
     }
 
     private initializeEventHandlers(): void {
@@ -122,18 +143,14 @@ class TopicGraphView {
                 return;
             }
 
-            // Handle topic action buttons (expand/focus)
+            // Handle topic action buttons (focus only)
             const button = target.closest("[data-action]") as HTMLElement;
             if (button) {
                 const action = button.getAttribute("data-action");
                 const topicId = button.getAttribute("data-topic-id");
 
-                if (topicId) {
-                    if (action === "expand") {
-                        this.expandTopic(topicId);
-                    } else if (action === "focus") {
-                        this.focusOnTopic(topicId);
-                    }
+                if (topicId && action === "focus") {
+                    this.focusOnTopic(topicId);
                 }
             }
         });
@@ -185,6 +202,12 @@ class TopicGraphView {
             await this.visualizer?.init(topicData);
 
             this.updateGraphStats();
+
+            // Check if we need to navigate to a specific topic from URL parameter
+            if (this.state.searchQuery.trim()) {
+                this.handleTopicNavigation(this.state.searchQuery.trim());
+            }
+
             this.hideLoading();
         } catch (error) {
             console.error("Failed to load topic data:", error);
@@ -198,25 +221,24 @@ class TopicGraphView {
     private async fetchGlobalImportanceView(): Promise<any> {
         try {
             console.log(
-                "[TopicGraphView] Fetching global importance layer (top 500 topics)...",
+                "[TopicGraphView] Fetching global importance layer (top 500 topics) - layout-only contract...",
             );
             const result = await this.extensionService.getTopicImportanceLayer(
                 500,
                 0.0,
             );
 
-            if (!result) {
+            if (!result || !result.graphologyLayout) {
                 console.warn(
-                    "[TopicGraphView] No importance layer data available",
+                    "[TopicGraphView] No layout data available in importance layer",
                 );
                 return this.createEmptyTopicGraph();
             }
 
-            console.log(`[TopicGraphView] Fetched global importance layer`);
-            if (result.metadata) {
-                console.log(`[TopicGraphView] Metadata:`, result.metadata);
-            }
-            const transformedData = this.transformImportanceLayerData(result);
+            console.log(
+                `[TopicGraphView] Fetched optimized layout-only importance layer with ${result.graphologyLayout.elements?.length || 0} elements`,
+            );
+            const transformedData = this.transformLayoutOnlyData(result);
             return transformedData;
         } catch (error) {
             console.error(
@@ -228,48 +250,32 @@ class TopicGraphView {
     }
 
     /**
-     * Transform importance layer data to visualization format
+     * Transform layout-only data to visualization format (Phase 1 optimization)
      */
-    private transformImportanceLayerData(data: any): any {
-        if (!data.topics) {
+    private transformLayoutOnlyData(data: any): any {
+        if (!data.graphologyLayout || !data.graphologyLayout.elements) {
             return this.createEmptyTopicGraph();
         }
 
-        const inputTopics = data.topics || [];
+        console.log(
+            `[TopicGraphView] Using optimized layout-only contract with graphology preset layout (${data.graphologyLayout.elements?.length || 0} elements)`,
+        );
 
-        const topics = inputTopics.map((topic: any) => ({
-            id: topic.topicId,
-            name: topic.topicName,
-            level: topic.level,
-            parentId: topic.parentTopicId,
-            confidence: topic.confidence || 0.7,
-            keywords: this.parseKeywords(topic.keywords),
-            entityReferences: topic.entityReferences || [],
-            childCount: this.countChildren(topic.topicId, inputTopics),
-            importance: topic.importance || 0.5,
-        }));
-
-        const relationships = data.relationships || [];
-
+        // Phase 1: Use layout-only data - no need to process raw topics/relationships
         const result: any = {
             centerTopic: null,
-            topics,
-            relationships,
-            maxDepth: Math.max(...topics.map((t: any) => t.level), 0),
+            topics: [], // Empty as we rely on graphology elements
+            relationships: [], // Empty as we rely on graphology elements
+            maxDepth: 0,
             metadata: data.metadata,
+            presetLayout: {
+                elements: data.graphologyLayout.elements,
+                layoutDuration: data.graphologyLayout.layoutDuration,
+                avgSpacing: data.graphologyLayout.avgSpacing,
+                communityCount: data.graphologyLayout.communityCount,
+                metadata: data.metadata,
+            },
         };
-
-        if (data.metadata?.graphologyLayout) {
-            console.log(
-                `[TopicGraphView] Using graphology preset layout (${data.metadata.graphologyLayout.elements?.length || 0} elements)`,
-            );
-            result.presetLayout = {
-                elements: data.metadata.graphologyLayout.elements,
-                layoutDuration: data.metadata.graphologyLayout.layoutDuration,
-                avgSpacing: data.metadata.graphologyLayout.avgSpacing,
-                communityCount: data.metadata.graphologyLayout.communityCount,
-            };
-        }
 
         return result;
     }
@@ -820,6 +826,9 @@ class TopicGraphView {
 
         this.openSidebar();
 
+        // Focus on the clicked topic node
+        this.focusOnTopic(topic.id);
+
         const sidebarContent = document.getElementById("sidebarContent")!;
         sidebarContent.innerHTML = `
             <div class="topic-details">
@@ -858,9 +867,6 @@ class TopicGraphView {
                 </div>
 
                 <div class="topic-actions">
-                    <button class="btn btn-sm btn-primary" data-action="expand" data-topic-id="${topic.id}">
-                        <i class="bi bi-plus-square"></i> Expand
-                    </button>
                     <button class="btn btn-sm btn-outline-primary" data-action="focus" data-topic-id="${topic.id}">
                         <i class="bi bi-bullseye"></i> Focus
                     </button>
@@ -972,14 +978,62 @@ class TopicGraphView {
             return;
         }
 
-        const results = this.visualizer.searchTopics(this.state.searchQuery);
+        this.handleTopicNavigation(this.state.searchQuery.trim());
+    }
+
+    private handleTopicNavigation(query: string): void {
+        if (!this.visualizer) return;
+
+        // First try to find exact match
+        const exactMatch = this.findTopicByExactName(query);
+        if (exactMatch) {
+            // Show details and focus on the exact match
+            this.showTopicDetails(exactMatch);
+            this.updateBreadcrumb(exactMatch);
+            this.showNotification(`Found topic: "${exactMatch.name}"`);
+            this.clearUrlParameter();
+            return;
+        }
+
+        // Fall back to search results
+        const results = this.visualizer.searchTopics(query);
         const topicIds = results.map((topic) => topic.id);
 
         this.visualizer.highlightSearchResults(topicIds);
 
-        // Show notification with results count
-        this.showNotification(
-            `Found ${results.length} topics matching "${this.state.searchQuery}"`,
+        if (results.length === 1) {
+            // If exactly one result, automatically show details and focus
+            this.showTopicDetails(results[0]);
+            this.updateBreadcrumb(results[0]);
+            this.showNotification(`Found topic: "${results[0].name}"`);
+            this.clearUrlParameter();
+        } else if (results.length > 1) {
+            // Multiple results - just highlight and show count
+            this.showNotification(
+                `Found ${results.length} topics matching "${query}". Click on a highlighted topic to view details.`,
+            );
+        } else {
+            // No results found
+            this.showNotification(`No topics found matching "${query}"`);
+        }
+    }
+
+    private clearUrlParameter(): void {
+        // Clear the topic parameter from URL after successful navigation
+        const url = new URL(window.location.href);
+        url.searchParams.delete("topic");
+        window.history.replaceState({}, "", url.toString());
+    }
+
+    private findTopicByExactName(name: string): any | null {
+        if (!this.visualizer || !this.lastLoadedData?.topics) return null;
+
+        // Case-insensitive exact match
+        const lowerName = name.toLowerCase();
+        return (
+            this.lastLoadedData.topics.find(
+                (topic: any) => topic.name.toLowerCase() === lowerName,
+            ) || null
         );
     }
 
@@ -993,8 +1047,6 @@ class TopicGraphView {
             stats.visibleTopics.toString();
         document.getElementById("maxDepth")!.textContent =
             stats.maxDepth.toString();
-        document.getElementById("expandedCount")!.textContent =
-            stats.expandedNodes.length.toString();
     }
 
     private updateBreadcrumb(topic: any): void {
@@ -1078,11 +1130,6 @@ class TopicGraphView {
         this.updateBreadcrumb({ name: "All Topics" });
     }
 
-    public expandTopic(topicId: string): void {
-        this.visualizer?.toggleTopicExpansion(topicId);
-        this.updateGraphStats();
-    }
-
     public focusOnTopic(topicId: string): void {
         this.visualizer?.focusOnTopic(topicId);
     }
@@ -1115,11 +1162,41 @@ class TopicGraphView {
     private openSidebar(): void {
         this.state.sidebarOpen = true;
         this.sidebar.classList.remove("collapsed");
+
+        // Force resize to recalculate click coordinates after sidebar layout change
+        if (this.visualizer) {
+            setTimeout(() => {
+                if (this.visualizer) {
+                    this.visualizer.resize();
+                    // Force a second resize after DOM has fully updated
+                    setTimeout(() => {
+                        if (this.visualizer) {
+                            this.visualizer.resize();
+                        }
+                    }, 50);
+                }
+            }, 100);
+        }
     }
 
     private closeSidebar(): void {
         this.state.sidebarOpen = false;
         this.sidebar.classList.add("collapsed");
+
+        // Force resize to recalculate click coordinates after sidebar layout change
+        if (this.visualizer) {
+            setTimeout(() => {
+                if (this.visualizer) {
+                    this.visualizer.resize();
+                    // Force a second resize after DOM has fully updated
+                    setTimeout(() => {
+                        if (this.visualizer) {
+                            this.visualizer.resize();
+                        }
+                    }, 50);
+                }
+            }, 100);
+        }
     }
 
     private escapeHtml(text: string): string {

@@ -495,37 +495,37 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getAllRelationships(): Promise<any[]> {
-        const result = await this.sendMessage<{ relationships?: any[] }>({
-            type: "getAllRelationships",
+    async getGlobalGraphLayoutData(parameters: {
+        maxNodes?: number;
+        includeConnectivity?: boolean;
+    }): Promise<any> {
+        return this.sendMessage({
+            type: "getGlobalGraphLayoutData",
+            parameters,
         });
-        return result?.relationships || [];
     }
 
-    async getAllCommunities(): Promise<any[]> {
-        const result = await this.sendMessage<{ communities?: any[] }>({
-            type: "getAllCommunities",
-        });
-        return result?.communities || [];
-    }
-
-    async getAllEntitiesWithMetrics(): Promise<any[]> {
-        const result = await this.sendMessage<{ entities?: any[] }>({
-            type: "getAllEntitiesWithMetrics",
-        });
-        return result?.entities || [];
-    }
-
-    async getEntityNeighborhood(
-        entityId: string,
-        depth: number,
-        maxNodes: number,
-    ): Promise<any> {
+    async getEntityNeighborhood(parameters: {
+        entityId: string;
+        depth?: number;
+        maxNodes?: number;
+    }): Promise<any> {
         return this.sendMessage({
             type: "getEntityNeighborhood",
-            entityId: entityId,
-            depth: depth,
-            maxNodes: maxNodes,
+            ...parameters,
+        });
+    }
+
+    async getEntityNeighborhoodLayoutData(
+        entityId: string,
+        depth?: number,
+        maxNodes?: number,
+    ): Promise<any> {
+        return this.sendMessage({
+            type: "getEntityNeighborhoodLayoutData",
+            entityId,
+            depth,
+            maxNodes,
         });
     }
 

@@ -5,6 +5,10 @@
 import { EntityGraphVisualizer } from "./entityGraphVisualizer.js";
 import { EntitySidebar } from "./entitySidebar.js";
 import { createExtensionService } from "./knowledgeUtilities";
+import {
+    GraphDataProvider,
+    GraphDataProviderImpl,
+} from "./graphDataProvider.js";
 
 /**
  * Main class for the Entity Graph View page
@@ -28,6 +32,7 @@ class EntityGraphView {
     private extensionService: any;
     private currentEntity: string | null = null;
     private currentViewMode: ViewMode = { type: "global" };
+    private graphDataProvider: GraphDataProvider;
 
     // Navigation history management
     private navigationHistory: NavigationState[] = [];
@@ -41,6 +46,10 @@ class EntityGraphView {
             // Initialize services with appropriate extension service based on environment
             this.extensionService = createExtensionService();
 
+            // Initialize Graph data provider for direct storage access
+            this.graphDataProvider = new GraphDataProviderImpl(
+                this.extensionService,
+            );
             console.log(
                 "Services initialized with Chrome extension connection",
             );
@@ -69,7 +78,8 @@ class EntityGraphView {
             console.log("Creating visualizer...");
             this.visualizer = new EntityGraphVisualizer(graphContainer);
 
-            // Hierarchical loading now handled by processed API endpoints
+            // Set up hierarchical loading
+            this.visualizer.setGraphDataProvider(this.graphDataProvider);
 
             // Set up UI callbacks
             this.visualizer.setInstanceChangeCallback(() => {
@@ -169,7 +179,10 @@ class EntityGraphView {
         // Entity click navigation
         this.visualizer.onEntityClick((entityData) => {
             if (this.currentViewMode.type === "global") {
+                // Show entity details in sidebar
                 this.showEntityDetails(entityData.name);
+                // Focus on the clicked node
+                this.focusOnEntity(entityData.name);
             } else {
                 this.navigateToEntity(entityData.name);
             }
@@ -502,10 +515,8 @@ class EntityGraphView {
         try {
             console.log(`Fetching details for entity: ${entityName}`);
 
-            const sidebarElement = document.getElementById("entitySidebar");
-            if (sidebarElement) {
-                sidebarElement.style.display = "flex";
-            }
+            // Show sidebar using proper visibility method to trigger resize
+            this.updateSidebarVisibility(true);
 
             const basicEntityData = {
                 name: entityName,
@@ -540,6 +551,20 @@ class EntityGraphView {
             }
         } catch (error) {
             console.error("Failed to load entity details:", error);
+        }
+    }
+
+    /**
+     * Focus on a specific entity node in the graph
+     */
+    private focusOnEntity(entityName: string): void {
+        try {
+            if (this.visualizer && this.currentViewMode.type === "global") {
+                console.log(`Focusing on entity: ${entityName}`);
+                this.visualizer.focusOnEntityNode(entityName);
+            }
+        } catch (error) {
+            console.error(`Failed to focus on entity ${entityName}:`, error);
         }
     }
 
@@ -679,7 +704,12 @@ class EntityGraphView {
             }
 
             if (this.visualizer) {
-                setTimeout(() => this.visualizer.resize(), 100);
+                // Force resize after layout changes to recalculate click coordinates
+                setTimeout(() => {
+                    this.visualizer.resize();
+                    // Force a second resize after DOM has fully updated
+                    setTimeout(() => this.visualizer.resize(), 50);
+                }, 100);
             }
         }
     }
@@ -716,20 +746,21 @@ class EntityGraphView {
             console.log(
                 "[Navigation] Dual-instance not available - fetching data and building graph",
             );
-            const globalData = await this.loadGlobalGraphData();
+            const globalData = await this.loadGlobalGraphLayoutData();
 
-            if (globalData.statistics.totalEntities === 0) {
+            if (globalData.statistics?.totalElements === 0) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
                 return;
             }
 
+            // Phase 3: Use layout-only data directly
             await this.visualizer.loadGlobalGraph(globalData);
 
             this.hideGraphLoading();
 
             console.log(
-                `Loaded global graph: ${globalData.statistics.totalEntities} entities, ${globalData.statistics.totalRelationships} relationships, ${globalData.statistics.totalCommunities} communities`,
+                `Loaded global graph: ${globalData.statistics?.totalElements} elements, ${globalData.statistics?.totalCommunities} communities (layout time: ${globalData.statistics?.layoutDuration}ms)`,
             );
         } catch (error) {
             console.error("Failed to load global view:", error);
@@ -738,44 +769,41 @@ class EntityGraphView {
         }
     }
 
-    private async loadGlobalGraphData(): Promise<any> {
-        // Use the processed API that includes proper relationship types and filtering
-        const globalGraphResult =
-            await this.extensionService.getGlobalImportanceLayer();
+    /**
+     * Phase 3: Load global graph using layout-only data contract
+     */
+    private async loadGlobalGraphLayoutData(): Promise<any> {
+        try {
+            // Use new layout-only data contract
+            const layoutData =
+                await this.graphDataProvider.getGlobalGraphLayoutData();
 
-        // Process communities for color assignment (if they exist)
-        const processedCommunities = (globalGraphResult.communities || []).map(
-            (c: any) => ({
-                ...c,
-                entities:
-                    typeof c.entities === "string"
-                        ? JSON.parse(c.entities || "[]")
-                        : c.entities || [],
-                topics:
-                    typeof c.topics === "string"
-                        ? JSON.parse(c.topics || "[]")
-                        : c.topics || [],
-            }),
-        );
+            console.log(
+                `[EntityGraphView] Loaded layout-only data: ${layoutData.presetLayout.elements.length} elements`,
+            );
 
-        // Assign community colors to entities
-        const entitiesWithColors = this.assignCommunityColors(
-            globalGraphResult.entities,
-            processedCommunities,
-        );
-
-        // Return data in format expected by existing UI components
-        return {
-            communities: processedCommunities,
-            entities: entitiesWithColors,
-            relationships: globalGraphResult.relationships,
-            topics: [],
-            statistics: {
-                totalEntities: globalGraphResult.entities.length,
-                totalRelationships: globalGraphResult.relationships.length,
-                totalCommunities: processedCommunities.length,
-            },
-        };
+            // Transform to format expected by EntityGraphVisualizer
+            return {
+                presetLayout: layoutData.presetLayout,
+                centerEntity: layoutData.centerEntity,
+                // Include metadata for statistics display
+                statistics: {
+                    totalElements: layoutData.presetLayout.elements.length,
+                    totalCommunities:
+                        layoutData.presetLayout.communityCount || 0,
+                    layoutDuration: layoutData.presetLayout.layoutDuration || 0,
+                },
+            };
+        } catch (error) {
+            console.error(
+                "[EntityGraphView] Failed to load layout-only global data:",
+                error,
+            );
+            // Re-throw the error instead of falling back to raw data
+            throw new Error(
+                `Failed to load global graph layout: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+        }
     }
 
     /**
@@ -1037,15 +1065,15 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Load entity graph using processed API
+            // Load entity graph using HybridGraph data provider
             let graphData;
             try {
                 const neighborhoodResult =
-                    await this.extensionService.getEntityNeighborhood({
-                        entityId: entityName,
-                        depth: 2,
-                        maxNodes: 50,
-                    });
+                    await this.graphDataProvider.getEntityNeighborhood(
+                        entityName,
+                        2,
+                        50,
+                    );
 
                 // Also fetch search data for sidebar enrichment (topics, domains, facets, etc.)
                 let searchData: any = null;
@@ -1208,21 +1236,8 @@ class EntityGraphView {
                     const from =
                         r.from || (r as any).relatedEntity || "Unknown";
                     const to = r.to || graphData.centerEntity || "Unknown";
-
-                    // STRICT validation - no fallbacks for relationship type
-                    const type = r.type || (r as any).relationshipType;
-                    if (!type) {
-                        console.error(
-                            `[ENTITY GRAPH VIEW] ERROR: Missing relationship type in input:`,
-                            r,
-                        );
-                        continue; // Skip this relationship rather than crashing
-                    }
-
-                    // Log relationship type resolution for debugging
-                    console.log(
-                        `[ENTITY GRAPH VIEW] RELATIONSHIP: "${r.type}" / "${(r as any).relationshipType}" → "${type}"`,
-                    );
+                    const type =
+                        r.type || (r as any).relationshipType || "related";
 
                     // Check if both entities exist in the graph
                     if (!entityNames.has(from) || !entityNames.has(to)) {
@@ -1339,6 +1354,41 @@ class EntityGraphView {
                 // Show sidebar after successfully loading data
                 this.updateSidebarVisibility(true);
 
+                // Check if graphology layout is available and render the graph
+                const hasGraphologyLayout =
+                    graphData.metadata?.graphologyLayout;
+
+                if (hasGraphologyLayout) {
+                    console.log(
+                        `[EntityGraphView] Using graphology preset layout for entity "${entityName}" with ${graphData.metadata.graphologyLayout.elements?.length || 0} elements`,
+                    );
+                    const presetLayoutData = {
+                        presetLayout: {
+                            elements:
+                                graphData.metadata.graphologyLayout.elements,
+                            layoutDuration:
+                                graphData.metadata.graphologyLayout
+                                    .layoutDuration,
+                            avgSpacing:
+                                graphData.metadata.graphologyLayout.avgSpacing,
+                            communityCount:
+                                graphData.metadata.graphologyLayout
+                                    .communityCount,
+                        },
+                    };
+
+                    // Use loadGlobalGraph since it handles precomputed layouts
+                    await this.visualizer.loadGlobalGraph(presetLayoutData);
+                    console.log(
+                        `[EntityGraphView] Entity graph rendered successfully for "${entityName}"`,
+                    );
+                } else {
+                    console.warn(
+                        `[EntityGraphView] No graphology layout found in metadata for entity "${entityName}"`,
+                    );
+                    // Could fall back to showing just the sidebar without the graph
+                }
+
                 this.hideGraphLoading();
             } else {
                 this.hideGraphLoading();
@@ -1362,11 +1412,11 @@ class EntityGraphView {
 
             // Refresh data by re-fetching entity neighborhood
             const refreshedEntity =
-                await this.extensionService.getEntityNeighborhood({
-                    entityId: entityName,
-                    depth: 2,
-                    maxNodes: 50,
-                });
+                await this.graphDataProvider.getEntityNeighborhood(
+                    entityName,
+                    2,
+                    50,
+                );
 
             if (refreshedEntity && refreshedEntity.neighbors.length > 0) {
                 await this.loadRealEntityData(entityName);
@@ -1473,35 +1523,35 @@ class EntityGraphView {
         try {
             this.showGraphLoading();
 
-            // Get importance layer data (top 1000 most important nodes)
-            const importanceData =
-                await this.extensionService.getGlobalImportanceLayer({
-                    maxNodes: 1000,
-                });
+            // Get importance layer data (layout-only contract)
+            const layoutData =
+                await this.graphDataProvider.getGlobalImportanceLayer(1000);
 
-            // Check if graphology layout is available
-            const hasGraphologyLayout =
-                importanceData.metadata?.graphologyLayout;
-
-            if (!hasGraphologyLayout) {
+            if (
+                !layoutData.graphologyLayout ||
+                layoutData.graphologyLayout.elements.length === 0
+            ) {
                 this.hideGraphLoading();
                 this.showGraphEmpty();
                 return;
             }
 
             console.log(
-                `[EntityGraphView] Using graphology preset layout with community colors (${importanceData.metadata.graphologyLayout.elements?.length || 0} elements)`,
+                `[EntityGraphView] Using optimized layout-only contract with graphology preset layout (${layoutData.graphologyLayout.elements?.length || 0} elements)`,
             );
-            const presetLayout = {
-                elements: importanceData.metadata.graphologyLayout.elements,
-                layoutDuration:
-                    importanceData.metadata.graphologyLayout.layoutDuration,
-                avgSpacing: importanceData.metadata.graphologyLayout.avgSpacing,
-                communityCount:
-                    importanceData.metadata.graphologyLayout.communityCount,
+
+            // Phase 1: Use new optimized GraphLayoutResult structure
+            const layoutOnlyData = {
+                presetLayout: {
+                    elements: layoutData.graphologyLayout.elements,
+                    layoutDuration: layoutData.graphologyLayout.layoutDuration,
+                    avgSpacing: layoutData.graphologyLayout.avgSpacing,
+                    communityCount: layoutData.graphologyLayout.communityCount,
+                    metadata: layoutData.metadata,
+                },
             };
 
-            await this.visualizer.loadGlobalGraph(presetLayout);
+            await this.visualizer.loadGlobalGraph(layoutOnlyData);
             this.hideGraphLoading();
         } catch (error) {
             console.error(
