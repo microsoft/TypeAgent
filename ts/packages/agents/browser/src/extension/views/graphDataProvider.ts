@@ -31,20 +31,20 @@ interface GraphStatistics {
     lastUpdated: number;
 }
 
+interface GraphLayoutData {
+    presetLayout: {
+        elements: any[];
+        layoutDuration?: number;
+        communityCount?: number;
+        avgSpacing?: number;
+        metadata?: any;
+    };
+    centerEntity?: string;
+}
+
 // ===================================================================
 // RESULT INTERFACES
 // ===================================================================
-
-interface GlobalGraphResult {
-    entities: EntityNode[];
-    relationships: RelationshipEdge[];
-    communities: any[];
-    statistics: GraphStatistics;
-    metadata: {
-        source: "hybrid_storage";
-        timestamp: number;
-    };
-}
 
 interface EntityNeighborhoodResult {
     centerEntity: EntityNode;
@@ -58,26 +58,103 @@ interface EntityNeighborhoodResult {
     };
 }
 
+// Phase 1: Layout-only data contracts for optimization
+interface GraphLayoutResult {
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        totalEntitiesInSystem: number;
+        selectedEntityCount: number;
+        coveragePercentage: number;
+        importanceThreshold: number;
+        layer: string;
+        connectedComponents?: any;
+    };
+}
+
+interface TopicGraphLayoutResult {
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        totalTopicsInSystem: number;
+        selectedTopicCount: number;
+        layer: string;
+    };
+}
+
+interface EntityNeighborhoodLayoutResult {
+    graphologyLayout: {
+        elements: any[];
+        layoutDuration: number;
+        avgSpacing: number;
+        communityCount: number;
+    };
+    metadata: {
+        entityId: string;
+        queryDepth: number;
+        maxNodes: number;
+        actualNodes: number;
+        actualEdges: number;
+        layer: string;
+        source: string;
+    };
+}
+
 // ===================================================================
 // DATA PROVIDER INTERFACE
 // ===================================================================
 
 interface GraphDataProvider {
-    // Global graph access
-    getGlobalGraphData(): Promise<GlobalGraphResult>;
+    // Phase 3: Layout-only data contracts
+    getGlobalGraphLayoutData(): Promise<GraphLayoutData>;
 
-    // Entity neighborhood queries
+    // Entity neighborhood queries (legacy)
     getEntityNeighborhood(
         entityId: string,
         depth: number,
         maxNodes: number,
     ): Promise<EntityNeighborhoodResult>;
 
+    // Phase 3: Layout-only neighborhood data (legacy)
+    getEntityNeighborhoodLayoutData(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<GraphLayoutData>;
+
     // Statistics and metadata
     getGraphStatistics(): Promise<GraphStatistics>;
 
-    // Hierarchical partitioned loading methods
-    getGlobalImportanceLayer(maxNodes?: number): Promise<any>;
+    // Phase 1: Optimized layout-only methods
+    getGlobalImportanceLayer(maxNodes?: number): Promise<GraphLayoutResult>;
+    getGlobalImportanceLayoutData(
+        maxNodes?: number,
+    ): Promise<GraphLayoutResult>;
+    getTopicImportanceLayoutData(
+        maxNodes?: number,
+    ): Promise<TopicGraphLayoutResult>;
+
+    // Phase 2: Optimized entity neighborhood method
+    getEntityNeighborhoodLayoutDataOptimized(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<EntityNeighborhoodLayoutResult>;
+
+    // Hierarchical partitioned loading methods (legacy)
+    getViewportBasedNeighborhood(
+        centerEntity: string,
+        viewportNodeNames: string[],
+        maxNodes?: number,
+    ): Promise<any>;
     getImportanceStatistics(): Promise<any>;
 
     // Validation and health checks
@@ -90,113 +167,9 @@ interface GraphDataProvider {
 
 class GraphDataProviderImpl implements GraphDataProvider {
     private baseService: any;
-    private transformSampleCount: number = 0;
 
     constructor(baseService: any) {
         this.baseService = baseService;
-    }
-
-    async getGlobalGraphData(): Promise<GlobalGraphResult> {
-        const startTime = performance.now();
-
-        try {
-            // Use proper service methods instead of direct sendMessage calls
-            console.time("[GraphDataProvider] Get status");
-            const status = await this.baseService.getKnowledgeGraphStatus();
-            console.timeEnd("[GraphDataProvider] Get status");
-
-            const relationships = await this.baseService.getAllRelationships();
-            console.log(
-                `[GraphDataProvider] Fetched ${Array.isArray(relationships) ? relationships.length : 0} relationships`,
-            );
-
-            console.time("[GraphDataProvider] Get communities");
-            const communities = await this.baseService.getAllCommunities();
-            console.timeEnd("[GraphDataProvider] Get communities");
-            console.log(
-                `[GraphDataProvider] Fetched ${Array.isArray(communities) ? communities.length : 0} communities`,
-            );
-
-            console.time("[GraphDataProvider] Get entities with metrics");
-            const entitiesWithMetrics =
-                await this.baseService.getAllEntitiesWithMetrics();
-            console.timeEnd("[GraphDataProvider] Get entities with metrics");
-            console.log(
-                `[GraphDataProvider] Fetched ${Array.isArray(entitiesWithMetrics) ? entitiesWithMetrics.length : 0} entities`,
-            );
-
-            if (!entitiesWithMetrics || !relationships) {
-                throw new Error(
-                    "Invalid global graph data received from backend APIs",
-                );
-            }
-
-            // Transform data to UI format using existing backend data structure
-            const entities =
-                this.transformEntitiesToUIFormat(entitiesWithMetrics);
-            const transformedRelationships =
-                this.transformRelationshipsToUIFormat(relationships);
-
-            // Process communities
-            const processedCommunities = Array.isArray(communities)
-                ? communities.map((c: any) => ({
-                      ...c,
-                      entities:
-                          typeof c.entities === "string"
-                              ? JSON.parse(c.entities || "[]")
-                              : c.entities || [],
-                      topics:
-                          typeof c.topics === "string"
-                              ? JSON.parse(c.topics || "[]")
-                              : c.topics || [],
-                  }))
-                : [];
-
-            // Create statistics
-            const statistics: GraphStatistics = {
-                totalEntities: status?.entityCount || entities.length,
-                totalRelationships:
-                    status?.relationshipCount ||
-                    transformedRelationships.length,
-                averageDegree:
-                    entities.length > 0
-                        ? (transformedRelationships.length * 2) /
-                          entities.length
-                        : 0,
-                density:
-                    entities.length > 1
-                        ? transformedRelationships.length /
-                          ((entities.length * (entities.length - 1)) / 2)
-                        : 0,
-                communities:
-                    status?.communityCount || processedCommunities.length,
-                lastUpdated: Date.now(),
-            };
-
-            const queryTime = performance.now() - startTime;
-            console.log(
-                `[GraphDataProvider] Global graph loaded: ${entities.length} entities, ${transformedRelationships.length} relationships (${queryTime.toFixed(1)}ms)`,
-            );
-
-            return {
-                entities,
-                relationships: transformedRelationships,
-                communities: processedCommunities,
-                statistics,
-                metadata: {
-                    source: "hybrid_storage",
-                    timestamp: Date.now(),
-                },
-            };
-        } catch (error) {
-            console.error(
-                "[GraphDataProvider] Failed to fetch global graph data:",
-                error,
-            );
-            throw new Error(
-                `Global graph data fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-            );
-        }
     }
 
     async getEntityNeighborhood(
@@ -209,11 +182,11 @@ class GraphDataProviderImpl implements GraphDataProvider {
         try {
             // Use the proper service method for efficient neighborhood retrieval
             const neighborhoodData =
-                await this.baseService.getEntityNeighborhood(
+                await this.baseService.getEntityNeighborhood({
                     entityId,
                     depth,
                     maxNodes,
-                );
+                });
 
             if (!neighborhoodData || neighborhoodData.error) {
                 console.warn(
@@ -349,38 +322,233 @@ class GraphDataProviderImpl implements GraphDataProvider {
     }
 
     // ===================================================================
+    // PHASE 3: LAYOUT-ONLY DATA CONTRACT METHODS
+    // ===================================================================
+
+    async getGlobalGraphLayoutData(): Promise<GraphLayoutData> {
+        try {
+            // Use the new optimized server method that returns only graphology layout
+            const layoutResult =
+                await this.baseService.getGlobalGraphLayoutData({
+                    maxNodes: 1000,
+                    includeConnectivity: true,
+                });
+
+            if (
+                !layoutResult.graphologyLayout ||
+                !layoutResult.graphologyLayout.elements
+            ) {
+                throw new Error(
+                    "No graphology layout found in server response",
+                );
+            }
+
+            console.log(
+                `[GraphDataProvider] Using optimized global graph layout: ${layoutResult.graphologyLayout.elements.length} elements`,
+            );
+
+            return {
+                presetLayout: {
+                    elements: layoutResult.graphologyLayout.elements,
+                    layoutDuration:
+                        layoutResult.graphologyLayout.layoutDuration || 0,
+                    communityCount:
+                        layoutResult.graphologyLayout.communityCount || 0,
+                    avgSpacing: layoutResult.graphologyLayout.avgSpacing || 100,
+                    metadata: {
+                        source: "server_graphology_optimized",
+                        algorithm:
+                            layoutResult.graphologyLayout.algorithm ||
+                            "force-directed",
+                        timestamp: Date.now(),
+                        totalEntitiesInSystem:
+                            layoutResult.metadata.totalEntitiesInSystem,
+                        selectedEntityCount:
+                            layoutResult.metadata.selectedEntityCount,
+                        coveragePercentage:
+                            layoutResult.metadata.coveragePercentage,
+                    },
+                },
+            };
+        } catch (error) {
+            console.error(
+                "[GraphDataProvider] Failed to fetch optimized global graph layout:",
+                error,
+            );
+            throw new Error(
+                `Global graph layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+        }
+    }
+
+    async getEntityNeighborhoodLayoutData(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<GraphLayoutData> {
+        try {
+            // Get the raw neighborhood data which should include graphologyLayout from server
+            const rawData = await this.getEntityNeighborhood(
+                entityId,
+                depth,
+                maxNodes,
+            );
+
+            // Extract the pre-computed graphology layout
+            const graphologyLayout = (rawData as any).graphologyLayout;
+
+            if (!graphologyLayout || !graphologyLayout.elements) {
+                throw new Error(
+                    "No graphology layout found in neighborhood response - server may need to be updated",
+                );
+            }
+
+            console.log(
+                `[GraphDataProvider] Using server-computed neighborhood layout: ${graphologyLayout.elements.length} elements`,
+            );
+
+            return {
+                presetLayout: {
+                    elements: graphologyLayout.elements,
+                    layoutDuration: graphologyLayout.layoutDuration || 0,
+                    communityCount: 0, // Neighborhoods typically don't have communities
+                    avgSpacing: graphologyLayout.avgSpacing || 80,
+                    metadata: {
+                        source: "server_graphology",
+                        algorithm:
+                            graphologyLayout.algorithm || "force-directed",
+                        timestamp: Date.now(),
+                    },
+                },
+                centerEntity: entityId,
+            };
+        } catch (error) {
+            console.error(
+                "[GraphDataProvider] Failed to fetch neighborhood layout:",
+                error,
+            );
+            throw new Error(
+                `Neighborhood layout fetch failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            );
+        }
+    }
+
+    // ===================================================================
     // HIERARCHICAL PARTITIONED LOADING METHODS
     // ===================================================================
 
-    async getGlobalImportanceLayer(maxNodes: number = 5000): Promise<any> {
+    async getGlobalImportanceLayer(
+        maxNodes: number = 5000,
+    ): Promise<GraphLayoutResult> {
         try {
             const result = await this.baseService.getGlobalImportanceLayer(
                 maxNodes,
                 true,
             );
 
-            const transformedEntities = this.transformEntitiesToUIFormat(
-                result.entities || [],
-            );
+            // Server now returns layout-only contract: {graphologyLayout, metadata}
+            // No need to transform entities/relationships as they're not included
 
-            const transformedRelationships =
-                this.transformRelationshipsToUIFormat(
-                    result.relationships || [],
-                );
-
-            const finalResult = {
-                entities: transformedEntities,
-                relationships: transformedRelationships,
-                metadata: {
-                    ...result.metadata,
-                    source: "global_importance_layer",
-                },
-            };
-
-            return finalResult;
+            return result;
         } catch (error) {
             console.error(
                 "[GraphDataProvider] Error fetching global importance layer:",
+                error,
+            );
+            throw error;
+        }
+    }
+
+    async getGlobalImportanceLayoutData(
+        maxNodes: number = 5000,
+    ): Promise<GraphLayoutResult> {
+        // Alias for the optimized method - same implementation
+        return this.getGlobalImportanceLayer(maxNodes);
+    }
+
+    async getTopicImportanceLayoutData(
+        maxNodes: number = 500,
+    ): Promise<TopicGraphLayoutResult> {
+        try {
+            const result =
+                await this.baseService.getTopicImportanceLayer(maxNodes);
+
+            // Server now returns layout-only contract: {graphologyLayout, metadata}
+            return result;
+        } catch (error) {
+            console.error(
+                "[GraphDataProvider] Error fetching topic importance layer:",
+                error,
+            );
+            throw error;
+        }
+    }
+
+    async getEntityNeighborhoodLayoutDataOptimized(
+        entityId: string,
+        depth: number,
+        maxNodes: number,
+    ): Promise<EntityNeighborhoodLayoutResult> {
+        try {
+            const result =
+                await this.baseService.getEntityNeighborhoodLayoutData(
+                    entityId,
+                    depth,
+                    maxNodes,
+                );
+
+            // Server returns optimized layout-only contract: {graphologyLayout, metadata}
+            return result;
+        } catch (error) {
+            console.error(
+                "[GraphDataProvider] Error fetching optimized entity neighborhood layout:",
+                error,
+            );
+            throw error;
+        }
+    }
+
+    async getViewportBasedNeighborhood(
+        centerEntity: string,
+        viewportNodeNames: string[],
+        maxNodes: number = 5000,
+    ): Promise<any> {
+        try {
+            const result = await this.baseService.getViewportBasedNeighborhood(
+                centerEntity,
+                viewportNodeNames,
+                maxNodes,
+                {
+                    importanceWeighting: true,
+                    includeGlobalContext: true,
+                    exploreFromAllViewportNodes: true,
+                    minDepthFromViewport: 1,
+                },
+            );
+
+            if (!result) {
+                console.warn(
+                    "[GraphDataProvider] Received null result from getViewportBasedNeighborhood service",
+                );
+                throw new Error("Service returned null result");
+            }
+
+            return {
+                entities: this.transformEntitiesToUIFormat(
+                    result.entities || [],
+                ),
+                relationships: this.transformRelationshipsToUIFormat(
+                    result.relationships || [],
+                ),
+                metadata: {
+                    ...result.metadata,
+                    source: "viewport_based_neighborhood",
+                    viewportAnchorCount: viewportNodeNames.length,
+                },
+            };
+        } catch (error) {
+            console.error(
+                "[GraphDataProvider] Error fetching viewport-based neighborhood:",
                 error,
             );
             throw error;
@@ -490,20 +658,6 @@ class GraphDataProviderImpl implements GraphDataProvider {
             return [];
         }
 
-        // DEBUG: Log sample relationships before transformation
-        const sampleRels = hybridRelationships.slice(0, 10);
-        console.log(
-            `[GRAPH DATA PROVIDER] Sample ${sampleRels.length} relationships before transformation:`,
-        );
-        sampleRels.forEach((rel, i) => {
-            const from = rel.fromEntity || rel.source || rel.from;
-            const to = rel.toEntity || rel.target || rel.to;
-            const type = rel.relationshipType || rel.type;
-            console.log(
-                `  ${i + 1}. ${from} -[${type}]-> ${to} (confidence: ${rel.confidence})`,
-            );
-        });
-
         const transformed = hybridRelationships
             .map((rel) => {
                 try {
@@ -516,76 +670,19 @@ class GraphDataProviderImpl implements GraphDataProvider {
                     return null;
                 }
             })
-            .filter((rel) => rel !== null)
-            .filter((rel) => rel!.from !== rel!.to) as RelationshipEdge[]; // Filter out self-referential edges
-
-        console.log(
-            `[GRAPH DATA PROVIDER] Filtered out self-referential edges: ${hybridRelationships.length} -> ${transformed.length}`,
-        );
-
-        // DEBUG: Log sample relationships after transformation
-        const sampleTransformed = transformed.slice(0, 10);
-        console.log(
-            `[GRAPH DATA PROVIDER] Sample ${sampleTransformed.length} relationships after transformation:`,
-        );
-        sampleTransformed.forEach((rel, i) => {
-            console.log(
-                `  ${i + 1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`,
-            );
-        });
-
-        // DEBUG: Log sample non-self-referential relationships after transformation
-        const nonSelfTransformed = transformed
-            .filter((rel) => rel.from !== rel.to)
-            .slice(0, 10);
-        if (nonSelfTransformed.length > 0) {
-            console.log(
-                `[GRAPH DATA PROVIDER] Sample ${nonSelfTransformed.length} non-self-referential relationships after transformation:`,
-            );
-            nonSelfTransformed.forEach((rel, i) => {
-                console.log(
-                    `  ${i + 1}. ${rel.from} -[${rel.type}]-> ${rel.to} (strength: ${rel.strength})`,
-                );
-            });
-        } else {
-            console.log(
-                `[GRAPH DATA PROVIDER] No non-self-referential relationships found in sample.`,
-            );
-        }
+            .filter((rel) => rel !== null) as RelationshipEdge[];
 
         return transformed;
     }
 
     private transformRelationshipToUIFormat(hybridRel: any): RelationshipEdge {
-        // Log complete input object for analysis (first 10 samples only)
-        if (!this.transformSampleCount) {
-            this.transformSampleCount = 0;
-        }
-        if (this.transformSampleCount < 10) {
-            console.log(
-                `[GRAPH DATA PROVIDER] INPUT SAMPLE ${this.transformSampleCount + 1}:`,
-                JSON.stringify(hybridRel, null, 2),
-            );
-            this.transformSampleCount++;
-        }
-
         // Handle the actual backend relationship field structure
         const fromEntity =
             hybridRel.fromEntity || hybridRel.from || hybridRel.source || "";
         const toEntity =
             hybridRel.toEntity || hybridRel.to || hybridRel.target || "";
-
-        // STRICT validation - no fallbacks for relationship type
-        const relType = hybridRel.relationshipType || hybridRel.type;
-        if (!relType) {
-            console.error(
-                `[GRAPH DATA PROVIDER] ERROR: Missing relationship type in input:`,
-                hybridRel,
-            );
-            throw new Error(
-                `Relationship missing required type field: ${JSON.stringify(hybridRel)}`,
-            );
-        }
+        const relType =
+            hybridRel.relationshipType || hybridRel.type || "connected";
 
         const strength = this.normalizeStrength(
             hybridRel.confidence ||
@@ -643,48 +740,17 @@ class GraphDataProviderImpl implements GraphDataProvider {
         if (isNaN(num)) return 0.5;
         return Math.max(0.0, Math.min(1.0, num));
     }
-
-    private calculateStatistics(
-        entities: EntityNode[],
-        relationships: RelationshipEdge[],
-    ): GraphStatistics {
-        const totalEntities = entities.length;
-        const totalRelationships = relationships.length;
-
-        // Calculate average degree (edges per node)
-        const averageDegree =
-            totalEntities > 0 ? (totalRelationships * 2) / totalEntities : 0;
-
-        // Calculate graph density
-        const maxPossibleEdges = (totalEntities * (totalEntities - 1)) / 2;
-        const density =
-            maxPossibleEdges > 0 ? totalRelationships / maxPossibleEdges : 0;
-
-        // Count communities (from entity properties)
-        const communitySet = new Set();
-        entities.forEach((entity) => {
-            if (entity.properties.community) {
-                communitySet.add(entity.properties.community);
-            }
-        });
-
-        return {
-            totalEntities,
-            totalRelationships,
-            averageDegree,
-            density,
-            communities: communitySet.size,
-            lastUpdated: Date.now(),
-        };
-    }
 }
 
 export {
     GraphDataProvider as GraphDataProvider,
     GraphDataProviderImpl as GraphDataProviderImpl,
-    GlobalGraphResult,
     EntityNeighborhoodResult,
     EntityNode,
     RelationshipEdge,
     GraphStatistics,
+    GraphLayoutResult,
+    TopicGraphLayoutResult,
+    EntityNeighborhoodLayoutResult,
+    GraphLayoutData,
 };

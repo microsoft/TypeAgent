@@ -29,12 +29,8 @@ import {
     buildKnowledgeGraph,
     rebuildKnowledgeGraph,
     mergeTopicHierarchies,
-    getAllRelationships,
-    getAllCommunities,
-    getAllEntitiesWithMetrics,
     getEntityNeighborhood,
     getGlobalImportanceLayer,
-    getViewportBasedNeighborhood,
     getTopicImportanceLayer,
     getImportanceStatistics,
     getTopicMetrics,
@@ -95,18 +91,10 @@ export async function handleKnowledgeAction(
             return await rebuildKnowledgeGraph(parameters, context);
         case "mergeTopicHierarchies":
             return await mergeTopicHierarchies(parameters, context);
-        case "getAllRelationships":
-            return await getAllRelationships(parameters, context);
-        case "getAllCommunities":
-            return await getAllCommunities(parameters, context);
-        case "getAllEntitiesWithMetrics":
-            return await getAllEntitiesWithMetrics(parameters, context);
         case "getEntityNeighborhood":
             return await getEntityNeighborhood(parameters, context);
         case "getGlobalImportanceLayer":
             return await getGlobalImportanceLayer(parameters, context);
-        case "getViewportBasedNeighborhood":
-            return await getViewportBasedNeighborhood(parameters, context);
         case "getImportanceStatistics":
             return await getImportanceStatistics(parameters, context);
         case "getTopicImportanceLayer":

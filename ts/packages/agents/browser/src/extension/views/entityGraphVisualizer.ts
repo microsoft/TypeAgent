@@ -10,17 +10,16 @@ interface EntityData {
     confidence: number;
 }
 
-interface RelationshipData {
-    from: string;
-    to: string;
-    type: string;
-    strength: number;
-}
-
-interface GraphData {
-    centerEntity?: string;
-    entities: EntityData[];
-    relationships: RelationshipData[];
+// Simplified layout-only data contract
+interface GraphLayoutData {
+    presetLayout: {
+        elements: any[]; // Cytoscape elements with positions
+        layoutDuration?: number; // Server layout computation time
+        communityCount?: number; // Number of communities detected
+        avgSpacing?: number; // Average node spacing
+        metadata?: any; // Additional layout metadata
+    };
+    centerEntity?: string; // For focusing on specific entity
 }
 
 type ViewMode =
@@ -36,30 +35,20 @@ type ViewMode =
 export class EntityGraphVisualizer {
     protected cy: any = null;
     private container: HTMLElement;
-    protected currentLayout: string = "force";
     private entityClickCallback: ((entity: EntityData) => void) | null = null;
-    private relationshipSampleCount: number = 0;
 
     // View mode and data management
     private viewMode: ViewMode = "global";
-    private globalGraphData: any = null;
+    private globalGraphData: GraphLayoutData | null = null; // Layout-only data
 
-    // Single-instance (global only) - Phase 3: Detail view removed
     private globalInstance: any = null;
     private currentActiveView: "global" = "global";
     private onInstanceChangeCallback?: () => void;
     private zoomHandlersSetup: boolean = false;
 
-    private layoutCache: Map<string, any> = new Map();
     private zoomTimer: any = null;
-    private isNodeBeingDragged: boolean = false;
-    private layoutUpdateTimer: any = null;
     private selectedNodes: Set<string> = new Set();
     private contextMenu: HTMLElement | null = null;
-
-    // Cursor tracking for center node selection
-    private lastCursorPosition: { x: number; y: number } | null = null;
-    private isCursorOverMap: boolean = false;
 
     // Investigation tracking
     private zoomEventCount: number = 0;
@@ -97,7 +86,8 @@ export class EntityGraphVisualizer {
      */
     private getOptimalRendererConfig(): any {
         if (this.detectWebGLSupport()) {
-            const nodeCount = this.globalGraphData?.elements?.length || 0;
+            // Use preset layout element count instead of raw entity count
+            const nodeCount = this.cy ? this.cy.nodes().length : 0;
 
             // Configure WebGL settings based on graph size
             let webglConfig = {
@@ -398,16 +388,8 @@ export class EntityGraphVisualizer {
             clearTimeout(this.zoomTimer);
             this.zoomTimer = null;
         }
-        if (this.layoutUpdateTimer) {
-            clearTimeout(this.layoutUpdateTimer);
-            this.layoutUpdateTimer = null;
-        }
-
-        // Reset state flags
-        this.isNodeBeingDragged = false;
 
         // Clear cached data
-        this.layoutCache.clear();
         this.selectedNodes.clear();
 
         // Reset investigation tracking
@@ -878,16 +860,6 @@ export class EntityGraphVisualizer {
             this.hideNodeTooltip();
             this.clearNeighborhoodHighlights();
         });
-
-        // Node dragging with auto-layout
-        instance.on("grab", "node", () => {
-            this.isNodeBeingDragged = true;
-        });
-
-        instance.on("free", "node", () => {
-            this.isNodeBeingDragged = false;
-            this.scheduleLayoutUpdate();
-        });
     }
 
     private setupEdgeInteractions(): void {
@@ -1017,13 +989,39 @@ export class EntityGraphVisualizer {
 
     /**
      * Load global importance layer into global instance (Triple-Instance Architecture)
+     * Phase 3: Now accepts GraphLayoutData for optimized data transfer
+     * Phase 3 Transition: Also supports legacy data format during migration
      */
-    public async loadGlobalGraph(presetLayout: any): Promise<void> {
+    public async loadGlobalGraph(
+        graphData: GraphLayoutData | any,
+    ): Promise<void> {
         // Clear all neighborhood state when loading global data
         this.clearNeighborhoodState();
 
+        // Phase 3 Transition: Handle both new layout-only format and legacy format
+        let layoutData: GraphLayoutData;
+
+        if (graphData.presetLayout?.elements) {
+            // New format: GraphLayoutData with presetLayout structure
+            layoutData = graphData as GraphLayoutData;
+        } else if (graphData.entities && graphData.relationships) {
+            // Legacy format: Has raw entities/relationships but no preset layout
+            console.warn(
+                "[EntityGraphVisualizer] Received legacy data format - server should provide preset layout",
+            );
+            throw new Error(
+                "Legacy data format no longer supported - server must provide GraphLayoutData with presetLayout",
+            );
+        } else {
+            // Invalid format
+            const errorMsg =
+                "Invalid data format - must provide GraphLayoutData with presetLayout.elements";
+            console.error(`[EntityGraphVisualizer] ${errorMsg}`);
+            throw new Error(errorMsg);
+        }
+
         // Require graphology preset layout - no fallback modes
-        if (!presetLayout?.elements) {
+        if (!layoutData.presetLayout?.elements) {
             const errorMsg =
                 "Graphology layout data is required but not available";
             console.error(`[EntityGraphVisualizer] ${errorMsg}`);
@@ -1031,12 +1029,12 @@ export class EntityGraphVisualizer {
         }
 
         console.log(
-            `[EntityGraphVisualizer] Loading graph using graphology preset layout (${presetLayout.elements.length} elements)`,
+            `[EntityGraphVisualizer] Loading graph using graphology preset layout (${layoutData.presetLayout.elements.length} elements)`,
         );
 
         // Clear existing elements and add graphology elements directly
         this.cy.elements().remove();
-        this.cy.add(presetLayout.elements);
+        this.cy.add(layoutData.presetLayout.elements);
 
         // Apply preset layout to use the positions from graphology without any computation
         this.cy
@@ -1049,30 +1047,15 @@ export class EntityGraphVisualizer {
             .run();
 
         // Store global data reference
-        this.globalGraphData = presetLayout;
+        this.globalGraphData = layoutData;
 
         console.log(
-            `[EntityGraphVisualizer] Loaded ${presetLayout.elements.length} pre-positioned elements from server`,
+            `[EntityGraphVisualizer] Loaded ${layoutData.presetLayout.elements.length} pre-positioned elements from server`,
         );
     }
 
     private setupContainerInteractions(): void {
         // Set up container-level interactions that apply to all instances
-
-        // Track cursor position and map hover state for smart center node selection
-        this.container.addEventListener("mousemove", (event) => {
-            // Store cursor position relative to container, not screen
-            const containerRect = this.container.getBoundingClientRect();
-            this.lastCursorPosition = {
-                x: event.clientX - containerRect.left,
-                y: event.clientY - containerRect.top,
-            };
-            this.isCursorOverMap = true;
-        });
-
-        this.container.addEventListener("mouseleave", () => {
-            this.isCursorOverMap = false;
-        });
 
         // Custom smooth zoom wheel handler to prevent abrupt zoom changes
         this.container.addEventListener(
@@ -1456,31 +1439,21 @@ export class EntityGraphVisualizer {
     }
 
     /**
-     * Apply layout to the graph
+     * Change the current layout (simplified for preset-only)
      */
-    private applyLayout(layoutName: string): void {
-        if (!this.cy) return;
-
-        // Always use preset positions from graphology - no client-side layout computation
+    changeLayout(): void {
         console.log(
-            "[EntityGraphVisualizer] Skipping layout calculation, using preset positions from graphology",
+            `[Layout] Layout changes not supported with preset layouts from server`,
         );
+        this.cy?.fit();
     }
 
     /**
-     * Change the current layout
-     */
-    changeLayout(layoutName: string): void {
-        this.currentLayout = layoutName;
-        this.applyLayout(layoutName);
-    }
-
-    /**
-     * Re-run the current layout algorithm
+     * Re-run the current layout algorithm (simplified to re-fit)
      */
     reRunLayout(): void {
-        console.log(`[Layout] Re-running ${this.currentLayout} layout`);
-        this.applyLayout(this.currentLayout);
+        console.log(`[Layout] Re-running layout simplified to fit view`);
+        this.cy?.fit();
     }
 
     /**
@@ -1689,7 +1662,7 @@ export class EntityGraphVisualizer {
         return {
             nodes: nodes,
             edges: edges,
-            layout: this.currentLayout,
+            layout: "preset",
             zoom: this.cy.zoom(),
             pan: { x: pan.x, y: pan.y },
             exportedAt: new Date().toISOString(),
@@ -1698,10 +1671,10 @@ export class EntityGraphVisualizer {
     }
 
     /**
-     * Get current layout
+     * Get current layout (always preset with server-side layouts)
      */
     getCurrentLayout(): string {
-        return this.currentLayout;
+        return "preset";
     }
 
     /**
@@ -1709,8 +1682,14 @@ export class EntityGraphVisualizer {
      */
     resize(): void {
         if (this.cy) {
-            this.cy.resize();
-            // Don't call fit() here - it resets zoom when sidebar opens/closes
+            // Force DOM to update before resize
+            requestAnimationFrame(() => {
+                if (this.cy) {
+                    this.cy.resize();
+                    // Force coordinate system recalculation
+                    this.cy.forceRender();
+                }
+            });
         }
     }
 
@@ -1834,6 +1813,26 @@ export class EntityGraphVisualizer {
         this.showLabelsForEntityNeighborhood(node.data("name"), 2);
     }
 
+    /**
+     * Focus on a specific entity by name in the global view
+     */
+    focusOnEntityNode(entityName: string): void {
+        if (!this.cy) return;
+
+        // Find the node by entity name
+        const node = this.cy.getElementById(entityName);
+
+        if (node.length === 0) {
+            console.warn(`Entity node "${entityName}" not found in graph`);
+            return;
+        }
+
+        console.log(`Focusing on entity node: ${entityName}`);
+
+        // Use the existing focusOnNode implementation
+        this.focusOnNode(node);
+    }
+
     private showProgressiveNodeInfo(node: any, position: any): void {
         const data = node.data();
         const tooltip = this.getOrCreateTooltip();
@@ -1881,18 +1880,6 @@ export class EntityGraphVisualizer {
         this.cy.elements().removeClass("neighborhood");
     }
 
-    private scheduleLayoutUpdate(): void {
-        if (this.layoutUpdateTimer) {
-            clearTimeout(this.layoutUpdateTimer);
-        }
-
-        this.layoutUpdateTimer = setTimeout(() => {
-            if (!this.isNodeBeingDragged) {
-                this.applyLayout(this.currentLayout);
-            }
-        }, 1000);
-    }
-
     private highlightEdgePath(edge: any): void {
         if (!this.cy) return;
 
@@ -1910,14 +1897,7 @@ export class EntityGraphVisualizer {
         const tooltip = this.getOrCreateTooltip();
 
         const strength = data.strength || 0;
-        const type = data.type;
-        if (!type) {
-            console.error(
-                `[ENTITY GRAPH VISUALIZER] ERROR: Edge missing type:`,
-                data,
-            );
-            return;
-        }
+        const type = data.type || "related";
 
         tooltip.innerHTML = `
             <div class="tooltip-header">${data.source} → ${data.target}</div>
@@ -2105,7 +2085,7 @@ export class EntityGraphVisualizer {
             { label: "Fit to View", action: () => this.fitToView() },
             {
                 label: "Reset Layout",
-                action: () => this.applyLayout(this.currentLayout),
+                action: () => this.cy?.fit(),
             },
             { label: "Show All Nodes", action: () => this.showAllNodes() },
             { label: "Export View", action: () => this.takeScreenshot() },

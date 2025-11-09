@@ -42,7 +42,8 @@ public enum FacetValueType
     String,
     Number,
     Boolean,
-    Quantity
+    Quantity,
+    Quantifier
 }
 
 public class StringFacetValue : IFacetValue
@@ -110,6 +111,24 @@ public readonly struct Quantity : IFacetValue
 
     public override string ToString() => $"{Amount} {Units}";
 }
+public readonly struct Quantifier : IFacetValue
+{
+    public string Amount { get; }
+    public string Units { get; }
+
+    [JsonConstructor]
+    public Quantifier(string amount, string units)
+    {
+        Amount = amount;
+        Units = units;
+    }
+
+    [JsonIgnore]
+    public FacetValueType ValueType => FacetValueType.Quantifier;
+
+    public override string ToString() => $"{Amount} {Units}";
+}
+
 
 
 public class FacetValueJsonConverter : JsonConverter<IFacetValue>
@@ -146,6 +165,12 @@ public class FacetValueJsonConverter : JsonConverter<IFacetValue>
                     {
                         return new Quantity(amountProp.GetDouble(), unitsProp.GetString()!);
                     }
+                    else if (root.TryGetProperty("amount", out var amountStringProp) &&
+                        root.TryGetProperty("units", out var unitsProp2) &&
+                        amountStringProp.ValueKind == JsonValueKind.String && unitsProp2.ValueKind == JsonValueKind.String)
+                    {
+                        return new Quantifier(amountStringProp.GetString(), unitsProp2.GetString()!);
+                    }
                 }
                 break;
         }
@@ -169,6 +194,12 @@ public class FacetValueJsonConverter : JsonConverter<IFacetValue>
                 writer.WriteStartObject();
                 writer.WriteNumber("amount", q.Amount);
                 writer.WriteString("units", q.Units);
+                writer.WriteEndObject();
+                break;
+            case Quantifier qq:
+                writer.WriteStartObject();
+                writer.WriteString("amount", qq.Amount);
+                writer.WriteString("units", qq.Units);
                 writer.WriteEndObject();
                 break;
             default:

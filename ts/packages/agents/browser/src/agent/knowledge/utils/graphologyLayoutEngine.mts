@@ -57,6 +57,7 @@ export interface GraphologyLayoutOptions {
     forceAtlas2Iterations?: number;
     noverlapIterations?: number;
     targetViewportSize?: number;
+    skipEdgeFiltering?: boolean;
 }
 
 const DEFAULT_OPTIONS: Required<GraphologyLayoutOptions> = {
@@ -66,6 +67,7 @@ const DEFAULT_OPTIONS: Required<GraphologyLayoutOptions> = {
     forceAtlas2Iterations: 150,
     noverlapIterations: 1000,
     targetViewportSize: 2000,
+    skipEdgeFiltering: false,
 };
 
 const COMMUNITY_COLORS = [
@@ -98,31 +100,16 @@ export function buildGraphologyGraph(
             inputEdges: edges.length,
             nodeLimit: opts.nodeLimit,
             willSliceNodesTo: Math.min(nodes.length, opts.nodeLimit),
+            skipEdgeFiltering: opts.skipEdgeFiltering,
+            minEdgeConfidence: opts.skipEdgeFiltering
+                ? "N/A (filtering disabled)"
+                : opts.minEdgeConfidence,
         },
     );
 
     const graph = new Graph({ type: "undirected" });
 
-    const nodesToAdd = nodes.slice(0, opts.nodeLimit);
-    console.log(
-        `[graphologyLayoutEngine] FILTERING STEP 4A - Adding ${nodesToAdd.length} nodes (sliced from ${nodes.length} to nodeLimit ${opts.nodeLimit})`,
-    );
-    console.log(
-        `[graphologyLayoutEngine] Sample of 10 nodes being added:`,
-        nodesToAdd
-            .slice(0, 10)
-            .map((n) => ({ id: n.id, name: n.name, type: n.type })),
-    );
-    if (nodes.length > opts.nodeLimit) {
-        console.log(
-            `[graphologyLayoutEngine] Sample of 10 nodes being filtered out:`,
-            nodes
-                .slice(opts.nodeLimit, opts.nodeLimit + 10)
-                .map((n) => ({ id: n.id, name: n.name, type: n.type })),
-        );
-    }
-
-    for (const node of nodesToAdd) {
+    for (const node of nodes.slice(0, opts.nodeLimit)) {
         const { id, ...nodeProps } = node;
         graph.addNode(id, {
             ...nodeProps,
@@ -139,9 +126,8 @@ export function buildGraphologyGraph(
     const nodeSet = new Set(graph.nodes());
     const edgeSet = new Set<string>();
     let edgeCount = 0;
-    let sampleCount = 0;
 
-    // Track filtering reasons
+    // Edge filtering counters
     let selfReferentialEdges = 0;
     let missingNodeEdges = 0;
     let duplicateEdges = 0;
@@ -149,188 +135,7 @@ export function buildGraphologyGraph(
     let missingTypeEdges = 0;
     let addErrorEdges = 0;
 
-    console.log(
-        `[graphologyLayoutEngine] FILTERING STEP 4B - Processing ${edges.length} input edges`,
-    );
-
-    // Analyze confidence distribution to help determine threshold
-    const confidenceValues = edges
-        .filter((e) => e.confidence !== undefined && e.confidence !== null)
-        .map((e) => e.confidence!)
-        .sort((a, b) => a - b);
-
-    if (confidenceValues.length > 0) {
-        const p10 = confidenceValues[Math.floor(confidenceValues.length * 0.1)];
-        const p25 =
-            confidenceValues[Math.floor(confidenceValues.length * 0.25)];
-        const p50 = confidenceValues[Math.floor(confidenceValues.length * 0.5)];
-        const p75 =
-            confidenceValues[Math.floor(confidenceValues.length * 0.75)];
-        const p90 = confidenceValues[Math.floor(confidenceValues.length * 0.9)];
-        const min = confidenceValues[0];
-        const max = confidenceValues[confidenceValues.length - 1];
-
-        console.log(`[graphologyLayoutEngine] CONFIDENCE ANALYSIS:`, {
-            totalEdgesWithConfidence: confidenceValues.length,
-            min: min,
-            p10: p10,
-            p25: p25,
-            median: p50,
-            p75: p75,
-            p90: p90,
-            max: max,
-            currentThreshold: 0.2,
-            wouldBeFilteredAt02: confidenceValues.filter((c) => c < 0.2).length,
-            wouldBeFilteredAt01: confidenceValues.filter((c) => c < 0.1).length,
-            wouldBeFilteredAt05: confidenceValues.filter((c) => c < 0.05)
-                .length,
-        });
-
-        // Show samples of edges in different confidence ranges
-        const veryLowConfidenceEdges = edges.filter(
-            (e) => e.confidence !== undefined && e.confidence < 0.1,
-        );
-        const lowConfidenceEdges = edges.filter(
-            (e) =>
-                e.confidence !== undefined &&
-                e.confidence >= 0.1 &&
-                e.confidence < 0.2,
-        );
-        const mediumConfidenceEdges = edges.filter(
-            (e) =>
-                e.confidence !== undefined &&
-                e.confidence >= 0.2 &&
-                e.confidence < 0.5,
-        );
-        const highConfidenceEdges = edges.filter(
-            (e) => e.confidence !== undefined && e.confidence >= 0.5,
-        );
-
-        console.log(`[graphologyLayoutEngine] CONFIDENCE RANGE SAMPLES:`);
-        if (veryLowConfidenceEdges.length > 0) {
-            console.log(
-                `  Very Low (< 0.1): ${veryLowConfidenceEdges.length} edges, samples:`,
-                veryLowConfidenceEdges.slice(0, 3).map((e) => ({
-                    from: e.from,
-                    to: e.to,
-                    type: e.type,
-                    confidence: e.confidence,
-                })),
-            );
-        }
-        if (lowConfidenceEdges.length > 0) {
-            console.log(
-                `  Low (0.1-0.2): ${lowConfidenceEdges.length} edges, samples:`,
-                lowConfidenceEdges.slice(0, 3).map((e) => ({
-                    from: e.from,
-                    to: e.to,
-                    type: e.type,
-                    confidence: e.confidence,
-                })),
-            );
-        }
-        if (mediumConfidenceEdges.length > 0) {
-            console.log(
-                `  Medium (0.2-0.5): ${mediumConfidenceEdges.length} edges, samples:`,
-                mediumConfidenceEdges.slice(0, 3).map((e) => ({
-                    from: e.from,
-                    to: e.to,
-                    type: e.type,
-                    confidence: e.confidence,
-                })),
-            );
-        }
-        if (highConfidenceEdges.length > 0) {
-            console.log(
-                `  High (0.5+): ${highConfidenceEdges.length} edges, samples:`,
-                highConfidenceEdges.slice(0, 3).map((e) => ({
-                    from: e.from,
-                    to: e.to,
-                    type: e.type,
-                    confidence: e.confidence,
-                })),
-            );
-        }
-
-        // Analyze relationship types being filtered at current threshold (0.2)
-        const edgesToBeFiltered = edges.filter(
-            (e) =>
-                e.type !== "parent" &&
-                e.type !== "parent-child" &&
-                (e.confidence || 1) < 0.2,
-        );
-
-        const typeCountsFiltered = edgesToBeFiltered.reduce(
-            (counts: Record<string, number>, edge) => {
-                const type = edge.type || "undefined";
-                counts[type] = (counts[type] || 0) + 1;
-                return counts;
-            },
-            {},
-        );
-
-        const typeCountsKept = edges
-            .filter(
-                (e) =>
-                    e.type === "parent" ||
-                    e.type === "parent-child" ||
-                    (e.confidence || 1) >= 0.2,
-            )
-            .reduce((counts: Record<string, number>, edge) => {
-                const type = edge.type || "undefined";
-                counts[type] = (counts[type] || 0) + 1;
-                return counts;
-            }, {});
-
-        console.log(
-            `[graphologyLayoutEngine] RELATIONSHIP TYPE ANALYSIS - Will be FILTERED (confidence < 0.2):`,
-            {
-                totalFiltered: edgesToBeFiltered.length,
-                byType: Object.entries(typeCountsFiltered)
-                    .sort(([, a], [, b]) => b - a)
-                    .slice(0, 10)
-                    .map(([type, count]) => ({
-                        type,
-                        count,
-                        percentage:
-                            ((count / edgesToBeFiltered.length) * 100).toFixed(
-                                1,
-                            ) + "%",
-                    })),
-            },
-        );
-
-        console.log(
-            `[graphologyLayoutEngine] RELATIONSHIP TYPE ANALYSIS - Will be KEPT (confidence >= 0.2 or parent types):`,
-            {
-                totalKept: edges.length - edgesToBeFiltered.length,
-                byType: Object.entries(typeCountsKept)
-                    .sort(([, a], [, b]) => b - a)
-                    .slice(0, 10)
-                    .map(([type, count]) => ({
-                        type,
-                        count,
-                        percentage:
-                            (
-                                (count /
-                                    (edges.length - edgesToBeFiltered.length)) *
-                                100
-                            ).toFixed(1) + "%",
-                    })),
-            },
-        );
-    }
-
     for (const edge of edges) {
-        // Log first 5 edges to see their complete structure
-        if (sampleCount < 5) {
-            debug(
-                `Edge sample ${sampleCount + 1}:`,
-                JSON.stringify(edge, null, 2),
-            );
-            sampleCount++;
-        }
-
         if (edge.from === edge.to) {
             selfReferentialEdges++;
             continue;
@@ -346,11 +151,13 @@ export function buildGraphologyGraph(
             continue;
         }
 
-        // Filter edges with confidence < 0.2 (except parent relationships)
+        // Filter edges with confidence < minEdgeConfidence (except parent relationships)
+        // Skip filtering entirely if skipEdgeFiltering is true
         if (
+            !opts.skipEdgeFiltering &&
             edge.type !== "parent" &&
             edge.type !== "parent-child" &&
-            (edge.confidence || 1) < 0.2
+            (edge.confidence || 1) < opts.minEdgeConfidence
         ) {
             lowConfidenceEdges++;
 
@@ -364,7 +171,7 @@ export function buildGraphologyGraph(
                         type: edge.type,
                         confidence: edge.confidence,
                         strength: edge.strength,
-                        reason: `type="${edge.type}" has confidence ${edge.confidence} < 0.2 threshold`,
+                        reason: `type="${edge.type}" has confidence ${edge.confidence} < ${opts.minEdgeConfidence} threshold`,
                         allFields: JSON.stringify(edge, null, 2),
                     },
                 );
@@ -374,25 +181,25 @@ export function buildGraphologyGraph(
         }
 
         edgeSet.add(edgeKey);
-        try {
-            // STRICT validation - no fallbacks for edge type
-            if (!edge.type) {
-                debug(
-                    `Warning: Edge missing type, skipping: ${edge.from} -> ${edge.to}`,
-                );
-                missingTypeEdges++;
-                continue;
-            }
 
+        // Check for missing edge type
+        if (!edge.type) {
+            missingTypeEdges++;
+        }
+
+        try {
             graph.addEdge(edge.from, edge.to, {
-                type: edge.type,
+                type: edge.type || "related",
                 confidence: edge.confidence || 0.5,
                 strength: edge.strength || edge.confidence || 0.5,
             });
             edgeCount++;
         } catch (error) {
-            debug(`Warning: Could not add edge ${edge.from} -> ${edge.to}`);
             addErrorEdges++;
+            debug(
+                `Warning: Could not add edge ${edge.from} -> ${edge.to}:`,
+                error,
+            );
         }
     }
 
@@ -402,6 +209,9 @@ export function buildGraphologyGraph(
         {
             inputEdges: edges.length,
             addedEdges: edgeCount,
+            filteringMode: opts.skipEdgeFiltering
+                ? "DISABLED - All edges included"
+                : `ENABLED - Min confidence: ${opts.minEdgeConfidence}`,
             selfReferential: selfReferentialEdges,
             missingNodes: missingNodeEdges,
             duplicates: duplicateEdges,
@@ -414,7 +224,6 @@ export function buildGraphologyGraph(
 
     // Remove isolated nodes (nodes with no edges)
     const isolatedNodes: string[] = [];
-    const nodesBeforeIsolatedRemoval = graph.order;
     for (const node of graph.nodes()) {
         if (graph.degree(node) === 0) {
             isolatedNodes.push(node);
@@ -423,28 +232,16 @@ export function buildGraphologyGraph(
 
     if (isolatedNodes.length > 0) {
         debug(`Removing ${isolatedNodes.length} isolated nodes (no edges)`);
-        console.log(
-            `[graphologyLayoutEngine] FILTERING STEP 4C - Removing ${isolatedNodes.length} isolated nodes:`,
-            isolatedNodes.slice(0, 10),
-        );
         for (const node of isolatedNodes) {
             graph.dropNode(node);
         }
     }
-
-    console.log(
-        `[graphologyLayoutEngine] FILTERING STEP 4C RESULT - Nodes after isolated removal: ${nodesBeforeIsolatedRemoval} → ${graph.order} (removed ${isolatedNodes.length})`,
-    );
 
     calculateNodeImportance(graph);
     assignNodeSizes(graph);
     detectCommunities(graph);
     assignCommunityColors(graph);
     applyMultiPhaseLayout(graph, opts);
-
-    console.log(
-        `[graphologyLayoutEngine] FILTERING STEP 4 FINAL - buildGraphologyGraph returning graph with ${graph.order} nodes and ${graph.size} edges`,
-    );
 
     return graph;
 }
@@ -454,7 +251,10 @@ function initializeCircularLayout(graph: Graph): void {
     const positions = circular(graph, { scale: 100 });
 
     let nodesWithMissingPositions = 0;
-    for (const node of graph.nodes()) {
+    const nodes = graph.nodes();
+
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         const pos = positions[node];
         if (
             !pos ||
@@ -467,8 +267,15 @@ function initializeCircularLayout(graph: Graph): void {
                 `[POSITION-ERROR] Node ${node} has invalid position from circular layout: ${JSON.stringify(pos)}`,
             );
             nodesWithMissingPositions++;
-            graph.setNodeAttribute(node, "x", 0);
-            graph.setNodeAttribute(node, "y", 0);
+
+            // Use fallback random positioning instead of all nodes at (0,0)
+            const angle = (i / nodes.length) * 2 * Math.PI;
+            const radius = 100 + (Math.random() - 0.5) * 20; // Add some randomness
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+
+            graph.setNodeAttribute(node, "x", x);
+            graph.setNodeAttribute(node, "y", y);
         } else {
             graph.setNodeAttribute(node, "x", pos.x);
             graph.setNodeAttribute(node, "y", pos.y);
@@ -477,7 +284,7 @@ function initializeCircularLayout(graph: Graph): void {
 
     if (nodesWithMissingPositions > 0) {
         debug(
-            `[POSITION-ERROR] ${nodesWithMissingPositions} nodes had invalid positions from circular layout`,
+            `[POSITION-ERROR] ${nodesWithMissingPositions} nodes had invalid positions from circular layout, used fallback positioning`,
         );
     }
 }
@@ -558,21 +365,32 @@ function applyMultiPhaseLayout(
         },
     });
 
-    // Check for invalid positions after ForceAtlas2
+    // Check for invalid positions after ForceAtlas2 and fix them
     let invalidAfterFA2 = 0;
-    for (const node of graph.nodes()) {
+    const nodes = graph.nodes();
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         const x = graph.getNodeAttribute(node, "x");
         const y = graph.getNodeAttribute(node, "y");
         if (x === undefined || y === undefined || isNaN(x) || isNaN(y)) {
             debug(
-                `[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y})`,
+                `[POSITION-ERROR] After ForceAtlas2, node ${node} has invalid position: (${x}, ${y}), applying fallback`,
             );
             invalidAfterFA2++;
+
+            // Apply fallback positioning similar to initial layout
+            const angle = (i / nodes.length) * 2 * Math.PI;
+            const radius = 150 + (Math.random() - 0.5) * 30;
+            const fallbackX = Math.cos(angle) * radius;
+            const fallbackY = Math.sin(angle) * radius;
+
+            graph.setNodeAttribute(node, "x", fallbackX);
+            graph.setNodeAttribute(node, "y", fallbackY);
         }
     }
     if (invalidAfterFA2 > 0) {
         debug(
-            `[POSITION-ERROR] ${invalidAfterFA2} nodes have invalid positions after ForceAtlas2`,
+            `[POSITION-ERROR] Fixed ${invalidAfterFA2} nodes with invalid positions after ForceAtlas2`,
         );
     }
 
@@ -708,61 +526,46 @@ export function convertToCytoscapeElements(
 ): CytoscapeElement[] {
     debug("Converting to Cytoscape format...");
 
-    console.log(
-        `[graphologyLayoutEngine] FILTERING STEP 5 - convertToCytoscapeElements:`,
-        {
-            inputGraphNodes: graph.order,
-            inputGraphEdges: graph.size,
-            targetViewportSize,
-        },
-    );
-
-    // Initialize circular layout for nodes that don't have positions yet
-    // This should only happen if the graph was never processed by buildGraphologyGraph
-    let hasValidPositions = false;
-    for (const node of graph.nodes()) {
-        const x = graph.getNodeAttribute(node, "x");
-        const y = graph.getNodeAttribute(node, "y");
-        if (x !== undefined && y !== undefined && !isNaN(x) && !isNaN(y)) {
-            hasValidPositions = true;
-            break;
-        }
-    }
-
-    if (!hasValidPositions) {
-        debug(
-            "No valid positions found, initializing emergency circular layout...",
-        );
-        debug(
-            "This suggests the graph was not processed through buildGraphologyGraph",
-        );
-        initializeCircularLayout(graph);
-    }
-
     const elements: CytoscapeElement[] = [];
 
     let minX = Infinity,
         maxX = -Infinity,
         minY = Infinity,
         maxY = -Infinity;
+    let validPositionCount = 0;
+
     for (const node of graph.nodes()) {
         const x = graph.getNodeAttribute(node, "x") as number;
         const y = graph.getNodeAttribute(node, "y") as number;
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
+
+        if (x !== undefined && y !== undefined && !isNaN(x) && !isNaN(y)) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+            validPositionCount++;
+        }
     }
 
     const targetMin = -targetViewportSize;
     const targetMax = targetViewportSize;
-    const scaleX =
-        maxX - minX === 0 ? 1 : (targetMax - targetMin) / (maxX - minX);
-    const scaleY =
-        maxY - minY === 0 ? 1 : (targetMax - targetMin) / (maxY - minY);
+
+    // If no valid positions found or all positions are the same, use default scaling
+    let scaleX = 1,
+        scaleY = 1;
+    if (validPositionCount > 0 && (maxX - minX > 0 || maxY - minY > 0)) {
+        scaleX =
+            maxX - minX === 0 ? 1 : (targetMax - targetMin) / (maxX - minX);
+        scaleY =
+            maxY - minY === 0 ? 1 : (targetMax - targetMin) / (maxY - minY);
+    }
 
     debug(`Scaling factors: X=${scaleX.toFixed(2)}, Y=${scaleY.toFixed(2)}`);
     debug(`Target viewport: [${targetMin}, ${targetMax}]`);
+    debug(
+        `Position bounds: X=[${minX.toFixed(2)}, ${maxX.toFixed(2)}], Y=[${minY.toFixed(2)}, ${maxY.toFixed(2)}]`,
+    );
+    debug(`Valid positions: ${validPositionCount}/${graph.order}`);
 
     let nodesWithInvalidPositions = 0;
     for (const node of graph.nodes()) {
@@ -784,8 +587,15 @@ export function convertToCytoscapeElements(
             x = 0;
             y = 0;
         } else {
-            x = (attr.x - minX) * scaleX + targetMin;
-            y = (attr.y - minY) * scaleY + targetMin;
+            // Only apply scaling if we have valid scaling factors
+            if (validPositionCount > 0 && !isNaN(scaleX) && !isNaN(scaleY)) {
+                x = (attr.x - minX) * scaleX + targetMin;
+                y = (attr.y - minY) * scaleY + targetMin;
+            } else {
+                // Fallback: use positions as-is if scaling failed
+                x = attr.x;
+                y = attr.y;
+            }
         }
 
         const nodeData: any = {
@@ -837,22 +647,6 @@ export function convertToCytoscapeElements(
 
     debug(
         `Converted ${graph.order} nodes and ${graph.size} edges to Cytoscape format`,
-    );
-
-    const nodeElements = elements.filter(
-        (el) => !el.data.source && !el.data.target,
-    );
-    const edgeElements = elements.filter(
-        (el) => el.data.source || el.data.target,
-    );
-    console.log(
-        `[graphologyLayoutEngine] FILTERING STEP 5 RESULT - convertToCytoscapeElements produced:`,
-        {
-            totalElements: elements.length,
-            nodeElements: nodeElements.length,
-            edgeElements: edgeElements.length,
-            nodesWithInvalidPositions,
-        },
     );
 
     return elements;

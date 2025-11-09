@@ -1297,48 +1297,31 @@ export async function handleMessage(
             }
         }
 
-        case "getAllRelationships": {
+        case "getGlobalGraphLayoutData": {
             try {
                 const result = await sendActionToAgent({
-                    actionName: "getAllRelationships",
-                    parameters: {},
+                    actionName: "getGlobalGraphLayoutData",
+                    parameters: message.parameters || {},
                 });
 
                 return result;
             } catch (error) {
-                console.error("Error getting all relationships:", error);
-                return [];
-            }
-        }
-
-        case "getAllCommunities": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "getAllCommunities",
-                    parameters: {},
-                });
-
-                return result;
-            } catch (error) {
-                console.error("Error getting all communities:", error);
-                return [];
-            }
-        }
-
-        case "getAllEntitiesWithMetrics": {
-            try {
-                const result = await sendActionToAgent({
-                    actionName: "getAllEntitiesWithMetrics",
-                    parameters: {},
-                });
-
-                return result;
-            } catch (error) {
-                console.error(
-                    "Error getting all entities with metrics:",
-                    error,
-                );
-                return [];
+                console.error("Error getting global graph layout data:", error);
+                return {
+                    graphologyLayout: {
+                        elements: [],
+                        layoutDuration: 0,
+                        avgSpacing: 0,
+                        communityCount: 0,
+                    },
+                    metadata: {
+                        totalEntitiesInSystem: 0,
+                        selectedEntityCount: 0,
+                        coveragePercentage: 0,
+                        importanceThreshold: 0,
+                        layer: "global_graph_layout",
+                    },
+                };
             }
         }
 
@@ -1357,6 +1340,43 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error getting entity neighborhood:", error);
                 return [];
+            }
+        }
+
+        case "getEntityNeighborhoodLayoutData": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getEntityNeighborhoodLayoutData",
+                    parameters: {
+                        entityId: message.entityId,
+                        depth: message.depth,
+                        maxNodes: message.maxNodes,
+                    },
+                });
+
+                return result;
+            } catch (error) {
+                console.error(
+                    "Error getting entity neighborhood layout:",
+                    error,
+                );
+                return {
+                    graphologyLayout: {
+                        elements: [],
+                        layoutDuration: 0,
+                        avgSpacing: 0,
+                        communityCount: 0,
+                    },
+                    metadata: {
+                        entityId: message.entityId,
+                        queryDepth: message.depth || 2,
+                        maxNodes: message.maxNodes || 100,
+                        actualNodes: 0,
+                        actualEdges: 0,
+                        layer: "entity_neighborhood",
+                        source: "graphology",
+                    },
+                };
             }
         }
 
