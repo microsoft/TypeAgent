@@ -17,4 +17,9 @@ public class TranslationSettings
     /// Maximum number of tokens to emit. 
     /// </summary>
     public int MaxTokens { get; set; } = -1;
+
+    /// <summary>
+    /// The seed for the model to minimize variation.
+    /// </summary>
+    public int Seed { get; set; } = 345;
 }
