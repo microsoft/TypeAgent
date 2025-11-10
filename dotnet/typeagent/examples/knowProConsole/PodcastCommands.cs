@@ -53,7 +53,7 @@ public class PodcastCommands : ICommandModule
         return cmd;
     }
 
-    private Task PodcastLoadAsync(ParseResult args)
+    private async Task<Task> PodcastLoadAsync(ParseResult args)
     {
         NamedArgs namedArgs = new(args);
         string name = namedArgs.GetRequired("name");
@@ -65,12 +65,13 @@ public class PodcastCommands : ICommandModule
         var podcast = CreatePodcast(name, false);
 
         _kpContext.Stopwatch.Stop();
-        KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+        KnowProWriter.WriteTiming(_kpContext.Stopwatch, "Load podcast");
 
         SetCurrent(podcast);
-        KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Loaded {name}");
+        KnowProWriter.Write(ConsoleColor.White, "Loaded ");
+        KnowProWriter.Write(ConsoleColor.Cyan, $"{name} ");
+        KnowProWriter.WriteLine(ConsoleColor.DarkGray, $"[{await podcast.Messages.GetCountAsync()} messages]");
 
-        //await podcast.BuildSecondaryIndexesAsync();
         return Task.CompletedTask;
     }
 
