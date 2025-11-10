@@ -239,6 +239,26 @@ public abstract class ConsoleApp
             Console.WriteLine(_allCommands.Description);
             Console.WriteLine();
         }
+
+
+        if (_stopStrings.Count > 0)
+        {
+            StringBuilder stopCmds = new StringBuilder();
+            for (int i = 0; i < _stopStrings.Count; ++i)
+            {
+                if (i > 0)
+                {
+                    stopCmds.Append(" OR ");
+                }
+
+                stopCmds.Append($"@{_stopStrings[i]}");
+            }
+
+            Console.WriteLine($"Type {stopCmds} to exit.");
+        }
+
+        Console.WriteLine("To run a command, prefix its name with: @");
+        Console.WriteLine("Type @help to get help on available commands.");
     }
 
     protected void WriteArgErrors(ParseResult parseResult)
