@@ -271,6 +271,6 @@ public abstract class ConsoleApp
 
     private bool IsHelp(string value)
     {
-        return value == "@hep" || value == "--help" || value == "--?" || value == "-?";
+        return value == "--help" || value == "--?" || value == "-?";
     }
 }
