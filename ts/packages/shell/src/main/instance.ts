@@ -24,6 +24,7 @@ import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { ClientIO, createDispatcher, Dispatcher } from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
+import { createProtocolClientIOWrapper } from "./protocolClientIOWrapper.js";
 import {
     hasPendingUpdate,
     setPendingUpdateCallback,
@@ -118,6 +119,9 @@ async function initializeDispatcher(
 
         const browserControl = createInlineBrowserControl(shellWindow);
 
+        // Wrap the clientIO to also route responses to WebSocket protocol clients
+        const wrappedClientIO = createProtocolClientIOWrapper(clientIO, shellWindow);
+
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {
             appAgentProviders: [
@@ -133,7 +137,7 @@ async function initializeDispatcher(
             metrics: true,
             dblogging: true,
             clientId: getClientId(),
-            clientIO,
+            clientIO: wrappedClientIO,
             indexingServiceRegistry:
                 await getIndexingServiceRegistry(instanceDir),
             constructionProvider: getDefaultConstructionProvider(),
@@ -264,6 +268,9 @@ export function initializeInstance(
         updateTitle,
         startTime,
     );
+
+    // Wire up protocol server to get dispatcher (it will be started in agent initialization)
+    shellWindow.startProtocolServer(3100, async () => dispatcherP);
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {
         const eventWindow = getShellWindowForChatViewIpcEvent(event);

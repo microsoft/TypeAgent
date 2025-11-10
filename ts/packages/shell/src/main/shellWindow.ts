@@ -27,6 +27,8 @@ import {
 
 import registerDebug from "debug";
 import { ChatServer } from "./chatServer.js";
+import { ProtocolChatServer } from "./protocolChatServer.js";
+import WebSocket from "ws";
 
 const debugShellWindow = registerDebug("typeagent:shell:window");
 const debugShellWindowError = registerDebug("typeagent:shell:window:error");
@@ -104,6 +106,15 @@ export class ShellWindow {
 
     // Chat as a tab support
     public chatViewServer: ChatServer | undefined;
+
+    // Protocol server for external clients (port 3100)
+    public protocolServer: ProtocolChatServer | undefined;
+
+    // Map to track protocol client requests: requestId -> {ws, sessionId}
+    private protocolRequests = new Map<
+        string,
+        { ws: WebSocket; sessionId: string }
+    >();
 
     public get inlineBrowser(): WebContentsView {
         // Always use multi-tab browser
@@ -387,6 +398,69 @@ export class ShellWindow {
             });
             this.chatViewServer.start();
         }
+    }
+
+    /**
+     * Start the protocol server for external client connections
+     * @param port - The port upon which to start the protocol server (default: 3100)
+     * @param getDispatcher - Getter function to access the dispatcher
+     */
+    public startProtocolServer(
+        port: number = 3100,
+        getDispatcher?: () => Promise<any>,
+    ) {
+        if (this.protocolServer !== undefined) {
+            debugShellWindow("Protocol server already started");
+            return;
+        }
+
+        this.protocolServer = new ProtocolChatServer(port);
+
+        // If dispatcher getter provided, wire it up
+        if (getDispatcher) {
+            this.protocolServer.setInstanceGetters(getDispatcher, () => this);
+        }
+
+        this.protocolServer.start();
+        console.log(`Protocol server started on port ${port} for external clients`);
+    }
+
+    /**
+     * Register a protocol client request so we can route responses to WebSocket
+     */
+    public registerProtocolRequest(
+        requestId: string,
+        ws: WebSocket,
+        sessionId: string,
+    ): void {
+        this.protocolRequests.set(requestId, { ws, sessionId });
+        debugShellWindow(`Registered protocol request: ${requestId}`);
+    }
+
+    /**
+     * Unregister a protocol client request after completion
+     */
+    public unregisterProtocolRequest(requestId: string): void {
+        this.protocolRequests.delete(requestId);
+        debugShellWindow(`Unregistered protocol request: ${requestId}`);
+    }
+
+    /**
+     * Check if a requestId is from a protocol client
+     */
+    public isProtocolRequest(requestId: string | undefined): boolean {
+        if (!requestId) return false;
+        return this.protocolRequests.has(requestId);
+    }
+
+    /**
+     * Get the WebSocket for a protocol request
+     */
+    public getProtocolRequestWebSocket(
+        requestId: string | undefined,
+    ): { ws: WebSocket; sessionId: string } | undefined {
+        if (!requestId) return undefined;
+        return this.protocolRequests.get(requestId);
     }
 
     private installHandler(name: string, handler: (event: any) => void) {
