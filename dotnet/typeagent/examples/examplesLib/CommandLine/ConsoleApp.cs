@@ -13,7 +13,7 @@ public abstract class ConsoleApp
         Console.OutputEncoding = Encoding.UTF8;
 
         _allCommands = new RootCommand(title);
-        AddModule(new StandardCommands());
+        AddModule(new StandardCommands(_allCommands));
         _stopStrings = ["quit", "exit"];
 
     }
@@ -271,6 +271,6 @@ public abstract class ConsoleApp
 
     private bool IsHelp(string value)
     {
-        return value == "--help" || value == "--?" || value == "-?";
+        return value == "@hep" || value == "--help" || value == "--?" || value == "-?";
     }
 }
