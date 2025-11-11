@@ -275,7 +275,7 @@ public class ConsoleWriter
 
     public static void WriteTiming(Stopwatch clock, string? label = null)
     {
-        WriteTiming(ConsoleColor.Gray, clock, label);
+        WriteTiming(ConsoleColor.DarkGray, clock, label);
     }
 
     public static void WriteTiming(ConsoleColor color, Stopwatch clock, string? label = null)

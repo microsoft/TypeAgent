@@ -5,13 +5,16 @@ namespace TypeAgent.ExamplesLib.CommandLine;
 
 public class StandardCommands : ICommandModule
 {
-    public StandardCommands()
+    private RootCommand? _root = null;
+
+    public StandardCommands(RootCommand? root = null)
     {
+        this._root = root;
     }
 
     public IList<Command> GetCommands()
     {
-        return [ClearDef(), PingDef()];
+        return [ClearDef(), HelpDef(), PingDef()];
     }
 
     private Command ClearDef()
@@ -24,6 +27,29 @@ public class StandardCommands : ICommandModule
     private void Clear(ParseResult args)
     {
         Console.Clear();
+    }
+
+    /// <summary>
+    /// Creates the @help command
+    /// </summary>
+    /// <returns>The @help command</returns>
+    private Command HelpDef()
+    {
+        Command cmd = new("help", "Show this list of commands.");
+        cmd.SetAction(this.HelpAsync);
+        return cmd;
+    }
+
+    /// <summary>
+    /// Calls the default help command but with @ prefix
+    /// </summary>
+    /// <param name="args">The </param>
+    private async void HelpAsync(ParseResult args)
+    {
+        if (this._root is not null)
+        {
+            await this._root.InvokeAsync("--help", CancellationToken.None);
+        }
     }
 
     private Command PingDef()

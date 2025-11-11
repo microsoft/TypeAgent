@@ -852,6 +852,8 @@ export function addStandardHandlers(
     handlers.commands.metadata = "List all commands";
     handlers.cls = cls;
     handlers.cls.metadata = "Clear the screen";
+    handlers.clear = cls;
+    handlers.clear.metadata = "Clear the screen";
     handlers.sleep = sleep;
     handlers.sleep.metadata = sleepDef();
 

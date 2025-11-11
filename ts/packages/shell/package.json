@@ -60,6 +60,7 @@
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
     "browser-typeagent": "workspace:*",
+    "chat-rpc-server": "workspace:*",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
