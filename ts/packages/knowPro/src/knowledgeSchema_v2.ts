@@ -3,7 +3,7 @@
 
 // Quantity must be a number, do not infer amounts.
 export type Quantity = {
-    amount: number; 
+    amount: number;
     units: string;
 };
 
