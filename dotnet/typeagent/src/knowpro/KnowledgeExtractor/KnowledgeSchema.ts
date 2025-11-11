@@ -7,7 +7,7 @@ export type Quantity = {
     units: string;
 };
 
-// String quantifier. i.e. "tons", "loads", "a bunch", etc.
+// String quantifier, e.g. 'many', 'few', 'several', 'a lot of', 'some'.
 export type Quantifier = {
     amount: string;
     units: string;

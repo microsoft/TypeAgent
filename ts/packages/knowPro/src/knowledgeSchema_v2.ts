@@ -1,12 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Quantity must be a number, do not infer amounts.
 export type Quantity = {
-    amount: number;
+    amount: number; 
     units: string;
 };
 
-export type Value = string | number | boolean | Quantity;
+// String quantifier, e.g. 'many', 'few', 'several', 'a lot of', 'some'.
+export type Quantifier = {
+    amount: string;
+    units: string;
+};
+
+export type Value = string | number | boolean | Quantity | Quantifier;
 
 export type Facet = {
     name: string;
