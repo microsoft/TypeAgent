@@ -172,13 +172,7 @@ export class ChatRpcServer {
             timestamp: new Date().toISOString(),
             sessionId: message.sessionId,
             message: "Session initialized successfully",
-            capabilities: [
-                "calendar",
-                "email",
-                "code",
-                "chat",
-                "dispatcher",
-            ],
+            capabilities: ["calendar", "email", "code", "chat", "dispatcher"],
         });
 
         // Send ready status

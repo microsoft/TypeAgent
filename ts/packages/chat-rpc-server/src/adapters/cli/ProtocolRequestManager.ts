@@ -5,7 +5,9 @@ import type WebSocket from "ws";
 import type { IProtocolRequestTracker } from "../../common/index.js";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:chat-rpc-server:protocol-request-manager");
+const debug = registerDebug(
+    "typeagent:chat-rpc-server:protocol-request-manager",
+);
 
 /**
  * Protocol Request Manager

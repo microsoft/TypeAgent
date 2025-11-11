@@ -119,7 +119,9 @@ export default class Interactive extends Command {
 
             // Start protocol server if port specified
             if (flags.port && requestManager) {
-                debugInteractive(`Starting protocol server on port ${flags.port}`);
+                debugInteractive(
+                    `Starting protocol server on port ${flags.port}`,
+                );
                 protocolServer = new ChatRpcServer({ port: flags.port });
                 const adapter = new CliHostAdapter(dispatcher, requestManager);
                 protocolServer.attachHost(adapter);

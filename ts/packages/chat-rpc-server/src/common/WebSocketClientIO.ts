@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import WebSocket from "ws";
-import type {
-    ClientIO,
-    IAgentMessage,
-    RequestId,
-} from "agent-dispatcher";
+import type { ClientIO, IAgentMessage, RequestId } from "agent-dispatcher";
 import type {
     DisplayAppendMode,
     TypeAgentAction,

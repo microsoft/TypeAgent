@@ -41,9 +41,12 @@ export class SessionManager {
      * Start automatic cleanup of inactive sessions
      */
     private startCleanup(): void {
-        this.cleanupInterval = setInterval(() => {
-            this.cleanupInactiveSessions();
-        }, 5 * 60 * 1000); // Check every 5 minutes
+        this.cleanupInterval = setInterval(
+            () => {
+                this.cleanupInactiveSessions();
+            },
+            5 * 60 * 1000,
+        ); // Check every 5 minutes
     }
 
     /**
@@ -220,7 +223,9 @@ export class SessionManager {
      * Clean up all sessions (for shutdown)
      */
     public shutdown(): void {
-        debug(`Shutting down session manager. Active sessions: ${this.sessions.size}`);
+        debug(
+            `Shutting down session manager. Active sessions: ${this.sessions.size}`,
+        );
         this.stopCleanup();
         this.sessions.clear();
         this.wsToSessionId.clear();

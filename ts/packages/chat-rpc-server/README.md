@@ -20,9 +20,9 @@ import { ChatRpcServer, ShellHostAdapter } from "chat-rpc-server";
 const server = new ChatRpcServer({ port: 3100 });
 
 const adapter = new ShellHostAdapter(
-    server,
-    () => getDispatcher(),
-    () => getShellWindow()
+  server,
+  () => getDispatcher(),
+  () => getShellWindow(),
 );
 
 server.attachHost(adapter);
@@ -59,12 +59,14 @@ HostAdapter (interface)
 The server implements the TypeAgent WebSocket protocol with these message types:
 
 **Client → Server:**
+
 - `initSession` - Initialize new session
 - `userRequest` - User command
 - `ping` - Health check
 - `closeSession` - End session
 
 **Server → Client:**
+
 - `sessionAck` - Session acknowledged
 - `response` - Command response
 - `status` - Status update (ready, busy, error)
@@ -75,11 +77,13 @@ The server implements the TypeAgent WebSocket protocol with these message types:
 ## Development
 
 Build:
+
 ```bash
 pnpm build
 ```
 
 Clean:
+
 ```bash
 pnpm clean
 ```
@@ -87,3 +91,11 @@ pnpm clean
 ## License
 
 MIT
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.

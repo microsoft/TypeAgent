@@ -121,7 +121,11 @@ async function initializeDispatcher(
 
         // Wrap the clientIO to also route responses to WebSocket protocol clients
         // Shell behavior: send some methods to both Shell UI and WebSocket (true parameter)
-        const wrappedClientIO = createProtocolClientIOWrapper(clientIO, shellWindow, true);
+        const wrappedClientIO = createProtocolClientIOWrapper(
+            clientIO,
+            shellWindow,
+            true,
+        );
 
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {

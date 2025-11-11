@@ -428,13 +428,15 @@ export class ShellWindow implements IProtocolRequestTracker {
             this.protocolAdapter = new ShellHostAdapter(
                 this.protocolServer,
                 getDispatcher,
-                () => this
+                () => this,
             );
             this.protocolServer.attachHost(this.protocolAdapter);
         }
 
         this.protocolServer.start();
-        console.log(`Chat RPC server started on port ${port} for external clients`);
+        console.log(
+            `Chat RPC server started on port ${port} for external clients`,
+        );
     }
 
     /**

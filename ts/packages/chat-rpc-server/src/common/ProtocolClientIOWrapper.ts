@@ -1,15 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type {
-    ClientIO,
-    IAgentMessage,
-    RequestId,
-} from "agent-dispatcher";
-import type {
-    DisplayAppendMode,
-    TypeAgentAction,
-} from "@typeagent/agent-sdk";
+import type { ClientIO, IAgentMessage, RequestId } from "agent-dispatcher";
+import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import type WebSocket from "ws";
 import { WebSocketClientIO } from "./WebSocketClientIO.js";
 import registerDebug from "debug";
@@ -63,7 +56,12 @@ export function createProtocolClientIOWrapper(
                     protocolClient.ws,
                     protocolClient.sessionId,
                 );
-                wsClientIO.setDisplayInfo(source, requestId, actionIndex, action);
+                wsClientIO.setDisplayInfo(
+                    source,
+                    requestId,
+                    actionIndex,
+                    action,
+                );
 
                 // Also send to native if configured (Shell behavior)
                 if (sendToNativeForProtocolRequests) {
@@ -78,7 +76,12 @@ export function createProtocolClientIOWrapper(
             }
 
             // Send to native for non-protocol requests
-            nativeClientIO.setDisplayInfo(source, requestId, actionIndex, action);
+            nativeClientIO.setDisplayInfo(
+                source,
+                requestId,
+                actionIndex,
+                action,
+            );
         },
 
         setDisplay(message: IAgentMessage): void {
@@ -88,7 +91,9 @@ export function createProtocolClientIOWrapper(
 
             // Send to WebSocket if this is a protocol request
             if (protocolClient) {
-                debug(`Routing setDisplay to WebSocket for request ${requestId}`);
+                debug(
+                    `Routing setDisplay to WebSocket for request ${requestId}`,
+                );
                 const wsClientIO = new WebSocketClientIO(
                     protocolClient.ws,
                     protocolClient.sessionId,

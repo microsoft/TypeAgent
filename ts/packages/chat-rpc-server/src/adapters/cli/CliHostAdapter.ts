@@ -74,9 +74,7 @@ export class CliHostAdapter implements HostAdapter {
         contentType: string,
         metadata?: any,
     ): void {
-        debug(
-            `sendResponse called (should use ClientIO wrapper instead)`,
-        );
+        debug(`sendResponse called (should use ClientIO wrapper instead)`);
     }
 
     /**

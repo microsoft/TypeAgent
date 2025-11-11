@@ -2,32 +2,34 @@
   "name": "chat-rpc-server",
   "version": "0.0.1",
   "description": "Shared RPC server for agent chat communication",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/chat-rpc-server"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
     "clean": "rimraf --glob dist *.tsbuildinfo",
     "test": "node --test"
   },
   "dependencies": {
-    "ws": "^8.18.0",
-    "debug": "^4.3.7",
+    "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "@typeagent/agent-sdk": "workspace:*"
+    "debug": "^4.3.7",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.12",
     "@types/node": "^20",
-    "@types/ws": "^8.5.13",
-    "@types/debug": "^4.1.12"
-  },
-  "keywords": [
-    "typeagent",
-    "rpc",
-    "chat",
-    "websocket"
-  ]
+    "@types/ws": "^8.5.13"
+  }
 }
