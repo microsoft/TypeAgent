@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import WebSocket from "ws";
-import type { ConversationEntry } from "./types/chatProtocol.js";
+import type { ConversationEntry } from "../types/protocol.js";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:shell:chatSessionManager");
+const debug = registerDebug("typeagent:chat-rpc-server:sessionManager");
 
 /**
  * Represents an active chat session
@@ -26,7 +26,7 @@ export interface ChatSession {
 /**
  * Manages chat sessions with session tracking, cleanup, and conversation history
  */
-export class ChatSessionManager {
+export class SessionManager {
     private sessions = new Map<string, ChatSession>();
     private wsToSessionId = new Map<WebSocket, string>();
     private readonly SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes

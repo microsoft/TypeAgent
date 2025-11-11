@@ -1,57 +1,87 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import WebSocket, { IncomingMessage } from "ws";
-import { ChatServer } from "./chatServer.js";
-import { ChatSessionManager } from "./chatSessionManager.js";
+import WebSocket, { WebSocketServer } from "ws";
+import { SessionManager } from "../session/SessionManager.js";
+import { HostAdapter } from "../adapters/HostAdapter.js";
 import type {
     TypeAgentMessage,
     InitSessionMessage,
     UserRequestMessage,
     PingMessage,
     CloseSessionMessage,
-} from "./types/chatProtocol.js";
+} from "../types/protocol.js";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:shell:protocolChatServer");
+const debug = registerDebug("typeagent:chat-rpc-server");
+
+export interface ServerConfig {
+    port: number;
+    host?: string;
+}
 
 /**
- * Extended ChatServer with protocol message handling and session management
- * Routes requests to dispatcher via shellWindow
+ * Chat RPC Server
+ * Handles WebSocket connections and routes messages to host-specific dispatcher
+ * Extracted from Shell's ProtocolChatServer for reuse across Shell and CLI
  */
-export class ProtocolChatServer {
-    private chatServer: ChatServer;
-    private sessionManager: ChatSessionManager;
-    private getDispatcher: (() => Promise<any>) | null = null;
-    private getShellWindow: (() => any) | null = null;
+export class ChatRpcServer {
+    private wss: WebSocketServer | null = null;
+    private sessionManager: SessionManager;
+    private hostAdapter: HostAdapter | null = null;
+    private config: ServerConfig;
 
-    constructor(port: number) {
-        this.chatServer = new ChatServer(port);
-        this.sessionManager = new ChatSessionManager();
-
-        // Set up connection handler
-        this.chatServer.onConnection((ws: WebSocket, req: IncomingMessage) => {
-            this.handleConnection(ws, req);
-        });
+    constructor(config: ServerConfig) {
+        this.config = {
+            host: "localhost",
+            ...config,
+        };
+        this.sessionManager = new SessionManager();
     }
 
     /**
-     * Set the getters for dispatcher and shellWindow
+     * Attach host adapter for dispatcher integration
      */
-    public setInstanceGetters(
-        getDispatcher: () => Promise<any>,
-        getShellWindow: () => any,
-    ): void {
-        this.getDispatcher = getDispatcher;
-        this.getShellWindow = getShellWindow;
-        debug("Instance getters attached to protocol server");
+    attachHost(adapter: HostAdapter): void {
+        this.hostAdapter = adapter;
+        debug("Host adapter attached to server");
+    }
+
+    /**
+     * Start WebSocket server
+     */
+    async start(): Promise<void> {
+        this.wss = new WebSocketServer({
+            port: this.config.port,
+            host: this.config.host,
+        });
+
+        this.wss.on("connection", (ws: WebSocket) => {
+            this.handleConnection(ws);
+        });
+
+        debug(
+            `Chat RPC Server listening on ${this.config.host}:${this.config.port}`,
+        );
+    }
+
+    /**
+     * Stop server
+     */
+    async stop(): Promise<void> {
+        if (this.wss) {
+            this.wss.close();
+            this.wss = null;
+        }
+        this.sessionManager.shutdown();
+        debug("Chat RPC Server stopped");
     }
 
     /**
      * Handle new WebSocket connection
      */
-    private handleConnection(ws: WebSocket, req: IncomingMessage): void {
-        debug(`New WebSocket connection from ${req.socket.remoteAddress}`);
+    private handleConnection(ws: WebSocket): void {
+        debug("New WebSocket connection established");
 
         ws.on("message", (data: Buffer) => {
             this.handleMessage(ws, data);
@@ -62,14 +92,14 @@ export class ProtocolChatServer {
             this.sessionManager.removeSessionByWebSocket(ws);
         });
 
-        ws.on("error", (error) => {
+        ws.on("error", (error: Error) => {
             debug(`WebSocket error: ${error.message}`);
             this.sessionManager.removeSessionByWebSocket(ws);
         });
     }
 
     /**
-     * Handle incoming message from WebSocket
+     * Handle incoming message
      */
     private async handleMessage(ws: WebSocket, data: Buffer): Promise<void> {
         try {
@@ -81,7 +111,10 @@ export class ProtocolChatServer {
             // Route message based on type
             switch (message.type) {
                 case "initSession":
-                    await this.handleInitSession(ws, message as InitSessionMessage);
+                    await this.handleInitSession(
+                        ws,
+                        message as InitSessionMessage,
+                    );
                     break;
                 case "userRequest":
                     await this.handleUserRequest(
@@ -149,7 +182,7 @@ export class ProtocolChatServer {
         });
 
         // Send ready status
-        this.sendStatus(ws, message.sessionId, "ready", "TypeAgent Shell ready");
+        this.sendStatus(ws, message.sessionId, "ready", "Server ready");
     }
 
     /**
@@ -189,36 +222,18 @@ export class ProtocolChatServer {
         this.sendStatus(ws, message.sessionId, "busy", "Processing request");
 
         try {
-            if (!this.getDispatcher || !this.getShellWindow) {
-                throw new Error("Instance getters not initialized");
+            if (!this.hostAdapter) {
+                throw new Error("Host adapter not attached");
             }
 
-            const dispatcher = await this.getDispatcher();
-            const shellWindow = this.getShellWindow();
-
-            if (!dispatcher) {
-                throw new Error("Dispatcher not available");
-            }
-
-            // Register this request with shellWindow so responses can be routed to WebSocket
-            shellWindow.registerProtocolRequest(
-                message.requestId,
-                ws,
+            // Process the command through the host adapter
+            await this.hostAdapter.processCommand(
                 message.sessionId,
-            );
-
-            // Process the command through the dispatcher
-            // The dispatcher's ClientIO will check if this is a protocol request and route accordingly
-            const result = await dispatcher.processCommand(
-                message.message,
                 message.requestId,
-                [], // No attachments for now
+                message.message,
+                message.context,
+                ws,
             );
-
-            debug(`Command result: ${JSON.stringify(result)}`);
-
-            // Clean up request mapping
-            shellWindow.unregisterProtocolRequest(message.requestId);
 
             // Send ready status after completion
             this.sendStatus(
@@ -229,12 +244,6 @@ export class ProtocolChatServer {
             );
         } catch (error: any) {
             debug(`Error processing request: ${error.message}`);
-
-            // Clean up on error
-            if (this.getShellWindow) {
-                const shellWindow = this.getShellWindow();
-                shellWindow.unregisterProtocolRequest(message.requestId);
-            }
 
             this.sendError(
                 ws,
@@ -291,7 +300,6 @@ export class ProtocolChatServer {
         ws.close();
     }
 
-
     /**
      * Send error message
      */
@@ -335,7 +343,7 @@ export class ProtocolChatServer {
     /**
      * Send a message to WebSocket
      */
-    private send(ws: WebSocket, message: any): void {
+    send(ws: WebSocket, message: any): void {
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(message));
             debug(`Sent message type: ${message.type}`);
@@ -345,25 +353,19 @@ export class ProtocolChatServer {
     }
 
     /**
-     * Start the server
+     * Send message to specific session
      */
-    public async start(): Promise<void> {
-        await this.chatServer.start();
-    }
-
-    /**
-     * Stop the server
-     */
-    public stop(): void {
-        debug("Stopping protocol chat server");
-        this.sessionManager.shutdown();
-        this.chatServer.stop();
+    sendToSession(sessionId: string, message: any): void {
+        const session = this.sessionManager.getSession(sessionId);
+        if (session) {
+            this.send(session.ws, message);
+        }
     }
 
     /**
      * Get session manager (for testing/debugging)
      */
-    public getSessionManager(): ChatSessionManager {
+    getSessionManager(): SessionManager {
         return this.sessionManager;
     }
 }

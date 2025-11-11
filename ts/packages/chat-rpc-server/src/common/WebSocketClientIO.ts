@@ -2,23 +2,25 @@
 // Licensed under the MIT License.
 
 import WebSocket from "ws";
-import {
+import type {
     ClientIO,
     IAgentMessage,
     RequestId,
 } from "agent-dispatcher";
-import {
+import type {
     DisplayAppendMode,
     TypeAgentAction,
     DisplayContent,
 } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:shell:webSocketClientIO");
+const debug = registerDebug("typeagent:chat-rpc-server:webSocketClientIO");
 
 /**
  * ClientIO implementation that sends all output through a WebSocket connection
  * This allows external clients to receive TypeAgent responses via the protocol
+ *
+ * Shared by both Shell and CLI adapters
  */
 export class WebSocketClientIO implements ClientIO {
     constructor(

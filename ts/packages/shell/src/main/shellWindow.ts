@@ -27,7 +27,12 @@ import {
 
 import registerDebug from "debug";
 import { ChatServer } from "./chatServer.js";
-import { ProtocolChatServer } from "./protocolChatServer.js";
+import {
+    ChatRpcServer,
+    ShellHostAdapter,
+    IProtocolRequestTracker,
+    type HostAdapter,
+} from "chat-rpc-server";
 import WebSocket from "ws";
 
 const debugShellWindow = registerDebug("typeagent:shell:window");
@@ -75,7 +80,7 @@ type OverlayData = BottomAlignedPosition & {
 };
 
 const dividerSize = 4; // 4px divider
-export class ShellWindow {
+export class ShellWindow implements IProtocolRequestTracker {
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
     private readonly overlayWebContentsViews: Map<
@@ -108,7 +113,8 @@ export class ShellWindow {
     public chatViewServer: ChatServer | undefined;
 
     // Protocol server for external clients (port 3100)
-    public protocolServer: ProtocolChatServer | undefined;
+    public protocolServer: ChatRpcServer | undefined;
+    private protocolAdapter: HostAdapter | undefined;
 
     // Map to track protocol client requests: requestId -> {ws, sessionId}
     private protocolRequests = new Map<
@@ -414,15 +420,21 @@ export class ShellWindow {
             return;
         }
 
-        this.protocolServer = new ProtocolChatServer(port);
+        // Create ChatRpcServer with the specified port
+        this.protocolServer = new ChatRpcServer({ port });
 
-        // If dispatcher getter provided, wire it up
+        // If dispatcher getter provided, create and attach the shell adapter
         if (getDispatcher) {
-            this.protocolServer.setInstanceGetters(getDispatcher, () => this);
+            this.protocolAdapter = new ShellHostAdapter(
+                this.protocolServer,
+                getDispatcher,
+                () => this
+            );
+            this.protocolServer.attachHost(this.protocolAdapter);
         }
 
         this.protocolServer.start();
-        console.log(`Protocol server started on port ${port} for external clients`);
+        console.log(`Chat RPC server started on port ${port} for external clients`);
     }
 
     /**
