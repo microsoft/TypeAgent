@@ -17,7 +17,7 @@ public class JsonTranslatorPrompts : IJsonTranslatorPrompts
         ArgumentVerify.ThrowIfNull(request, nameof(request));
         Prompt prompt = new Prompt();
 
-        prompt += IntroSection(typeSchema.TypeFullName, typeSchema.Schema);
+        prompt += IntroSection(typeSchema.TypeName, typeSchema.Schema);
         AddContextAndRequest(prompt, request, context);
 
         return prompt;
@@ -65,7 +65,7 @@ public class JsonTranslatorPrompts : IJsonTranslatorPrompts
     {
         PromptSection introSection = new PromptSection();
         introSection += $"You are a service that translates user requests into JSON objects of type \"{typeName}\" according to the following TypeScript definitions:\n";
-        introSection += $"###\n{schema}###\n";
+        introSection += $"```\n{schema}```\n";
         return introSection;
     }
 

@@ -66,6 +66,10 @@ public class OpenAIChatModel : ModelApi, IChatModel
             {
                 request.max_tokens = translationSettings.MaxTokens;
             }
+            if (translationSettings.Seed != 0)
+            {
+                request.seed = translationSettings.Seed;
+            }
         }
         string? apiToken = Settings.ApiTokenProvider is not null
                     ? await Settings.ApiTokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false)
