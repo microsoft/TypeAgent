@@ -45,7 +45,7 @@ internal static class LookupExtensions
             scoreBooster
         ).ConfigureAwait(false);
 
-        return filtered ?? scoredOrdinals;
+        return filtered;
     }
 
     public static async ValueTask<IList<ScoredSemanticRefOrdinal>?> FilterAsync(
