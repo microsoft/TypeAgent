@@ -16,7 +16,7 @@ export interface BaseMessage {
     sessionId?: string;
 }
 
-// Request Messages (Client ’ Server)
+// Request Messages (Client ï¿½ Server)
 export interface InitSessionMessage extends BaseMessage {
     type: "initSession";
     sessionId: string;
@@ -53,7 +53,7 @@ export interface CloseSessionMessage extends BaseMessage {
     reason?: string;
 }
 
-// Response Messages (Server ’ Client)
+// Response Messages (Server ï¿½ Client)
 export interface ResponseMessage extends BaseMessage {
     type: "response";
     sessionId: string;
@@ -118,6 +118,22 @@ export interface SessionAckMessage extends BaseMessage {
     capabilities?: string[];
 }
 
+export interface InvokeExternalChatMessage extends BaseMessage {
+    type: "invoke_external_chat";
+    sessionId: string;
+    requestId: string;
+    query: string;
+    context?: {
+        conversationHistory?: Array<{
+            role: "user" | "assistant";
+            content: string;
+        }>;
+        userLocation?: string;
+        locale?: string;
+        metadata?: Record<string, any>;
+    };
+}
+
 // Union Types
 export type TypeAgentRequestMessage =
     | InitSessionMessage
@@ -131,7 +147,8 @@ export type TypeAgentResponseMessage =
     | PongMessage
     | StatusMessage
     | ProgressMessage
-    | SessionAckMessage;
+    | SessionAckMessage
+    | InvokeExternalChatMessage;
 
 export type TypeAgentMessage =
     | TypeAgentRequestMessage

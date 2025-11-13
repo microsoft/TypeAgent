@@ -8,11 +8,12 @@ import {
     GenerateResponseAction,
 } from "./chatResponseActionSchema.js";
 
-import { ActionContext, AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgent, TypeAgentAction, ActionResult } from "@typeagent/agent-sdk";
 import {
     createActionResultFromHtmlDisplay,
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
+import { shouldDelegateToExternalChat } from "./externalChatDelegation.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -25,6 +26,32 @@ export async function executeChatResponseAction(
     chatAction: TypeAgentAction<ChatResponseAction>,
     context: ActionContext,
 ) {
+    const requestId = (chatAction as any).requestId ||
+                     (context as any).requestId ||
+                     undefined;
+
+    if (shouldDelegateToExternalChat(context, requestId)) {
+        console.log("[ChatAgent] Protocol request - delegating to external chat");
+
+        const query = (chatAction.parameters as any)?.originalRequest ||
+                     (chatAction.parameters as any)?.query ||
+                     "";
+
+        const delegationResult: ActionResult = {
+            literalText: undefined,
+            dynamicDisplayId: "external_chat_delegation",
+            dynamicDisplayType: "inline",
+            delegationInfo: {
+                type: "invoke_external_chat",
+                query,
+                requestId,
+            },
+        };
+
+        return delegationResult;
+    }
+
+    console.log("[ChatAgent] Local request - processing with TypeAgent");
     return handleChatResponse(chatAction, context);
 }
 
