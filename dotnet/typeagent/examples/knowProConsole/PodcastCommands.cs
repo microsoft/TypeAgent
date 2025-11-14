@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Threading.Tasks;
+using TypeAgent.KnowPro;
 using TypeAgent.KnowPro.Storage;
 
 namespace KnowProConsole;
@@ -66,11 +67,24 @@ public class PodcastCommands : ICommandModule
 
         _kpContext.Stopwatch.Stop();
         KnowProWriter.WriteTiming(_kpContext.Stopwatch, "Load podcast");
-
         SetCurrent(podcast);
         KnowProWriter.Write(ConsoleColor.White, "Loaded ");
         KnowProWriter.Write(ConsoleColor.Cyan, $"{name} ");
         KnowProWriter.WriteLine(ConsoleColor.DarkGray, $"[{await podcast.Messages.GetCountAsync()} messages]");
+
+        var timeRange = await podcast.GetStartTimestampRangeAsync().ConfigureAwait(false);
+        if (timeRange is not null)
+        {
+            KnowProWriter.WriteLine(ConsoleColor.White, $"Time Range: Started: {timeRange.Value.StartTimestamp}\nEnded: {timeRange.Value.EndTimestamp}");
+        }
+
+        var participants = await podcast.GetParticipantsAsync().ConfigureAwait(false);
+        if (participants is not null)
+        {
+            KnowProWriter.WriteLine(ConsoleColor.White, $"Partiipants: {string.Join(", ", participants)}");
+        }
+
+
 
         return Task.CompletedTask;
     }
@@ -81,7 +95,7 @@ public class PodcastCommands : ICommandModule
         {
             Args.Arg<string>("filePath", "Path to existing podcast index"),
             Options.Arg<string>("startAt", "ISO date: When the podcast occurred"),
-            Options.Arg<int>("length", "In minutes"),
+            Options.Arg<int?>("length", "In minutes", null),
             Options.Arg<bool>("buildIndex", "Also build index", true)
         };
         cmd.SetAction(this.PodcastImportIndexAsync);
@@ -121,7 +135,7 @@ public class PodcastCommands : ICommandModule
             filePath,
             podcastName,
             startDate,
-            namedArgs.Get<int>("length")
+            namedArgs.Get<int?>("length")
         );
 
         if (namedArgs.Get<bool>("buildIndex"))

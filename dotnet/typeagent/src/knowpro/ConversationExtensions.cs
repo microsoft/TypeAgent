@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Collections.Generic;
+using static System.Runtime.InteropServices.JavaScript.JSType;
+
 namespace TypeAgent.KnowPro;
 
 public static class ConversationExtensions
@@ -13,6 +16,21 @@ public static class ConversationExtensions
     public static IAsyncCollectionReader<IMessage> GetMessageReader(this IConversation conversation)
     {
         return conversation.Cache?.Messages ?? conversation.Messages;
+    }
+
+    public static async ValueTask<IList<string>> GetParticipantsAsync(this IConversation conversation)
+    {
+        HashSet<string> participants = [];
+
+        await foreach (IMessage msg in conversation.Messages)
+        {
+            if (!string.IsNullOrEmpty(msg.Metadata.Source))
+            {
+                participants.Add(msg.Metadata.Source);
+            }
+        }
+
+        return [.. participants];
     }
 
     public static async ValueTask<DateRange?> GetDateRangeAsync(this IConversation conversation)
@@ -32,11 +50,23 @@ public static class ConversationExtensions
             var end = await conversation.Messages.GetTimestampAsync(messageCount - 1).ConfigureAwait(false);
             if (start is not null)
             {
-                return new TimestampRange
+                // Try to parse the date time so we can pretty up the output
+                if (System.DateTime.TryParse(start, out System.DateTime startDate) && System.DateTime.TryParse(end, out System.DateTime endDate))
                 {
-                    StartTimestamp = start,
-                    EndTimestamp = end
-                };
+                    return new TimestampRange
+                    {
+                        StartTimestamp = startDate.ToString("r"),
+                        EndTimestamp = endDate.ToString("r")
+                    };
+                }
+                else
+                {
+                    return new TimestampRange
+                    {
+                        StartTimestamp = start,
+                        EndTimestamp = end
+                    };
+                }
             }
         }
         return null;
