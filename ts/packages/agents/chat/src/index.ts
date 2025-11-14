@@ -10,4 +10,3 @@ export function instantiate(): AppAgent {
 
 export { executeChatResponseAction, logEntities } from "./chatResponseHandler.js";
 export type { ChatResponseAction, GenerateResponseAction } from "./chatResponseActionSchema.js";
-export { shouldDelegateToExternalChat, isProtocolRequest, getConversationHistory } from "./externalChatDelegation.js";

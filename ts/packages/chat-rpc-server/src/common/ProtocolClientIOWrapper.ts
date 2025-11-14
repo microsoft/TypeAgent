@@ -278,5 +278,11 @@ export function createProtocolClientIOWrapper(
             // Always forward to native
             nativeClientIO.takeAction(action, data);
         },
-    };
+
+        getProtocolRequestWebSocket(
+            requestId: string | undefined,
+        ): { ws: WebSocket; sessionId: string } | undefined {
+            return requestTracker.getProtocolRequestWebSocket(requestId);
+        },
+    } as ClientIO & { getProtocolRequestWebSocket: typeof requestTracker.getProtocolRequestWebSocket };
 }

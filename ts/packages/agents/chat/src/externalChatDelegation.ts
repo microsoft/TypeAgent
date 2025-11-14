@@ -19,11 +19,21 @@ export function isProtocolRequest(
     context: ActionContext<any>,
     requestId?: string,
 ): boolean {
+    console.log(`[ChatDelegation] isProtocolRequest called with requestId: ${requestId}`);
+
     if (!requestId) {
+        console.log(`[ChatDelegation] No requestId provided, returning false`);
         return false;
     }
 
     const agentContext = context.sessionContext.agentContext;
+    console.log(`[ChatDelegation] agentContext exists: ${!!agentContext}`);
+    console.log(`[ChatDelegation] agentContext type: ${typeof agentContext}`);
+
+    if (agentContext && typeof agentContext === "object") {
+        console.log(`[ChatDelegation] Has getProtocolRequestWebSocket: ${"getProtocolRequestWebSocket" in agentContext}`);
+        console.log(`[ChatDelegation] Is function: ${typeof (agentContext as any).getProtocolRequestWebSocket === "function"}`);
+    }
 
     if (
         agentContext &&
@@ -34,9 +44,11 @@ export function isProtocolRequest(
         const protocolInfo = (agentContext as any).getProtocolRequestWebSocket(
             requestId,
         );
+        console.log(`[ChatDelegation] getProtocolRequestWebSocket returned: ${protocolInfo !== undefined ? "protocol info found" : "undefined"}`);
         return protocolInfo !== undefined;
     }
 
+    console.log(`[ChatDelegation] agentContext does not have getProtocolRequestWebSocket method`);
     return false;
 }
 

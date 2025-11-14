@@ -95,6 +95,74 @@ function getStreamingActionContext(
     return actionContext;
 }
 
+function isProtocolRequest(
+    systemContext: CommandHandlerContext,
+): boolean {
+    const requestId = systemContext.requestId;
+    console.log("[Dispatcher:Delegation] isProtocolRequest - requestId:", requestId);
+
+    if (!requestId) {
+        console.log("[Dispatcher:Delegation] No requestId, returning false");
+        return false;
+    }
+
+    console.log("[Dispatcher:Delegation] clientIO exists:", !!systemContext.clientIO);
+    console.log("[Dispatcher:Delegation] getProtocolRequestWebSocket exists:",
+        typeof (systemContext.clientIO as any)?.getProtocolRequestWebSocket === "function");
+
+    if (
+        systemContext.clientIO &&
+        typeof (systemContext.clientIO as any).getProtocolRequestWebSocket === "function"
+    ) {
+        const protocolInfo = (systemContext.clientIO as any).getProtocolRequestWebSocket(requestId);
+        console.log("[Dispatcher:Delegation] getProtocolRequestWebSocket result:",
+            protocolInfo !== undefined ? "found" : "undefined");
+        return protocolInfo !== undefined;
+    }
+
+    console.log("[Dispatcher:Delegation] clientIO does not have getProtocolRequestWebSocket method");
+    return false;
+}
+
+function shouldDelegateAction(
+    schemaName: string,
+    systemContext: CommandHandlerContext,
+): boolean {
+    console.log("[Dispatcher:Delegation] shouldDelegateAction called for schema:", schemaName);
+    console.log("[Dispatcher:Delegation] requestId:", systemContext.requestId);
+
+    const config = systemContext.agents.getActionConfig(schemaName);
+    console.log("[Dispatcher:Delegation] config.delegatable:", config.delegatable);
+
+    if (!config.delegatable) {
+        console.log("[Dispatcher:Delegation] Schema not delegatable, processing locally");
+        return false;
+    }
+
+    const envValue = process.env.TYPEAGENT_EXTERNAL_CHAT_DELEGATION;
+    const delegationEnabled = envValue === undefined || envValue.toLowerCase() === "true" || envValue === "1";
+    console.log("[Dispatcher:Delegation] env TYPEAGENT_EXTERNAL_CHAT_DELEGATION:", envValue ?? "(undefined - defaults to true)");
+    console.log("[Dispatcher:Delegation] delegation enabled:", delegationEnabled);
+
+    if (!delegationEnabled) {
+        console.log("[Dispatcher:Delegation] External chat delegation disabled via config, processing locally");
+        debugActions("External chat delegation disabled via config");
+        return false;
+    }
+
+    console.log("[Dispatcher:Delegation] Checking if this is a protocol request...");
+    const isProtocol = isProtocolRequest(systemContext);
+
+    if (isProtocol) {
+        console.log(`[Dispatcher:Delegation] ✓ Protocol request ${systemContext.requestId} - DELEGATING to external service`);
+        debugActions(`Protocol request ${systemContext.requestId}, delegating action to external service`);
+    } else {
+        console.log(`[Dispatcher:Delegation] ✗ Local request ${systemContext.requestId} - processing with TypeAgent`);
+    }
+
+    return isProtocol;
+}
+
 async function executeAction(
     executableAction: ExecutableAction,
     context: ActionContext<CommandHandlerContext>,
@@ -110,6 +178,44 @@ async function executeAction(
     const schemaName = action.schemaName;
     const systemContext = context.sessionContext.agentContext;
     const appAgentName = getAppAgentName(schemaName);
+
+    console.log("[Dispatcher:Delegation] executeAction - checking delegation for schema:", schemaName);
+
+    if (shouldDelegateAction(schemaName, systemContext)) {
+        console.log(`[Dispatcher:Delegation] ===> DELEGATING ${schemaName} action to external service`);
+        debugActions(`Delegating ${schemaName} action to external service`);
+
+        const query = (action.parameters as any)?.originalRequest ||
+                     (action.parameters as any)?.query ||
+                     (action.parameters as any)?.request ||
+                     "";
+
+        console.log("[Dispatcher:Delegation] Extracted query:", query.substring(0, 100));
+
+        const delegationData = JSON.stringify({
+            _delegationType: "external_chat",
+            query,
+            requestId: systemContext.requestId,
+        });
+
+        console.log("[Dispatcher:Delegation] Returning delegation result with content:", delegationData);
+
+        // Send delegation marker directly through appendDisplay
+        console.log("[Dispatcher:Delegation] Sending delegation marker through appendDisplay");
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: delegationData,
+        }, "block");
+
+        // Return a result without displayContent since we already sent it
+        return {
+            entities: [],
+            historyText: delegationData,
+        };
+    }
+
+    console.log(`[Dispatcher:Delegation] ===> EXECUTING ${schemaName} action locally with TypeAgent`);
+
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
