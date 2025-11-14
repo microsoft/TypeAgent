@@ -47,9 +47,19 @@ public static partial class Transcript
 
         TMessage? current = default;
 
-        foreach (var line in lines)
+        bool emptySpeech = false;
+        for(int i = 0; i < lines.Count; i++)
         {
+            var line = lines[i];
             var match = s_turnParser.Match(line);
+
+            // if the last line was just a speaker name with no speech, reprocess
+            if (emptySpeech)
+            {
+                match = s_turnParser.Match(lines[i - 1] + " " + line);
+                emptySpeech = false;
+            }
+
             if (!match.Success)
             {
                 continue;
@@ -57,6 +67,12 @@ public static partial class Transcript
 
             var speakerRaw = match.Groups["speaker"].Success ? match.Groups["speaker"].Value : null;
             var speech = match.Groups["speech"].Value;
+            emptySpeech = string.IsNullOrEmpty(speech);
+
+            if (emptySpeech)
+            {
+                continue;
+            }
 
             if (current is not null)
             {

@@ -13,6 +13,11 @@ namespace TypeAgent.Common;
 public static class Dotenv
 {
     /// <summary>
+    /// The default location to look for the .env file
+    /// </summary>
+    public const string DEFAULT_DOT_ENV_LOCATION = "..\\..\\..\\..\\..\\..\\..\\ts\\.env";
+
+    /// <summary>
     /// Loads environment variables from the specified .env file.
     /// </summary>
     /// <param name="filePath">Path to the .env file.</param>
