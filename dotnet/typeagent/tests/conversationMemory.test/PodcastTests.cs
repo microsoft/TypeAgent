@@ -27,7 +27,8 @@ public class PodcastTests
 
         if (Dotenv.LoadIfExists(Dotenv.DEFAULT_DOT_ENV_LOCATION) == 0)
         {
-            throw new Xunit.Sdk.SkipException();
+            //throw new Xunit.Sdk.SkipException();
+            throw new ArgumentException("Missing .ENV configuration, can't run tests.");
         }
     }
 
