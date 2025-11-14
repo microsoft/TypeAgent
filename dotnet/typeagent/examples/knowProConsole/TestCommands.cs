@@ -431,7 +431,17 @@ public class TestCommands : ICommandModule
                 null,
                 null
             ).ConfigureAwait(false);
-            KnowProWriter.WriteJson(answer);
+
+            KnowProWriter.WriteLine();
+            if (answer.Type == AnswerType.Answered)
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Green, answer.Answer);
+            }
+            else
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Yellow, answer.WhyNoAnswer);
+            }
+            KnowProWriter.WriteLine();
         }
     }
 
