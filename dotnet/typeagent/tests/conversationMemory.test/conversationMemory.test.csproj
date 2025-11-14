@@ -7,8 +7,8 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <AssemblyName>TypeAgent.Tests.KnowPro</AssemblyName>
-    <RootNamespace>TypeAgent.Tests.KnowPro</RootNamespace>
+    <AssemblyName>TypeAgent.Tests.ConversationMemory</AssemblyName>
+    <RootNamespace>TypeAgent.Tests.ConversationMemory</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,9 +25,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\common\common.csproj" />
+    <ProjectReference Include="..\..\src\aiclient\aiclient.csproj" />
+    <ProjectReference Include="..\..\src\conversationMemory\conversationMemory.csproj" />
     <ProjectReference Include="..\..\src\knowproStorage\knowproStorage.csproj" />
-    <ProjectReference Include="..\..\src\knowpro\knowpro.csproj" />
     <ProjectReference Include="..\testLib\testLib.csproj" />
   </ItemGroup>
 

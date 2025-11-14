@@ -50,8 +50,7 @@ public class KnowProConsole : ConsoleApp
 
     public static async Task<int> Main(string[] args)
     {
-        string dotEnvPath = "..\\..\\..\\..\\..\\..\\..\\ts\\.env";
-        if (Dotenv.LoadIfExists(dotEnvPath) == 0)
+        if (Dotenv.LoadIfExists(Dotenv.DEFAULT_DOT_ENV_LOCATION) == 0)
         {
             KnowProWriter.WriteError("NO .env variables applied");
         }
