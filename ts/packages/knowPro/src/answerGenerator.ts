@@ -346,7 +346,7 @@ export async function generateAnswerInChunks(
             }
             if (chunk.messages) {
                 knowledgeChunk ??= {};
-                knowledgeChunk.messages = chunk.messages;;
+                knowledgeChunk.messages = chunk.messages;
             }
             if (knowledgeChunk !== undefined) {
                 structuredChunks.push(knowledgeChunk);
