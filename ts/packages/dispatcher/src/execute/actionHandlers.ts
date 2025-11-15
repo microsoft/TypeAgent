@@ -95,7 +95,7 @@ function getStreamingActionContext(
     return actionContext;
 }
 
-function isProtocolRequest(
+export function isProtocolRequest(
     systemContext: CommandHandlerContext,
 ): boolean {
     const requestId = systemContext.requestId;
@@ -124,7 +124,7 @@ function isProtocolRequest(
     return false;
 }
 
-function shouldDelegateAction(
+export function shouldDelegateAction(
     schemaName: string,
     systemContext: CommandHandlerContext,
 ): boolean {
@@ -182,8 +182,9 @@ async function executeAction(
     console.log("[Dispatcher:Delegation] executeAction - checking delegation for schema:", schemaName);
 
     if (shouldDelegateAction(schemaName, systemContext)) {
-        console.log(`[Dispatcher:Delegation] ===> DELEGATING ${schemaName} action to external service`);
-        debugActions(`Delegating ${schemaName} action to external service`);
+        console.warn(`[Dispatcher:Delegation] ⚠️  OLD DELEGATION PATH HIT - This should have been caught in translation phase!`);
+        console.log(`[Dispatcher:Delegation] ===> DELEGATING ${schemaName} action to external service (fallback path)`);
+        debugActions(`Delegating ${schemaName} action to external service (fallback path)`);
 
         const query = (action.parameters as any)?.originalRequest ||
                      (action.parameters as any)?.query ||
@@ -201,7 +202,7 @@ async function executeAction(
         console.log("[Dispatcher:Delegation] Returning delegation result with content:", delegationData);
 
         // Send delegation marker directly through appendDisplay
-        console.log("[Dispatcher:Delegation] Sending delegation marker through appendDisplay");
+        console.log("[Dispatcher:Delegation] Sending delegation marker through appendDisplay (late)");
         context.actionIO.appendDisplay({
             type: "text",
             content: delegationData,
@@ -400,6 +401,14 @@ export async function executeActions(
         const executableAction = pending.executableAction;
 
         const action = executableAction.action;
+        
+        // Skip delegated actions - they were already handled in translation phase
+        if (action.schemaName === "system" && action.actionName === "delegated") {
+            console.log("[Dispatcher:Execute] Skipping delegated action - delegation signal already sent");
+            actionIndex++;
+            continue;
+        }
+        
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
                 action,

@@ -38,6 +38,7 @@ import { loadAssistantSelectionJsonTranslator } from "./unknownSwitcher.js";
 import {
     getSchemaNamePrefix,
     startStreamPartialAction,
+    shouldDelegateAction,
 } from "../execute/actionHandlers.js";
 import { ProfileNames } from "../utils/profileNames.js";
 import {
@@ -680,6 +681,35 @@ async function translateRequestWithActiveSchemas(
         activeSchemas,
         systemContext,
     );
+
+    // Check for delegation IMMEDIATELY after schema selection, before any translation work
+    if (shouldDelegateAction(schemaName, systemContext)) {
+        console.log(`[Dispatcher:Translation] Schema '${schemaName}' should be delegated - sending signal NOW (before translation)`);
+        
+        const delegationData = JSON.stringify({
+            _delegationType: "external_chat",
+            query: request,
+            requestId: systemContext.requestId,
+        });
+        
+        // Send delegation signal immediately via ClientIO
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: delegationData,
+        }, "block");
+        
+        // Return a special "delegated" action that executeActions will skip
+        return createExecutableAction(
+            "system",
+            "delegated",
+            {
+                originalRequest: request,
+                delegatedTo: "external_chat",
+                delegatedSchema: schemaName,
+            },
+            undefined,
+        );
+    }
 
     const result = await translateRequestWithSchema(
         schemaName,
