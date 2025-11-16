@@ -68,11 +68,10 @@ public class PodcastCommands : ICommandModule
 
         var podcast = CreatePodcast(name, false);
 
-        if (_kpContext is not null)
-        {
-            _kpContext.Stopwatch.Stop();
-            KnowProWriter.WriteTiming(_kpContext.Stopwatch, "Load podcast");
-        }
+        _kpContext?.Stopwatch.Stop();
+
+        KnowProWriter.WriteTiming(_kpContext?.Stopwatch, "Load podcast");
+
         SetCurrent(podcast);
         KnowProWriter.Write(ConsoleColor.White, "Loaded ");
         KnowProWriter.Write(ConsoleColor.Cyan, $"{name} ");

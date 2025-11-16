@@ -273,8 +273,13 @@ public class ConsoleWriter
         }
     }
 
-    public static void WriteTiming(Stopwatch clock, string? label = null)
+    public static void WriteTiming(Stopwatch? clock, string? label = null)
     {
+        if (clock == null)
+        {
+            return;
+        }
+
         WriteTiming(ConsoleColor.DarkGray, clock, label);
     }
 
