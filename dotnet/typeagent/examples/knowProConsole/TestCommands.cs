@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
 
@@ -8,11 +9,14 @@ namespace KnowProConsole;
 
 public class TestCommands : ICommandModule
 {
-    KnowProConsoleContext _kpContext;
+    KnowProConsoleContext? _kpContext;
 
-    public TestCommands(KnowProConsoleContext context)
+    public TestCommands(KnowProContext context)
     {
-        _kpContext = context;
+        if (context is KnowProConsoleContext kpContext)
+        {
+            _kpContext = kpContext;
+        }
     }
 
     public IList<Command> GetCommands()
@@ -207,10 +211,14 @@ public class TestCommands : ICommandModule
         foreach (var term in allTerms)
         {
             KnowProWriter.WriteLine(ConsoleColor.Cyan, term);
-            _kpContext.Stopwatch.Restart();
+            _kpContext?.Stopwatch.Restart();
             var matches = await fuzzyIndex.LookupTermAsync(term, 10, 0, cancellationToken);
-            _kpContext.Stopwatch.Stop();
-            KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+            _kpContext?.Stopwatch.Stop();
+
+            if (_kpContext is not null)
+            {
+                KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+            }
             matches.ForEach(KnowProWriter.WriteTerm);
         }
     }
@@ -287,7 +295,7 @@ public class TestCommands : ICommandModule
             cancellationToken
         ).ConfigureAwait(false);
 
-        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results);
+        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext?.Conversation!, results);
     }
 
     private Command SearchQueryTermsDef()
@@ -447,6 +455,11 @@ public class TestCommands : ICommandModule
 
     private IConversation EnsureConversation()
     {
+        if (_kpContext is null)
+        {
+            throw new InvalidOperationException("KnowProContext is not initialized");
+        }
+
         return (_kpContext.Conversation is not null)
             ? _kpContext.Conversation!
             : throw new InvalidOperationException("No conversation loaded");

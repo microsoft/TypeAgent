@@ -9,12 +9,15 @@ namespace KnowProConsole;
 
 public class PodcastCommands : ICommandModule
 {
-    KnowProConsoleContext _kpContext;
+    KnowProConsoleContext? _kpContext;
     Podcast? _podcast; // Currently loaded podcast, if any
 
-    public PodcastCommands(KnowProConsoleContext context)
+    public PodcastCommands(KnowProContext context)
     {
-        _kpContext = context;
+        if (context is KnowProConsoleContext kpContext)
+        {
+            _kpContext = kpContext;
+        }
     }
 
     public IList<Command> GetCommands()
@@ -61,12 +64,15 @@ public class PodcastCommands : ICommandModule
 
         UnloadCurrent();
 
-        _kpContext.Stopwatch.Restart();
+        _kpContext?.Stopwatch.Restart();
 
         var podcast = CreatePodcast(name, false);
 
-        _kpContext.Stopwatch.Stop();
-        KnowProWriter.WriteTiming(_kpContext.Stopwatch, "Load podcast");
+        if (_kpContext is not null)
+        {
+            _kpContext.Stopwatch.Stop();
+            KnowProWriter.WriteTiming(_kpContext.Stopwatch, "Load podcast");
+        }
         SetCurrent(podcast);
         KnowProWriter.Write(ConsoleColor.White, "Loaded ");
         KnowProWriter.Write(ConsoleColor.Cyan, $"{name} ");
@@ -83,8 +89,6 @@ public class PodcastCommands : ICommandModule
         {
             KnowProWriter.WriteLine(ConsoleColor.White, $"Partiipants: {string.Join(", ", participants)}");
         }
-
-
 
         return Task.CompletedTask;
     }
@@ -196,6 +200,11 @@ public class PodcastCommands : ICommandModule
 
     private Podcast CreatePodcast(string name, bool createNew)
     {
+        if (_kpContext is null)
+        {
+            throw new InvalidOperationException("KnowProContext is not initialized");
+        }
+
         MemorySettings settings = new MemorySettings();
         var provider = _kpContext.CreateStorageProvider<PodcastMessage, PodcastMessageMeta>(
             settings.ConversationSettings,
@@ -209,7 +218,7 @@ public class PodcastCommands : ICommandModule
 
     private void UnloadCurrent()
     {
-        _kpContext.UnloadCurrent();
+        _kpContext?.UnloadCurrent();
         if (_podcast is not null)
         {
             _podcast.Dispose();
@@ -223,7 +232,7 @@ public class PodcastCommands : ICommandModule
         if (podcast is not null)
         {
             _podcast = podcast;
-            _kpContext.SetCurrent(podcast);
+            _kpContext?.SetCurrent(podcast);
         }
     }
 }
