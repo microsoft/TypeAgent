@@ -151,14 +151,14 @@ export class WebSocketClientIO implements ClientIO {
         const content = this.displayContentToText(message.message);
         const contentType = this.getContentType(message.message);
 
-        console.log("[WebSocketClientIO] appendDisplay content:", content.substring(0, 200));
+        debug("[WebSocketClientIO] appendDisplay content:", content.substring(0, 200));
 
         // Check if this is a delegation marker
         try {
             const parsed = JSON.parse(content);
-            console.log("[WebSocketClientIO] Parsed JSON, checking _delegationType:", parsed._delegationType);
+            debug("[WebSocketClientIO] Parsed JSON, checking _delegationType:", parsed._delegationType);
             if (parsed._delegationType === "external_chat") {
-                console.log("[WebSocketClientIO] ✓ Detected delegation marker - sending invoke_external_chat");
+                debug("[WebSocketClientIO] ✓ Detected delegation marker - sending invoke_external_chat");
                 debug("Detected delegation marker - sending invoke_external_chat");
                 this.send({
                     type: "invoke_external_chat",
@@ -173,10 +173,10 @@ export class WebSocketClientIO implements ClientIO {
                 });
                 return;
             } else {
-                console.log("[WebSocketClientIO] Not a delegation marker, sending as partialResponse");
+                debug("[WebSocketClientIO] Not a delegation marker, sending as partialResponse");
             }
         } catch (e) {
-            console.log("[WebSocketClientIO] Not valid JSON or parse error:", e instanceof Error ? e.message : String(e));
+            debug("[WebSocketClientIO] Not valid JSON or parse error:", e instanceof Error ? e.message : String(e));
             // Not JSON or not a delegation marker, continue with normal flow
         }
 
