@@ -135,7 +135,7 @@ public class AnswerGenerator : IAnswerGenerator
             "- Use the 'name', 'type' and 'facets' properties of the provided JSON entities to identify those highly relevant to answering the question. NOTE: each entity can have multiple types.",
             "- 'origin' and 'audience' fields contain the names of entities involved in communication about the knowledge",
             "**Important:** Communicating DOES NOT imply associations such as authorship, ownership etc. E.g. origin: [X] telling audience [Y, Z] communicating about a book does not imply authorship.",
-            "- When asked to generate lists, answer the question and nothing else. Gather list items from [ANSWER CONTEXT]. 'List all' just means the items [ANSWER CONTEX] lists do not have to be complete beyond what's in [ANSWER CONTEXT].",
+            "- When asked for lists, ensure the list contents answer the question and nothing else. E.g. for the question 'List all books': List only the books in [ANSWER CONTEXT].\"",
             "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",
             "- Your answer is readable and complete, with appropriate formatting: line breaks, numbered lists, bullet points etc.",
         ];
