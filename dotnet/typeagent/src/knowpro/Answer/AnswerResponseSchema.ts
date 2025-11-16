@@ -10,7 +10,7 @@ export type AnswerResponse = {
     type: AnswerType;
     // the answer to display if [ANSWER CONTEXT] is highly relevant and can be used to answer the user's question
     answer?: string | undefined;
-    // If NoAnswer, explain why..
-    // particularly explain why you didn't use any supplied entities
+    // If NoAnswer, explain why.
+    // Particularly explain why you didn't use any supplied entities
     whyNoAnswer?: string;
 };

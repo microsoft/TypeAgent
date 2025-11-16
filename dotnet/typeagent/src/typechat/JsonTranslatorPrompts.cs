@@ -63,9 +63,9 @@ public class JsonTranslatorPrompts : IJsonTranslatorPrompts
     /// <returns></returns>
     public static PromptSection IntroSection(string typeName, string schema)
     {
-        PromptSection introSection = new PromptSection();
-        introSection += $"You are a service that translates user requests into JSON objects of type \"{typeName}\" according to the following TypeScript definitions:\n";
-        introSection += $"```\n{schema}```\n";
+        PromptSection introSection = new PromptSection(PromptSection.Sources.System,
+            $"You are a service that translates user requests into JSON objects of type \"{typeName}\" according to the following TypeScript definitions:\n"
+            + $"```\n{schema}```\n");
         return introSection;
     }
 
