@@ -6,14 +6,11 @@ namespace KnowProConsole;
 
 public class MemoryCommands : ICommandModule
 {
-    KnowProConsoleContext? _kpContext;
+    KnowProConsoleContext _kpContext;
 
-    public MemoryCommands(KnowProContext context)
+    public MemoryCommands(KnowProConsoleContext context)
     {
-        if (context is KnowProConsoleContext kpContext)
-        {
-            _kpContext = kpContext;
-        }
+        _kpContext = context;
     }
 
     public IList<Command> GetCommands()
@@ -167,11 +164,6 @@ public class MemoryCommands : ICommandModule
 
     private IConversation EnsureConversation()
     {
-        if (_kpContext is null)
-        {
-            throw new InvalidOperationException("KnowProContext is not initialized");
-        }
-
         return (_kpContext.Conversation is not null)
             ? _kpContext.Conversation!
             : throw new InvalidOperationException("No conversation loaded");

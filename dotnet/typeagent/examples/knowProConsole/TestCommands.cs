@@ -9,14 +9,11 @@ namespace KnowProConsole;
 
 public class TestCommands : ICommandModule
 {
-    KnowProConsoleContext? _kpContext;
+    KnowProConsoleContext _kpContext;
 
-    public TestCommands(KnowProContext context)
+    public TestCommands(KnowProConsoleContext context)
     {
-        if (context is KnowProConsoleContext kpContext)
-        {
-            _kpContext = kpContext;
-        }
+        _kpContext = context;
     }
 
     public IList<Command> GetCommands()
@@ -211,14 +208,12 @@ public class TestCommands : ICommandModule
         foreach (var term in allTerms)
         {
             KnowProWriter.WriteLine(ConsoleColor.Cyan, term);
-            _kpContext?.Stopwatch.Restart();
+            _kpContext.Stopwatch.Restart();
             var matches = await fuzzyIndex.LookupTermAsync(term, 10, 0, cancellationToken);
-            _kpContext?.Stopwatch.Stop();
+            _kpContext.Stopwatch.Stop();
 
-            if (_kpContext is not null)
-            {
-                KnowProWriter.WriteTiming(_kpContext.Stopwatch);
-            }
+            KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+
             matches.ForEach(KnowProWriter.WriteTerm);
         }
     }
@@ -295,7 +290,7 @@ public class TestCommands : ICommandModule
             cancellationToken
         ).ConfigureAwait(false);
 
-        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext?.Conversation!, results);
+        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results);
     }
 
     private Command SearchQueryTermsDef()
@@ -455,11 +450,6 @@ public class TestCommands : ICommandModule
 
     private IConversation EnsureConversation()
     {
-        if (_kpContext is null)
-        {
-            throw new InvalidOperationException("KnowProContext is not initialized");
-        }
-
         return (_kpContext.Conversation is not null)
             ? _kpContext.Conversation!
             : throw new InvalidOperationException("No conversation loaded");

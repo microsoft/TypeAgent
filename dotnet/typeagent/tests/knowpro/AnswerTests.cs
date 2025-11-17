@@ -39,9 +39,9 @@ public class AnswerTests : TestWithTemporaryFiles
 
         // simulate console commands
         RootCommand cmds = [];
-        cmds.AddModule(new PodcastCommands(new KnowProContext()));
-        cmds.AddModule(new MemoryCommands(new KnowProContext()));
-        cmds.AddModule(new TestCommands(new KnowProContext()));
+        cmds.AddModule(new PodcastCommands(new KnowProConsoleContext()));
+        cmds.AddModule(new MemoryCommands(new KnowProConsoleContext()));
+        cmds.AddModule(new TestCommands(new KnowProConsoleContext()));
 
         var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(new ConversationSettings(), Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "episode_53_adriantchaikovsky", false);
 

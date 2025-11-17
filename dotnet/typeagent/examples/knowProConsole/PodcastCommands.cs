@@ -9,15 +9,12 @@ namespace KnowProConsole;
 
 public class PodcastCommands : ICommandModule
 {
-    KnowProConsoleContext? _kpContext;
+    KnowProConsoleContext _kpContext;
     Podcast? _podcast; // Currently loaded podcast, if any
 
-    public PodcastCommands(KnowProContext context)
+    public PodcastCommands(KnowProConsoleContext context)
     {
-        if (context is KnowProConsoleContext kpContext)
-        {
-            _kpContext = kpContext;
-        }
+        _kpContext = context;
     }
 
     public IList<Command> GetCommands()
@@ -64,13 +61,13 @@ public class PodcastCommands : ICommandModule
 
         UnloadCurrent();
 
-        _kpContext?.Stopwatch.Restart();
+        _kpContext.Stopwatch.Restart();
 
         var podcast = CreatePodcast(name, false);
 
-        _kpContext?.Stopwatch.Stop();
+        _kpContext.Stopwatch.Stop();
 
-        KnowProWriter.WriteTiming(_kpContext?.Stopwatch, "Load podcast");
+        KnowProWriter.WriteTiming(_kpContext.Stopwatch, "Load podcast");
 
         SetCurrent(podcast);
         KnowProWriter.Write(ConsoleColor.White, "Loaded ");
@@ -199,11 +196,6 @@ public class PodcastCommands : ICommandModule
 
     private Podcast CreatePodcast(string name, bool createNew)
     {
-        if (_kpContext is null)
-        {
-            throw new InvalidOperationException("KnowProContext is not initialized");
-        }
-
         MemorySettings settings = new MemorySettings();
         var provider = _kpContext.CreateStorageProvider<PodcastMessage, PodcastMessageMeta>(
             settings.ConversationSettings,
@@ -217,7 +209,7 @@ public class PodcastCommands : ICommandModule
 
     private void UnloadCurrent()
     {
-        _kpContext?.UnloadCurrent();
+        _kpContext.UnloadCurrent();
         if (_podcast is not null)
         {
             _podcast.Dispose();
@@ -231,7 +223,7 @@ public class PodcastCommands : ICommandModule
         if (podcast is not null)
         {
             _podcast = podcast;
-            _kpContext?.SetCurrent(podcast);
+            _kpContext.SetCurrent(podcast);
         }
     }
 }

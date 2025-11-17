@@ -26,20 +26,42 @@ public struct CursorPos
 
     public static CursorPos Capture()
     {
-        return new()
+        try
         {
-            Left = Console.CursorLeft,
-            Top = Console.CursorTop
-        };
+            return new()
+            {
+                Left = Console.CursorLeft,
+                Top = Console.CursorTop
+            };
+        }
+        catch (IOException)
+        {
+            return new()
+            {
+                Left = -1,
+                Top = -1
+            };
+        }
     }
 
     public static CursorPos CaptureLeft()
     {
-        return new()
+        try
         {
-            Left = Console.CursorLeft,
-            Top = -1,
-        };
+            return new()
+            {
+                Left = Console.CursorLeft,
+                Top = -1
+            };
+        }
+        catch (IOException)
+        {
+            return new()
+            {
+                Left = -1,
+                Top = -1
+            };
+        }
     }
 }
 
