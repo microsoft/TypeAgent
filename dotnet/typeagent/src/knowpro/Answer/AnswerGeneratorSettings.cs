@@ -23,6 +23,12 @@ public sealed class AnswerGeneratorSettings
     }
 
     /// <summary>
+    /// Creates a default instance of the answer generator settings
+    /// </summary>
+    /// <returns></returns>
+    public static AnswerGeneratorSettings CreateDefault(IChatModel model) => new AnswerGeneratorSettings(model);
+
+    /// <summary>
     /// Model used to generate answers from context.
     /// </summary>
     public IChatModel GeneratorModel { get; }

@@ -19,4 +19,8 @@
     <ProjectReference Include="..\examplesLib\examplesLib.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TypeAgent.Tests.KnowPro" />
+  </ItemGroup>  
+
 </Project>

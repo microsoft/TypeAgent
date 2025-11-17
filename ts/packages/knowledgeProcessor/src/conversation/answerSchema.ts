@@ -10,7 +10,7 @@ export type AnswerResponse = {
     type: AnswerRelevance;
     // the answer to display if the conversation history is highly relevant and can be used to answer the user's question
     answer?: string | undefined;
-    // If NoAnswer, explain why..
-    // particularly explain why you didn't use any supplied entities
+    // If NoAnswer, explain why.
+    // Particularly explain why you didn't use any supplied entities
     whyNoAnswer?: string;
 };

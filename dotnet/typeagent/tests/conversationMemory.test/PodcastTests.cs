@@ -10,36 +10,12 @@ using TypeAgent.KnowPro.Storage.Sqlite;
 using Xunit.Sdk;
 using Xunit;
 using TypeAgent.KnowPro;
+using TypeAgent.TestLib;
 
 namespace TypeAgent.Tests.ConversationMemory;
 
-public class PodcastTests
+public class PodcastTests : TestWithTemporaryFiles
 {
-    DirectoryInfo _tempDir;
-    private bool _disposedValue;
-
-    /// <summary>
-    /// Test setup including loading .ENV settings and creating temporary folder for sqlite DB
-    /// </summary>
-    public PodcastTests()
-    {
-        _tempDir = Directory.CreateTempSubdirectory();
-
-        if (Dotenv.LoadIfExists(Dotenv.DEFAULT_DOT_ENV_LOCATION) == 0)
-        {
-            //throw new Xunit.Sdk.SkipException();
-            throw new ArgumentException("Missing .ENV configuration, can't run tests.");
-        }
-    }
-
-    /// <summary>
-    /// Cleans up test data
-    /// </summary>
-    ~PodcastTests()
-    {
-        Directory.Delete(_tempDir.FullName, true);
-    }
-
     private class TestTranscriptInfo
     {
         public string filePath { get; set; } = string.Empty;
@@ -67,7 +43,7 @@ public class PodcastTests
     [Fact]
     public async Task BuildIndexAsync()
     {
-        Podcast podcast = await LoadTestPodcastAsync(GetTransscriptSmall(), true);
+        Podcast podcast = await ImportTestPodcastAsync(GetTransscriptSmall(), true);
 
         Assert.Equal(7, await podcast.Messages.GetCountAsync());
 
@@ -84,9 +60,9 @@ public class PodcastTests
         Assert.True(terms?.Count > 0);
     }
 
-    private async Task<Podcast> LoadTestPodcastAsync(TestTranscriptInfo podcastDetails, bool online)
+    private async Task<Podcast> ImportTestPodcastAsync(TestTranscriptInfo podcastDetails, bool online)
     {
-        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(new KnowPro.ConversationSettings(), _tempDir.FullName, nameof(this.LoadTestPodcastAsync), true);
+        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(new KnowPro.ConversationSettings(), this._tempDir.FullName, nameof(this.ImportTestPodcastAsync), true);
 
         Podcast podcast = new Podcast(new MemorySettings(), provider);
 

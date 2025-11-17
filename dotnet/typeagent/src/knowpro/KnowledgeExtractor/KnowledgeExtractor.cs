@@ -106,10 +106,11 @@ public class KnowledgeExtractorPrompts : JsonTranslatorPrompts
     public override Prompt CreateRequestPrompt(TypeSchema typeSchema, Prompt request, IList<IPromptSection> context = null)
     {
         return
-$"You are a service that translates user messages in a conversation into JSON objects of type \"{typeSchema.TypeFullName}\" according to the following TypeScript definitions:\n" +
-$"```\n{typeSchema.Schema}\n```\n" +
-"The following are messages in a conversation:\n" +
-$"\"\"\"\n{request}\n\"\"\"\n" +
-"The following is the user request translated into a JSON object with zero spaces of indentation and no properties with the value undefined:\n";
+
+        $"You are a service that translates user messages in a conversation into JSON objects of type \"{typeSchema.TypeFullName}\" according to the following TypeScript definitions:\n" +
+        $"```\n{typeSchema.Schema}\n```\n" +
+        "The following are messages in a conversation:\n" +
+        $"\"\"\"\n{request}\n\"\"\"\n" +
+        "The following is the user request translated into a JSON object with zero spaces of indentation and no properties with the value undefined:\n";
     }
 }

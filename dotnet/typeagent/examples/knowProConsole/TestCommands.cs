@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
 
@@ -210,7 +211,9 @@ public class TestCommands : ICommandModule
             _kpContext.Stopwatch.Restart();
             var matches = await fuzzyIndex.LookupTermAsync(term, 10, 0, cancellationToken);
             _kpContext.Stopwatch.Stop();
+
             KnowProWriter.WriteTiming(_kpContext.Stopwatch);
+
             matches.ForEach(KnowProWriter.WriteTerm);
         }
     }

@@ -66,7 +66,9 @@ public class PodcastCommands : ICommandModule
         var podcast = CreatePodcast(name, false);
 
         _kpContext.Stopwatch.Stop();
+
         KnowProWriter.WriteTiming(_kpContext.Stopwatch, "Load podcast");
+
         SetCurrent(podcast);
         KnowProWriter.Write(ConsoleColor.White, "Loaded ");
         KnowProWriter.Write(ConsoleColor.Cyan, $"{name} ");
@@ -83,8 +85,6 @@ public class PodcastCommands : ICommandModule
         {
             KnowProWriter.WriteLine(ConsoleColor.White, $"Partiipants: {string.Join(", ", participants)}");
         }
-
-
 
         return Task.CompletedTask;
     }

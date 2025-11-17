@@ -146,7 +146,7 @@ public class AnswerGenerator : IAnswerGenerator
     {
         ArgumentVerify.ThrowIfNullOrEmpty(context, nameof(context));
 
-        string content = $"[ANSWER CONTEXT]\n` + `===\n{context}\n ===\n";
+        string content = $"[ANSWER CONTEXT]\n===\n{context}\n===\n";
         return content;
     }
 
