@@ -105,7 +105,7 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
         Dictionary<int, SemanticRef> dicSemanticRefs = [];
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
-            // Since the database doesn't gurantee the order of returned rows witn IN statements
+            // Since the database doesn't gurantee the order of returned rows within IN statements
             // rows come back based on the index used by the query or by order the were inserted)
             // or some other unguarnateed order
             // We use the dictionary to retain the order and to do easily lookups from the db results
