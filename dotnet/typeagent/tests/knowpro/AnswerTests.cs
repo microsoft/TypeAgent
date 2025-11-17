@@ -96,15 +96,6 @@ public class AnswerTests : TestWithTemporaryFiles
                 Assert.Equal(AnswerType.Answered, combinedResponse.Type);
                 Assert.False(string.IsNullOrEmpty(combinedResponse.Answer));
             }
-
-
-
-
-
-            //var answer = await podcast.AnswerQuestionAsync(question, searchResults.First());
-
-            //Assert.Equal(AnswerType.Answered, answer.Type);
-            //Assert.False(string.IsNullOrEmpty(answer.Answer));
         }
     }
 }

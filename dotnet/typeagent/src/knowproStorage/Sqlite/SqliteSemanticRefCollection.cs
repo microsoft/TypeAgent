@@ -102,7 +102,6 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
     {
         ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
 
-        List<SemanticRef> semanticRefs = new(semanticRefIds.Count);
         Dictionary<int, SemanticRef> dicSemanticRefs = [];
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
@@ -129,7 +128,6 @@ ORDER BY semref_id";
             {
                 var sr = FromSemanticRefRow(row);
                 dicSemanticRefs[sr.SemanticRefOrdinal] = sr;
-                semanticRefs.Add(FromSemanticRefRow(row));
             }
         }
         return ValueTask.FromResult((IList<SemanticRef>)[.. dicSemanticRefs.Values]);
