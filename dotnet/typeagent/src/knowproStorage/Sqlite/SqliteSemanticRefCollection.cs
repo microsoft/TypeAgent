@@ -103,8 +103,18 @@ FROM SemanticRefs WHERE semref_id = @semref_id");
         ArgumentVerify.ThrowIfNullOrEmpty(semanticRefIds, nameof(semanticRefIds));
 
         List<SemanticRef> semanticRefs = new(semanticRefIds.Count);
+        Dictionary<int, SemanticRef> dicSemanticRefs = [];
         foreach (var batch in semanticRefIds.Batch(SqliteDatabase.MaxBatchSize))
         {
+            // Since the database doesn't gurantee the order of returned rows witn IN statements
+            // rows come back based on the index used by the query or by order the were inserted)
+            // or some other unguarnateed order
+            // We use the dictionary to retain the order and to do easily lookups from the db results
+            foreach (var item in batch)
+            {
+                dicSemanticRefs.Add(item, SemanticRef.Empty);
+            }
+
             var placeholderIds = SqliteDatabase.MakeInPlaceholderParamIds(batch.Count);
             var sql = $@"
 SELECT semref_id, range_json, knowledge_type, knowledge_json
@@ -117,10 +127,12 @@ ORDER BY semref_id";
             );
             foreach (var row in rows)
             {
+                var sr = FromSemanticRefRow(row);
+                dicSemanticRefs[sr.SemanticRefOrdinal] = sr;
                 semanticRefs.Add(FromSemanticRefRow(row));
             }
         }
-        return ValueTask.FromResult((IList<SemanticRef>)semanticRefs);
+        return ValueTask.FromResult((IList<SemanticRef>)[.. dicSemanticRefs.Values]);
     }
 
     public TextRange GetRange(int semanticRefId)

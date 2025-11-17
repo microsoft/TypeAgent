@@ -2,7 +2,7 @@
 
 --query "List all books and also list all movies"
 
---query "Which movies are mentioned"
+--query "List all movies"
 
 --query "List all books and movies"
 

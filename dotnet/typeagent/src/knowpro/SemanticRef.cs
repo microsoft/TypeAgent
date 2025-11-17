@@ -8,6 +8,8 @@ namespace TypeAgent.KnowPro;
 
 public class SemanticRef
 {
+    public static SemanticRef Empty { get; } = new SemanticRef();
+
     public SemanticRef() { }
 
     public SemanticRef(
