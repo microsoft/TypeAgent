@@ -59,7 +59,7 @@
     "debug": "^4.4.0",
     "exifreader": "^4.30.1",
     "file-size": "^1.0.0",
-    "glob": "^10.3.12",
+    "glob": "^11.1.0",
     "html-to-text": "^9.0.5",
     "image-memory": "workspace:*",
     "knowledge-processor": "workspace:*",
