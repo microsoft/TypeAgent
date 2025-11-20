@@ -92,4 +92,41 @@ export class CliHostAdapter implements HostAdapter {
     sendProgress(sessionId: string, requestId: string, progress: any): void {
         debug(`sendProgress called (should use ClientIO wrapper instead)`);
     }
+
+    /**
+     * Get command completion suggestions
+     */
+    async getCompletion(prefix: string): Promise<{
+        startIndex: number;
+        space: boolean;
+        completions: Array<{
+            name: string;
+            completions: string[];
+            needQuotes?: boolean;
+            emojiChar?: string;
+            sorted?: boolean;
+        }>;
+    } | undefined> {
+        debug(`Getting completions for prefix: "${prefix}"`);
+
+        try {
+            if (!this.dispatcher) {
+                throw new Error("Dispatcher not available");
+            }
+
+            // Call dispatcher's getCommandCompletion
+            const result = await this.dispatcher.getCommandCompletion(prefix);
+
+            if (!result) {
+                debug("No completions found");
+                return undefined;
+            }
+
+            debug(`Got ${result.completions?.length || 0} completion groups`);
+            return result;
+        } catch (error: any) {
+            debug(`Error getting completions: ${error.message}`);
+            throw error;
+        }
+    }
 }

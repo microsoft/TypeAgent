@@ -123,4 +123,43 @@ export class ShellHostAdapter implements HostAdapter {
             progress,
         });
     }
+
+    /**
+     * Get command completion suggestions
+     */
+    async getCompletion(prefix: string): Promise<{
+        startIndex: number;
+        space: boolean;
+        completions: Array<{
+            name: string;
+            completions: string[];
+            needQuotes?: boolean;
+            emojiChar?: string;
+            sorted?: boolean;
+        }>;
+    } | undefined> {
+        debug(`Getting completions for prefix: "${prefix}"`);
+
+        try {
+            const dispatcher = await this.getDispatcher();
+
+            if (!dispatcher) {
+                throw new Error("Dispatcher not available");
+            }
+
+            // Call dispatcher's getCommandCompletion
+            const result = await dispatcher.getCommandCompletion(prefix);
+
+            if (!result) {
+                debug("No completions found");
+                return undefined;
+            }
+
+            debug(`Got ${result.completions?.length || 0} completion groups`);
+            return result;
+        } catch (error: any) {
+            debug(`Error getting completions: ${error.message}`);
+            throw error;
+        }
+    }
 }

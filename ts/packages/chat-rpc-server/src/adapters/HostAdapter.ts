@@ -63,4 +63,24 @@ export interface HostAdapter {
      * @param progress - Progress information
      */
     sendProgress(sessionId: string, requestId: string, progress: any): void;
+
+    /**
+     * Get command completion suggestions
+     *
+     * @param prefix - Partial input text to get completions for
+     * @returns Completion result from dispatcher
+     */
+    getCompletion?(
+        prefix: string,
+    ): Promise<{
+        startIndex: number;
+        space: boolean;
+        completions: Array<{
+            name: string;
+            completions: string[];
+            needQuotes?: boolean;
+            emojiChar?: string;
+            sorted?: boolean;
+        }>;
+    } | undefined>;
 }

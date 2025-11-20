@@ -10,6 +10,7 @@ import type {
     UserRequestMessage,
     PingMessage,
     CloseSessionMessage,
+    CompletionRequestMessage,
 } from "../types/protocol.js";
 import registerDebug from "debug";
 
@@ -120,6 +121,12 @@ export class ChatRpcServer {
                     await this.handleUserRequest(
                         ws,
                         message as UserRequestMessage,
+                    );
+                    break;
+                case "completionRequest":
+                    await this.handleCompletionRequest(
+                        ws,
+                        message as CompletionRequestMessage,
                     );
                     break;
                 case "ping":
@@ -252,6 +259,78 @@ export class ChatRpcServer {
                 "ready",
                 "Ready after error",
             );
+        }
+    }
+
+    /**
+     * Handle completionRequest message
+     */
+    private async handleCompletionRequest(
+        ws: WebSocket,
+        message: CompletionRequestMessage,
+    ): Promise<void> {
+        const session = this.sessionManager.getSession(message.sessionId);
+        if (!session) {
+            this.sendError(
+                ws,
+                "SESSION_NOT_FOUND",
+                "Session not found",
+                message.sessionId,
+                message.requestId,
+            );
+            return;
+        }
+
+        debug(
+            `Getting completions for session ${message.sessionId}: "${message.prefix}"`,
+        );
+
+        // Update session activity
+        this.sessionManager.updateActivity(message.sessionId);
+
+        try {
+            if (!this.hostAdapter) {
+                throw new Error("Host adapter not attached");
+            }
+
+            // Check if host adapter supports getCompletion
+            if (!this.hostAdapter.getCompletion) {
+                throw new Error("Host adapter does not support getCompletion");
+            }
+
+            // Get completions from host adapter
+            const result = await this.hostAdapter.getCompletion(message.prefix);
+
+            // Send completion response
+            this.send(ws, {
+                type: "completionResponse",
+                timestamp: new Date().toISOString(),
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                result: result ? {
+                    startIndex: result.startIndex,
+                    space: result.space,
+                    completions: result.completions,
+                } : undefined,
+            });
+
+            debug(
+                `Sent completion response with ${result?.completions?.length || 0} groups`,
+            );
+        } catch (error: any) {
+            debug(`Error getting completions: ${error.message}`);
+
+            // Send error response
+            this.send(ws, {
+                type: "completionResponse",
+                timestamp: new Date().toISOString(),
+                sessionId: message.sessionId,
+                requestId: message.requestId,
+                error: {
+                    code: "DISPATCHER_ERROR",
+                    message: error.message || "Failed to get completions",
+                },
+            });
         }
     }
 
