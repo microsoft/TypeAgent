@@ -1244,19 +1244,15 @@ async function openWebPage(
         const relationshipsCount = existingKnowledge.relationships?.length || 0;
 
         // Display existing knowledge with detailed cards
-        const knowledgeHtml = generateDetailedKnowledgeCards(existingKnowledge);
+        const knowledgeMarkdown = generateDetailedKnowledgeCards(existingKnowledge);
         context.actionIO.appendDisplay(
             {
-                type: "html",
-                content: `
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
-                    <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
-                    <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
-                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
-                    </div>
-                    ${knowledgeHtml}
-                </div>
-                `,
+                type: "markdown",
+                content: `> 📖 **Existing Knowledge Found**
+>
+> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
+
+${knowledgeMarkdown}`,
             },
             "block",
         );
@@ -1941,16 +1937,12 @@ async function handlePageNavigation(
                     // Display existing knowledge details using action context
                     cachedContext.actionIO.appendDisplay(
                         {
-                            type: "html",
-                            content: `
-                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
-                            <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
-                            <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
-                                Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
-                            </div>
-                        </div>    
-                        ${generateDetailedKnowledgeCards(existingKnowledge)}
-                        `,
+                            type: "markdown",
+                            content: `> 📖 **Existing Knowledge Found**
+>
+> Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
+
+${generateDetailedKnowledgeCards(existingKnowledge)}`,
                         },
                         "block",
                     );
@@ -2005,16 +1997,12 @@ async function handlePageNavigation(
                 // Display existing knowledge first using ActionContext, then extraction will update it
                 cachedContext.actionIO.appendDisplay(
                     {
-                        type: "html",
-                        content: `
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                        <div style="font-weight: 600; color: #856404;">🔄 Updating Existing Knowledge</div>
-                        <div style="font-size: 13px; color: #856404; margin-top: 4px;">
-                            Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships. Extracting updated knowledge...
-                        </div>
-                    </div>    
-                    ${generateDetailedKnowledgeCards(existingKnowledge)}
-                    `,
+                        type: "markdown",
+                        content: `> 🔄 **Updating Existing Knowledge**
+>
+> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships. Extracting updated knowledge...
+
+${generateDetailedKnowledgeCards(existingKnowledge)}`,
                     },
                     "block",
                 );

@@ -72,8 +72,8 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
-    createActionResultFromHtmlDisplay,
     createActionResultFromTextDisplay,
+    createActionResultFromMarkdownDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     equivalentNames,
@@ -268,29 +268,37 @@ async function htmlTrackNames(
     headText = "Tracks",
 ) {
     const selectedTracks = trackCollection.getTracks();
-    const displayContent: DisplayContent = {
-        type: "html",
-        content: "",
-    };
 
     const actionResult: ActionResult = {
-        displayContent,
+        displayContent: { type: "html", content: "" },
         historyText: "",
         entities: [],
     };
-    let prevUrl = "";
-    if (selectedTracks.length > 1) {
-        displayContent.content = `<div class='track-list scroll_enabled'><div>${headText}...</div><ol>\n`;
+
+    if (selectedTracks.length === 0) {
+        return createNotFoundActionResult("tracks");
+    }
+
+    // Use HTML for large lists (>10 tracks) to enable scrolling
+    const useHtml = selectedTracks.length > 10;
+
+    if (useHtml) {
+        // HTML implementation for large lists with scrolling
+        const displayContent: DisplayContent = {
+            type: "html",
+            content: `<div class='track-list scroll_enabled'><div>${headText}...</div><ol>\n`,
+        };
+        actionResult.displayContent = displayContent;
+
+        let prevUrl = "";
         let entCount = 0;
         for (const track of selectedTracks) {
             if (entCount < 1) {
-                // make an entity for the track
                 actionResult.entities.push({
                     name: track.name,
                     type: ["track", "song"],
                     uniqueId: track.id,
                 });
-                // make an entity for each artist
                 for (const artist of track.artists) {
                     actionResult.entities.push({
                         name: artist.name,
@@ -298,7 +306,6 @@ async function htmlTrackNames(
                         uniqueId: artist.id,
                     });
                 }
-                // make an entity for the album
                 actionResult.entities.push({
                     name: track.album.name,
                     type: ["album"],
@@ -316,7 +323,6 @@ async function htmlTrackNames(
                 track.album.images[0].url &&
                 track.album.images[0].url != prevUrl
             ) {
-                // make a list item that is a flex box with an image and a div
                 displayContent.content += `  <li><div class='track-album-cover-container'>\n <div class='track-info'> <div class='track-title'>${track.name}</div>\n`;
                 displayContent.content += `    <div class='track-artist'>${artists}</div>`;
                 displayContent.content += `    <div>Album: ${track.album.name}</div></div>\n`;
@@ -333,60 +339,72 @@ async function htmlTrackNames(
         displayContent.content += "</ol></div>";
         actionResult.historyText =
             "Updated the current track list with the numbered list of tracks on the screen";
-    } else if (selectedTracks.length === 1) {
-        const track = selectedTracks[0];
-        const artistsPrefix =
-            track.artists.length > 1 ? "   Artists: " : "   Artist: ";
-        const artists =
-            artistsPrefix +
-            track.artists.map((artist) => artist.name).join(", ");
-        actionResult.entities.push({
-            name: track.name,
-            type: ["track", "song"],
-            uniqueId: track.id,
-        });
-        // make an entity for each artist
-        for (const artist of track.artists) {
-            actionResult.entities.push({
-                name: artist.name,
-                type: ["artist"],
-                uniqueId: artist.id,
-            });
-        }
-        // make an entity for the album
-        actionResult.entities.push({
-            name: track.album.name,
-            type: ["album"],
-            uniqueId: track.album.id,
-        });
-        const litArtistsPrefix =
-            track.artists.length > 1 ? "artists: " : "artist ";
-        const litArtists =
-            litArtistsPrefix +
-            track.artists.map((artist) => artist.name).join(", ");
-        actionResult.historyText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
-        if (track.album.images.length > 0 && track.album.images[0].url) {
-            displayContent.content = "<div class='track-list scroll_enabled'>";
-            displayContent.content +=
-                "<div class='track-album-cover-container'>";
-            displayContent.content += `  <div class='track-info'>`;
-            displayContent.content += `    <div class='track-title'>${track.name}</div>`;
-            displayContent.content += `    <div>${artists}</div>`;
-            displayContent.content += `    <div>Album: ${track.album.name}</div>`;
-            displayContent.content += "</div>";
-            displayContent.content += `  <img src='${track.album.images[0].url}' alt='album cover' class='track-album-cover' />\n`;
-            displayContent.content += "</div>";
-            displayContent.content += "</div>";
-        } else {
-            displayContent.content = "<div class='track-list scroll_enabled'>";
-            displayContent.content += `    <div class='track-title'>${track.name}</div>`;
-            displayContent.content += `    <div>${artists}</div>`;
-            displayContent.content += `    <div>Album: ${track.album.name}</div>`;
-            displayContent.content += "</div>";
-        }
     } else {
-        return createNotFoundActionResult("tracks");
+        // Markdown implementation for small lists (≤10 tracks) with embedded album art
+        const displayContent: DisplayContent = {
+            type: "markdown",
+            content: selectedTracks.length > 1 ? `### ${headText}\n\n` : "",
+        };
+        actionResult.displayContent = displayContent;
+
+        let trackNum = 1;
+        let prevUrl = "";
+        for (const track of selectedTracks) {
+            if (trackNum === 1) {
+                actionResult.entities.push({
+                    name: track.name,
+                    type: ["track", "song"],
+                    uniqueId: track.id,
+                });
+                for (const artist of track.artists) {
+                    actionResult.entities.push({
+                        name: artist.name,
+                        type: ["artist"],
+                        uniqueId: artist.id,
+                    });
+                }
+                actionResult.entities.push({
+                    name: track.album.name,
+                    type: ["album"],
+                    uniqueId: track.album.id,
+                });
+            }
+
+            const artistsLabel = track.artists.length > 1 ? "Artists" : "Artist";
+            const artistsList = track.artists.map((artist) => artist.name).join(", ");
+
+            if (selectedTracks.length > 1) {
+                displayContent.content += `${trackNum}. **${track.name}**\n`;
+            } else {
+                displayContent.content += `**${track.name}**\n`;
+            }
+            displayContent.content += `   ${artistsLabel}: ${artistsList}\n`;
+            displayContent.content += `   Album: ${track.album.name}\n`;
+
+            if (
+                track.album.images.length > 0 &&
+                track.album.images[0].url &&
+                track.album.images[0].url !== prevUrl
+            ) {
+                displayContent.content += `   <img src="${track.album.images[0].url}" alt="album cover" style="width: 100px; height: 100px; margin-top: 8px;" />\n`;
+                prevUrl = track.album.images[0].url;
+            }
+
+            displayContent.content += "\n";
+            trackNum++;
+        }
+
+        if (selectedTracks.length === 1) {
+            const track = selectedTracks[0];
+            const litArtistsPrefix = track.artists.length > 1 ? "artists: " : "artist ";
+            const litArtists = litArtistsPrefix + track.artists.map((artist) => artist.name).join(", ");
+            actionResult.historyText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
+        } else {
+            actionResult.historyText =
+                "Updated the current track list with the numbered list of tracks on the screen";
+        }
     }
+
     return actionResult;
 }
 
@@ -1020,12 +1038,12 @@ export async function handleCall(
                         a.name.localeCompare(b.name),
                     );
 
-                    let html = "<div>Playlists...</div>";
+                    let markdown = "Playlists...\n\n";
                     for (const playlist of sortedPlaylists) {
-                        html += `<div><span class="playlist-title">${playlist.name}</span> (<span>${playlist.tracks.total} tracks</span>)</div>`;
+                        markdown += `**${playlist.name}** (${playlist.tracks.total} tracks)\n`;
                     }
                     const actionResult =
-                        createActionResultFromHtmlDisplay(html);
+                        createActionResultFromMarkdownDisplay(markdown);
                     actionResult.historyText = "Listed your playlists";
                     return actionResult;
                 }

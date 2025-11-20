@@ -77,89 +77,66 @@ export function generateDetailedKnowledgeCards(
             ) || [];
     }
 
-    let html = '<div style="margin-top: 12px;">';
+    const MAX_ENTITIES = 20;
+    const MAX_TOPICS = 20;
+    const MAX_RELATIONSHIPS = 20;
+
+    let markdown = "";
 
     // Entities section
     if (entities.length > 0) {
-        html += `
-        <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-tags"></i> Entities (${entities.length}):</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                ${entities
-                    .slice(0, 10)
-                    .map((e: any) => {
-                        const name = e.name || e;
-                        const type = e.type ? ` (${e.type})` : "";
-                        const confidence = e.confidence
-                            ? ` ${Math.round(e.confidence * 100)}%`
-                            : "";
-                        const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
-                        return `<a
-                            href="${entityUrl}"
-                            style="background: #e3f2fd; color: #1976d2; padding: 2px 6px;
-                                   border-radius: 12px; font-size: 12px;
-                                   text-decoration: none; display: inline-block;
-                                   transition: background 0.2s, transform 0.1s;"
-                            title="Click to view entity graph">
-                            ${name}${type}${confidence}
-                        </a>`;
-                    })
-                    .join("")}
-                ${entities.length > 10 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${entities.length - 10} more</span>` : ""}
-            </div>
-        </div>`;
+        markdown += `### 🏷️ Entities (${entities.length}):\n`;
+        const displayCount = Math.min(entities.length, MAX_ENTITIES);
+        for (let i = 0; i < displayCount; i++) {
+            const e = entities[i];
+            const name = e.name || e;
+            const type = e.type ? ` (${e.type})` : "";
+            const confidence = e.confidence
+                ? ` ${Math.round(e.confidence * 100)}%`
+                : "";
+            const entityUrl = `typeagent-browser://views/entityGraphView.html?entity=${encodeURIComponent(name)}`;
+            markdown += `- [${name}${type}${confidence}](${entityUrl})\n`;
+        }
+        if (entities.length > MAX_ENTITIES) {
+            markdown += `+${entities.length - MAX_ENTITIES} more\n`;
+        }
+        markdown += "\n";
     }
 
     // Topics section
     if (topics.length > 0) {
-        html += `
-        <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-bookmark"></i> Topics (${topics.length}):</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                ${topics
-                    .slice(0, 8)
-                    .map((topic: any) => {
-                        const name = topic.name || topic;
-                        const topicUrl = `typeagent-browser://views/topicGraphView.html?topic=${encodeURIComponent(name)}`;
-                        return `<a
-                            href="${topicUrl}"
-                            style="background: #fff3cd; color: #856404; padding: 2px 8px;
-                                   border-radius: 12px; font-size: 12px;
-                                   border: 1px solid #ffeaa7; text-decoration: none;
-                                   display: inline-block; transition: background 0.2s;"
-                            title="Click to view topic graph">
-                            ${name}
-                        </a>`;
-                    })
-                    .join("")}
-                ${topics.length > 8 ? `<span style="color: #6c757d; font-style: italic; font-size: 12px;">+${topics.length - 8} more</span>` : ""}
-            </div>
-        </div>`;
+        markdown += `### 🔖 Topics (${topics.length}):\n`;
+        const displayCount = Math.min(topics.length, MAX_TOPICS);
+        for (let i = 0; i < displayCount; i++) {
+            const topic = topics[i];
+            const name = topic.name || topic;
+            const topicUrl = `typeagent-browser://views/topicGraphView.html?topic=${encodeURIComponent(name)}`;
+            markdown += `- [${name}](${topicUrl})\n`;
+        }
+        if (topics.length > MAX_TOPICS) {
+            markdown += `+${topics.length - MAX_TOPICS} more\n`;
+        }
+        markdown += "\n";
     }
 
     // Relationships section
     if (relationships.length > 0) {
-        html += `
-        <div style="margin-bottom: 12px;">
-            <div style="font-weight: 600; color: #495057; margin-bottom: 6px;"><i class="bi bi-diagram-3"></i> Relationships (${relationships.length}):</div>
-            <div style="font-size: 13px; color: #6c757d;">
-                ${relationships
-                    .slice(0, 5)
-                    .map((r: any) => {
-                        const source = r.source || r.from || "Unknown";
-                        const target = r.target || r.to || "Unknown";
-                        const relation =
-                            r.relationship || r.relation || "relates to";
-                        return `<div style="margin: 2px 0;"><strong>${source}</strong> → <em>${relation}</em> → <strong>${target}</strong></div>`;
-                    })
-                    .join("")}
-                ${relationships.length > 5 ? `<div style="font-style: italic;">+${relationships.length - 5} more relationships</div>` : ""}
-            </div>
-        </div>`;
+        markdown += `### 🔗 Relationships (${relationships.length}):\n`;
+        const displayCount = Math.min(relationships.length, MAX_RELATIONSHIPS);
+        for (let i = 0; i < displayCount; i++) {
+            const r = relationships[i];
+            const source = r.source || r.from || "Unknown";
+            const target = r.target || r.to || "Unknown";
+            const relation = r.relationship || r.relation || "relates to";
+            markdown += `- **${source}** → *${relation}* → **${target}**\n`;
+        }
+        if (relationships.length > MAX_RELATIONSHIPS) {
+            markdown += `+${relationships.length - MAX_RELATIONSHIPS} more relationships\n`;
+        }
+        markdown += "\n";
     }
 
-    html += "</div>";
-    return html;
+    return markdown;
 }
 
 /**
