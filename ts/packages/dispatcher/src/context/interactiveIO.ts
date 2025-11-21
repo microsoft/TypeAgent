@@ -26,6 +26,7 @@ export interface IAgentMessage {
     message: DisplayContent;
     requestId?: string | undefined;
     source: string;
+    sourceIcon?: string | undefined;
     actionIndex?: number | undefined;
     metrics?: RequestMetrics | undefined;
 }
@@ -131,10 +132,21 @@ export function makeClientIOMessage(
         }
     }
 
+    // Get the source icon (emoji) from the agent manifest
+    let sourceIcon: string | undefined;
+    try {
+        if (context.agents.isAppAgentName(source)) {
+            sourceIcon = context.agents.getAppAgentEmoji(source);
+        }
+    } catch {
+        // If we can't get the emoji, that's okay - just leave it undefined
+    }
+
     return {
         message,
         requestId,
         source,
+        sourceIcon,
         actionIndex,
         metrics:
             requestId !== undefined

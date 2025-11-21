@@ -50,18 +50,18 @@ export function chalkStatus(status: SpotifyApi.CurrentPlaybackResponse) {
     return result;
 }
 
-function htmlPlaybackStatus(
+function markdownPlaybackStatus(
     status: SpotifyApi.CurrentPlaybackResponse,
     actionResult: ActionResultSuccess,
 ) {
-    let displayHTML = "";
+    let displayMarkdown = "";
     if (status.item) {
         let timePart = msToElapsedMinSec(status.item.duration_ms);
         if (status.progress_ms) {
             timePart = `${msToElapsedMinSec(status.progress_ms)}/${timePart}`;
         }
         let symbol = status.is_playing ? playSymbol : pauseSymbol;
-        displayHTML += `<div>${symbol}  ${timePart}  <span class='track-title'>${status.item.name}</span></div>\n`;
+        displayMarkdown += `${symbol}  ${timePart}  **${status.item.name}**\n`;
         if (status.item.type === "track") {
             let artists = status.item.artists
                 .map((artist) => artist.name)
@@ -79,7 +79,6 @@ function htmlPlaybackStatus(
                 type: ["track"],
                 uniqueId: status.item.id,
             });
-            // make an entity for each artist
             for (const artist of status.item.artists) {
                 actionResult.entities.push({
                     name: artist.name,
@@ -87,9 +86,9 @@ function htmlPlaybackStatus(
                     uniqueId: artist.id,
                 });
             }
-            const plainArtists = "    A" + artists.substring(1);
-            displayHTML += `<div>${plainArtists}</div>\n`;
-            displayHTML += `<div>   Album: ${album}</div>\n`;
+            const plainArtists = "A" + artists.substring(1);
+            displayMarkdown += `${plainArtists}\n`;
+            displayMarkdown += `Album: ${album}\n`;
             actionResult.entities.push({
                 name: album,
                 type: ["album"],
@@ -97,14 +96,14 @@ function htmlPlaybackStatus(
             });
         }
     }
-    return displayHTML;
+    return displayMarkdown;
 }
 
 export async function htmlStatus(context: IClientContext) {
     const status = await getPlaybackState(context.service);
     const displayContent: DisplayContent = {
-        type: "html",
-        content: "<div data-group='status'>Status...",
+        type: "markdown",
+        content: "## Now Playing\n\n",
     };
     const actionResult: ActionResultSuccess = {
         historyText: "",
@@ -112,17 +111,16 @@ export async function htmlStatus(context: IClientContext) {
         displayContent,
     };
     if (status) {
-        displayContent.content += htmlPlaybackStatus(status, actionResult);
+        displayContent.content += markdownPlaybackStatus(status, actionResult);
         const activeDevice = status.device;
         const aux = `Volume is ${activeDevice.volume_percent}%. ${status.shuffle_state ? "Shuffle on" : ""}`;
-        displayContent.content += `<div>Active device: ${activeDevice.name} of type ${activeDevice.type}</div>`;
-        displayContent.content += `<div>${aux}</div>`;
+        displayContent.content += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n`;
+        displayContent.content += `${aux}`;
         actionResult.historyText += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n${aux}`;
     } else {
-        displayContent.content += "<div>Nothing playing.</div>";
+        displayContent.content += "Nothing playing.";
         actionResult.historyText = "Nothing playing.";
     }
-    displayContent.content += "</div>";
     actionResult.dynamicDisplayId = "status";
     actionResult.dynamicDisplayNextRefreshMs = 1000;
     return actionResult;

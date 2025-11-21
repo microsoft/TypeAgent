@@ -16,7 +16,7 @@ export interface BaseMessage {
     sessionId?: string;
 }
 
-// Request Messages (Client ’ Server)
+// Request Messages (Client ï¿½ Server)
 export interface InitSessionMessage extends BaseMessage {
     type: "initSession";
     sessionId: string;
@@ -53,7 +53,18 @@ export interface CloseSessionMessage extends BaseMessage {
     reason?: string;
 }
 
-// Response Messages (Server ’ Client)
+/**
+ * Completion request message
+ * Requests autocomplete/intellisense suggestions for partial input
+ */
+export interface CompletionRequestMessage extends BaseMessage {
+    type: "completionRequest";
+    sessionId: string;
+    requestId: string;
+    prefix: string; // The partial input text to get completions for
+}
+
+// Response Messages (Server ï¿½ Client)
 export interface ResponseMessage extends BaseMessage {
     type: "response";
     sessionId: string;
@@ -118,12 +129,60 @@ export interface SessionAckMessage extends BaseMessage {
     capabilities?: string[];
 }
 
+export interface InvokeExternalChatMessage extends BaseMessage {
+    type: "invoke_external_chat";
+    sessionId: string;
+    requestId: string;
+    query: string;
+    context?: {
+        conversationHistory?: Array<{
+            role: "user" | "assistant";
+            content: string;
+        }>;
+        userLocation?: string;
+        locale?: string;
+        metadata?: Record<string, any>;
+    };
+}
+
+/**
+ * Completion group - represents a category of autocomplete suggestions
+ * Matches the CompletionGroup type from agent-dispatcher
+ */
+export interface CompletionGroup {
+    name: string; // Group name (e.g., "Commands", "Artist Names")
+    completions: string[]; // List of completion strings
+    needQuotes?: boolean; // If true, quote values with spaces
+    emojiChar?: string; // Optional icon for the category
+    sorted?: boolean; // If true, completions are already sorted
+}
+
+/**
+ * Completion response message
+ * Returns autocomplete suggestions from dispatcher
+ */
+export interface CompletionResponseMessage extends BaseMessage {
+    type: "completionResponse";
+    sessionId: string;
+    requestId: string;
+    result?: {
+        startIndex: number; // Index where completion starts in the input
+        space: boolean; // Whether space is required before completion
+        completions: CompletionGroup[]; // Array of completion groups
+    };
+    error?: {
+        code: string;
+        message: string;
+    };
+}
+
 // Union Types
 export type TypeAgentRequestMessage =
     | InitSessionMessage
     | UserRequestMessage
     | PingMessage
-    | CloseSessionMessage;
+    | CloseSessionMessage
+    | CompletionRequestMessage;
 
 export type TypeAgentResponseMessage =
     | ResponseMessage
@@ -131,7 +190,9 @@ export type TypeAgentResponseMessage =
     | PongMessage
     | StatusMessage
     | ProgressMessage
-    | SessionAckMessage;
+    | SessionAckMessage
+    | InvokeExternalChatMessage
+    | CompletionResponseMessage;
 
 export type TypeAgentMessage =
     | TypeAgentRequestMessage

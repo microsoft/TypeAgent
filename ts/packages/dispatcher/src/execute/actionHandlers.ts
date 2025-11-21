@@ -95,6 +95,66 @@ function getStreamingActionContext(
     return actionContext;
 }
 
+export function isProtocolRequest(
+    systemContext: CommandHandlerContext,
+): boolean {
+    const requestId = systemContext.requestId;
+
+    if (!requestId) {
+        return false;
+    }
+
+    if (
+        systemContext.clientIO &&
+        typeof (systemContext.clientIO as any).getProtocolRequestWebSocket ===
+            "function"
+    ) {
+        const protocolInfo = (
+            systemContext.clientIO as any
+        ).getProtocolRequestWebSocket(requestId);
+
+        return protocolInfo !== undefined;
+    }
+
+    return false;
+}
+
+export function shouldDelegateAction(
+    schemaName: string,
+    systemContext: CommandHandlerContext,
+): boolean {
+    const config = systemContext.agents.getActionConfig(schemaName);
+
+    if (!config.delegatable) {
+        return false;
+    }
+
+    const envValue = process.env.TYPEAGENT_EXTERNAL_CHAT_DELEGATION;
+    const delegationEnabled =
+        envValue === undefined ||
+        envValue.toLowerCase() === "true" ||
+        envValue === "1";
+
+    if (!delegationEnabled) {
+        debugActions("External chat delegation disabled via config");
+        return false;
+    }
+
+    const isProtocol = isProtocolRequest(systemContext);
+
+    if (isProtocol) {
+        debugActions(
+            `Protocol request ${systemContext.requestId}, delegating action to external service`,
+        );
+    } else {
+        debugActions(
+            `[Dispatcher:Delegation] ✗ Local request ${systemContext.requestId} - processing with TypeAgent`,
+        );
+    }
+
+    return isProtocol;
+}
+
 async function executeAction(
     executableAction: ExecutableAction,
     context: ActionContext<CommandHandlerContext>,
@@ -110,6 +170,53 @@ async function executeAction(
     const schemaName = action.schemaName;
     const systemContext = context.sessionContext.agentContext;
     const appAgentName = getAppAgentName(schemaName);
+
+    if (shouldDelegateAction(schemaName, systemContext)) {
+        console.warn(
+            `[Dispatcher:Delegation] ⚠️  OLD DELEGATION PATH HIT - This should have been caught in translation phase!`,
+        );
+        debugActions(
+            `[Dispatcher:Delegation] ===> DELEGATING ${schemaName} action to external service (fallback path)`,
+        );
+        debugActions(
+            `Delegating ${schemaName} action to external service (fallback path)`,
+        );
+
+        const query =
+            (action.parameters as any)?.originalRequest ||
+            (action.parameters as any)?.query ||
+            (action.parameters as any)?.request ||
+            "";
+
+        const delegationData = JSON.stringify({
+            _delegationType: "external_chat",
+            query,
+            requestId: systemContext.requestId,
+        });
+
+        // Send delegation marker directly through appendDisplay
+        debugActions(
+            "[Dispatcher:Delegation] Sending delegation marker through appendDisplay (late)",
+        );
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: delegationData,
+            },
+            "block",
+        );
+
+        // Return a result without displayContent since we already sent it
+        return {
+            entities: [],
+            historyText: delegationData,
+        };
+    }
+
+    debugActions(
+        `[Dispatcher:Delegation] ===> EXECUTING ${schemaName} action locally with TypeAgent`,
+    );
+
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
@@ -294,6 +401,19 @@ export async function executeActions(
         const executableAction = pending.executableAction;
 
         const action = executableAction.action;
+
+        // Skip delegated actions - they were already handled in translation phase
+        if (
+            action.schemaName === "system" &&
+            action.actionName === "delegated"
+        ) {
+            debugActions(
+                "[Dispatcher:Execute] Skipping delegated action - delegation signal already sent",
+            );
+            actionIndex++;
+            continue;
+        }
+
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
                 action,

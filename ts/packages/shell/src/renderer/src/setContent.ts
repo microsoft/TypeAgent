@@ -54,7 +54,9 @@ function processContent(
                     /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
             });
         case "markdown":
-            const md = new MarkdownIt();
+            const md = new MarkdownIt({
+                html: true,
+            });
             // Links in the chat windows should open in a new tab.
             const defaultRender =
                 md.renderer.rules.link_open ||
@@ -66,9 +68,19 @@ function processContent(
                 return defaultRender(tokens, idx, ...args);
             };
 
-            return ansiUpMarkdownToHtml.ansi_to_html(
-                inline ? md.renderInline(content) : md.render(content),
-            );
+            const renderedMarkdown = inline
+                ? md.renderInline(content)
+                : md.render(content);
+            const withAnsi =
+                ansiUpMarkdownToHtml.ansi_to_html(renderedMarkdown);
+
+            return DOMPurify.sanitize(withAnsi, {
+                ADD_ATTR: ["target", "onclick", "onerror", "href"],
+                ADD_DATA_URI_TAGS: ["img"],
+                ADD_URI_SAFE_ATTR: ["src", "href", "style"],
+                ALLOWED_URI_REGEXP:
+                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+            });
         case "text":
             return enableText2Html
                 ? textToHtml(content)
@@ -88,6 +100,30 @@ function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
         }
     }
     return true;
+}
+
+function tableToMarkdown(table: string[][]): string {
+    if (table.length === 0) {
+        return "";
+    }
+
+    const rows: string[] = [];
+
+    // Add header row
+    if (table.length > 0) {
+        rows.push("| " + table[0].join(" | ") + " |");
+
+        // Add separator row
+        const separators = table[0].map(() => "---");
+        rows.push("| " + separators.join(" | ") + " |");
+    }
+
+    // Add data rows
+    for (let i = 1; i < table.length; i++) {
+        rows.push("| " + table[i].join(" | ") + " |");
+    }
+
+    return rows.join("\n");
 }
 
 function messageContentToHTML(
@@ -114,6 +150,14 @@ function messageContentToHTML(
     }
 
     const table = message as string[][];
+
+    // For text and markdown types, convert to markdown table
+    if (type === "text" || type === "markdown") {
+        const markdownTable = tableToMarkdown(table);
+        return processContent(markdownTable, "markdown", inline);
+    }
+
+    // For HTML and iframe types, use HTML table
     return `<table class="table-message">${table.map((row, i) => `<tr>${row.map((cell) => `${i === 0 ? "<th>" : "<td>"}${processContent(cell, type)}${i === 0 ? "</th>" : "</td>"}`).join("")}</tr>`).join("")}</table>`;
 }
 

@@ -139,6 +139,7 @@ export class WebSocketClientIO implements ClientIO {
             contentType,
             metadata: {
                 source: message.source,
+                sourceIcon: message.sourceIcon,
                 actionIndex: message.actionIndex,
                 metrics: message.metrics,
             },
@@ -151,6 +152,51 @@ export class WebSocketClientIO implements ClientIO {
         const content = this.displayContentToText(message.message);
         const contentType = this.getContentType(message.message);
 
+        debug(
+            "[WebSocketClientIO] appendDisplay content:",
+            content.substring(0, 200),
+        );
+
+        // Check if this is a delegation marker
+        try {
+            const parsed = JSON.parse(content);
+            debug(
+                "[WebSocketClientIO] Parsed JSON, checking _delegationType:",
+                parsed._delegationType,
+            );
+            if (parsed._delegationType === "external_chat") {
+                debug(
+                    "[WebSocketClientIO] ✓ Detected delegation marker - sending invoke_external_chat",
+                );
+                debug(
+                    "Detected delegation marker - sending invoke_external_chat",
+                );
+                this.send({
+                    type: "invoke_external_chat",
+                    timestamp: new Date().toISOString(),
+                    sessionId: this.sessionId,
+                    requestId:
+                        parsed.requestId || message.requestId || "unknown",
+                    query: parsed.query,
+                    context: {
+                        conversationHistory: [],
+                        metadata: {},
+                    },
+                });
+                return;
+            } else {
+                debug(
+                    "[WebSocketClientIO] Not a delegation marker, sending as partialResponse",
+                );
+            }
+        } catch (e) {
+            debug(
+                "[WebSocketClientIO] Not valid JSON or parse error:",
+                e instanceof Error ? e.message : String(e),
+            );
+            // Not JSON or not a delegation marker, continue with normal flow
+        }
+
         // Send as a partial response
         this.send({
             type: "partialResponse",
@@ -162,6 +208,7 @@ export class WebSocketClientIO implements ClientIO {
             appendMode: mode,
             metadata: {
                 source: message.source,
+                sourceIcon: message.sourceIcon,
                 actionIndex: message.actionIndex,
             },
         });

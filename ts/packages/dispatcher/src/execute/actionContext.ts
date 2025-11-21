@@ -26,6 +26,7 @@ export function getActionContext(
 ): ActionContextWithClose {
     let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
+
     context.clientIO.setDisplayInfo(
         appAgentName,
         requestId,
