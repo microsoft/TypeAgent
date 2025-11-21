@@ -54,7 +54,7 @@
     "email": "workspace:*",
     "exifreader": "^4.30.1",
     "file-size": "^1.0.0",
-    "glob": "^10.3.12",
+    "glob": "^11.1.0",
     "greeting-agent": "workspace:*",
     "image-agent": "workspace:*",
     "knowledge-processor": "workspace:*",
