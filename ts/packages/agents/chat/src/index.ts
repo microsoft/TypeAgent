@@ -8,5 +8,11 @@ export function instantiate(): AppAgent {
     return instantiateChatAgent();
 }
 
-export { executeChatResponseAction, logEntities } from "./chatResponseHandler.js";
-export type { ChatResponseAction, GenerateResponseAction } from "./chatResponseActionSchema.js";
+export {
+    executeChatResponseAction,
+    logEntities,
+} from "./chatResponseHandler.js";
+export type {
+    ChatResponseAction,
+    GenerateResponseAction,
+} from "./chatResponseActionSchema.js";

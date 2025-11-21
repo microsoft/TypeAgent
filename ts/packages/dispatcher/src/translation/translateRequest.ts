@@ -684,20 +684,25 @@ async function translateRequestWithActiveSchemas(
 
     // Check for delegation IMMEDIATELY after schema selection, before any translation work
     if (shouldDelegateAction(schemaName, systemContext)) {
-        console.log(`[Dispatcher:Translation] Schema '${schemaName}' should be delegated - sending signal NOW (before translation)`);
-        
+        console.log(
+            `[Dispatcher:Translation] Schema '${schemaName}' should be delegated - sending signal NOW (before translation)`,
+        );
+
         const delegationData = JSON.stringify({
             _delegationType: "external_chat",
             query: request,
             requestId: systemContext.requestId,
         });
-        
+
         // Send delegation signal immediately via ClientIO
-        context.actionIO.appendDisplay({
-            type: "text",
-            content: delegationData,
-        }, "block");
-        
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: delegationData,
+            },
+            "block",
+        );
+
         // Return a special "delegated" action that executeActions will skip
         return createExecutableAction(
             "system",

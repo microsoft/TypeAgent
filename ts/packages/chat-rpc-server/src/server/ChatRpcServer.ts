@@ -307,11 +307,13 @@ export class ChatRpcServer {
                 timestamp: new Date().toISOString(),
                 sessionId: message.sessionId,
                 requestId: message.requestId,
-                result: result ? {
-                    startIndex: result.startIndex,
-                    space: result.space,
-                    completions: result.completions,
-                } : undefined,
+                result: result
+                    ? {
+                          startIndex: result.startIndex,
+                          space: result.space,
+                          completions: result.completions,
+                      }
+                    : undefined,
             });
 
             debug(

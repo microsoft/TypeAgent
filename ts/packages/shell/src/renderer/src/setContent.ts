@@ -71,7 +71,8 @@ function processContent(
             const renderedMarkdown = inline
                 ? md.renderInline(content)
                 : md.render(content);
-            const withAnsi = ansiUpMarkdownToHtml.ansi_to_html(renderedMarkdown);
+            const withAnsi =
+                ansiUpMarkdownToHtml.ansi_to_html(renderedMarkdown);
 
             return DOMPurify.sanitize(withAnsi, {
                 ADD_ATTR: ["target", "onclick", "onerror", "href"],

@@ -370,8 +370,11 @@ async function htmlTrackNames(
                 });
             }
 
-            const artistsLabel = track.artists.length > 1 ? "Artists" : "Artist";
-            const artistsList = track.artists.map((artist) => artist.name).join(", ");
+            const artistsLabel =
+                track.artists.length > 1 ? "Artists" : "Artist";
+            const artistsList = track.artists
+                .map((artist) => artist.name)
+                .join(", ");
 
             if (selectedTracks.length > 1) {
                 displayContent.content += `${trackNum}. **${track.name}**\n`;
@@ -396,8 +399,11 @@ async function htmlTrackNames(
 
         if (selectedTracks.length === 1) {
             const track = selectedTracks[0];
-            const litArtistsPrefix = track.artists.length > 1 ? "artists: " : "artist ";
-            const litArtists = litArtistsPrefix + track.artists.map((artist) => artist.name).join(", ");
+            const litArtistsPrefix =
+                track.artists.length > 1 ? "artists: " : "artist ";
+            const litArtists =
+                litArtistsPrefix +
+                track.artists.map((artist) => artist.name).join(", ");
             actionResult.historyText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
         } else {
             actionResult.historyText =

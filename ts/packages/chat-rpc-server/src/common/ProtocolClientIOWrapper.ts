@@ -284,5 +284,7 @@ export function createProtocolClientIOWrapper(
         ): { ws: WebSocket; sessionId: string } | undefined {
             return requestTracker.getProtocolRequestWebSocket(requestId);
         },
-    } as ClientIO & { getProtocolRequestWebSocket: typeof requestTracker.getProtocolRequestWebSocket };
+    } as ClientIO & {
+        getProtocolRequestWebSocket: typeof requestTracker.getProtocolRequestWebSocket;
+    };
 }

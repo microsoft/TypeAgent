@@ -1244,7 +1244,8 @@ async function openWebPage(
         const relationshipsCount = existingKnowledge.relationships?.length || 0;
 
         // Display existing knowledge with detailed cards
-        const knowledgeMarkdown = generateDetailedKnowledgeCards(existingKnowledge);
+        const knowledgeMarkdown =
+            generateDetailedKnowledgeCards(existingKnowledge);
         context.actionIO.appendDisplay(
             {
                 type: "markdown",

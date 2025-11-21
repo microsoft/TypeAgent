@@ -96,17 +96,20 @@ export class CliHostAdapter implements HostAdapter {
     /**
      * Get command completion suggestions
      */
-    async getCompletion(prefix: string): Promise<{
-        startIndex: number;
-        space: boolean;
-        completions: Array<{
-            name: string;
-            completions: string[];
-            needQuotes?: boolean;
-            emojiChar?: string;
-            sorted?: boolean;
-        }>;
-    } | undefined> {
+    async getCompletion(prefix: string): Promise<
+        | {
+              startIndex: number;
+              space: boolean;
+              completions: Array<{
+                  name: string;
+                  completions: string[];
+                  needQuotes?: boolean;
+                  emojiChar?: string;
+                  sorted?: boolean;
+              }>;
+          }
+        | undefined
+    > {
         debug(`Getting completions for prefix: "${prefix}"`);
 
         try {

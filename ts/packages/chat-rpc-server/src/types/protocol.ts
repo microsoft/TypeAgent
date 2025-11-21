@@ -150,11 +150,11 @@ export interface InvokeExternalChatMessage extends BaseMessage {
  * Matches the CompletionGroup type from agent-dispatcher
  */
 export interface CompletionGroup {
-    name: string;              // Group name (e.g., "Commands", "Artist Names")
-    completions: string[];     // List of completion strings
-    needQuotes?: boolean;      // If true, quote values with spaces
-    emojiChar?: string;        // Optional icon for the category
-    sorted?: boolean;          // If true, completions are already sorted
+    name: string; // Group name (e.g., "Commands", "Artist Names")
+    completions: string[]; // List of completion strings
+    needQuotes?: boolean; // If true, quote values with spaces
+    emojiChar?: string; // Optional icon for the category
+    sorted?: boolean; // If true, completions are already sorted
 }
 
 /**
@@ -166,8 +166,8 @@ export interface CompletionResponseMessage extends BaseMessage {
     sessionId: string;
     requestId: string;
     result?: {
-        startIndex: number;        // Index where completion starts in the input
-        space: boolean;            // Whether space is required before completion
+        startIndex: number; // Index where completion starts in the input
+        space: boolean; // Whether space is required before completion
         completions: CompletionGroup[]; // Array of completion groups
     };
     error?: {
