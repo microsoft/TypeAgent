@@ -139,6 +139,7 @@ export class WebSocketClientIO implements ClientIO {
             contentType,
             metadata: {
                 source: message.source,
+                sourceIcon: message.sourceIcon,
                 actionIndex: message.actionIndex,
                 metrics: message.metrics,
             },
@@ -191,6 +192,7 @@ export class WebSocketClientIO implements ClientIO {
             appendMode: mode,
             metadata: {
                 source: message.source,
+                sourceIcon: message.sourceIcon,
                 actionIndex: message.actionIndex,
             },
         });
