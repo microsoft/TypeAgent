@@ -82,3 +82,4 @@ export default class Compile extends Command {
         console.log(`Parsed action schema written: ${flags.output}`);
     }
 }
+console.log("Action Schema Compiler loaded");

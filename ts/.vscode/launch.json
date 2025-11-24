@@ -425,6 +425,17 @@
       "program": "./dist/index.js",
       "outFiles": ["${workspaceFolder}/**/*.js"],
       "resolveSourceMapLocations": []
-    },          
+    },  
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch Action schema Compiler",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/packages/actionSchemaCompiler/src/index.ts",
+      "args": ["--compile", "test.tst"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },            
   ]
 }
