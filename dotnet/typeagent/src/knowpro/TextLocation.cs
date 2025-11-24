@@ -19,7 +19,7 @@ public struct TextLocation
 
     public readonly bool IsLessThan(TextLocation other)
     {
-        return this.MessageOrdinal <= other.MessageOrdinal && this.ChunkOrdinal < other.ChunkOrdinal;
+        return this.MessageOrdinal + this.ChunkOrdinal <= other.MessageOrdinal;
     }
 
     public readonly bool IsValid() => MessageOrdinal >= 0 && ChunkOrdinal >= 0;
