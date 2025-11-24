@@ -21,6 +21,7 @@ export type ActionConfig = {
     actionDefaultEnabled: boolean;
     transient: boolean;
     schemaName: string;
+    delegatable: boolean;
 } & SchemaManifest;
 
 function collectActionConfigs(
@@ -32,6 +33,7 @@ function collectActionConfigs(
     transient: boolean,
     schemaDefaultEnabled: boolean,
     actionDefaultEnabled: boolean,
+    delegatable: boolean,
 ) {
     transient = manifest.transient ?? transient; // inherit from parent if not specified
     schemaDefaultEnabled =
@@ -42,6 +44,7 @@ function collectActionConfigs(
         manifest.actionDefaultEnabled ??
         manifest.defaultEnabled ??
         actionDefaultEnabled; // inherit from parent if not specified
+    delegatable = manifest.schema?.delegatable ?? delegatable; // inherit from parent if not specified
 
     if (manifest.schema) {
         debugConfig(`Adding schema '${schemaName}'`);
@@ -53,6 +56,7 @@ function collectActionConfigs(
             transient,
             schemaDefaultEnabled,
             actionDefaultEnabled,
+            delegatable,
         };
     }
 
@@ -71,6 +75,7 @@ function collectActionConfigs(
                 transient, // propagate default transient
                 schemaDefaultEnabled, // propagate default schemaDefaultEnabled
                 actionDefaultEnabled, // propagate default actionDefaultEnabled
+                delegatable, // propagate default delegatable
             );
         }
     }
@@ -101,6 +106,7 @@ export function convertToActionConfig(
         false, // transient default to false if not specified
         true, // translationDefaultEnable default to true if not specified
         true, // actionDefaultEnabled default to true if not specified
+        false, // delegatable default to false if not specified
     );
     return actionConfigs;
 }
