@@ -26,7 +26,7 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace TypeAgent.Tests.KnowPro;
 
-public class AnswerTests : TestWithTemporaryFiles
+public class AnswerGeneratorTests : TestWithTemporaryFiles
 {
 
     [Fact]
