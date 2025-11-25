@@ -16,7 +16,7 @@ import {
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { createActionResultFromHtmlDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     CommandHandlerNoParams,
     CommandHandlerTable,
@@ -126,7 +126,7 @@ async function executeEmailAction(
 
     let result = await handleEmailAction(action, context);
     if (result) {
-        return createActionResultFromHtmlDisplay(result);
+        return createActionResult(result);
     }
 }
 
@@ -136,7 +136,7 @@ async function handleEmailAction(
 ) {
     const { mailClient } = context.sessionContext.agentContext;
     if (!mailClient) {
-        return "<div>Mail client not initialized ...</div>";
+        return "Mail client not initialized ...";
     }
 
     let res;
@@ -199,9 +199,9 @@ async function handleEmailAction(
             );
 
             if (res) {
-                return "<div>Email sent ...</div>";
+                return "Email sent ...";
             } else {
-                return "<div>Error encountered when sending email!</div>";
+                return "Error encountered when sending email!";
             }
             break;
 
@@ -269,9 +269,9 @@ async function handleForwardOrReplyAction(
                     );
 
                     if (res) {
-                        return "<div>Email replied ...</div>";
+                        return "Email replied ...";
                     } else {
-                        return "<div>Error encountered when replying to email!</div>";
+                        return "Error encountered when replying to email!";
                     }
                 } else {
                     let to_addrs: string[] | undefined = [];
@@ -294,9 +294,9 @@ async function handleForwardOrReplyAction(
                     );
 
                     if (res) {
-                        return "<div>Email forwarded ...</div>";
+                        return "Email forwarded ...";
                     } else {
-                        return "<div>Error encountered when forwarding email!</div>";
+                        return "Error encountered when forwarding email!";
                     }
                 }
             }

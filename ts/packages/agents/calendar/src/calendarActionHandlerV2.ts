@@ -31,6 +31,7 @@ import {
 import {
     createActionResultFromTextDisplay,
     createActionResultFromHtmlDisplay,
+    createActionResultFromMarkdownDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
@@ -197,24 +198,30 @@ function findEventsDisplayHtml(events: any[] | GraphEntity): string {
                 (event) => (delete event.attendees, event),
             );
 
-            let htmlEvents: string = `<div style="height: 100px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; font-family: sans-serif; font-size: small">Outlook Calendar Events`;
-            eventsCopy.forEach((event) => {
+            const MAX_EVENTS = 10;
+            let markdown = "## Outlook Calendar Events\n\n";
+            const displayCount = Math.min(eventsCopy.length, MAX_EVENTS);
+
+            for (let i = 0; i < displayCount; i++) {
+                const event = eventsCopy[i];
                 const calendarItemLink = `https://outlook.office.com/calendar/item/${encodeURIComponent(event.id)}`;
-                htmlEvents +=
-                    `<p><a href="${calendarItemLink}" target="_blank">` +
-                    `<h4>${event.subject}</a>` +
-                    `</p>`;
-            });
-            htmlEvents += `</div>`;
-            return htmlEvents;
+                markdown += `### [${event.subject}](${calendarItemLink})\n`;
+                if (event.start?.dateTime) {
+                    markdown += `📅 ${event.start.dateTime}\n\n`;
+                }
+            }
+
+            if (eventsCopy.length > MAX_EVENTS) {
+                markdown += `\n_Showing ${MAX_EVENTS} of ${eventsCopy.length} events._`;
+            }
+
+            return markdown;
         } else {
             const event = events as GraphEntity;
             const calendarItemLink = `https://outlook.office.com/calendar/item/${encodeURIComponent(event.id)}`;
-            const htmlEvent =
-                `<div>Outlook Calendar Events<a href="${calendarItemLink}" target="_blank">` +
-                `<h4>${event.subject}</h4></a><div style="font-size: 12px;">` +
-                "</div></div>";
-            return htmlEvent;
+            let markdown = "## Outlook Calendar Events\n\n";
+            markdown += `### [${event.subject}](${calendarItemLink})\n`;
+            return markdown;
         }
     }
     return "";
@@ -794,7 +801,7 @@ async function populateMeetingDetailsFromEvent(
     if (events instanceof Array) {
         if (events && events.length > 0) {
             const displayText = findEventsDisplayHtml(events);
-            let result = createActionResultFromHtmlDisplay(displayText);
+            let result = createActionResultFromMarkdownDisplay(displayText);
             return result;
         } else {
             const displayText = `You have a meeting free day 😊`;
@@ -803,7 +810,7 @@ async function populateMeetingDetailsFromEvent(
         }
     } else {
         const displayText = findEventsDisplayHtml(events);
-        let result = createActionResultFromHtmlDisplay(displayText);
+        let result = createActionResultFromMarkdownDisplay(displayText);
         return result;
     }
 }
