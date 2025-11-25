@@ -11,3 +11,5 @@ global using System.Text.Json.Serialization;
 global using System.Diagnostics;
 global using Xunit;
 global using Xunit.Abstractions;
+global using Xunit.Sdk;
+

@@ -1,16 +1,19 @@
 // Copyright (c) Microsoft. All rights reserved.
 
+using TypeAgent.AIClient;
+using TypeAgent.TestLib;
+
 namespace Microsoft.TypeChat.Tests;
 
-public class TestEndToEnd : TypeChatTest, IClassFixture<OpenAIConfig>
+public class TestEndToEnd : TypeChatTest
 {
-    private readonly OpenAIConfig _config;
+    //private readonly OpenAIConfig _config;
 
-    public TestEndToEnd(OpenAIConfig config, ITestOutputHelper output)
-        : base(output)
-    {
-        _config = config;
-    }
+    //public TestEndToEnd(OpenAIConfig config, ITestOutputHelper output)
+    //    : base(output)
+    //{
+    //    _config = config;
+    //}
 
     //[SkippableFact]
     //public async Task TranslateSentiment_ChatModel()
@@ -66,26 +69,26 @@ public class TestEndToEnd : TypeChatTest, IClassFixture<OpenAIConfig>
     //    Assert.Equal(15, rect.Width);
     //}
 
-    ///// <summary>
-    ///// This one loads the schema from a TS file
-    //[SkippableFact]
-    //public async Task TranslateWithTSFileSchema()
-    //{
-    //    Skip.If(!CanRunEndToEndTest(_config));
+    /// <summary>
+    /// This one loads the schema from a TS file
+    [SkippableFact]
+    public async Task TranslateWithTSFileSchemaAsync()
+    {
+        IChatModel model = ModelUtils.CreateTestChatModel(nameof(TranslateWithTSFileSchemaAsync));
 
-    //    SchemaText schema = SchemaText.Load("./SentimentSchema.ts");
-    //    var translator = new JsonTranslator<SentimentResponse>(
-    //        new ChatLanguageModel(_config.OpenAI),
-    //        schema
-    //    );
-    //    SentimentResponse response = await translator.TranslateAsync("Tonights gonna be a good night! A good good night!");
-    //    Assert.NotNull(response);
-    //    Assert.NotNull(response.Sentiment);
+        SchemaText schema = SchemaText.Load("./SentimentSchema.ts");
+        var translator = new JsonTranslator<SentimentResponse>(
+            new OpenAIChatModel(),
+            schema
+        );
+        SentimentResponse response = await translator.TranslateAsync("Tonights gonna be a good night! A good good night!");
+        Assert.NotNull(response);
+        Assert.NotNull(response.Sentiment);
 
-    //    response = await translator.TranslateAsync("Its been a long days night, and I've been working like a dog");
-    //    Assert.NotNull(response);
-    //    Assert.NotNull(response.Sentiment);
-    //}
+        response = await translator.TranslateAsync("Its been a long days night, and I've been working like a dog");
+        Assert.NotNull(response);
+        Assert.NotNull(response.Sentiment);
+    }
 
     //[SkippableFact]
     //public async Task ProgramMath()

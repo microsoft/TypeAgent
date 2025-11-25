@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\aiclient\aiclient.csproj" />
     <ProjectReference Include="..\..\src\common\common.csproj" />
     <ProjectReference Include="..\..\src\typechat.schema\TypeChat.Schema.csproj" />
     <ProjectReference Include="..\..\src\typechat\TypeChat.csproj" />
@@ -30,6 +31,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="SentimentSchema.ts">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="TestVocabs.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

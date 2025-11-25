@@ -1,8 +1,10 @@
-// Copyright (c) Microsoft. All rights reserved.
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 using System.Diagnostics;
 using System.Reflection;
 using Microsoft.TypeChat.Schema;
+using TypeAgent.AIClient;
 using Xunit.Abstractions;
 
 namespace Microsoft.TypeChat.Tests;
@@ -14,6 +16,8 @@ public class TypeChatTest
     public TypeChatTest(ITestOutputHelper? output = null)
     {
         _output = output;
+
+        TestHelpers.LoadDotEnvOrSkipTest();
     }
 
     public ITestOutputHelper? Output => _output;
@@ -71,13 +75,30 @@ public class TypeChatTest
         }
     }
 
-    //public bool CanRunEndToEndTest(OpenAIConfig config)
-    //{
-    //    return !string.IsNullOrEmpty(config.ApiKey) && config.ApiKey != "?";
+    public bool CanRunEndToEndTest(OpenAIConfig config)
+    {
+        return !string.IsNullOrEmpty(config.ApiKey) && config.ApiKey != "?";
 
-    //    //return (config.HasOpenAI &&
-    //    //        !string.IsNullOrEmpty(config.OpenAI.ApiKey) &&
-    //    //        config.OpenAI.ApiKey != "?");
+        //return (config.HasOpenAI &&
+        //        !string.IsNullOrEmpty(config.OpenAI.ApiKey) &&
+        //        config.OpenAI.ApiKey != "?");
+    }
+
+    public static bool CanRunEndToEndTests()
+    {
+        ModelApiSettings settings = ModelApiSettings.FromEnv(ModelType.Chat);
+
+        return !string.IsNullOrEmpty(settings.ApiKey) && settings.ApiKey != "?";
+    }
+
+    //public bool CanRunEndToEndTest(OpenAIChatModel model)
+    //{
+    //    return CanRunEndToEndTest(model.CompletionSettings);
+    //}
+
+    //public bool CanRunEndToEndTest(CompletionSettings settings)
+    //{
+    //    return settings.
     //}
 
     //public bool CanRunEndToEndTest(OpenAIConfig config, string testName)
