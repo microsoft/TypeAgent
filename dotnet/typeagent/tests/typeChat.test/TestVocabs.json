@@ -1,0 +1,28 @@
+{
+  "Milk": [
+    "whole milk",
+    "two percent milk",
+    "nonfat milk",
+    "coconut milk",
+    "soy milk",
+    "almond milk",
+    "oat milk"
+  ],
+  "Fruits": [
+    "Regular Apple",
+    "Honeycrisp Apple",
+    "Banana",
+    "Rainier Cherry",
+    "Blackberry",
+    "Pear",
+    "Nectarine"
+  ],
+  "Desserts": [
+    "Tiramisu",
+    "Strawberry Cake",
+    "Banana Cake",
+    "Coffee Cake",
+    "Strawberry Shortcake",
+    "Chocolate Cake"
+  ]
+}

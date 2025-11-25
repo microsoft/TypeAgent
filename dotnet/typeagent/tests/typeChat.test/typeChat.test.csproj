@@ -1,10 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <AssemblyName>Microsoft.TypeChat.Tests</AssemblyName>
+    <RootNamespace>Microsoft.TypeChat.Tests</RootNamespace>    
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,10 +14,29 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\aiclient\aiclient.csproj" />
+    <ProjectReference Include="..\..\src\common\common.csproj" />
+    <ProjectReference Include="..\..\src\typechat.schema\TypeChat.Schema.csproj" />
+    <ProjectReference Include="..\..\src\typechat\TypeChat.csproj" />
+    <ProjectReference Include="..\..\src\vector\vector.csproj" />
+    <ProjectReference Include="..\testLib\testLib.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="SentimentSchema.ts">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="TestVocabs.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

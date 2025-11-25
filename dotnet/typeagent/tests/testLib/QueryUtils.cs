@@ -12,6 +12,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace TypeAgent.TestLib;
+
 public static class QueryUtils
 {
 

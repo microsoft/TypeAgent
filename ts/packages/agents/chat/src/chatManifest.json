@@ -7,6 +7,7 @@
     "schemaType": "ChatResponseAction",
     "injected": true,
     "cached": false,
-    "streamingActions": ["generateResponse"]
+    "streamingActions": ["generateResponse"],
+    "delegatable": true
   }
 }
