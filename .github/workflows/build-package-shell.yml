@@ -72,16 +72,16 @@ jobs:
           pnpm run build:shell
         env:
           DEBUG_DEMB: true
-      - name: Electron Builder Cache
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        uses: actions/cache@v4
-        with:
-          key: electron | ${{ runner.os }} | ${{ runner.arch }} | ${{ hashFiles('**/pnpm-lock.yaml') }}
-          path: |
-            ${{ env.ELECTRON_BUILDER_CACHE }}
-            ${{ env.ELECTRON_CACHE }}
-          restore-keys: |
-            electron | ${{ runner.os }} | ${{ runner.arch }}
+      # - name: Electron Builder Cache
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+      #   uses: actions/cache@v4
+      #   with:
+      #     key: electron | ${{ runner.os }} | ${{ runner.arch }} | ${{ hashFiles('**/pnpm-lock.yaml') }}
+      #     path: |
+      #       ${{ env.ELECTRON_BUILDER_CACHE }}
+      #       ${{ env.ELECTRON_CACHE }}
+      #     restore-keys: |
+      #       electron | ${{ runner.os }} | ${{ runner.arch }}
       - name: Package - shell
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
