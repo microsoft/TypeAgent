@@ -25,11 +25,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{F8894106
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "testLib", "tests\testLib\testLib.csproj", "{6CFB4BDE-47CC-4A11-9650-784D8BB8D173}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "knowproTest", "src\knowproTest\knowproTest.csproj", "{951567AD-B2B9-4064-A330-637683176AE0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "knowpro.test", "src\knowpro.test\knowpro.test.csproj", "{951567AD-B2B9-4064-A330-637683176AE0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "conversationMemory", "src\conversationMemory\conversationMemory.csproj", "{C0800C33-1D8A-1303-D937-161BF7838C26}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "knowpro.test", "tests\knowpro\knowpro.test.csproj", "{D75E0CEB-EBE6-497A-802B-F7394CF05EEC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "knowpro.test", "tests\knowpro.test\knowpro.test.csproj", "{D75E0CEB-EBE6-497A-802B-F7394CF05EEC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aiclient", "src\aiclient\aiclient.csproj", "{D0DBA3BB-2CC1-40BA-BCDF-979E09D89578}"
 EndProject
