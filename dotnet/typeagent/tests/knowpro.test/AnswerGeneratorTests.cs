@@ -21,7 +21,6 @@ using TypeAgent.KnowPro;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
 using TypeAgent.KnowPro.Storage.Sqlite;
-using TypeAgent.KnowProTest;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace TypeAgent.Tests.KnowPro;
