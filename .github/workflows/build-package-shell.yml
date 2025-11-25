@@ -72,6 +72,10 @@ jobs:
           pnpm run build:shell
         env:
           DEBUG_DEMB: true
+      # Reusing the cache can be flaky. If a downloaded archive is corrupted it can cause
+      # problems because github tries to reuse the same machine for the next job leading to
+      # blocked builds. This is a bug in electron-builder, it's not smart enough to retry acquiring the archive.
+      # Disabling for now.
       # - name: Electron Builder Cache
       #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
       #   uses: actions/cache@v4
