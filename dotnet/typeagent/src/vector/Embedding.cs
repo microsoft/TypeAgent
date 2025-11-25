@@ -56,6 +56,16 @@ public readonly struct Embedding : ICosineSimilarity<Embedding>
         return TensorPrimitives.CosineSimilarity(this, other);
     }
 
+    /// <summary>
+    /// The Dot Product of this vector with the
+    /// </summary>
+    /// <param name="other">other embedding</param>
+    /// <returns>dot product</returns>
+    public double DotProduct(Embedding other)
+    {
+        return TensorPrimitives.Dot(Vector, other.Vector);
+    }
+
     public NormalizedEmbedding ToNormalized()
     {
         float[] normalized = new float[Vector.Length];
