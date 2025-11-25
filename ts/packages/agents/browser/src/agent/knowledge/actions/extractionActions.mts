@@ -1476,7 +1476,7 @@ export async function performKnowledgeExtractionWithNotifications(
             ) {
                 lastNotificationState = currentState;
 
-                const knowledgeHtml =
+                const knowledgeMarkdown =
                     generateDetailedKnowledgeCards(aggregatedKnowledge);
                 const headerText = "🔄 Knowledge Extraction Progress";
                 const subText = `Extracting knowledge from ${url}`;
@@ -1484,19 +1484,14 @@ export async function performKnowledgeExtractionWithNotifications(
                 sessionContext.notify(
                     AppAgentEvent.Inline,
                     {
-                        type: "html",
-                        content: `
-                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">
-                                <div style="font-weight: 600; color: #0d47a1;">${headerText}</div>
-                                <div style="font-size: 13px; color: #0d47a1; margin-top: 4px;">
-                                    ${subText}
-                                </div>
-                                <div style="font-size: 13px; color: #0d47a1; margin-top: 8px;">
-                                    Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
-                                </div>
-                            </div>
-                            ${knowledgeHtml}
-                        `,
+                        type: "markdown",
+                        content: `> **${headerText}**
+>
+> ${subText}
+>
+> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+
+${knowledgeMarkdown}`,
                     },
                     extractionId,
                 );
@@ -1547,7 +1542,7 @@ export async function performKnowledgeExtractionWithNotifications(
                     const relationshipsCount =
                         knowledge.relationships?.length || 0;
 
-                    const knowledgeHtml =
+                    const knowledgeMarkdown =
                         generateDetailedKnowledgeCards(knowledge);
 
                     const headerText = "✅ Knowledge Extraction Complete";
@@ -1556,19 +1551,14 @@ export async function performKnowledgeExtractionWithNotifications(
                     sessionContext.notify(
                         AppAgentEvent.Inline,
                         {
-                            type: "html",
-                            content: `
-                                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 4px;">
-                                    <div style="font-weight: 600; color: #155724;">${headerText}</div>
-                                    <div style="font-size: 13px; color: #155724; margin-top: 4px;">
-                                        ${subText}
-                                    </div>
-                                    <div style="font-size: 13px; color: #155724; margin-top: 8px;">
-                                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
-                                    </div>
-                                </div>
-                                ${knowledgeHtml}
-                            `,
+                            type: "markdown",
+                            content: `> **${headerText}**
+>
+> ${subText}
+>
+> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+
+${knowledgeMarkdown}`,
                         },
                         extractionId,
                     );
@@ -1586,7 +1576,7 @@ export async function performKnowledgeExtractionWithNotifications(
                     const relationshipsCount =
                         knowledge.relationships?.length || 0;
 
-                    const knowledgeHtml =
+                    const knowledgeMarkdown =
                         generateDetailedKnowledgeCards(knowledge);
 
                     const headerText =
@@ -1596,19 +1586,14 @@ export async function performKnowledgeExtractionWithNotifications(
                     sessionContext.notify(
                         AppAgentEvent.Inline,
                         {
-                            type: "html",
-                            content: `
-                                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                                    <div style="font-weight: 600; color: #856404;">${headerText}</div>
-                                    <div style="font-size: 13px; color: #856404; margin-top: 4px;">
-                                        ${subText}
-                                    </div>
-                                    <div style="font-size: 13px; color: #856404; margin-top: 8px;">
-                                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
-                                    </div>
-                                </div>
-                                ${knowledgeHtml}
-                            `,
+                            type: "markdown",
+                            content: `> **${headerText}**
+>
+> ${subText}
+>
+> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships
+
+${knowledgeMarkdown}`,
                         },
                         extractionId,
                     );
@@ -1634,18 +1619,12 @@ export async function performKnowledgeExtractionWithNotifications(
                 sessionContext.notify(
                     AppAgentEvent.Inline,
                     {
-                        type: "html",
-                        content: `
-                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
-                                <div style="font-weight: 600; color: #721c24;">❌ Knowledge Extraction Failed</div>
-                                <div style="font-size: 13px; color: #721c24; margin-top: 4px;">
-                                    Failed to extract knowledge from ${url}
-                                </div>
-                                <div style="font-size: 12px; color: #721c24; margin-top: 8px;">
-                                    Error: ${error.message}
-                                </div>
-                            </div>
-                        `,
+                        type: "markdown",
+                        content: `> **❌ Knowledge Extraction Failed**
+>
+> Failed to extract knowledge from ${url}
+>
+> Error: ${error.message}`,
                     },
                     extractionId,
                 );
