@@ -3,8 +3,8 @@
 
 import registerDebug from "debug";
 import { AppAgent } from "@typeagent/agent-sdk";
-import { createAgentRpcServer } from "agent-rpc/server";
-import { createChannelProvider } from "agent-rpc/channel";
+import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
+import { createChannelProvider } from "@typeagent/agent-rpc/channel";
 import { createRequire } from "node:module";
 
 //=================================================================

@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { RpcChannel } from "agent-rpc/channel";
-import { createRpc } from "agent-rpc/rpc";
+import { RpcChannel } from "@typeagent/agent-rpc/channel";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { ClientIO } from "../context/interactiveIO.js";
 import {
     ClientIOCallFunctions,

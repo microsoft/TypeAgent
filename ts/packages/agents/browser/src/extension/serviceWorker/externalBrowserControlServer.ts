@@ -5,9 +5,9 @@ import {
     createGenericChannel,
     GenericChannel,
     RpcChannel,
-} from "agent-rpc/channel";
+} from "@typeagent/agent-rpc/channel";
 import { getActiveTab } from "./tabManager";
-import { createRpc } from "agent-rpc/rpc";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,

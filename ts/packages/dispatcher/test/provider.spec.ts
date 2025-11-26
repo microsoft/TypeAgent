@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import { createNpmAppAgentProvider } from "../src/agentProvider/npmAgentProvider.js";
-import { createDispatcher, Dispatcher } from "../src/dispatcher.js";
-import { fileURLToPath } from "node:url";
-
-import {
+import { createDispatcher } from "../src/dispatcher.js";
+import type {
+    Dispatcher,
     ClientIO,
     IAgentMessage,
-    nullClientIO,
-} from "../src/context/interactiveIO.js";
+} from "@typeagent/dispatcher-types";
+import { fileURLToPath } from "node:url";
+import { nullClientIO } from "../src/context/interactiveIO.js";
 
 const testAppAgentProvider = createNpmAppAgentProvider(
     {

@@ -27,12 +27,13 @@ Any use of third-party trademarks or logos are subject to those third-party's po
 
 function getExpectedValues(file) {
     const values = structuredClone(staticExpectedValues);
-    if (
+
+    values.private =
         file.json["name"] !== undefined &&
         !file.json["name"].startsWith("@typeagent/")
-    ) {
-        values.private = true;
-    }
+            ? true
+            : undefined;
+
     values.repository.directory = path.dirname(file.name);
     return values;
 }

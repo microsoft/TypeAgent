@@ -1,23 +1,23 @@
 {
-  "name": "@typeagent/agent-rpc",
+  "name": "@typeagent/dispatcher-types",
   "version": "0.0.1",
-  "description": "Remoting library for the TypeAgent SDK",
+  "description": "TypeAgent Dispatcher Types",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agentRpc"
+    "directory": "ts/packages/dispatcherTypes"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./client": "./dist/client.js",
-    "./channel": "./dist/common.js",
-    "./rpc": "./dist/rpc.js",
-    "./server": "./dist/server.js"
+    ".": "./dist/index.js"
   },
-  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
@@ -26,14 +26,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*",
-    "@typeagent/common-utils": "workspace:*",
-    "debug": "^4.4.0"
+    "@typeagent/agent-sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.12",
-    "@types/jest": "^29.5.7",
-    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

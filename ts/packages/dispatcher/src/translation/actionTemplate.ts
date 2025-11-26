@@ -12,26 +12,16 @@ import {
     TemplateFieldArray,
     TemplateFieldPrimitive,
 } from "@typeagent/agent-sdk";
+import type {
+    TemplateData,
+    TemplateEditConfig,
+} from "@typeagent/dispatcher-types";
 import {
     ActionParamArray,
     ActionParamObject,
     ActionParamType,
 } from "action-schema";
 import { getActionParamCompletion } from "./requestCompletion.js";
-
-export type TemplateData = {
-    schema: TemplateSchema;
-    data: unknown;
-};
-export type TemplateEditConfig = {
-    templateAgentName: string;
-    templateName: string;
-    templateData: TemplateData | TemplateData[];
-    defaultTemplate: TemplateSchema;
-    preface?: string;
-    editPreface?: string;
-    completion?: boolean;
-};
 
 function getDefaultActionTemplate(
     schemas: string[],

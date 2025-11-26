@@ -5,12 +5,12 @@ import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import {
     createGenericChannel,
     createGenericChannelProvider,
-} from "agent-rpc/channel";
-import { createRpc } from "agent-rpc/rpc";
+} from "@typeagent/agent-rpc/channel";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     AgentInterfaceFunctionName,
     createAgentRpcServer,
-} from "agent-rpc/server";
+} from "@typeagent/agent-rpc/server";
 import { isWebAgentMessageFromDispatcher } from "../common/webAgentMessageTypes.mjs";
 import {
     WebAgentRegisterMessage,

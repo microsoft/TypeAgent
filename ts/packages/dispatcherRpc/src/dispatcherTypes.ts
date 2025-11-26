@@ -1,13 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
+import type {
     DisplayType,
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import { CommandCompletionResult } from "../command/completion.js";
-import { CommandResult } from "../dispatcher.js";
+import type {
+    CommandCompletionResult,
+    CommandResult,
+} from "@typeagent/dispatcher-types";
 
 export type DispatcherInvokeFunctions = {
     processCommand(params: {

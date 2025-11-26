@@ -9,9 +9,9 @@ import {
     debugShellInit,
 } from "./debug.js";
 import { ShellSettingManager } from "./shellSettings.js";
-import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
+import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { ShellWindow } from "./shellWindow.js";
-import { createGenericChannel } from "agent-rpc/channel";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import {
     getDefaultAppAgentInstaller,
@@ -29,7 +29,7 @@ import {
     hasPendingUpdate,
     setPendingUpdateCallback,
 } from "./commands/update.js";
-import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
+import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isProd } from "./index.js";
 
 type ShellInstance = {

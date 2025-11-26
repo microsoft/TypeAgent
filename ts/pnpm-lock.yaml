@@ -73,6 +73,9 @@ importers:
 
   examples/cacheRESTEndpoint:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../packages/agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../packages/agentSdk
@@ -88,9 +91,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../packages/dispatcher
-      agent-rpc:
-        specifier: workspace:*
-        version: link:../../packages/agentRpc
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -1143,6 +1143,9 @@ importers:
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -1152,9 +1155,6 @@ importers:
       action-schema:
         specifier: workspace:*
         version: link:../../actionSchema
-      agent-rpc:
-        specifier: workspace:*
-        version: link:../../agentRpc
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -2237,15 +2237,18 @@ importers:
       '@azure/storage-blob':
         specifier: ^12.26.0
         version: 12.27.0
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/dispatcher-rpc':
+        specifier: workspace:*
+        version: link:../dispatcherRpc
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
-      agent-rpc:
-        specifier: workspace:*
-        version: link:../agentRpc
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2683,6 +2686,9 @@ importers:
       '@modelcontextprotocol/server-filesystem':
         specifier: 2025.8.21
         version: 2025.8.21(zod@3.24.4)
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -2701,9 +2707,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
-      agent-rpc:
-        specifier: workspace:*
-        version: link:../agentRpc
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2852,12 +2855,18 @@ importers:
       '@azure/msal-node-extensions':
         specifier: ^1.5.0
         version: 1.5.13
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../dispatcherTypes
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -2867,9 +2876,6 @@ importers:
       agent-cache:
         specifier: workspace:*
         version: link:../cache
-      agent-rpc:
-        specifier: workspace:*
-        version: link:../agentRpc
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2961,6 +2967,44 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/dispatcherRpc:
+    dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../dispatcherTypes
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/dispatcherTypes:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+    devDependencies:
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3498,18 +3542,21 @@ importers:
       '@electron-toolkit/preload':
         specifier: ^3.0.2
         version: 3.0.2(electron@37.4.0)
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/dispatcher-rpc':
+        specifier: workspace:*
+        version: link:../dispatcherRpc
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
-      agent-rpc:
-        specifier: workspace:*
-        version: link:../agentRpc
       aiclient:
         specifier: workspace:*
         version: link:../aiclient

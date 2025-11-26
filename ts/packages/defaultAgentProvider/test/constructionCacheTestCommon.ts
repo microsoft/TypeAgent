@@ -25,11 +25,11 @@ import {
     fromJsonActions,
     toJsonActions,
     ExecutableAction,
-    FullAction,
 } from "agent-cache";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
+import { TypeAgentAction } from "@typeagent/agent-sdk";
 
 const schemaInfoProvider = createSchemaInfoProvider(
     (await getAllActionConfigProvider(getDefaultAppAgentProviders(undefined)))
@@ -150,7 +150,7 @@ function normalizeParams(obj: any) {
     }
 }
 
-export function normalizeAction(action: JSONAction | FullAction) {
+export function normalizeAction(action: JSONAction | TypeAgentAction) {
     if (action.parameters !== undefined) {
         normalizeParams(action.parameters);
     }

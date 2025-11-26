@@ -2,19 +2,19 @@
 // Licensed under the MIT License.
 
 import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
-import { createAgentRpcClient } from "agent-rpc/client";
+import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import {
     createGenericChannel,
     createGenericChannelProvider,
     GenericChannel,
     GenericChannelProvider,
-} from "agent-rpc/channel";
-import { createRpc } from "agent-rpc/rpc";
+} from "@typeagent/agent-rpc/channel";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { BrowserActionContext } from "./browserActions.mjs";
 import { WebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 import registerDebug from "debug";
-import { AgentInterfaceFunctionName } from "agent-rpc/server";
+import { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 
 const debug = registerDebug("typeagent:webAgent");
 const debugError = registerDebug("typeagent:webAgent:error");

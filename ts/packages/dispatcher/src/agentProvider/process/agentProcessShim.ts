@@ -3,10 +3,10 @@
 
 import child_process from "child_process";
 import { AppAgent } from "@typeagent/agent-sdk";
-import { createAgentRpcClient } from "agent-rpc/client";
-import { createChannelProvider } from "agent-rpc/channel";
+import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
+import { createChannelProvider } from "@typeagent/agent-rpc/channel";
 import { fileURLToPath } from "url";
-import { AgentInterfaceFunctionName } from "agent-rpc/server";
+import { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 
 export type AgentProcess = {
     appAgent: AppAgent;

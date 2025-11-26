@@ -22,9 +22,9 @@ import {
     extractSchemaFromLinkedPages,
 } from "./schemaExtraction";
 import { awaitPageIncrementalUpdates } from "./loadingDetector";
-import { createGenericChannel } from "agent-rpc/channel";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
-import { createRpc } from "agent-rpc/rpc";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 
 // Set up history interception for SPA navigation
 const interceptHistory = (method: "pushState" | "replaceState") => {

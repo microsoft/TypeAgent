@@ -7,12 +7,12 @@ import {
     DisplayContent,
     MessageContent,
 } from "@typeagent/agent-sdk";
-import {
+import type {
+    RequestId,
     ClientIO,
     IAgentMessage,
-    RequestId,
-} from "../context/interactiveIO.js";
-import { TemplateEditConfig } from "../translation/actionTemplate.js";
+    TemplateEditConfig,
+} from "@typeagent/dispatcher-types";
 import chalk from "chalk";
 import stringWidth from "string-width";
 import { createInterface } from "readline/promises";

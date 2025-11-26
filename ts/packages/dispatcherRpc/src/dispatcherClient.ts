@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { RpcChannel } from "agent-rpc/channel";
-import { createRpc } from "agent-rpc/rpc";
-import { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
-import { Dispatcher } from "../dispatcher.js";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
+import type { RpcChannel } from "@typeagent/agent-rpc/channel";
+import type { Dispatcher } from "@typeagent/dispatcher-types";
+import type { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
 
 function remoteCallNotSupported(): never {
     throw new Error("Remote call not supported");

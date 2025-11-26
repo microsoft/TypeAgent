@@ -5,7 +5,7 @@ import {
     DispatcherEmoji,
     DispatcherName,
 } from "../context/dispatcher/dispatcherUtils.js";
-import type { DispatcherStatus } from "../dispatcher.js";
+import type { DispatcherStatus } from "@typeagent/dispatcher-types";
 
 export function getStatusSummary(
     state: DispatcherStatus,
