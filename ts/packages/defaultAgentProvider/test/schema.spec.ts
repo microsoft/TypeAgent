@@ -5,7 +5,7 @@ import {
     getAllActionConfigProvider,
     getAssistantSelectionSchemas,
 } from "agent-dispatcher/internal";
-import { composeTranslatorSchemas } from "common-utils";
+import { composeTranslatorSchemas } from "typechat-utils";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 

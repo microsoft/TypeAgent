@@ -33,13 +33,13 @@
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
+    "typechat-utils": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {

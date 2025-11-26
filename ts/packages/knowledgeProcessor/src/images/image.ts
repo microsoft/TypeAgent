@@ -31,7 +31,7 @@ import {
     ImagePromptDetails,
     isImageFileType,
     parseDateString,
-} from "common-utils";
+} from "typechat-utils";
 import { KnowledgeExtractor } from "../conversation/knowledge.js";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { createTypeScriptJsonValidator } from "typechat/ts";

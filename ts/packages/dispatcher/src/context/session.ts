@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { getFileExtensionForMimeType } from "typechat-utils";
 import {
     DeepPartialUndefined,
     DeepPartialUndefinedAndNull,
-    getFileExtensionForMimeType,
 } from "common-utils";
 import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
 import registerDebug from "debug";

@@ -3,6 +3,7 @@ packages:
   - packages/memory/*
   - packages/agents/*
   - packages/agents/agentUtils/*
+  - packages/utils/*
   - examples/*
   - examples/agentExamples/*
   - tools

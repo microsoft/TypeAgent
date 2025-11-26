@@ -14,7 +14,7 @@ import {
     getSubphraseExplanationInstruction,
 } from "../explainer.js";
 import { TypeChatAgent } from "../typeChatAgent.js";
-import { createJsonTranslatorFromFile } from "common-utils";
+import { createJsonTranslatorFromFile } from "typechat-utils";
 import {
     PropertySubPhase,
     SubPhrase,

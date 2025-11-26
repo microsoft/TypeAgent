@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getImageElement, getMimeType } from "common-utils";
+import { getImageElement, getMimeType } from "typechat-utils";
 import {
     ChatResponseAction,
     Entity,

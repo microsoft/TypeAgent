@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createJsonTranslatorFromFile } from "common-utils";
+import { createJsonTranslatorFromFile } from "typechat-utils";
 import { RequestAction } from "../requestAction.js";
 import { TypeChatAgent } from "../typeChatAgent.js";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";

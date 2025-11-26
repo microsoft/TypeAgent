@@ -17,7 +17,7 @@ import {
     getCommandResult,
 } from "../../commandHandlerContext.js";
 
-import { CachedImageWithDetails } from "common-utils";
+import { CachedImageWithDetails } from "typechat-utils";
 import { Logger } from "telemetry";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import {

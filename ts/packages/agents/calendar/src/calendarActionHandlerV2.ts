@@ -14,7 +14,7 @@ import {
     GraphEntity,
     ErrorResponse,
 } from "graph-utils";
-import { getTimeZoneName, getUniqueLocalId } from "common-utils";
+import { getTimeZoneName, getUniqueLocalId } from "typechat-utils";
 import chalk from "chalk";
 import {
     CalendarAction,

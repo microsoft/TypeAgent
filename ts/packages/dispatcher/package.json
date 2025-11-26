@@ -70,6 +70,7 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
+    "typechat-utils": "workspace:*",
     "website-memory": "workspace:*",
     "ws": "^8.17.1"
   },
