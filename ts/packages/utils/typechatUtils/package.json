@@ -22,8 +22,8 @@
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
-    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "npm run test:local",
     "test:local": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",

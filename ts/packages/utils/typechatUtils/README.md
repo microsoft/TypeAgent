@@ -1,4 +1,4 @@
-# common-utils
+# typechat-utils
 
 Common utilities package for the TypeAgent project.
 

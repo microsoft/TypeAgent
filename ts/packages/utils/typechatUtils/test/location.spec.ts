@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { XmpTag } from "exifreader";
-import {
-    exifGPSTagToLatLong,
-    LatLong,
-} from "../../typechatUtils/src/location.js";
+import { exifGPSTagToLatLong, LatLong } from "../src/location.js";
 
 describe("Location Tests", () => {
     it("EXIF LatLong to LatLong", () => {

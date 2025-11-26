@@ -39,13 +39,26 @@ jobs:
 
       - template: include-update-package-version.yml
         parameters:
-          packageFolder: $(agentsdk_folder)
+          packageFolder: $(buildDirectory)
           prerelease: $(Build.BuildId)
 
       - script: |
           npm run build
         displayName: "Build"
         workingDirectory: $(buildDirectory)
+
+      - script: |
+          pnpm pack --filter @typeagent/* --pack-destination $(publishedPackageDirectory)
+        displayName: "Pack Published packages"
+        workingDirectory: $(buildDirectory)
+
+      - script: |
+          pnpm pack --filter=\!@typeagent/* --pack-destination $(packageDirectory)
+        displayName: "Pack Non-published packages"
+        workingDirectory: $(buildDirectory)
+
+      - publish: $(packageDirectory)
+        artifact: Packages
 
       - script: |
           sudo apt install libsecret-1-0
@@ -60,11 +73,6 @@ jobs:
       - script: |
           npm run lint
         displayName: "Lint"
-        workingDirectory: $(buildDirectory)
-
-      - script: |
-          pnpm pack --filter @typeagent/* --pack-destination $(publishedPackageDirectory)
-        displayName: "Pack"
         workingDirectory: $(buildDirectory)
 
       - script: |
@@ -87,11 +95,3 @@ jobs:
           done
         displayName: "Publish packages"
         workingDirectory: $(NpmRcDirectory)
-
-      - script: |
-          pnpm pack --filter=!@typeagent/* --pack-destination $(packageDirectory)
-        displayName: "Pack Non-published packages"
-        workingDirectory: $(buildDirectory)
-
-      - publish: $(packageDirectory)
-        artifact: Packages
