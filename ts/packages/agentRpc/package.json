@@ -1,6 +1,7 @@
 {
   "name": "agent-rpc",
   "version": "0.0.1",
+  "private": true,
   "description": "Remoting library for the TypeAgent SDK",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -27,7 +28,7 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "common-utils": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "debug": "^4.4.0"
   },
   "devDependencies": {

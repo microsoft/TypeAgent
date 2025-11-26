@@ -1,6 +1,7 @@
 {
   "name": "knowledge-processor",
   "version": "0.0.1",
+  "private": true,
   "description": "Libraries for using AI with textual and other knowledge.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

@@ -11,7 +11,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
-import { getColorElapsedString } from "common-utils";
+import { getColorElapsedString } from "@typeagent/common-utils";
 import { translateRequest } from "../../../translation/translateRequest.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
 import { createHistoryContext } from "../../../translation/interpretRequest.js";

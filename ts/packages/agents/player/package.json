@@ -25,8 +25,8 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "express": "^4.21.2",

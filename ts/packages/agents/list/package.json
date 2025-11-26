@@ -1,6 +1,7 @@
 {
   "name": "list-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "List dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

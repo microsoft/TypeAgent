@@ -1,6 +1,7 @@
 {
   "name": "local-whisper-client",
   "version": "0.0.1",
+  "private": true,
   "description": "Client for testing local whisper service instances",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

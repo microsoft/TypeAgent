@@ -4,7 +4,7 @@
 import {
     DeepPartialUndefined,
     DeepPartialUndefinedAndNull,
-} from "common-utils";
+} from "@typeagent/common-utils";
 
 export function cloneConfig<T>(config: T): T {
     return structuredClone(config);

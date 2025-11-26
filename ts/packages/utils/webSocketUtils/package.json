@@ -1,6 +1,7 @@
 {
   "name": "websocket-utils",
   "version": "0.0.1",
+  "private": true,
   "description": "Web socket utilities package for the TypeAgent project.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

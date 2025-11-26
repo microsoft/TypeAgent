@@ -18,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { InstanceConfigProvider } from "../src/utils/config.js";
-import { getObjectProperty, setObjectProperty } from "common-utils";
+import { getObjectProperty, setObjectProperty } from "@typeagent/common-utils";
 import chalk from "chalk";
 import { normalizeAction } from "./constructionCacheTestCommon.js";
 

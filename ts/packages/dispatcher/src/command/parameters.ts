@@ -11,7 +11,7 @@ import {
     getFlagType,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
-import { setObjectProperty } from "common-utils";
+import { setObjectProperty } from "@typeagent/common-utils";
 
 function parseBooleanParameter(
     valueStr: string,

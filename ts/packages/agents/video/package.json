@@ -1,6 +1,7 @@
 {
   "name": "video-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Video dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

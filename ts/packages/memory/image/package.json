@@ -1,6 +1,7 @@
 {
   "name": "image-memory",
   "version": "0.0.1",
+  "private": true,
   "description": "Using structured RAG to implement image memory",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

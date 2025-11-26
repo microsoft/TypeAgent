@@ -1,6 +1,7 @@
 {
   "name": "action-grammar",
   "version": "0.0.1",
+  "private": true,
   "description": "Grammar for typeagent actions.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

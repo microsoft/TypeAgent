@@ -1,6 +1,7 @@
 {
   "name": "agent-cache-explorer",
   "version": "0.0.1",
+  "private": true,
   "description": "Explorer for construction cache for TypeAgent requests",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

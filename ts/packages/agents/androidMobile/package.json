@@ -1,6 +1,7 @@
 {
   "name": "android-mobile-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Android mobile dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

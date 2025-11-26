@@ -20,7 +20,7 @@ import {
     TransformInfo,
 } from "../constructions/matchPart.js";
 import { loadConstructionCacheFile } from "../cache/constructionStore.js";
-import { setObjectProperty } from "common-utils";
+import { setObjectProperty } from "@typeagent/common-utils";
 import { MatchedValueTranslator } from "../constructions/constructionValue.js";
 
 import registerDebug from "debug";

@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getElapsedString, getColorElapsedString } from "common-utils";
+import {
+    getElapsedString,
+    getColorElapsedString,
+} from "@typeagent/common-utils";
 import chalk from "chalk";
 import { ProcessRequestActionResult } from "../cache/cache.js";
 import { ImportConstructionResult } from "../index.js";

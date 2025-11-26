@@ -1,5 +1,5 @@
 {
-  "name": "common-utils",
+  "name": "@typeagent/common-utils",
   "version": "0.0.1",
   "description": "Common utilities package for the TypeAgent project.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",

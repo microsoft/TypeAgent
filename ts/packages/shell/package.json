@@ -1,6 +1,7 @@
 {
   "name": "agent-shell",
   "version": "0.0.1",
+  "private": true,
   "description": "TypeAgent Shell",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -55,13 +56,13 @@
     "@azure/msal-node-extensions": "^1.5.0",
     "@electron-toolkit/preload": "^3.0.2",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
     "browser-typeagent": "workspace:*",
     "chat-rpc-server": "workspace:*",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dompurify": "^3.2.5",

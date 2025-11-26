@@ -1,6 +1,7 @@
 {
   "name": "default-agent-provider",
   "version": "0.0.1",
+  "private": true,
   "description": "TypeAgent default agent provider",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -36,6 +37,7 @@
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@modelcontextprotocol/server-filesystem": "2025.8.21",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "action-grammar": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
@@ -48,7 +50,6 @@
     "chalk": "^5.4.1",
     "chat-agent": "workspace:*",
     "code-agent": "workspace:*",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "desktop-automation": "workspace:*",
     "email": "workspace:*",

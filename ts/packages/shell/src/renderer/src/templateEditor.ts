@@ -9,7 +9,7 @@ import {
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { Dispatcher, TemplateData, TemplateEditConfig } from "agent-dispatcher";
-import { getObjectProperty, setObjectProperty } from "common-utils";
+import { getObjectProperty, setObjectProperty } from "@typeagent/common-utils";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 

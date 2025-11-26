@@ -1,6 +1,7 @@
 {
   "name": "calendar",
   "version": "0.0.1",
+  "private": true,
   "description": "Calendar dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

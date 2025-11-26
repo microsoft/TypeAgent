@@ -1,6 +1,7 @@
 {
   "name": "agent-cli",
   "version": "0.0.1",
+  "private": true,
   "description": "TypeAgent Dispatcher CLI",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -46,6 +47,7 @@
     "@oclif/core": "^4.2.10",
     "@oclif/plugin-help": "^6",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "action-grammar": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
@@ -53,7 +55,6 @@
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "chat-rpc-server": "workspace:*",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",

@@ -17,9 +17,12 @@ pool:
 variables:
   - name: buildDirectory
     value: $(Build.SourcesDirectory)/ts
-  - name: agentsdk_folder
-    value: $(buildDirectory)/packages/agentSdk
-
+  - name: packageDirectory
+    value: $(Build.ArtifactStagingDirectory)/packages
+  - name: publishedPackageDirectory
+    value: $(Build.ArtifactStagingDirectory)/packages/published
+  - name: NpmRcDirectory
+    value: $(Build.SourcesDirectory)
 jobs:
   - job: build_ts
     displayName: "Build TypeScript Project"
@@ -60,19 +63,35 @@ jobs:
         workingDirectory: $(buildDirectory)
 
       - script: |
+          pnpm pack --filter @typeagent/* --pack-destination $(publishedPackageDirectory)
+        displayName: "Pack"
+        workingDirectory: $(buildDirectory)
+
+      - script: |
           echo $(ADO_REGISTRY)
           echo "registry=$(ADO_REGISTRY)" > .npmrc
           echo "always-auth=true" >> .npmrc
           cat .npmrc
         displayName: "Create .npmrc file."
-        workingDirectory: $(agentsdk_folder)
+        workingDirectory: $(NpmRcDirectory)
 
       - task: npmAuthenticate@0
         inputs:
-          workingFile: "$(agentsdk_folder)/.npmrc"
+          workingFile: "$(NpmRcDirectory)/.npmrc"
         displayName: "Authenticate with Azure Artifacts"
 
       - script: |
-          npm publish --registry=$(ADO_REGISTRY)
-        displayName: "Pack and Publish agent-sdk Module"
-        workingDirectory: $(agentsdk_folder)
+          for file in $(publishedPackageDirectory)/*.tgz; do
+            echo "Publishing file: $file"
+            npm publish --registry=$(ADO_REGISTRY) "$file"
+          done
+        displayName: "Publish packages"
+        workingDirectory: $(NpmRcDirectory)
+
+      - script: |
+          pnpm pack --filter=!@typeagent/* --pack-destination $(packageDirectory)
+        displayName: "Pack Non-published packages"
+        workingDirectory: $(buildDirectory)
+
+      - publish: $(packageDirectory)
+        artifact: Packages

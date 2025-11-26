@@ -1,6 +1,7 @@
 {
   "name": "spelunker-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Spelunker dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -25,10 +26,10 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
     "better-sqlite3": "12.2.0",
     "code-processor": "workspace:*",
-    "common-utils": "workspace:*",
     "dotenv": "^16.3.1",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",

@@ -7,7 +7,7 @@ import * as path from "path";
 import * as sqlite from "better-sqlite3";
 import { Result, TypeChatJsonTranslator } from "typechat";
 
-import { createLimiter } from "common-utils";
+import { createLimiter } from "@typeagent/common-utils";
 import { ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
     createActionResultFromMarkdownDisplay,

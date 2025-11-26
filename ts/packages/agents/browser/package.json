@@ -1,6 +1,7 @@
 {
   "name": "browser-typeagent",
   "version": "0.0.1",
+  "private": true,
   "description": "",
   "keywords": [],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
@@ -50,6 +51,7 @@
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "action-schema": "workspace:*",
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
@@ -57,7 +59,6 @@
     "bootstrap": "^5.3.3",
     "chalk": "^5.4.1",
     "cheerio": "^1.1.0",
-    "common-utils": "workspace:*",
     "conversation-memory": "workspace:*",
     "cytoscape": "^3.32.0",
     "cytoscape-dagre": "^2.5.0",

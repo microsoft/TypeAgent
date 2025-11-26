@@ -2,6 +2,7 @@
   "name": "agent-coda",
   "displayName": "agent-coda",
   "version": "0.0.1",
+  "private": true,
   "description": "Coda Operated Assistance for Coding with Voice",
   "categories": [
     "Other"

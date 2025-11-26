@@ -1,6 +1,7 @@
 {
   "name": "telemetry",
   "version": "0.0.1",
+  "private": true,
   "description": "Telemetry provider package for the TypeAgent project.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

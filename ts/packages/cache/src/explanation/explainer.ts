@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getObjectPropertyNames } from "common-utils";
+import { getObjectPropertyNames } from "@typeagent/common-utils";
 import {
     RequestAction,
     HistoryContext,

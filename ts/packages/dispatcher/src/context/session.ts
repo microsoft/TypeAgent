@@ -5,7 +5,7 @@ import { getFileExtensionForMimeType } from "typechat-utils";
 import {
     DeepPartialUndefined,
     DeepPartialUndefinedAndNull,
-} from "common-utils";
+} from "@typeagent/common-utils";
 import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
 import registerDebug from "debug";
 import fs from "node:fs";

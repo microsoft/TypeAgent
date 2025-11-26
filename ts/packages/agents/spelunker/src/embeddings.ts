@@ -5,7 +5,7 @@ import { Statement } from "better-sqlite3";
 import { Result } from "typechat";
 
 import { openai, TextEmbeddingModel } from "aiclient";
-import { createLimiter } from "common-utils";
+import { createLimiter } from "@typeagent/common-utils";
 import { createNormalized, dotProduct } from "typeagent";
 import { NormalizedEmbedding } from "typeagent";
 

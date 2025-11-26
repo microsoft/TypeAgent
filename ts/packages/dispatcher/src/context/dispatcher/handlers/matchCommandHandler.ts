@@ -13,7 +13,7 @@ import {
     displayError,
     displayResult,
 } from "@typeagent/agent-sdk/helpers/display";
-import { getColorElapsedString } from "common-utils";
+import { getColorElapsedString } from "@typeagent/common-utils";
 import { matchRequest } from "../../../translation/matchRequest.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
 

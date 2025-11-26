@@ -25,10 +25,10 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",
-    "common-utils": "workspace:*",
     "conversation-memory": "workspace:*",
     "dotenv": "^16.3.1",
     "exifreader": "^4.30.1",
