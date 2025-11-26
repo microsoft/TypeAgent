@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using TypeAgent.AIClient;
 
 namespace TypeAgent.TestLib;
+
 public class ModelUtils
 {
     public static IChatModel CreateTestChatModel(string modelName)

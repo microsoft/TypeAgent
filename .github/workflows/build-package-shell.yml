@@ -72,16 +72,20 @@ jobs:
           pnpm run build:shell
         env:
           DEBUG_DEMB: true
-      - name: Electron Builder Cache
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        uses: actions/cache@v4
-        with:
-          key: electron | ${{ runner.os }} | ${{ runner.arch }} | ${{ hashFiles('**/pnpm-lock.yaml') }}
-          path: |
-            ${{ env.ELECTRON_BUILDER_CACHE }}
-            ${{ env.ELECTRON_CACHE }}
-          restore-keys: |
-            electron | ${{ runner.os }} | ${{ runner.arch }}
+      # Reusing the cache can be flaky. If a downloaded archive is corrupted it can cause
+      # problems because github tries to reuse the same machine for the next job leading to
+      # blocked builds. This is a bug in electron-builder, it's not smart enough to retry acquiring the archive.
+      # Disabling for now.
+      # - name: Electron Builder Cache
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+      #   uses: actions/cache@v4
+      #   with:
+      #     key: electron | ${{ runner.os }} | ${{ runner.arch }} | ${{ hashFiles('**/pnpm-lock.yaml') }}
+      #     path: |
+      #       ${{ env.ELECTRON_BUILDER_CACHE }}
+      #       ${{ env.ELECTRON_CACHE }}
+      #     restore-keys: |
+      #       electron | ${{ runner.os }} | ${{ runner.arch }}
       - name: Package - shell
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
