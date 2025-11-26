@@ -89,6 +89,7 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "website-memory": "workspace:*",
+    "websocket-utils": "workspace:*",
     "ws": "^8.17.1",
     "yaml": "^2.3.4"
   },

@@ -6,8 +6,6 @@ export * from "./print.js";
 
 export * from "./types.js";
 
-export * from "./webSockets.js";
-
 export { simpleStarRegex } from "./simpleStartRegex.js";
 
 export {

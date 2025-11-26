@@ -10,7 +10,7 @@ import {
     WebContentsView,
 } from "electron";
 import path from "node:path";
-import { WebSocketMessageV2 } from "common-utils";
+import type { WebSocketMessageV2 } from "websocket-utils";
 import { runDemo } from "./demo.js";
 import {
     ShellUserSettings,

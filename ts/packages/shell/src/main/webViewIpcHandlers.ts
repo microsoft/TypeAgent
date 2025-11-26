@@ -5,7 +5,7 @@ import { ipcMain, session } from "electron";
 import { debugShellError } from "./debug.js";
 import { ExtensionStorageManager } from "./extensionStorage.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
-import { WebSocketMessageV2 } from "common-utils";
+import type { WebSocketMessageV2 } from "websocket-utils";
 import path from "path";
 import { getShellWindow, getShellWindowForIpcEvent } from "./instance.js";
 

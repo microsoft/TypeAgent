@@ -1,21 +1,18 @@
 {
-  "name": "common-utils",
+  "name": "websocket-utils",
   "version": "0.0.1",
-  "description": "Common utilities package for the TypeAgent project.",
+  "description": "Web socket utilities package for the TypeAgent project.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/utils/commonUtils"
+    "directory": "ts/packages/utils/webSocketUtils"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": {
-      "node": "./dist/indexNode.js",
-      "default": "./dist/indexBrowser.js"
-    }
+    ".": "./dist/index.js"
   },
   "files": [
     "dist",
@@ -26,20 +23,19 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "test": "npm run test:local",
-    "test:local": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*",
-    "chalk": "^5.4.1",
-    "debug": "^4.4.0"
+    "debug": "^4.4.0",
+    "dotenv": "^16.3.1",
+    "find-config": "^1.0.0",
+    "isomorphic-ws": "^5.0.0",
+    "ws": "^8.17.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
-    "@types/jest": "^29.5.7",
-    "jest": "^29.7.0",
+    "@types/find-config": "1.0.4",
+    "@types/ws": "^8.5.10",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
