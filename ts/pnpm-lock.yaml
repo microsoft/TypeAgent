@@ -2982,6 +2982,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcherTypes

@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*"
   },
   "devDependencies": {
