@@ -4,8 +4,6 @@
 export { Limiter, createLimiter } from "./limiter.js";
 export * from "./print.js";
 
-export * from "./command.js";
-
 export * from "./types.js";
 
 export * from "./webSockets.js";
