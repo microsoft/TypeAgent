@@ -76,6 +76,11 @@ jobs:
         workingDirectory: $(buildDirectory)
 
       - script: |
+          npm run check:policy
+        displayName: "Check Policy"
+        workingDirectory: $(buildDirectory)
+
+      - script: |
           echo $(ADO_REGISTRY)
           echo "registry=$(ADO_REGISTRY)" > .npmrc
           echo "always-auth=true" >> .npmrc

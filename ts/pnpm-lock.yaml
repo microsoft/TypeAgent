@@ -76,6 +76,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../packages/agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../packages/utils/commonUtils
       action-schema:
         specifier: workspace:*
         version: link:../../packages/actionSchema
@@ -97,9 +100,6 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
-      common-utils:
-        specifier: workspace:*
-        version: link:../../packages/utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -259,6 +259,9 @@ importers:
 
   examples/commandHistogram:
     dependencies:
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../packages/utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -268,9 +271,6 @@ importers:
       code-processor:
         specifier: workspace:*
         version: link:../../packages/codeProcessor
-      common-utils:
-        specifier: workspace:*
-        version: link:../../packages/utils/commonUtils
       conversation-memory:
         specifier: workspace:*
         version: link:../../packages/memory/conversation
@@ -317,7 +317,7 @@ importers:
 
   examples/debugDocGenerator:
     dependencies:
-      common-utils:
+      '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
       typescript:
@@ -797,6 +797,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../packages/utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -809,9 +812,6 @@ importers:
       code-processor:
         specifier: workspace:*
         version: link:../../packages/codeProcessor
-      common-utils:
-        specifier: workspace:*
-        version: link:../../packages/utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -992,7 +992,7 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
-      common-utils:
+      '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
       debug:
@@ -1060,15 +1060,15 @@ importers:
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
         version: 3.0.7(@azure/identity@4.10.0)
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../../../aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
-      common-utils:
-        specifier: workspace:*
-        version: link:../../../utils/commonUtils
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -1146,6 +1146,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       action-schema:
         specifier: workspace:*
         version: link:../../actionSchema
@@ -1167,9 +1170,6 @@ importers:
       cheerio:
         specifier: ^1.1.0
         version: 1.1.0
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       conversation-memory:
         specifier: workspace:*
         version: link:../../memory/conversation
@@ -1263,6 +1263,9 @@ importers:
       website-memory:
         specifier: workspace:*
         version: link:../../memory/website
+      websocket-utils:
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.17.1
         version: 8.18.2
@@ -1458,12 +1461,12 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
+      websocket-utils:
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       ws:
         specifier: ^8.17.1
         version: 8.18.2
@@ -1599,6 +1602,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher
@@ -1608,9 +1614,6 @@ importers:
       chat-agent:
         specifier: workspace:*
         version: link:../chat
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -1825,15 +1828,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
       body-parser:
         specifier: 1.20.3
         version: 1.20.3
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       d3:
         specifier: ^7.9.0
         version: 7.9.0
@@ -1954,12 +1957,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -2006,6 +2009,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher
@@ -2015,9 +2021,6 @@ importers:
       chat-agent:
         specifier: workspace:*
         version: link:../chat
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -2055,6 +2058,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -2064,9 +2070,6 @@ importers:
       code-processor:
         specifier: workspace:*
         version: link:../../codeProcessor
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -2359,6 +2362,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -2374,9 +2380,6 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
-      common-utils:
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -2518,6 +2521,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -2539,9 +2545,6 @@ importers:
       chat-rpc-server:
         specifier: workspace:*
         version: link:../chat-rpc-server
-      common-utils:
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -2683,6 +2686,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -2719,9 +2725,6 @@ importers:
       code-agent:
         specifier: workspace:*
         version: link:../agents/code
-      common-utils:
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -2852,6 +2855,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -2873,9 +2879,6 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
-      common-utils:
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       conversation-memory:
         specifier: workspace:*
         version: link:../memory/conversation
@@ -3370,6 +3373,9 @@ importers:
 
   packages/memory/website:
     dependencies:
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -3379,9 +3385,6 @@ importers:
       cheerio:
         specifier: ^1.0.0
         version: 1.1.0
-      common-utils:
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
       conversation-memory:
         specifier: workspace:*
         version: link:../conversation
@@ -3498,6 +3501,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
@@ -3516,9 +3522,6 @@ importers:
       chat-rpc-server:
         specifier: workspace:*
         version: link:../chat-rpc-server
-      common-utils:
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -3552,6 +3555,9 @@ importers:
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      websocket-utils:
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
       ws:
         specifier: ^8.17.1
         version: 8.18.2
@@ -3697,6 +3703,9 @@ importers:
 
   packages/typeagent:
     dependencies:
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -3706,9 +3715,6 @@ importers:
       cheerio:
         specifier: 1.0.0-rc.12
         version: 1.0.0-rc.12
-      common-utils:
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -3749,40 +3755,19 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      find-config:
-        specifier: ^1.0.0
-        version: 1.0.0
-      isomorphic-ws:
-        specifier: ^5.0.0
-        version: 5.0.0(ws@8.18.2)
-      ws:
-        specifier: ^8.17.1
-        version: 8.18.2
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
-      '@types/find-config':
-        specifier: 1.0.4
-        version: 1.0.4
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      '@types/ws':
-        specifier: ^8.5.10
-        version: 8.18.1
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
@@ -3832,6 +3817,43 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/utils/webSocketUtils:
+    dependencies:
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      find-config:
+        specifier: ^1.0.0
+        version: 1.0.0
+      isomorphic-ws:
+        specifier: ^5.0.0
+        version: 5.0.0(ws@8.18.2)
+      ws:
+        specifier: ^8.17.1
+        version: 8.18.2
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/find-config':
+        specifier: 1.0.4
+        version: 1.0.4
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
