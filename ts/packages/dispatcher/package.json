@@ -49,6 +49,7 @@
     "@azure/msal-node-extensions": "^1.5.0",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "action-grammar": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",

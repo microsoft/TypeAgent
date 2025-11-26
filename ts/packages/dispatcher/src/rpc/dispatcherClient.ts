@@ -4,7 +4,7 @@
 import { RpcChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
 import { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
-import { Dispatcher } from "../dispatcher.js";
+import { Dispatcher } from "@typeagent/dispatcher-types";
 
 function remoteCallNotSupported(): never {
     throw new Error("Remote call not supported");

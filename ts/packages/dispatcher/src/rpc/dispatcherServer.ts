@@ -3,7 +3,7 @@
 
 import { RpcChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
-import { Dispatcher } from "../dispatcher.js";
+import { Dispatcher } from "@typeagent/dispatcher-types";
 import { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
 
 export function createDispatcherRpcServer(

@@ -9,7 +9,6 @@ import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { CommandResult, createDispatcher, Dispatcher } from "agent-dispatcher";
 import { ChatHistoryInputAssistant } from "agent-dispatcher/internal";
 import {
-    FullAction,
     normalizeParamValue,
     ParamValueType,
     splitFullActionName,
@@ -21,11 +20,12 @@ import { InstanceConfigProvider } from "../src/utils/config.js";
 import { getObjectProperty, setObjectProperty } from "@typeagent/common-utils";
 import chalk from "chalk";
 import { normalizeAction } from "./constructionCacheTestCommon.js";
+import { TypeAgentAction } from "@typeagent/agent-sdk";
 
-type SimpleActionMatch = string | FullAction;
+type SimpleActionMatch = string | TypeAgentAction;
 
 type ActionMatchWithAlternates = {
-    action: FullAction;
+    action: TypeAgentAction;
     partial?: boolean;
     alternates?: Record<string, ParamValueType | ParamValueType[]>;
 };
@@ -261,13 +261,13 @@ function validateCommandResult(
 }
 
 type PossibleMatch = {
-    action: FullAction;
+    action: TypeAgentAction;
     partial: boolean;
 };
 
 // This function validates the test data, to make sure the alternatives are valid.
 function validateAlternatives(
-    action: FullAction,
+    action: TypeAgentAction,
     name: string,
     values: ParamValueType[],
 ) {
@@ -292,7 +292,7 @@ function validateAlternatives(
 
 function expandAlternates(
     expectedMatch: ActionMatchWithAlternates,
-): { action: FullAction; partial: boolean }[] {
+): { action: TypeAgentAction; partial: boolean }[] {
     const expandedActions = [
         {
             action: structuredClone(expectedMatch.action),
@@ -325,7 +325,10 @@ function expandAlternates(
     return expandedActions;
 }
 
-function checkPossibleMatch(action: FullAction, possibleMatch: PossibleMatch) {
+function checkPossibleMatch(
+    action: TypeAgentAction,
+    possibleMatch: PossibleMatch,
+) {
     if (possibleMatch.partial) {
         expect(action).toMatchObject(possibleMatch.action);
     } else {
@@ -335,7 +338,7 @@ function checkPossibleMatch(action: FullAction, possibleMatch: PossibleMatch) {
 
 function validateExpectedAction(
     match: ActionMatchWithAlternates[],
-    action: FullAction,
+    action: TypeAgentAction,
 ) {
     const filtered = match.filter(
         (em) =>

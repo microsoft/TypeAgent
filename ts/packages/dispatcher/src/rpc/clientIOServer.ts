@@ -3,7 +3,7 @@
 
 import { RpcChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
-import { ClientIO } from "../context/interactiveIO.js";
+import { ClientIO } from "@typeagent/dispatcher-types";
 import {
     ClientIOCallFunctions,
     ClientIOInvokeFunctions,

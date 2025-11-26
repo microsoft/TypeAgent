@@ -2858,6 +2858,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../dispatcherTypes
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -2961,6 +2964,22 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/dispatcherTypes:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+    devDependencies:
       prettier:
         specifier: ^3.5.3
         version: 3.5.3

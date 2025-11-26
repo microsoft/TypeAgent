@@ -6,8 +6,10 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import { CommandCompletionResult } from "../command/completion.js";
-import { CommandResult } from "../dispatcher.js";
+import {
+    CommandCompletionResult,
+    CommandResult,
+} from "@typeagent/dispatcher-types";
 
 export type DispatcherInvokeFunctions = {
     processCommand(params: {

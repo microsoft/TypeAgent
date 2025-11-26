@@ -2,8 +2,11 @@
 // Licensed under the MIT License.
 
 import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
-import { IAgentMessage, RequestId } from "../context/interactiveIO.js";
-import { TemplateEditConfig } from "../translation/actionTemplate.js";
+import type {
+    IAgentMessage,
+    RequestId,
+    TemplateEditConfig,
+} from "@typeagent/dispatcher-types";
 
 export type ClientIOInvokeFunctions = {
     askYesNo(params: {

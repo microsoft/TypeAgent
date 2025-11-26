@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { fromJsonActions, toFullActions, FullAction } from "agent-cache";
+import { fromJsonActions, toFullActions } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import {
     readExplanationTestData,
@@ -18,15 +18,16 @@ import chalk from "chalk";
 import fs from "node:fs";
 import { getElapsedString } from "@typeagent/common-utils";
 import { getChatModelNames, openai as ai } from "aiclient";
+import { TypeAgentAction } from "@typeagent/agent-sdk";
 
 type TestResult = {
     request: string;
-    actions: (FullAction[] | undefined)[];
+    actions: (TypeAgentAction[] | undefined)[];
 };
 
 type FailedTestResult = {
     request: string;
-    actions?: (FullAction[] | undefined)[];
+    actions?: (TypeAgentAction[] | undefined)[];
 };
 
 type TestResultFile = {
@@ -395,7 +396,7 @@ export default class TestTranslateCommand extends Command {
             while (requests.length > 0) {
                 const request = requests.shift()!;
 
-                const results: (FullAction[] | undefined)[] = [];
+                const results: (TypeAgentAction[] | undefined)[] = [];
 
                 let currentTotalExecTime = 0;
                 let currentMaxExecTime = 0;

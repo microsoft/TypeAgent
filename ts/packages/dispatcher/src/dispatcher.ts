@@ -6,101 +6,15 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
+import { Dispatcher } from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
-import {
-    CommandCompletionResult,
-    getCommandCompletion,
-} from "./command/completion.js";
+import { getCommandCompletion } from "./command/completion.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
     DispatcherOptions,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
-import { RequestId } from "./context/interactiveIO.js";
-import { RequestMetrics } from "./utils/metrics.js";
-import { FullAction } from "agent-cache";
-import { openai as ai } from "aiclient";
-
-export type CommandResult = {
-    // last error message
-    lastError?: string;
-
-    // Actions that were executed as part of the command.
-    actions?: FullAction[];
-    metrics?: RequestMetrics;
-    tokenUsage?: ai.CompletionUsageStats;
-};
-
-export type AppAgentStatus = {
-    emoji: string;
-    name: string;
-    lastUsed: boolean;
-    priority: boolean;
-    request: boolean;
-    active: boolean;
-};
-
-export type DispatcherStatus = {
-    agents: AppAgentStatus[];
-    details: string;
-};
-
-/**
- * A dispatcher instance
- */
-export interface Dispatcher {
-    /**
-     * Process a single user request.
-     *
-     * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
-     * @param requestId an optional request id to track the command
-     * @param attachments encoded image attachments for the model
-     */
-    processCommand(
-        command: string,
-        requestId?: RequestId,
-        attachments?: string[],
-    ): Promise<CommandResult | undefined>;
-
-    /**
-     * Close the dispatcher and release all resources.
-     */
-    close(): Promise<void>;
-
-    /**
-     * Get the latest update on a dynamic display that is returned to the host via ClientIO or CommandResult
-     * @param appAgentName the agent name that originated the display
-     * @param type the type of the display content.
-     * @param displayId the displayId of the display content as given from ClientIO or CommandResult.
-     */
-    getDynamicDisplay(
-        appAgentName: string,
-        type: DisplayType,
-        displayId: string,
-    ): Promise<DynamicDisplay>;
-
-    // APIs for form filling templates.
-    getTemplateSchema(
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-    ): Promise<TemplateSchema>;
-
-    getTemplateCompletion(
-        templateAgentName: string,
-        templateName: string,
-        data: unknown,
-        propertyName: string,
-    ): Promise<string[] | undefined>;
-
-    // APIs to get command completion for intellisense like functionality.
-    getCommandCompletion(
-        prefix: string,
-    ): Promise<CommandCompletionResult | undefined>;
-
-    getStatus(): DispatcherStatus;
-}
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
