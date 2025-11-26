@@ -15,7 +15,10 @@ import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getParameterNames, validateAction } from "action-schema";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import { FullAction, toExecutableActions } from "agent-cache";
-import { DeepPartialUndefined, getObjectProperty } from "common-utils";
+import {
+    DeepPartialUndefined,
+    getObjectProperty,
+} from "@typeagent/common-utils";
 import { getActionParamCompletion } from "../../../translation/requestCompletion.js";
 import { getActionSchema } from "../../../translation/actionSchemaUtils.js";
 import { tryGetActionSchema } from "../../../translation/actionSchemaFileCache.js";

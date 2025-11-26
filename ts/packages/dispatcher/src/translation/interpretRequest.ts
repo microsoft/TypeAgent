@@ -12,7 +12,7 @@ import {
 import { translateRequest } from "./translateRequest.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { CachedImageWithDetails } from "common-utils";
+import { CachedImageWithDetails } from "typechat-utils";
 import { unicodeChar } from "../command/command.js";
 import { confirmTranslation } from "./confirmTranslation.js";
 import {

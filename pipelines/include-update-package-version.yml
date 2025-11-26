@@ -14,9 +14,9 @@ steps:
       current_version=$(node -p "require('./package.json').version")
       new_version="${current_version}-${{ parameters.prerelease }}"
       echo "##vso[task.setvariable variable=package_version]$new_version"
-      jq ".version=\"$new_version\"" package.json > package.tmp.json
-      mv package.tmp.json package.json
+
+      pnpm -r exec $(Build.SourcesDirectory)/pipelines/scripts/update-package-version.sh "$new_version"
       echo "Updated package.json to version $new_version"
-      cat package.json
+      git diff
     displayName: "Update Package Version"
     workingDirectory: ${{ parameters.packageFolder }}

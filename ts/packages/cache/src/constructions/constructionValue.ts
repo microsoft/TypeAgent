@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { setObjectProperty } from "common-utils";
+import { setObjectProperty } from "@typeagent/common-utils";
 import {
     HistoryContext,
     JSONAction,

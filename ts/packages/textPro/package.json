@@ -1,6 +1,7 @@
 {
   "name": "textpro",
   "version": "0.0.1",
+  "private": true,
   "description": "textpro contains sample library for manipulating text.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

@@ -24,7 +24,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "common-utils": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "typescript": "~5.4.5"
   },
   "devDependencies": {

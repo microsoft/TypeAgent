@@ -7,7 +7,7 @@ import {
     validateType,
 } from "action-schema";
 import { Result, success, error } from "typechat";
-import { createJsonTranslatorWithValidator } from "common-utils";
+import { createJsonTranslatorWithValidator } from "typechat-utils";
 
 import { FullAction } from "agent-cache";
 import registerDebug from "debug";

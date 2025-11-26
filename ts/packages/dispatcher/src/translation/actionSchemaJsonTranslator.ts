@@ -20,7 +20,7 @@ import {
     createJsonTranslatorWithValidator,
     JsonTranslatorOptions,
     TypeAgentJsonValidator,
-} from "common-utils";
+} from "typechat-utils";
 import {
     createChangeAssistantActionSchema,
     getCombinedActionSchemaTypeName,

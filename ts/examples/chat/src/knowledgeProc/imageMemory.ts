@@ -30,7 +30,7 @@ import fs from "node:fs";
 import * as knowLib from "knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
-import { isImageFileType } from "common-utils";
+import { isImageFileType } from "typechat-utils";
 import { TokenCounter, openai } from "aiclient";
 
 type CompletionUsageStats = openai.CompletionUsageStats;

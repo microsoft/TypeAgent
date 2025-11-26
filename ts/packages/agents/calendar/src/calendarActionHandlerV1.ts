@@ -6,7 +6,7 @@ import {
     getNormalizedDateTimes,
     getTimeZoneName,
     getUniqueLocalId,
-} from "common-utils";
+} from "typechat-utils";
 import {
     createCalendarGraphClient,
     CalendarClient,

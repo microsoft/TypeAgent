@@ -1,6 +1,7 @@
 {
   "name": "knowpro",
   "version": "0.0.1",
+  "private": true,
   "description": "Basic structured RAG implementation",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

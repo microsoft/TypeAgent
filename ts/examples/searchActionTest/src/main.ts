@@ -10,7 +10,7 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { readSchemaFile } from "common-utils";
+import { readSchemaFile } from "typechat-utils";
 
 import * as fs from "fs";
 

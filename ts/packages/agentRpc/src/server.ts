@@ -36,7 +36,7 @@ import {
     uint8ArrayToBase64,
     createLimiter,
     setObjectProperty,
-} from "common-utils";
+} from "@typeagent/common-utils";
 
 function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
     const optionsChannel: RpcChannel = channelProvider.createChannel(

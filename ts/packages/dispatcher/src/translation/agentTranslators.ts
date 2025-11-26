@@ -7,7 +7,10 @@ import {
     enableJsonTranslatorStreaming,
     JsonTranslatorOptions,
     TypeAgentJsonValidator,
-} from "common-utils";
+    TranslatorSchemaDef,
+    composeTranslatorSchemas,
+    IncrementalJsonValueCallBack,
+} from "typechat-utils";
 import { AppAction, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { Result } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
@@ -15,12 +18,6 @@ import {
     getMultipleActionSchemaDef,
     MultipleActionOptions,
 } from "./multipleActionSchema.js";
-import {
-    TranslatorSchemaDef,
-    composeTranslatorSchemas,
-    IncrementalJsonValueCallBack,
-} from "common-utils";
-
 import { HistoryContext, ParamObjectType } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
 import {

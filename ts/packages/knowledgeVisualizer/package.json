@@ -1,6 +1,7 @@
 {
   "name": "knowledgevisualizer",
   "version": "0.0.1",
+  "private": true,
   "description": "Knowledge Visualizer",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

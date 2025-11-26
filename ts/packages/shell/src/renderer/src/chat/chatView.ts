@@ -24,7 +24,7 @@ import { PartialCompletion } from "../partial";
 import { InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
-import { uint8ArrayToBase64 } from "common-utils";
+import { uint8ArrayToBase64 } from "@typeagent/common-utils";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {

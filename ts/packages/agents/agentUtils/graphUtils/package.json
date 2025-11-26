@@ -1,6 +1,7 @@
 {
   "name": "graph-utils",
   "version": "0.0.1",
+  "private": true,
   "description": "Utility function to access msgraph apis.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -32,9 +33,9 @@
     "@azure/identity-cache-persistence": "^1.1.1",
     "@azure/logger": "^1.1.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",

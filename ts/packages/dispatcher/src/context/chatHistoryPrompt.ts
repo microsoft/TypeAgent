@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { HistoryContext } from "agent-cache";
-import { CachedImageWithDetails, TypeAgentJsonValidator } from "common-utils";
+import { CachedImageWithDetails, TypeAgentJsonValidator } from "typechat-utils";
 import { PromptSection } from "typechat";
 
 export function createTypeAgentRequestPrompt(

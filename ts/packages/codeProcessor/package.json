@@ -1,6 +1,7 @@
 {
   "name": "code-processor",
   "version": "0.0.1",
+  "private": true,
   "description": "Libraries for using AI with code.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

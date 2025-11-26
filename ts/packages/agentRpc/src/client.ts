@@ -29,7 +29,7 @@ import {
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
-import { getObjectProperty, uint8ArrayToBase64 } from "common-utils";
+import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
 import { AgentInterfaceFunctionName } from "./server.js";
 
 type ShimContext =

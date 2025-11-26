@@ -11,7 +11,7 @@ import {
 } from "../../commandHandlerContext.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 
-import { simpleStarRegex } from "common-utils";
+import { simpleStarRegex } from "@typeagent/common-utils";
 import { openai as ai, getChatModelNames } from "aiclient";
 import { SessionOptions } from "../../session.js";
 import chalk from "chalk";

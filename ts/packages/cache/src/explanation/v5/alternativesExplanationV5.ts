@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createJsonTranslatorFromFile } from "common-utils";
+import { createJsonTranslatorFromFile } from "typechat-utils";
 import { toJsonActions, RequestAction } from "../requestAction.js";
 import { TypeChatAgent } from "../typeChatAgent.js";
 import {
@@ -60,7 +60,7 @@ function createInstructions([
         `  ${JSON.stringify(subPhraseText)}`,
         "For each non-implicit property, the following list are the property name and the sub-phrases that determine the property value.",
         JSON.stringify(propertySubPhraseDescription, undefined, 2),
-        "For each non-implicit property and their subpharses, provide possible alternative property values and their substitue sub-phrases to get this alternative property value.",
+        "For each non-implicit property and their subpharses, provide possible alternative property values and their substitute sub-phrases to get this alternative property value.",
     ];
 
     return [

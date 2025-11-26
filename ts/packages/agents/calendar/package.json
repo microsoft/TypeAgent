@@ -1,6 +1,7 @@
 {
   "name": "calendar",
   "version": "0.0.1",
+  "private": true,
   "description": "Calendar dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -25,10 +26,10 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",
-    "graph-utils": "workspace:*"
+    "graph-utils": "workspace:*",
+    "typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

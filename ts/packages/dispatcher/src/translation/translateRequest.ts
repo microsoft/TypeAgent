@@ -15,7 +15,7 @@ import {
 import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
-} from "common-utils";
+} from "typechat-utils";
 import {
     isMultipleAction,
     isPendingRequest,

@@ -15,7 +15,7 @@ import {
     getObjectProperty,
     getObjectPropertyNames,
     setObjectProperty,
-} from "common-utils";
+} from "@typeagent/common-utils";
 
 export type { ShellUserSettings };
 

@@ -1,6 +1,7 @@
 {
   "name": "montage-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Montage agent for creating montages.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -28,9 +29,9 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
     "body-parser": "1.20.3",
-    "common-utils": "workspace:*",
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
     "debug": "^4.4.0",

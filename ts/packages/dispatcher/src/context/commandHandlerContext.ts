@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DeepPartialUndefined, Limiter, createLimiter } from "common-utils";
+import {
+    DeepPartialUndefined,
+    Limiter,
+    createLimiter,
+} from "@typeagent/common-utils";
 import {
     ChildLogger,
     Logger,

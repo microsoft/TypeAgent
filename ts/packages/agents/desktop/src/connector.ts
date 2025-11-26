@@ -10,7 +10,7 @@ import { DesktopActions } from "./actionsSchema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { downloadImage } from "common-utils";
+import { downloadImage } from "typechat-utils";
 import { randomUUID } from "crypto";
 
 const debug = registerDebug("typeagent:desktop");

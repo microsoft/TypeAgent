@@ -1,6 +1,7 @@
 {
   "name": "oracle-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Oracle dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

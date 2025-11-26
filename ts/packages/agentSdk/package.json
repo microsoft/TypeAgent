@@ -15,9 +15,7 @@
     ".": "./dist/index.js",
     "./helpers/action": "./dist/helpers/actionHelpers.js",
     "./helpers/command": "./dist/helpers/commandHelpers.js",
-    "./helpers/display": "./dist/helpers/displayHelpers.js",
-    "./helpers/rpc/server": "./dist/helpers/rpc/server.js",
-    "./helpers/rpc/client": "./dist/helpers/rpc/client.js"
+    "./helpers/display": "./dist/helpers/displayHelpers.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

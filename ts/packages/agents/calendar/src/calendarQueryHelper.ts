@@ -7,7 +7,7 @@ import {
     getISODayStartTime,
     getISODayEndTime,
     parseFuzzyDateString,
-} from "common-utils";
+} from "typechat-utils";
 
 export function generateEventReferenceCriteria(
     eventReference: EventReference,

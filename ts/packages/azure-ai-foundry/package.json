@@ -1,6 +1,7 @@
 {
   "name": "azure-ai-foundry",
   "version": "0.0.1",
+  "private": true,
   "description": "Clients for AI APIs used by Microsoft AI Systems team.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

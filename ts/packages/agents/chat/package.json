@@ -1,6 +1,7 @@
 {
   "name": "chat-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Chat dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -29,11 +30,11 @@
     "@azure/identity": "^4.10.0",
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
-    "common-utils": "workspace:*",
     "knowledge-processor": "workspace:*",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.1"
+    "typechat": "^0.1.1",
+    "typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "copyfiles": "^2.4.1",

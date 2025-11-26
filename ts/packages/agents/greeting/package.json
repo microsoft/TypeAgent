@@ -1,6 +1,7 @@
 {
   "name": "greeting-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Greeting agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -25,10 +26,10 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
     "chat-agent": "workspace:*",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
     "telemetry": "workspace:*",

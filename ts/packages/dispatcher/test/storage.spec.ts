@@ -5,7 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 import { getStorage } from "../src/execute/storageImpl.js";
-import { uint8ArrayToBase64 } from "common-utils";
+import { uint8ArrayToBase64 } from "@typeagent/common-utils";
 
 const tempDir = path.join(os.tmpdir(), ".typeagent");
 try {

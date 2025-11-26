@@ -21,7 +21,11 @@ import {
     toJsonActions,
     createExecutableAction,
 } from "agent-cache";
-import { getElapsedString, createLimiter, Limiter } from "common-utils";
+import {
+    getElapsedString,
+    createLimiter,
+    Limiter,
+} from "@typeagent/common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
 import { Result } from "typechat";
 import {

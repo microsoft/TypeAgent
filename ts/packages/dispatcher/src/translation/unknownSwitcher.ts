@@ -4,7 +4,7 @@
 import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
-} from "common-utils";
+} from "typechat-utils";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { ActionConfigProvider } from "./actionConfigProvider.js";

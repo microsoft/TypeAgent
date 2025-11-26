@@ -10,7 +10,7 @@ import {
     RequestAction,
 } from "agent-cache";
 import chalk from "chalk";
-import { getColorElapsedString } from "common-utils";
+import { getColorElapsedString } from "@typeagent/common-utils";
 import { getActionTemplateEditConfig } from "./actionTemplate.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { validateAction } from "action-schema";

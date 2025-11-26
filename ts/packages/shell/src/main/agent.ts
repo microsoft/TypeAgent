@@ -24,7 +24,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 import { ShellWindow } from "./shellWindow.js";
-import { getObjectProperty, getObjectPropertyNames } from "common-utils";
+import {
+    getObjectProperty,
+    getObjectPropertyNames,
+} from "@typeagent/common-utils";
 import { installAndRestart, updateHandlerTable } from "./commands/update.js";
 import { isProd, reloadInstance } from "./index.js";
 import { ShellWindowState } from "./shellSettings.js";

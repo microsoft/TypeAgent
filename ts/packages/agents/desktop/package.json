@@ -29,13 +29,13 @@
     "aiclient": "workspace:*",
     "body-parser": "^1.20.3",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "cors": "^2.8.5",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
+    "typechat-utils": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {

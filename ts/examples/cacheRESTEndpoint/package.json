@@ -1,6 +1,7 @@
 {
   "name": "cache-rest-endpoint",
   "version": "0.0.1",
+  "private": true,
   "description": "AgentCache REST endpoint.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -22,6 +23,7 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
@@ -29,7 +31,6 @@
     "aiclient": "workspace:*",
     "body-parser": "1.20.3",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",

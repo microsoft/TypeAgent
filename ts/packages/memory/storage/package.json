@@ -1,6 +1,7 @@
 {
   "name": "memory-storage",
   "version": "0.0.1",
+  "private": true,
   "description": "Memory storage and index providers.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

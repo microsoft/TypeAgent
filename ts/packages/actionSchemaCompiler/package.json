@@ -1,6 +1,7 @@
 {
   "name": "action-schema-compiler",
   "version": "0.0.1",
+  "private": true,
   "description": "Action schema compiler",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

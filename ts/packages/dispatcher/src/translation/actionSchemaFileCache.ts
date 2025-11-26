@@ -16,7 +16,7 @@ import {
 } from "./actionConfigProvider.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction, SchemaFormat, SchemaTypeNames } from "@typeagent/agent-sdk";
-import { DeepPartialUndefined, simpleStarRegex } from "common-utils";
+import { DeepPartialUndefined, simpleStarRegex } from "@typeagent/common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";

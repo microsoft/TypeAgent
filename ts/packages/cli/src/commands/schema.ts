@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { composeTranslatorSchemas } from "common-utils";
+import { composeTranslatorSchemas } from "typechat-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
