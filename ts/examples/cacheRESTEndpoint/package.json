@@ -22,12 +22,12 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "body-parser": "1.20.3",
     "chalk": "^5.4.1",

@@ -5,7 +5,7 @@ import { AppAction } from "./types";
 import { getSettings } from "./storage";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { runBrowserAction } from "./browserActions";
-import { createGenericChannel } from "agent-rpc/channel";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
 import { createExternalBrowserServer } from "./externalBrowserControlServer";
 
 import registerDebug from "debug";

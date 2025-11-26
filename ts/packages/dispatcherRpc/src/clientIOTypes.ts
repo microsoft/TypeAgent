@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
+import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import type {
     IAgentMessage,
     RequestId,

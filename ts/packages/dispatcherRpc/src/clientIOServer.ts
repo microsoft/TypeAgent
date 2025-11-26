@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { RpcChannel } from "agent-rpc/channel";
-import { createRpc } from "agent-rpc/rpc";
-import { ClientIO } from "@typeagent/dispatcher-types";
-import {
+import { createRpc } from "@typeagent/agent-rpc/rpc";
+import type { RpcChannel } from "@typeagent/agent-rpc/channel";
+import type { ClientIO } from "@typeagent/dispatcher-types";
+import type {
     ClientIOCallFunctions,
     ClientIOInvokeFunctions,
 } from "./clientIOTypes.js";

@@ -7,8 +7,8 @@ import {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
 } from "../../common/browserControl.mjs";
-import { createGenericChannel } from "agent-rpc/channel";
-import { createRpc } from "agent-rpc/rpc";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { WebSocketMessageV2 } from "websocket-utils";
 import { AgentWebSocketServer } from "../agentWebSocketServer.mjs";
 

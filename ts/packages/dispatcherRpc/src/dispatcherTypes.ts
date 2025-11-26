@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
+import type {
     DisplayType,
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import {
+import type {
     CommandCompletionResult,
     CommandResult,
 } from "@typeagent/dispatcher-types";

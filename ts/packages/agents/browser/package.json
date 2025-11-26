@@ -50,10 +50,10 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "action-schema": "workspace:*",
-    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "bootstrap": "^5.3.3",

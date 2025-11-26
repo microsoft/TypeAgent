@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createRpc } from "agent-rpc/rpc";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     ClientIO,
     IAgentMessage,
@@ -12,7 +12,7 @@ import {
     ClientIOInvokeFunctions,
 } from "./clientIOTypes.js";
 import { TemplateEditConfig } from "../translation/actionTemplate.js";
-import { RpcChannel } from "agent-rpc/channel";
+import { RpcChannel } from "@typeagent/agent-rpc/channel";
 import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {

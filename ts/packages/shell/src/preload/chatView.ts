@@ -9,9 +9,9 @@ import {
     UserExpression,
 } from "./electronTypes.js"; // Custom APIs for renderer
 import { Dispatcher } from "agent-dispatcher";
-import { createGenericChannel } from "agent-rpc/channel";
-import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
-import { createClientIORpcServer } from "agent-dispatcher/rpc/clientio/server";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
+import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 
 ipcRenderer.on("send-demo-event", (_, name) => {
     // bounce back to the main process

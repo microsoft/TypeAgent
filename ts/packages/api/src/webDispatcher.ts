@@ -5,9 +5,9 @@ import { createDispatcher } from "agent-dispatcher";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getInstanceDir, getClientId } from "agent-dispatcher/helpers/data";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
-import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
-import { createDispatcherRpcServer } from "agent-dispatcher/rpc/dispatcher/server";
-import { createGenericChannel } from "agent-rpc/channel";
+import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
+import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,

@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import { Client, ClientAPI } from "../../preload/electronTypes.js";
-import { createClientIORpcServer } from "agent-dispatcher/rpc/clientio/server";
-import { createGenericChannel } from "agent-rpc/channel";
-import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
+import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
 
 const clientIOChannel = createGenericChannel((message: any) =>
     globalThis.ws.send(
