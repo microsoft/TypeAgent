@@ -14,38 +14,20 @@ export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
     const rpc = createRpc<DispatcherInvokeFunctions>("dispatcher", channel);
 
     return {
-        async processCommand(command, requestId, attachments) {
-            return rpc.invoke("processCommand", {
-                command,
-                requestId,
-                attachments,
-            });
+        async processCommand(...args) {
+            return rpc.invoke("processCommand", ...args);
         },
-        async getDynamicDisplay(appAgentName, type, id) {
-            return rpc.invoke("getDynamicDisplay", { appAgentName, type, id });
+        async getDynamicDisplay(...args) {
+            return rpc.invoke("getDynamicDisplay", ...args);
         },
-        async getTemplateSchema(templateAgentName, templateName, data) {
-            return rpc.invoke("getTemplateSchema", {
-                templateAgentName,
-                templateName,
-                data,
-            });
+        async getTemplateSchema(...args) {
+            return rpc.invoke("getTemplateSchema", ...args);
         },
-        async getTemplateCompletion(
-            templateAgentName,
-            templateName,
-            data,
-            propertyName,
-        ) {
-            return rpc.invoke("getTemplateCompletion", {
-                templateAgentName,
-                templateName,
-                data,
-                propertyName,
-            });
+        async getTemplateCompletion(...args) {
+            return rpc.invoke("getTemplateCompletion", ...args);
         },
-        async getCommandCompletion(prefix) {
-            return rpc.invoke("getCommandCompletion", { prefix });
+        async getCommandCompletion(...args) {
+            return rpc.invoke("getCommandCompletion", ...args);
         },
         async close() {
             return rpc.invoke("close");

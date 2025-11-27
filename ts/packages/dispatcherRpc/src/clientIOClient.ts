@@ -2,18 +2,12 @@
 // Licensed under the MIT License.
 
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import type {
-    ClientIO,
-    IAgentMessage,
-    RequestId,
-    TemplateEditConfig,
-} from "@typeagent/dispatcher-types";
+import type { ClientIO } from "@typeagent/dispatcher-types";
 import type {
     ClientIOCallFunctions,
     ClientIOInvokeFunctions,
 } from "./clientIOTypes.js";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
-import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {
     const rpc = createRpc<ClientIOInvokeFunctions, ClientIOCallFunctions>(
@@ -27,92 +21,43 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         exit(): void {
             return rpc.send("exit");
         },
-        setDisplayInfo(
-            source: string,
-            requestId: RequestId,
-            actionIndex?: number,
-            action?: TypeAgentAction,
-        ): void {
-            return rpc.send("setDisplayInfo", {
-                source,
-                requestId,
-                actionIndex,
-                action,
-            });
+        setDisplayInfo(...args): void {
+            return rpc.send("setDisplayInfo", ...args);
         },
-        setDisplay(message: IAgentMessage): void {
-            return rpc.send("setDisplay", { message });
+        setDisplay(...args): void {
+            return rpc.send("setDisplay", ...args);
         },
-        appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
-            return rpc.send("appendDisplay", { message, mode });
+        appendDisplay(...args): void {
+            return rpc.send("appendDisplay", ...args);
         },
-        appendDiagnosticData(requestId: RequestId, data: any) {
-            return rpc.send("appendDiagnosticData", { requestId, data });
+        appendDiagnosticData(...args) {
+            return rpc.send("appendDiagnosticData", ...args);
         },
-        setDynamicDisplay(
-            source: string,
-            requestId: RequestId,
-            actionIndex: number,
-            displayId: string,
-            nextRefreshMs: number,
-        ): void {
-            return rpc.send("setDynamicDisplay", {
-                source,
-                requestId,
-                actionIndex,
-                displayId,
-                nextRefreshMs,
-            });
+        setDynamicDisplay(...args): void {
+            return rpc.send("setDynamicDisplay", ...args);
         },
 
         // Input
-        askYesNo(
-            message: string,
-            requestId: RequestId,
-            defaultValue?: boolean,
-        ): Promise<boolean> {
-            return rpc.invoke("askYesNo", { message, requestId, defaultValue });
+        askYesNo(...args): Promise<boolean> {
+            return rpc.invoke("askYesNo", ...args);
         },
-        proposeAction(
-            actionTemplates: TemplateEditConfig,
-            requestId: RequestId,
-            source: string,
-        ): Promise<unknown> {
-            return rpc.invoke("proposeAction", {
-                actionTemplates,
-                requestId,
-                source,
-            });
+        proposeAction(...args): Promise<unknown> {
+            return rpc.invoke("proposeAction", ...args);
         },
-        popupQuestion(
-            message: string,
-            choices: string[],
-            defaultId: number | undefined,
-            source: string,
-        ): Promise<number> {
-            return rpc.invoke("popupQuestion", {
-                message,
-                choices,
-                defaultId,
-                source,
-            });
+        popupQuestion(...args): Promise<number> {
+            return rpc.invoke("popupQuestion", ...args);
         },
-        notify(
-            event: string,
-            requestId: RequestId,
-            data: any,
-            source: string,
-        ): void {
-            return rpc.send("notify", { event, requestId, data, source });
+        notify(...args): void {
+            return rpc.send("notify", ...args);
         },
-        openLocalView(port: number): Promise<void> {
-            return rpc.invoke("openLocalView", { port });
+        openLocalView(...args): Promise<void> {
+            return rpc.invoke("openLocalView", ...args);
         },
-        closeLocalView(port: number): Promise<void> {
-            return rpc.invoke("closeLocalView", { port });
+        closeLocalView(...args): Promise<void> {
+            return rpc.invoke("closeLocalView", ...args);
         },
-        takeAction(action: string, data: unknown): void {
-            return rpc.send("takeAction", { action, data });
+        takeAction(...args): void {
+            return rpc.send("takeAction", ...args);
         },
     };
 }

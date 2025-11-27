@@ -11,37 +11,24 @@ export function createDispatcherRpcServer(
     channel: RpcChannel,
 ) {
     const dispatcherInvokeHandler: DispatcherInvokeFunctions = {
-        processCommand: async (params) => {
-            return dispatcher.processCommand(
-                params.command,
-                params.requestId,
-                params.attachments,
+        processCommand: async (...args) => {
+            return dispatcher.processCommand(...args
             );
         },
-        getDynamicDisplay: async (params) => {
-            return dispatcher.getDynamicDisplay(
-                params.appAgentName,
-                params.type,
-                params.id,
+        getDynamicDisplay: async (...args) => {
+            return dispatcher.getDynamicDisplay(...args
             );
         },
-        getTemplateSchema: async (params) => {
-            return dispatcher.getTemplateSchema(
-                params.templateAgentName,
-                params.templateName,
-                params.data,
+        getTemplateSchema: async (...args) => {
+            return dispatcher.getTemplateSchema(...args
             );
         },
-        getTemplateCompletion: async (params) => {
-            return dispatcher.getTemplateCompletion(
-                params.templateAgentName,
-                params.templateName,
-                params.data,
-                params.propertyName,
+        getTemplateCompletion: async (...args) => {
+            return dispatcher.getTemplateCompletion(...args
             );
         },
-        getCommandCompletion: async (params) => {
-            return dispatcher.getCommandCompletion(params.prefix);
+        getCommandCompletion: async (...args) => {
+            return dispatcher.getCommandCompletion(...args);
         },
         close: async () => {
             await dispatcher.close();
