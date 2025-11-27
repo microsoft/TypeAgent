@@ -12,20 +12,16 @@ export function createDispatcherRpcServer(
 ) {
     const dispatcherInvokeHandler: DispatcherInvokeFunctions = {
         processCommand: async (...args) => {
-            return dispatcher.processCommand(...args
-            );
+            return dispatcher.processCommand(...args);
         },
         getDynamicDisplay: async (...args) => {
-            return dispatcher.getDynamicDisplay(...args
-            );
+            return dispatcher.getDynamicDisplay(...args);
         },
         getTemplateSchema: async (...args) => {
-            return dispatcher.getTemplateSchema(...args
-            );
+            return dispatcher.getTemplateSchema(...args);
         },
         getTemplateCompletion: async (...args) => {
-            return dispatcher.getTemplateCompletion(...args
-            );
+            return dispatcher.getTemplateCompletion(...args);
         },
         getCommandCompletion: async (...args) => {
             return dispatcher.getCommandCompletion(...args);
