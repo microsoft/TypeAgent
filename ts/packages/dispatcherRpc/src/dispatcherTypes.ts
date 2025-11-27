@@ -12,33 +12,33 @@ import type {
 } from "@typeagent/dispatcher-types";
 
 export type DispatcherInvokeFunctions = {
-    processCommand(params: {
-        command: string;
-        requestId?: string | undefined;
-        attachments?: string[] | undefined;
-    }): Promise<CommandResult | undefined>;
+    processCommand(
+        command: string,
+        requestId?: string,
+        attachments?: string[],
+    ): Promise<CommandResult | undefined>;
 
-    getDynamicDisplay(params: {
-        appAgentName: string;
-        type: DisplayType;
-        id: string;
-    }): Promise<DynamicDisplay>;
-    getTemplateSchema(params: {
-        templateAgentName: string;
-        templateName: string;
-        data: unknown;
-    }): Promise<TemplateSchema>;
+    getDynamicDisplay(
+        appAgentName: string,
+        type: DisplayType,
+        id: string,
+    ): Promise<DynamicDisplay>;
+    getTemplateSchema(
+        templateAgentName: string,
+        templateName: string,
+        data: unknown,
+    ): Promise<TemplateSchema>;
 
-    getTemplateCompletion(params: {
-        templateAgentName: string;
-        templateName: string;
-        data: unknown;
-        propertyName: string;
-    }): Promise<string[] | undefined>;
+    getTemplateCompletion(
+        templateAgentName: string,
+        templateName: string,
+        data: unknown,
+        propertyName: string,
+    ): Promise<string[] | undefined>;
 
-    getCommandCompletion(params: {
-        prefix: string;
-    }): Promise<CommandCompletionResult | undefined>;
+    getCommandCompletion(
+        prefix: string,
+    ): Promise<CommandCompletionResult | undefined>;
 
     close(): Promise<void>;
 };

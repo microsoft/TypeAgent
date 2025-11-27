@@ -14,68 +14,35 @@ export function createClientIORpcServer(
     channel: RpcChannel,
 ) {
     const clientIOInvokeFunctions: ClientIOInvokeFunctions = {
-        askYesNo: async (params) => {
-            return clientIO.askYesNo(
-                params.message,
-                params.requestId,
-                params.defaultValue,
-            );
+        askYesNo: async (...args) => {
+            return clientIO.askYesNo(...args);
         },
-        proposeAction: async (params) => {
-            return clientIO.proposeAction(
-                params.actionTemplates,
-                params.requestId,
-                params.source,
-            );
+        proposeAction: async (...args) => {
+            return clientIO.proposeAction(...args);
         },
-        popupQuestion: async (params) => {
-            return clientIO.popupQuestion(
-                params.message,
-                params.choices,
-                params.defaultId,
-                params.source,
-            );
+        popupQuestion: async (...args) => {
+            return clientIO.popupQuestion(...args);
         },
-        openLocalView: async (params) => {
-            return clientIO.openLocalView(params.port);
+        openLocalView: async (...args) => {
+            return clientIO.openLocalView(...args);
         },
-        closeLocalView: async (params) => {
-            return clientIO.closeLocalView(params.port);
+        closeLocalView: async (...args) => {
+            return clientIO.closeLocalView(...args);
         },
     };
 
     const clientIOCallFunctions: ClientIOCallFunctions = {
         clear: () => clientIO.clear(),
         exit: () => clientIO.exit(),
-        setDisplayInfo: (params) =>
-            clientIO.setDisplayInfo(
-                params.source,
-                params.requestId,
-                params.actionIndex,
-                params.action,
-            ),
-        setDisplay: (params) => clientIO.setDisplay(params.message),
-        appendDisplay: (params) =>
-            clientIO.appendDisplay(params.message, params.mode),
-        appendDiagnosticData: (params) => {
-            clientIO.appendDiagnosticData(params.requestId, params.data);
+        setDisplayInfo: (...args) => clientIO.setDisplayInfo(...args),
+        setDisplay: (...args) => clientIO.setDisplay(...args),
+        appendDisplay: (...args) => clientIO.appendDisplay(...args),
+        appendDiagnosticData: (...args) => {
+            clientIO.appendDiagnosticData(...args);
         },
-        setDynamicDisplay: (params) =>
-            clientIO.setDynamicDisplay(
-                params.source,
-                params.requestId,
-                params.actionIndex,
-                params.displayId,
-                params.nextRefreshMs,
-            ),
-        notify: (params) =>
-            clientIO.notify(
-                params.event,
-                params.requestId,
-                params.data,
-                params.source,
-            ),
-        takeAction: (params) => clientIO.takeAction(params.action, params.data),
+        setDynamicDisplay: (...args) => clientIO.setDynamicDisplay(...args),
+        notify: (...args) => clientIO.notify(...args),
+        takeAction: (...args) => clientIO.takeAction(...args),
     };
     createRpc(
         "clientio",

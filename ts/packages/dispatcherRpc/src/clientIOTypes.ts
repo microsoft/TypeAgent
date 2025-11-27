@@ -9,56 +9,53 @@ import type {
 } from "@typeagent/dispatcher-types";
 
 export type ClientIOInvokeFunctions = {
-    askYesNo(params: {
-        message: string;
-        requestId: RequestId;
-        defaultValue?: boolean | undefined;
-    }): Promise<boolean>;
-    proposeAction(params: {
-        actionTemplates: TemplateEditConfig;
-        requestId: RequestId;
-        source: string;
-    }): Promise<unknown>;
-    popupQuestion(params: {
-        message: string;
-        choices: string[];
-        defaultId: number | undefined;
-        source: string;
-    }): Promise<number>;
-    openLocalView(params: { port: number }): Promise<void>;
-    closeLocalView(params: { port: number }): Promise<void>;
+    askYesNo(
+        message: string,
+        requestId: RequestId,
+        defaultValue?: boolean,
+    ): Promise<boolean>;
+    proposeAction(
+        actionTemplates: TemplateEditConfig,
+        requestId: RequestId,
+        source: string,
+    ): Promise<unknown>;
+    popupQuestion(
+        message: string,
+        choices: string[],
+        defaultId: number | undefined,
+        source: string,
+    ): Promise<number>;
+    openLocalView(port: number): Promise<void>;
+    closeLocalView(port: number): Promise<void>;
 };
 
 export type ClientIOCallFunctions = {
     clear(): void;
     exit(): void;
 
-    setDisplayInfo(params: {
-        source: string;
-        requestId: RequestId;
-        actionIndex?: number | undefined;
-        action?: TypeAgentAction | undefined;
-    }): void;
-    setDisplay(params: { message: IAgentMessage }): void;
-    appendDisplay(params: {
-        message: IAgentMessage;
-        mode: DisplayAppendMode;
-    }): void;
-    appendDiagnosticData(params: { requestId: RequestId; data: any }): void;
-    setDynamicDisplay(params: {
-        source: string;
-        requestId: RequestId;
-        actionIndex: number;
-        displayId: string;
-        nextRefreshMs: number;
-    }): void;
+    setDisplayInfo(
+        source: string,
+        requestId: RequestId,
+        actionIndex?: number,
+        action?: TypeAgentAction | string[],
+    ): void;
+    setDisplay(message: IAgentMessage): void;
+    appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
+    appendDiagnosticData(requestId: RequestId, data: any): void;
+    setDynamicDisplay(
+        source: string,
+        requestId: RequestId,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ): void;
 
-    notify(params: {
-        event: string;
-        requestId: RequestId;
-        data: any;
-        source: string;
-    }): void;
+    notify(
+        event: string,
+        requestId: RequestId,
+        data: any,
+        source: string,
+    ): void;
 
-    takeAction(params: { action: string; data: unknown }): void;
+    takeAction(action: string, data: unknown): void;
 };
