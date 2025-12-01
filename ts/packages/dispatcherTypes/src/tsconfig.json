@@ -3,12 +3,10 @@
   "compilerOptions": {
     "composite": true,
     "rootDir": ".",
-    "outDir": "../dist/test",
-    "types": ["node", "jest"]
+    "outDir": "../dist"
   },
   "include": ["./**/*"],
   "ts-node": {
     "esm": true
-  },
-  "references": [{ "path": "../src" }]
+  }
 }

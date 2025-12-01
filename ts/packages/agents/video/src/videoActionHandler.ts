@@ -17,7 +17,7 @@ import { ImageInPaintItem, openai, VideoGenerationJob } from "aiclient";
 import { CreateVideoAction, VideoAction } from "./videoActionSchema.js";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { randomBytes } from "crypto";
-import { getMimeType } from "common-utils";
+import { getMimeType } from "typechat-utils";
 
 export function instantiate(): AppAgent {
     return {

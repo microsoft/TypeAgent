@@ -10,7 +10,8 @@ import {
 } from "../src/context/commandHandlerContext.js";
 import { getCommandInterface } from "@typeagent/agent-sdk/helpers/command";
 import { resolveCommand } from "../src/command/command.js";
-import { createDispatcher, Dispatcher } from "../src/dispatcher.js";
+import { createDispatcher } from "../src/dispatcher.js";
+import type { Dispatcher } from "@typeagent/dispatcher-types";
 
 // create an inlined test agent and provider to test command handler.
 const config: AppAgentManifest = {

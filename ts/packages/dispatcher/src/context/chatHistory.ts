@@ -2,9 +2,12 @@
 // Licensed under the MIT License.
 
 import { ActionResultActivityContext, Entity } from "@typeagent/agent-sdk";
-import { CachedImageWithDetails, extractRelevantExifTags } from "common-utils";
+import {
+    CachedImageWithDetails,
+    extractRelevantExifTags,
+} from "typechat-utils";
 import { PromptSection } from "typechat";
-import { RequestId } from "./interactiveIO.js";
+import { RequestId } from "@typeagent/dispatcher-types";
 import { normalizeParamString, PromptEntity } from "agent-cache";
 import { SchemaCreator as sc, validateType } from "action-schema";
 import { getAppAgentName } from "../internal.js";

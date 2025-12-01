@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createGenericChannel } from "agent-rpc/channel";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
 import { ShellWindow } from "./shellWindow.js";
 import type {
     BrowserControl,

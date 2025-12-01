@@ -30,7 +30,7 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { IncrementalJsonValueCallBack } from "common-utils";
+import { IncrementalJsonValueCallBack } from "typechat-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {

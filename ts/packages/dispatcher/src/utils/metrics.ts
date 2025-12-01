@@ -9,22 +9,11 @@ import {
 } from "telemetry";
 
 import { ProfileNames } from "./profileNames.js";
-
-export type Timing = {
-    duration: number;
-    count: number;
-};
-
-export type PhaseTiming = {
-    marks?: Record<string, Timing>;
-    duration?: number | undefined;
-};
-export type RequestMetrics = {
-    parse?: PhaseTiming | undefined;
-    command?: PhaseTiming | undefined;
-    actions: (PhaseTiming | undefined)[];
-    duration?: number | undefined;
-};
+import {
+    PhaseTiming,
+    RequestMetrics,
+    Timing,
+} from "@typeagent/dispatcher-types";
 
 function minStart(measures: ProfileMeasure[]) {
     const value = measures.reduce(

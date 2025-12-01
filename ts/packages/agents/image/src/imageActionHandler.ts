@@ -8,7 +8,7 @@ import {
     ActionResult,
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
-import { downloadImage } from "common-utils";
+import { downloadImage } from "typechat-utils";
 import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,

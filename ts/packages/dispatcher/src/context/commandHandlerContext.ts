@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DeepPartialUndefined, Limiter, createLimiter } from "common-utils";
+import {
+    DeepPartialUndefined,
+    Limiter,
+    createLimiter,
+} from "@typeagent/common-utils";
 import {
     ChildLogger,
     Logger,
@@ -27,7 +31,8 @@ import {
 } from "../translation/agentTranslators.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
-import { ClientIO, nullClientIO, RequestId } from "./interactiveIO.js";
+import { nullClientIO } from "./interactiveIO.js";
+import { ClientIO, RequestId } from "@typeagent/dispatcher-types";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 
 import {
@@ -69,7 +74,7 @@ import registerDebug from "debug";
 import path from "node:path";
 import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.js";
 import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
-import { CommandResult } from "../dispatcher.js";
+import { CommandResult } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";

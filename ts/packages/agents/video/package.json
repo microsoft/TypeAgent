@@ -1,6 +1,7 @@
 {
   "name": "video-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Video dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -25,8 +26,8 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
-    "common-utils": "workspace:*",
-    "telemetry": "workspace:*"
+    "telemetry": "workspace:*",
+    "typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "prettier": "^3.5.3",

@@ -5,7 +5,7 @@ import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
-import { createLimiter, getElapsedString } from "common-utils";
+import { createLimiter, getElapsedString } from "@typeagent/common-utils";
 import chalk from "chalk";
 
 export class ExplainCommandHandler implements CommandHandler {

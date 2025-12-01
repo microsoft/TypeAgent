@@ -1,6 +1,7 @@
 {
   "name": "photo-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Photo dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

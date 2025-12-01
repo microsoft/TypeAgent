@@ -5,7 +5,7 @@ import {
     WebSocketMessageV2,
     createWebSocket,
     keepWebSocketAlive,
-} from "common-utils";
+} from "websocket-utils";
 
 import WebSocket from "ws";
 import registerDebug from "debug";

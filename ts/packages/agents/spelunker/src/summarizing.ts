@@ -3,7 +3,7 @@
 
 import * as sqlite from "better-sqlite3";
 
-import { createLimiter } from "common-utils";
+import { createLimiter } from "@typeagent/common-utils";
 
 import { Chunk, ChunkId } from "./chunkSchema.js";
 import { console_log } from "./logging.js";

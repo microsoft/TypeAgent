@@ -37,7 +37,7 @@ import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { ConversationMemory } from "conversation-memory";
 import { SearchSelectExpr } from "knowpro";
 import { conversation as kp } from "knowledge-processor";
-import { getObjectProperty } from "common-utils";
+import { getObjectProperty } from "@typeagent/common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
 import { getActionParametersType } from "../translation/actionSchemaUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";

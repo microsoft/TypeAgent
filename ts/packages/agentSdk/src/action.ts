@@ -8,7 +8,7 @@ import { Entity } from "./memory.js";
 export interface AppAction {
     actionName: string;
     schemaName?: string;
-    parameters?: Record<string, unknown> | undefined; // the type of the parameters are defined by the AppAgent
+    parameters?: Record<string, unknown>; // the type of the parameters are defined by the AppAgent
 }
 
 export type ActionResultError = {

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessageV2 } from "common-utils";
-
 export interface AppAction {
     actionName: string;
     fullActionName?: string;

@@ -13,6 +13,17 @@
       ],
       "label": "npm run build",
       "detail": "npm run build"
+    },
+    {
+      "type": "shell",
+      "command": "pnpm i",
+      "isBackground": true,
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "label": "pnpm install",
+      "detail": "pnpm install"
     }
   ]
 }

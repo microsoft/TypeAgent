@@ -21,7 +21,7 @@ import {
     ContinousSpeechRecognizer,
 } from "../speech";
 import { getSpeechToken, SpeechToken } from "../speechToken";
-import { uint8ArrayToBase64 } from "common-utils";
+import { uint8ArrayToBase64 } from "@typeagent/common-utils";
 
 export class ChatInput {
     private inputContainer: HTMLDivElement;

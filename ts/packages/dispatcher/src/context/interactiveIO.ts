@@ -1,105 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TemplateEditConfig } from "../translation/actionTemplate.js";
 import {
     CommandHandlerContext,
     getCommandResult,
 } from "./commandHandlerContext.js";
+import { DisplayContent, MessageContent } from "@typeagent/agent-sdk";
 import {
-    DisplayContent,
-    DisplayAppendMode,
-    TypeAgentAction,
-    MessageContent,
-} from "@typeagent/agent-sdk";
-import { RequestMetrics } from "../utils/metrics.js";
-export type RequestId = string | undefined;
+    RequestId,
+    IAgentMessage,
+    ClientIO,
+} from "@typeagent/dispatcher-types";
 
 export enum NotifyCommands {
     ShowSummary = "summarize",
     Clear = "clear",
     ShowUnread = "unread",
     ShowAll = "all",
-}
-
-export interface IAgentMessage {
-    message: DisplayContent;
-    requestId?: string | undefined;
-    source: string;
-    sourceIcon?: string | undefined;
-    actionIndex?: number | undefined;
-    metrics?: RequestMetrics | undefined;
-}
-
-export type NotifyExplainedData = {
-    error?: string | undefined;
-    fromCache: "construction" | "grammar" | false;
-    fromUser: boolean;
-    time: string;
-};
-
-// Client provided IO
-export interface ClientIO {
-    clear(): void;
-    exit(): void;
-
-    // Display
-    setDisplayInfo(
-        source: string,
-        requestId: RequestId,
-        actionIndex?: number,
-        action?: TypeAgentAction | string[],
-    ): void;
-    setDisplay(message: IAgentMessage): void;
-    appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
-    appendDiagnosticData(requestId: RequestId, data: any): void;
-    setDynamicDisplay(
-        source: string,
-        requestId: RequestId,
-        actionIndex: number,
-        displayId: string,
-        nextRefreshMs: number,
-    ): void;
-
-    // Input
-    askYesNo(
-        message: string,
-        requestId: RequestId,
-        defaultValue?: boolean,
-    ): Promise<boolean>;
-    proposeAction(
-        actionTemplates: TemplateEditConfig,
-        requestId: RequestId,
-        source: string,
-    ): Promise<unknown>;
-
-    // A question outside of the request
-    popupQuestion(
-        message: string,
-        choices: string[],
-        defaultId: number | undefined,
-        source: string,
-    ): Promise<number>;
-
-    // Notification (TODO: turn these in to dispatcher events)
-    notify(
-        event: string,
-        requestId: RequestId,
-        data: any,
-        source: string,
-    ): void;
-    notify(
-        event: "explained",
-        requestId: RequestId,
-        data: NotifyExplainedData,
-        source: string,
-    ): void;
-
-    openLocalView(port: number): void;
-    closeLocalView(port: number): void;
-
-    // Host specific (TODO: Formalize the API)
-    takeAction(action: string, data: unknown): void;
 }
 
 function messageContentToString(content: MessageContent): string {

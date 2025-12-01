@@ -1,6 +1,7 @@
 {
   "name": "schema-author",
   "version": "0.0.1",
+  "private": true,
   "description": "schema-author is a library for creating intents and associated schemas.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

@@ -1,6 +1,7 @@
 {
   "name": "examples-lib",
   "version": "0.0.1",
+  "private": true,
   "description": "Shared library for implementing examples.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

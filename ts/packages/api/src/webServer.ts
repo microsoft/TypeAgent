@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getMimeType } from "common-utils";
+import { getMimeType } from "typechat-utils";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createServer, Server } from "node:http";
 import {

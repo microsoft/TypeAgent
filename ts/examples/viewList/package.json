@@ -1,6 +1,7 @@
 {
   "name": "list-visualization",
   "version": "0.0.1",
+  "private": true,
   "description": "Client for visualizing data for the list agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

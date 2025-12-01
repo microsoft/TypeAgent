@@ -3,7 +3,7 @@
 
 import chalk from "chalk";
 import registerDebug from "debug";
-import { makeClientIOMessage, RequestId } from "../context/interactiveIO.js";
+import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -19,7 +19,11 @@ import { executeCommand } from "../execute/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
-import { CommandResult, DispatcherStatus } from "../dispatcher.js";
+import {
+    CommandResult,
+    DispatcherStatus,
+    RequestId,
+} from "@typeagent/dispatcher-types";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
 

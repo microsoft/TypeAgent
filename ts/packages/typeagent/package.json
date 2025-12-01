@@ -1,6 +1,7 @@
 {
   "name": "typeagent",
   "version": "0.0.1",
+  "private": true,
   "description": "Sample library code intended only for the example agents and apps in the TypeAgent project",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -30,13 +31,14 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
     "async": "^3.2.5",
     "cheerio": "1.0.0-rc.12",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "typechat": "^0.1.1",
+    "typechat-utils": "workspace:*",
     "typescript": "~5.4.5"
   },
   "devDependencies": {

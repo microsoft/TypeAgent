@@ -1,6 +1,7 @@
 {
   "name": "turtle",
   "version": "0.0.1",
+  "private": true,
   "description": "Turtle web app with browser side agent for TypeAgent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

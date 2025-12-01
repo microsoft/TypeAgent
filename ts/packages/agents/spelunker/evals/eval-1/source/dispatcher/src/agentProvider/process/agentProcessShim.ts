@@ -3,8 +3,8 @@
 
 import child_process from "child_process";
 import { AppAgent } from "@typeagent/agent-sdk";
-import { createAgentRpcClient } from "agent-rpc/client";
-import { createChannelProvider } from "agent-rpc/channel";
+import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
+import { createChannelProvider } from "@typeagent/agent-rpc/channel";
 import { fileURLToPath } from "url";
 
 export type AgentProcess = {

@@ -5,7 +5,7 @@ import { createKnowledgeModel } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
 import path from "node:path";
-import { isImageFileType } from "common-utils";
+import { isImageFileType } from "typechat-utils";
 import { ChatModel } from "aiclient";
 import { isDirectoryPath } from "typeagent";
 import registerDebug from "debug";

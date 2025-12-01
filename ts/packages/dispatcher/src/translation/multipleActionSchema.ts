@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TranslatorSchemaDef } from "common-utils";
+import { TranslatorSchemaDef } from "typechat-utils";
 import { AppAction } from "@typeagent/agent-sdk";
 import { TranslatedAction } from "./agentTranslators.js";
 import {

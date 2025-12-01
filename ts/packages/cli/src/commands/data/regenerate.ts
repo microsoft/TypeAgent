@@ -28,7 +28,7 @@ import {
     PromptEntity,
     RequestAction,
 } from "agent-cache";
-import { createLimiter, getElapsedString } from "common-utils";
+import { createLimiter, getElapsedString } from "@typeagent/common-utils";
 import { getChatModelMaxConcurrency, getChatModelNames } from "aiclient";
 import {
     getDefaultAppAgentProviders,

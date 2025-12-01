@@ -1,6 +1,7 @@
 {
   "name": "agent-api",
   "version": "0.0.1",
+  "private": true,
   "description": "TypeAgent API",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -28,18 +29,19 @@
     "@aws-sdk/lib-storage": "^3.726.0",
     "@azure/identity": "^4.9.1",
     "@azure/storage-blob": "^12.26.0",
+    "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/dispatcher-rpc": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
-    "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
+    "typechat-utils": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@ import { createServer, Server, IncomingMessage } from "node:http";
 import registerDebug from "debug";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import WebSocket, { WebSocketServer } from "ws";
-import { getMimeType } from "common-utils";
+import { getMimeType } from "typechat-utils";
 import path from "node:path";
 
 const debug = registerDebug("typeagent:shell:chatServer");

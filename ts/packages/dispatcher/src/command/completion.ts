@@ -24,14 +24,9 @@ import {
 } from "./command.js";
 
 import registerDebug from "debug";
+import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
-
-export type CommandCompletionResult = {
-    startIndex: number; // the index for the input where completion starts
-    completions: CompletionGroup[]; // All the partial completions available after partial (and space if true)
-    space: boolean; // require space before the completion   (e.g. false if we are trying to complete a command)
-};
 
 // Return the index of the last incomplete term for completion.
 // if the last term is the '@' command itself, return the index right after the '@'.

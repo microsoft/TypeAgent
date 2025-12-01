@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import { WebSocketMessageV2 } from "common-utils";
-import { AppAction, isWebAgentMessageFromDispatcher } from "./types";
+import type { WebSocketMessageV2 } from "websocket-utils";
+import { AppAction } from "./types";
 import { getSettings } from "./storage";
-import { showBadgeError, showBadgeHealthy, showBadgeBusy } from "./ui";
+import { showBadgeError, showBadgeHealthy } from "./ui";
 import { runBrowserAction } from "./browserActions";
-import { createGenericChannel } from "agent-rpc/channel";
+import { createGenericChannel } from "@typeagent/agent-rpc/channel";
 import { createExternalBrowserServer } from "./externalBrowserControlServer";
 
 import registerDebug from "debug";

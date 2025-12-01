@@ -18,7 +18,7 @@ import {
     displaySuccess,
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
-import { getElapsedString } from "common-utils";
+import { getElapsedString } from "@typeagent/common-utils";
 import { isProd } from "../index.js";
 
 const { autoUpdater } = electronUpdater;
