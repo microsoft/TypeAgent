@@ -17,7 +17,7 @@ public class TestWithTemporaryFiles
     /// <summary>
     /// Test setup including loading .ENV settings and creating temporary folder for sqlite DB
     /// </summary>
-    public TestWithTemporaryFiles()
+    public TestWithTemporaryFiles(bool loadDotEnv)
     {
         _tempDir = Directory.CreateTempSubdirectory($"TypeAgent_{this.GetType().Name}");
 

@@ -16,6 +16,11 @@ namespace TypeAgent.Tests.ConversationMemory;
 
 public class PodcastTests : TestWithTemporaryFiles
 {
+    /// <summary>
+    /// Create temporary folder and load .ENV file
+    /// </summary>
+    public PodcastTests() : base(true) { }
+
     private class TestTranscriptInfo
     {
         public string filePath { get; set; } = string.Empty;

@@ -44,10 +44,10 @@ public class TypeChatTest
         return Environment.GetEnvironmentVariable(name);
     }
 
-    public string? SetEnv(string name, string value)
+    public string? SetEnv(string name, string? value)
     {
         string? prev = GetEnv(name);
-        Environment.SetEnvironmentVariable(name, value, EnvironmentVariableTarget.Process);
+        Environment.SetEnvironmentVariable(name, value ?? string.Empty, EnvironmentVariableTarget.Process);
         return prev;
     }
 
@@ -141,24 +141,26 @@ public class TypeChatTest
         return null;
     }
 
-    public OpenAIConfig MockOpenAIConfig(bool azure = true)
+    public OpenAIModelApiSettings MockOpenAISettings(bool azure = true)
     {
-        OpenAIConfig config = new OpenAIConfig
-        {
-            Azure = azure,
-            ApiKey = "NOT_A_KEY",
-            Model = "gpt-35-turbo"
-        };
-        if (azure)
-        {
-            config.Endpoint = "https://YOUR_RESOURCE_NAME.openai.azure.com";
-        }
-        else
-        {
-            config.Endpoint = "https://api.openai.com/v1/chat/completions";
-            config.Organization = "NOT_AN_ORG";
-        }
-        return config;
+        return new OpenAIModelApiSettings(ModelType.Chat, "https://none/", "no_key", "some-fancy-model", null);
+
+        //OpenAIConfig config = new OpenAIConfig
+        //{
+        //    Azure = azure,
+        //    ApiKey = "NOT_A_KEY",
+        //    Model = "gpt-35-turbo"
+        //};
+        //if (azure)
+        //{
+        //    config.Endpoint = "https://YOUR_RESOURCE_NAME.openai.azure.com";
+        //}
+        //else
+        //{
+        //    config.Endpoint = "https://api.openai.com/v1/chat/completions";
+        //    config.Organization = "NOT_AN_ORG";
+        //}
+        //return config;
     }
 }
 

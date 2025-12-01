@@ -27,6 +27,10 @@ namespace TypeAgent.Tests.KnowPro;
 
 public class AnswerGeneratorTests : TestWithTemporaryFiles
 {
+    /// <summary>
+    /// Create temporary folder and load .ENV file
+    /// </summary>
+    public AnswerGeneratorTests() : base(true) { }
 
     [Fact]
     public async Task GenerateAnswerAsync()
@@ -42,7 +46,8 @@ public class AnswerGeneratorTests : TestWithTemporaryFiles
         cmds.AddModule(new MemoryCommands(new KnowProConsoleContext()));
         cmds.AddModule(new TestCommands(new KnowProConsoleContext()));
 
-        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(new ConversationSettings(), Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "episode_53_adriantchaikovsky", false);
+        // Load the test conversation database
+        var provider = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(new ConversationSettings(), Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "episode_53_adriantchaikovsky", false);
 
         Podcast podcast = new Podcast(new MemorySettings(), provider);
 

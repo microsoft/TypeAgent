@@ -3,8 +3,10 @@
 
 namespace TypeAgent.AIClient;
 
-public class ModelApi
+public class ModelApi : IDisposable
 {
+    private bool _disposedValue;
+
     public ModelApi(ModelApiSettings settings, HttpClient ? client = null)
     {
         ArgumentVerify.ThrowIfNull(settings, nameof(settings));
@@ -26,5 +28,25 @@ public class ModelApi
         {
             Client.Timeout = TimeSpan.FromMilliseconds(Settings.TimeoutMs);
         }
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposedValue)
+        {
+            if (disposing)
+            {
+                this.Client.Dispose();
+            }
+
+            _disposedValue = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }
