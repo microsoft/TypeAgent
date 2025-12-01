@@ -49,7 +49,7 @@
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^20.17.28",
-    "markdown-link-check": "^3.13.7",
+    "markdown-link-check": "^3.14.2",
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
