@@ -3799,9 +3799,6 @@ importers:
 
   packages/typeagent:
     dependencies:
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -3814,15 +3811,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -3836,6 +3827,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))

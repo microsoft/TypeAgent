@@ -1,21 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { error, success, Result } from "typechat";
-
-/**
- * Represents an object that can validate that an object of T matches constraints on its values.
- * Examples of constraints include number ranges, email address formats, etc.
- * Constraints checking is applied after structural JSON validation
- */
-export interface TypeChatConstraintsValidator<T extends object> {
-    validateConstraints(value: T): Result<T>;
-}
+import { error, Result, success } from "typechat";
 
 /**
  * Diagnostics emitted during constraints validation
  */
-export type ValidationDiagnostic = {
+type ValidationDiagnostic = {
     category?: string;
     message: string;
 };
@@ -26,13 +17,8 @@ export type ValidationDiagnostic = {
  */
 export function createConstraintsValidator<T extends object>(
     validationCallback: (value: T, context: ValidationContext) => void,
-): TypeChatConstraintsValidator<T> {
-    const validator: TypeChatConstraintsValidator<T> = {
-        validateConstraints: validate,
-    };
-    return validator;
-
-    function validate(value: T): Result<T> {
+): (value: T) => Result<T> {
+    return (value: T): Result<T> => {
         // Call the validation callback with context
         const context = new ValidationContext();
         validationCallback(value, context);
@@ -41,13 +27,13 @@ export function createConstraintsValidator<T extends object>(
             return error(context.diagnosticString());
         }
         return success(value);
-    }
+    };
 }
 
 /**
  * Context used to collect diagnostics during constraints checking
  */
-export class ValidationContext {
+class ValidationContext {
     private _errors: ValidationDiagnostic[];
 
     constructor() {
