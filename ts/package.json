@@ -40,9 +40,10 @@
     "shell:dev": "pnpm -C packages/shell run dev",
     "shell:nosandbox": "pnpm -C packages/shell run start:nosandbox",
     "shell:package": "pnpm -C packages/shell run package",
+    "shell:smoke": "pnpm -C packages/shell run shell:smoke",
     "shell:start:package": "pnpm -C packages/shell run start:package",
-    "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
-    "test": "pnpm run test:local && pnpm run test:live",
+    "shell:test": "pnpm -C packages/shell run shell:test",
+    "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
     "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=1 run test:local"
   },
