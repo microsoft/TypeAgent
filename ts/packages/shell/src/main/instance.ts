@@ -31,6 +31,7 @@ import {
 } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isProd } from "./index.js";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -139,6 +140,7 @@ async function initializeDispatcher(
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
             persistSession: true,
             persistDir: instanceDir,
+            storageProvider: getFsStorageProvider(),
             metrics: true,
             dblogging: true,
             clientId: getClientId(),

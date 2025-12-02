@@ -57,6 +57,7 @@
     "chat-rpc-server": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
+    "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
     "ts-node": "^10.9.1",
     "typechat": "^0.1.1",
