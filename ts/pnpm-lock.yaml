@@ -2682,10 +2682,10 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.24.0
-        version: 1.24.0(zod@3.24.4)
+        version: 1.24.0(zod@4.1.13)
       '@modelcontextprotocol/server-filesystem':
         specifier: 2025.8.21
-        version: 2025.8.21(zod@3.24.4)
+        version: 2025.8.21(zod@4.1.13)
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
@@ -2793,7 +2793,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
@@ -2804,8 +2804,8 @@ importers:
         specifier: ^8.17.1
         version: 8.18.2
       zod:
-        specifier: ^3.24.1
-        version: 3.24.4
+        specifier: ^4.1.13
+        version: 4.1.13
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -15931,25 +15931,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.24.0(zod@3.24.4)':
-    dependencies:
-      ajv: 8.17.1
-      ajv-formats: 3.0.1(ajv@8.17.1)
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.2.1
-      express-rate-limit: 7.5.1(express@5.2.1)
-      jose: 6.1.3
-      pkce-challenge: 5.0.1
-      raw-body: 3.0.2
-      zod: 3.24.4
-      zod-to-json-schema: 3.25.0(zod@3.24.4)
-    transitivePeerDependencies:
-      - supports-color
-
   '@modelcontextprotocol/sdk@1.24.0(zod@4.1.13)':
     dependencies:
       ajv: 8.17.1
@@ -15969,13 +15950,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server-filesystem@2025.8.21(zod@3.24.4)':
+  '@modelcontextprotocol/server-filesystem@2025.8.21(zod@4.1.13)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.24.0(zod@3.24.4)
+      '@modelcontextprotocol/sdk': 1.24.0(zod@4.1.13)
       diff: 5.2.0
       glob: 10.5.0
       minimatch: 10.0.1
-      zod-to-json-schema: 3.24.5(zod@3.24.4)
+      zod-to-json-schema: 3.24.5(zod@4.1.13)
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
@@ -24700,6 +24681,11 @@ snapshots:
       typescript: 5.4.5
       zod: 3.24.4
 
+  typechat@0.1.1(typescript@5.4.5)(zod@4.1.13):
+    optionalDependencies:
+      typescript: 5.4.5
+      zod: 4.1.13
+
   typed-array-buffer@1.0.3:
     dependencies:
       call-bound: 1.0.4
@@ -25446,13 +25432,9 @@ snapshots:
       compress-commons: 6.0.2
       readable-stream: 4.5.2
 
-  zod-to-json-schema@3.24.5(zod@3.24.4):
+  zod-to-json-schema@3.24.5(zod@4.1.13):
     dependencies:
-      zod: 3.24.4
-
-  zod-to-json-schema@3.25.0(zod@3.24.4):
-    dependencies:
-      zod: 3.24.4
+      zod: 4.1.13
 
   zod-to-json-schema@3.25.0(zod@4.1.13):
     dependencies:
@@ -25460,7 +25442,8 @@ snapshots:
 
   zod@3.23.8: {}
 
-  zod@3.24.4: {}
+  zod@3.24.4:
+    optional: true
 
   zod@4.1.13: {}
 
