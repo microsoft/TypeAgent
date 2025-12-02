@@ -7,7 +7,7 @@ import {
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
 } from "agent-dispatcher";
-import { createNpmAppAgentProvider } from "agent-dispatcher/helpers/npmAgentProvider";
+import { createNpmAppAgentProvider } from "dispatcher-node-providers";
 
 import path from "node:path";
 import fs from "node:fs";

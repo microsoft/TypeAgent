@@ -90,7 +90,7 @@ importers:
         version: link:../../packages/cache
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../../packages/dispatcher
+        version: link:../../packages/dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -707,7 +707,7 @@ importers:
     dependencies:
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../../packages/dispatcher
+        version: link:../../packages/dispatcher/dispatcher
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -1607,7 +1607,7 @@ importers:
         version: link:../../utils/commonUtils
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../../dispatcher
+        version: link:../../dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -2014,7 +2014,7 @@ importers:
         version: link:../../utils/commonUtils
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../../dispatcher
+        version: link:../../dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -2245,10 +2245,10 @@ importers:
         version: link:../agentSdk
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
-        version: link:../dispatcherRpc
+        version: link:../dispatcher/rpc
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../dispatcher
+        version: link:../dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2261,6 +2261,9 @@ importers:
       default-agent-provider:
         specifier: workspace:*
         version: link:../defaultAgentProvider
+      dispatcher-node-providers:
+        specifier: workspace:*
+        version: link:../dispatcher/nodeProviders
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -2431,7 +2434,7 @@ importers:
         version: link:../cache
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../dispatcher
+        version: link:../dispatcher/dispatcher
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -2480,7 +2483,7 @@ importers:
         version: link:../agentSdk
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../dispatcher
+        version: link:../dispatcher/dispatcher
       debug:
         specifier: ^4.3.7
         version: 4.4.3(supports-color@8.1.1)
@@ -2538,7 +2541,7 @@ importers:
         version: link:../cache
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../dispatcher
+        version: link:../dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2554,6 +2557,9 @@ importers:
       default-agent-provider:
         specifier: workspace:*
         version: link:../defaultAgentProvider
+      dispatcher-node-providers:
+        specifier: workspace:*
+        version: link:../dispatcher/nodeProviders
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -2706,7 +2712,7 @@ importers:
         version: link:../cache
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../dispatcher
+        version: link:../dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2734,6 +2740,9 @@ importers:
       desktop-automation:
         specifier: workspace:*
         version: link:../agents/desktop
+      dispatcher-node-providers:
+        specifier: workspace:*
+        version: link:../dispatcher/nodeProviders
       email:
         specifier: workspace:*
         version: link:../agents/email
@@ -2841,7 +2850,7 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/dispatcher:
+  packages/dispatcher/dispatcher:
     dependencies:
       '@azure/ai-agents':
         specifier: ^1.0.0-beta.3
@@ -2852,45 +2861,42 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
-      '@azure/msal-node-extensions':
-        specifier: ^1.5.0
-        version: 1.5.13
       '@typeagent/agent-rpc':
         specifier: workspace:*
-        version: link:../agentRpc
+        version: link:../../agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
-        version: link:../agentSdk
+        version: link:../../agentSdk
       '@typeagent/common-utils':
         specifier: workspace:*
-        version: link:../utils/commonUtils
+        version: link:../../utils/commonUtils
       '@typeagent/dispatcher-types':
         specifier: workspace:*
-        version: link:../dispatcherTypes
+        version: link:../types
       action-grammar:
         specifier: workspace:*
-        version: link:../actionGrammar
+        version: link:../../actionGrammar
       action-schema:
         specifier: workspace:*
-        version: link:../actionSchema
+        version: link:../../actionSchema
       agent-cache:
         specifier: workspace:*
-        version: link:../cache
+        version: link:../../cache
       aiclient:
         specifier: workspace:*
-        version: link:../aiclient
+        version: link:../../aiclient
       azure-ai-foundry:
         specifier: workspace:*
-        version: link:../azure-ai-foundry
+        version: link:../../azure-ai-foundry
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
       conversation-memory:
         specifier: workspace:*
-        version: link:../memory/conversation
+        version: link:../../memory/conversation
       debug:
         specifier: ^4.4.0
-        version: 4.4.1
+        version: 4.4.3(supports-color@8.1.1)
       exifreader:
         specifier: ^4.30.1
         version: 4.30.1
@@ -2905,13 +2911,13 @@ importers:
         version: 9.0.5
       image-memory:
         specifier: workspace:*
-        version: link:../memory/image
+        version: link:../../memory/image
       knowledge-processor:
         specifier: workspace:*
-        version: link:../knowledgeProcessor
+        version: link:../../knowledgeProcessor
       knowpro:
         specifier: workspace:*
-        version: link:../knowPro
+        version: link:../../knowPro
       open:
         specifier: ^10.1.0
         version: 10.1.2
@@ -2923,22 +2929,19 @@ importers:
         version: 7.2.0
       telemetry:
         specifier: workspace:*
-        version: link:../telemetry
+        version: link:../../telemetry
       typeagent:
         specifier: workspace:*
-        version: link:../typeagent
+        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
       typechat-utils:
         specifier: workspace:*
-        version: link:../utils/typechatUtils
+        version: link:../../utils/typechatUtils
       website-memory:
         specifier: workspace:*
-        version: link:../memory/website
-      ws:
-        specifier: ^8.17.1
-        version: 8.18.2
+        version: link:../../memory/website
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -2977,17 +2980,60 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/dispatcherRpc:
+  packages/dispatcher/nodeProviders:
+    dependencies:
+      '@azure/msal-node-extensions':
+        specifier: ^1.5.0
+        version: 1.5.13
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../types
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../dispatcher
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/dispatcher/rpc:
     dependencies:
       '@typeagent/agent-rpc':
         specifier: workspace:*
-        version: link:../agentRpc
+        version: link:../../agentRpc
       '@typeagent/agent-sdk':
         specifier: workspace:*
-        version: link:../agentSdk
+        version: link:../../agentSdk
       '@typeagent/dispatcher-types':
         specifier: workspace:*
-        version: link:../dispatcherTypes
+        version: link:../types
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -2999,11 +3045,11 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/dispatcherTypes:
+  packages/dispatcher/types:
     dependencies:
       '@typeagent/agent-sdk':
         specifier: workspace:*
-        version: link:../agentSdk
+        version: link:../../agentSdk
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -3178,7 +3224,7 @@ importers:
     dependencies:
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../dispatcher
+        version: link:../dispatcher/dispatcher
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -3553,10 +3599,10 @@ importers:
         version: link:../utils/commonUtils
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
-        version: link:../dispatcherRpc
+        version: link:../dispatcher/rpc
       agent-dispatcher:
         specifier: workspace:*
-        version: link:../dispatcher
+        version: link:../dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -3575,6 +3621,9 @@ importers:
       default-agent-provider:
         specifier: workspace:*
         version: link:../defaultAgentProvider
+      dispatcher-node-providers:
+        specifier: workspace:*
+        version: link:../dispatcher/nodeProviders
       dompurify:
         specifier: ^3.2.5
         version: 3.2.5
@@ -3750,9 +3799,6 @@ importers:
 
   packages/typeagent:
     dependencies:
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../utils/commonUtils
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -3765,15 +3811,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -3787,6 +3827,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))

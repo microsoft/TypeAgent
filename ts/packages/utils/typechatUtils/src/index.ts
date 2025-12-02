@@ -17,7 +17,6 @@ export {
 } from "./jsonTranslator.js";
 export { IncrementalJsonValueCallBack } from "./incrementalJsonParser.js";
 
-export * from "./constraints.js";
 export * from "./location.js";
 export * from "./image.js";
 export * from "./datetimeHelper.js";

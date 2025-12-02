@@ -14,6 +14,7 @@ import {
     getIndexingServiceRegistry,
 } from "default-agent-provider";
 import WebSocket from "ws";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
@@ -36,6 +37,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
         persistSession: true,
         persistDir: instanceDir,
+        storageProvider: getFsStorageProvider(),
         metrics: true,
         dblogging: true,
         clientId: getClientId(),

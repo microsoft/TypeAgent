@@ -15,6 +15,7 @@ import {
 } from "default-agent-provider";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -109,6 +110,7 @@ export default class ExplainCommand extends Command {
                 indexingServiceRegistry:
                     await getIndexingServiceRegistry(instanceDir),
                 persistDir: instanceDir,
+                storageProvider: getFsStorageProvider(),
                 dblogging: true,
                 clientId: getClientId(),
             });

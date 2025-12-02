@@ -10,7 +10,7 @@ import {
     success,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { createConstraintsValidator } from "typechat-utils";
+import { createConstraintsValidator } from "../constraints.js";
 
 const classificationSchemaText = `// The schema for Class object
 export type Class = {
@@ -58,12 +58,10 @@ export async function createTextClassifier<InputType = string>(
         validator,
     );
 
-    const constraintsValidator =
+    translator.validateInstance =
         createConstraintsValidator<ClassificationResponse>((action, context) =>
             validateConstraints(action, context),
         );
-
-    translator.validateInstance = constraintsValidator.validateConstraints;
 
     const classifier: TextClassifier<InputType> = {
         translator,
