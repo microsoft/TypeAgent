@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getEnvSetting } from "./common.js";
-import { wikipedia } from "./index.js";
+import { getEnvSetting } from "aiclient";
+import * as wikipedia from "./wikipedia.js";
 
 export type WikipediaApiSettings = {
     endpoint?: string;
