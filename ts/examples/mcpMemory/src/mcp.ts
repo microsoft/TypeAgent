@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export type Content = {
     type: string;
@@ -82,7 +82,7 @@ export function toolResult(result: string): CallToolResult {
 //------------------------
 
 function pingSchema() {
-    return { message: z.string() };
+    return { message: z.string() }
 }
 const PingRequestSchema = z.object(pingSchema());
 
@@ -90,12 +90,19 @@ export type PingRequest = z.infer<typeof PingRequestSchema>;
 export type PingResponse = string;
 
 export function addPingTool(server: McpServer) {
-    server.tool("ping", pingSchema(), async (pingRequest: PingRequest) => {
-        let response = pingRequest.message
-            ? "PONG: " + pingRequest.message
-            : "pong";
-        return toolResult(response);
-    });
+    // server.tool("ping", pingSchema(), async (pingRequest: PingRequest) => {
+    //     let response = pingRequest.message
+    //         ? "PONG: " + pingRequest.message
+    //         : "pong";
+    //     return toolResult(response);
+    // });
+
+    server.registerTool("ping", { inputSchema: pingSchema() }, async (pingRequest: PingRequest) => {
+            let response = pingRequest.message
+                ? "PONG: " + pingRequest.message
+                : "pong";
+            return toolResult(response);
+        });    
 }
 
 export async function callPingTool(
