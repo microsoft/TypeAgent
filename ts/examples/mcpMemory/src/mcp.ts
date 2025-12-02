@@ -82,7 +82,7 @@ export function toolResult(result: string): CallToolResult {
 //------------------------
 
 function pingSchema() {
-    return { message: z.string() }
+    return { message: z.string() };
 }
 const PingRequestSchema = z.object(pingSchema());
 
@@ -97,12 +97,16 @@ export function addPingTool(server: McpServer) {
     //     return toolResult(response);
     // });
 
-    server.registerTool("ping", { inputSchema: pingSchema() }, async (pingRequest: PingRequest) => {
+    server.registerTool(
+        "ping",
+        { inputSchema: pingSchema() },
+        async (pingRequest: PingRequest) => {
             let response = pingRequest.message
                 ? "PONG: " + pingRequest.message
                 : "pong";
             return toolResult(response);
-        });    
+        },
+    );
 }
 
 export async function callPingTool(
