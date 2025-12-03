@@ -37,7 +37,6 @@ internal class QueryCompiler
     private List<CompiledTermGroup> _allScopeSearchTerms;
     private CancellationToken _cancellationToken;
 
-
     public QueryCompiler(
         IConversation conversation,
         IConversationCache conversationCache,

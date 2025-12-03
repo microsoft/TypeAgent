@@ -20,20 +20,15 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace TypeAgent.Tests.KnowPro;
 
-public class SearchTests : TestWithTemporaryFiles, IDisposable
+public class SearchTests : TestWithData
 {
-    SqliteStorageProvider<PodcastMessage, PodcastMessageMeta> _sqliteDB;
-    Podcast _podcast;
     private bool _disposedValue;
 
     /// <summary>
     /// Create temporary folder but and load .ENV file
     /// </summary>
-    public SearchTests() : base(true)
+    public SearchTests() : base(true, true)
     {
-        // Load the test conversation database
-        this._sqliteDB = new SqliteStorageProvider<PodcastMessage, PodcastMessageMeta>(new ConversationSettings(), Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!, "episode_53_adriantchaikovsky", false);
-        this._podcast = new Podcast(new MemorySettings(), this._sqliteDB);
     }
 
     [Fact]
@@ -99,26 +94,4 @@ public class SearchTests : TestWithTemporaryFiles, IDisposable
 
         return matches!;
     }
-
-    #region IDisposable
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!_disposedValue)
-        {
-            if (disposing)
-            {
-                this._sqliteDB.Dispose();
-            }
-
-            _disposedValue = true;
-        }
-    }
-
-    public void Dispose()
-    {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-    #endregion IDisposable
 }

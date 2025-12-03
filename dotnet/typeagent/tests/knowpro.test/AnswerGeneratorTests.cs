@@ -25,7 +25,7 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace TypeAgent.Tests.KnowPro;
 
-public class AnswerGeneratorTests : TestWithTemporaryFiles
+public class AnswerGeneratorTests : TestWithData
 {
     /// <summary>
     /// Create temporary folder and load .ENV file
