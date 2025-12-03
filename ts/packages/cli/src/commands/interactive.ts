@@ -29,6 +29,7 @@ import {
     createProtocolClientIOWrapper,
 } from "chat-rpc-server";
 import registerDebug from "debug";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
@@ -100,6 +101,7 @@ export default class Interactive extends Command {
                 ? createProtocolClientIOWrapper(consoleClientIO, requestManager)
                 : consoleClientIO;
 
+            const persistDir = !flags.memory ? instanceDir : undefined;
             const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: defaultAppAgentProviders,
                 agentInstaller: getDefaultAppAgentInstaller(instanceDir),
@@ -107,12 +109,15 @@ export default class Interactive extends Command {
                 translation: { model: flags.model },
                 explainer: { name: flags.explainer },
                 persistSession: !flags.memory,
-                persistDir: !flags.memory ? getInstanceDir() : undefined,
+                persistDir,
+                storageProvider:
+                    persistDir !== undefined
+                        ? getFsStorageProvider()
+                        : undefined,
                 clientIO,
                 dblogging: true,
-                indexingServiceRegistry: await getIndexingServiceRegistry(
-                    !flags.memory ? getInstanceDir() : undefined,
-                ),
+                indexingServiceRegistry:
+                    await getIndexingServiceRegistry(persistDir),
                 clientId: getClientId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });

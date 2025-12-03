@@ -15,6 +15,7 @@ import {
 import chalk from "chalk";
 import { getChatModelNames } from "aiclient";
 import { readFileSync, existsSync } from "fs";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -75,6 +76,7 @@ export default class RequestCommand extends Command {
                 await getIndexingServiceRegistry(instanceDir),
             cache: { enabled: false },
             persistDir: instanceDir,
+            storageProvider: getFsStorageProvider(),
             dblogging: true,
             clientId: getClientId(),
         });
