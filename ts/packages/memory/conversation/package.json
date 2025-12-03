@@ -33,7 +33,7 @@
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
-    "mailparser": "3.7.2",
+    "mailparser": "3.9.0",
     "memory-storage": "workspace:*",
     "textpro": "workspace:*",
     "typeagent": "workspace:*",
