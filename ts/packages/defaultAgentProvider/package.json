@@ -34,7 +34,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.24.0",
     "@modelcontextprotocol/server-filesystem": "2025.8.21",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
@@ -76,7 +76,7 @@
     "typechat-utils": "workspace:*",
     "video-agent": "workspace:*",
     "ws": "^8.17.1",
-    "zod": "^3.24.1"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
