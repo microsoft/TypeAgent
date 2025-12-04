@@ -241,10 +241,10 @@ internal class QueryCompiler
         // TODO: implement
         // Constrain the select with scopes and 'where'
         WhereExpr? whereExpr = null;
-        //if (whenFilter.KnowledgeType is not null)
-        //{
-        //    whereExpr = new WhereExpr(selectExpr, (KnowledgeType)whenFilter.KnowledgeType);
-        //}
+        if (whenFilter.KnowledgeType is not null)
+        {
+            whereExpr = new WhereExpr(selectExpr, (KnowledgeType)whenFilter.KnowledgeType);
+        }
 
         return new SelectTopNKnowledgeGroupExpr(
             new GroupByKnowledgeTypeExpr(whereExpr ?? selectExpr)

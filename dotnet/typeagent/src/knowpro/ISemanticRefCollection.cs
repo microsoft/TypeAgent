@@ -19,7 +19,6 @@ public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 
     event Action<BatchProgress> OnKnowledgeExtracted;
     void NotifyKnowledgeProgress(BatchProgress progress);
-
 }
 
 public static class SemanticRefCollectionExtensions

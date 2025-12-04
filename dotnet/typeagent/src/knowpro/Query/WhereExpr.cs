@@ -19,15 +19,39 @@ internal class WhereExpr : QueryOpExpr<SemanticRefAccumulator>
 
     public override async ValueTask<SemanticRefAccumulator> EvalAsync(QueryEvalContext context)
     {
+        // Get the matches from the inner expression
         SemanticRefAccumulator semanticRefMatches = await Matches.EvalAsync(context).ConfigureAwait(false);
 
-        int index = 0;
-        while (index < semanticRefMatches.Count)
+        // Extract the ordinals to look up
+        List<ScoredSemanticRefOrdinal> refs = [];
+        foreach (Match<int> m in semanticRefMatches.GetMatches())
         {
-            context.CancellationToken.ThrowIfCancellationRequested();
-            index++;
+            refs.Add(new ScoredSemanticRefOrdinal() { Score = m.Score, SemanticRefOrdinal = m.Value });
         }
 
-        return semanticRefMatches;
+        // Look up all semantic refs of the specified knowledge type
+        IList<ScoredSemanticRefOrdinal> entityRefs = await LookupExtensions.FilterAsync(context, refs, (SemanticRef sr, ScoredSemanticRefOrdinal sso) =>
+        {
+            return sr.KnowledgeType == this.KnowledgeType;
+        });
+
+        // make a hashet of the ordinals for fast lookup
+        HashSet<int> ids = [];
+        foreach (ScoredSemanticRefOrdinal scoredOrdinal in entityRefs)
+        {
+            ids.Add(scoredOrdinal.SemanticRefOrdinal);
+        }
+
+        // filter the original matches to only those in the set
+        SemanticRefAccumulator results = new();
+        foreach (var item in semanticRefMatches.GetMatches())
+        {
+            if (ids.Contains(item.Value))
+            {
+                results.Add(item.Value, item.Score, true);
+            }
+        }
+
+        return results;
     }
 }
