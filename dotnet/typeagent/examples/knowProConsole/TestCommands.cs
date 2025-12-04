@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using TypeAgent.Common;
+using TypeAgent.ExamplesLib.CommandLine;
+using TypeAgent.KnowPro;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
 
@@ -35,6 +38,11 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestSearchTerms")
         {
+            // TODO: finish
+            Args.Arg<bool>("andTerms", "'And' all terms. Set to TRUE, otherwise search terms are 'Or'", false),
+            Args.Arg<string>("ktype", "Filter results to a specific knowledge type.", "entity"),
+            Args.Arg<bool>("exact", "Exact match only. No related terms.", false)
+
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.SearchTermsAsync);
@@ -45,26 +53,62 @@ public class TestCommands : ICommandModule
     {
         IConversation conversation = EnsureConversation();
 
-        // Hard coded test for now
-        SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
+        //// Hard coded test for now
+        //SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
+        //{
+        //    "Children of Time",
+        //    "book"
+        //};
+        //await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        //searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
+        //await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        //searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
+        //await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        //searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
+        //{
+        //    "Children of Physics",
+        //    "book"
+        //};
+
+        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), cancellationToken);
+    }
+
+    private SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs)
+    {
+        // get the named args
+        NamedArgs namedArgs = new NamedArgs(parsedArgs);
+
+        // get the logic operator
+        SearchTermBooleanOp logicOperator = SearchTermBooleanOp.Or;
+        if (namedArgs.Get("andTerms") is not null && bool.Parse(namedArgs.Get("andTerms")!))
         {
-            "Children of Time",
-            "book"
-        };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+            logicOperator = SearchTermBooleanOp.And;
+        }
 
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+        // are we doing an exact match?
+        bool exactMatch = namedArgs.Get("exact") is not null && bool.Parse(namedArgs.Get("exact")!);
 
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
-
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
+        SearchTermGroup stg = new SearchTermGroup(logicOperator)
         {
-            "Children of Physics",
-            "book"
+            // add unmatched tokens as search terms
+            { parsedArgs.UnmatchedTokens, exactMatch }
         };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+        // TODO: finish all parameters
+        // TODO: Finish when filter implementation
+        WhenFilter? when = null;
+
+        if (namedArgs.Get("ktype") is not null)
+        {
+            when = new WhenFilter();
+            when.KnowledgeType = KnowledgeType.Parse(namedArgs.Get("ktype")!);
+        }
+
+        SearchSelectExpr select = new SearchSelectExpr(stg, when);
+
+        return select;
     }
 
     private Command SearchPropertyTermsDef()
@@ -279,13 +323,17 @@ public class TestCommands : ICommandModule
         }
     }
 
-
-    async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
     {
-        KnowProWriter.WriteLine(searchGroup);
+        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), cancellationToken);
+    }
+
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, CancellationToken cancellationToken)
+    {
+        KnowProWriter.WriteLine(searchExpresion);
 
         var results = await conversation.SearchKnowledgeAsync(
-            new SearchSelectExpr(searchGroup),
+            searchExpresion,
             null,
             cancellationToken
         ).ConfigureAwait(false);

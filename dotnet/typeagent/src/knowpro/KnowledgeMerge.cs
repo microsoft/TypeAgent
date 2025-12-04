@@ -59,6 +59,12 @@ internal class MergedEntity : MergedKnowledge
         return entity;
     }
 
+    /// <summary>
+    /// In place union of two entities
+    /// </summary>
+    /// <param name="to">The entity to merge into.</param>
+    /// <param name="other">The entity to merge.</param>
+    /// <returns>True if the operation was successful, false otherwise.</returns>
     public static bool Union(MergedEntity to, MergedEntity other)
     {
         if (to.Name != other.Name)
@@ -68,7 +74,7 @@ internal class MergedEntity : MergedKnowledge
 
         to.Type = [.. to.Type.Union(other.Type)];
         to.Facets = MergedFacets.Union(to.Facets, other.Facets);
-        return false;
+        return true;
     }
 
     public static IEnumerable<ConcreteEntity> Merge(IEnumerable<ConcreteEntity> entities)

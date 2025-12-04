@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace TypeAgent.KnowPro;
 
-public struct KnowledgeType : IEquatable<KnowledgeType>
+public struct KnowledgeType : IEquatable<KnowledgeType>, IParsable<KnowledgeType>
 {
     /// <summary>
     /// <see cref="ConcreteEntity"/>
@@ -64,6 +64,33 @@ public struct KnowledgeType : IEquatable<KnowledgeType>
     public bool Equals(KnowledgeType other)
     {
         return Value == other.Value;
+    }
+
+    public static KnowledgeType Parse(string s, IFormatProvider? provider = null)
+    {
+        return s.Trim().ToLowerInvariant() switch
+        {
+            EntityTypeName => Entity,
+            ActionTypeName => Action,
+            TopicTypeName => Topic,
+            TagTypeName => Tag,
+            STagTypeName => STag,
+            _ => throw new KnowProException(KnowProException.ErrorCode.InvalidKnowledgeType, s),
+        };
+    }
+
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, [MaybeNullWhen(false)] out KnowledgeType result)
+    {
+        try
+        {
+            result = Parse(s, provider);
+            return true;
+        }
+        catch
+        {
+            result = default;
+            return false;
+        }
     }
 
     public static bool operator ==(KnowledgeType x, KnowledgeType y)
