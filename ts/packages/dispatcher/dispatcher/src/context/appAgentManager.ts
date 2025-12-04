@@ -11,6 +11,7 @@ import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
     convertToActionConfig,
     ActionConfig,
+    getGrammarContent,
 } from "../translation/actionConfig.js";
 import {
     ActionConfigProvider,
@@ -33,8 +34,6 @@ import {
     appAgentStateKeys,
 } from "./appAgentStateConfig.js";
 import { GrammarStore } from "agent-cache";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import fs from "node:fs";
 import { Grammar, grammarFromJson } from "action-grammar";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
@@ -96,29 +95,17 @@ export const alwaysEnabledAgents = {
 };
 
 function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
-    if (actionConfig.grammarFile === undefined) {
+    const grammarContent = getGrammarContent(actionConfig);
+    if (grammarContent === undefined) {
         return undefined;
     }
 
-    let source: string;
-    if (typeof actionConfig.grammarFile === "string") {
-        const fullPath = getPackageFilePath(actionConfig.grammarFile);
-        source = fs.readFileSync(fullPath, "utf-8");
-        const isActionGrammar = actionConfig.grammarFile.endsWith(".ag.json");
-        if (!isActionGrammar) {
-            throw new Error(
-                `Unsupported grammar file extension: ${actionConfig.grammarFile}`,
-            );
-        }
-    } else {
-        if (actionConfig.grammarFile.format !== "ag") {
-            throw new Error(
-                `Unsupported grammar file extension: ${actionConfig.grammarFile}`,
-            );
-        }
-        source = actionConfig.grammarFile.content;
+    if (grammarContent.format !== "ag") {
+        throw new Error(
+            `Unsupported grammar file extension: ${actionConfig.grammarFile}`,
+        );
     }
-    return grammarFromJson(JSON.parse(source));
+    return grammarFromJson(JSON.parse(grammarContent.content));
 }
 
 export class AppAgentManager implements ActionConfigProvider {
