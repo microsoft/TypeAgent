@@ -34,7 +34,7 @@ import {
     SchemaCreator as sc,
     GenerateSchemaOptions,
 } from "action-schema";
-import { ActionConfig } from "./actionConfig.js";
+import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { CompleteUsageStatsCallback } from "aiclient";
@@ -180,17 +180,16 @@ function getTranslatorSchemaDef(
         };
     }
 
-    if (actionConfig.schemaFile.format === "ts") {
+    const schemaContent = getSchemaContent(actionConfig);
+    if (schemaContent.format === "ts") {
         return {
             kind: "inline",
             typeName,
-            schema: actionConfig.schemaFile.content,
+            schema: schemaContent.content,
         };
     }
 
-    throw new Error(
-        `Unsupported schema source type: ${actionConfig.schemaFile.format}"`,
-    );
+    throw new Error(`Unsupported schema source type: ${schemaContent.format}"`);
 }
 
 function getTranslatorSchemaDefs(

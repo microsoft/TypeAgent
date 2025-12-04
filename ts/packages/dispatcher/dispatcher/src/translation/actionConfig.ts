@@ -6,10 +6,22 @@ import {
     AppAgentManifest,
     SchemaManifest,
     ActivityCacheSpec,
+    SchemaContent,
+    GrammarContent,
 } from "@typeagent/agent-sdk";
+import fs from "node:fs";
 import registerDebug from "debug";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { readSchemaConfig } from "../utils/loadSchemaConfig.js";
 const debugConfig = registerDebug("typeagent:dispatcher:schema:config");
 
+type RuntimeSchemaManifest = Omit<
+    SchemaManifest,
+    "schemaFile" | "grammarFile"
+> & {
+    schemaFile: SchemaContent | (() => SchemaContent);
+    grammarFile: GrammarContent | (() => GrammarContent) | undefined;
+};
 // A flatten AppAgentManifest
 export type ActionConfig = {
     emojiChar: string;
@@ -22,7 +34,54 @@ export type ActionConfig = {
     transient: boolean;
     schemaName: string;
     delegatable: boolean;
-} & SchemaManifest;
+} & RuntimeSchemaManifest;
+
+function loadSchemaFile(schemaFile: string): SchemaContent {
+    const fullPath = getPackageFilePath(schemaFile);
+    const content = fs.readFileSync(fullPath, "utf-8");
+    const pas = schemaFile.endsWith(".pas.json");
+    const config = pas ? undefined : readSchemaConfig(fullPath);
+    return {
+        format: pas ? "pas" : "ts",
+        content,
+        config,
+    };
+}
+
+function loadGrammarFile(grammarFile: string): GrammarContent {
+    const fullPath = getPackageFilePath(grammarFile);
+    const isActionGrammar = grammarFile.endsWith(".ag.json");
+    if (!isActionGrammar) {
+        throw new Error(`Unsupported grammar file extension: ${grammarFile}`);
+    }
+    return { format: "ag", content: fs.readFileSync(fullPath, "utf-8") };
+}
+
+export function getSchemaContent(actionConfig: ActionConfig): SchemaContent {
+    const schemaFile = actionConfig.schemaFile;
+    if (typeof schemaFile !== "function") {
+        return schemaFile;
+    }
+    const loadedSchemaFile = schemaFile();
+    actionConfig.schemaFile = loadedSchemaFile;
+    return loadedSchemaFile;
+}
+
+export function getGrammarContent(
+    actionConfig: ActionConfig,
+): GrammarContent | undefined {
+    const grammarFile = actionConfig.grammarFile;
+    if (grammarFile === undefined) {
+        return undefined;
+    }
+
+    if (typeof grammarFile !== "function") {
+        return grammarFile;
+    }
+    const loadedGrammarFile = grammarFile();
+    actionConfig.grammarFile = loadedGrammarFile;
+    return loadedGrammarFile;
+}
 
 function collectActionConfigs(
     actionConfigs: { [key: string]: ActionConfig },
@@ -47,12 +106,25 @@ function collectActionConfigs(
     delegatable = manifest.schema?.delegatable ?? delegatable; // inherit from parent if not specified
 
     if (manifest.schema) {
+        const originalSchemaFile = manifest.schema.schemaFile;
+        const schemaFile =
+            typeof originalSchemaFile === "string"
+                ? () => loadSchemaFile(originalSchemaFile)
+                : originalSchemaFile;
+
+        const originalGrammarFile = manifest.schema.grammarFile;
+        const grammarFile =
+            typeof originalGrammarFile === "string"
+                ? () => loadGrammarFile(originalGrammarFile)
+                : originalGrammarFile;
         debugConfig(`Adding schema '${schemaName}'`);
         actionConfigs[schemaName] = {
             schemaName,
             emojiChar,
             cachedActivities,
             ...manifest.schema,
+            schemaFile,
+            grammarFile,
             transient,
             schemaDefaultEnabled,
             actionDefaultEnabled,

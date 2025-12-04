@@ -4,7 +4,9 @@
 export {
     AppAgentManifest,
     ActionManifest,
+    GrammarContent,
     GrammarFormat,
+    SchemaContent,
     SchemaFormat,
     SchemaManifest,
     AppAgent,

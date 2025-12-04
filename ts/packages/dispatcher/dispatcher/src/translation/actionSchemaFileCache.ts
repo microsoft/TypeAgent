@@ -9,18 +9,16 @@ import {
     SchemaConfig,
     toJSONParsedActionSchema,
 } from "action-schema";
-import { ActionConfig } from "./actionConfig.js";
+import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import {
     ActionConfigProvider,
     ActionSchemaFile,
 } from "./actionConfigProvider.js";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction, SchemaFormat, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "@typeagent/common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";
-import { readSchemaConfig } from "../utils/loadSchemaConfig.js";
 import { SchemaInfoProvider } from "agent-cache";
 import {
     getActionSchemaTypeName,
@@ -152,32 +150,17 @@ export class ActionSchemaFileCache {
         fullPath: string | undefined;
         format: SchemaFormat;
     } {
-        if (typeof actionConfig.schemaFile === "string") {
-            const fullPath = getPackageFilePath(actionConfig.schemaFile);
-            const source = fs.readFileSync(fullPath, "utf-8");
-            const config = readSchemaConfig(fullPath);
+        const schemaContent = getSchemaContent(actionConfig);
+        if (schemaContent.format === "ts" || schemaContent.format === "pas") {
             return {
-                fullPath,
-                source,
-                config,
-                format: actionConfig.schemaFile.endsWith(".pas.json")
-                    ? "pas"
-                    : "ts",
-            };
-        }
-        if (
-            actionConfig.schemaFile.format === "ts" ||
-            actionConfig.schemaFile.format === "pas"
-        ) {
-            return {
-                source: actionConfig.schemaFile.content,
+                source: schemaContent.content,
                 config: undefined,
                 fullPath: undefined,
-                format: actionConfig.schemaFile.format,
+                format: schemaContent.format,
             };
         }
         throw new Error(
-            `Unsupported schema source type ${actionConfig.schemaFile.format}`,
+            `Unsupported schema source type ${schemaContent.format}`,
         );
     }
     public getActionSchemaFile(actionConfig: ActionConfig): ActionSchemaFile {
