@@ -29,6 +29,8 @@
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
+    "agent-server-protocol": "workspace:*",
     "debug": "^4.4.0",
     "isomorphic-ws": "^5.0.0"
   },

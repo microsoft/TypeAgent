@@ -11,7 +11,7 @@ import {
 import { connectDispatcher } from "agent-server-client";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 
-export default class Interactive extends Command {
+export default class Connect extends Command {
     static description = "Interactive mode";
     static flags = {
         exit: Flags.boolean({
@@ -32,14 +32,13 @@ export default class Interactive extends Command {
         }),
     };
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(Interactive);
+        const { args, flags } = await this.parse(Connect);
 
         await withConsoleClientIO(async (clientIO) => {
             const dispatcher = await connectDispatcher(
                 clientIO,
                 `ws://localhost:${flags.port}`,
             );
-
             try {
                 if (args.input) {
                     await dispatcher.processCommand(`@run ${args.input}`);

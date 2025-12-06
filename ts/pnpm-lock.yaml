@@ -1046,38 +1046,26 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/agentServer:
+  packages/agentServer/client:
     dependencies:
       '@typeagent/agent-rpc':
         specifier: workspace:*
-        version: link:../agentRpc
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../utils/commonUtils
+        version: link:../../agentRpc
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
-        version: link:../dispatcher/rpc
-      agent-dispatcher:
+        version: link:../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
         specifier: workspace:*
-        version: link:../dispatcher/dispatcher
+        version: link:../../dispatcher/types
+      agent-server-protocol:
+        specifier: workspace:*
+        version: link:../protocol
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      default-agent-provider:
-        specifier: workspace:*
-        version: link:../defaultAgentProvider
-      dispatcher-node-providers:
-        specifier: workspace:*
-        version: link:../dispatcher/nodeProviders
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      websocket-channel-server:
-        specifier: workspace:*
-        version: link:../utils/webSocketChannelServer
-      ws:
-        specifier: ^8.17.1
-        version: 8.18.2
+      isomorphic-ws:
+        specifier: ^5.0.0
+        version: 5.0.0(ws@8.18.2)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -1095,20 +1083,72 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/agentServerClient:
+  packages/agentServer/protocol:
     dependencies:
       '@typeagent/agent-rpc':
         specifier: workspace:*
-        version: link:../agentRpc
+        version: link:../../agentRpc
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
-        version: link:../dispatcher/rpc
+        version: link:../../dispatcher/rpc
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       isomorphic-ws:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.18.2)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/agentServer/server:
+    dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
+      '@typeagent/dispatcher-rpc':
+        specifier: workspace:*
+        version: link:../../dispatcher/rpc
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../dispatcher/dispatcher
+      agent-server-protocol:
+        specifier: workspace:*
+        version: link:../protocol
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+      default-agent-provider:
+        specifier: workspace:*
+        version: link:../../defaultAgentProvider
+      dispatcher-node-providers:
+        specifier: workspace:*
+        version: link:../../dispatcher/nodeProviders
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      websocket-channel-server:
+        specifier: workspace:*
+        version: link:../../utils/webSocketChannelServer
+      ws:
+        specifier: ^8.17.1
+        version: 8.18.2
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -2624,7 +2664,7 @@ importers:
         version: link:../dispatcher/dispatcher
       agent-server-client:
         specifier: workspace:*
-        version: link:../agentServerClient
+        version: link:../agentServer/client
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -3077,9 +3117,6 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
-      '@typeagent/dispatcher-types':
-        specifier: workspace:*
-        version: link:../types
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher

@@ -39,8 +39,12 @@ export async function createWebSocketChannelServer(
                 data,
                 cb
                     ? (err) => {
-                          debugError(`send error callback: ${err}`);
-                          cb(err ?? null);
+                          if (err) {
+                              debugError(`send error callback: ${err}`);
+                              cb(err);
+                          } else {
+                              cb(null);
+                          }
                       }
                     : undefined,
             );

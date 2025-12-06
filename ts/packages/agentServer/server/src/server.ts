@@ -12,11 +12,12 @@ import {
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import { ChannelProvider } from "@typeagent/agent-rpc/channel";
-import { createClientIORpcClient } from "../../dispatcher/rpc/dist/clientIOClient.js";
+import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createPromiseWithResolvers } from "@typeagent/common-utils";
+import { AgentServerInvokeFunctions, ChannelName } from "agent-server-protocol";
 import dotenv from "dotenv";
-const envPath = new URL("../../../.env", import.meta.url);
+const envPath = new URL("../../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
 const nullClientIO: ClientIO = {
@@ -42,10 +43,6 @@ const nullClientIO: ClientIO = {
     takeAction: (action: string) => {
         throw new Error(`Action ${action} not supported`);
     },
-};
-
-type AgentServerInvokeFunctions = {
-    join: () => Promise<void>;
 };
 
 async function main() {
@@ -102,10 +99,12 @@ async function main() {
                         currentCloseFn = undefined;
                     });
 
-                    const dispatcherChannel =
-                        channelProvider.createChannel("dispatcher");
-                    const clientIOChannel =
-                        channelProvider.createChannel("clientIO");
+                    const dispatcherChannel = channelProvider.createChannel(
+                        ChannelName.Dispatcher,
+                    );
+                    const clientIOChannel = channelProvider.createChannel(
+                        ChannelName.ClientIO,
+                    );
                     const clientIORpcClient =
                         createClientIORpcClient(clientIOChannel);
                     Object.assign(clientIO, clientIORpcClient);
@@ -115,7 +114,7 @@ async function main() {
 
             createRpc(
                 "agent-server",
-                channelProvider.createChannel("agent-server"),
+                channelProvider.createChannel(ChannelName.AgentServer),
                 invokeFunctions,
             );
         },

@@ -1,8 +1,8 @@
 {
-  "name": "agent-server",
+  "name": "agent-server-protocol",
   "version": "0.0.1",
   "private": true,
-  "description": "Type Agent Server",
+  "description": "Protocol definition for the Type Agent Server",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -24,20 +24,13 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "start": "node dist/index.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/common-utils": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
-    "agent-dispatcher": "workspace:*",
-    "default-agent-provider": "workspace:*",
-    "dispatcher-node-providers": "workspace:*",
-    "websocket-channel-server": "workspace:*",
     "debug": "^4.4.0",
-    "dotenv": "^16.3.1",
-    "ws": "^8.17.1"
+    "isomorphic-ws": "^5.0.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

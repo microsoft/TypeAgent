@@ -1,22 +1,19 @@
 {
-  "name": "@typeagent/dispatcher-rpc",
+  "name": "agent-server",
   "version": "0.0.1",
-  "description": "TypeAgent Dispatcher RPC",
+  "private": true,
+  "description": "Type Agent Server",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/dispatcher/rpc"
+    "directory": "ts/packages/utils/webSocketUtils"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
-    "./clientio/client": "./dist/clientIOClient.js",
-    "./clientio/server": "./dist/clientIOServer.js",
-    "./dispatcher/client": "./dist/dispatcherClient.js",
-    "./dispatcher/server": "./dist/dispatcherServer.js"
+    ".": "./dist/server.js"
   },
   "files": [
     "dist",
@@ -27,14 +24,25 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "start": "node dist/server.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/common-utils": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
-    "@typeagent/agent-sdk": "workspace:*",
-    "@typeagent/dispatcher-types": "workspace:*"
+    "@typeagent/dispatcher-rpc": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "agent-server-protocol": "workspace:*",
+    "default-agent-provider": "workspace:*",
+    "dispatcher-node-providers": "workspace:*",
+    "websocket-channel-server": "workspace:*",
+    "debug": "^4.4.0",
+    "dotenv": "^16.3.1",
+    "ws": "^8.17.1"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/ws": "^8.5.10",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
