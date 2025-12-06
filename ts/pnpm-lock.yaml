@@ -1054,9 +1054,6 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
-      '@typeagent/dispatcher-types':
-        specifier: workspace:*
-        version: link:../../dispatcher/types
       agent-server-protocol:
         specifier: workspace:*
         version: link:../protocol

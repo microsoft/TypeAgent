@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/utils/webSocketUtils"
+    "directory": "ts/packages/agentServer/client"
   },
   "license": "MIT",
   "author": "Microsoft",
@@ -29,7 +29,6 @@
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
-    "@typeagent/dispatcher-types": "workspace:*",
     "agent-server-protocol": "workspace:*",
     "debug": "^4.4.0",
     "isomorphic-ws": "^5.0.0"

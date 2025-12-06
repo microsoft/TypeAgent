@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/utils/webSocketUtils"
+    "directory": "ts/packages/agentServer/server"
   },
   "license": "MIT",
   "author": "Microsoft",
@@ -28,16 +28,16 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/common-utils": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "agent-server-protocol": "workspace:*",
+    "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
-    "websocket-channel-server": "workspace:*",
-    "debug": "^4.4.0",
     "dotenv": "^16.3.1",
+    "websocket-channel-server": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {
