@@ -8,7 +8,7 @@ import type {
     ClientIO,
     IAgentMessage,
     RequestId,
-} from "@typeagent/dispatcher-types";
+} from "agent-dispatcher";
 import { fileURLToPath } from "node:url";
 
 const testAppAgentProvider = createNpmAppAgentProvider(

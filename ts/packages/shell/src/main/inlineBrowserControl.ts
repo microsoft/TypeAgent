@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { ShellWindow } from "./shellWindow.js";
 import type {
     BrowserControl,
@@ -34,7 +34,7 @@ export function createInlineBrowserControl(
         }
         return activeBrowserView.webContentsView.webContents;
     }
-    const contentScriptRpcChannel = createGenericChannel((message) => {
+    const contentScriptRpcChannel = createChannelAdapter((message) => {
         const webContents = getActiveBrowserWebContents();
         webContents.send("inline-browser-rpc-call", message);
     });
@@ -42,7 +42,7 @@ export function createInlineBrowserControl(
     // Handle RPC replies from browser views
     const onReply = (_, message) => {
         // REVIEW: should verify the sender is the browser view we did the rpc call to.
-        contentScriptRpcChannel.message(message);
+        contentScriptRpcChannel.notifyMessage(message);
     };
     ipcMain.on("inline-browser-rpc-reply", onReply);
 
@@ -515,7 +515,7 @@ export function createInlineBrowserControl(
     return {
         control,
         close: () => {
-            contentScriptRpcChannel.disconnect();
+            contentScriptRpcChannel.notifyDisconnected();
             ipcMain.removeListener("inline-browser-rpc-reply", onReply);
         },
     };

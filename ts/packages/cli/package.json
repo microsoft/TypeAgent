@@ -52,6 +52,7 @@
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
+    "agent-server-client": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "chat-rpc-server": "workspace:*",

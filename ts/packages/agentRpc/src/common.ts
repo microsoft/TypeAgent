@@ -34,27 +34,36 @@ type ChannelData = {
 };
 
 export type ChannelProvider = {
+    on(event: "disconnect", cb: DisconnectHandler): void;
+    off(event: "disconnect", cb: DisconnectHandler): void;
     createChannel<T = any>(name: string): RpcChannel<T>;
     deleteChannel(name: string): void;
 };
-export type GenericChannelProvider = ChannelProvider & {
-    message(message: any): void;
-    disconnect(): void;
+
+// Channel provider adapter to hook up with an actual transport (like a websocket)
+export type ChannelProviderAdapter = ChannelProvider & {
+    // Deliver messages or notify disconnects to the local client from a connection transport.
+    notifyMessage(message: any): void;
+    notifyDisconnected(): void;
 };
 
-export type GenericChannel = {
+// Channel adapter to hook up with an actual transport (like a websocket)
+export type ChannelAdapter = {
+    // To actual channel
     channel: RpcChannel;
-    message: (message: any) => void;
-    disconnect: () => void;
+
+    // Deliver messages or notify disconnects to the local client from a connection transport.
+    notifyMessage(message: any): void;
+    notifyDisconnected(): void;
 };
 
 type GenericSendFunc = (message: any, cb?: (err: Error | null) => void) => void;
 
 // A generic channel to wrap any transport by providing a send function.
 // Returns RpcChannel and functions to trigger `message` and `disconnect` events.
-export function createGenericChannel(
+export function createChannelAdapter(
     sendFunc: GenericSendFunc,
-): GenericChannel {
+): ChannelAdapter {
     const data: ChannelData = {
         handlers: {
             message: [],
@@ -85,14 +94,14 @@ export function createGenericChannel(
         },
     };
 
-    const message = (message: any) => {
+    const notifyMessage = (message: any) => {
         data.handlers.message.forEach((h) => h(message));
         const callbacks = data.once.message;
         data.once.message = [];
         callbacks.forEach((h) => h(message));
     };
 
-    const disconnect = () => {
+    const notifyDisconnected = () => {
         data.handlers.disconnect.forEach((h) => h());
         const callbacks = data.once.disconnect;
         data.once.disconnect = [];
@@ -100,52 +109,54 @@ export function createGenericChannel(
     };
 
     return {
-        message,
-        disconnect,
+        notifyMessage,
+        notifyDisconnected,
         channel,
     };
 }
 
-export function createGenericChannelProvider(
+export function createChannelProviderAdapter(
     sendFunc: GenericSendFunc,
-): GenericChannelProvider {
-    const genericSharedChannel = createGenericChannel(sendFunc);
+): ChannelProviderAdapter {
+    const genericSharedChannel = createChannelAdapter(sendFunc);
 
     return {
         ...createChannelProvider(genericSharedChannel.channel),
-        message: genericSharedChannel.message,
-        disconnect: genericSharedChannel.disconnect,
+        notifyMessage: genericSharedChannel.notifyMessage,
+        notifyDisconnected: genericSharedChannel.notifyDisconnected,
     };
 }
 
 export function createChannelProvider(
     sharedChannel: SharedRpcChannel,
 ): ChannelProvider {
-    const channels = new Map<string, GenericChannel>();
+    const channelAdapters = new Map<string, ChannelAdapter>();
     sharedChannel.on("message", (message: any) => {
         if (message.name === undefined) {
-            debugError("Missing channel name in message");
+            debugError(
+                `Missing channel name in message: ${JSON.stringify(message)}`,
+            );
             return;
         }
-        const channel = channels.get(message.name);
-        if (channel === undefined) {
+        const channelAdapter = channelAdapters.get(message.name);
+        if (channelAdapter === undefined) {
             debugError(`Invalid channel name ${message.name} in message`);
             return;
         }
-        channel.message(message.message);
+        channelAdapter.notifyMessage(message.message);
     });
 
     sharedChannel.on("disconnect", () => {
-        for (const channel of channels.values()) {
-            channel.disconnect();
+        for (const channel of channelAdapters.values()) {
+            channel.notifyDisconnected();
         }
     });
     function createChannel(name: string): RpcChannel {
         debug(`createChannel ${name}`);
-        if (channels.has(name)) {
+        if (channelAdapters.has(name)) {
             throw new Error(`Channel ${name} already exists`);
         }
-        const genericChannel = createGenericChannel((message, cb) => {
+        const channelAdapter = createChannelAdapter((message, cb) => {
             sharedChannel.send(
                 {
                     name,
@@ -155,14 +166,16 @@ export function createChannelProvider(
             );
         });
 
-        channels.set(name, genericChannel);
-        return genericChannel.channel;
+        channelAdapters.set(name, channelAdapter);
+        return channelAdapter.channel;
     }
 
     function deleteChannel(name: string) {
         debug(`deleteChannel ${name}`);
-        if (channels.has(name)) {
-            channels.delete(name);
+        const channel = channelAdapters.get(name);
+        if (channel) {
+            channelAdapters.delete(name);
+            channel.notifyDisconnected();
             debug(`deleteChannel ${name} - deleted`);
         } else {
             debug(`deleteChannel ${name} - already deleted, ignoring`);
@@ -171,5 +184,11 @@ export function createChannelProvider(
     return {
         createChannel,
         deleteChannel,
+        on(event: "disconnect", cb: DisconnectHandler) {
+            sharedChannel.on(event, cb);
+        },
+        off(event: "disconnect", cb: DisconnectHandler) {
+            sharedChannel.off(event, cb);
+        },
     };
 }

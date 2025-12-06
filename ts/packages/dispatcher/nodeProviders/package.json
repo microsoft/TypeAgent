@@ -34,7 +34,6 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
-    "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "debug": "^4.4.0"
   },

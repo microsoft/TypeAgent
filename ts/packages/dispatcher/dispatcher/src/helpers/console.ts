@@ -435,7 +435,7 @@ function getNextInput(prompt: string, inputs: string[]): string {
  * @param processRequest Async callback function that is invoked for each interactive input or each line in text file.
  */
 export async function processCommands<T>(
-    interactivePrompt: string | ((context: T) => string),
+    interactivePrompt: string | ((context: T) => string | Promise<string>),
     processCommand: (request: string, context: T) => Promise<any>,
     context: T,
     inputs?: string[],
@@ -461,7 +461,7 @@ export async function processCommands<T>(
     while (true) {
         const prompt =
             typeof interactivePrompt === "function"
-                ? interactivePrompt(context)
+                ? await interactivePrompt(context)
                 : interactivePrompt;
         const request = inputs
             ? getNextInput(prompt, inputs)
