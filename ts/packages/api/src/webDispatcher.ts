@@ -81,9 +81,6 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         const summary = updateSettingSummary();
         console.log(getConsolePrompt(summary), text);
 
-        // Update before processing the command in case there was change outside of command processing
-        updateSettingSummary();
-
         const result = await dispatcher.processCommand(text, id, images);
 
         updateSettingSummary();
