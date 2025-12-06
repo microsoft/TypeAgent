@@ -23,6 +23,7 @@ registerDebug.enable("typeagent:webserver:*");
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
     close(): void;
+    handleAction(action: any): Promise<any>;
 }
 
 export async function createWebDispatcher(): Promise<WebDispatcher> {
@@ -75,6 +76,11 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         return newSettingSummary;
     };
 
+    async function handleAction(action: any): Promise<any> {
+        //dispatcher.handleAction(action);
+        // TODO: Implement handleAction
+    };
+
     async function processShellRequest(
         text: string,
         id: string,
@@ -98,6 +104,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const patchedDispatcher = {
         ...dispatcher,
         processCommand: processShellRequest,
+        handleAction: handleAction,
     };
 
     const dispatcherChannel = createGenericChannel((message: any) =>
@@ -145,5 +152,6 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         close: () => {
             dispatcher.close();
         },
+        handleAction: handleAction,
     };
 }

@@ -21,8 +21,9 @@ export type TypeAgentAPIServerConfig = {
 export class TypeAgentAPIWebServer {
     public server: Server<any, any>;
     private secureServer: SecureServer<any, any> | undefined;
+    private actionHandler: (action: any) => any;
 
-    constructor(config: TypeAgentAPIServerConfig) {
+    constructor(config: TypeAgentAPIServerConfig, actionHandler: (action: any) => any) {
         // web server
         this.server = createServer((request: any, response: any) => {
             this.serve(config, request, response);
@@ -49,6 +50,9 @@ export class TypeAgentAPIWebServer {
                 "SSL Certificates NOT found, cannot listen for https:// requests!",
             );
         }
+
+        // action handler
+        this.actionHandler = actionHandler;
     }
 
     serve(config: TypeAgentAPIServerConfig, request: any, response: any) {
@@ -62,6 +66,34 @@ export class TypeAgentAPIWebServer {
         // special case - dev helper
         if (requestedFile == "/__/__headers") {
             return this.printHeaders(request, response);
+        }
+
+        // process POST requests
+        let url = new URL(request.url, "http://localhost");
+        if (url.pathname == "/action/" && (request.method === "PUT" || request.method === "GET")) {
+
+            let data: string | null = "";
+            if (request.method === "PUT") {
+                data = request.read();
+            } else {
+                data = url.searchParams.get("a");
+            }
+            
+            try {
+                var action: any = JSON.parse(data?.toString() ?? "");    
+                console.log("Received action request: ", JSON.stringify(action, null, 2));
+
+                var actionResult = this.actionHandler(action);
+
+                response.writeHead(200, { "Content-Type": "application/json" });
+                response.end(JSON.stringify(actionResult));
+
+            } catch (ex) {
+                response.writeHead(500, { "Content-Type": "application/json" });
+                response.end(JSON.stringify({ error: ex }));
+            }
+            
+            return;
         }
 
         // make sure requested file falls under web root
@@ -85,13 +117,18 @@ export class TypeAgentAPIWebServer {
                 response.end(readFileSync(requestedFile).toString());
 
                 console.log(`Served '${requestedFile}' as '${request.url}'`);
+                return;
             }
         } catch (error) {
             response.writeHead(404, { "Content-Type": "text/plain" });
             response.end("File Not Found!\n");
 
             console.log(`Unable to serve '${request.url}', 404. ${error}`);
+            return;
         }
+
+        response.writeHead(400, { "Content-Type": "text/plain" });
+        response.end("Invalid Request!\n");
     }
 
     start() {

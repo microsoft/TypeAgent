@@ -78,7 +78,10 @@ export class TypeAgentServer {
         debug("Web Dispatcher created.");
 
         // web server
-        this.webServer = new TypeAgentAPIWebServer(this.config);
+        this.webServer = new TypeAgentAPIWebServer(this.config, (action: any) => {
+            // a client passed in an action to perform
+            this.webDispatcher?.handleAction(action);
+        });
         this.webServer.start();
         debug("TypeAgent Web Server created.");
 
