@@ -1,7 +1,6 @@
 {
-  "name": "agent-server-client",
+  "name": "@typeagent/agent-server-client",
   "version": "0.0.1",
-  "private": true,
   "description": "Client for the Type Agent Server",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -28,8 +27,8 @@
   },
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
-    "agent-server-protocol": "workspace:*",
     "debug": "^4.4.0",
     "isomorphic-ws": "^5.0.0"
   },

@@ -29,10 +29,10 @@
   },
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "agent-server-protocol": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",

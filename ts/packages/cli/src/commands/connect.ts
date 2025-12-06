@@ -8,7 +8,7 @@ import {
     processCommands,
     withConsoleClientIO,
 } from "agent-dispatcher/helpers/console";
-import { connectDispatcher } from "agent-server-client";
+import { connectDispatcher } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 
 export default class Connect extends Command {
