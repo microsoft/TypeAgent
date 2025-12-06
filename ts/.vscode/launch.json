@@ -65,7 +65,14 @@
       "cwd": "${workspaceFolder}/packages/api",
       "program": "./dist/index.js",
       "outFiles": ["${workspaceFolder}/**/*.js"],
-      "resolveSourceMapLocations": []
+      "console": "externalTerminal",
+      "resolveSourceMapLocations": [],
+      "serverReadyAction": {
+      "pattern": "Listening on all local IPs at port ([0-9]+)",
+      "uriFormat": "http://localhost:%s/chatView.html",
+      "action": "openExternally"
+      }
+    }
     },
     {
       "type": "node",

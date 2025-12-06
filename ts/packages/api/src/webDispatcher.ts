@@ -15,11 +15,16 @@ import {
 } from "default-agent-provider";
 import WebSocket from "ws";
 import { getFsStorageProvider } from "dispatcher-node-providers";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:webserver:api");
+registerDebug.enable("typeagent:webserver:*");
 
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
     close(): void;
 }
+
 export async function createWebDispatcher(): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createGenericChannel((message: any) =>
@@ -30,6 +35,8 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
             }),
         ),
     );
+
+    debug("Creating Web Dispatcher...");
 
     const instanceDir = getInstanceDir();
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
