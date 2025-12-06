@@ -9,7 +9,7 @@ import {
     UserExpression,
 } from "./electronTypes.js"; // Custom APIs for renderer
 import { Dispatcher } from "agent-dispatcher";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 
@@ -26,11 +26,11 @@ function registerClient(client: Client) {
 
     // Establish the clientIO RPC
     clientRegistered = true;
-    const clientIOChannel = createGenericChannel((message: any) =>
+    const clientIOChannel = createChannelAdapter((message: any) =>
         ipcRenderer.send("clientio-rpc-reply", message),
     );
     ipcRenderer.on("clientio-rpc-call", (_event, message) => {
-        clientIOChannel.message(message);
+        clientIOChannel.notifyMessage(message);
     });
     createClientIORpcServer(client.clientIO, clientIOChannel.channel);
 
@@ -74,12 +74,12 @@ function registerClient(client: Client) {
     ipcRenderer.on("dispatcher-initialized", () => {
         // Resolve the dispatcher promise when the dispatcher is initialized)
         // set up dispatch RPC client
-        const dispatcherChannel = createGenericChannel((message: any) =>
+        const dispatcherChannel = createChannelAdapter((message: any) =>
             ipcRenderer.send("dispatcher-rpc-call", message),
         );
 
         ipcRenderer.on("dispatcher-rpc-reply", (_event, message) => {
-            dispatcherChannel.message(message);
+            dispatcherChannel.notifyMessage(message);
         });
 
         const dispatcher: Dispatcher = createDispatcherRpcClient(

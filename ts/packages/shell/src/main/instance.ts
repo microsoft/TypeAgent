@@ -11,7 +11,7 @@ import {
 import { ShellSettingManager } from "./shellSettings.js";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { ShellWindow } from "./shellWindow.js";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import {
     getDefaultAppAgentInstaller,
@@ -53,14 +53,14 @@ async function initializeDispatcher(
         await cleanupP;
     }
     try {
-        const clientIOChannel = createGenericChannel((message: any) => {
+        const clientIOChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send("clientio-rpc-call", message);
         });
         const onClientIORpcReply = (event, message) => {
             if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
                 return;
             }
-            clientIOChannel.message(message);
+            clientIOChannel.notifyMessage(message);
         };
         ipcMain.on("clientio-rpc-reply", onClientIORpcReply);
 
@@ -194,9 +194,9 @@ async function initializeDispatcher(
                     "dispatcher-rpc-call",
                     onDispatcherRpcCall,
                 );
-                dispatcherChannel.disconnect();
+                dispatcherChannel.notifyDisconnected();
                 await newDispatcher.close();
-                clientIOChannel.disconnect();
+                clientIOChannel.notifyDisconnected();
                 ipcMain.removeListener(
                     "clientio-rpc-reply",
                     onClientIORpcReply,
@@ -206,7 +206,7 @@ async function initializeDispatcher(
         };
 
         // Set up the RPC
-        const dispatcherChannel = createGenericChannel((message: any) => {
+        const dispatcherChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send(
                 "dispatcher-rpc-reply",
                 message,
@@ -216,7 +216,7 @@ async function initializeDispatcher(
             if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
                 return;
             }
-            dispatcherChannel.message(message);
+            dispatcherChannel.notifyMessage(message);
         };
         ipcMain.on("dispatcher-rpc-call", onDispatcherRpcCall);
         createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
