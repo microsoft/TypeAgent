@@ -47,8 +47,8 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     });
 
     let settingSummary: string = "";
-    const updateSettingSummary = (force: boolean = false) => {
-        const status = dispatcher.getStatus();
+    const updateSettingSummary = async (force: boolean = false) => {
+        const status = await dispatcher.getStatus();
         const newSettingSummary = getStatusSummary(status);
         if (force || newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
@@ -78,15 +78,12 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         }
 
         // Update before processing the command in case there was change outside of command processing
-        const summary = updateSettingSummary();
+        const summary = await updateSettingSummary();
         console.log(getConsolePrompt(summary), text);
-
-        // Update before processing the command in case there was change outside of command processing
-        updateSettingSummary();
 
         const result = await dispatcher.processCommand(text, id, images);
 
-        updateSettingSummary();
+        await updateSettingSummary();
 
         return result;
     }

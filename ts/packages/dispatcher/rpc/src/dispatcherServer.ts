@@ -29,6 +29,9 @@ export function createDispatcherRpcServer(
         close: async () => {
             await dispatcher.close();
         },
+        getStatus: async () => {
+            return dispatcher.getStatus();
+        },
     };
 
     createRpc("dispatcher", channel, dispatcherInvokeHandler);

@@ -45,7 +45,7 @@ let quitting: boolean = false;
 async function initializeDispatcher(
     instanceDir: string,
     shellWindow: ShellWindow,
-    updateSummary: (dispatcher: Dispatcher) => string,
+    updateSummary: (dispatcher: Dispatcher) => Promise<string>,
     startTime: number,
 ): Promise<Dispatcher | undefined> {
     if (cleanupP !== undefined) {
@@ -162,7 +162,7 @@ async function initializeDispatcher(
             }
 
             // Update before processing the command in case there was change outside of command processing
-            const summary = updateSummary(dispatcher);
+            const summary = await updateSummary(dispatcher);
 
             if (debugShell.enabled) {
                 debugShell(getConsolePrompt(summary), text);
@@ -182,7 +182,7 @@ async function initializeDispatcher(
             shellWindow.chatView.webContents.focus();
 
             // Update the summary after processing the command in case state changed.
-            updateSummary(dispatcher);
+            await updateSummary(dispatcher);
             return commandResult;
         }
 
@@ -248,8 +248,8 @@ export function initializeInstance(
     const shellWindow = new ShellWindow(shellSettings);
     const { chatView } = shellWindow;
     let title: string = "";
-    function updateTitle(dispatcher: Dispatcher) {
-        const status = dispatcher.getStatus();
+    async function updateTitle(dispatcher: Dispatcher) {
+        const status = await dispatcher.getStatus();
 
         const newSettingSummary = getStatusSummary(status);
         const zoomFactor = chatView.webContents.zoomFactor;

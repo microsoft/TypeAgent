@@ -49,9 +49,9 @@ export default class Interactive extends Command {
                 }
 
                 await processCommands(
-                    (dispatcher: Dispatcher) =>
+                    async (dispatcher: Dispatcher) =>
                         getConsolePrompt(
-                            getStatusSummary(dispatcher.getStatus(), {
+                            getStatusSummary(await dispatcher.getStatus(), {
                                 showPrimaryName: false,
                             }),
                         ),

@@ -116,7 +116,7 @@ export async function createDispatcher(
         async close() {
             await closeCommandHandlerContext(context);
         },
-        getStatus() {
+        async getStatus() {
             return getDispatcherStatus(context);
         },
     };
