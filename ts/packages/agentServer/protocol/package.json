@@ -1,7 +1,6 @@
 {
-  "name": "agent-server-protocol",
+  "name": "@typeagent/agent-server-protocol",
   "version": "0.0.1",
-  "private": true,
   "description": "Protocol definition for the Type Agent Server",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

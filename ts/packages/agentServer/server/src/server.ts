@@ -15,7 +15,10 @@ import { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createPromiseWithResolvers } from "@typeagent/common-utils";
-import { AgentServerInvokeFunctions, ChannelName } from "agent-server-protocol";
+import {
+    AgentServerInvokeFunctions,
+    ChannelName,
+} from "@typeagent/agent-server-protocol";
 import dotenv from "dotenv";
 const envPath = new URL("../../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -89,7 +92,7 @@ async function main() {
                     }
 
                     if (currentChannelProvider) {
-                        throw new Error("Unable tto disconnect");
+                        throw new Error("Unable to disconnect");
                     }
 
                     currentChannelProvider = channelProvider;

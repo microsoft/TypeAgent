@@ -1051,12 +1051,12 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
-      agent-server-protocol:
-        specifier: workspace:*
-        version: link:../protocol
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -1116,6 +1116,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
@@ -1125,9 +1128,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
-      agent-server-protocol:
-        specifier: workspace:*
-        version: link:../protocol
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -2644,6 +2644,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../agentServer/client
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -2659,9 +2662,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
-      agent-server-client:
-        specifier: workspace:*
-        version: link:../agentServer/client
       aiclient:
         specifier: workspace:*
         version: link:../aiclient

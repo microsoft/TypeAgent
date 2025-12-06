@@ -8,7 +8,11 @@ import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc";
 
 import registerDebug from "debug";
-import { AgentServerInvokeFunctions, ChannelName } from "agent-server-protocol";
+import {
+    AgentServerInvokeFunctions,
+    ChannelName,
+} from "@typeagent/agent-server-protocol";
+
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
 
