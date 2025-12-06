@@ -1,6 +1,6 @@
 # agent-server
 
-Agent sever
+Agent server implementation
 
 ## Trademarks
 

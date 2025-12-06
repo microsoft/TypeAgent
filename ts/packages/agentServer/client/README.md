@@ -1,6 +1,6 @@
-# agent-server
+# agent-server-client
 
-Agent sever
+Agent server client
 
 ## Trademarks
 
