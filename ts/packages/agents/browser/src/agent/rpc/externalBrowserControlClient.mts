@@ -7,7 +7,7 @@ import {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
 } from "../../common/browserControl.mjs";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { WebSocketMessageV2 } from "websocket-utils";
 import { AgentWebSocketServer } from "../agentWebSocketServer.mjs";
@@ -20,7 +20,7 @@ export interface ExternalBrowserClient {
 export function createExternalBrowserClient(
     agentWebSocketServer: AgentWebSocketServer,
 ): ExternalBrowserClient {
-    const browserControlChannel = createGenericChannel((message) => {
+    const browserControlChannel = createChannelAdapter((message) => {
         // Message to the active browser extension client (fallback to extension type only)
         const activeClient = agentWebSocketServer.getActiveClient("extension");
         if (activeClient && activeClient.socket.readyState === WebSocket.OPEN) {
@@ -41,7 +41,7 @@ export function createExternalBrowserClient(
                 data.source === "browserExtension" &&
                 data.method === "browserControl/message"
             ) {
-                browserControlChannel.message(data.params);
+                browserControlChannel.notifyMessage(data.params);
             }
         } catch (error) {
             // Ignore parsing errors for non-JSON messages

@@ -120,5 +120,5 @@ export interface Dispatcher {
         prefix: string,
     ): Promise<CommandCompletionResult | undefined>;
 
-    getStatus(): DispatcherStatus;
+    getStatus(): Promise<DispatcherStatus>;
 }

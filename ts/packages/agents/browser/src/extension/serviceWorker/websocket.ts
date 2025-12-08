@@ -5,7 +5,7 @@ import { AppAction } from "./types";
 import { getSettings } from "./storage";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { runBrowserAction } from "./browserActions";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { createExternalBrowserServer } from "./externalBrowserControlServer";
 
 import registerDebug from "debug";
@@ -105,7 +105,7 @@ export async function ensureWebsocketConnected(): Promise<
         keepWebSocketAlive(webSocket);
         broadcastConnectionStatus(true);
 
-        const browserControlChannel = createGenericChannel((message: any) => {
+        const browserControlChannel = createChannelAdapter((message: any) => {
             if (webSocket && webSocket.readyState === WebSocket.OPEN) {
                 const text = JSON.stringify({
                     source: "browserExtension",
@@ -137,7 +137,7 @@ export async function ensureWebsocketConnected(): Promise<
             }
             if (data.method === "browserControl/message") {
                 if (data.source === "browserAgent") {
-                    browserControlChannel.message(data.params);
+                    browserControlChannel.notifyMessage(data.params);
                 }
                 return;
             }

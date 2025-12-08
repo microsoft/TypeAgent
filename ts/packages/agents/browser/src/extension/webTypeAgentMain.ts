@@ -3,8 +3,8 @@
 
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import {
-    createGenericChannel,
-    createGenericChannelProvider,
+    createChannelAdapter,
+    createChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
@@ -53,7 +53,7 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     if (manager !== undefined) {
         return manager;
     }
-    const messageChannelProvider = createGenericChannelProvider(
+    const messageChannelProvider = createChannelProviderAdapter(
         (message: any) => {
             window.postMessage({
                 source: "webAgent",
@@ -63,7 +63,7 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
         },
     );
 
-    const registerChannel = createGenericChannel((message: any) => {
+    const registerChannel = createChannelAdapter((message: any) => {
         window.postMessage({
             source: "webAgent",
             method: "webAgent/register",
@@ -103,14 +103,14 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
         if (isWebAgentMessageFromDispatcher(data)) {
             switch (data.method) {
                 case "webAgent/register":
-                    registerChannel.message(data.params);
+                    registerChannel.notifyMessage(data.params);
                     break;
                 case "webAgent/message":
-                    messageChannelProvider.message(data.params);
+                    messageChannelProvider.notifyMessage(data.params);
                     break;
                 case "webAgent/disconnect":
-                    messageChannelProvider.disconnect();
-                    registerChannel.disconnect();
+                    messageChannelProvider.notifyDisconnected();
+                    registerChannel.notifyDisconnected();
                     window.removeEventListener("message", messageHandler);
                     manager = undefined;
                     break;

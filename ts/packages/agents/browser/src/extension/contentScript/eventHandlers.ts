@@ -22,7 +22,7 @@ import {
     extractSchemaFromLinkedPages,
 } from "./schemaExtraction";
 import { awaitPageIncrementalUpdates } from "./loadingDetector";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 
@@ -55,7 +55,7 @@ export function initializeEventHandlers(): void {
  * Sets up message listeners for communication with the extension
  */
 function setupMessageListeners(): void {
-    const contentScriptExtensionChannel = createGenericChannel((message) => {
+    const contentScriptExtensionChannel = createChannelAdapter((message) => {
         // Send messages to the background script
         chrome.runtime?.sendMessage({
             type: "rpc",
@@ -67,7 +67,7 @@ function setupMessageListeners(): void {
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
             if (message.type === "rpc") {
-                contentScriptExtensionChannel.message(message.message);
+                contentScriptExtensionChannel.notifyMessage(message.message);
                 return false;
             }
 
@@ -81,7 +81,7 @@ function setupMessageListeners(): void {
         },
     );
 
-    const contentScriptChannel = createGenericChannel((message) => {
+    const contentScriptChannel = createChannelAdapter((message) => {
         window.postMessage({
             source: "contentScript",
             target: "preload",
@@ -103,7 +103,7 @@ function setupMessageListeners(): void {
                 switch (event.data.messageType) {
                     case "rpc":
                         // Handle RPC messages
-                        contentScriptChannel.message(event.data.body);
+                        contentScriptChannel.notifyMessage(event.data.body);
                         break;
                     case "scriptActionRequest":
                         await handleMessage(event.data.body, (response) => {
