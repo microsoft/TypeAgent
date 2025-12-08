@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    createGenericChannel,
-    GenericChannel,
+    createChannelAdapter,
+    ChannelAdapter,
     RpcChannel,
 } from "@typeagent/agent-rpc/channel";
 import { getActiveTab } from "./tabManager";
@@ -32,13 +32,13 @@ async function ensureActiveTab() {
 export function createExternalBrowserServer(channel: RpcChannel) {
     const rpcMap = new Map<
         number,
-        { channel: GenericChannel; contentScriptRpc: ContentScriptRpc }
+        { channel: ChannelAdapter; contentScriptRpc: ContentScriptRpc }
     >();
 
     chrome.tabs.onRemoved.addListener((tabId) => {
         const entry = rpcMap.get(tabId);
         if (entry) {
-            entry.channel.disconnect();
+            entry.channel.notifyDisconnected();
             rpcMap.delete(tabId);
         }
     });
@@ -49,7 +49,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             return entry.contentScriptRpc;
         }
 
-        const contentScriptRpcChannel = createGenericChannel(
+        const contentScriptRpcChannel = createChannelAdapter(
             async (message, cb) => {
                 try {
                     await chrome.tabs.sendMessage(tabId, {
@@ -116,7 +116,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             if (message.type === "rpc") {
                 const tabId = sender.tab?.id;
                 if (tabId) {
-                    rpcMap.get(tabId)?.channel.message(message.message);
+                    rpcMap.get(tabId)?.channel.notifyMessage(message.message);
                 }
             }
         },

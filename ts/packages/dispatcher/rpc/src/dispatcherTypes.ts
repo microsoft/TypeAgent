@@ -9,6 +9,7 @@ import type {
 import type {
     CommandCompletionResult,
     CommandResult,
+    DispatcherStatus,
 } from "@typeagent/dispatcher-types";
 
 export type DispatcherInvokeFunctions = {
@@ -41,4 +42,6 @@ export type DispatcherInvokeFunctions = {
     ): Promise<CommandCompletionResult | undefined>;
 
     close(): Promise<void>;
+
+    getStatus(): Promise<DispatcherStatus>;
 };

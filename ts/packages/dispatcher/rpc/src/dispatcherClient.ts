@@ -6,10 +6,6 @@ import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
 import type { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
 
-function remoteCallNotSupported(): never {
-    throw new Error("Remote call not supported");
-}
-
 export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
     const rpc = createRpc<DispatcherInvokeFunctions>("dispatcher", channel);
 
@@ -32,6 +28,8 @@ export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
         async close() {
             return rpc.invoke("close");
         },
-        getStatus: remoteCallNotSupported,
+        async getStatus() {
+            return rpc.invoke("getStatus");
+        },
     };
 }

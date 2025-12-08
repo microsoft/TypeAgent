@@ -3,10 +3,10 @@
 
 import { Client, ClientAPI } from "../../preload/electronTypes.js";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
 
-const clientIOChannel = createGenericChannel((message: any) =>
+const clientIOChannel = createChannelAdapter((message: any) =>
     globalThis.ws.send(
         JSON.stringify({
             message: "clientio-rpc-reply",
@@ -77,7 +77,7 @@ export const webapi: ClientAPI = {
     },
 };
 
-const dispatcherChannel = createGenericChannel((message: any) =>
+const dispatcherChannel = createChannelAdapter((message: any) =>
     globalThis.ws.send(
         JSON.stringify({
             message: "dispatcher-rpc-call",
@@ -112,11 +112,11 @@ export async function createWebSocket(autoReconnect: boolean = true) {
             console.log(msgObj);
             switch (msgObj.message) {
                 case "clientio-rpc-call":
-                    clientIOChannel.message(msgObj.data);
+                    clientIOChannel.notifyMessage(msgObj.data);
                     break;
 
                 case "dispatcher-rpc-reply":
-                    dispatcherChannel.message(msgObj.data);
+                    dispatcherChannel.notifyMessage(msgObj.data);
                     break;
 
                 case "setting-summary-changed":
@@ -162,8 +162,8 @@ export async function createWebSocket(autoReconnect: boolean = true) {
             if (autoReconnect) {
                 createWebSocket().then((ws) => (globalThis.ws = ws));
             } else {
-                clientIOChannel.disconnect();
-                dispatcherChannel.disconnect();
+                clientIOChannel.notifyDisconnected();
+                dispatcherChannel.notifyDisconnected();
             }
         };
         webSocket.onerror = (event: object) => {
