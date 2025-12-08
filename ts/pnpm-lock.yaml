@@ -2363,6 +2363,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../dispatcher/rpc
+      agent-cache:
+        specifier: workspace:*
+        version: link:../cache
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher

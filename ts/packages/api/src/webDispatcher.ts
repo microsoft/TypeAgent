@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createDispatcher } from "agent-dispatcher";
+import { CommandResult, createDispatcher } from "agent-dispatcher";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getInstanceDir, getClientId } from "agent-dispatcher/helpers/data";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
@@ -15,11 +15,18 @@ import {
 } from "default-agent-provider";
 import WebSocket from "ws";
 import { getFsStorageProvider } from "dispatcher-node-providers";
+import registerDebug from "debug";
+import { FullAction } from "agent-cache";
+
+const debug = registerDebug("typeagent:webserver:api");
+registerDebug.enable("typeagent:webserver:*");
 
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
     close(): void;
+    handleAction(action: FullAction): Promise<CommandResult>;
 }
+
 export async function createWebDispatcher(): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createChannelAdapter((message: any) =>
@@ -30,6 +37,8 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
             }),
         ),
     );
+
+    debug("Creating Web Dispatcher...");
 
     const instanceDir = getInstanceDir();
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
@@ -68,6 +77,16 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         return newSettingSummary;
     };
 
+    async function handleAction(action: FullAction): Promise<any> {
+        // TODO: expose executeAction so we can call that directly instead of running it through a command
+        // TODO: bubble back any action results along with the command result
+        await dispatcher.processCommand(
+            `@action ${action.schemaName} ${action.actionName} --parameters '${JSON.stringify(action.parameters).replaceAll("'", "\\'")}'`,
+            undefined,
+            undefined,
+        );
+    }
+
     async function processShellRequest(
         text: string,
         id: string,
@@ -91,6 +110,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const patchedDispatcher = {
         ...dispatcher,
         processCommand: processShellRequest,
+        handleAction: handleAction,
     };
 
     const dispatcherChannel = createChannelAdapter((message: any) =>
@@ -138,5 +158,6 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         close: () => {
             dispatcher.close();
         },
+        handleAction: handleAction,
     };
 }
