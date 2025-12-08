@@ -40,6 +40,8 @@ public class TestCommands : ICommandModule
         {
             // TODO: finish
             Args.Arg<bool>("andTerms", "'And' all terms. Set to TRUE, otherwise search terms are 'Or'", false),
+            Args.Arg<bool>("displayAsc", "Display results in ascending order", true),
+            Args.Arg<bool>("distinct", "Show distinct results", true),
             Args.Arg<string>("ktype", "Filter results to a specific knowledge type.", "entity"),
             Args.Arg<bool>("exact", "Exact match only. No related terms.", false)
 
@@ -73,7 +75,10 @@ public class TestCommands : ICommandModule
         //    "book"
         //};
 
-        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), cancellationToken);
+        // get the named args
+        NamedArgs namedArgs = new NamedArgs(result);
+
+        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), namedArgs.Get<bool>("displayAsc"), cancellationToken);
     }
 
     private SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs)
@@ -97,9 +102,7 @@ public class TestCommands : ICommandModule
             { parsedArgs.UnmatchedTokens, exactMatch }
         };
         // TODO: finish all parameters
-        // TODO: Finish when filter implementation
         WhenFilter? when = null;
-
         if (namedArgs.Get("ktype") is not null)
         {
             when = new WhenFilter();
@@ -131,7 +134,7 @@ public class TestCommands : ICommandModule
             { "genre", "sci-fi" },
             { KnowledgePropertyName.EntityName, "Children of Time" },
         };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, searchGroup, new NamedArgs(result).Get<bool>("displayAsc"), cancellationToken);
     }
 
     private Command SearchMessagesTermsDef()
@@ -323,12 +326,12 @@ public class TestCommands : ICommandModule
         }
     }
 
-    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, bool ascending, CancellationToken cancellationToken)
     {
-        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), ascending, cancellationToken);
     }
 
-    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, bool ascending, CancellationToken cancellationToken)
     {
         KnowProWriter.WriteLine(searchExpresion);
 
@@ -338,7 +341,7 @@ public class TestCommands : ICommandModule
             cancellationToken
         ).ConfigureAwait(false);
 
-        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results);
+        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results, null, ascending);
     }
 
     private Command SearchQueryTermsDef()

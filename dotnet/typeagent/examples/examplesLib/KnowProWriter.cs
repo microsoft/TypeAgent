@@ -243,24 +243,34 @@ public class KnowProWriter : ConsoleWriter
         }
 
         var matchesToDisplay = semanticRefMatches.Slice(0, maxToDisplay);
-        WriteLine($"Displaying {matchesToDisplay.Count} matches of total {semanticRefMatches.Count}");
 
         if (kType == KnowledgeType.Entity)
         {
             IList<Scored<ConcreteEntity>> distinctEntities = await semanticRefCollection.GetDistinctEntitiesAsync(matchesToDisplay);
+
+            var entitesToDisplay = distinctEntities.Slice(0, maxToDisplay < distinctEntities.Count ? maxToDisplay : distinctEntities.Count);
+            WriteLine($"Displaying {entitesToDisplay.Count} matches of total {semanticRefMatches.Count}");
+            if (entitesToDisplay.Count < matchesToDisplay.Count)
+            {
+                WriteLine(ConsoleColor.Yellow, "Duplicate entities have been removed from the results.");
+            }
+            WriteLine();
+
             for (int i = 0; i < distinctEntities.Count; ++i)
             {
-                var pos = isAsc ? matchesToDisplay.Count - (i + 1) : i;
+                var pos = isAsc ? entitesToDisplay.Count - (i + 1) : i;
                 WriteLine(
                     ConsoleColor.Green,
-                    $"{pos + 1} / {distinctEntities.Count}: [{distinctEntities[i].Score}]"
+                    $"{pos + 1} / {distinctEntities.Count}: [{distinctEntities[pos].Score}]"
                 );
-                WriteEntity(distinctEntities[i]);
+                WriteEntity(distinctEntities[pos]);
                 WriteLine();
             }
         }
         else
         {
+            WriteLine($"Displaying {matchesToDisplay.Count} matches of total {semanticRefMatches.Count}");
+
             IList<SemanticRef> semanticRefs = await semanticRefCollection.GetAsync(matchesToDisplay);
             for (int i = 0; i < matchesToDisplay.Count; ++i)
             {
