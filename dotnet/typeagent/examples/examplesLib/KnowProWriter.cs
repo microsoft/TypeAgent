@@ -161,9 +161,7 @@ public class KnowProWriter : ConsoleWriter
     public static async Task WriteKnowledgeSearchResultsAsync(
         IConversation conversation,
         IDictionary<KnowledgeType, SemanticRefSearchResult>? results,
-        int? maxToDisplay = null,
-        bool isAsc = false,
-        bool distinct = true
+        WriterOptions? options = null
     )
     {
         if (results.IsNullOrEmpty())
@@ -174,7 +172,7 @@ public class KnowProWriter : ConsoleWriter
 
         foreach (var kv in results!)
         {
-            await WriteKnowledgeSearchResultAsync(conversation, kv.Key, kv.Value, maxToDisplay, isAsc, distinct);
+            await WriteKnowledgeSearchResultAsync(conversation, kv.Key, kv.Value, options);
             WriteLine();
         }
     }
@@ -183,11 +181,11 @@ public class KnowProWriter : ConsoleWriter
         IConversation conversation,
         KnowledgeType kType,
         SemanticRefSearchResult result,
-        int? maxToDisplay = null,
-        bool isAsc = true,
-        bool distinct = true
+        WriterOptions? options = null
     )
     {
+        options ??= WriterOptions.Default;
+
         WriteLineUnderline(kType.ToString().ToUpper());
         InColor(ConsoleColor.Cyan, () => WriteList(
             result.TermMatches,
@@ -200,9 +198,7 @@ public class KnowProWriter : ConsoleWriter
             result.SemanticRefMatches,
             conversation.SemanticRefs,
             kType,
-            maxToDisplay is not null ? maxToDisplay.Value : result.SemanticRefMatches.Count,
-            isAsc,
-            distinct
+            options
         );
     }
 
@@ -236,30 +232,30 @@ public class KnowProWriter : ConsoleWriter
         IList<ScoredSemanticRefOrdinal> semanticRefMatches,
         ISemanticRefCollection semanticRefCollection,
         KnowledgeType kType,
-        int maxToDisplay,
-        bool isAsc = true,
-        bool distinct = true
+        WriterOptions? options = null
     )
     {
-        if (isAsc)
+        options ??= WriterOptions.Default;
+
+        if (options!.Ascending == true)
         {
             WriteLine("Sorted in ascending order(lowest first)");
         }
 
-        var matchesToDisplay = semanticRefMatches.Slice(0, maxToDisplay);
+        var matchesToDisplay = semanticRefMatches.Slice(0, options!.MaxToDisplay);
 
         if (kType == KnowledgeType.Entity)
         {
             // Get the entity details (either distinct or not)
-            IList<Scored<ConcreteEntity>>? entities = distinct
+            IList<Scored<ConcreteEntity>>? entities = options!.Distinct
                 ? await semanticRefCollection.GetDistinctEntitiesAsync(matchesToDisplay)
                 : await semanticRefCollection.GetEntitiesAsync(matchesToDisplay);
 
             // trim the list to max to display
-            var entitesToDisplay = entities.Slice(0, maxToDisplay < entities.Count ? maxToDisplay : entities.Count);
+            var entitesToDisplay = entities.Slice(0, options!.MaxToDisplay < entities.Count ? options!.MaxToDisplay : entities.Count);
 
             // warn the user some dupes were trimmed
-            if (distinct && entitesToDisplay.Count < matchesToDisplay.Count)
+            if (options!.Distinct && entitesToDisplay.Count < matchesToDisplay.Count)
             {
                 WriteLine(ConsoleColor.Yellow, "Duplicate entities have been removed from the results.");
             }
@@ -269,7 +265,7 @@ public class KnowProWriter : ConsoleWriter
             // display each entity
             for (int i = 0; i < entities.Count; ++i)
             {
-                var pos = isAsc ? entitesToDisplay.Count - (i + 1) : i;
+                var pos = options.Ascending ? entitesToDisplay.Count - (i + 1) : i;
                 WriteLine(
                     ConsoleColor.Green,
                     $"{pos + 1} / {entities.Count}: [{entities[pos].Score}]"
@@ -285,7 +281,7 @@ public class KnowProWriter : ConsoleWriter
             IList<SemanticRef> semanticRefs = await semanticRefCollection.GetAsync(matchesToDisplay);
             for (int i = 0; i < matchesToDisplay.Count; ++i)
             {
-                var pos = isAsc ? matchesToDisplay.Count - (i + 1) : i;
+                var pos = options!.Ascending ? matchesToDisplay.Count - (i + 1) : i;
                 WriteScoredRef(
                     pos,
                     matchesToDisplay.Count,
@@ -324,5 +320,26 @@ public class KnowProWriter : ConsoleWriter
         {
             WriteLine($"SemanticRefIndex count: 0");
         }
+    }
+
+    /// <summary>
+    /// Display options
+    /// </summary>
+    public class WriterOptions
+    {
+        public static WriterOptions Default { get; } = new();
+
+        public bool Ascending { get; set; } = true;
+
+        public bool Distinct { get; set; } = true;
+
+        public int MaxToDisplay { get; set; } = 25;
+
+        public bool ShowKnowledge { get; set; } = false;
+
+        public bool ShowMessages { get; set; } = false;
+
+        public bool Verbose { get; set; } = false;
+
     }
 }

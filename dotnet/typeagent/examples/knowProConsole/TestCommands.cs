@@ -7,6 +7,7 @@ using TypeAgent.ExamplesLib.CommandLine;
 using TypeAgent.KnowPro;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
+using static TypeAgent.ExamplesLib.KnowProWriter;
 
 namespace KnowProConsole;
 
@@ -39,13 +40,18 @@ public class TestCommands : ICommandModule
         Command cmd = new("kpTestSearchTerms")
         {
             // TODO: finish
-            Args.Arg<bool>("andTerms", "'And' all terms. Set to TRUE, otherwise search terms are 'Or'", false),
-            Args.Arg<bool>("displayAsc", "Display results in ascending order", true),
-            Args.Arg<bool>("distinct", "Show distinct results", true),
-            Args.Arg<string>("ktype", "Filter results to a specific knowledge type.", "entity"),
-            Args.Arg<bool>("exact", "Exact match only. No related terms.", false)
-
+            Options.Arg<bool>("andTerms", "'And' all terms. Set to TRUE, otherwise search terms are 'Or'.", false),
+            Options.Arg<bool>("displayAsc", "Display results in ascending order.", true),
+            Options.Arg<bool>("distinct", "Show distinct results.", true),
+            Options.Arg<string>("endDate", "Ending at this date (ISO format)."),
+            Options.Arg<int>("endMinute", "Ending minute."),
+            Options.Arg<bool>("exact", "Exact match only. No related terms.", false),
+            Options.Arg<string>("ktype", "Filter results to a specific knowledge type [entity | topic | action | tag]."),
+            Options.Arg<int>("maxToDisplay", "Maximum number of results to display", 25),
+            Options.Arg<string>("startDate", "Starting at this date (ISO format)."),
+            Options.Arg<int>("startMinute", "Starting minute."),
         };
+
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.SearchTermsAsync);
         return cmd;
@@ -78,9 +84,21 @@ public class TestCommands : ICommandModule
         // get the named args
         NamedArgs namedArgs = new NamedArgs(result);
 
-        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), namedArgs.Get<bool>("displayAsc"), namedArgs.Get<bool>("distinct"), cancellationToken);
+        WriterOptions options = new WriterOptions()
+        {
+            MaxToDisplay = namedArgs.Get("MaxToDisplay") is not null ? namedArgs.Get<int>("MaxToDisplay") : WriterOptions.Default.MaxToDisplay,
+            Ascending = namedArgs.Get<bool>("displayAsc"),
+            Distinct = namedArgs.Get<bool>("distinct")
+        };
+
+        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), options, cancellationToken);
     }
 
+    /// <summary>
+    /// Conerts the supplied parsed command line arguments into a search select expression.
+    /// </summary>
+    /// <param name="parsedArgs">The parsed command arguments.</param>
+    /// <returns>A select expression representing the supplied argumentns</returns>
     private SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs)
     {
         // get the named args
@@ -101,7 +119,7 @@ public class TestCommands : ICommandModule
             // add unmatched tokens as search terms
             { parsedArgs.UnmatchedTokens, exactMatch }
         };
-        // TODO: finish all parameters
+
         WhenFilter? when = null;
         if (namedArgs.Get("ktype") is not null)
         {
@@ -134,7 +152,18 @@ public class TestCommands : ICommandModule
             { "genre", "sci-fi" },
             { KnowledgePropertyName.EntityName, "Children of Time" },
         };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, new NamedArgs(result).Get<bool>("displayAsc"), new NamedArgs(result).Get<bool>("distinct"), cancellationToken);
+
+        // get the named args
+        NamedArgs namedArgs = new NamedArgs(result);
+
+        WriterOptions options = new WriterOptions()
+        {
+            MaxToDisplay = namedArgs.Get("MaxToDisplay") is not null ? namedArgs.Get<int>("MaxToDisplay") : WriterOptions.Default.MaxToDisplay,
+            Ascending = namedArgs.Get<bool>("displayAsc"),
+            Distinct = namedArgs.Get<bool>("distinct")
+        };
+
+        await TestSearchKnowledgeAsync(conversation, searchGroup, options, cancellationToken);
     }
 
     private Command SearchMessagesTermsDef()
@@ -326,12 +355,12 @@ public class TestCommands : ICommandModule
         }
     }
 
-    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, bool ascending, bool distinct, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, WriterOptions options, CancellationToken cancellationToken)
     {
-        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), ascending, distinct, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), options, cancellationToken);
     }
 
-    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, bool ascending, bool distinct, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, WriterOptions options, CancellationToken cancellationToken)
     {
         KnowProWriter.WriteLine(searchExpresion);
 
@@ -341,7 +370,7 @@ public class TestCommands : ICommandModule
             cancellationToken
         ).ConfigureAwait(false);
 
-        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results, null, ascending, distinct);
+        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results, options);
     }
 
     private Command SearchQueryTermsDef()
