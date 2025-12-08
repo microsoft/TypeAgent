@@ -23,7 +23,10 @@ export class TypeAgentAPIWebServer {
     private secureServer: SecureServer<any, any> | undefined;
     private actionHandler: (action: any) => any;
 
-    constructor(config: TypeAgentAPIServerConfig, actionHandler: (action: any) => any) {
+    constructor(
+        config: TypeAgentAPIServerConfig,
+        actionHandler: (action: any) => any,
+    ) {
         // web server
         this.server = createServer((request: any, response: any) => {
             this.serve(config, request, response);
@@ -70,29 +73,33 @@ export class TypeAgentAPIWebServer {
 
         // process POST requests
         let url = new URL(request.url, "http://localhost");
-        if (url.pathname == "/action/" && (request.method === "PUT" || request.method === "GET")) {
-
+        if (
+            url.pathname == "/action/" &&
+            (request.method === "PUT" || request.method === "GET")
+        ) {
             let data: string | null = "";
             if (request.method === "PUT") {
                 data = request.read();
             } else {
                 data = url.searchParams.get("a");
             }
-            
+
             try {
-                var action: any = JSON.parse(data?.toString() ?? "");    
-                console.log("Received action request: ", JSON.stringify(action, null, 2));
+                var action: any = JSON.parse(data?.toString() ?? "");
+                console.log(
+                    "Received action request: ",
+                    JSON.stringify(action, null, 2),
+                );
 
                 var actionResult = this.actionHandler(action);
 
                 response.writeHead(200, { "Content-Type": "application/json" });
                 response.end(JSON.stringify(actionResult));
-
             } catch (ex) {
                 response.writeHead(500, { "Content-Type": "application/json" });
                 response.end(JSON.stringify({ error: ex }));
             }
-            
+
             return;
         }
 

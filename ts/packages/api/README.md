@@ -10,7 +10,7 @@ After setting up and building at the workspace root, there are several ways to s
 
 ### Locally
 
-The server can be started with `npm run start` in this package's directory. Then connect to `http://localhost:3000` using a web browser.  If you want to load the Shell interface in the browser window you want to open `http://localhost:3000/chatView.html`
+The server can be started with `npm run start` in this package's directory. Then connect to `http://localhost:3000` using a web browser. If you want to load the Shell interface in the browser window you want to open `http://localhost:3000/chatView.html`
 
 ### Docker Image
 

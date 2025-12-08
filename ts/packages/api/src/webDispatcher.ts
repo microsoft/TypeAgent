@@ -80,8 +80,12 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     async function handleAction(action: FullAction): Promise<any> {
         // TODO: expose executeAction so we can call that directly instead of running it through a command
         // TODO: bubble back any action results along with the command result
-        await dispatcher.processCommand(`@action ${action.schemaName} ${action.actionName} --parameters '${JSON.stringify(action.parameters).replaceAll("'", "\\'")}'` , undefined, undefined);
-    };
+        await dispatcher.processCommand(
+            `@action ${action.schemaName} ${action.actionName} --parameters '${JSON.stringify(action.parameters).replaceAll("'", "\\'")}'`,
+            undefined,
+            undefined,
+        );
+    }
 
     async function processShellRequest(
         text: string,

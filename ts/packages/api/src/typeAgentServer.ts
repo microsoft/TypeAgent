@@ -38,7 +38,6 @@ export class TypeAgentServer {
     private config: TypeAgentAPIServerConfig;
 
     constructor(private envPath: string) {
-
         debug(`Loading .env from path: ${envPath}`);
 
         // typeAgent config
@@ -61,7 +60,9 @@ export class TypeAgentServer {
             ]();
             debug(`Storage provider setup: ${this.config.storageProvider}`);
         } else {
-            debug(`Skipping storage provider setup [backupEnabled: ${this.config.blobBackupEnabled}] [provider: ${this.config.storageProvider}]`);
+            debug(
+                `Skipping storage provider setup [backupEnabled: ${this.config.blobBackupEnabled}] [provider: ${this.config.storageProvider}]`,
+            );
         }
     }
 
@@ -78,10 +79,13 @@ export class TypeAgentServer {
         debug("Web Dispatcher created.");
 
         // web server
-        this.webServer = new TypeAgentAPIWebServer(this.config, (action: any) => {
-            // a client passed in an action to perform
-            this.webDispatcher?.handleAction(action);
-        });
+        this.webServer = new TypeAgentAPIWebServer(
+            this.config,
+            (action: any) => {
+                // a client passed in an action to perform
+                this.webDispatcher?.handleAction(action);
+            },
+        );
         this.webServer.start();
         debug("TypeAgent Web Server created.");
 
