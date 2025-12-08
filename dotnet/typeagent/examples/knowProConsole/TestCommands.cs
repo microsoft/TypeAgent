@@ -39,7 +39,6 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestSearchTerms")
         {
-            // TODO: finish
             Options.Arg<bool>("andTerms", "'And' all terms. Set to TRUE, otherwise search terms are 'Or'.", false),
             Options.Arg<bool>("displayAsc", "Display results in ascending order.", true),
             Options.Arg<bool>("distinct", "Show distinct results.", true),
@@ -83,23 +82,26 @@ public class TestCommands : ICommandModule
 
         // get the named args
         NamedArgs namedArgs = new NamedArgs(result);
-
+        
         WriterOptions options = new WriterOptions()
         {
-            MaxToDisplay = namedArgs.Get("MaxToDisplay") is not null ? namedArgs.Get<int>("MaxToDisplay") : WriterOptions.Default.MaxToDisplay,
+            MaxToDisplay = namedArgs.Get("maxToDisplay") is not null ? namedArgs.Get<int>("maxToDisplay") : WriterOptions.Default.MaxToDisplay,
             Ascending = namedArgs.Get<bool>("displayAsc"),
             Distinct = namedArgs.Get<bool>("distinct")
         };
 
-        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), options, cancellationToken);
+        var convTimeRange = await conversation.GetStartTimestampRangeAsync();
+
+        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result, convTimeRange), options, cancellationToken);
     }
 
     /// <summary>
     /// Conerts the supplied parsed command line arguments into a search select expression.
     /// </summary>
     /// <param name="parsedArgs">The parsed command arguments.</param>
+    /// <param name="convTimeRange">The conversation timerange</param>
     /// <returns>A select expression representing the supplied argumentns</returns>
-    private SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs)
+    private SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs, TimestampRange? convTimeRange)
     {
         // get the named args
         NamedArgs namedArgs = new NamedArgs(parsedArgs);
@@ -125,6 +127,32 @@ public class TestCommands : ICommandModule
         {
             when = new WhenFilter();
             when.KnowledgeType = KnowledgeType.Parse(namedArgs.Get("ktype")!);
+        }
+
+        // start and end dates
+        TimestampRange? timestampRange = null;
+        if (namedArgs.Get("startDate") is not null || namedArgs.Get("endDate") is not null)
+        {
+            timestampRange = new TimestampRange()
+            {
+                StartTimestamp = namedArgs.Get("startDate") ?? convTimeRange?.StartTimestamp ?? string.Empty,
+                EndTimestamp = namedArgs.Get("endDate") ?? convTimeRange?.EndTimestamp ?? string.Empty
+            };
+
+            DateRange dateRange = new(timestampRange.Value);
+
+            if (namedArgs.Get("startMinute") is not null)
+            {
+                dateRange.Start = dateRange.Start.AddMinutes(namedArgs.Get<int>("startMinute"));
+            }
+
+            if (namedArgs.Get("endMinute") is not null && dateRange.HasEnd)
+            {
+                dateRange.End = dateRange.End!.Value.AddMinutes(namedArgs.Get<int>("endMinute"));
+            }
+
+            when ??= new WhenFilter();
+            when.DateRange = dateRange;
         }
 
         SearchSelectExpr select = new SearchSelectExpr(stg, when);

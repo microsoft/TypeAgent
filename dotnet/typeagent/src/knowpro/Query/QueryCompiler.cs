@@ -238,7 +238,6 @@ internal class QueryCompiler
 
         var selectExpr = CompileSelect(searchGroup, scopeExpr);
 
-        // TODO: implement
         // Constrain the select with scopes and 'where'
         WhereExpr? whereExpr = null;
         if (whenFilter.KnowledgeType is not null)
