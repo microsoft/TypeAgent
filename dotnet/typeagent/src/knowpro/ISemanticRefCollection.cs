@@ -96,6 +96,26 @@ public static class SemanticRefCollectionExtensions
             : [.. entitites];
     }
 
+    public static async ValueTask<IList<Scored<ConcreteEntity>>> GetEntitiesAsync(
+        this IAsyncCollectionReader<SemanticRef> semanticRefs,
+        IList<ScoredSemanticRefOrdinal> semanticRefMatches,
+        int? topK = null
+    )
+    {
+        var scoredEntities = await semanticRefs.GetScoredAsync(
+            semanticRefMatches
+        ).ConfigureAwait(false);
+
+        IEnumerable<Scored<ConcreteEntity>> entities = scoredEntities.Select((v) =>
+        {
+            return new Scored<ConcreteEntity>(v.Item.AsEntity(), v.Score);
+        });
+
+        return (topK is not null)
+            ? entities.GetTopK(topK.Value)
+            : [.. entities];
+    }
+
     public static async ValueTask<IList<ConcreteEntity>> GetAllEntitiesAsync(
         this ISemanticRefCollection semanticRefs,
         CancellationToken cancellation = default

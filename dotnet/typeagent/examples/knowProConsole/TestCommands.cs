@@ -78,7 +78,7 @@ public class TestCommands : ICommandModule
         // get the named args
         NamedArgs namedArgs = new NamedArgs(result);
 
-        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), namedArgs.Get<bool>("displayAsc"), cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result), namedArgs.Get<bool>("displayAsc"), namedArgs.Get<bool>("distinct"), cancellationToken);
     }
 
     private SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs)
@@ -134,7 +134,7 @@ public class TestCommands : ICommandModule
             { "genre", "sci-fi" },
             { KnowledgePropertyName.EntityName, "Children of Time" },
         };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, new NamedArgs(result).Get<bool>("displayAsc"), cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, searchGroup, new NamedArgs(result).Get<bool>("displayAsc"), new NamedArgs(result).Get<bool>("distinct"), cancellationToken);
     }
 
     private Command SearchMessagesTermsDef()
@@ -326,12 +326,12 @@ public class TestCommands : ICommandModule
         }
     }
 
-    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, bool ascending, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, bool ascending, bool distinct, CancellationToken cancellationToken)
     {
-        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), ascending, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), ascending, distinct, cancellationToken);
     }
 
-    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, bool ascending, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, bool ascending, bool distinct, CancellationToken cancellationToken)
     {
         KnowProWriter.WriteLine(searchExpresion);
 
@@ -341,7 +341,7 @@ public class TestCommands : ICommandModule
             cancellationToken
         ).ConfigureAwait(false);
 
-        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results, null, ascending);
+        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results, null, ascending, distinct);
     }
 
     private Command SearchQueryTermsDef()

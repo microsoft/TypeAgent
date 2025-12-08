@@ -162,7 +162,8 @@ public class KnowProWriter : ConsoleWriter
         IConversation conversation,
         IDictionary<KnowledgeType, SemanticRefSearchResult>? results,
         int? maxToDisplay = null,
-        bool isAsc = false
+        bool isAsc = false,
+        bool distinct = true
     )
     {
         if (results.IsNullOrEmpty())
@@ -173,7 +174,7 @@ public class KnowProWriter : ConsoleWriter
 
         foreach (var kv in results!)
         {
-            await WriteKnowledgeSearchResultAsync(conversation, kv.Key, kv.Value, maxToDisplay, isAsc);
+            await WriteKnowledgeSearchResultAsync(conversation, kv.Key, kv.Value, maxToDisplay, isAsc, distinct);
             WriteLine();
         }
     }
@@ -183,7 +184,8 @@ public class KnowProWriter : ConsoleWriter
         KnowledgeType kType,
         SemanticRefSearchResult result,
         int? maxToDisplay = null,
-        bool isAsc = true
+        bool isAsc = true,
+        bool distinct = true
     )
     {
         WriteLineUnderline(kType.ToString().ToUpper());
@@ -199,7 +201,8 @@ public class KnowProWriter : ConsoleWriter
             conversation.SemanticRefs,
             kType,
             maxToDisplay is not null ? maxToDisplay.Value : result.SemanticRefMatches.Count,
-            isAsc
+            isAsc,
+            distinct
         );
     }
 
@@ -234,7 +237,8 @@ public class KnowProWriter : ConsoleWriter
         ISemanticRefCollection semanticRefCollection,
         KnowledgeType kType,
         int maxToDisplay,
-        bool isAsc = true
+        bool isAsc = true,
+        bool distinct = true
     )
     {
         if (isAsc)
@@ -246,24 +250,31 @@ public class KnowProWriter : ConsoleWriter
 
         if (kType == KnowledgeType.Entity)
         {
-            IList<Scored<ConcreteEntity>> distinctEntities = await semanticRefCollection.GetDistinctEntitiesAsync(matchesToDisplay);
+            // Get the entity details (either distinct or not)
+            IList<Scored<ConcreteEntity>>? entities = distinct
+                ? await semanticRefCollection.GetDistinctEntitiesAsync(matchesToDisplay)
+                : await semanticRefCollection.GetEntitiesAsync(matchesToDisplay);
 
-            var entitesToDisplay = distinctEntities.Slice(0, maxToDisplay < distinctEntities.Count ? maxToDisplay : distinctEntities.Count);
-            WriteLine($"Displaying {entitesToDisplay.Count} matches of total {semanticRefMatches.Count}");
-            if (entitesToDisplay.Count < matchesToDisplay.Count)
+            // trim the list to max to display
+            var entitesToDisplay = entities.Slice(0, maxToDisplay < entities.Count ? maxToDisplay : entities.Count);
+
+            // warn the user some dupes were trimmed
+            if (distinct && entitesToDisplay.Count < matchesToDisplay.Count)
             {
                 WriteLine(ConsoleColor.Yellow, "Duplicate entities have been removed from the results.");
             }
-            WriteLine();
 
-            for (int i = 0; i < distinctEntities.Count; ++i)
+            WriteLine($"Displaying {entitesToDisplay.Count} matches of total {semanticRefMatches.Count}\n");
+
+            // display each entity
+            for (int i = 0; i < entities.Count; ++i)
             {
                 var pos = isAsc ? entitesToDisplay.Count - (i + 1) : i;
                 WriteLine(
                     ConsoleColor.Green,
-                    $"{pos + 1} / {distinctEntities.Count}: [{distinctEntities[pos].Score}]"
+                    $"{pos + 1} / {entities.Count}: [{entities[pos].Score}]"
                 );
-                WriteEntity(distinctEntities[pos]);
+                WriteEntity(entities[pos]);
                 WriteLine();
             }
         }
@@ -283,7 +294,6 @@ public class KnowProWriter : ConsoleWriter
                 );
             }
         }
-
     }
 
     public static void WriteScoredRef(
