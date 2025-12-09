@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Net.Http.Headers;
+
 namespace TypeAgent.KnowPro;
 
 public class Facet
@@ -25,10 +27,44 @@ public class Facet
             return false;
         }
 
-        return Value is Quantity qx
-            ? y.Value is Quantity qy && qx.Amount == qy.Amount && qx.Units == qy.Units
-            : Value == y.Value;
+        if (Value is Quantity qx)
+        {
+            return y.Value is Quantity qy && qx.Amount == qy.Amount && qx.Units == qy.Units;
+        }
+        else if (Value is Quantifier qf)
+        {
+            return y.Value is Quantifier qz && qf.Amount == qz.Amount && qf.Units == qz.Units;
+        }
+        else
+        {
+            return Value == y.Value;
+        }
     }
+
+    // TODO: equality operators (including all IFacenValues)
+    //public static bool operator ==(Facet x, Facet y)
+    //{
+    //    if (x == null && y == null)
+    //    {
+    //        return true;
+    //    }
+    //    else if (x == null || y == null)
+    //    {
+    //        return false;
+    //    }
+
+    //    if (!x.Name.Equals(y.Name, StringComparison.OrdinalIgnoreCase))
+    //    {
+    //        return false;
+    //    }
+
+    //    return x.Value == y.Value;
+    //}
+
+    //public static bool operator !=(Facet x, Facet y)
+    //{
+    //    return !(x == y);
+    //}
 }
 
 public interface IFacetValue
@@ -96,7 +132,10 @@ public class BooleanFacetValue : IFacetValue
 
 public readonly struct Quantity : IFacetValue
 {
+    [JsonPropertyName("amount")]
     public double Amount { get; }
+
+    [JsonPropertyName("units")]
     public string Units { get; }
 
     [JsonConstructor]
@@ -113,7 +152,10 @@ public readonly struct Quantity : IFacetValue
 }
 public readonly struct Quantifier : IFacetValue
 {
+    [JsonPropertyName("amount")]
     public string Amount { get; }
+
+    [JsonPropertyName("units")]
     public string Units { get; }
 
     [JsonConstructor]
