@@ -21,7 +21,7 @@ public class ApiSettings
 
     public string ApiKey { get; }
 
-    public int TimeoutMs { get; set; } = 15 * 1000;
+    public int TimeoutMs { get; set; } = 30 * 1000;
 
     public RetrySettings Retry { get; set; }
 

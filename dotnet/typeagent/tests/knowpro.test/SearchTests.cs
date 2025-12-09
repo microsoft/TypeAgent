@@ -85,7 +85,7 @@ public class SearchTests : TestWithData
         Assert.True(await matches.HasEntitiesAsync(["The Circle", "Children of Time", "spider", "spiders", "Portids"], this._podcast.SemanticRefs));
     }
 
-    [Fact]
+    [Fact(Timeout = 60000)]
     public async Task SearchQueriesAsync()
     {
         List<string> testQueries = QueryUtils.LoadTestQueries("../../../../../../../ts/packages/knowPro/test/data/Episode_53_query.txt");
@@ -106,12 +106,9 @@ public class SearchTests : TestWithData
 
             var parseResult = cmds.Parse(cmdLine);
 
-            SearchTermGroup stg = new SearchTermGroup(SearchTermBooleanOp.Or);
-
             // TODO: finish validating results
-
             var results = await this._podcast!.SearchKnowledgeAsync(
-                new SearchSelectExpr(stg),
+                TestCommands.SearchSeletExpressionFromCommandArgs(parseResult, await this._podcast!.GetStartTimestampRangeAsync()),
                 null,
                 CancellationToken.None
             );

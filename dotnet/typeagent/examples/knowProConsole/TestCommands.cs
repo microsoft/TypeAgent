@@ -82,7 +82,7 @@ public class TestCommands : ICommandModule
 
         // get the named args
         NamedArgs namedArgs = new NamedArgs(result);
-        
+
         WriterOptions options = new WriterOptions()
         {
             MaxToDisplay = namedArgs.Get("maxToDisplay") is not null ? namedArgs.Get<int>("maxToDisplay") : WriterOptions.Default.MaxToDisplay,
@@ -101,7 +101,7 @@ public class TestCommands : ICommandModule
     /// <param name="parsedArgs">The parsed command arguments.</param>
     /// <param name="convTimeRange">The conversation timerange</param>
     /// <returns>A select expression representing the supplied argumentns</returns>
-    private SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs, TimestampRange? convTimeRange)
+    internal static SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs, TimestampRange? convTimeRange)
     {
         // get the named args
         NamedArgs namedArgs = new NamedArgs(parsedArgs);

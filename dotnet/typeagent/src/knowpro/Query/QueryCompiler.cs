@@ -240,7 +240,7 @@ internal class QueryCompiler
 
         // Constrain the select with scopes and 'where'
         WhereExpr? whereExpr = null;
-        if (whenFilter.KnowledgeType is not null)
+        if (whenFilter?.KnowledgeType is not null)
         {
             whereExpr = new WhereExpr(selectExpr, (KnowledgeType)whenFilter.KnowledgeType);
         }
