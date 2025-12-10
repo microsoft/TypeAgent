@@ -1,6 +1,9 @@
-﻿// Copyright (c) Microsoft. All rights reserved.
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
-namespace Microsoft.TypeChat;
+using Microsoft.TypeChat;
+
+namespace TypeAgent.TestLib;
 
 /// <summary>
 /// A library of common Prompt Sections and instructions
