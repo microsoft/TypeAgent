@@ -21,6 +21,7 @@ using TypeAgent.ExamplesLib.CommandLine;
 using TypeAgent.KnowPro;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
+using TypeAgent.KnowPro.Query;
 using TypeAgent.KnowPro.Storage.Sqlite;
 using TypeAgent.Vector;
 using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -85,6 +86,122 @@ public class SearchTests : TestWithData
         Assert.True(await matches.HasEntitiesAsync(["The Circle", "Children of Time", "spider", "spiders", "Portids"], this._podcast.SemanticRefs));
     }
 
+    [Fact]
+    public async Task TestSearchAsync_OrMaxAsync()
+    {
+        // OrMax
+        SearchTermGroup stg = new SearchTermGroup(SearchTermBooleanOp.OrMax, [new SearchTerm("person"), new SearchTerm("spider")]);
+        var results = await this._podcast!.SearchAsync(new SearchSelectExpr(stg), null, null);
+        Assert.NotNull(results);
+        Assert.True(results.HasResults);
+        Assert.True(results.KnowledgeMatches.Count > 0);
+        Assert.True(results.MessageMatches.Count > 0);
+    }
+
+    [Fact]
+    public async Task TestSearchAsync()
+    {
+        SearchTermGroup stg = new SearchTermGroup(SearchTermBooleanOp.Or, [new SearchTerm("57862")]);
+
+        LangSearchOptions options = new LangSearchOptions()
+        {
+
+        };
+
+        LangSearchFilter filter = new LangSearchFilter()
+        {
+
+        };
+
+        LangSearchDebugContext context = new LangSearchDebugContext()
+        {
+
+        };
+
+        // search with results
+        var results = await this._podcast!.SearchAsync("book", options, filter, context, CancellationToken.None);
+        Assert.NotNull(results);
+        Assert.True(results.Count > 0);
+        Assert.True(results.First().HasResults);
+        Assert.True(results.First().KnowledgeMatches.Count > 0);
+        Assert.True(results.First().MessageMatches.Count > 0);
+
+        // search with no result (uses fallback query)
+        results = await this._podcast!.SearchAsync("aslifjsdflksdfjsdl", options, filter, context, CancellationToken.None);
+        Assert.NotNull(results);
+        Assert.Single(results);
+        Assert.False(results.First().HasResults);
+        Assert.Empty(results.First().KnowledgeMatches);
+        Assert.Empty(results.First().MessageMatches);
+    }
+
+    [Fact]
+    public void CompileWhenTest()
+    {
+        LangSearchOptions options = new LangSearchOptions()
+        {
+
+        };
+
+        LangSearchFilter filter = new LangSearchFilter()
+        {
+            KnowledgeType = KnowledgeType.Action,
+            ScopeDefiningTerms = new SearchTermGroup(SearchTermBooleanOp.And, [new SearchTerm("created"), new SearchTerm("published")]),
+            Tags = ["t1", "t2"],
+            ThreadDescription = "Adrian"
+        };
+
+        SearchQueryCompiler sqc = new SearchQueryCompiler(this._podcast!, options, filter);
+        SearchExpr searchExpr = new SearchExpr()
+        {
+            Filters = [
+                new SearchFilter()
+                {
+                    ActionSearchTerm = new ActionTerm()
+                    {
+                         ActionVerbs = new VerbsTerm()
+                         {
+                             Words = ["created", "published"],
+                             Tense = VerbsTermTense.Past
+                         }
+                    },
+                    EntitySearchTerms = [
+                        new EntityTerm()
+                        {
+                             Name = "Adrian"
+                        }
+                    ],
+                    TimeRange = new DateTimeRange()
+                    {
+                         StartDate = new TypeAgent.KnowPro.DateTime()
+                         {
+                            Date = new DateVal()
+                            {
+                                 Day = 1,
+                                 Month = 1,
+                                 Year = 2000
+                            }
+                         },
+                         StopDate = new TypeAgent.KnowPro.DateTime()
+                         {
+                            Date = new DateVal()
+                            {
+                                 Day = 31,
+                                 Month = 12,
+                                 Year = 2025
+                            }
+                         }
+                    }
+                }
+            ]
+        };
+
+        var query = sqc.CompileSearchExpr(searchExpr);
+
+        Assert.Single(query.SelectExpressions);
+        Assert.NotNull(query.SelectExpressions.First().When);
+    }
+
     [Fact(Timeout = 60000)]
     public async Task SearchQueriesAsync()
     {
@@ -106,12 +223,14 @@ public class SearchTests : TestWithData
 
             var parseResult = cmds.Parse(cmdLine);
 
-            // TODO: finish validating results
             var results = await this._podcast!.SearchKnowledgeAsync(
                 TestCommands.SearchSeletExpressionFromCommandArgs(parseResult, await this._podcast!.GetStartTimestampRangeAsync()),
                 null,
                 CancellationToken.None
             );
+
+            Assert.NotNull(results);
+            Assert.True(results.Count > 0);
         }
     }
 

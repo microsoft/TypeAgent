@@ -31,8 +31,8 @@ public class QueryCompilerTests : TestWithData
     [Fact]
     public async Task OrQueryTestAsync()
     {
-        QueryEvalContext context = new QueryEvalContext(this._podcast, CancellationToken.None);
-        QueryCompiler qc = new QueryCompiler(this._podcast, context.Cache, CancellationToken.None);
+        QueryEvalContext context = new QueryEvalContext(this._podcast!, CancellationToken.None);
+        QueryCompiler qc = new QueryCompiler(this._podcast!, context.Cache, CancellationToken.None);
 
         qc.Settings.EntityTermMatchWeight = 101;
         qc.Settings.DefaultTermMatchWeight = 9;
@@ -42,24 +42,23 @@ public class QueryCompilerTests : TestWithData
         var results = await query.EvalAsync(context);
 
         Assert.True(results.Count > 0);
-
-        //    const string TargetEntity = "Children of Memory";
-
-        //    QueryEvalContext context = new QueryEvalContext(this._podcast, CancellationToken.None);
-        //    QueryCompiler qc = new QueryCompiler(this._podcast, context.Cache, CancellationToken.None);
-
-        //    qc.
-
-        //    const expr = new q.MatchMessagesOrExpr([
-        //new q.MatchPropertySearchTermExpr(createPropertySearchTerm(PropertyNames.Object, targetEntityName)),
-        //    new q.MatchPropertySearchTermExpr(createPropertySearchTerm(PropertyNames.EntityName, targetEntityName)),
-        //]);
     }
 
-    //test("messages.terms.or", () => {
-    //    const targetEntityName = "Children of Memory";
-    //    const query = compileActionTarget(targetEntityName);
-    //    const messageOrdinals = query.eval(createContext());
-    //    expect(messageOrdinals.size).toBeGreaterThan(0);
-    //}, testTimeout);
+    [Fact]
+    public void SearchGroupTest()
+    {
+        QueryEvalContext context = new QueryEvalContext(this._podcast!, CancellationToken.None);
+        QueryCompiler qc = new QueryCompiler(this._podcast!, context.Cache, CancellationToken.None);
+        var searchTermGroup = new SearchTermGroup(
+            SearchTermBooleanOp.Or,
+            [
+                new SearchTerm("movie"),
+                new SearchTerm("book"),
+                new PropertySearchTerm("age", "55"),
+                new SearchTermGroup(SearchTermBooleanOp.And, new SearchTerm("s1"), new SearchTerm("s2"))
+            ]
+        );
+
+        var query = qc.CompileMessageSearchGroup(searchTermGroup, null);
+    }
 }
