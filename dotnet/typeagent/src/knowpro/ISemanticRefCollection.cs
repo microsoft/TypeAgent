@@ -19,7 +19,6 @@ public interface ISemanticRefCollection : IAsyncCollection<SemanticRef>
 
     event Action<BatchProgress> OnKnowledgeExtracted;
     void NotifyKnowledgeProgress(BatchProgress progress);
-
 }
 
 public static class SemanticRefCollectionExtensions
@@ -95,6 +94,26 @@ public static class SemanticRefCollectionExtensions
         return (topK is not null)
             ? entitites.GetTopK(topK.Value)
             : [.. entitites];
+    }
+
+    public static async ValueTask<IList<Scored<ConcreteEntity>>> GetEntitiesAsync(
+        this IAsyncCollectionReader<SemanticRef> semanticRefs,
+        IList<ScoredSemanticRefOrdinal> semanticRefMatches,
+        int? topK = null
+    )
+    {
+        var scoredEntities = await semanticRefs.GetScoredAsync(
+            semanticRefMatches
+        ).ConfigureAwait(false);
+
+        IEnumerable<Scored<ConcreteEntity>> entities = scoredEntities.Select((v) =>
+        {
+            return new Scored<ConcreteEntity>(v.Item.AsEntity(), v.Score);
+        });
+
+        return (topK is not null)
+            ? entities.GetTopK(topK.Value)
+            : [.. entities];
     }
 
     public static async ValueTask<IList<ConcreteEntity>> GetAllEntitiesAsync(

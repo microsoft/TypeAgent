@@ -12,8 +12,8 @@ public class OpenAIChatModel : ModelApi, IChatModel
 
     }
 
-    public OpenAIChatModel(ModelApiSettings settings, CompletionSettings? completionSettings = null)
-        : base(settings)
+    public OpenAIChatModel(ModelApiSettings settings, CompletionSettings? completionSettings = null, HttpClient? client = null)
+        : base(settings, client)
     {
         CompletionSettings = completionSettings ?? CompletionSettings.CreateDefault();
     }

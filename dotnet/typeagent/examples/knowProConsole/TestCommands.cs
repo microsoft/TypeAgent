@@ -2,8 +2,12 @@
 // Licensed under the MIT License.
 
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using TypeAgent.Common;
+using TypeAgent.ExamplesLib.CommandLine;
+using TypeAgent.KnowPro;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
+using static TypeAgent.ExamplesLib.KnowProWriter;
 
 namespace KnowProConsole;
 
@@ -35,7 +39,18 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestSearchTerms")
         {
+            Options.Arg<bool>("andTerms", "'And' all terms. Set to TRUE, otherwise search terms are 'Or'.", false),
+            Options.Arg<bool>("displayAsc", "Display results in ascending order.", true),
+            Options.Arg<bool>("distinct", "Show distinct results.", true),
+            Options.Arg<string>("endDate", "Ending at this date (ISO format)."),
+            Options.Arg<int>("endMinute", "Ending minute."),
+            Options.Arg<bool>("exact", "Exact match only. No related terms.", false),
+            Options.Arg<string>("ktype", "Filter results to a specific knowledge type [entity | topic | action | tag]."),
+            Options.Arg<int>("maxToDisplay", "Maximum number of results to display", 25),
+            Options.Arg<string>("startDate", "Starting at this date (ISO format)."),
+            Options.Arg<int>("startMinute", "Starting minute."),
         };
+
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.SearchTermsAsync);
         return cmd;
@@ -45,26 +60,104 @@ public class TestCommands : ICommandModule
     {
         IConversation conversation = EnsureConversation();
 
-        // Hard coded test for now
-        SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
+        //// Hard coded test for now
+        //SearchTermGroup searchGroup = new SearchTermGroup(SearchTermBooleanOp.Or)
+        //{
+        //    "Children of Time",
+        //    "book"
+        //};
+        //await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        //searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
+        //await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        //searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
+        //await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        //searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
+        //{
+        //    "Children of Physics",
+        //    "book"
+        //};
+
+        // get the named args
+        NamedArgs namedArgs = new NamedArgs(result);
+
+        WriterOptions options = new WriterOptions()
         {
-            "Children of Time",
-            "book"
+            MaxToDisplay = namedArgs.Get("maxToDisplay") is not null ? namedArgs.Get<int>("maxToDisplay") : WriterOptions.Default.MaxToDisplay,
+            Ascending = namedArgs.Get<bool>("displayAsc"),
+            Distinct = namedArgs.Get<bool>("distinct")
         };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
 
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax, searchGroup.Terms);
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+        var convTimeRange = await conversation.GetStartTimestampRangeAsync();
 
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.And, searchGroup.Terms);
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+        await TestSearchKnowledgeAsync(conversation, SearchSeletExpressionFromCommandArgs(result, convTimeRange), options, cancellationToken);
+    }
 
-        searchGroup = new SearchTermGroup(SearchTermBooleanOp.OrMax)
+    /// <summary>
+    /// Conerts the supplied parsed command line arguments into a search select expression.
+    /// </summary>
+    /// <param name="parsedArgs">The parsed command arguments.</param>
+    /// <param name="convTimeRange">The conversation timerange</param>
+    /// <returns>A select expression representing the supplied argumentns</returns>
+    internal static SearchSelectExpr SearchSeletExpressionFromCommandArgs(ParseResult parsedArgs, TimestampRange? convTimeRange)
+    {
+        // get the named args
+        NamedArgs namedArgs = new NamedArgs(parsedArgs);
+
+        // get the logic operator
+        SearchTermBooleanOp logicOperator = SearchTermBooleanOp.Or;
+        if (namedArgs.Get("andTerms") is not null && bool.Parse(namedArgs.Get("andTerms")!))
         {
-            "Children of Physics",
-            "book"
+            logicOperator = SearchTermBooleanOp.And;
+        }
+
+        // are we doing an exact match?
+        bool exactMatch = namedArgs.Get("exact") is not null && bool.Parse(namedArgs.Get("exact")!);
+
+        SearchTermGroup stg = new SearchTermGroup(logicOperator)
+        {
+            // add unmatched tokens as search terms
+            { parsedArgs.UnmatchedTokens, exactMatch }
         };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        WhenFilter? when = null;
+        if (namedArgs.Get("ktype") is not null)
+        {
+            when = new WhenFilter();
+            when.KnowledgeType = KnowledgeType.Parse(namedArgs.Get("ktype")!);
+        }
+
+        // start and end dates
+        TimestampRange? timestampRange = null;
+        if (namedArgs.Get("startDate") is not null || namedArgs.Get("endDate") is not null)
+        {
+            timestampRange = new TimestampRange()
+            {
+                StartTimestamp = namedArgs.Get("startDate") ?? convTimeRange?.StartTimestamp ?? string.Empty,
+                EndTimestamp = namedArgs.Get("endDate") ?? convTimeRange?.EndTimestamp ?? string.Empty
+            };
+
+            DateRange dateRange = new(timestampRange.Value);
+
+            if (namedArgs.Get("startMinute") is not null)
+            {
+                dateRange.Start = dateRange.Start.AddMinutes(namedArgs.Get<int>("startMinute"));
+            }
+
+            if (namedArgs.Get("endMinute") is not null && dateRange.HasEnd)
+            {
+                dateRange.End = dateRange.End!.Value.AddMinutes(namedArgs.Get<int>("endMinute"));
+            }
+
+            when ??= new WhenFilter();
+            when.DateRange = dateRange;
+        }
+
+        SearchSelectExpr select = new SearchSelectExpr(stg, when);
+
+        return select;
     }
 
     private Command SearchPropertyTermsDef()
@@ -87,7 +180,18 @@ public class TestCommands : ICommandModule
             { "genre", "sci-fi" },
             { KnowledgePropertyName.EntityName, "Children of Time" },
         };
-        await TestSearchKnowledgeAsync(conversation, searchGroup, cancellationToken);
+
+        // get the named args
+        NamedArgs namedArgs = new NamedArgs(result);
+
+        WriterOptions options = new WriterOptions()
+        {
+            MaxToDisplay = namedArgs.Get("MaxToDisplay") is not null ? namedArgs.Get<int>("MaxToDisplay") : WriterOptions.Default.MaxToDisplay,
+            Ascending = namedArgs.Get<bool>("displayAsc"),
+            Distinct = namedArgs.Get<bool>("distinct")
+        };
+
+        await TestSearchKnowledgeAsync(conversation, searchGroup, options, cancellationToken);
     }
 
     private Command SearchMessagesTermsDef()
@@ -279,18 +383,22 @@ public class TestCommands : ICommandModule
         }
     }
 
-
-    async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, CancellationToken cancellationToken)
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchTermGroup searchGroup, WriterOptions options, CancellationToken cancellationToken)
     {
-        KnowProWriter.WriteLine(searchGroup);
+        await TestSearchKnowledgeAsync(conversation, new SearchSelectExpr(searchGroup), options, cancellationToken);
+    }
+
+    internal async Task TestSearchKnowledgeAsync(IConversation conversation, SearchSelectExpr searchExpresion, WriterOptions options, CancellationToken cancellationToken)
+    {
+        KnowProWriter.WriteLine(searchExpresion);
 
         var results = await conversation.SearchKnowledgeAsync(
-            new SearchSelectExpr(searchGroup),
+            searchExpresion,
             null,
             cancellationToken
         ).ConfigureAwait(false);
 
-        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results);
+        await KnowProWriter.WriteKnowledgeSearchResultsAsync(_kpContext.Conversation!, results, options);
     }
 
     private Command SearchQueryTermsDef()

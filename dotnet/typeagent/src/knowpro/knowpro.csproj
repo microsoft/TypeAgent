@@ -32,4 +32,8 @@
     <ProjectReference Include="..\typechat\TypeChat.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TypeAgent.Tests.KnowPro" />
+  </ItemGroup>
+
 </Project>

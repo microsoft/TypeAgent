@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections;
+using TypeAgent.KnowPro.Query;
 
 namespace TypeAgent.KnowPro;
 
@@ -13,6 +14,10 @@ public class SearchTermGroup : ISearchTerm, IEnumerable<ISearchTerm>
 
         BooleanOp = booleanOp;
         Terms = terms ?? [];
+    }
+
+    public SearchTermGroup(SearchTermBooleanOp booleanOp, params ISearchTerm[]? terms) : this(booleanOp, (IList<ISearchTerm>)terms)
+    {
     }
 
     public SearchTermBooleanOp BooleanOp { get; }

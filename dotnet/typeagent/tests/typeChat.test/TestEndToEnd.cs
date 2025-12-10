@@ -72,7 +72,7 @@ public class TestEndToEnd : TypeChatTest
 
     /// <summary>
     /// This one loads the schema from a TS file
-    [SkippableFact]
+    [Fact]
     public async Task TranslateWithTSFileSchemaAsync()
     {
         IChatModel model = ModelUtils.CreateTestChatModel(nameof(TranslateWithTSFileSchemaAsync));

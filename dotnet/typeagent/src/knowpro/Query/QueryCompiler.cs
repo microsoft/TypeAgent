@@ -37,7 +37,6 @@ internal class QueryCompiler
     private List<CompiledTermGroup> _allScopeSearchTerms;
     private CancellationToken _cancellationToken;
 
-
     public QueryCompiler(
         IConversation conversation,
         IConversationCache conversationCache,
@@ -239,8 +238,15 @@ internal class QueryCompiler
 
         var selectExpr = CompileSelect(searchGroup, scopeExpr);
 
+        // Constrain the select with scopes and 'where'
+        WhereExpr? whereExpr = null;
+        if (whenFilter?.KnowledgeType is not null)
+        {
+            whereExpr = new WhereExpr(selectExpr, (KnowledgeType)whenFilter.KnowledgeType);
+        }
+
         return new SelectTopNKnowledgeGroupExpr(
-            new GroupByKnowledgeTypeExpr(selectExpr)
+            new GroupByKnowledgeTypeExpr(whereExpr ?? selectExpr)
         );
     }
 

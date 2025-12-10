@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\aiclient\aiclient.csproj" />
+    <ProjectReference Include="..\..\src\conversationMemory\conversationMemory.csproj" />
+    <ProjectReference Include="..\..\src\knowproStorage\knowproStorage.csproj" />
   </ItemGroup>
 
 </Project>

@@ -14,8 +14,13 @@ using TypeAgent.TestLib;
 
 namespace TypeAgent.Tests.ConversationMemory;
 
-public class PodcastTests : TestWithTemporaryFiles
+public class PodcastTests : TestWithData
 {
+    /// <summary>
+    /// Create temporary folder and load .ENV file
+    /// </summary>
+    public PodcastTests() : base(true) { }
+
     private class TestTranscriptInfo
     {
         public string filePath { get; set; } = string.Empty;
@@ -43,7 +48,7 @@ public class PodcastTests : TestWithTemporaryFiles
     [Fact]
     public async Task BuildIndexAsync()
     {
-        Podcast podcast = await ImportTestPodcastAsync(GetTransscriptSmall(), true);
+        using Podcast podcast = await ImportTestPodcastAsync(GetTransscriptSmall(), true);
 
         Assert.Equal(7, await podcast.Messages.GetCountAsync());
 

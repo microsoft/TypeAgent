@@ -203,7 +203,7 @@ internal class RankMessagesBySimilarityExpr : QueryOpExpr<MessageAccumulator>
             context
         ).ConfigureAwait(false);
 
-        if (MaxMessages is not null && matches.Count <= MaxMessages.Value)
+        if (MaxMessages is not null && matches.Count <= MaxMessages.Value || matches.Count == 0)
         {
             return matches;
         }

@@ -17,6 +17,12 @@ public partial class ConcreteEntity
         this.Type = [type];
     }
 
+    public ConcreteEntity(string name, IEnumerable<string> types)
+    {
+        this.Name = name;
+        this.Type = types?.ToArray() ?? [];
+    }
+
     [JsonIgnore]
     public override KnowledgeType KnowledgeType => KnowledgeType.Entity;
 
