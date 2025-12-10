@@ -11,6 +11,7 @@ import { getChatModelNames } from "aiclient";
 import { getAllActionConfigProvider } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -115,6 +116,7 @@ export default class TranslateCommand extends Command {
                 cache: { enabled: false },
                 clientIO,
                 persistDir: instanceDir,
+                storageProvider: getFsStorageProvider(),
                 dblogging: true,
                 indexingServiceRegistry:
                     await getIndexingServiceRegistry(instanceDir),

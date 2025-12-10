@@ -1,27 +1,35 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createDispatcher } from "agent-dispatcher";
+import { CommandResult, createDispatcher } from "agent-dispatcher";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getInstanceDir, getClientId } from "agent-dispatcher/helpers/data";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
 import WebSocket from "ws";
+import { getFsStorageProvider } from "dispatcher-node-providers";
+import registerDebug from "debug";
+import { FullAction } from "agent-cache";
+
+const debug = registerDebug("typeagent:webserver:api");
+registerDebug.enable("typeagent:webserver:*");
 
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
     close(): void;
+    handleAction(action: FullAction): Promise<CommandResult>;
 }
+
 export async function createWebDispatcher(): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
-    const clientIOChannel = createGenericChannel((message: any) =>
+    const clientIOChannel = createChannelAdapter((message: any) =>
         ws?.send(
             JSON.stringify({
                 message: "clientio-rpc-call",
@@ -30,12 +38,15 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         ),
     );
 
+    debug("Creating Web Dispatcher...");
+
     const instanceDir = getInstanceDir();
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
         persistSession: true,
         persistDir: instanceDir,
+        storageProvider: getFsStorageProvider(),
         metrics: true,
         dblogging: true,
         clientId: getClientId(),
@@ -45,8 +56,8 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     });
 
     let settingSummary: string = "";
-    const updateSettingSummary = (force: boolean = false) => {
-        const status = dispatcher.getStatus();
+    const updateSettingSummary = async (force: boolean = false) => {
+        const status = await dispatcher.getStatus();
         const newSettingSummary = getStatusSummary(status);
         if (force || newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
@@ -66,6 +77,16 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         return newSettingSummary;
     };
 
+    async function handleAction(action: FullAction): Promise<any> {
+        // TODO: expose executeAction so we can call that directly instead of running it through a command
+        // TODO: bubble back any action results along with the command result
+        await dispatcher.processCommand(
+            `@action ${action.schemaName} ${action.actionName} --parameters '${JSON.stringify(action.parameters).replaceAll("'", "\\'")}'`,
+            undefined,
+            undefined,
+        );
+    }
+
     async function processShellRequest(
         text: string,
         id: string,
@@ -76,15 +97,12 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         }
 
         // Update before processing the command in case there was change outside of command processing
-        const summary = updateSettingSummary();
+        const summary = await updateSettingSummary();
         console.log(getConsolePrompt(summary), text);
-
-        // Update before processing the command in case there was change outside of command processing
-        updateSettingSummary();
 
         const result = await dispatcher.processCommand(text, id, images);
 
-        updateSettingSummary();
+        await updateSettingSummary();
 
         return result;
     }
@@ -92,9 +110,10 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const patchedDispatcher = {
         ...dispatcher,
         processCommand: processShellRequest,
+        handleAction: handleAction,
     };
 
-    const dispatcherChannel = createGenericChannel((message: any) =>
+    const dispatcherChannel = createChannelAdapter((message: any) =>
         ws?.send(
             JSON.stringify({
                 message: "dispatcher-rpc-reply",
@@ -117,10 +136,10 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
 
                     switch (msgObj.message) {
                         case "dispatcher-rpc-call":
-                            dispatcherChannel.message(msgObj.data);
+                            dispatcherChannel.notifyMessage(msgObj.data);
                             break;
                         case "clientio-rpc-reply":
-                            clientIOChannel.message(msgObj.data);
+                            clientIOChannel.notifyMessage(msgObj.data);
                             break;
                     }
                 } catch (e) {
@@ -139,5 +158,6 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         close: () => {
             dispatcher.close();
         },
+        handleAction: handleAction,
     };
 }

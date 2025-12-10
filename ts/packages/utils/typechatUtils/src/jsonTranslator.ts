@@ -12,7 +12,6 @@ import {
     TypeChatJsonValidator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
 import {
     openai as ai,
@@ -206,7 +205,7 @@ async function attachAttachments(
 }
 
 export type JsonTranslatorOptions<T extends object> = {
-    constraintsValidator?: TypeChatConstraintsValidator<T> | undefined; // Optional
+    validateInstance?: (instance: T) => Result<T>; // Optional
     instructions?: PromptSection[] | undefined; // Instructions before the per request preamble
     model?: string | undefined; // optional
 };
@@ -297,9 +296,9 @@ export function createJsonTranslatorWithValidator<T extends object>(
 
     translator.stripNulls = true;
 
-    const constraintsValidator = options?.constraintsValidator;
-    if (constraintsValidator) {
-        translator.validateInstance = constraintsValidator.validateConstraints;
+    const validateInstance = options?.validateInstance;
+    if (validateInstance) {
+        translator.validateInstance = validateInstance;
     }
 
     // Patch up the property for json schema for stream.

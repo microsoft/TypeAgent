@@ -4,10 +4,10 @@
 import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
 import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import {
-    createGenericChannel,
-    createGenericChannelProvider,
-    GenericChannel,
-    GenericChannelProvider,
+    createChannelAdapter,
+    createChannelProviderAdapter,
+    ChannelAdapter,
+    ChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { BrowserActionContext } from "./browserActions.mjs";
@@ -20,8 +20,8 @@ const debug = registerDebug("typeagent:webAgent");
 const debugError = registerDebug("typeagent:webAgent:error");
 
 export type WebAgentChannels = {
-    channelProvider: GenericChannelProvider;
-    registerChannel: GenericChannel;
+    channelProvider: ChannelProviderAdapter;
+    registerChannel: ChannelAdapter;
 };
 
 const dynamicAgentDomainsDataName = "allowDynamicAgentDomains.json";
@@ -107,7 +107,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         return undefined;
     }
 
-    const channelProvider = createGenericChannelProvider((message) => {
+    const channelProvider = createChannelProviderAdapter((message) => {
         const client = agentServer.getActiveClient();
         if (client) {
             client.socket.send(
@@ -120,7 +120,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         }
     });
 
-    const registerChannel = createGenericChannel((message) => {
+    const registerChannel = createChannelAdapter((message) => {
         const client = agentServer.getActiveClient();
         if (client) {
             client.socket.send(
@@ -187,10 +187,10 @@ export async function processWebAgentMessage(
     try {
         switch (message.method) {
             case "webAgent/register":
-                webAgentChannels.registerChannel.message(message.params);
+                webAgentChannels.registerChannel.notifyMessage(message.params);
                 break;
             case "webAgent/message":
-                webAgentChannels.channelProvider.message(message.params);
+                webAgentChannels.channelProvider.notifyMessage(message.params);
                 break;
             case "webAgent/disconnect":
                 await context.removeDynamicAgent(message.params);

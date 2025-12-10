@@ -40,20 +40,22 @@
     "shell:dev": "pnpm -C packages/shell run dev",
     "shell:nosandbox": "pnpm -C packages/shell run start:nosandbox",
     "shell:package": "pnpm -C packages/shell run package",
+    "shell:smoke": "pnpm -C packages/shell run shell:smoke",
     "shell:start:package": "pnpm -C packages/shell run start:package",
-    "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
-    "test": "pnpm run test:local && pnpm run test:live",
+    "shell:test": "pnpm -C packages/shell run shell:test",
+    "start:agent-server": "pnpm -C packages/agentServer/server run start",
+    "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
     "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=1 run test:local"
   },
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^20.17.28",
-    "markdown-link-check": "^3.13.7",
+    "markdown-link-check": "^3.14.2",
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.23.0+sha512.21c4e5698002ade97e4efe8b8b4a89a8de3c85a37919f957e7a0f30f38fbc5bbdd05980ffe29179b2fb6e6e691242e098d945d1601772cad0fef5fb6411e2a4b",
+  "packageManager": "pnpm@10.24.0+sha512.01ff8ae71b4419903b65c60fb2dc9d34cf8bb6e06d03bde112ef38f7a34d6904c424ba66bea5cdcf12890230bf39f9580473140ed9c946fef328b6e5238a345a",
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"

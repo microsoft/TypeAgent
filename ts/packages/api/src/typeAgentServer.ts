@@ -24,6 +24,10 @@ import { TypeAgentStorageProvider } from "./storageProvider.js";
 import { AzureStorageProvider } from "./storageProviders/azureStorageProvider.js";
 import { AWSStorageProvider } from "./storageProviders/awsStorageProvider.js";
 import { WebDispatcher, createWebDispatcher } from "./webDispatcher.js";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:webserver:api");
+registerDebug.enable("typeagent:webserver:*");
 
 export class TypeAgentServer {
     private webDispatcher: WebDispatcher | undefined;
@@ -34,11 +38,15 @@ export class TypeAgentServer {
     private config: TypeAgentAPIServerConfig;
 
     constructor(private envPath: string) {
+        debug(`Loading .env from path: ${envPath}`);
+
         // typeAgent config
         dotenv.config({ path: this.envPath });
 
         // web server config
         this.config = JSON.parse(readFileSync("data/config.json").toString());
+
+        debug(`Loaded web config from `);
 
         const storageProviderMap = {
             azure: AzureStorageProvider,
@@ -50,6 +58,11 @@ export class TypeAgentServer {
             this.storageProvider = new storageProviderMap[
                 this.config.storageProvider
             ]();
+            debug(`Storage provider setup: ${this.config.storageProvider}`);
+        } else {
+            debug(
+                `Skipping storage provider setup [backupEnabled: ${this.config.blobBackupEnabled}] [provider: ${this.config.storageProvider}]`,
+            );
         }
     }
 
@@ -60,39 +73,28 @@ export class TypeAgentServer {
             await this.syncFromProvider();
             this.startLocalStorageBackup();
             sw.stop("Downloaded Session Backup");
-            /*
-            if (
-                this.storageAccount !== undefined &&
-                this.storageAccount.length > 0 &&
-                this.containerName != undefined &&
-                this.containerName.length > 0
-            ) {
-                const sw = new StopWatch();
-                sw.start("Downloading Session Backup");
-
-                await this.syncBlobStorage();
-
-                this.startLocalStorageBackup();
-
-                sw.stop("Downloaded Session Backup");
-            } else {
-                console.warn(
-                    `Blob backup enabled but NOT configured.  Missing env var ${openai.EnvVars.AZURE_STORAGE_ACCOUNT}.`,
-                );
-            }
-            */
         }
 
         this.webDispatcher = await createWebDispatcher();
+        debug("Web Dispatcher created.");
+
         // web server
-        this.webServer = new TypeAgentAPIWebServer(this.config);
+        this.webServer = new TypeAgentAPIWebServer(
+            this.config,
+            (action: any) => {
+                // a client passed in an action to perform
+                this.webDispatcher?.handleAction(action);
+            },
+        );
         this.webServer.start();
+        debug("TypeAgent Web Server created.");
 
         // websocket server
         this.webSocketServer = new TypeAgentAPIWebSocketServer(
             this.webServer.server,
             this.webDispatcher.connect,
         );
+        debug("WebSocket Server created.");
     }
 
     stop() {

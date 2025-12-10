@@ -20,6 +20,7 @@ import type {
     TranslateTestFile,
     TranslateTestStep,
 } from "default-agent-provider/test";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -153,6 +154,7 @@ export default class ReplayCommand extends Command {
                 cache: { enabled: false },
                 clientIO,
                 persistDir: instanceDir,
+                storageProvider: getFsStorageProvider(),
                 dblogging: true,
                 clientId: getClientId(),
                 indexingServiceRegistry:
