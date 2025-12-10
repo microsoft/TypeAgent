@@ -3,7 +3,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
+import { z } from "zod/v4";
 import * as cm from "conversation-memory";
 import { addPingTool, toolResult } from "./mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -59,14 +59,14 @@ export class MemoryServer {
     }
 
     private addTools() {
-        this.server.tool(
+        this.server.registerTool(
             "remember",
-            rememberRequestSchema(),
+            { inputSchema: rememberRequestSchema() },
             async (request: RememberRequest) => this.remember(request),
         );
-        this.server.tool(
+        this.server.registerTool(
             "recall",
-            recallRequestSchema(),
+            { inputSchema: recallRequestSchema() },
             async (request: RecallRequest) => this.recall(request),
         );
     }

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { glob } from "glob";
-import { NpmAppAgentInfo } from "agent-dispatcher/helpers/npmAgentProvider";
+import { NpmAppAgentInfo } from "dispatcher-node-providers";
 import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
 import { McpAppAgentConfig, McpAppAgentInfo } from "../mcpAgentProvider.js";

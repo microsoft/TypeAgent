@@ -13,16 +13,11 @@ import {
     ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
-import {
-    ChatModelWithStreaming,
-    CompletionSettings,
-    openai,
-    wikipedia,
-    wikipediaSchemas,
-} from "aiclient";
+import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { readFileSync } from "fs";
 import { Result } from "typechat";
-import { encodeWikipediaTitle } from "../../aiclient/dist/wikipedia.js";
+import * as wikipediaSchemas from "./wikipediaSchemas.js";
+import * as wikipedia from "./wikipedia.js";
 
 const debug = registerDebug("typeagent:azure-ai-foundry:urlResolver");
 
@@ -457,7 +452,7 @@ export async function resolveURLWithWikipedia(
                 } else {
                     // no "official website" found, so just use the wikipedia page URL
                     retVal.push(
-                        `https://en.wikipedia.org/wiki/${encodeWikipediaTitle(data.pages[i].title)}`,
+                        `https://en.wikipedia.org/wiki/${wikipedia.encodeWikipediaTitle(data.pages[i].title)}`,
                     );
                 }
             }

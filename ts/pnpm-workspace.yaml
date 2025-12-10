@@ -3,6 +3,8 @@ packages:
   - packages/memory/*
   - packages/agents/*
   - packages/agents/agentUtils/*
+  - packages/agentServer/*
+  - packages/dispatcher/*
   - packages/utils/*
   - examples/*
   - examples/agentExamples/*

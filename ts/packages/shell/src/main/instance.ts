@@ -11,7 +11,7 @@ import {
 import { ShellSettingManager } from "./shellSettings.js";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { ShellWindow } from "./shellWindow.js";
-import { createGenericChannel } from "@typeagent/agent-rpc/channel";
+import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import {
     getDefaultAppAgentInstaller,
@@ -31,6 +31,7 @@ import {
 } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isProd } from "./index.js";
+import { getFsStorageProvider } from "dispatcher-node-providers";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -44,7 +45,7 @@ let quitting: boolean = false;
 async function initializeDispatcher(
     instanceDir: string,
     shellWindow: ShellWindow,
-    updateSummary: (dispatcher: Dispatcher) => string,
+    updateSummary: (dispatcher: Dispatcher) => Promise<string>,
     startTime: number,
 ): Promise<Dispatcher | undefined> {
     if (cleanupP !== undefined) {
@@ -52,14 +53,14 @@ async function initializeDispatcher(
         await cleanupP;
     }
     try {
-        const clientIOChannel = createGenericChannel((message: any) => {
+        const clientIOChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send("clientio-rpc-call", message);
         });
         const onClientIORpcReply = (event, message) => {
             if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
                 return;
             }
-            clientIOChannel.message(message);
+            clientIOChannel.notifyMessage(message);
         };
         ipcMain.on("clientio-rpc-reply", onClientIORpcReply);
 
@@ -139,6 +140,7 @@ async function initializeDispatcher(
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
             persistSession: true,
             persistDir: instanceDir,
+            storageProvider: getFsStorageProvider(),
             metrics: true,
             dblogging: true,
             clientId: getClientId(),
@@ -160,7 +162,7 @@ async function initializeDispatcher(
             }
 
             // Update before processing the command in case there was change outside of command processing
-            const summary = updateSummary(dispatcher);
+            const summary = await updateSummary(dispatcher);
 
             if (debugShell.enabled) {
                 debugShell(getConsolePrompt(summary), text);
@@ -180,7 +182,7 @@ async function initializeDispatcher(
             shellWindow.chatView.webContents.focus();
 
             // Update the summary after processing the command in case state changed.
-            updateSummary(dispatcher);
+            await updateSummary(dispatcher);
             return commandResult;
         }
 
@@ -192,9 +194,9 @@ async function initializeDispatcher(
                     "dispatcher-rpc-call",
                     onDispatcherRpcCall,
                 );
-                dispatcherChannel.disconnect();
+                dispatcherChannel.notifyDisconnected();
                 await newDispatcher.close();
-                clientIOChannel.disconnect();
+                clientIOChannel.notifyDisconnected();
                 ipcMain.removeListener(
                     "clientio-rpc-reply",
                     onClientIORpcReply,
@@ -204,7 +206,7 @@ async function initializeDispatcher(
         };
 
         // Set up the RPC
-        const dispatcherChannel = createGenericChannel((message: any) => {
+        const dispatcherChannel = createChannelAdapter((message: any) => {
             shellWindow.chatView.webContents.send(
                 "dispatcher-rpc-reply",
                 message,
@@ -214,7 +216,7 @@ async function initializeDispatcher(
             if (getShellWindowForChatViewIpcEvent(event) !== shellWindow) {
                 return;
             }
-            dispatcherChannel.message(message);
+            dispatcherChannel.notifyMessage(message);
         };
         ipcMain.on("dispatcher-rpc-call", onDispatcherRpcCall);
         createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
@@ -246,8 +248,8 @@ export function initializeInstance(
     const shellWindow = new ShellWindow(shellSettings);
     const { chatView } = shellWindow;
     let title: string = "";
-    function updateTitle(dispatcher: Dispatcher) {
-        const status = dispatcher.getStatus();
+    async function updateTitle(dispatcher: Dispatcher) {
+        const status = await dispatcher.getStatus();
 
         const newSettingSummary = getStatusSummary(status);
         const zoomFactor = chatView.webContents.zoomFactor;

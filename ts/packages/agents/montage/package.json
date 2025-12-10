@@ -35,7 +35,7 @@
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
     "debug": "^4.4.0",
-    "express": "^4.21.2",
+    "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
     "image-memory": "workspace:*",
     "knowledge-processor": "workspace:*",
