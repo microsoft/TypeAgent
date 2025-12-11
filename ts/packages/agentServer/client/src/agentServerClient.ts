@@ -5,7 +5,7 @@ import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
-import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc";
+import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 
 import registerDebug from "debug";
 import {
