@@ -52,12 +52,12 @@ public class SearchTests : TestWithData
     public async Task TestSearchKnowledge_AndAsync()
     {
         var termGroup = new SearchTermGroup(SearchTermBooleanOp.And, [new SearchTerm("book"), new SearchTerm("movie")]);
-        var matches = await SearchKnowledgeAsync(termGroup, KnowledgeType.Entity, true, 3, 2);
+        var matches = await SearchKnowledgeAsync(this._podcast, termGroup, KnowledgeType.Entity, true, 3, 2);
 
         Assert.True(await matches.HasEntityMatchesWithNameAsync("The Circle", this._podcast.SemanticRefs));
 
         var noResultsTermGroup = new SearchTermGroup(SearchTermBooleanOp.And, [new SearchTerm("book"), new SearchTerm("spider")]);
-        await SearchKnowledgeAsync(noResultsTermGroup, KnowledgeType.Entity, false);
+        await SearchKnowledgeAsync(this._podcast, noResultsTermGroup, KnowledgeType.Entity, false);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class SearchTests : TestWithData
         var orGroup = new SearchTermGroup(SearchTermBooleanOp.Or, new SearchTerm("Children of Time"), new SearchTerm("The Circle"));
         var andOrGroup = new SearchTermGroup(SearchTermBooleanOp.And, orGroup, new SearchTerm("movie", true));
 
-        var matches = await SearchKnowledgeAsync(andOrGroup, KnowledgeType.Entity, true);
+        var matches = await SearchKnowledgeAsync(this._podcast, andOrGroup, KnowledgeType.Entity, true);
 
         var entities = await matches.GetEntitiesAsync(this._podcast.SemanticRefs);
 
@@ -81,7 +81,7 @@ public class SearchTests : TestWithData
     {
         var orGroup = new SearchTermGroup(SearchTermBooleanOp.Or, new SearchTerm("book"), new SearchTerm("movie"), new SearchTerm("spider"));
 
-        var matches = await SearchKnowledgeAsync(orGroup, KnowledgeType.Entity, true);
+        var matches = await SearchKnowledgeAsync(this._podcast, orGroup, KnowledgeType.Entity, true);
 
         Assert.True(await matches.HasEntitiesAsync(["The Circle", "Children of Time", "spider", "spiders", "Portids"], this._podcast.SemanticRefs));
     }
@@ -234,10 +234,12 @@ public class SearchTests : TestWithData
         }
     }
 
-    private async Task<IDictionary<KnowledgeType, SemanticRefSearchResult>> SearchKnowledgeAsync(SearchTermGroup searchTermGroup, KnowledgeType knowledgeType, bool expectMatches, int? semanticRefMatches = null, int? termMatches = null)
+    internal static async Task<IDictionary<KnowledgeType, SemanticRefSearchResult>> SearchKnowledgeAsync(IConversation? conversation, SearchTermGroup searchTermGroup, KnowledgeType knowledgeType, bool expectMatches, int? semanticRefMatches = null, int? termMatches = null)
     {
+        ArgumentVerify.ThrowIfNull(conversation, nameof(conversation));
+
         var select = new SearchSelectExpr(searchTermGroup);
-        var matches = await this._podcast.SearchKnowledgeAsync(select, null, new CancellationToken());
+        var matches = await conversation.SearchKnowledgeAsync(select, null, new CancellationToken());
 
         if (expectMatches)
         {
