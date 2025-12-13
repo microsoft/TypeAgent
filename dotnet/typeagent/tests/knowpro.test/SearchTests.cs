@@ -140,7 +140,10 @@ public class SearchTests : TestWithData
     {
         LangSearchOptions options = new LangSearchOptions()
         {
-
+            CompilerSettings = new()
+            {
+                ExactScope = true
+            }
         };
 
         LangSearchFilter filter = new LangSearchFilter()
@@ -163,7 +166,14 @@ public class SearchTests : TestWithData
                          {
                              Words = ["created", "published"],
                              Tense = VerbsTermTense.Past
-                         }
+                         },
+                         AdditionalEntities = [
+                             new EntityTerm()
+                             {
+                                  Type = ["tag"],
+                                  Name = "t1"
+                             }
+                         ]
                     },
                     EntitySearchTerms = [
                         new EntityTerm()

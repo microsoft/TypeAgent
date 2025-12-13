@@ -83,7 +83,7 @@ public class PodcastCommands : ICommandModule
         var participants = await podcast.GetParticipantsAsync().ConfigureAwait(false);
         if (participants is not null)
         {
-            KnowProWriter.WriteLine(ConsoleColor.White, $"Partiipants: {string.Join(", ", participants)}");
+            KnowProWriter.WriteLine(ConsoleColor.White, $"Participants: {string.Join(", ", participants)}");
         }
 
         return Task.CompletedTask;
@@ -91,7 +91,7 @@ public class PodcastCommands : ICommandModule
 
     private Command PodcastImportIndexDef()
     {
-        Command cmd = new("kpPodcastImportIndex", "Import existing podcast memory index")
+        Command cmd = new("kpPodcastImport", "Import a podcast transcript as Podcast memory")
         {
             Args.Arg<string>("filePath", "Path to existing podcast index"),
             Options.Arg<string>("startAt", "ISO date: When the podcast occurred"),

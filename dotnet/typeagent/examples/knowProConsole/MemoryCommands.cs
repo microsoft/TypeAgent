@@ -71,7 +71,7 @@ public class MemoryCommands : ICommandModule
 
     private Command AliasesDef()
     {
-        Command command = new("kpAliases")
+        Command command = new("kpAlias")
         {
             Options.Arg<string>("term"),
             Options.Arg<string>("alias")
