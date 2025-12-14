@@ -140,14 +140,15 @@ public class PodcastCommands : ICommandModule
             namedArgs.Get<int?>("length")
         );
 
-        if (namedArgs.Get<bool>("buildIndex"))
-        {
-            await podcast.BuildIndexAsync(cancellationToken);
-        }
-
         KnowProWriter.WriteLine($"{podcast.Name}");
         KnowProWriter.WriteLine($"{await podcast.Messages.GetCountAsync(cancellationToken)} messages.");
         KnowProWriter.WriteLine($"Participants: {(await podcast.GetParticipantsAsync()).Join(", ")}");
+
+        if (namedArgs.Get<bool>("buildIndex"))
+        {
+            KnowProWriter.WriteLine("Building Index...");
+            await podcast.BuildIndexAsync(cancellationToken);
+        }
     }
 
     private Command PodcastBuildIndexDef()
@@ -228,6 +229,7 @@ public class PodcastCommands : ICommandModule
         );
 
         var podcast = new Podcast(settings, provider);
+        podcast.Name = name;
         return podcast;
     }
 

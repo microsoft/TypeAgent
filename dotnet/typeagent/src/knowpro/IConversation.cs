@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using TypeAgent.KnowPro.Lang;
 using TypeAgent.KnowPro.Query;
 
@@ -40,4 +42,8 @@ public interface IConversation
     IConversationSecondaryIndexes SecondaryIndexes { get; }
 
     IConversationCache? Cache { get; set; }
+
+    public event Action<EventArgs> IndexingStarted;
+
+    public event Action<EventArgs> IndexingCompleted;
 }
