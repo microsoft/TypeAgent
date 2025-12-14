@@ -1,12 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Diagnostics;
+
 namespace KnowProConsole;
 
 public class ConversationEventHandler
 {
     InplaceText _inplaceUpdate;
     string _prevEventType = string.Empty;
+    Dictionary<string, Stopwatch?> _duration = [];
+    const string FUZZY = "Fuzzy";
+    const string MESSAGE = "Message";
+    const string KNOWLEDGE = "Knowledge";
 
     public ConversationEventHandler()
     {
@@ -33,17 +39,32 @@ public class ConversationEventHandler
 
     private void FuzzyIndex_OnIndexed(BatchProgress item)
     {
-        WriteProgress(item, "Fuzzy");
+        if (!_duration.ContainsKey(FUZZY))
+        {
+            _duration[FUZZY] = Stopwatch.StartNew();
+        }
+
+        WriteProgress(item, FUZZY);
     }
 
     private void Message_OnIndexed(BatchProgress item)
     {
-        WriteProgress(item, "Message");
+        if (!_duration.ContainsKey(MESSAGE))
+        {
+            _duration[MESSAGE] = Stopwatch.StartNew();
+        }
+
+        WriteProgress(item, MESSAGE);
     }
 
     private void KnowledgeExtractor_OnExtracted(BatchProgress item)
     {
-        WriteProgress(item, "Knowledge");
+        if (!_duration.ContainsKey(KNOWLEDGE))
+        {
+            _duration[KNOWLEDGE] = Stopwatch.StartNew();
+        }
+
+        WriteProgress(item, KNOWLEDGE);
     }
 
     private void WriteProgress(BatchProgress progress, string label)
@@ -53,6 +74,12 @@ public class ConversationEventHandler
             ConsoleWriter.WriteLine();
             _prevEventType = label;
         }
-        _inplaceUpdate.Write($"[{label}: {progress.CountCompleted} / {progress.Count}]");
+        _inplaceUpdate.Write($"[{label}: {progress.CountCompleted} / {progress.Count}] [~{_duration[label]?.Elapsed.TotalSeconds:N1}s]");
+
+        if (progress.CountCompleted == progress.Count)
+        {
+            ConsoleWriter.WriteLine();
+            _duration.Remove(label);
+        }
     }
 }

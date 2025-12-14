@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Threading.Tasks;
+using TypeAgent.ConversationMemory;
 using TypeAgent.KnowPro;
 using TypeAgent.KnowPro.Storage;
 
@@ -21,7 +22,8 @@ public class PodcastCommands : ICommandModule
     {
         return [
             PodcastLoadDef(),
-            PodcastImportIndexDef()
+            PodcastImportIndexDef(),
+            PodcastBuildIndexDef()
         ];
     }
 
@@ -142,6 +144,30 @@ public class PodcastCommands : ICommandModule
         {
             await podcast.BuildIndexAsync(cancellationToken);
         }
+
+        KnowProWriter.WriteLine($"{podcast.Name}");
+        KnowProWriter.WriteLine($"{await podcast.Messages.GetCountAsync(cancellationToken)} messages.");
+        KnowProWriter.WriteLine($"Participants: {(await podcast.GetParticipantsAsync()).Join(", ")}");
+    }
+
+    private Command PodcastBuildIndexDef()
+    {
+        Command cmd = new("kpPodcastBuildIndex", "Build the index for the loaded podcast.")
+        {
+        };
+        cmd.SetAction(this.PodcastBuildIndexAsync);
+        return cmd;
+    }
+
+    private async Task PodcastBuildIndexAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+        if (this._podcast is null)
+        {
+            KnowProWriter.WriteError("NO podcast loaded.");
+            return;
+        }
+
+        await this._podcast.BuildIndexAsync(cancellationToken);
     }
 
     private async Task ImportExistingIndexAsync(NamedArgs namedArgs, string filePath, string podcastName, CancellationToken cancellationToken)
@@ -158,6 +184,7 @@ public class PodcastCommands : ICommandModule
 
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Importing {podcastName}");
         var podcast = CreatePodcast(podcastName, true);
+        SetCurrent(podcast);
         try
         {
             int count = await podcast.ImportMessagesAsync(data.Messages, cancellationToken);
@@ -182,9 +209,7 @@ public class PodcastCommands : ICommandModule
             KnowProWriter.WriteLine($"{count} properties imported");
 
             await podcast.UpdateMessageIndexAsync(false, cancellationToken);
-            await podcast.BuildSecondaryIndexesAsync(cancellationToken);
-
-            SetCurrent(podcast);
+            await podcast.BuildSecondaryIndexesAsync(cancellationToken);            
         }
         catch
         {
@@ -192,7 +217,6 @@ public class PodcastCommands : ICommandModule
             throw;
         }
     }
-
 
     private Podcast CreatePodcast(string name, bool createNew)
     {

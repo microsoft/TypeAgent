@@ -326,9 +326,9 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestBuildIndex")
         {
-            Options.Arg<bool>("related", "index related terms", false),
-            Options.Arg<bool>("messages", "index messages", false),
-            Options.Arg<bool>("semanticRefs", "index semantic refs", false)
+            Options.Arg<bool>("related", "index related terms", true),
+            Options.Arg<bool>("messages", "index messages", true),
+            Options.Arg<bool>("semanticRefs", "index semantic refs", true)
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.BuildIndexAsync);
