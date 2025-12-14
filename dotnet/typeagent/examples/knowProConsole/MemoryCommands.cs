@@ -52,7 +52,6 @@ public class MemoryCommands : ICommandModule
         IConversation conversation = EnsureConversation();
 
         await KnowProWriter.WriteMessagesAsync(conversation);
-
     }
 
     private Command SemanticRefsDef()
@@ -66,12 +65,11 @@ public class MemoryCommands : ICommandModule
         IConversation conversation = EnsureConversation();
 
         await KnowProWriter.WriteSemanticRefsAsync(conversation);
-
     }
 
     private Command AliasesDef()
     {
-        Command command = new("kpAliases")
+        Command command = new("kpAlias")
         {
             Options.Arg<string>("term"),
             Options.Arg<string>("alias")

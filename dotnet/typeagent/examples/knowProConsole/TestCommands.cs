@@ -43,12 +43,12 @@ public class TestCommands : ICommandModule
             Options.Arg<bool>("displayAsc", "Display results in ascending order.", true),
             Options.Arg<bool>("distinct", "Show distinct results.", true),
             Options.Arg<string>("endDate", "Ending at this date (ISO format)."),
-            Options.Arg<int>("endMinute", "Ending minute."),
+            Options.Arg<int?>("endMinute", "Ending minute."),
             Options.Arg<bool>("exact", "Exact match only. No related terms.", false),
             Options.Arg<string>("ktype", "Filter results to a specific knowledge type [entity | topic | action | tag]."),
             Options.Arg<int>("maxToDisplay", "Maximum number of results to display", 25),
             Options.Arg<string>("startDate", "Starting at this date (ISO format)."),
-            Options.Arg<int>("startMinute", "Starting minute."),
+            Options.Arg<int?>("startMinute", "Starting minute."),
         };
 
         cmd.TreatUnmatchedTokensAsErrors = false;
@@ -326,9 +326,9 @@ public class TestCommands : ICommandModule
     {
         Command cmd = new("kpTestBuildIndex")
         {
-            Options.Arg<bool>("related", "index related terms", false),
-            Options.Arg<bool>("messages", "index messages", false),
-            Options.Arg<bool>("semanticRefs", "index semantic refs", false)
+            Options.Arg<bool>("related", "index related terms", true),
+            Options.Arg<bool>("messages", "index messages", true),
+            Options.Arg<bool>("semanticRefs", "index semantic refs", true)
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(this.BuildIndexAsync);

@@ -1,12 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
+
 namespace TypeAgent.KnowPro;
 
 public class Conversation<TMessage> : IConversation<TMessage>, IConversation, IDisposable
     where TMessage : IMessage, new()
 {
     private IStorageProvider<TMessage> _storageProvider;
+
+    public event Action<EventArgs> IndexingStarted;
+    public event Action<EventArgs> IndexingCompleted;
 
     public Conversation(ConversationSettings settings, IStorageProvider<TMessage> provider)
     {
@@ -40,6 +45,16 @@ public class Conversation<TMessage> : IConversation<TMessage>, IConversation, ID
             _storageProvider.Dispose();
             _storageProvider = null;
         }
+    }
+
+    protected void BeginIndexing()
+    {
+        this.IndexingStarted?.Invoke(new EventArgs());
+    }
+
+    protected void EndIndexing()
+    {
+        this.IndexingCompleted?.Invoke(new EventArgs());
     }
 
     public void Dispose()
