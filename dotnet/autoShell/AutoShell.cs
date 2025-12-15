@@ -19,21 +19,13 @@ using Newtonsoft.Json;
 
 namespace autoShell
 {
-    // window rect structure
-    struct RECT
-    {
-        public int Left;        // x position of upper-left corner
-        public int Top;         // y position of upper-left corner
-        public int Right;       // x position of lower-right corner
-        public int Bottom;      // y position of lower-right corner
-    }
-
-    internal class AutoShell
+    internal partial class AutoShell
     {
         // create a map of friendly names to executable paths
         static Hashtable s_friendlyNameToPath = new Hashtable();
         static Hashtable s_friendlyNameToId = new Hashtable();
         static double s_savedVolumePct = 0.0;
+
         static AutoShell()
         {
             // get current user name
@@ -74,6 +66,9 @@ namespace autoShell
             {
                 s_friendlyNameToId.Add(kvp.Key, kvp.Value);
             }
+
+            // Load the installed themes
+            LoadThemes();
         }
 
         static SortedList<string, string> GetAllInstalledAppsIds()
@@ -119,33 +114,6 @@ namespace autoShell
             Debug.WriteLine("Current Mute:" + defaultPlaybackDevice.IsMuted);
             defaultPlaybackDevice.Mute(mute);
         }
-
-        // import GetWindowRect
-        [DllImport("user32.dll")]
-        static extern bool GetWindowRect(IntPtr hWnd, ref RECT Rect);
-
-        // import GetShellWindow
-        [DllImport("user32.dll")]
-        static extern IntPtr GetShellWindow();
-
-        // import GetDesktopWindow
-        [DllImport("user32.dll")]
-        static extern IntPtr GetDesktopWindow();
-
-        // import SetForegroundWindow
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll", EntryPoint = "SendMessage", SetLastError = true)]
-        static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, UInt32 wParam, IntPtr lParam);
-
-
-        // import SetWindowPos
-        [DllImport("user32.dll")]
-        static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        // import FindWindowEx
-        [DllImport("user32.dll")]
-        static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
 
         static string ResolveProcessNameFromFriendlyName(string friendlyName)
         {
@@ -302,6 +270,7 @@ namespace autoShell
                 Interaction.AppActivate(pid2);
             }
         }
+
         // given a friendly name, check if it's running and if not, start it; if it's running raise it to the top level
         static void OpenApplication(string friendlyName)
         {
@@ -360,13 +329,6 @@ namespace autoShell
                 }
             }
         }
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-
-        private const int SPI_SETDESKWALLPAPER = 20;
-        private const int SPIF_UPDATEINIFILE = 0x01;
-        private const int SPIF_SENDCHANGE = 0x02;
 
         private static void SetDesktopWallpaper(string imagePath)
         {
@@ -433,6 +395,13 @@ namespace autoShell
                     case "setWallpaper":
                         SetDesktopWallpaper(value);
                         break;
+                    case "applyTheme":
+                        bool result = ApplyTheme(value);
+                        break;
+                    case "listThemes":
+                        var themes = GetInstalledThemes();
+                        Console.WriteLine(JsonConvert.SerializeObject(themes));
+                        break;
                     default:
                         Debug.WriteLine("Unknown command: " + key);
                         break;
@@ -440,6 +409,7 @@ namespace autoShell
             }
             return quit;
         }
+
         static void Main(string[] args)
         {
             bool quit = false;
