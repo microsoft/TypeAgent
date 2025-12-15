@@ -372,7 +372,7 @@ async function updateBrowserContext(
                 "./agentWebSocketServer.mjs"
             );
             context.agentContext.agentWebSocketServer =
-                new AgentWebSocketServer(80881);
+                new AgentWebSocketServer(8081);
 
             context.agentContext.agentWebSocketServer.getPreferredClientType =
                 () => {

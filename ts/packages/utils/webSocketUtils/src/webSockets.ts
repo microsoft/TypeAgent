@@ -25,7 +25,7 @@ export async function createWebSocket(
     channel: string,
     role: "dispatcher" | "client",
     clientId?: string,
-    port: number = 80881,
+    port: number = 8081,
 ) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         let endpoint = `ws://localhost:${port}`;
