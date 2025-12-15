@@ -24,7 +24,7 @@ export class AgentWebSocketServer {
     public onClientConnected?: (client: BrowserClient) => void;
     public onClientDisconnected?: (client: BrowserClient) => void;
 
-    constructor(port: number = 8081) {
+    constructor(port: number = 80881) {
         this.server = new WebSocketServer({ port });
         this.setupHandlers();
         debug(`Agent WebSocket server started on port ${port}`);
