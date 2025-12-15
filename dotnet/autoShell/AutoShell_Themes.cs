@@ -196,8 +196,11 @@ namespace autoShell
                 if (themeName.ToLowerInvariant() != "previous")
                 {
                     // Apply theme by opening the .theme file
-                    Process.Start(themePath);
+                    Process p = Process.Start(themePath);
                     s_previousTheme = previous;
+
+                    p.Exited += P_Exited;
+
                     return true;
                 }
                 else
@@ -216,6 +219,11 @@ namespace autoShell
             {
                 return false;
             }
+        }
+
+        private static void P_Exited(object sender, EventArgs e)
+        {
+            Debug.WriteLine(((Process)sender).ExitCode);
         }
 
         /// <summary>

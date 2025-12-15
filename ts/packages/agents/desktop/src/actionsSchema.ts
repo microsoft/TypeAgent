@@ -11,7 +11,8 @@ export type DesktopActions =
     | SetVolumeAction
     | RestoreVolumeAction
     | MuteVolumeAction
-    | SetWallpaperAction;
+    | SetWallpaperAction
+    | ChangeThemeAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
@@ -95,6 +96,15 @@ export type SetWallpaperAction = {
         url?: string; // The url to the image
     };
 };
+
+// Sets the theme of the current [windows] desktop
+export type ChangeThemeAction = {
+    actionName: "applyTheme";
+    parameters: {
+        theme: KnownThemes | "previous" | string; // The name of the theme
+    };
+};
+
 export type KnownPrograms =
     | "chrome"
     | "word"
@@ -116,3 +126,16 @@ export type KnownPrograms =
     | "magnifier"
     | "paint 3d"
     | "task manager";
+
+export type KnownThemes = 
+    | "Windows (light)"
+    | "Windows (dark)"
+    | "Windows spotlight"
+    | "Glow"
+    | "Captured Motion"
+    | "Sunrise"
+    | "Flow" 
+    | "High Contrast #1"
+    | "High Contrast #2"
+    | "High Contrast Black"
+    | "High Contrast White";
