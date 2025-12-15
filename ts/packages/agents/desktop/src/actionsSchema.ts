@@ -127,14 +127,14 @@ export type KnownPrograms =
     | "paint 3d"
     | "task manager";
 
-export type KnownThemes = 
+export type KnownThemes =
     | "Windows (light)"
     | "Windows (dark)"
     | "Windows spotlight"
     | "Glow"
     | "Captured Motion"
     | "Sunrise"
-    | "Flow" 
+    | "Flow"
     | "High Contrast #1"
     | "High Contrast #2"
     | "High Contrast Black"
