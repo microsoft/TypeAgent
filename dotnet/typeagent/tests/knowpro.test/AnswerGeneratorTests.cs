@@ -30,7 +30,7 @@ public class AnswerGeneratorTests : TestWithData
     /// <summary>
     /// Create temporary folder and load .ENV file
     /// </summary>
-    public AnswerGeneratorTests() : base(true) { }
+    public AnswerGeneratorTests() : base(true, true) { }
 
     [Fact]
     public async Task GenerateAnswerAsync()
@@ -101,6 +101,23 @@ public class AnswerGeneratorTests : TestWithData
                 Assert.False(string.IsNullOrEmpty(combinedResponse.Answer));
             }
         }
+    }
+
+    [Fact]
+    public async Task RelevantTopicTestsAsync()
+    {
+        // search empty search results
+        AnswerContextBuilder builder = new AnswerContextBuilder(this._podcast!);
+        var v = await builder.GetRelevantTopicsAsync(new SemanticRefSearchResult() { }, null, CancellationToken.None);
+        Assert.Empty(v);
+
+        // search related topics
+        var termGroup = new SearchTermGroup(SearchTermBooleanOp.Or, [new SearchTerm("writing")]);
+        var matches = await SearchTests.SearchKnowledgeAsync(this._podcast, termGroup, KnowledgeType.Topic, true);
+        var topics = await builder.GetRelevantTopicsAsync(matches[KnowledgeType.Topic], null, CancellationToken.None);
+
+        Assert.NotEmpty(topics);
+        Assert.Equal(13, topics.Count);
     }
 }
 

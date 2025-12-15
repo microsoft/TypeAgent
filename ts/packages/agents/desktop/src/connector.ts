@@ -208,6 +208,11 @@ export async function runDesktopActions(
             actionData = String(action.parameters.on);
             break;
         }
+        case "applyTheme": {
+            actionData = action.parameters!.theme;
+            confirmationMessage = `Changed theme to '${action.parameters.theme}'`;
+            break;
+        }
     }
 
     // send message to child process
