@@ -101,7 +101,9 @@ namespace autoShell
         {
             // CoreAudioDevice and CoreAudioController were provided by the AudioSwitcher.AudioApi.CoreAudio package, which is no longer referenced. To restore this functionality, re-add the AudioSwitcher.AudioApi.CoreAudio NuGet package and add the appropriate using directive:
             // using AudioSwitcher.AudioApi.CoreAudio;
-            // CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
+using AudioSwitcher.AudioApi.CoreAudio;
+// CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
+CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().GetDefaultDevice(AudioSwitcher.AudioApi.DeviceType.Playback, AudioSwitcher.AudioApi.Role.Multimedia);
             s_savedVolumePct = defaultPlaybackDevice.Volume;
             defaultPlaybackDevice.Volume = pct;
         }
