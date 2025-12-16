@@ -30,7 +30,7 @@ public class SearchSelectExpr
         StringBuilder sb = new StringBuilder();
         sb.Append(SearchTermGroup.ToString());
         sb.Append(Environment.NewLine);
-        sb.Append(When.ToString());
+        sb.Append(When?.ToString());
 
         return sb.ToString();
     }
