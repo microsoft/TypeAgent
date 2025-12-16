@@ -21,8 +21,8 @@ namespace autoShell
     internal partial class AutoShell
     {
         // create a map of friendly names to executable paths
-        static Hashtable s_friendlyNameToPath = new Hashtable();
-        static Hashtable s_friendlyNameToId = new Hashtable();
+        static Hashtable s_friendlyNameToPath = [];
+        static Hashtable s_friendlyNameToId = [];
         static double s_savedVolumePct = 0.0;
 
         static AutoShell()
