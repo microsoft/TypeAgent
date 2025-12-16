@@ -99,20 +99,26 @@ namespace autoShell
 
         static void SetMasterVolume(int pct)
         {
-            CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
+            // CoreAudioDevice and CoreAudioController were provided by the AudioSwitcher.AudioApi.CoreAudio package, which is no longer referenced. To restore this functionality, re-add the AudioSwitcher.AudioApi.CoreAudio NuGet package and add the appropriate using directive:
+            // using AudioSwitcher.AudioApi.CoreAudio;
+            // CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
             s_savedVolumePct = defaultPlaybackDevice.Volume;
             defaultPlaybackDevice.Volume = pct;
         }
 
         static void RestoreMasterVolume()
         {
-            CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
+            // CoreAudioDevice and CoreAudioController were provided by the AudioSwitcher.AudioApi.CoreAudio package, which is no longer referenced. To restore this functionality, re-add the AudioSwitcher.AudioApi.CoreAudio NuGet package and add the appropriate using directive:
+            // using AudioSwitcher.AudioApi.CoreAudio;
+            // CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
             defaultPlaybackDevice.Volume = s_savedVolumePct;
         }
 
         static void SetMasterMute(bool mute)
         {
-            CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
+            // CoreAudioDevice and CoreAudioController were provided by the AudioSwitcher.AudioApi.CoreAudio package, which is no longer referenced. To restore this functionality, re-add the AudioSwitcher.AudioApi.CoreAudio NuGet package and add the appropriate using directive:
+            // using AudioSwitcher.AudioApi.CoreAudio;
+            // CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
             Debug.WriteLine("Current Mute:" + defaultPlaybackDevice.IsMuted);
             defaultPlaybackDevice.Mute(mute);
         }
