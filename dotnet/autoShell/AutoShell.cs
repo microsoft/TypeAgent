@@ -99,30 +99,60 @@ namespace autoShell
 
         static void SetMasterVolume(int pct)
         {
-            // CoreAudioDevice and CoreAudioController were provided by the AudioSwitcher.AudioApi.CoreAudio package, which is no longer referenced. To restore this functionality, re-add the AudioSwitcher.AudioApi.CoreAudio NuGet package and add the appropriate using directive:
-            // using AudioSwitcher.AudioApi.CoreAudio;
-
-
-var defaultPlaybackDevice = new AudioSwitcher.AudioApi.CoreAudio.CoreAudioController().GetDefaultDevice(AudioSwitcher.AudioApi.DeviceType.Playback, AudioSwitcher.AudioApi.Role.Multimedia);
-            s_savedVolumePct = defaultPlaybackDevice.Volume;
-            defaultPlaybackDevice.Volume = pct;
+            // Using Windows Core Audio API via COM interop
+            try
+            {
+                var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
+                var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
+                var audioEndpointVolume = (IAudioEndpointVolume)obj;
+                audioEndpointVolume.GetMasterVolumeLevelScalar(out float currentVolume);
+                s_savedVolumePct = currentVolume * 100.0;
+                audioEndpointVolume.SetMasterVolumeLevelScalar(pct / 100.0f, Guid.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to set volume: " + ex.Message);
+            }
         }
 
         static void RestoreMasterVolume()
         {
-            // CoreAudioDevice and CoreAudioController were provided by the AudioSwitcher.AudioApi.CoreAudio package, which is no longer referenced. To restore this functionality, re-add the AudioSwitcher.AudioApi.CoreAudio NuGet package and add the appropriate using directive:
-            // using AudioSwitcher.AudioApi.CoreAudio;
-            // CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
-            defaultPlaybackDevice.Volume = s_savedVolumePct;
+            // Using Windows Core Audio API via COM interop
+            try
+            {
+                var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
+                var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
+                var audioEndpointVolume = (IAudioEndpointVolume)obj;
+                audioEndpointVolume.SetMasterVolumeLevelScalar((float)(s_savedVolumePct / 100.0), Guid.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to restore volume: " + ex.Message);
+            }
         }
 
         static void SetMasterMute(bool mute)
         {
-            // CoreAudioDevice and CoreAudioController were provided by the AudioSwitcher.AudioApi.CoreAudio package, which is no longer referenced. To restore this functionality, re-add the AudioSwitcher.AudioApi.CoreAudio NuGet package and add the appropriate using directive:
-            // using AudioSwitcher.AudioApi.CoreAudio;
-            // CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
-            Debug.WriteLine("Current Mute:" + defaultPlaybackDevice.IsMuted);
-            defaultPlaybackDevice.Mute(mute);
+            // Using Windows Core Audio API via COM interop
+            try
+            {
+                var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
+                var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
+                var audioEndpointVolume = (IAudioEndpointVolume)obj;
+                audioEndpointVolume.GetMute(out bool currentMute);
+                Debug.WriteLine("Current Mute:" + currentMute);
+                audioEndpointVolume.SetMute(mute, Guid.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to set mute: " + ex.Message);
+            }
         }
 
         static string ResolveProcessNameFromFriendlyName(string friendlyName)
