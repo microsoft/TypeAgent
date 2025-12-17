@@ -196,10 +196,13 @@ export async function processWebAgentMessage(
                 webAgentChannels.channelProvider.notifyMessage(message.params);
                 break;
             case "webAgent/disconnect":
-                await context.removeDynamicAgent(message.params);
-                webAgentChannels.channelProvider.deleteChannel(
-                    `agent:${message.params}`,
-                );
+                const agentNames = message.params;
+                for (const name of agentNames) {
+                    await context.removeDynamicAgent(name);
+                    webAgentChannels.channelProvider.deleteChannel(
+                        `agent:${name}`,
+                    );
+                }
                 break;
         }
     } catch (e: any) {

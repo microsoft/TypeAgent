@@ -302,21 +302,20 @@ function setupEventListeners(): void {
                     param.title = title;
                     param.url = url;
                 }
-
                 webSocket.send(JSON.stringify(data));
             }
         });
 
         port.onDisconnect.addListener(() => {
             debugWebAgentProxy(`Web page disconnected: ${url}`);
-            for (const name of agentNames) {
-                const message: WebAgentDisconnectMessage = {
-                    source: "webAgent",
-                    method: "webAgent/disconnect",
-                    params: name,
-                };
-                webSocket.send(JSON.stringify(message));
-            }
+            const disconnectMessage: WebAgentDisconnectMessage = {
+                source: "webAgent",
+                method: "webAgent/disconnect",
+                params: Array.from(agentNames),
+            };
+
+            webSocket.send(JSON.stringify(disconnectMessage));
+            agentNames.clear();
             webSocket.removeEventListener("message", handler);
         });
     });
