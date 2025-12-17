@@ -9,7 +9,7 @@ import {
 import { PromptSection } from "typechat";
 import { RequestId } from "@typeagent/dispatcher-types";
 import { normalizeParamString, PromptEntity } from "agent-cache";
-import { SchemaCreator as sc, validateType } from "action-schema";
+import { SchemaCreator as sc, validateType } from "@typeagent/action-schema";
 import { getAppAgentName } from "../internal.js";
 
 type UserEntry = {

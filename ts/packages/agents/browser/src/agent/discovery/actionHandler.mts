@@ -12,8 +12,8 @@ import {
     generateActionSchema,
     parseActionSchemaSource,
     generateSchemaTypeDefinition,
-} from "action-schema";
-import { SchemaCreator as sc } from "action-schema";
+} from "@typeagent/action-schema";
+import { SchemaCreator as sc } from "@typeagent/action-schema";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";

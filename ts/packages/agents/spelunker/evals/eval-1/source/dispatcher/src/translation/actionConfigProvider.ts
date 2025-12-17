@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionSchemaFile } from "action-schema";
+import { ActionSchemaFile } from "@typeagent/action-schema";
 import { ActionConfig } from "./actionConfig.js";
 
 export interface ActionConfigProvider {

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { ActionSchemaFile, ActionSchemaTypeDefinition } from "action-schema";
+import { ActionSchemaFile, ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import { ActionConfig } from "./actionConfig.js";
 import {
     generateEmbeddingWithRetry,

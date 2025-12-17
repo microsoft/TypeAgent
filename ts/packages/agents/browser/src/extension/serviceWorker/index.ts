@@ -280,7 +280,7 @@ function setupEventListeners(): void {
 
         debugWebAgentProxy("Web page connected:", url);
         const handler = async (event: MessageEvent) => {
-            const message = await (event.data as Blob).text();
+            const message = event.data;
             const data = JSON.parse(message);
             if (isWebAgentMessageFromDispatcher(data)) {
                 debugWebAgentProxy(`Dispatcher -> WebAgent (${url})`, data);
@@ -289,16 +289,18 @@ function setupEventListeners(): void {
         };
         webSocket.addEventListener("message", handler);
 
-        const agentNames: string[] = [];
+        const agentNames = new Set<string>();
         port.onMessage.addListener((data) => {
             if (isWebAgentMessage(data)) {
                 debugWebAgentProxy(`WebAgent -> Dispatcher (${url})`, data);
                 // relay message from the browser agent message sent via content script to the browser agent via the websocket.
                 if (data.method === "webAgent/register") {
-                    agentNames.push(data.params.param.name);
+                    // TODO: sniffing the RPC call arguments. Fix typing.
+                    const param = data.params.args[0];
+                    agentNames.add(param.name);
                     // Fill in identification information
-                    data.params.param.title = title;
-                    data.params.param.url = url;
+                    param.title = title;
+                    param.url = url;
                 }
 
                 webSocket.send(JSON.stringify(data));

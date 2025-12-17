@@ -25,7 +25,7 @@ import {
     dedupeLineFile,
 } from "typeagent";
 import { generateActionPhrases, loadActionSchema } from "schema-author";
-import { NodeType, SchemaParser } from "action-schema";
+import { NodeType, SchemaParser } from "@typeagent/action-schema";
 import { createStudio } from "./studio.js";
 import { createTemplateCommand } from "./templateCommand.js";
 import {

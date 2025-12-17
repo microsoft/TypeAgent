@@ -22,14 +22,17 @@ export async function connectDispatcher(
 ): Promise<Dispatcher> {
     return new Promise((resolve, reject: (e: Error) => void) => {
         const ws = new WebSocket(url); // Replace with the actual WebSocket server URL
-        const channel = createChannelProviderAdapter((message: any) => {
-            debug("Sending message to server:", message);
-            // Server assume data are JSON strings
-            ws.send(JSON.stringify(message));
-        });
+        const channel = createChannelProviderAdapter(
+            "agent-server:client",
+            (message: any) => {
+                debug("Sending message to server:", message);
+                // Server assume data are JSON strings
+                ws.send(JSON.stringify(message));
+            },
+        );
 
         const rpc = createRpc<AgentServerInvokeFunctions>(
-            "agent-server-client",
+            "agent-server:client",
             channel.createChannel(ChannelName.AgentServer),
         );
 

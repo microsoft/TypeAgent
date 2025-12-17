@@ -107,18 +107,21 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         return undefined;
     }
 
-    const channelProvider = createChannelProviderAdapter((message) => {
-        const client = agentServer.getActiveClient();
-        if (client) {
-            client.socket.send(
-                JSON.stringify({
-                    source: "dispatcher",
-                    method: "webAgent/message",
-                    params: message,
-                }),
-            );
-        }
-    });
+    const channelProvider = createChannelProviderAdapter(
+        "webAgent:server",
+        (message) => {
+            const client = agentServer.getActiveClient();
+            if (client) {
+                client.socket.send(
+                    JSON.stringify({
+                        source: "dispatcher",
+                        method: "webAgent/message",
+                        params: message,
+                    }),
+                );
+            }
+        },
+    );
 
     const registerChannel = createChannelAdapter((message) => {
         const client = agentServer.getActiveClient();
@@ -133,7 +136,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         }
     });
 
-    createRpc("webagent", registerChannel.channel, {
+    createRpc("webAgent:server", registerChannel.channel, {
         addTypeAgent: async (param: {
             name: string;
             manifest: AppAgentManifest;
@@ -162,7 +165,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
             } catch (e: any) {
                 debugError("Failed to register dynamic agent", name, e);
                 // Clean up the channel if adding the agent fails
-                channelProvider.deleteChannel(name);
+                channelProvider.deleteChannel(`agent:${name}`);
                 throw e;
             }
         },
@@ -194,7 +197,9 @@ export async function processWebAgentMessage(
                 break;
             case "webAgent/disconnect":
                 await context.removeDynamicAgent(message.params);
-                webAgentChannels.channelProvider.deleteChannel(message.params);
+                webAgentChannels.channelProvider.deleteChannel(
+                    `agent:${message.params}`,
+                );
                 break;
         }
     } catch (e: any) {

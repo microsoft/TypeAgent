@@ -47,7 +47,7 @@ import {
     SchemaInfoProvider,
     getNamespaceForCache,
 } from "../schemaInfoProvider.js";
-import { ParamSpec } from "action-schema";
+import { ParamSpec } from "@typeagent/action-schema";
 import { openai } from "aiclient";
 import {
     PropertyExplainer,
