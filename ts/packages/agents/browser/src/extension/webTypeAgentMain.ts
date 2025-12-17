@@ -54,25 +54,31 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
         return manager;
     }
     const messageChannelProvider = createChannelProviderAdapter(
+        "webAgent:client",
         (message: any) => {
-            window.postMessage({
+            const wrapped: WebAgentRpcMessage = {
                 source: "webAgent",
                 method: "webAgent/message",
-                params: message,
-            } as WebAgentRpcMessage);
+                // REVIEW: fields in the original message may not be structure cloneable.  Use JSON stringify/parse to sanitize.
+                params: JSON.parse(JSON.stringify(message)),
+            };
+
+            window.postMessage(wrapped);
         },
     );
 
     const registerChannel = createChannelAdapter((message: any) => {
-        window.postMessage({
+        const wrapped: WebAgentRegisterMessage = {
             source: "webAgent",
             method: "webAgent/register",
-            params: message,
-        } as WebAgentRegisterMessage);
+            // REVIEW: fields in the original message may not be structure cloneable.  Use JSON stringify/parse to sanitize.
+            params: JSON.parse(JSON.stringify(message)),
+        };
+        window.postMessage(wrapped);
     });
 
     const rpc = createRpc<DynamicTypeAgentManagerInvokeFunctions>(
-        "webAgent",
+        "webAgent:client",
         registerChannel.channel,
     );
     manager = {
@@ -132,12 +138,4 @@ actualGlobal.registerTypeAgent = async (
 ): Promise<void> => {
     const manager = ensureDynamicTypeAgentManager();
     await manager.addTypeAgent(name, manifest, agent);
-
-    window.addEventListener("beforeunload", (event) => {
-        window.postMessage({
-            source: "webAgent",
-            method: "webAgent/disconnect",
-            params: name,
-        });
-    });
 };

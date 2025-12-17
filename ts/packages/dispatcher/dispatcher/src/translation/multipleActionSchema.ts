@@ -8,8 +8,8 @@ import {
     ActionSchemaTypeDefinition,
     ActionSchemaUnion,
     generateSchemaTypeDefinition,
-} from "action-schema";
-import { SchemaCreator as sc } from "action-schema";
+} from "@typeagent/action-schema";
+import { SchemaCreator as sc } from "@typeagent/action-schema";
 
 // Multiple Action is what is used and returned from the LLM
 const multipleActionName = "multiple";

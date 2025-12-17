@@ -12,7 +12,7 @@ import {
     CompletionEmojis,
     getPropertyType,
     resolveTypeReference,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { getAppAgentName } from "./agentTranslators.js";
 import { resolveEntityTypeName } from "../execute/pendingActions.js";
 import {

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { TypeSchema } from "typeagent";
-import { NodeType, SchemaParser, SymbolNode } from "action-schema";
+import { NodeType, SchemaParser, SymbolNode } from "@typeagent/action-schema";
 
 export function loadActionSchema(
     filePathOrSchema: string | SchemaParser,

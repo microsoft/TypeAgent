@@ -28,7 +28,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "action-schema": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
     "aiclient": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"

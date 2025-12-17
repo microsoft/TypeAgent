@@ -1,7 +1,6 @@
 {
-  "name": "action-schema-compiler",
+  "name": "@typeagent/action-schema-compiler",
   "version": "0.0.1",
-  "private": true,
   "description": "Action schema compiler",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -42,7 +41,7 @@
   "dependencies": {
     "@oclif/core": "^4.2.10",
     "@oclif/plugin-help": "^6",
-    "action-schema": "workspace:*"
+    "@typeagent/action-schema": "workspace:*"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

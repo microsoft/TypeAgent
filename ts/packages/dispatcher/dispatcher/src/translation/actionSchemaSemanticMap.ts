@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { ActionSchemaTypeDefinition } from "action-schema";
+import { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionSchemaFile } from "./actionConfigProvider.js";
 import {

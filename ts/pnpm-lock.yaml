@@ -73,6 +73,9 @@ importers:
 
   examples/cacheRESTEndpoint:
     dependencies:
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../../packages/actionSchema
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../packages/agentRpc
@@ -82,9 +85,6 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
-      action-schema:
-        specifier: workspace:*
-        version: link:../../packages/actionSchema
       agent-cache:
         specifier: workspace:*
         version: link:../../packages/cache
@@ -591,7 +591,7 @@ importers:
 
   examples/schemaStudio:
     dependencies:
-      action-schema:
+      '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
       aiclient:
@@ -751,7 +751,7 @@ importers:
 
   examples/vscodeSchemaGen:
     dependencies:
-      action-schema:
+      '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
       aiclient:
@@ -889,7 +889,7 @@ importers:
 
   packages/actionGrammar:
     dependencies:
-      action-schema:
+      '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
       chalk:
@@ -976,7 +976,7 @@ importers:
       '@oclif/plugin-help':
         specifier: ^6
         version: 6.2.26
-      action-schema:
+      '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
     devDependencies:
@@ -1260,6 +1260,9 @@ importers:
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../../actionSchema
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -1269,9 +1272,6 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
-      action-schema:
-        specifier: workspace:*
-        version: link:../../actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -2096,6 +2096,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -2108,9 +2111,6 @@ importers:
       action-grammar-compiler:
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
-      action-schema-compiler:
-        specifier: workspace:*
-        version: link:../../actionSchemaCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2241,6 +2241,9 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -2485,6 +2488,9 @@ importers:
 
   packages/cache:
     dependencies:
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -2494,9 +2500,6 @@ importers:
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
-      action-schema:
-        specifier: workspace:*
-        version: link:../actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -2644,6 +2647,9 @@ importers:
       '@oclif/plugin-help':
         specifier: ^6
         version: 6.2.26
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -2656,9 +2662,6 @@ importers:
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
-      action-schema:
-        specifier: workspace:*
-        version: link:../actionSchema
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -2815,6 +2818,9 @@ importers:
       '@modelcontextprotocol/server-filesystem':
         specifier: 2025.8.21
         version: 2025.8.21(zod@4.1.13)
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
@@ -2827,9 +2833,6 @@ importers:
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
-      action-schema:
-        specifier: workspace:*
-        version: link:../actionSchema
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -2984,6 +2987,9 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../../actionSchema
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -2999,9 +3005,6 @@ importers:
       action-grammar:
         specifier: workspace:*
         version: link:../../actionGrammar
-      action-schema:
-        specifier: workspace:*
-        version: link:../../actionSchema
       agent-cache:
         specifier: workspace:*
         version: link:../../cache
@@ -3674,7 +3677,7 @@ importers:
 
   packages/schemaAuthor:
     dependencies:
-      action-schema:
+      '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
       aiclient:

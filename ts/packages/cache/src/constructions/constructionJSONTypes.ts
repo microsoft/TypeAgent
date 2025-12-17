@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ParamSpec } from "action-schema";
+import { ParamSpec } from "@typeagent/action-schema";
 import { ImplicitParameter, WildcardMode } from "./constructions.js";
 import { ParamValueType } from "../explanation/requestAction.js";
 import { TransformEntityRecord } from "./transforms.js";
