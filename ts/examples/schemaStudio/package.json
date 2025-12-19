@@ -22,7 +22,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "action-schema": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
     "aiclient": "workspace:*",
     "azure-ai-foundry": "workspace:*",
     "debug": "^4.4.0",

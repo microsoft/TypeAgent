@@ -52,6 +52,7 @@ export type GrammarFormat = "ag";
 
 export type SchemaContent = {
     format: SchemaFormat;
+    // TODO: enable non-stringify pas content.
     content: string;
     config?: string | undefined; // for "ts" only
 };

@@ -42,7 +42,7 @@ import {
     isSwitchEnabled,
     translatePendingRequestAction,
 } from "../translation/translateRequest.js";
-import { validateAction } from "action-schema";
+import { validateAction } from "@typeagent/action-schema";
 import {
     PendingAction,
     resolveEntities,

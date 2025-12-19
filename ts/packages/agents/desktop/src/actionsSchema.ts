@@ -125,7 +125,9 @@ export type KnownPrograms =
     | "snipping tool"
     | "magnifier"
     | "paint 3d"
-    | "task manager";
+    | "task manager"
+    | "spotify"
+    | "m365 copilot";
 
 export type KnownThemes =
     | "Windows (light)"

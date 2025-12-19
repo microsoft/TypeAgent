@@ -10,7 +10,7 @@ import {
 } from "agent-cache";
 import { existsSync } from "fs";
 import path from "path";
-import { NodeType, SchemaParser } from "action-schema";
+import { NodeType, SchemaParser } from "@typeagent/action-schema";
 import { NameValue } from "typeagent";
 
 // Create an instance of an Express application

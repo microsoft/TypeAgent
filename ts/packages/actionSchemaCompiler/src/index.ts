@@ -6,7 +6,7 @@ import {
     parseActionSchemaSource,
     SchemaConfig,
     toJSONParsedActionSchema,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import path from "node:path";
 import fs from "node:fs";
 

@@ -5,7 +5,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { parseToolsJsonSchema, toJSONParsedActionSchema } from "action-schema";
+import {
+    parseToolsJsonSchema,
+    toJSONParsedActionSchema,
+} from "@typeagent/action-schema";
 import { AppAgentProvider } from "agent-dispatcher";
 import {
     ArgDefinitions,

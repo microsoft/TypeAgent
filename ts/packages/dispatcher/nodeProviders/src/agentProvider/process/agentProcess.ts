@@ -50,7 +50,10 @@ if (typeof module.instantiate !== "function") {
 // Instantiate agent and  Create agent RPC server
 //=================================================================
 const agent: AppAgent = module.instantiate();
-const channelProvider = createChannelProvider(process);
+const channelProvider = createChannelProvider(
+    `agent-process:server:${agentName}`,
+    process,
+);
 const { agentInterface } = createAgentRpcServer(
     agentName,
     agent,

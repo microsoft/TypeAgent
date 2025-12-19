@@ -46,11 +46,11 @@
   "dependencies": {
     "@oclif/core": "^4.2.10",
     "@oclif/plugin-help": "^6",
+    "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "action-grammar": "workspace:*",
-    "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",

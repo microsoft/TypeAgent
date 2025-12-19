@@ -15,7 +15,7 @@ import {
     generateActionActionFunctionJsonSchemas,
     ActionObjectJsonSchema,
     ActionFunctionJsonSchema,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import {
     createJsonTranslatorWithValidator,
     JsonTranslatorOptions,

@@ -23,7 +23,7 @@ import {
     EmbeddingCache,
 } from "../translation/actionSchemaSemanticMap.js";
 import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
-import { ActionSchemaFile } from "action-schema";
+import { ActionSchemaFile } from "@typeagent/action-schema";
 import path from "path";
 import { callEnsureError } from "../utils/exceptions.js";
 

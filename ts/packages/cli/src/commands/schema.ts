@@ -10,7 +10,7 @@ import {
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
-import { generateSchemaTypeDefinition } from "action-schema";
+import { generateSchemaTypeDefinition } from "@typeagent/action-schema";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 
 const { provider, schemaNames } = await getAllActionConfigProvider(

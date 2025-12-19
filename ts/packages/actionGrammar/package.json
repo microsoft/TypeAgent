@@ -31,7 +31,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "action-schema": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "regexp.escape": "^2.0.1"
