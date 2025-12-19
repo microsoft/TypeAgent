@@ -69,6 +69,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AutoShell.cs" />
+    <Compile Include="AutoShell_Themes.cs" />
+    <Compile Include="AutoShell_Win32.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
