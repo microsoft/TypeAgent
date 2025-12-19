@@ -186,6 +186,7 @@ public class SqliteMessageCollection<TMessage, TMeta> : IMessageCollection<TMess
 
 internal class MessageRow
 {
+    public int MessageId { get; set; }
     public string? ChunksJson { get; set; }
     public string? ChunkUri { get; set; }
     public int MessageLength { get; set; }
@@ -196,6 +197,7 @@ internal class MessageRow
 
     public MessageRow Read(SqliteDataReader reader, int iCol = 0)
     {
+        MessageId = reader.GetInt32(iCol++);
         ChunksJson = reader.GetStringOrNull(iCol++);
         ChunkUri = reader.GetStringOrNull(iCol++);
         MessageLength = reader.GetInt32(iCol++);
@@ -341,6 +343,7 @@ public class SqliteMessageCollection : IMessageCollection
     {
         IMessage message = (IMessage)Activator.CreateInstance(_messageType);
 
+        message.MessageId = messageRow.MessageId;
         message.TextChunks = StorageSerializer.FromJsonArray<string>(messageRow.ChunksJson);
         message.Tags = StorageSerializer.FromJsonArray<string>(messageRow.TagsJson);
         message.Timestamp = messageRow.StartTimestamp;
@@ -463,7 +466,7 @@ FROM Messages WHERE msg_id = @msg_id",
     public static IAsyncEnumerable<MessageRow> GetAllMessagesAsync(SqliteDatabase db, CancellationToken cancellation = default)
     {
         return db.EnumerateAsync<MessageRow>(@"
-SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
+SELECT msg_id, chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages ORDER BY msg_id",
             ReadMessageRow,
             cancellation
