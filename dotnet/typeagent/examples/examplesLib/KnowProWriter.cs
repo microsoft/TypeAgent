@@ -3,6 +3,7 @@
 
 using System.Threading.Tasks;
 using TypeAgent.ExamplesLib.CommandLine;
+using TypeAgent.KnowPro;
 
 namespace TypeAgent.ExamplesLib;
 
@@ -128,9 +129,12 @@ public class KnowProWriter : ConsoleWriter
         {
             if (verbose)
             {
-                foreach (var match in searchResult.MessageMatches)
+                for(int i = 0; i < searchResult.MessageMatches.Count; i++)
                 {
+                    int position = searchResult.MessageMatches.Count - 1 - i;
+                    var match = searchResult.MessageMatches[position];
                     var message = await conversation.Messages.GetAsync(match.MessageOrdinal);
+                    WriteRankAndScore(match, position + 1, searchResult.MessageMatches.Count);
                     WriteNameValue("MessageOrdinal", match.MessageOrdinal);
                     WriteMessage(message);
                     WriteLine();
@@ -147,6 +151,11 @@ public class KnowProWriter : ConsoleWriter
             WriteLineHeading("Knowledge");
             await WriteKnowledgeSearchResultsAsync(conversation, searchResult.KnowledgeMatches);
         }
+    }
+
+    public static void WriteRankAndScore(ScoredMessageOrdinal ord, int rank, int resultCount)
+    {
+        WriteLine(ConsoleColor.Green, $"#{rank} / {resultCount} [{ord.Score}]");
     }
 
     public static void WriteScoredMessageOrdinals(

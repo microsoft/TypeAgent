@@ -156,6 +156,7 @@ public class MemoryCommands : ICommandModule
             conversation,
             matches,
             true,
+            true,
             true
         );
     }
