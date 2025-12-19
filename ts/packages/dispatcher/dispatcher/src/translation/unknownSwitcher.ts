@@ -11,7 +11,7 @@ import { ActionConfigProvider } from "./actionConfigProvider.js";
 import {
     generateSchemaTypeDefinition,
     SchemaCreator as sc,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 

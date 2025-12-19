@@ -8,7 +8,7 @@ import {
     parseActionSchemaSource,
     SchemaConfig,
     toJSONParsedActionSchema,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import {
     ActionConfigProvider,

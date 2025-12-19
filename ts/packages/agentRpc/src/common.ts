@@ -3,9 +3,6 @@
 
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:rpc");
-const debugError = registerDebug("typeagent:rpc:error");
-
 type MessageHandler<T> = (message: Partial<T>) => void;
 type DisconnectHandler = () => void;
 
@@ -116,20 +113,24 @@ export function createChannelAdapter(
 }
 
 export function createChannelProviderAdapter(
+    name: string, // for debug only
     sendFunc: GenericSendFunc,
 ): ChannelProviderAdapter {
     const genericSharedChannel = createChannelAdapter(sendFunc);
 
     return {
-        ...createChannelProvider(genericSharedChannel.channel),
+        ...createChannelProvider(name, genericSharedChannel.channel),
         notifyMessage: genericSharedChannel.notifyMessage,
         notifyDisconnected: genericSharedChannel.notifyDisconnected,
     };
 }
 
 export function createChannelProvider(
+    name: string, // for debug only
     sharedChannel: SharedRpcChannel,
 ): ChannelProvider {
+    const debug = registerDebug(`typeagent:${name}:channel`);
+    const debugError = registerDebug(`typeagent:${name}:channel:error`);
     const channelAdapters = new Map<string, ChannelAdapter>();
     sharedChannel.on("message", (message: any) => {
         if (message.name === undefined) {
@@ -154,7 +155,7 @@ export function createChannelProvider(
     function createChannel(name: string): RpcChannel {
         debug(`createChannel ${name}`);
         if (channelAdapters.has(name)) {
-            throw new Error(`Channel ${name} already exists`);
+            throw new Error(`Channel '${name}' already exists`);
         }
         const channelAdapter = createChannelAdapter((message, cb) => {
             sharedChannel.send(

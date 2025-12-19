@@ -4,7 +4,7 @@
 import * as fs from "fs";
 import chalk from "chalk";
 import { similarity, SimilarityType } from "typeagent";
-import { SymbolNode, SchemaParser } from "action-schema";
+import { SymbolNode, SchemaParser } from "@typeagent/action-schema";
 import { distance } from "fastest-levenshtein";
 
 export interface StatsResult {

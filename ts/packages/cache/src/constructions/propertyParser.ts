@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ParamSpec } from "action-schema";
+import { ParamSpec } from "@typeagent/action-schema";
 
 export type PropertyParser = {
     readonly name: ParamSpec;

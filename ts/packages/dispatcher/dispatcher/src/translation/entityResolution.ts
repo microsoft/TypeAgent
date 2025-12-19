@@ -5,7 +5,7 @@ import {
     generateSchemaTypeDefinition,
     SchemaCreator as sc,
     validateType,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { Result, success, error } from "typechat";
 import { createJsonTranslatorWithValidator } from "typechat-utils";
 

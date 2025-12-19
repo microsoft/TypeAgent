@@ -20,7 +20,7 @@ import {
     ActionParamArray,
     ActionParamObject,
     ActionParamType,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { getActionParamCompletion } from "./requestCompletion.js";
 
 function getDefaultActionTemplate(

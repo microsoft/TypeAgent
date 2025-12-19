@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionParamObject, ActionSchemaTypeDefinition } from "action-schema";
+import {
+    ActionParamObject,
+    ActionSchemaTypeDefinition,
+} from "@typeagent/action-schema";
 import { ActionSchemaFile } from "./actionConfigProvider.js";
 
 export function getActionSchema(

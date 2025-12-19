@@ -22,11 +22,3 @@ export const isWebAgentMessageFromDispatcher = (message) => {
         message.method.startsWith("webAgent/")
     );
 };
-
-export class WebAgentDisconnectMessage {
-    constructor(name) {
-        this.source = "webAgent";
-        this.method = "webAgent/disconnect";
-        this.params = name;
-    }
-}

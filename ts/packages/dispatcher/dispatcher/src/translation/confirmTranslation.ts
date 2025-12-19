@@ -13,7 +13,7 @@ import chalk from "chalk";
 import { getColorElapsedString } from "@typeagent/common-utils";
 import { getActionTemplateEditConfig } from "./actionTemplate.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { validateAction } from "action-schema";
+import { validateAction } from "@typeagent/action-schema";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { tryGetActionSchema } from "./actionSchemaFileCache.js";
 

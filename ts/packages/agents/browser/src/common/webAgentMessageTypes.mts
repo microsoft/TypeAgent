@@ -28,7 +28,7 @@ export type WebAgentRpcMessage = {
 export type WebAgentDisconnectMessage = {
     source: "webAgent";
     method: "webAgent/disconnect";
-    params: string;
+    params: string[];
 };
 
 export type WebAgentRegisterMessageFromDispatcher = {
