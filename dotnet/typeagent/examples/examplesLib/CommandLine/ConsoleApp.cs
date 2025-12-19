@@ -129,6 +129,7 @@ public abstract class ConsoleApp
             return CommandResult.NotHandled;
         }
         var parseResult = _allCommands.Parse(cmdLine);
+        parseResult.InvocationConfiguration.EnableDefaultExceptionHandler = false;
         return await parseResult.InvokeAsync(null, cancellationToken).ConfigureAwait(false);
     }
 
@@ -229,7 +230,7 @@ public abstract class ConsoleApp
 
     protected void WriteError(Exception ex)
     {
-        ConsoleWriter.WriteError(ex);
+        ConsoleWriter.WriteError(ex.Message);
     }
 
     protected virtual void WriteTitle()
