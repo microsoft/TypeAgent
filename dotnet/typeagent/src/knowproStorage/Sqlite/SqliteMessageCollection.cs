@@ -378,7 +378,7 @@ internal static class MessagesTable
         KnowProVerify.ThrowIfInvalidMessageOrdinal(msgId);
 
         return db.Get(@"
-SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
+SELECT msg_id, chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id = @msg_id",
         (cmd) =>
         {
@@ -402,7 +402,7 @@ SELECT msg_id, chunks, chunk_uri, message_length, start_timestamp, tags, metadat
 FROM Messages WHERE msg_id IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 ",
                 (cmd) => cmd.AddPlaceholderParameters(placeholderIds, batch),
-                (reader) => new KeyValuePair<int, MessageRow>(reader.GetInt32(0), ReadMessageRow(reader, 1)),
+                (reader) => new KeyValuePair<int, MessageRow>(reader.GetInt32(0), ReadMessageRow(reader, 0)),
                 messageRows
             );
         }

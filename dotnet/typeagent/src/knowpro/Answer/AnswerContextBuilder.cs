@@ -184,7 +184,7 @@ internal class AnswerContextBuilder
         {
             return [];
         }
-        List<int> ordinals = messageMatches.ToMessageOrdinals(topK);
+        List<int> ordinals = messageMatches.ToMessageOrdinals(topK, true);
         IList<IMessage> messages = await _conversation.GetMessageReader().GetAsync(
             ordinals,
             cancellationToken

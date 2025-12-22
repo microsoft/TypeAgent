@@ -38,7 +38,6 @@ public static class ConversationAnswer
         throw new NotImplementedException("Answer chunking");
     }
 
-
     public static async ValueTask<AnswerResponse> AnswerQuestionAsync(
         this IConversation conversation,
         string question,
@@ -112,5 +111,44 @@ public static class ConversationAnswer
             cancellationToken
         ).ConfigureAwait(false);
         return combinedResponse;
+    }
+
+    /// <summary>
+    /// Performs answer generation using RAG search and RAG context for answer generation
+    /// </summary>
+    /// <param name="conversation">The conversation to use as the context for the question being asked.</param>
+    /// <param name="question">The question being asked.</param>
+    /// <param name="progress">A progresss callback.</param>
+    /// <param name="cancellationToken">The cancellation token to abort if necessary.</param>
+    /// <returns></returns>
+    public static async ValueTask<AnswerResponse> AnswerQuestionRagAsync(
+        this IConversation conversation,
+        string question,
+        Action<BatchProgress>? progress = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ConversationSearchResult searchResults = await conversation.SearchRagAsync(
+            question,
+            null,
+            null,
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        if (searchResults is null)
+        {
+            return AnswerResponse.NoAnswer();
+        }
+
+        IAnswerGenerator generator = conversation.Settings.AnswerGenerator;
+        AnswerResponse answerResponse = await conversation.AnswerQuestionAsync(
+            question,
+            searchResults,
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        return answerResponse;
     }
 }
