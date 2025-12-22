@@ -20,7 +20,7 @@ import {
     ActionParamArray,
     ActionParamObject,
     ActionParamType,
-} from "action-schema";
+} from "@typeagent/action-schema";
 
 export type TemplateData = {
     schema: TemplateSchema;

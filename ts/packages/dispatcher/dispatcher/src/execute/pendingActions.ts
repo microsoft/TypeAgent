@@ -10,7 +10,7 @@ import {
     resolveTypeReference,
     resolveUnionType,
     ActionSchemaEntityTypeDefinition,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import {
     ExecutableAction,
     FullAction,

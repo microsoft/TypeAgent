@@ -60,7 +60,7 @@ import {
     getParameterType,
     getParameterNames,
     validateAction,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
 import { executeHistoryAction } from "./action/historyActionHandler.js";

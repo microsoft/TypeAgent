@@ -9,7 +9,7 @@ import {
     parseActionSchemaSource,
     SchemaConfig,
     toJSONActionSchemaFile,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";

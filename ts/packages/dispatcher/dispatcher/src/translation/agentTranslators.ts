@@ -33,7 +33,7 @@ import {
     ActionSchemaObject,
     SchemaCreator as sc,
     GenerateSchemaOptions,
-} from "action-schema";
+} from "@typeagent/action-schema";
 import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";

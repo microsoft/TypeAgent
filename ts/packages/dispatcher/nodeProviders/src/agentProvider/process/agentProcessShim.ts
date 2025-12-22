@@ -26,7 +26,10 @@ export async function createAgentProcess(
         { env },
     );
 
-    const channelProvider = createChannelProvider(agentProcess);
+    const channelProvider = createChannelProvider(
+        `agent-process:client:${agentName}`,
+        agentProcess,
+    );
     const traceChannel = channelProvider.createChannel("trace");
     return {
         process: agentProcess,

@@ -9,8 +9,8 @@ import WebSocket, { WebSocketServer } from "ws";
 import registerDebug from "debug";
 import { createPromiseWithResolvers } from "@typeagent/common-utils";
 
-const debugWss = registerDebug("typeagent:channel:wss");
-const debugWssError = registerDebug("typeagent:channel:wss:error");
+const debugWss = registerDebug("typeagent:transport:wss");
+const debugWssError = registerDebug("typeagent:transport:wss:error");
 
 let nextId = 0;
 
@@ -27,28 +27,30 @@ export async function createWebSocketChannelServer(
     const wss = new WebSocketServer(options);
     wss.on("connection", (ws) => {
         const id = nextId++;
-        const debug = registerDebug(`typeagent:channel:wss:ws-${id}`);
-        const debugError = registerDebug(
-            `typeagent:channel:wss:ws:${id}:error`,
-        );
+        const debugId = `typeagent:transport:wss:ws-${id}`;
+        const debug = registerDebug(debugId);
+        const debugError = registerDebug(`${debugId}:error`);
         debug(`connected`);
-        const channelProvider = createChannelProviderAdapter((message, cb) => {
-            const data = JSON.stringify(message);
-            debug(`sending message: ${data}`);
-            ws.send(
-                data,
-                cb
-                    ? (err) => {
-                          if (err) {
-                              debugError(`send error callback: ${err}`);
-                              cb(err);
-                          } else {
-                              cb(null);
+        const channelProvider = createChannelProviderAdapter(
+            "agent-server:server",
+            (message, cb) => {
+                const data = JSON.stringify(message);
+                debug(`sending message: ${data}`);
+                ws.send(
+                    data,
+                    cb
+                        ? (err) => {
+                              if (err) {
+                                  debugError(`send error callback: ${err}`);
+                                  cb(err);
+                              } else {
+                                  cb(null);
+                              }
                           }
-                      }
-                    : undefined,
-            );
-        });
+                        : undefined,
+                );
+            },
+        );
         ws.on("message", (data: Buffer) => {
             debug(`receiving message: ${data}`);
             try {

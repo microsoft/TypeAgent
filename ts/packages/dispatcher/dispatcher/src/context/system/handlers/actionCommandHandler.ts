@@ -12,7 +12,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { getParameterNames, validateAction } from "action-schema";
+import { getParameterNames, validateAction } from "@typeagent/action-schema";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import { FullAction, toExecutableActions } from "agent-cache";
 import {

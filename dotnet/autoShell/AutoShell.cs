@@ -8,7 +8,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
-using AudioSwitcher.AudioApi.CoreAudio;
 using System.IO;
 using System.Collections;
 using Newtonsoft.Json.Linq;
@@ -22,8 +21,8 @@ namespace autoShell
     internal partial class AutoShell
     {
         // create a map of friendly names to executable paths
-        static Hashtable s_friendlyNameToPath = new Hashtable();
-        static Hashtable s_friendlyNameToId = new Hashtable();
+        static Hashtable s_friendlyNameToPath = [];
+        static Hashtable s_friendlyNameToId = [];
         static double s_savedVolumePct = 0.0;
 
         static AutoShell()
@@ -53,7 +52,10 @@ namespace autoShell
                 { "powershell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" },
                 { "snipping tool", "C:\\Windows\\System32\\SnippingTool.exe" },
                 { "magnifier", "C:\\Windows\\System32\\Magnify.exe" },
-                { "paint 3d", "C:\\Program Files\\WindowsApps\\Microsoft.MSPaint_10.1807.18022.0_x64__8wekyb3d8bbwe\\"}
+                { "paint 3d", "C:\\Program Files\\WindowsApps\\Microsoft.MSPaint_10.1807.18022.0_x64__8wekyb3d8bbwe\\"},
+                { "m365 copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
+                { "copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
+                { "spotify", "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.278.418.0_x64__zpdnekdrzrea0\\spotify.exe" },
             };
             // add the entries to the hashtable
             foreach (var kvp in sortedList)
@@ -97,22 +99,60 @@ namespace autoShell
 
         static void SetMasterVolume(int pct)
         {
-            CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
-            s_savedVolumePct = defaultPlaybackDevice.Volume;
-            defaultPlaybackDevice.Volume = pct;
+            // Using Windows Core Audio API via COM interop
+            try
+            {
+                var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
+                var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
+                var audioEndpointVolume = (IAudioEndpointVolume)obj;
+                audioEndpointVolume.GetMasterVolumeLevelScalar(out float currentVolume);
+                s_savedVolumePct = currentVolume * 100.0;
+                audioEndpointVolume.SetMasterVolumeLevelScalar(pct / 100.0f, Guid.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to set volume: " + ex.Message);
+            }
         }
 
         static void RestoreMasterVolume()
         {
-            CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
-            defaultPlaybackDevice.Volume = s_savedVolumePct;
+            // Using Windows Core Audio API via COM interop
+            try
+            {
+                var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
+                var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
+                var audioEndpointVolume = (IAudioEndpointVolume)obj;
+                audioEndpointVolume.SetMasterVolumeLevelScalar((float)(s_savedVolumePct / 100.0), Guid.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to restore volume: " + ex.Message);
+            }
         }
 
         static void SetMasterMute(bool mute)
         {
-            CoreAudioDevice defaultPlaybackDevice = new CoreAudioController().DefaultPlaybackDevice;
-            Debug.WriteLine("Current Mute:" + defaultPlaybackDevice.IsMuted);
-            defaultPlaybackDevice.Mute(mute);
+            // Using Windows Core Audio API via COM interop
+            try
+            {
+                var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
+                var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
+                device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
+                var audioEndpointVolume = (IAudioEndpointVolume)obj;
+                audioEndpointVolume.GetMute(out bool currentMute);
+                Debug.WriteLine("Current Mute:" + currentMute);
+                audioEndpointVolume.SetMute(mute, Guid.Empty);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to set mute: " + ex.Message);
+            }
         }
 
         static string ResolveProcessNameFromFriendlyName(string friendlyName)
