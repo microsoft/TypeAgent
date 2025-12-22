@@ -5,6 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public class Message : IMessage
 {
+    public int MessageId { get; set; }
     public IList<string> TextChunks { get; set; }
     public IList<string>? Tags { get; set; }
     public string? Timestamp { get; set; }
@@ -31,6 +32,9 @@ public class Message<TMeta> : IMessageEx where TMeta : IMessageMetadata
         TextChunks = [text];
         Metadata = meta;
     }
+
+    [JsonPropertyName("messageId")]
+    public int MessageId { get; set; }
 
     [JsonPropertyName("textChunks")]
     public IList<string> TextChunks { get; set; } = [];

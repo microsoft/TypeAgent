@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using TypeAgent.ExamplesLib.CommandLine;
 using TypeAgent.KnowPro;
@@ -41,6 +42,7 @@ public class KnowProWriter : ConsoleWriter
     {
         await foreach (var message in conversation.Messages)
         {
+            WriteLine($"[{message.MessageId}]");
             WriteMessage(message);
             WriteLine();
         }

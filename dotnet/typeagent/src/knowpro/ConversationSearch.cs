@@ -212,7 +212,8 @@ public static class ConversationSearch
 
         if (maxCharsInBudget is not null)
         {
-            var messageOrdinals = messageMatches.ToMessageOrdinals();
+            // reverse the message matches so we start with the highest ranked results first
+            var messageOrdinals = messageMatches.ToMessageOrdinals(null, true);
 
             int messageCountInBudget = await conversation.Messages.GetCountInCharBudgetAsync(
                 messageOrdinals,

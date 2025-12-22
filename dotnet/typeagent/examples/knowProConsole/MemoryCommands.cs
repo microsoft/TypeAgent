@@ -2,6 +2,10 @@
 // Licensed under the MIT License.
 
 
+using TypeAgent.ExamplesLib.CommandLine;
+using TypeAgent.KnowPro;
+using TypeAgent.KnowPro.Lang;
+
 namespace KnowProConsole;
 
 public class MemoryCommands : ICommandModule
@@ -20,7 +24,8 @@ public class MemoryCommands : ICommandModule
             MessagesDef(),
             AliasesDef(),
             SearchDef(),
-            SearchRagDef()
+            SearchRagDef(),
+            AnswerRagDef()
         ];
     }
 
@@ -125,7 +130,7 @@ public class MemoryCommands : ICommandModule
 
     private Command SearchRagDef()
     {
-        Command command = new("kpSearchRag")
+        Command command = new("kpSearchRag", "Text similarity search.")
         {
             Options.Arg<string>("query"),
             Options.Arg<int>("maxMatches", 25),
@@ -135,6 +140,7 @@ public class MemoryCommands : ICommandModule
         command.SetAction(this.SearchRagAsync);
         return command;
     }
+
     private async Task SearchRagAsync(ParseResult args, CancellationToken cancellationToken)
     {
         IConversation conversation = EnsureConversation();
@@ -166,5 +172,54 @@ public class MemoryCommands : ICommandModule
         return (_kpContext.Conversation is not null)
             ? _kpContext.Conversation!
             : throw new InvalidOperationException("No conversation loaded");
+    }
+
+    private Command AnswerRagDef()
+    {
+        Command command = new("kpAnswerRag", "Answer using classic RAG.")
+        {
+            Options.Arg<string>("query"),
+            Options.Arg<int>("maxMatches", 25),
+            Options.Arg<double>("minScore", 0.7),
+            Options.Arg<int>("budget", 16 * 1024)
+        };
+        command.SetAction(this.AnswerRagAsync);
+        return command;
+    }
+
+    private async Task AnswerRagAsync(ParseResult args, CancellationToken cancellationToken)
+    {
+
+        IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        string? query = namedArgs.Get<string>("query");
+        if (string.IsNullOrEmpty(query))
+        {
+            return;
+        }
+
+        AnswerResponse answer = await conversation.AnswerQuestionRagAsync(
+            query,
+            namedArgs.Get<double>("minScore"),
+            namedArgs.Get<int>("budget"),
+            new AnswerContextOptions()
+            {
+                MessagesTopK = namedArgs.Get<int>("maxMatches"),
+            },
+            null,
+            cancellationToken
+        ).ConfigureAwait(false);
+
+        KnowProWriter.WriteLine();
+        if (answer.Type == AnswerType.Answered)
+        {
+            KnowProWriter.WriteLine(ConsoleColor.Green, answer.Answer);
+        }
+        else
+        {
+            KnowProWriter.WriteLine(ConsoleColor.Yellow, answer.WhyNoAnswer);
+        }
+        KnowProWriter.WriteLine();
     }
 }

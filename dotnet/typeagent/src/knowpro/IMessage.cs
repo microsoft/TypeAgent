@@ -5,6 +5,7 @@ namespace TypeAgent.KnowPro;
 
 public interface IMessage : IKnowledgeSource
 {
+    int MessageId { get; set; }
     IList<string> TextChunks { get; set; }
 
     IList<string>? Tags { get; set; }
