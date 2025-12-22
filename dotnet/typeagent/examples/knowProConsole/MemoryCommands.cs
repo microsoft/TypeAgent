@@ -201,6 +201,12 @@ public class MemoryCommands : ICommandModule
 
         AnswerResponse answer = await conversation.AnswerQuestionRagAsync(
             query,
+            namedArgs.Get<double>("minScore"),
+            namedArgs.Get<int>("budget"),
+            new AnswerContextOptions()
+            {
+                MessagesTopK = namedArgs.Get<int>("maxMatches"),
+            },
             null,
             cancellationToken
         ).ConfigureAwait(false);

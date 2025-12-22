@@ -124,15 +124,18 @@ public static class ConversationAnswer
     public static async ValueTask<AnswerResponse> AnswerQuestionRagAsync(
         this IConversation conversation,
         string question,
+        double minScore,
+        int maxCharsInBudget,
+        AnswerContextOptions? options,
         Action<BatchProgress>? progress = null,
         CancellationToken cancellationToken = default
     )
     {
         ConversationSearchResult searchResults = await conversation.SearchRagAsync(
             question,
-            null,
-            null,
-            null,
+            options.MessagesTopK,
+            minScore,
+            maxCharsInBudget,
             cancellationToken
         ).ConfigureAwait(false);
 
@@ -145,7 +148,7 @@ public static class ConversationAnswer
         AnswerResponse answerResponse = await conversation.AnswerQuestionAsync(
             question,
             searchResults,
-            null,
+            options,
             cancellationToken
         ).ConfigureAwait(false);
 
