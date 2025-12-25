@@ -392,6 +392,8 @@ public class Drawing
                 {
                     return (T)shape;
                 }
+
+                curNumber++;
             }
         }
         return null;
