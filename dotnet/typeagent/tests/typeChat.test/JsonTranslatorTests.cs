@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Microsoft.TypeChat.Tests;
 
-public class SampleType
+public class SampleType : SentimentResponse
 {
     public string Name { get; set; } = string.Empty;
     public int Value { get; set; }
@@ -17,80 +17,85 @@ public class SampleType
 
 public class JsonTranslatorTests : TestWithData
 {
-    public JsonTranslatorTests() : base(true) { }
 
-    //[Fact]
-    //public void Constructor_InitializesProperties()
-    //{
-    //    IChatModel model = ModelUtils.CreateTestChatModel(nameof(JsonTranslatorTests));
-    //    SchemaText schema = SchemaText.Load("./SentimentSchema.ts");
-    //    var translator = new JsonTranslator<SentimentResponse>(
-    //        new OpenAIChatModel(),
-    //        schema
-    //    );
+    private OpenAIChatModel _model;
+    private SchemaText _schema;
+    private JsonTranslator<SentimentResponse> _translator;
+    private JsonSerializerTypeValidator<SentimentResponse> _validator;
 
-    //    var validator = new JsonSerializerTypeValidator<SentimentResponse>(schema);
+    public JsonTranslatorTests() : base(true)
+    {
+        _model = (OpenAIChatModel)ModelUtils.CreateTestChatModel(nameof(JsonTranslatorTests));
+        _schema = SchemaText.Load("./SentimentSchema.ts");
+        _translator = new JsonTranslator<SentimentResponse>(
+            ModelUtils.CreateTestChatModel(nameof(JsonTranslatorTests)),
+            _schema
+        );
 
-    //    Assert.Equal(model, translator.Model);
-    //    Assert.Equal(validator.Schema, translator.Validator.Schema);
-    //    Assert.NotNull(translator.Prompts);
-    //    Assert.NotNull(translator.TranslationSettings);
-    //    Assert.Equal(JsonTranslator<SampleType>.DefaultMaxRepairAttempts, translator.MaxRepairAttempts);
-    //}
+        _validator = new JsonSerializerTypeValidator<SentimentResponse>(_schema);
+    }
 
-    //[Fact]
-    //public void Validator_Setter_UpdatesValidator()
-    //{
-    //    var model = new Mock<ILanguageModel>().Object;
-    //    var validator1 = new Mock<IJsonTypeValidator<SampleType>>().Object;
-    //    var validator2 = new Mock<IJsonTypeValidator<SampleType>>().Object;
-    //    var translator = new JsonTranslator<SampleType>(model, validator1);
+    [Fact]
+    public void Constructor_InitializesProperties()
+    {
+        Assert.Equal(_model.Settings.ModelName, ((OpenAIChatModel)_translator.Model).Settings.ModelName);
+        Assert.Equal(_model.Settings.Endpoint, ((OpenAIChatModel)_translator.Model).Settings.Endpoint);
+        Assert.Equal(_validator.Schema.TypeFullName, _translator.Validator.Schema.TypeFullName);
+        Assert.Equal(_validator.Schema.Schema, _translator.Validator.Schema.Schema);
+        Assert.NotNull(_translator.Prompts);
+        Assert.NotNull(_translator.TranslationSettings);
+        Assert.Equal(JsonTranslator<SampleType>.DefaultMaxRepairAttempts, _translator.MaxRepairAttempts);
+    }
 
-    //    translator.Validator = validator2;
-    //    Assert.Equal(validator2, translator.Validator);
-    //}
+    [Fact]
+    public void Validator_Setter_UpdatesValidator()
+    {
+        var model = ModelUtils.CreateTestChatModel(nameof(JsonTranslatorTests));
+        var validator = new JsonSerializerTypeValidator<SentimentResponse>(_schema);
+        var translator = new JsonTranslator<SentimentResponse>(model, validator);
 
-    //[Fact]
-    //public void MaxRepairAttempts_Setter_HandlesNegativeValues()
-    //{
-    //    var model = new Mock<ILanguageModel>().Object;
-    //    var validator = new Mock<IJsonTypeValidator<SampleType>>().Object;
-    //    var translator = new JsonTranslator<SampleType>(model, validator);
+        translator.Validator = _validator;
+        Assert.Equal(_validator, translator.Validator);
+    }
 
-    //    translator.MaxRepairAttempts = -5;
-    //    Assert.Equal(0, translator.MaxRepairAttempts);
-    //}
+    [Fact]
+    public void MaxRepairAttempts_Setter_HandlesNegativeValues()
+    {
+        _translator.MaxRepairAttempts = -5;
+        Assert.Equal(0, _translator.MaxRepairAttempts);
+    }
 
-    //[Fact]
-    //public async Task TranslateAsync_ThrowsOnInvalidJson()
-    //{
-    //    var modelMock = new Mock<ILanguageModel>();
-    //    var validatorMock = new Mock<IJsonTypeValidator<SampleType>>();
-    //    var promptsMock = new Mock<IJsonTranslatorPrompts>();
+    [Fact]
+    public async Task TranslateAsync_ThrowsOnInvalidNoAsync()
+    {
+        var prompt = new Prompt("Test request");
+        var mockModel = new MockModel_No_JSON_Response();
 
-    //    var prompt = new Prompt("Test request");
-    //    var invalidJson = "{ invalid json }";
-    //    var result = Result.Error<SampleType>("Invalid JSON");
+        var translator = new JsonTranslator<SampleType>(mockModel, _schema)
+        {
+            MaxRepairAttempts = 1
+        };
 
-    //    modelMock.Setup(m => m.CompleteAsync(It.IsAny<Prompt>(), It.IsAny<TranslationSettings>(), It.IsAny<CancellationToken>()))
-    //        .ReturnsAsync(invalidJson);
+        await Assert.ThrowsAsync<TypeChatException>(async () =>
+        {
+            await translator.TranslateAsync(prompt, null, null, CancellationToken.None);
+        });
+    }
 
-    //    validatorMock.Setup(v => v.Validate(It.IsAny<string>())).Returns(result);
+    [Fact]
+    public async Task TranslateAsync_ThrowsOnInvalidJsonAsync()
+    {
+        var prompt = new Prompt("Test request");
+        var mockModel = new MockModel_Partial_JSON_Response();
 
-    //    promptsMock.Setup(p => p.CreateRequestPrompt(It.IsAny<TypeSchema>(), It.IsAny<Prompt>(), It.IsAny<IList<IPromptSection>>()))
-    //        .Returns(prompt);
+        var translator = new JsonTranslator<SampleType>(mockModel, _schema)
+        {
+            MaxRepairAttempts = 1
+        };
 
-    //    promptsMock.Setup(p => p.CreateRepairPrompt(It.IsAny<TypeSchema>(), It.IsAny<string>(), It.IsAny<string>()))
-    //        .Returns(new PromptSection(PromptSection.Sources.System, "Repair"));
-
-    //    var translator = new JsonTranslator<SampleType>(modelMock.Object, validatorMock.Object, promptsMock.Object)
-    //    {
-    //        MaxRepairAttempts = 1
-    //    };
-
-    //    await Assert.ThrowsAsync<TypeChatException>(async () =>
-    //    {
-    //        await translator.TranslateAsync(prompt, null, null, CancellationToken.None);
-    //    });
-    //}
+        await Assert.ThrowsAsync<TypeChatException>(async () =>
+        {
+            await translator.TranslateAsync(prompt, null, null, CancellationToken.None);
+        });
+    }
 }
