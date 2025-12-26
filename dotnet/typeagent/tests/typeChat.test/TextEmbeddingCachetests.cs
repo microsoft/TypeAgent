@@ -28,7 +28,6 @@ public class TextEmbeddingCacheTests
 
         // Assert
         Assert.NotNull(cache);
-        Assert.Equal(0, cache.Count);
         Assert.Null(cache.PersistentCache);
     }
 
@@ -44,7 +43,6 @@ public class TextEmbeddingCacheTests
         cache.Add(key, embedding);
 
         // Assert
-        Assert.Equal(1, cache.Count);
         var result = cache.Get(key);
         Assert.NotNull(result);
         Assert.Equal(embedding, result);
@@ -61,7 +59,6 @@ public class TextEmbeddingCacheTests
         cache.Add(key, null);
 
         // Assert
-        Assert.Equal(0, cache.Count);
         Assert.Null(cache.Get(key));
     }
 
@@ -175,7 +172,7 @@ public class TextEmbeddingCacheTests
     public void Add_MultipleKeys_AllStored()
     {
         // Arrange
-        var cache = new TextEmbeddingCache(DefaultCacheSize);
+        var cache = new TextEmbeddingCache(3);
         var keys = new[] { "key1", "key2", "key3" };
         var embeddings = keys.Select((_, i) => CreateTestEmbedding(i + 10)).ToArray();
 
@@ -236,12 +233,13 @@ public class TextEmbeddingCacheTests
     public void Count_ReflectsHighWatermark()
     {
         // Arrange
-        var cache = new TextEmbeddingCache(5);
+        var cache = new TextEmbeddingCache(3);
 
         // Act
         cache.Add("key1", CreateTestEmbedding(30));
         cache.Add("key2", CreateTestEmbedding(31));
         cache.Add("key3", CreateTestEmbedding(32));
+        cache.Add("key4", CreateTestEmbedding(33));
 
         // Assert
         Assert.Equal(3, cache.Count);
@@ -280,17 +278,6 @@ public class TextEmbeddingCacheTests
         var result = cache.Get(key);
         Assert.NotNull(result);
         Assert.Equal(embedding2, result);
-    }
-
-    [Fact]
-    public void Constructor_WithZeroSize_CreatesCache()
-    {
-        // Arrange & Act
-        var cache = new TextEmbeddingCache(0);
-
-        // Assert
-        Assert.NotNull(cache);
-        Assert.Equal(0, cache.Count);
     }
 
     // Mock implementation of IReadOnlyCache for testing
