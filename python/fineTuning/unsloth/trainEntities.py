@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco.
+# Licensed under the MIT License.
+
 from unsloth import FastLanguageModel
 import torch
 from knowledgePrompt import get_knowledge_prompt
