@@ -27,8 +27,6 @@ public class PodcastTests : TestWithData
         public string name { get; set; } = string.Empty;
         public System.DateTime date { get; set; } = System.DateTime.Now;
         public uint length { get; set; } = 0;
-        public uint? participantCount { get; set; } = null;
-        public uint? messageCount { get; set; } = null;
     }
 
     private static TestTranscriptInfo GetTransscriptSmall()
@@ -39,8 +37,6 @@ public class PodcastTests : TestWithData
             name = "Test",
             date = System.DateTime.Parse("March 2024"),
             length = 15,
-            messageCount = 7,
-            participantCount = 5,
         };
     }
 
@@ -62,7 +58,7 @@ public class PodcastTests : TestWithData
         Assert.Equal(["hamlet", "lady bracknell", "macbeth", "richard", "sherlock holmes"], participants);
 
         var terms = await podcast.SemanticRefIndex.LookupTermAsync("misfortune");
-        Assert.True(terms?.Count > 0);
+        Assert.True(terms!.Count > 0);
     }
 
     private async Task<Podcast> ImportTestPodcastAsync(TestTranscriptInfo podcastDetails, bool online)

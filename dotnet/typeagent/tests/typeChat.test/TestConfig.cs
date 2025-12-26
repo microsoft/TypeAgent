@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
+
 namespace Microsoft.TypeChat.Tests;
 
 public class TestConfig : TypeChatTest
@@ -97,5 +99,33 @@ public class TestConfig : TypeChatTest
             SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_ENDPOINT, prevEndpoint);
             SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_API_KEY, prevKey);
         }
+    }
+
+    [Fact]
+    public void TestConfigFromFile()
+    {
+        // create a temp config file
+        string file = Path.GetTempFileName();
+        var config = OpenAIConfig.FromEnvironment();
+        var sconfig = JsonSerializer.Serialize(config);
+        File.WriteAllText(file, sconfig);
+        var fileCfg = OpenAIConfig.LoadFromJsonFile(file);
+
+        Assert.Equal(sconfig, JsonSerializer.Serialize(fileCfg));
+    }
+
+    [Fact]
+    public void TestInvalidConfigFile()
+    {
+        string file = Path.GetTempFileName();
+        File.AppendAllText(file, "");
+
+        Assert.Throws<ArgumentException>(() =>
+        {
+            var config = OpenAIConfig.LoadFromJsonFile(file);
+            config.Validate(file);
+        });
+
+        File.Delete(file);
     }
 }
