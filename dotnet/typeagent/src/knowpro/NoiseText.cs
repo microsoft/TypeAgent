@@ -12,6 +12,15 @@ public class NoiseText : HashSet<string>
     {
     }
 
+    public NoiseText(IEnumerable<string> values)
+        : this()
+    {
+        foreach (var value in values)
+        {
+            this.Add(value);
+        }
+    }
+
     public NoiseText(string srcFilePath)
         : this()
     {
