@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco.
+# Licensed under the MIT License.
+
 from rake_nltk import Rake
 import sys
 import os

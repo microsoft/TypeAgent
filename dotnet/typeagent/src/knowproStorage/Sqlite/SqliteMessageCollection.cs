@@ -480,7 +480,7 @@ FROM Messages ORDER BY msg_id",
         ArgumentVerify.ThrowIfGreaterThan(startOrdinal, endOrdinal, nameof(startOrdinal));
 
         return db.Enumerate(@"
-SELECT chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
+SELECT msg_id, chunks, chunk_uri, message_length, start_timestamp, tags, metadata, extra
 FROM Messages WHERE msg_id >= @start_id AND msg_id < @end_id
 ORDER BY msg_id",
             (cmd) =>

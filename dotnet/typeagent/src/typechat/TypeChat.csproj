@@ -19,4 +19,8 @@
     <ProjectReference Include="..\typechat.schema\TypeChat.Schema.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.TypeChat.Tests" />
+  </ItemGroup>  
+  
 </Project>
