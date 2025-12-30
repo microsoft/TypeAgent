@@ -49,13 +49,37 @@ import pandas as pd
 from unsloth import to_sharegpt
 # load an array of JSON objects with properties knowledge and message
 import json
- 
+
+# reduce token count by simplifying the knowledge structure
+def simplify_knowledge(knowledge):
+    # change fields ending in EntityName like subjectEntityName to single words like subject
+    for action in knowledge['actions']:
+        if 'subjectEntityName' in action:
+            action['subject'] = action.pop('subjectEntityName')
+        if 'objectEntityName' in action:
+            action['object'] = action.pop('objectEntityName')
+        if 'indirectObjectEntityName' in action:
+            action['indirectObject'] = action.pop('indirectObjectEntityName')
+        # also subjectEntityFacet to subjectFacet
+        if 'subjectEntityFacet' in action:
+            action['subjectFacet'] = action.pop('subjectEntityFacet')
+    # remove the inverseActions field if it exists
+    if 'inverseActions' in knowledge:
+        knowledge.pop('inverseActions')
+    # if any fields have value "none", remove those fields
+    for action in knowledge['actions']:
+        keys_to_remove = [key for key, value in action.items() if value == "none"]
+        for key in keys_to_remove:
+            action.pop(key)
+    return knowledge
+
 with open('/data/gpt4o_train_3200.json') as f:
   rawData = json.load(f)
 # loop through the JSON objects and print the properties
 data = []
 for i in range(len(rawData)):
-  data.append({'output': json.dumps(rawData[i]['knowledge'],separators=(',', ':')), 'instruction': get_knowledge_prompt(rawData[i]['message']), 'input': '', 'text': ''})
+  simplified = simplify_knowledge(rawData[i]['knowledge'])
+  data.append({'output': json.dumps(simplified,separators=(',', ':')), 'instruction': get_knowledge_prompt(rawData[i]['message']), 'input': '', 'text': ''})
 # create a hugging face dataset from the JSON objects with the knowledge property becoming the output property and the message property becoming the instruction property
 dataset = Dataset.from_pandas(pd.DataFrame(data=data))
 print(dataset.column_names)
