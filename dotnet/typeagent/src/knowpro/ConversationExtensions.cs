@@ -46,7 +46,9 @@ public static class ConversationExtensions
         var messageCount = await conversation.Messages.GetCountAsync().ConfigureAwait(false);
         if (messageCount > 0)
         {
-            var start = await conversation.Messages.GetTimestampAsync(1).ConfigureAwait(false);
+            // BUGBUG - This assumes conversations always start 0 which *might* not be correct
+            // This should probably be something like GetEarliest() and GetLatest() message or something similar.
+            var start = await conversation.Messages.GetTimestampAsync(0).ConfigureAwait(false);
             var end = await conversation.Messages.GetTimestampAsync(messageCount - 1).ConfigureAwait(false);
             if (start is not null)
             {

@@ -24,7 +24,7 @@ public static class ListExtensions
     public static T? GetOrNull<T>(this IList<T> list, int index)
         where T : class
     {
-        return (index < list.Count) ? list[index] : null;
+        return (index < list.Count && index >= 0) ? list[index] : null;
     }
 
     public static void AddRange<T>(this IList<T> list, IEnumerable<T> items)

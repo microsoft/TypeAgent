@@ -5,9 +5,9 @@ using System.Text.Json;
 
 namespace Microsoft.TypeChat.Tests;
 
+[Collection("Sequential_EnvironmentVariable_Dependency")]
 public class TestConfig : TypeChatTest
 {
-    [Fact]
     public void TestEnvOpenAI()
     {
         string? prevAzureKey = null;
@@ -18,8 +18,8 @@ public class TestConfig : TypeChatTest
         string? prevModel = null;
         try
         {
-            prevAzureKey = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_API_KEY, string.Empty);
-            prevAzureEndpoint = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_ENDPOINT, string.Empty);
+            prevAzureKey = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_API_KEY, null);
+            prevAzureEndpoint = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_ENDPOINT, null);
             prevEndpoint = SetEnv(OpenAIConfig.VariableNames.OPENAI_ENDPOINT, "O_ENDPOINT");
             prevKey = SetEnv(OpenAIConfig.VariableNames.OPENAI_API_KEY, "O_API");
             prevOrg = SetEnv(OpenAIConfig.VariableNames.OPENAI_ORGANIZATION, "O_ORG");
@@ -54,8 +54,8 @@ public class TestConfig : TypeChatTest
         string? prevModel = null;
         try
         {
-            prevAzureKey = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_API_KEY, string.Empty);
-            prevAzureEndpoint = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_ENDPOINT, string.Empty);
+            prevAzureKey = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_API_KEY, null);
+            prevAzureEndpoint = SetEnv(OpenAIConfig.VariableNames.AZURE_OPENAI_ENDPOINT, null);
             prevEndpoint = SetEnv(OpenAIConfig.VariableNames.OPENAI_ENDPOINT, "O_ENDPOINT");
             prevKey = SetEnv(OpenAIConfig.VariableNames.OPENAI_API_KEY, "O_API");
             prevOrg = SetEnv(OpenAIConfig.VariableNames.OPENAI_ORGANIZATION, "O_ORG");

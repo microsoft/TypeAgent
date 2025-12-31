@@ -14,6 +14,7 @@ using TypeAgent.TestLib;
 
 namespace TypeAgent.Tests.ConversationMemory;
 
+[Collection("Sequential_EnvironmentVariable_Dependency")]
 public class PodcastTests : TestWithData
 {
     /// <summary>

@@ -36,6 +36,8 @@ public class TypescriptExporter : TypeExporter<Type>
     /// <returns></returns>
     public static TypescriptSchema GenerateSchema(Type type, IVocabCollection? knownVocabs = null)
     {
+        ArgumentVerify.ThrowIfNull(type, nameof(type));
+
         using StringWriter writer = new StringWriter();
         TypescriptExporter exporter = new TypescriptExporter(writer);
         if (knownVocabs is not null)
@@ -75,6 +77,7 @@ public class TypescriptExporter : TypeExporter<Type>
     public TypescriptExporter(TextWriter writer)
         : this(new TypescriptWriter(writer))
     {
+        ArgumentVerify.ThrowIfNull(writer, nameof(writer));
     }
 
     public TypescriptExporter(TypescriptWriter writer)
@@ -165,6 +168,7 @@ public class TypescriptExporter : TypeExporter<Type>
 
 #if NET6_0_OR_GREATER
         _nullableInfo = null;
+        _nullableInfo = new NullabilityInfoContext();
 #endif
     }
 
