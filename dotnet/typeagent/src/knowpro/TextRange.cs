@@ -19,16 +19,15 @@ public class TextRange : IComparable<TextRange>
         Start = new TextLocation(messageOrdinal, chunkOrdinal);
     }
 
-
-    [JsonConstructor]
     public TextRange(TextLocation start)
     {
         Start = start;
     }
 
-    public TextRange(TextLocation start, TextLocation end)
+    [JsonConstructor]
+    public TextRange(TextLocation start, TextLocation? end)
     {
-        if (!start.IsLessThan(end))
+        if (end.HasValue && !start.IsLessThan(end.Value))
         {
             throw new ArgumentException("Invalid text range");
         }

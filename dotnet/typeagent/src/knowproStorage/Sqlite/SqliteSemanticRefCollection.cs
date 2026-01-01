@@ -49,6 +49,10 @@ public class SqliteSemanticRefCollection : ISemanticRefCollection
         int rowCount = cmd.ExecuteNonQuery();
         if (rowCount > 0)
         {
+            if (_count < 0)
+            {
+                _count = 0;
+            }
             _count += rowCount;
         }
     }
@@ -172,7 +176,7 @@ FROM SemanticRefs WHERE semref_id IN ({SqliteDatabase.MakeInStatement(placeholde
                );
         }
 
-        return ValueTask.FromResult((IList<TextRange>)rangeRows.GetValues(semanticRefIds));
+        return ValueTask.FromResult((IList<TextRange>)[.. rangeRows.GetValues(semanticRefIds)]);
     }
 
     public KnowledgeType GetKnowledgeType(int semanticRefId)
