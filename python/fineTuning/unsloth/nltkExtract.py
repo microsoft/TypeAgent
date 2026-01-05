@@ -17,11 +17,13 @@ parser.add_argument("--dataset_path", type=str, default='/data/npr_chunks_no_emb
 parser.add_argument("--max_length", type=int, default=1, help="Maximum number of words in a keyword phrase.")
 parser.add_argument("--output_file", type=str, default='extraction.txt', help="Path to the output file.")
 parser.add_argument("--verbose", action='store_true', help="Enable verbose output (shows all extraction details). Default is non-verbose.")
+parser.add_argument("--nogpu", action='store_true', help="Force KeyBERT to use CPU instead of GPU. Default is false (use GPU if available).")
 args = parser.parse_args(sys.argv[1:])
 dataset_path = args.dataset_path
 max_length = args.max_length
 output_file = args.output_file
 verbose = args.verbose
+nogpu = args.nogpu
 
 # Initialize RAKE with max_length configuration
 rake = Rake(max_length=max_length)
@@ -31,11 +33,22 @@ rake = Rake(max_length=max_length)
 yake_extractor = yake.KeywordExtractor(lan="en", n=max_length, dedupLim=0.9, top=20)
 
 # Initialize KeyBERT model
-keybert_model = KeyBERT()
+if nogpu:
+    from sentence_transformers import SentenceTransformer
+    # Force sentence transformer to use CPU
+    model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+    keybert_model = KeyBERT(model=model)
+    print('Using KeyBERT on CPU')
+else:
+    keybert_model = KeyBERT()
 
 # Load spacy model with only necessary components
 # Keep: tok2vec, tagger, parser, lemmatizer
 # Disable: ner, attribute_ruler, and any other unused components
+if nogpu:
+    # Force spaCy to use CPU
+    spacy.require_cpu()
+    print('Using spaCy on CPU')
 nlp = spacy.load("en_core_web_sm", disable=["ner"])
 
 # Load an array of JSON objects with properties like speaker and content
