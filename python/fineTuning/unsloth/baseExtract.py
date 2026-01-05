@@ -160,6 +160,19 @@ plt.tight_layout()
 plt.savefig('word_message_distribution.png', dpi=150)
 print(f"Distribution plot saved to word_message_distribution.png")
 
+# Plot distribution for words with 50 or fewer messages
+message_counts_50_or_less = [count for count in message_counts if count <= 50]
+plt.figure(figsize=(12, 6))
+plt.hist(message_counts_50_or_less, bins=50, edgecolor='black', alpha=0.7)
+plt.xlabel('Number of Messages per Word')
+plt.ylabel('Number of Words')
+plt.title('Distribution of Message Counts per Unique Word (≤50 messages)')
+plt.yscale('log')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig('word_message_distribution_50_or_less.png', dpi=150)
+print(f"Zoomed distribution plot saved to word_message_distribution_50_or_less.png")
+
 # Print elapsed time
 elapsed_time = time.time() - start_time
 print(f"\nTotal processing time: {elapsed_time:.2f} seconds")
