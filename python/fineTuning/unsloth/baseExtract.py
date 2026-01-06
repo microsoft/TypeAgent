@@ -4,17 +4,26 @@ parser = ArgumentParser(description="Extract keywords from dataset using NLTK-RA
 parser.add_argument("--dataset_path", type=str, default='/data/npr/npr_chunks_no_embedding.json', 
 help="Path to the dataset file.")
 # output_file
-parser.add_argument("--output_file", type=str, default='baseExtraction.txt', 
+parser.add_argument("--output_file", type=str, default='reformatted_data.txt', 
 help="Path to the output file.")
+parser.add_argument("--maxMsgPct", type=float, default=0.005,
+help="Maximum message percentage threshold for filtering words (0.0-1.0). Words appearing in more than this percentage of messages will be filtered out. Default: 0.1")
 args = parser.parse_args(sys.argv[1:])
 dataset_path = args.dataset_path
 output_file = args.output_file
+maxMsgPct = args.maxMsgPct
+
+# Validate maxMsgPct
+if not 0.0 <= maxMsgPct <= 1.0:
+    print(f"Error: maxMsgPct must be between 0.0 and 1.0, got {maxMsgPct}")
+    sys.exit(1)
 
 import json
 import re
 import time
 from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
+import tiktoken
 
 @dataclass
 class Message:
@@ -28,6 +37,8 @@ class Section:
     messages: list[Message] = field(default_factory=list)
     words: set[str] = field(default_factory=set)
     total_words: int = 0
+    total_chars: int = 0
+    total_tokens: int = 0
 
 @dataclass
 class Word:
@@ -50,9 +61,13 @@ start_time = time.time()
 # Read the dataset
 messages, message_count = read_and_count_messages(dataset_path)
 
+# Initialize tiktoken encoder
+print("Initializing tokenizer...")
+encoder = tiktoken.encoding_for_model("gpt-4")
+
 # Create dictionary of sections and process messages
 print("Processing messages and extracting words...")
-word_pattern = re.compile(r'\b\w+\b')
+word_pattern = re.compile(r"\b[\w']+\b")
 sections = {}
 all_messages = []
 word_dict = {}
@@ -72,9 +87,15 @@ for i, message in enumerate(messages):
     
     # Extract words from this message
     words = word_pattern.findall(content.lower())
+    # Filter out numbers less than 100
+    words = [w for w in words if not (w.isdigit() and int(w) < 100)]
     word_count = len(words)
+    char_count = len(content)
+    token_count = len(encoder.encode(content))
     total_words += word_count
     sections[section_title].total_words += word_count
+    sections[section_title].total_chars += char_count
+    sections[section_title].total_tokens += token_count
     sections[section_title].words.update(words)
     all_unique_words.update(words)
     
@@ -86,6 +107,30 @@ for i, message in enumerate(messages):
         word_dict[word].messages.append(msg)
     
 print(f"Processing complete.")
+
+# Filter words based on maxMsgPct
+print(f"\nFiltering words with message percentage > {maxMsgPct * 100:.1f}%...")
+total_message_count = len(all_messages)
+max_messages_threshold = maxMsgPct * total_message_count
+
+# Filter overall word_dict
+words_before_filter = len(word_dict)
+filtered_word_dict = {word: word_obj for word, word_obj in word_dict.items() 
+                      if len(word_obj.messages) < max_messages_threshold}
+words_filtered = words_before_filter - len(filtered_word_dict)
+print(f"  Filtered {words_filtered} words from overall word list ({words_before_filter} -> {len(filtered_word_dict)})")
+
+# Filter each section's word set
+for section in sections.values():
+    words_to_remove = {word for word in section.words 
+                       if word not in filtered_word_dict}
+    section.words -= words_to_remove
+
+# Update word_dict to filtered version
+word_dict = filtered_word_dict
+all_unique_words = set(word_dict.keys())
+
+print(f"Filtering complete.")
 
 # Print statistics
 section_count = len(sections)
@@ -105,6 +150,12 @@ avg_word_density = sum(word_density_ratios) / len(word_density_ratios) if word_d
 total_message_references = sum(len(word.messages) for word in word_dict.values())
 avg_messages_per_word = total_message_references / len(word_dict) if word_dict else 0
 
+# Calculate token statistics
+import statistics
+token_counts = [section.total_tokens for section in sections.values()]
+median_tokens_per_section = statistics.median(token_counts) if token_counts else 0
+mean_tokens_per_section = statistics.mean(token_counts) if token_counts else 0
+
 print(f"Total sections: {section_count}")
 print(f"Average messages per section: {avg_messages_per_section:.2f}")
 print(f"Total words: {total_words}")
@@ -113,6 +164,8 @@ print(f"Average unique words per section: {avg_words_per_section:.2f}")
 print(f"Average word density ratio (unique/total per section): {avg_word_density * 100:.3f}%")
 print(f"Overall word density ratio (unique/total across all messages): {len(all_unique_words) / total_words * 100:.3f}%")
 print(f"Average messages per unique word: {avg_messages_per_word:.2f}")
+print(f"Mean tokens per section: {mean_tokens_per_section:.2f}")
+print(f"Median tokens per section: {median_tokens_per_section:.2f}")
 
 # Analyze message count distribution
 message_counts = [len(word.messages) for word in word_dict.values()]
@@ -172,6 +225,30 @@ plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('word_message_distribution_50_or_less.png', dpi=150)
 print(f"Zoomed distribution plot saved to word_message_distribution_50_or_less.png")
+
+# Write data to output file
+print(f"\nWriting data to {output_file}...")
+output_data = []
+for section in sections.values():
+    section_data = {
+        "title": section.title,
+        "messages": [
+            {
+                "content": msg.content,
+                "speaker": msg.speaker
+            }
+            for msg in section.messages
+        ],
+        "words": sorted(list(section.words)),
+        "word_count": section.total_words,
+        "char_count": section.total_chars,
+        "token_count": section.total_tokens
+    }
+    output_data.append(section_data)
+
+with open(output_file, 'w') as f:
+    json.dump(output_data, f, indent=2)
+print(f"Data written to {output_file}")
 
 # Print elapsed time
 elapsed_time = time.time() - start_time
