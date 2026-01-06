@@ -7,11 +7,10 @@ name: build-package-shell
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
-  merge_group:
+  workflow_run:
+    workflows: ["build-ts"]
+    types:
+      - completed
     branches: ["main"]
 
 concurrency:
@@ -41,37 +40,28 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        continue-on-error: true
-        with:
-          filters: |
-            ts:
-              - "ts/**"
-              - ".github/workflows/build-package-shell.yml"
       - uses: pnpm/action-setup@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
-      - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        run: |
-          pnpm run build:shell
-        env:
-          DEBUG_DEMB: true
+      - name: Download build artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ts-build-${{ matrix.os }}-node${{ matrix.version }}
+          path: ts
       # Reusing the cache can be flaky. If a downloaded archive is corrupted it can cause
       # problems because github tries to reuse the same machine for the next job leading to
       # blocked builds. This is a bug in electron-builder, it's not smart enough to retry acquiring the archive.
@@ -87,7 +77,7 @@ jobs:
       #     restore-keys: |
       #       electron | ${{ runner.os }} | ${{ runner.arch }}
       - name: Package - shell
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
         working-directory: ts
         shell: bash
         run: pnpm run shell:package

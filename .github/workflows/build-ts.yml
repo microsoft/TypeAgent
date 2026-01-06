@@ -115,6 +115,15 @@ jobs:
         working-directory: ts
         run: |
           npm run build
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        name: Upload build artifacts
+        with:
+          name: ts-build-${{ matrix.os }}-node${{ matrix.version }}
+          path: |
+            ts/packages/**/dist/**
+            ts/packages/**/lib/**
+          retention-days: 7
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
