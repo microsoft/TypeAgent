@@ -19,7 +19,7 @@ To build:
 - Install pnpm (`npm i -g pnpm && pnpm setup`)
 - **(Linux/WSL Only)** Read TypeAgent Shell's [README.md](./packages/shell/README.md) for additional requirements
 
-### Steps
+### Steps 
 
 In this directory:
 
