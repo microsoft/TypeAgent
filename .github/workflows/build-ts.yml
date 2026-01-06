@@ -8,7 +8,7 @@ name: build-ts
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "dev/robgruen/workflow_update"]
   pull_request:
     branches: ["main"]
   merge_group:
@@ -27,7 +27,50 @@ env:
   NODE_OPTIONS: --max_old_space_size=8192
 
 jobs:
-  build_ts:
+  linting:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        version: [20, 22]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Git LF
+        run: |
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        continue-on-error: true
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-ts.yml"
+      - uses: pnpm/action-setup@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+      - uses: actions/setup-node@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        with:
+          node-version: ${{ matrix.version }}
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Lint
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        run: |
+          npm run lint          
+
+  build_and_test:
     strategy:
       fail-fast: false
       matrix:
@@ -72,11 +115,6 @@ jobs:
         working-directory: ts
         run: |
           npm run build
-      - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        run: |
-          npm run lint          
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
