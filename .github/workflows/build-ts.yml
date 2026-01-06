@@ -120,10 +120,11 @@ jobs:
         name: Upload build artifacts
         with:
           name: ts-build-${{ matrix.os }}-node${{ matrix.version }}
+          retention-days: 1
+          compression-level: 0
           path: |
             ts/packages/**/dist/**
             ts/packages/**/lib/**
-          retention-days: 7
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
