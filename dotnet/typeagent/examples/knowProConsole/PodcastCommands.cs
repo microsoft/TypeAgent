@@ -23,7 +23,9 @@ public class PodcastCommands : ICommandModule
         return [
             PodcastLoadDef(),
             PodcastImportIndexDef(),
-            PodcastBuildIndexDef()
+            PodcastBuildIndexDef(),
+            PocastBulkImportDef(),
+            PodcastUnloadDef()
         ];
     }
 
@@ -44,6 +46,61 @@ public class PodcastCommands : ICommandModule
         {
             Console.WriteLine(token);
         }
+    }
+
+    private Command PodcastUnloadDef()
+    {
+        Command cmd = new("kpPodcastUnload", "Unload the current podcast")
+        {
+        };
+        string name = _podcast is not null ? _podcast.Name : string.Empty;
+        cmd.SetAction((ParseResult _) => UnloadCurrent());
+
+        if (string.IsNullOrEmpty(name))
+        {
+            KnowProWriter.WriteLine(ConsoleColor.Red, $"No podcast loaded.");
+        }
+        else
+        {
+            KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Unloaded podcast '{name}'");
+        }
+
+        return cmd;
+    }
+
+    private Command PocastBulkImportDef()
+    {
+        Command cmd = new("kpPodcastBulkImport", "Index and import multipe podcasts from a folder")
+        {
+            Args.Arg<string>("dir", "The folder from which to import all podcasts (local files only, not recursive)"),
+            Options.Arg<bool>("buildIndex", "Also build index", true)
+        };
+        cmd.SetAction(this.PodcastBulkImportAsync);
+        return cmd;
+    }
+
+    private async Task<Task> PodcastBulkImportAsync(ParseResult args)
+    {
+        NamedArgs namedArgs = new(args);
+        string dir = namedArgs.GetRequired("dir");
+        var files = Directory.GetFiles(dir, "*.txt");
+
+
+        foreach (var file in files)
+        {
+            string ext = Path.GetExtension(file);
+            string podcastName = Path.GetFileNameWithoutExtension(file);
+            KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Importing {podcastName} from {file}");
+            if (ext.Equals("json", StringComparison.OrdinalIgnoreCase))
+            {
+                await ImportExistingIndexAsync(namedArgs, file, podcastName, CancellationToken.None);
+            }
+            else
+            {
+                await ImportTranscriptAsync(namedArgs, file, podcastName, CancellationToken.None);
+            }
+        }
+        return Task.CompletedTask;
     }
 
     private Command PodcastLoadDef()
