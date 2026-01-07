@@ -10,7 +10,7 @@ public interface ITranscriptMessage
     void AddContent(string text, int chunkOrdinal);
 }
 
-public static partial class Transcript
+public static partial class TextTranscript
 {
     // Matches an optional SPEAKER: prefix (uppercase letters/digits) followed by the rest of the line as speech.
     // Examples:

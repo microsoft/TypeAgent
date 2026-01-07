@@ -97,7 +97,7 @@ public class PodcastMessage : Message<PodcastMessageMeta>, ITranscriptMessage
 
     public static (IList<PodcastMessage>, ISet<string>) ParseTranscript(string transcriptText)
     {
-        return Transcript.Parse(
+        return TextTranscript.Parse(
             transcriptText,
             (speaker, speech) => new PodcastMessage(speech, speaker)
         );
