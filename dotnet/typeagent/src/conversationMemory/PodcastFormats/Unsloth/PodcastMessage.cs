@@ -31,7 +31,8 @@ public class PodcastMessage
 
         return new ConversationMemory.PodcastMessage(
             unslothMessage.Content ?? string.Empty,
-            unslothMessage.Speaker ?? string.Empty
+            unslothMessage.Speaker ?? string.Empty,
+            string.IsNullOrEmpty(unslothMessage.SectionTitle) ? [] : [unslothMessage.SectionTitle]
         );
     }
 }

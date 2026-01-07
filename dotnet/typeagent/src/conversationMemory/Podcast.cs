@@ -72,26 +72,33 @@ public class Podcast : Memory<PodcastMessage>
         }
         else if (fileExtension == ".json")
         {
+            // TODO: add branching for other JSON formats
             UnslothFormat.PodcastMessage[] messages = Json.ParseFile<UnslothFormat.PodcastMessage[]>(filePath);
             if (messages is not null)
             {
                 // accumulate the speakers so we can assign listners
-                HashSet<string> participants = new(StringComparer.OrdinalIgnoreCase);
-                List<PodcastMessage> podcastMessages = new();
+                Dictionary<string, HashSet<string>> participants = [];
+                List<PodcastMessage> podcastMessages = [];
                 foreach (var message in messages)
                 {
+                    if (!participants.TryGetValue(message.SectionTitle, out HashSet<string>? value))
+                    {
+                        value = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        participants.Add(message.SectionTitle, value);
+                    }
+
                     // get the speaker
                     if (!string.IsNullOrEmpty(message.Speaker))
                     {
-                        participants.Add(message.Speaker);
+                        value.Add(message.Speaker);
                     }
 
                     // convert to PodcastMessage
-                    podcastMessages.Add((PodcastMessage)message); ;
+                    podcastMessages.Add((PodcastMessage)message);
                 }
 
                 // Assign listeners
-                AssignMessageListeners(podcastMessages, participants);
+                AssignMessageListeners(podcastMessages, null, participants);
 
                 // append the messages
                 await Messages.AppendAsync(
@@ -145,14 +152,15 @@ public class Podcast : Memory<PodcastMessage>
         return aliases;
     }
 
-    private void AssignMessageListeners(IEnumerable<PodcastMessage> messages, ISet<string> participants)
+    private void AssignMessageListeners(IEnumerable<PodcastMessage> messages, ISet<string> participants, Dictionary<string, HashSet<string>> dictParticipants = null)
     {
         foreach (var message in messages)
         {
             string? speaker = message.Metadata?.Speaker;
             if (!string.IsNullOrEmpty(speaker))
             {
-                foreach (var participant in participants)
+                var pp = participants ?? dictParticipants?[message.Tags.Count > 0 ? message.Tags[0] : ""];
+                foreach (var participant in pp)
                 {
                     if (participant != speaker)
                     {
