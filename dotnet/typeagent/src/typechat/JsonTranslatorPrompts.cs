@@ -88,11 +88,41 @@ public class JsonTranslatorPrompts : IJsonTranslatorPrompts
     }
 }
 
+/// <summary>
+/// In this prompting translation system the system prompt is used to instruct the model
+/// including the response type, schema, and purpose of the translation. This allows the request
+/// to just contain user messages.
+/// </summary>
 public class JsonTranslatorSystemPrompts : IJsonTranslatorPrompts
 {
     public Prompt CreateRequestPrompt(TypeSchema typeSchema, Prompt request, IList<IPromptSection> preamble)
     {
         Prompt prompt = [];
+
+        // make sure the preamble has some system instructions
+        bool hasSystemPromptSection = false;
+        foreach (var promptSection in preamble)
+        {
+            if (promptSection.Source == PromptSection.Sources.System)
+            {
+                hasSystemPromptSection = true;
+                break;
+            }
+        }
+
+        if (preamble.Count == 0 || !hasSystemPromptSection)
+        {
+            throw new InvalidOperationException("No system prompt section found in preamble. Please provide one.");
+        }
+
+        foreach(var promptSection in request)
+        {
+            if (promptSection.Source == PromptSection.Sources.System)
+            {
+                throw new InvalidOperationException("System prompt sections are not allowed in the request when using JsonTranslatorSystemPrompts. Please move them to the preamble.");
+            }
+        }
+
 
         prompt.AddRange(preamble);
         prompt.Add(SystemSectionReturnType(typeSchema.TypeName, typeSchema.Schema));
@@ -100,7 +130,6 @@ public class JsonTranslatorSystemPrompts : IJsonTranslatorPrompts
 
         return prompt;
     }
-
     public string CreateRepairPrompt(TypeSchema schema, string json, string validationError)
     {
         return JsonTranslatorPrompts.Default.CreateRepairPrompt(schema, json, validationError);
@@ -117,7 +146,7 @@ public class JsonTranslatorSystemPrompts : IJsonTranslatorPrompts
     {
         PromptSection introSection = new PromptSection(PromptSection.Sources.System, string.Empty);
         introSection += $"Respond only in valid JSON objects of type \"{typeName}\" according to the following TypeScript definitions:\n";
-        introSection += $"```\n{schema}```\n";
+        introSection += $"```typescript\n{schema}```\n";
         return introSection;
     }
 
