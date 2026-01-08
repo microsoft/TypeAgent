@@ -62,12 +62,26 @@ public class Json
     /// <typeparam name="T">value type</typeparam>
     /// <param name="value">value to stringify</param>
     /// <param name="indented">if true, produce indented json</param>
-    /// <returns></returns>
+    /// <returns>The JSON representation of the provided object</returns>
     public static string Stringify<T>(T value, bool indented = true)
     {
         return indented ?
                s_indented.Serialize(value) :
                s_default.Serialize<T>(value);
+    }
+
+    /// <summary>
+    /// Stringify value of type T
+    /// </summary>
+    /// <typeparam name="T">value type</typeparam>
+    /// <param name="value">value to stringify</param>
+    /// <param name="indented">if true, produce indented json</param>
+    /// <returns>The stringified JSON.</returns>
+    public static string StringifyToFile<T>(T value, string filePath, bool indented = true)
+    {
+        string json = Stringify<T>(value, indented);
+        System.IO.File.WriteAllText(filePath, json);
+        return json;
     }
 
     /// <summary>
