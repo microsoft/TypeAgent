@@ -82,9 +82,8 @@ public class PodcastCommands : ICommandModule
     private async Task<Task> PodcastBulkImportAsync(ParseResult args)
     {
         NamedArgs namedArgs = new(args);
-        string dir = namedArgs.GetRequired("dir");
-        var files = Directory.GetFiles(dir, "*.txt");
-
+        string path = namedArgs.GetRequired("path");
+        var files = Directory.GetFiles(path, "*.txt");
 
         foreach (var file in files)
         {

@@ -71,7 +71,11 @@ public class KnowProVerify
     {
         ArgumentVerify.ThrowIfNull(facet, nameof(facet));
         ArgumentVerify.ThrowIfNullOrEmpty(facet!.Name, nameof(facet.Name));
-        ArgumentVerify.ThrowIfNull(facet.Value, nameof(facet.Value));
+
+        if (!allowNullValue)
+        {
+            ArgumentVerify.ThrowIfNull(facet.Value, nameof(facet.Value));
+        }
     }
 
     public static void ThrowIfInvalid(Action? action)
