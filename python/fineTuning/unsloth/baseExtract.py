@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 from argparse import ArgumentParser
 import sys
 parser = ArgumentParser(description="Extract keywords from dataset using NLTK-RAKE.")
