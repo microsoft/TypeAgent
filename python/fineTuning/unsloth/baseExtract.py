@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 from argparse import ArgumentParser
 import sys
 parser = ArgumentParser(description="Extract keywords from dataset using NLTK-RAKE.")
@@ -36,6 +39,7 @@ class Section:
     title: str
     messages: list[Message] = field(default_factory=list)
     words: set[str] = field(default_factory=set)
+    proper_nouns: set[str] = field(default_factory=set)
     total_words: int = 0
     total_chars: int = 0
     total_tokens: int = 0
@@ -44,6 +48,52 @@ class Section:
 class Word:
     word: str
     messages: list[Message] = field(default_factory=list)
+
+def extract_proper_nouns(text):
+    """Extract proper nouns (capitalized words not at sentence start).
+    Prefers 2-word proper nouns over 1-word. Excludes pronoun 'I' and its contractions.
+    Handles quoted dialogue to avoid capturing sentence-initial words within quotes."""
+    # Split into sentences (simple approach)
+    sentences = re.split(r'[.!?]+\s+', text)
+    proper_nouns = set()
+    
+    # Words to exclude: pronoun "I" and its contractions
+    excluded_words = {"I", "I'd", "I'll", "I'm", "I've"}
+    
+    for sentence in sentences:
+        words = sentence.split()
+        i = 1  # Start from index 1 to skip sentence-initial capitalization
+        
+        while i < len(words):
+            # Clean word of punctuation
+            word1 = re.sub(r'[^\w\']+$', '', words[i])
+            word1_clean = re.sub(r'^[^\w\']+', '', word1)
+            
+            # Check if previous word ends with opening quote (indicating quoted sentence start)
+            is_quote_start = False
+            if i > 0:
+                prev_word = words[i - 1]
+                # Check if previous word ends with quote marks
+                if prev_word and prev_word[-1] in ['"', '"', '"', '\'']:
+                    is_quote_start = True
+            
+            # Check if capitalized and not an excluded word or quote-initial word
+            if word1_clean and word1_clean[0].isupper() and word1_clean not in excluded_words and not is_quote_start:
+                # Check for 2-word proper noun
+                if i + 1 < len(words):
+                    word2 = re.sub(r'[^\w\']+$', '', words[i + 1])
+                    word2_clean = re.sub(r'^[^\w\']+', '', word2)
+                    if word2_clean and word2_clean[0].isupper() and word2_clean not in excluded_words:
+                        # Found 2-word proper noun
+                        proper_nouns.add(f"{word1_clean} {word2_clean}")
+                        i += 2
+                        continue
+                
+                # Single-word proper noun
+                proper_nouns.add(word1_clean)
+            i += 1
+    
+    return proper_nouns
 
 def read_and_count_messages(file_path):
     """Read the JSON file and return the array and its count."""
@@ -85,10 +135,19 @@ for i, message in enumerate(messages):
     sections[section_title].messages.append(msg)
     all_messages.append(msg)
     
+    # Extract proper nouns
+    proper_nouns = extract_proper_nouns(content)
+    sections[section_title].proper_nouns.update(proper_nouns)
+    
+    # Build set of words to exclude (all words from proper nouns, lowercased)
+    words_to_exclude = set()
+    for proper_noun in proper_nouns:
+        words_to_exclude.update(word.lower() for word in proper_noun.split())
+    
     # Extract words from this message
     words = word_pattern.findall(content.lower())
-    # Filter out numbers less than 100
-    words = [w for w in words if not (w.isdigit() and int(w) < 100)]
+    # Filter out numbers less than 100 and proper noun words
+    words = [w for w in words if not (w.isdigit() and int(w) < 100) and w not in words_to_exclude]
     word_count = len(words)
     char_count = len(content)
     token_count = len(encoder.encode(content))
@@ -156,11 +215,20 @@ token_counts = [section.total_tokens for section in sections.values()]
 median_tokens_per_section = statistics.median(token_counts) if token_counts else 0
 mean_tokens_per_section = statistics.mean(token_counts) if token_counts else 0
 
+# Calculate proper noun statistics
+all_unique_proper_nouns = set()
+for section in sections.values():
+    all_unique_proper_nouns.update(section.proper_nouns)
+
+avg_proper_nouns_per_section = sum(len(section.proper_nouns) for section in sections.values()) / section_count if section_count > 0 else 0
+
 print(f"Total sections: {section_count}")
 print(f"Average messages per section: {avg_messages_per_section:.2f}")
 print(f"Total words: {total_words}")
 print(f"Unique words across all messages: {len(all_unique_words)}")
 print(f"Average unique words per section: {avg_words_per_section:.2f}")
+print(f"Total unique proper nouns across all messages: {len(all_unique_proper_nouns)}")
+print(f"Average unique proper nouns per section: {avg_proper_nouns_per_section:.2f}")
 print(f"Average word density ratio (unique/total per section): {avg_word_density * 100:.3f}%")
 print(f"Overall word density ratio (unique/total across all messages): {len(all_unique_words) / total_words * 100:.3f}%")
 print(f"Average messages per unique word: {avg_messages_per_word:.2f}")
@@ -240,6 +308,7 @@ for section in sections.values():
             for msg in section.messages
         ],
         "words": sorted(list(section.words)),
+        "proper_nouns": sorted(list(section.proper_nouns)),
         "word_count": section.total_words,
         "char_count": section.total_chars,
         "token_count": section.total_tokens
