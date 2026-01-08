@@ -76,7 +76,7 @@ public partial class ConcreteEntity
             foreach (var facet in Facets)
             {
                 string name = facet.Name.ToLower();
-                string value = facet.Value.ToString().ToLower();
+                string value = facet.Value?.ToString().ToLower();
                 mergedFacets.AddUnique(name, value);
             }
         }

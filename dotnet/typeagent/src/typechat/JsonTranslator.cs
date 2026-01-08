@@ -196,10 +196,10 @@ public class JsonTranslator<T> : IJsonTranslator
     /// <summary>
     /// Translate a natural language request into an object of type 'T'
     /// </summary>
-    /// <param name="request"></param>
-    /// <param name="preamble"></param>
-    /// <param name="requestSettings"></param>
-    /// <param name="cancelToken"></param>
+    /// <param name="request">The user request for the current turn.</param>
+    /// <param name="preamble">Any prompt preambles to apply</param>
+    /// <param name="requestSettings">The request settings</param>
+    /// <param name="cancelToken">The cancellation token</param>
     /// <returns>Result containing object of type T</returns>
     /// <exception cref="TypeChatException"></exception>
     public async Task<T> TranslateAsync(

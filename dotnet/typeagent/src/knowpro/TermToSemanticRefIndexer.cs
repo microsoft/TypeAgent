@@ -189,7 +189,7 @@ public static class TermToSemanticRefIndexer
             return;
         }
 
-        KnowProVerify.ThrowIfInvalid(facet);
+        KnowProVerify.ThrowIfInvalid(facet, true);
 
         await index.AddTermAsync(
             facet.Name,

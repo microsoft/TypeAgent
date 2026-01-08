@@ -10,6 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Benchmarking\BenchmarkQuestionResponseSchema.ts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Benchmarking\BenchmarkQuestionResponseSchema.ts" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\aiclient\aiclient.csproj" />
     <ProjectReference Include="..\..\src\common\common.csproj" />
     <ProjectReference Include="..\..\src\conversationMemory\conversationMemory.csproj" />
@@ -20,6 +28,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TypeAgent.Tests.KnowPro" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="NewFolder1\" />
+    <Folder Include="NewFolder\" />
   </ItemGroup>  
 
 </Project>
