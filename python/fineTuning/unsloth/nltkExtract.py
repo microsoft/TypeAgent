@@ -13,7 +13,7 @@ import yake
 from keybert import KeyBERT
 
 parser = ArgumentParser(description="Extract keywords from dataset using NLTK-RAKE.")
-parser.add_argument("--dataset_path", type=str, default='/data/npr_chunks_no_embedding_seed127_samples5000_test.json', help="Path to the dataset file.")
+parser.add_argument("--dataset_path", type=str, default='/data/npr/npr_chunks_no_embedding.json', help="Path to the dataset file.")
 parser.add_argument("--max_length", type=int, default=1, help="Maximum number of words in a keyword phrase.")
 parser.add_argument("--output_file", type=str, default='extraction.txt', help="Path to the output file.")
 parser.add_argument("--verbose", action='store_true', help="Enable verbose output (shows all extraction details). Default is non-verbose.")

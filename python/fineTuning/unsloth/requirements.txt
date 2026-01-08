@@ -1,0 +1,19 @@
+# Core ML/DL dependencies
+unsloth
+torch
+datasets
+pandas
+
+# NLP libraries
+nltk
+rake-nltk
+spacy
+yake
+keybert
+sentence-transformers
+
+# Tokenization
+tiktoken
+
+# Visualization
+matplotlib
