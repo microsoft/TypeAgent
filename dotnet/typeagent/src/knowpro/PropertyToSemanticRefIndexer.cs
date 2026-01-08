@@ -155,7 +155,7 @@ public static class PropertyToSemanticRefIndexer
         CancellationToken cancellationToken
     )
     {
-        KnowProVerify.ThrowIfInvalid(facet);
+        KnowProVerify.ThrowIfInvalid(facet, true);
 
         // TODO: Bulk operations
         await propertyIndex.AddPropertyAsync(
