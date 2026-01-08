@@ -66,6 +66,8 @@ The user provides you with a transcript and you generate 50 questions regarding 
 
         CreateModel();
 
+        KnowProWriter.WriteLine(ConsoleColor.White, $"Found {files.Length} text transcripts.");
+
         foreach (var file in files)
         {
             await CreateQuestionsForPodcastAsync(file);
@@ -88,6 +90,8 @@ The user provides you with a transcript and you generate 50 questions regarding 
     /// <param name="file"></param>
     private async Task CreateQuestionsForPodcastAsync(string file)
     {
+        var start = _kpContext.Stopwatch.Elapsed;
+
         SchemaText schema = new SchemaText(
             SchemaLoader.LoadResource(
                 this.GetType().Assembly,
@@ -119,6 +123,8 @@ The user provides you with a transcript and you generate 50 questions regarding 
             JsonTranslatorPrompts.System
         );
 
+        KnowProWriter.Write(ConsoleColor.White, $"Generating questions for '{Path.GetFileNameWithoutExtension(file)}'...");
+
         PromptSection transcript = new PromptSection(PromptSection.Sources.User, File.ReadAllText(file));
 
         var response = await translator.TranslateAsync(new(transcript), [_questionGeneratorSystemPrompt]);
@@ -126,6 +132,8 @@ The user provides you with a transcript and you generate 50 questions regarding 
         // write out these questions to a file
         string outFile = Path.ChangeExtension(file, ".questions.json");
         Json.StringifyToFile(response, outFile, true);
+
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:2}s]");
     }
 }
 
