@@ -13,15 +13,16 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Identity.Client;
 using Microsoft.TypeChat;
 using Microsoft.TypeChat.Schema;
+using TypeAgent.KnowPro.Lang;
 using static System.Net.Mime.MediaTypeNames;
 using Prompt = Microsoft.TypeChat.Prompt;
 
-namespace KnowProConsole;
+namespace KnowProConsole.Benchmarking;
 
 /// <summary>
 /// A class that holds the commands for creating benchmark questions/answers.
 /// </summary>
-public class BenchmarkCommands : ICommandModule
+public class BenchmarkCommands : ICommandModule, IDisposable
 {
     KnowProConsoleContext _kpContext;
     OpenAIChatModel _model;
@@ -29,6 +30,7 @@ public class BenchmarkCommands : ICommandModule
     const string QUESTION_GENERATOR = @"You are a question generator. The user provides you with a transcript and you generate 50 questions regarding the content in the supplied transcript.";
 
     PromptSection _questionGeneratorSystemPrompt = new PromptSection(PromptSection.Sources.System, QUESTION_GENERATOR);
+    private bool _disposedValue;
 
     public BenchmarkCommands(KnowProConsoleContext context)
     {
@@ -43,13 +45,90 @@ public class BenchmarkCommands : ICommandModule
     public IList<Command> GetCommands()
     {
         return [
-            BenchmarkCreatePodcastQuestionsDef()
+            BenchmarkCreatePodcastQuestionsDef(),
+            BenchmarkRunDef()
         ];
+    }
+
+    private Command BenchmarkRunDef()
+    {
+        Command cmd = new("benchmarkRun", "Run all benchmarks against the loaded podcast.")
+        {
+            Args.Arg<string>("path", "The file or folder to load questions files (*.question.json) from."),
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(BenchmarkRunAsync);
+        return cmd;
+
+    }
+
+    // TODO: validate answers with LLM
+    // TODO: store answer responses and rag/srag configuration parameters
+    // TODO: score/report results
+    private async Task BenchmarkRunAsync(ParseResult args)
+    {
+        IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new(args);
+        string path = namedArgs.GetRequired("path");
+        List<string> questionFiles = [];
+        if (File.Exists(path))
+        {
+            questionFiles.Add(path);
+        }
+        else if (Directory.Exists(path))
+        {
+            var files = Directory.GetFiles(path, "*.questions.json");
+            questionFiles.AddRange(files);
+        }
+        else
+        {
+            throw new FileNotFoundException($"The specified path '{path}' does not exist.");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, $"Found {questionFiles.Count} question files.");
+        foreach (var file in questionFiles)
+        {
+            var questions = Json.ParseFile<QuestionResponse>(file);
+            KnowProWriter.Write(ConsoleColor.White, $"Loaded");
+            KnowProWriter.Write(ConsoleColor.Magenta, $" {questions?.Questions?.Count} questions");
+            KnowProWriter.WriteLine(ConsoleColor.White, $" from '{file}'");
+
+            // now run this query through RAG and SRAG and collect the answers
+            foreach (var q in questions?.Questions ?? [])
+            {
+                string question = q.Question;
+                KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Question: {question}");
+                AnswerResponse? answerRAG = await conversation.AnswerQuestionRagAsync(question, 0.7, 8196, new() { MessagesTopK = 25 }, null, CancellationToken.None);
+                KnowProWriter.Write(ConsoleColor.DarkBlue, $" RAG: ");
+                if (answerRAG is null || answerRAG.Type == AnswerType.NoAnswer)
+                {
+                    KnowProWriter.WriteLine(ConsoleColor.Red, $"No answer returned ({answerRAG?.WhyNoAnswer}).");
+                }
+                else
+                {
+                    KnowProWriter.WriteLine(ConsoleColor.Green, $"{answerRAG.Answer}");
+                }
+
+                KnowProWriter.Write(ConsoleColor.DarkCyan, $"SRAG: ");
+                AnswerResponse? answer = await conversation.AnswerQuestionAsync(question, new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = 8196, MaxMessageMatches = 25 }, null, null, null, CancellationToken.None);
+                if (answer is null || answer.Type == AnswerType.NoAnswer)
+                {
+                    KnowProWriter.WriteLine(ConsoleColor.Red, $"No answer returned.({answer?.WhyNoAnswer})");
+                }
+                else
+                {
+                    KnowProWriter.WriteLine(ConsoleColor.Green, $"{answer.Answer}");
+                }
+
+
+            }
+        }
     }
 
     private Command BenchmarkCreatePodcastQuestionsDef()
     {
-        Command cmd = new("benchmarkCreatePodcastQuestions")
+        Command cmd = new("benchmarkCreatePodcastQuestions", "Create questions and answers for individual podcast transcripts.")
         {
             Args.Arg<string>("path", "The folder from which to import all podcasts (local files only, not recursive)"),
         };
@@ -122,6 +201,34 @@ public class BenchmarkCommands : ICommandModule
         Json.StringifyToFile(response, outFile, true);
 
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:2}s]");
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposedValue)
+        {
+            if (disposing)
+            {
+                this._model.Dispose();
+            }
+
+            _disposedValue = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    // TODO: make an extension method for this
+    private IConversation EnsureConversation()
+    {
+        return (_kpContext.Conversation is not null)
+            ? _kpContext.Conversation!
+            : throw new InvalidOperationException("No conversation loaded");
     }
 }
 
