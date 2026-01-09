@@ -67,11 +67,15 @@ public class KnowProVerify
         ArgumentVerify.ThrowIfNull(entity.Type, nameof(entity.Type));
     }
 
-    public static void ThrowIfInvalid(Facet? facet)
+    public static void ThrowIfInvalid(Facet? facet, bool allowNullValue = false)
     {
         ArgumentVerify.ThrowIfNull(facet, nameof(facet));
         ArgumentVerify.ThrowIfNullOrEmpty(facet!.Name, nameof(facet.Name));
-        ArgumentVerify.ThrowIfNull(facet.Value, nameof(facet.Value));
+
+        if (!allowNullValue)
+        {
+            ArgumentVerify.ThrowIfNull(facet.Value, nameof(facet.Value));
+        }
     }
 
     public static void ThrowIfInvalid(Action? action)

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using UnslothFormat = TypeAgent.ConversationMemory.PodcastFormats.Unsloth;
+
 namespace TypeAgent.ConversationMemory;
 
 public class Podcast : Memory<PodcastMessage>
@@ -47,22 +49,71 @@ public class Podcast : Memory<PodcastMessage>
         int? lengthMinutes = null
     )
     {
-        // delegate error checking
-        string text = File.ReadAllText(filePath);
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-        var (messages, participants) = PodcastMessage.ParseTranscript(text);
-        AssignMessageListeners(messages, participants);
-        if (startDate is not null)
-        {
-            messages.TimestampMessages(startDate.Value, startDate.Value.AddMinutes(lengthMinutes ?? 60));
-        }
+        string fileExtension = Path.GetExtension(filePath).ToLowerInvariant();
 
-        await Messages.AppendAsync(
-            messages
-        ).ConfigureAwait(false);
+        if (fileExtension == ".txt")
+        {
+            // delegate error checking
+            string text = File.ReadAllText(filePath);
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+            var (messages, participants) = PodcastMessage.ParseTranscript(text);
+            AssignMessageListeners(messages, participants);
+            if (startDate is not null)
+            {
+                messages.TimestampMessages(startDate.Value, startDate.Value.AddMinutes(lengthMinutes ?? 60));
+            }
+
+            await Messages.AppendAsync(
+                messages
+            ).ConfigureAwait(false);
+        }
+        else if (fileExtension == ".json")
+        {
+            // TODO: add branching for other JSON formats
+            UnslothFormat.PodcastMessage[] messages = Json.ParseFile<UnslothFormat.PodcastMessage[]>(filePath);
+            if (messages is not null)
+            {
+                // accumulate the speakers so we can assign listners
+                Dictionary<string, HashSet<string>> participants = [];
+                List<PodcastMessage> podcastMessages = [];
+                foreach (var message in messages)
+                {
+                    if (!participants.TryGetValue(message.SectionTitle, out HashSet<string>? value))
+                    {
+                        value = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        participants.Add(message.SectionTitle, value);
+                    }
+
+                    // get the speaker
+                    if (!string.IsNullOrEmpty(message.Speaker))
+                    {
+                        value.Add(message.Speaker);
+                    }
+
+                    // convert to PodcastMessage
+                    podcastMessages.Add((PodcastMessage)message);
+                }
+
+                // Assign listeners
+                AssignMessageListeners(podcastMessages, null, participants);
+
+                // append the messages
+                await Messages.AppendAsync(
+                    podcastMessages
+                ).ConfigureAwait(false);
+            }
+            else
+            {
+                throw new ArgumentNullException(nameof(filePath), "Failed to parse JSON transcript file.");
+            }
+        }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(filePath), "Unsupported transcript file format.");
+        }
     }
 
     private async ValueTask AddSynonymsAsync(CancellationToken cancellationToken)
@@ -101,14 +152,15 @@ public class Podcast : Memory<PodcastMessage>
         return aliases;
     }
 
-    private void AssignMessageListeners(IList<PodcastMessage> messages, ISet<string> participants)
+    private void AssignMessageListeners(IEnumerable<PodcastMessage> messages, ISet<string> participants, Dictionary<string, HashSet<string>> dictParticipants = null)
     {
         foreach (var message in messages)
         {
             string? speaker = message.Metadata?.Speaker;
             if (!string.IsNullOrEmpty(speaker))
             {
-                foreach (var participant in participants)
+                var pp = participants ?? dictParticipants?[message.Tags.Count > 0 ? message.Tags[0] : ""];
+                foreach (var participant in pp)
                 {
                     if (participant != speaker)
                     {

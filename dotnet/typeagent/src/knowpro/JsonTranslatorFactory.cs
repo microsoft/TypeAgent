@@ -18,7 +18,7 @@ internal static class JsonTranslatorFactory
 
         SchemaText schema = new SchemaText(
             SchemaLoader.LoadResource(
-                typeof(JsonTranslatorFactory).Assembly,
+                assembly,
                 schemaResourcePath
             ),
             SchemaText.Languages.Typescript

@@ -59,9 +59,13 @@ public class PodcastMessage : Message<PodcastMessageMeta>, ITranscriptMessage
     {
     }
 
-    public PodcastMessage(string text, string speaker)
+    public PodcastMessage(string text, string speaker, IEnumerable<string> tags = null)
         : base(text, new PodcastMessageMeta(speaker))
     {
+        if (tags is not null)
+        {
+            Tags = [.. tags];
+        }
     }
 
     public override KnowledgeResponse? GetKnowledge()
@@ -97,7 +101,7 @@ public class PodcastMessage : Message<PodcastMessageMeta>, ITranscriptMessage
 
     public static (IList<PodcastMessage>, ISet<string>) ParseTranscript(string transcriptText)
     {
-        return Transcript.Parse(
+        return TextTranscript.Parse(
             transcriptText,
             (speaker, speech) => new PodcastMessage(speech, speaker)
         );
