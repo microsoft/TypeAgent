@@ -18,5 +18,8 @@
     "debug": "^4.4.0",
     "sort-package-json": "^3.0.0",
     "validate-npm-package-name": "^6.0.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.5.0"
   }
 }
