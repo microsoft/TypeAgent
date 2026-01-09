@@ -1,5 +1,3 @@
-#!/usr/bin/env npx ts-node
-
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
