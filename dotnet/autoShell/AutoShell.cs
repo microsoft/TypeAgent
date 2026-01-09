@@ -2,18 +2,20 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices;
-using System.IO;
-using System.Collections;
-using Newtonsoft.Json.Linq;
+using System.Windows.Controls;
 using Microsoft.VisualBasic;
 using Microsoft.WindowsAPICodePack.Shell;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using static autoShell.AutoShell;
 
 
 namespace autoShell
@@ -25,6 +27,16 @@ namespace autoShell
         static Hashtable s_friendlyNameToId = [];
         static double s_savedVolumePct = 0.0;
 
+        static IServiceProvider10 s_shell;
+        static IVirtualDesktopManager s_virtualDesktopManager;
+        static IVirtualDesktopManagerInternal s_virtualDesktopManagerInternal;
+        static IApplicationViewCollection s_applicationViewCollection;
+        static IVirtualDesktopPinnedApps s_virtualDesktopPinnedApps;
+
+
+        /// <summary>
+        /// Constructor used to get system wide information required for specific commands.
+        /// </summary>
         static AutoShell()
         {
             // get current user name
@@ -57,6 +69,7 @@ namespace autoShell
                 { "copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
                 { "spotify", "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.278.418.0_x64__zpdnekdrzrea0\\spotify.exe" },
             };
+
             // add the entries to the hashtable
             foreach (var kvp in sortedList)
             {
@@ -71,6 +84,40 @@ namespace autoShell
 
             // Load the installed themes
             LoadThemes();
+
+            // Desktop management
+            s_shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_ImmersiveShell));
+            s_virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)s_shell.QueryService(CLSID_VirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+            s_virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_VirtualDesktopManager));
+            //s_virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(typeof(VirtualDesktopManager));
+            s_applicationViewCollection = (IApplicationViewCollection)s_shell.QueryService(typeof(IApplicationViewCollection).GUID, typeof(IApplicationViewCollection).GUID);
+            s_virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)s_shell.QueryService(CLSID_VirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
+        }
+
+        /// <summary>
+        /// Program entry point
+        /// </summary>
+        /// <param name="args">Any command line arguments</param>
+        static void Main(string[] args)
+        {
+            string rawCmdLine = Marshal.PtrToStringUni(GetCommandLineW());
+
+            // if there are command line args let's execute those and then exit
+            if (args.Length > 0)
+            {
+                string exe = $"\"{Environment.ProcessPath}\"";
+
+                execLine(rawCmdLine.Replace(exe, ""));
+                return;
+            }
+
+            bool quit = false;
+            while (!quit)
+            {
+                // read a line from the console
+                string line = Console.ReadLine();
+                quit = execLine(line);
+            }
         }
 
         static SortedList<string, string> GetAllInstalledAppsIds()
@@ -375,6 +422,98 @@ namespace autoShell
             SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, imagePath, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
         }
 
+        /// <summary>
+        /// Creates virtual desktops from a JSON array of desktop names.
+        /// </summary>
+        /// <param name="jsonValue">JSON array containing desktop names, e.g., ["Work", "Personal", "Gaming"]</param>
+        static void CreateDesktop(string jsonValue)
+        {
+            try
+            {
+                // Parse the JSON array of desktop names
+                JArray desktopNames = JArray.Parse(jsonValue);
+
+                if (desktopNames == null || desktopNames.Count == 0)
+                {
+                    Debug.WriteLine("No desktop names provided");
+                    return;
+                }
+
+                if (s_virtualDesktopManagerInternal == null)
+                {
+                    Debug.WriteLine($"Failed to get Virtual Desktop Manager Internal (Last Win32 Error: {Marshal.GetLastWin32Error()})");
+                    return;
+                }
+
+                foreach (JToken desktopNameToken in desktopNames)
+                {
+                    string desktopName = desktopNameToken.ToString();
+
+                    if (string.IsNullOrWhiteSpace(desktopName))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        // Create a new virtual desktop
+                        IVirtualDesktop newDesktop = s_virtualDesktopManagerInternal.CreateDesktop();
+                        //var rc = s_virtualDesktop.Desktop.FromDesktop(s_virtualDesktop.Desktop.Create());
+
+                        if (newDesktop != null)
+                        {
+                            // Set the desktop name (Windows 10 build 20231+ / Windows 11)
+                            try
+                            {
+                                s_virtualDesktopManagerInternal.SetDesktopName(newDesktop, desktopName);
+                                //IVirtualDesktop2 desktop2 = (IVirtualDesktop2)newDesktop;
+                                //desktop2.SetName(desktopName);
+                                Debug.WriteLine($"Created virtual desktop: {desktopName}");
+                            }
+                            catch (Exception ex2)
+                            {
+                                // Older Windows version - name setting not supported
+                                Debug.WriteLine($"Created virtual desktop (naming not supported on this Windows version): {ex2.Message}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to create desktop '{desktopName}': {ex.Message}");
+                    }
+                }
+            }
+            catch (JsonException ex)
+            {
+                Debug.WriteLine($"Failed to parse desktop names JSON: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error creating desktops: {ex.Message}");
+            }
+        }
+
+        static IVirtualDesktopManagerInternal GetVirtualDesktopManagerInternal()
+        {
+            try
+            {
+                IServiceProvider shellServiceProvider = (IServiceProvider)Activator.CreateInstance(
+                    Type.GetTypeFromCLSID(CLSID_ImmersiveShell));
+
+                object objVirtualDesktopManagerInternal;
+                shellServiceProvider.QueryService(
+                    CLSID_VirtualDesktopManagerInternal,
+                    typeof(IVirtualDesktopManagerInternal).GUID,
+                    out objVirtualDesktopManagerInternal);
+
+                return (IVirtualDesktopManagerInternal)objVirtualDesktopManagerInternal;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         static bool execLine(string line)
         {
             var quit = false;
@@ -442,23 +581,15 @@ namespace autoShell
                         var themes = GetInstalledThemes();
                         Console.WriteLine(JsonConvert.SerializeObject(themes));
                         break;
+                    case "createDesktop":
+                        CreateDesktop(value);
+                        break;
                     default:
                         Debug.WriteLine("Unknown command: " + key);
                         break;
                 }
             }
             return quit;
-        }
-
-        static void Main(string[] args)
-        {
-            bool quit = false;
-            while (!quit)
-            {
-                // read a line from the console
-                string line = Console.ReadLine();
-                quit = execLine(line);
-            }
         }
     }
 }
