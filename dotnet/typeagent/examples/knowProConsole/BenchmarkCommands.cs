@@ -26,14 +26,14 @@ public class BenchmarkCommands : ICommandModule
     KnowProConsoleContext _kpContext;
     OpenAIChatModel _model;
 
-    const string QUESTION_GENERATOR = @"You are a question generator.
-The user provides you with a transcript and you generate 50 questions regarding the content in the supplied transcript.";
+    const string QUESTION_GENERATOR = @"You are a question generator. The user provides you with a transcript and you generate 50 questions regarding the content in the supplied transcript.";
 
     PromptSection _questionGeneratorSystemPrompt = new PromptSection(PromptSection.Sources.System, QUESTION_GENERATOR);
 
     public BenchmarkCommands(KnowProConsoleContext context)
     {
         _kpContext = context;
+        _model = new OpenAIChatModel(AzureModelApiSettings.ChatSettingsFromEnv("_GPT_5_2"));
     }
 
     /// <summary>
@@ -64,24 +64,12 @@ The user provides you with a transcript and you generate 50 questions regarding 
         string path = namedArgs.GetRequired("path");
         var files = Directory.GetFiles(path, "*.txt");
 
-        CreateModel();
-
         KnowProWriter.WriteLine(ConsoleColor.White, $"Found {files.Length} text transcripts.");
 
         foreach (var file in files)
         {
             await CreateQuestionsForPodcastAsync(file);
         }
-    }
-
-    private void CreateModel()
-    {
-        if (_model is not null)
-        {
-            return;
-        }
-
-        _model = new OpenAIChatModel(AzureModelApiSettings.ChatSettingsFromEnv("_GPT_5_2"));
     }
 
     /// <summary>
