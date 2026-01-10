@@ -14,6 +14,10 @@ import { getStatusSummary } from "agent-dispatcher/helpers/status";
 export default class Connect extends Command {
     static description = "Interactive mode";
     static flags = {
+        request: Flags.string({
+            description:
+                "Initial request to send to the type agent upon connection",
+        }),
         exit: Flags.boolean({
             description: "Exit after processing input file",
             default: true,
@@ -40,13 +44,15 @@ export default class Connect extends Command {
                 `ws://localhost:${flags.port}`,
             );
             try {
+                if (flags.request) {
+                    await dispatcher.processCommand(flags.request);
+                }
                 if (args.input) {
                     await dispatcher.processCommand(`@run ${args.input}`);
-                    if (flags.exit) {
-                        return;
-                    }
                 }
-
+                if (flags.exit) {
+                    return;
+                }
                 await processCommands(
                     async (dispatcher: Dispatcher) =>
                         getConsolePrompt(
