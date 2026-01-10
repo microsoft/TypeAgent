@@ -30,6 +30,7 @@ namespace autoShell
         static IServiceProvider10 s_shell;
         static IVirtualDesktopManager s_virtualDesktopManager;
         static IVirtualDesktopManagerInternal s_virtualDesktopManagerInternal;
+        static IVirtualDesktopManagerInternal_BUGBUG s_virtualDesktopManagerInternal_BUGBUG;
         static IApplicationViewCollection s_applicationViewCollection;
         static IVirtualDesktopPinnedApps s_virtualDesktopPinnedApps;
 
@@ -88,8 +89,8 @@ namespace autoShell
             // Desktop management
             s_shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_ImmersiveShell));
             s_virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)s_shell.QueryService(CLSID_VirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+            s_virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)s_shell.QueryService(CLSID_VirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
             s_virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_VirtualDesktopManager));
-            //s_virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(typeof(VirtualDesktopManager));
             s_applicationViewCollection = (IApplicationViewCollection)s_shell.QueryService(typeof(IApplicationViewCollection).GUID, typeof(IApplicationViewCollection).GUID);
             s_virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)s_shell.QueryService(CLSID_VirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
         }
@@ -458,17 +459,16 @@ namespace autoShell
                     {
                         // Create a new virtual desktop
                         IVirtualDesktop newDesktop = s_virtualDesktopManagerInternal.CreateDesktop();
-                        //var rc = s_virtualDesktop.Desktop.FromDesktop(s_virtualDesktop.Desktop.Create());
 
                         if (newDesktop != null)
                         {
                             // Set the desktop name (Windows 10 build 20231+ / Windows 11)
                             try
                             {
-                                s_virtualDesktopManagerInternal.SetDesktopName(newDesktop, desktopName);
-                                //IVirtualDesktop2 desktop2 = (IVirtualDesktop2)newDesktop;
-                                //desktop2.SetName(desktopName);
-                                Debug.WriteLine($"Created virtual desktop: {desktopName}");
+                                // TODO: debug & get working
+                                // Works in .NET framework but not .NET
+                                //s_virtualDesktopManagerInternal_BUGBUG.SetDesktopName(newDesktop, desktopName);
+                                //Debug.WriteLine($"Created virtual desktop: {desktopName}");
                             }
                             catch (Exception ex2)
                             {
@@ -500,11 +500,10 @@ namespace autoShell
                 IServiceProvider shellServiceProvider = (IServiceProvider)Activator.CreateInstance(
                     Type.GetTypeFromCLSID(CLSID_ImmersiveShell));
 
-                object objVirtualDesktopManagerInternal;
                 shellServiceProvider.QueryService(
                     CLSID_VirtualDesktopManagerInternal,
                     typeof(IVirtualDesktopManagerInternal).GUID,
-                    out objVirtualDesktopManagerInternal);
+                    out object objVirtualDesktopManagerInternal);
 
                 return (IVirtualDesktopManagerInternal)objVirtualDesktopManagerInternal;
             }

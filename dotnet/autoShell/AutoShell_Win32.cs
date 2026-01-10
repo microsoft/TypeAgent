@@ -135,24 +135,11 @@ namespace autoShell
             bool IsRemote();
         }
 
-        //// IVirtualDesktop2 COM Interface (Windows 10 20H1+ / Windows 11 - supports naming)
-        //[ComImport]
-        //[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        //[Guid("31EBDE3F-6EC3-4CBD-B9FB-0EF6D09B41F4")]
-        //private interface IVirtualDesktop2
-        //{
-        //    bool IsViewVisible(object pView);
-        //    Guid GetID();
-        //    [return: MarshalAs(UnmanagedType.HString)]
-        //    string GetName();
-        //    void SetName([MarshalAs(UnmanagedType.HString)] string name);
-        //}
-
         // IVirtualDesktopManagerInternal COM Interface
         [ComImport]
         [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         [Guid("53F5CA0B-158F-4124-900C-057158060B27")]
-        internal interface IVirtualDesktopManagerInternal
+        internal interface IVirtualDesktopManagerInternal_BUGBUG
         {
             int GetCount();
             void MoveViewToDesktop(IApplicationView view, IVirtualDesktop desktop);
@@ -178,6 +165,36 @@ namespace autoShell
             void WaitForAnimationToComplete();
         }
 
+        // IVirtualDesktopManagerInternal COM Interface
+        [ComImport]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        [Guid("53F5CA0B-158F-4124-900C-057158060B27")]
+        internal interface IVirtualDesktopManagerInternal
+        {
+            int GetCount();
+            void MoveViewToDesktop(IApplicationView view, IVirtualDesktop desktop);
+            bool CanViewMoveDesktops(IApplicationView view);
+            IVirtualDesktop GetCurrentDesktop();
+            void GetDesktops(out IObjectArray desktops);
+            [PreserveSig]
+            int GetAdjacentDesktop(IVirtualDesktop from, int direction, out IVirtualDesktop desktop);
+            void SwitchDesktop(IVirtualDesktop desktop);
+            void SwitchDesktopAndMoveForegroundView(IVirtualDesktop desktop);
+            IVirtualDesktop CreateDesktop();
+            void MoveDesktop(IVirtualDesktop desktop, int nIndex);
+            void RemoveDesktop(IVirtualDesktop desktop, IVirtualDesktop fallback);
+            IVirtualDesktop FindDesktop(ref Guid desktopid);
+            void GetDesktopSwitchIncludeExcludeViews(IVirtualDesktop desktop, out IObjectArray unknown1, out IObjectArray unknown2);
+            void SetDesktopName(IVirtualDesktop desktop, [MarshalAs(UnmanagedType.HString)] string name);
+            void SetDesktopWallpaper(IVirtualDesktop desktop, [MarshalAs(UnmanagedType.HString)] string path);
+            void UpdateWallpaperPathForAllDesktops([MarshalAs(UnmanagedType.HString)] string path);
+            void CopyDesktopState(IApplicationView pView0, IApplicationView pView1);
+            void CreateRemoteDesktop([MarshalAs(UnmanagedType.HString)] string path, out IVirtualDesktop desktop);
+            void SwitchRemoteDesktop(IVirtualDesktop desktop, IntPtr switchtype);
+            void SwitchDesktopWithAnimation(IVirtualDesktop desktop);
+            void GetLastActiveDesktop(out IVirtualDesktop desktop);
+            void WaitForAnimationToComplete();
+        }
 
         // IObjectArray COM Interface
         [ComImport]
