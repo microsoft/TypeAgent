@@ -13,6 +13,8 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - **Audio Control**: Set volume levels, mute/unmute, and restore previous volume
 - **Theme Management**: List and apply Windows themes
 - **Desktop Customization**: Set desktop wallpaper
+- **Virtual Desktop Management**: Create new virtual desktops
+- **Notification Center**: Toggle the Windows notification center
 
 ## Requirements
 
@@ -46,6 +48,8 @@ Run the application and send JSON commands via stdin:
 | `applyTheme` | Theme name | Applies a Windows theme |
 | `listThemes` | (none) | Outputs installed themes as JSON |
 | `listAppNames` | (none) | Outputs installed applications as JSON |
+| `createDesktop` | JSON array of names | Creates one or more virtual desktops |
+| `toggleNotifications` | (none) | Toggles the Windows notification center |
 | `quit` | (none) | Exits the application |
 
 ### Examples
@@ -78,6 +82,16 @@ Mute the system audio:
 Set the desktop wallpaper and then quit AutoShell:
 ```json
 {"setWallpaper": "C:\Users\Public\Pictures\wallpaper.jpg"} {"quit": true}
+```
+
+Create a new virtual desktop named "Design Work", and switch to it:
+```json
+{"createDesktop": ["Design Work"]} {"switchTo": "Design Work"}
+```
+
+Toggle the Windows notification center:
+```json
+{"toggleNotifications": true}
 ```
 
 ### Supported Application Friendly Names

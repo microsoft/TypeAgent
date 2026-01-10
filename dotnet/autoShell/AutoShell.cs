@@ -103,21 +103,52 @@ internal partial class AutoShell
     {
         string rawCmdLine = Marshal.PtrToStringUni(GetCommandLineW());
 
-        // if there are command line args let's execute those and then exit
+        // if there are command line args let's execute those one at a time and then exit
+        // user can specify a single JSON object command or an array of them on the command line
         if (args.Length > 0)
         {
             string exe = $"\"{Environment.ProcessPath}\"";
+            string cmdLine = rawCmdLine.Replace(exe, "");
 
-            execLine(rawCmdLine.Replace(exe, ""));
+            JArray commands = JArray.Parse(cmdLine);
+            if (commands is not null)
+            {
+                foreach (JObject jo in commands.Children<JObject>())
+                {
+                    execLine(jo);
+                }
+            }
+            else
+            {
+                execLine(JObject.Parse(cmdLine));
+            }
+
+            // exit
             return;
         }
 
+        // run in interactive mode, keep accepting commands until we get the shutdown command
         bool quit = false;
         while (!quit)
         {
-            // read a line from the console
-            string line = Console.ReadLine();
-            quit = execLine(line);
+            try
+            {
+                // read a line from the console
+                string line = Console.ReadLine();
+                // parse the line as a json object with one or more command keys (with values as parameters)
+                JObject root = JObject.Parse(line);
+
+                // execute the line
+                quit = execLine(root);
+            }
+            catch (JsonReaderException ex)
+            {
+                Debug.WriteLine(ex);
+                ConsoleColor previousColor = Console.ForegroundColor;
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error parsing Json");
+                Console.ForegroundColor = previousColor;
+            }
         }
     }
 
@@ -273,8 +304,19 @@ internal partial class AutoShell
                 SendMessage(p.MainWindowHandle, WM_SYSCOMMAND, SC_MAXIMIZE, IntPtr.Zero);
                 SetForegroundWindow(p.MainWindowHandle);
                 Interaction.AppActivate(p.Id);
-                break;
+                return;
             }
+        }
+
+        // if we haven't found what we are looking for let's enumerate the top level windows and try that way
+        (nint hWnd, int pid) = FindWindowByTitle(processName);
+        if (hWnd != nint.Zero)
+        {
+            uint WM_SYSCOMMAND = 0x112;
+            uint SC_MAXIMIZE = 0xf030;
+            SendMessage(hWnd, WM_SYSCOMMAND, SC_MAXIMIZE, IntPtr.Zero);
+            SetForegroundWindow(hWnd);
+            Interaction.AppActivate(pid);
         }
     }
 
@@ -292,6 +334,17 @@ internal partial class AutoShell
                 SendMessage(p.MainWindowHandle, WM_SYSCOMMAND, SC_MINIMIZE, IntPtr.Zero);
                 break;
             }
+        }
+
+        // if we haven't found what we are looking for let's enumerate the top level windows and try that way
+        (nint hWnd, int pid) = FindWindowByTitle(processName);
+        if (hWnd != nint.Zero)
+        {
+            uint WM_SYSCOMMAND = 0x112;
+            uint SC_MINIMIZE = 0xF020;
+            SendMessage(hWnd, WM_SYSCOMMAND, SC_MINIMIZE, IntPtr.Zero);
+            SetForegroundWindow(hWnd);
+            Interaction.AppActivate(pid);
         }
     }
 
@@ -580,11 +633,9 @@ internal partial class AutoShell
         }
     }
 
-    static bool execLine(string line)
+    static bool execLine(JObject root)
     {
         var quit = false;
-        // parse the line as a json object with one or more command keys (with values as parameters)
-        JObject root = JObject.Parse(line);
         foreach (var kvp in root)
         {
             string key = kvp.Key;
@@ -649,6 +700,9 @@ internal partial class AutoShell
                     break;
                 case "createDesktop":
                     CreateDesktop(value);
+                    break;
+                case "toggleNotifications":
+                    ShellExecute(IntPtr.Zero, "open", "ms-actioncenter:", null, null, 1);
                     break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);

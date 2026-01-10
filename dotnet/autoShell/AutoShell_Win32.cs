@@ -331,5 +331,14 @@ namespace autoShell
         static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         #endregion Window Functions
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr ShellExecute(
+                IntPtr hwnd,
+                string lpOperation,
+                string lpFile,
+                string lpParameters,
+                string lpDirectory,
+                int nShowCmd);
     }
 }
