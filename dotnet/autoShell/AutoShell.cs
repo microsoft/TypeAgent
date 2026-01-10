@@ -242,6 +242,20 @@ namespace autoShell
                 {
                     Process.Start(path);
                 }
+                else
+                {
+                    // Try to find by window title if we haven't found it and bring it forward
+                    if (!foundMatch)
+                    {
+                        (nint hWnd1, int pid) = FindWindowByTitle(processName);
+
+                        if (hWnd1 != nint.Zero)
+                        {
+                            SetForegroundWindow(hWnd1);
+                            Interaction.AppActivate(pid);
+                        }
+                    }
+                }
             }
         }
 
@@ -301,6 +315,13 @@ namespace autoShell
                     break;
                 }
             }
+
+            // If no process found by name, search by window title
+            if (hWnd1 == IntPtr.Zero)
+            {
+                (hWnd1, pid1) = FindWindowByTitle(processName1);
+            }
+
             processName2 = ResolveProcessNameFromFriendlyName(processName2);
             Process[] processes2 = Process.GetProcessesByName(processName2);
             foreach (Process p in processes2)
@@ -312,6 +333,13 @@ namespace autoShell
                     break;
                 }
             }
+
+            // If no process found by name, search by window title
+            if (hWnd2 == IntPtr.Zero)
+            {
+                (hWnd2, pid2) = FindWindowByTitle(processName2);
+            }
+
             if (hWnd1 != IntPtr.Zero && hWnd2 != IntPtr.Zero)
             {
                 // TODO: handle multiple monitors
@@ -357,6 +385,45 @@ namespace autoShell
                 SetForegroundWindow(hWnd2);
                 Interaction.AppActivate(pid2);
             }
+        }
+
+        /// <summary>
+        /// Finds a top-level window by searching for a partial match in the window title.
+        /// </summary>
+        /// <param name="titleSearch">The text to search for in window titles (case-insensitive).</param>
+        /// <returns>A tuple containing the window handle and process ID, or (IntPtr.Zero, -1) if not found.</returns>
+        static (IntPtr hWnd, int pid) FindWindowByTitle(string titleSearch)
+        {
+            IntPtr foundHandle = IntPtr.Zero;
+            int foundPid = -1;
+            StringBuilder windowTitle = new StringBuilder(256);
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                // Only consider visible windows
+                if (!IsWindowVisible(hWnd))
+                {
+                    return true; // Continue enumeration
+                }
+
+                // Get window title
+                int length = GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
+                if (length > 0)
+                {
+                    string title = windowTitle.ToString();
+                    // Case-insensitive partial match
+                    if (title.Contains(titleSearch, StringComparison.OrdinalIgnoreCase))
+                    {
+                        foundHandle = hWnd;
+                        GetWindowThreadProcessId(hWnd, out uint pid);
+                        foundPid = (int)pid;
+                        return false; // Stop enumeration
+                    }
+                }
+                return true; // Continue enumeration
+            }, IntPtr.Zero);
+
+            return (foundHandle, foundPid);
         }
 
         // given a friendly name, check if it's running and if not, start it; if it's running raise it to the top level
