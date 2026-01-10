@@ -19,7 +19,8 @@ export default class Connect extends Command {
                 "Initial request to send to the type agent upon connection",
         }),
         exit: Flags.boolean({
-            description: "Exit after processing input file",
+            description:
+                "Exit after processing --request or input file.  No effect if request or file is not provided.",
             default: true,
             allowNo: true,
         }),
@@ -44,13 +45,16 @@ export default class Connect extends Command {
                 `ws://localhost:${flags.port}`,
             );
             try {
+                let processed = false;
                 if (flags.request) {
                     await dispatcher.processCommand(flags.request);
+                    processed = true;
                 }
                 if (args.input) {
                     await dispatcher.processCommand(`@run ${args.input}`);
+                    processed = true;
                 }
-                if (flags.exit) {
+                if (processed && flags.exit) {
                     return;
                 }
                 await processCommands(
