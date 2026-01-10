@@ -562,7 +562,7 @@ internal partial class AutoShell
 
             if (s_virtualDesktopManagerInternal == null)
             {
-                Debug.WriteLine($"Failed to get Virtual Desktop Manager Internal (Last Win32 Error: {Marshal.GetLastWin32Error()})");
+                Debug.WriteLine($"Failed to get Virtual Desktop Manager Internal");
                 return;
             }
 
@@ -611,6 +611,97 @@ internal partial class AutoShell
         {
             Debug.WriteLine($"Error creating desktops: {ex.Message}");
         }
+    }
+
+    static void SwitchDesktop(string desktopIdentifier)
+    {
+        if (!int.TryParse(desktopIdentifier, out int index))
+        {
+            // Try to find the desktop by name
+            s_virtualDesktopManagerInternal.SwitchDesktop(FindDesktopByName(desktopIdentifier));
+        }
+        else
+        {
+            SwitchDesktop(index);
+        }
+    }
+
+    static void SwitchDesktop(int index)
+    {
+        s_virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        desktops.GetAt(index, typeof(IVirtualDesktop).GUID, out object od);
+        s_virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+        Marshal.ReleaseComObject(desktops);
+    }
+
+    static void BumpDesktopIndex(int bump)
+    {
+        IVirtualDesktop desktop = s_virtualDesktopManagerInternal.GetCurrentDesktop();
+        int index = GetDesktopIndex(desktop);
+        int count = s_virtualDesktopManagerInternal.GetCount();
+
+        if (index == -1)
+        {
+            Debug.WriteLine("Undable to get the index of the current desktop");
+            return;
+        }
+
+        index += bump;
+
+        if (index > count)
+        {
+            index = 0;
+        }
+        else if (index < 0)
+        {
+            index = count - 1;
+        }
+
+        SwitchDesktop(index);
+    }
+
+    static IVirtualDesktop FindDesktopByName(string name)
+    {
+        int index = -1;
+        int count = s_virtualDesktopManagerInternal.GetCount();
+
+        s_virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        for (int i = 0; i < count; i++)
+        {
+            desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
+
+            if (string.Equals(((IVirtualDesktop)od).GetName(), name, StringComparison.OrdinalIgnoreCase))
+            {
+                Marshal.ReleaseComObject(desktops);
+                return (IVirtualDesktop)od;
+            }
+        }
+
+        Marshal.ReleaseComObject(desktops);
+
+        return null;
+    }
+
+    static int GetDesktopIndex(IVirtualDesktop desktop)
+    {
+        int index = -1;
+        int count = s_virtualDesktopManagerInternal.GetCount();
+
+        s_virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        for (int i = 0; i < count; i++)
+        {
+            desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
+
+            if (desktop.GetId() == ((IVirtualDesktop)od).GetId())
+            {
+                Marshal.ReleaseComObject(desktops);
+                return i;
+            }
+        }
+
+        Marshal.ReleaseComObject(desktops);
+
+        return -1;
     }
 
     static IVirtualDesktopManagerInternal GetVirtualDesktopManagerInternal()
@@ -701,8 +792,20 @@ internal partial class AutoShell
                 case "createDesktop":
                     CreateDesktop(value);
                     break;
+                case "switchDesktop":
+                    SwitchDesktop(value);
+                    break;
+                case "nextDesktop":
+                    BumpDesktopIndex(1);
+                    break;
+                case "previousDesktop":
+                    BumpDesktopIndex(-1);
+                    break;
                 case "toggleNotifications":
                     ShellExecute(IntPtr.Zero, "open", "ms-actioncenter:", null, null, 1);
+                    break;
+                case "debug":
+                    Debugger.Launch();
                     break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);

@@ -55,6 +55,7 @@ namespace autoShell
         // import SetWindowPos
         [DllImport("user32.dll")]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
         // import FindWindowEx
         [DllImport("user32.dll")]
         static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
@@ -329,6 +330,10 @@ namespace autoShell
 
         [DllImport("user32.dll")]
         static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        // get handle of active window
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
 
         #endregion Window Functions
 
