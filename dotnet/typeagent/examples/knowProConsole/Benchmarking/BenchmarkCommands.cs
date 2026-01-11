@@ -162,7 +162,7 @@ public class BenchmarkCommands : ICommandModule, IDisposable
         SchemaText schema = new SchemaText(
             SchemaLoader.LoadResource(
                 this.GetType().Assembly,
-                $"{typeof(BenchmarkQuestion).Namespace}.Benchmarking.BenchmarkQuestionResponseSchema.ts"
+                $"{typeof(BenchmarkQuestion).Namespace}.BenchmarkQuestionResponseSchema.ts"
             ),
             SchemaText.Languages.Typescript
         );
