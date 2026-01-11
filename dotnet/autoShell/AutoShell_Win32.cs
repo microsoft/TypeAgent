@@ -11,7 +11,7 @@ using System.Windows;
 
 namespace autoShell
 {
-    internal partial class AutoShell
+    internal unsafe partial class AutoShell
     {
         private const int SPI_SETDESKWALLPAPER = 20;
         private const int SPIF_UPDATEINIFILE = 0x01;
@@ -117,10 +117,6 @@ namespace autoShell
             void MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
         }
 
-        //[ComImport]
-        //[Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A")]
-        //internal class VirtualDesktopManager { }
-
         // IVirtualDesktop COM Interface (Windows 10/11)
         [ComImport]
         [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -129,6 +125,7 @@ namespace autoShell
         {
             bool IsViewVisible(IApplicationView view);
             Guid GetId();
+            // TODO: proper HSTRING custom marshaling
             [return: MarshalAs(UnmanagedType.HString)]
             string GetName();
             [return: MarshalAs(UnmanagedType.HString)]
@@ -208,7 +205,7 @@ namespace autoShell
         }
 
         [ComImport]
-        [InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         [Guid("372E1D3B-38D3-42E4-A15B-8AB2B178F513")]
         internal interface IApplicationView
         {
@@ -345,5 +342,16 @@ namespace autoShell
                 string lpParameters,
                 string lpDirectory,
                 int nShowCmd);
+
+
+        [DllImport("combase.dll")]
+        internal static extern int WindowsCreateString(char* sourceString, int length, out IntPtr hstring);
+
+        [DllImport("combase.dll")]
+        internal static extern int WindowsDeleteString(IntPtr hstring);
+
+        [DllImport("combase.dll")]
+        internal static extern char* WindowsGetStringRawBuffer(IntPtr hstring, out uint length);
+
     }
 }

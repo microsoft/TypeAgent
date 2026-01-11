@@ -247,45 +247,54 @@ internal partial class AutoShell
         }
     }
 
-    // given part of a process name, raise the window of that process to the top level
-    static void RaiseWindow(string processName)
+    static IntPtr FindProcessWindowHandle(string processName)
     {
         processName = ResolveProcessNameFromFriendlyName(processName);
         Process[] processes = Process.GetProcessesByName(processName);
-        bool foundMatch = false;
         // loop through the processes that match the name; raise the first one that has a main window
         foreach (Process p in processes)
         {
             if (p.MainWindowHandle != IntPtr.Zero)
             {
-                foundMatch = true;
-                SetForegroundWindow(p.MainWindowHandle);
-                Interaction.AppActivate(p.Id);
-                break;
+                return p.MainWindowHandle;
             }
         }
 
-        if (!foundMatch)
-        {
-            // this means all the applications processes are running in the background. This happens for edge and chrome browsers.
-            string path = (string)s_friendlyNameToPath[processName];
-            if (path != null)
-            {
-                Process.Start(path);
-            }
-            else
-            {
-                // Try to find by window title if we haven't found it and bring it forward
-                if (!foundMatch)
-                {
-                    (nint hWnd1, int pid) = FindWindowByTitle(processName);
+        // Try to find by window title if we haven't found it and bring it forward
+        return FindWindowByTitle(processName).hWnd;
+    }
 
-                    if (hWnd1 != nint.Zero)
-                    {
-                        SetForegroundWindow(hWnd1);
-                        Interaction.AppActivate(pid);
-                    }
-                }
+    // given part of a process name, raise the window of that process to the top level
+    static void RaiseWindow(string processName)
+    {
+        processName = ResolveProcessNameFromFriendlyName(processName);
+        Process[] processes = Process.GetProcessesByName(processName);
+        // loop through the processes that match the name; raise the first one that has a main window
+        foreach (Process p in processes)
+        {
+            if (p.MainWindowHandle != IntPtr.Zero)
+            {
+                SetForegroundWindow(p.MainWindowHandle);
+                Interaction.AppActivate(p.Id);
+                return;
+            }
+        }
+
+        // this means all the applications processes are running in the background. This happens for edge and chrome browsers.
+        string path = (string)s_friendlyNameToPath[processName];
+        if (path != null)
+        {
+            Process.Start(path);
+        }
+        else
+        {
+            // Try to find by window title if we haven't found it and bring it forward
+            (nint hWnd1, int pid) = FindWindowByTitle(processName);
+
+            if (hWnd1 != nint.Zero)
+            {
+                SetForegroundWindow(hWnd1);
+                Interaction.AppActivate(pid);
             }
         }
     }
@@ -662,7 +671,6 @@ internal partial class AutoShell
 
     static IVirtualDesktop FindDesktopByName(string name)
     {
-        int index = -1;
         int count = s_virtualDesktopManagerInternal.GetCount();
 
         s_virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
@@ -702,6 +710,52 @@ internal partial class AutoShell
         Marshal.ReleaseComObject(desktops);
 
         return -1;
+    }
+
+    static void MoveWindowToDesktop(JToken value)
+    {
+        string process = value["process"].Value<string>();
+        string desktop = value["desktop"].Value<string>();
+        if (string.IsNullOrEmpty(process))
+        {
+            Debug.WriteLine("No process name supplied");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(desktop))
+        {
+            Debug.WriteLine("No desktop id supplied");
+            return;
+        }
+
+        IntPtr hWnd = FindProcessWindowHandle(process);
+
+        if (int.TryParse(desktop, out int desktopIndex))
+        {
+            s_virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+            desktops.GetAt(desktopIndex, typeof(IVirtualDesktop).GUID, out object od);
+            Guid g = ((IVirtualDesktop)od).GetId();
+            s_virtualDesktopManager.MoveWindowToDesktop(hWnd, g);
+            Marshal.ReleaseComObject(desktops);
+            return;
+        }
+
+        IVirtualDesktop ivd = FindDesktopByName(desktop);
+        if (ivd is not null)
+        {
+            s_virtualDesktopManager.MoveWindowToDesktop(hWnd, ivd.GetId());
+        }
+    }
+
+    static void PinWindow(string processName)
+    {
+        IntPtr hWnd = FindProcessWindowHandle(processName);
+        s_applicationViewCollection.GetViewForHwnd(hWnd, out IApplicationView view);
+
+        if (view is not null)
+        {
+            s_virtualDesktopPinnedApps.PinView((IApplicationView)view);
+        }
     }
 
     static IVirtualDesktopManagerInternal GetVirtualDesktopManagerInternal()
@@ -800,6 +854,12 @@ internal partial class AutoShell
                     break;
                 case "previousDesktop":
                     BumpDesktopIndex(-1);
+                    break;
+                case "moveWindowToDesktop":
+                    MoveWindowToDesktop(kvp.Value);
+                    break;
+                case "pinWindow":
+                    PinWindow(value);
                     break;
                 case "toggleNotifications":
                     ShellExecute(IntPtr.Zero, "open", "ms-actioncenter:", null, null, 1);
