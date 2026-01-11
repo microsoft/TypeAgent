@@ -25,6 +25,9 @@ namespace KnowProConsole.Benchmarking;
 /// </summary>
 public class BenchmarkCommands : ICommandModule, IDisposable
 {
+    const int METRIC_COL_WIDTH = 12;
+    const int VALUE_COL_WIDTH = 18;
+
     KnowProConsoleContext _kpContext;
     OpenAIChatModel _model;
 
@@ -178,59 +181,91 @@ Provide feedback for each answer to help improve future responses.  If the answe
         // summarize each group
         foreach (var group in groupedQuestions)
         {
-            KnowProWriter.WriteLine(ConsoleColor.White, $"Source: {group.Key}");
-            summary.Add(group.Key, SummarizeGrades(group.Value));
+            int correct = group.Value.Count(g => g.IsCorrect == Answer.Correct);
+            int incorrect = group.Value.Count(g => g.IsCorrect == Answer.Incorrect);
+            int partial = group.Value.Count(g => g.IsCorrect == Answer.Partial);
+            int total = group.Value.Count;
+            summary.Add(group.Key, (correct, incorrect, partial, total));
         }
 
-        // now compare both sources
+        // output combined summary table
         KnowProWriter.WriteLine(ConsoleColor.White, $"Overall Summary:");
-        CompareGroups(summary);
+        OutputSummary(summary);
     }
 
-    private void CompareGroups(Dictionary<string, (int correct, int incorrect, int partial, int total)> summary)
+    private void OutputSummary(Dictionary<string, (int correct, int incorrect, int partial, int total)> summary)
     {
-        if (summary.Count != 2)
+        // Build header with metric column + source columns
+        var sources = summary.Keys.ToList();
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Metric",-METRIC_COL_WIDTH}");
+        foreach (var source in sources)
         {
-            KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Cannot compare groups, expected 2 groups but found {summary.Count}.");
-            return;
+            headerBuilder.Append($" {source,VALUE_COL_WIDTH}");
         }
-        var enumerator = summary.GetEnumerator();
-        enumerator.MoveNext();
-        var first = enumerator.Current;
-        enumerator.MoveNext();
-        var second = enumerator.Current;
-        KnowProWriter.WriteLine(ConsoleColor.White, $"Comparing '{first.Key}' to '{second.Key}':");
-        KnowProWriter.WriteLine(ConsoleColor.White, $" Correct: {first.Value.correct} vs {second.Value.correct}");
-        KnowProWriter.WriteLine(ConsoleColor.White, $" Incorrect: {first.Value.incorrect} vs {second.Value.incorrect}");
-        KnowProWriter.WriteLine(ConsoleColor.White, $" Partial: {first.Value.partial} vs {second.Value.partial}");
-        KnowProWriter.WriteLine(ConsoleColor.White, $" Total: {first.Value.total} vs {second.Value.total}");
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
 
-        double score1 = (first.Value.correct + ((double)first.Value.partial / 2)) / (double)first.Value.total * 100D;
-        double score2 = (second.Value.correct + ((double)second.Value.partial / 2)) / (double)second.Value.total * 100D;
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
 
-        ConsoleColor color1 = score1 > score2 ? ConsoleColor.Green : score1 < score2 ? ConsoleColor.Red : ConsoleColor.Cyan;
-        ConsoleColor color2 = score1 > score2 ? ConsoleColor.Red : score1 < score2 ? ConsoleColor.Green : ConsoleColor.Cyan;
+        // Calculate scores
+        var scores = new Dictionary<string, double>();
+        foreach (var group in summary)
+        {
+            double score = (group.Value.correct + ((double)group.Value.partial / 2)) / (double)group.Value.total * 100D;
+            scores[group.Key] = score;
+        }
 
-        KnowProWriter.Write(ConsoleColor.White, $" Score: ");
-        KnowProWriter.Write(color1, $" {score1:N0}% ");
-        KnowProWriter.WriteLine(color2, $" vs {score2:N0}% ");
+        // Data rows for each metric
+        WriteMetricRow("Correct", sources, s => summary[s].correct);
+        WriteMetricRow("Incorrect", sources, s => summary[s].incorrect);
+        WriteMetricRow("Partial", sources, s => summary[s].partial);
+        WriteMetricRow("Total", sources, s => summary[s].total);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Score row with color coding
+        double? maxScore = scores.Values.Max();
+        double? minScore = scores.Values.Min();
+
+        KnowProWriter.Write(ConsoleColor.White, $"{"Score",-METRIC_COL_WIDTH}");
+        foreach (var source in sources)
+        {
+            double score = scores[source];
+            ConsoleColor scoreColor = score == maxScore && maxScore != minScore
+                ? ConsoleColor.Green
+                : score == minScore && maxScore != minScore
+                    ? ConsoleColor.Red
+                    : ConsoleColor.Cyan;
+
+            KnowProWriter.Write(scoreColor, $" {score,VALUE_COL_WIDTH - 1:N1}%");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
     }
 
-    private (int, int, int, int) SummarizeGrades(List<GradedQuestion> gradedQuestions)
+    private void WriteMetricRow(string metricName, List<string> sources, Func<string, double> getValue)
     {
-        int correct = gradedQuestions.Count(g => g.IsCorrect == Answer.Correct);
-        int incorrect = gradedQuestions.Count(g => g.IsCorrect == Answer.Incorrect);
-        int partial = gradedQuestions.Count(g => g.IsCorrect == Answer.Partial);
-        int total = gradedQuestions.Count;
-        KnowProWriter.WriteLine(ConsoleColor.White, $"Grading Summary:");
-        KnowProWriter.WriteLine(ConsoleColor.Green, $" Correct: {correct}");
-        KnowProWriter.WriteLine(ConsoleColor.Red, $" Incorrect: {incorrect}");
-        KnowProWriter.WriteLine(ConsoleColor.Yellow, $" Partial: {partial}");
-        KnowProWriter.WriteLine(ConsoleColor.White, $" Total: {total}");
-        KnowProWriter.Write(ConsoleColor.White, $" Score: ");
-        KnowProWriter.WriteLine(ConsoleColor.Magenta, $" {(correct + (partial / 2)) / total * 100:N0}% ");
+        KnowProWriter.Write(ConsoleColor.White, $"{metricName,-METRIC_COL_WIDTH}");
+        //foreach (var source in sources)
+        //{
+        var v1 = getValue(sources.First());
+        var v2 = getValue(sources.Last());
+        var color1 = (v1 == v2) ? ConsoleColor.Yellow : (v1 > v2) ? ConsoleColor.Green : ConsoleColor.Red;
+        var color2 = (v1 == v2) ? ConsoleColor.Yellow : (v1 < v2) ? ConsoleColor.Green : ConsoleColor.Red;
 
-        return (correct, incorrect, partial, total);
+        // for partial lower is better
+        if (metricName == "Partial")
+        {
+            (color2, color1) = (color1, color2);
+        }
+
+        KnowProWriter.Write(color1, $" {v1,VALUE_COL_WIDTH}");
+        KnowProWriter.Write(color2, $" {v2,VALUE_COL_WIDTH}");
+        //}
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
     }
 
     private Command BenchmarkCreatePodcastQuestionsDef()
