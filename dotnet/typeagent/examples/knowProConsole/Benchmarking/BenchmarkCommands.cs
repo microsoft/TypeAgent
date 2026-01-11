@@ -31,8 +31,15 @@ public class BenchmarkCommands : ICommandModule, IDisposable
 
     KnowProConsoleContext _kpContext;
     OpenAIChatModel _model;
+    TranslationSettings _translatorSettings = new() { Temperature = 1 };
 
-    const string QUESTION_GENERATOR = @"You are a question generator. The user provides you with a transcript and you generate 50 questions regarding the content in the supplied transcript.";
+
+    //    const string QUESTION_GENERATOR = @"You are a question generator. The user provides you with a transcript and you generate 60 questions regarding the content in the supplied transcript.
+    //There should be an equal distribution of question difficulties.
+    //Ensure that each category of questions has at least one question of each difficulty.";
+    const string QUESTION_GENERATOR = @"You are a question generator. The user provides you with a transcript and you generate 60 questions regarding the content in the supplied transcript.
+Half of the questions should be 'easy', half as many 'moderate' questions, and half again as many 'hard' questions.
+Ensure that each category of questions has at least one question of each difficulty.";
     const string QUESTION_GRADER = @"You are a question grader. The user provides you with a list of questions, the correct answers, and some provided answers.
 You need to grade each answer as Correct, Incorrect, or Partial based on how well it matches the correct answer.
 Provide feedback for each answer to help improve future responses.  If the answer contains additional context you should still consider the answer correct but you can add notes int he feedback.";
@@ -44,7 +51,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
     public BenchmarkCommands(KnowProConsoleContext context)
     {
         _kpContext = context;
-        _model = new OpenAIChatModel(AzureModelApiSettings.ChatSettingsFromEnv("_GPT_5_2"));
+        _model = new OpenAIChatModel(AzureModelApiSettings.ChatSettingsFromEnv("GPT_5_2_CHAT"));
     }
 
     /// <summary>
@@ -98,16 +105,20 @@ Provide feedback for each answer to help improve future responses.  If the answe
         List<GradedQuestion> allGradedQuestions = [];
         foreach (var file in questionFiles)
         {
+            TimeSpan fileProcessingStartTime = _kpContext.Stopwatch.Elapsed;
+
             var questions = Json.ParseFile<QuestionResponse>(file);
             KnowProWriter.Write(ConsoleColor.White, $"Loaded");
             KnowProWriter.Write(ConsoleColor.Magenta, $" {questions?.Questions?.Count} questions");
             KnowProWriter.WriteLine(ConsoleColor.White, $" from '{file}'");
 
             // now run this query through RAG and SRAG and collect the answers
-            for(int i = 0; i < questions?.Questions?.Count && (maxQuestions == 0 || i < maxQuestions); i++)
+            _kpContext.Stopwatch.Restart();
+            for (int i = 0; i < questions?.Questions?.Count && (maxQuestions == 0 || i < maxQuestions); i++)
             {
                 BenchmarkQuestion q = questions!.Questions![i];
                 // get the RAG answer
+                TimeSpan questionStart = _kpContext.Stopwatch.Elapsed;
                 string question = q.Question;
                 string category = q.Category;
                 KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Question: {question}");
@@ -115,24 +126,27 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 KnowProWriter.Write(ConsoleColor.DarkBlue, $" RAG: ");
                 if (answerRAG is null || answerRAG.Type == AnswerType.NoAnswer)
                 {
-                    KnowProWriter.WriteLine(ConsoleColor.Red, $"No answer returned ({answerRAG?.WhyNoAnswer}).");
+                    KnowProWriter.Write(ConsoleColor.Red, $"No answer returned ({answerRAG?.WhyNoAnswer}).");
                 }
                 else
                 {
-                    KnowProWriter.WriteLine(ConsoleColor.Green, $"{answerRAG.Answer}");
+                    KnowProWriter.Write(ConsoleColor.Green, $"{answerRAG.Answer}");
                 }
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{_kpContext.Stopwatch.Elapsed.Subtract(questionStart).TotalSeconds:N0}s]");
 
                 // get the structured RAG answer
                 KnowProWriter.Write(ConsoleColor.DarkCyan, $"SRAG: ");
+                questionStart = _kpContext.Stopwatch.Elapsed;
                 AnswerResponse? answer = await conversation.AnswerQuestionAsync(question, new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = 8196, MaxMessageMatches = 25 }, null, null, null, CancellationToken.None);
                 if (answer is null || answer.Type == AnswerType.NoAnswer)
                 {
-                    KnowProWriter.WriteLine(ConsoleColor.Red, $"No answer returned.({answer?.WhyNoAnswer})");
+                    KnowProWriter.Write(ConsoleColor.Red, $"No answer returned.({answer?.WhyNoAnswer})");
                 }
                 else
                 {
-                    KnowProWriter.WriteLine(ConsoleColor.Green, $"{answer.Answer}");
+                    KnowProWriter.Write(ConsoleColor.Green, $"{answer.Answer}");
                 }
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{_kpContext.Stopwatch.Elapsed.Subtract(questionStart).TotalSeconds:N0}s]");
 
                 // Grade the answer
                 GradingResponse answers = new GradingResponse()
@@ -143,14 +157,20 @@ Provide feedback for each answer to help improve future responses.  If the answe
                             Id = 1,
                             Question = question,
                             CorrectAnswer = q.Answer,
-                            ProvidedAnswer = answerRAG?.Answer ?? string.Empty,
+                            ProvidedAnswer = answerRAG?.Answer ?? "unknown",
+                            Category = q.Category,
+                            Difficulty = q.Difficulty,
+                            Answer = Answer.Unknown.ToString()
                         },
                         new GradedQuestion()
                         {
                             Id = 2,
                             Question = question,
                             CorrectAnswer = q.Answer,
-                            ProvidedAnswer = answer?.Answer ?? string.Empty,
+                            ProvidedAnswer = answer?.Answer ?? "unknown",
+                            Category = q.Category,
+                            Difficulty = q.Difficulty,
+                            Answer = Answer.Unknown.ToString()
                         },
 
                     ]
@@ -172,6 +192,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
                 allGradedQuestions.AddRange(graded);
             }
+            KnowProWriter.WriteLine(ConsoleColor.Cyan, $"'{Path.GetFileNameWithoutExtension(file)}' processing time: {_kpContext.Stopwatch.Elapsed.Subtract(fileProcessingStartTime).TotalSeconds:N0}s");
         }
 
         // group the questions by source
@@ -402,21 +423,23 @@ Provide feedback for each answer to help improve future responses.  If the answe
     {
         NamedArgs namedArgs = new(args);
         string path = namedArgs.GetRequired("path");
-        var files = Directory.GetFiles(path, "*.txt");
+        string[] files = Directory.GetFiles(path, "*.txt");
 
         KnowProWriter.WriteLine(ConsoleColor.White, $"Found {files.Length} text transcripts.");
 
-        foreach (var file in files)
+        for(int i = 0; i < files.Length; i++)
         {
-            await CreateQuestionsForPodcastAsync(file);
+            await CreateQuestionsForPodcastAsync(files[i], i + 1, files.Length);
         }
     }
 
     /// <summary>
     /// Given a podcast transcript get the LLM to generate some questions for the podcast content
     /// </summary>
-    /// <param name="file"></param>
-    private async Task CreateQuestionsForPodcastAsync(string file)
+    /// <param name="file">The file for which we are generating questions.</param>
+    /// <param name="index">The current file idnex</param>
+    /// <param name="total">The total # of files</param>
+    private async Task CreateQuestionsForPodcastAsync(string file, int index, int total)
     {
         if (!_kpContext.Stopwatch.IsRunning)
         {
@@ -455,15 +478,16 @@ Provide feedback for each answer to help improve future responses.  If the answe
             JsonTranslatorPrompts.System
         );
 
+        KnowProWriter.Write(ConsoleColor.DarkYellow, $"[ {index} / {total} ]");
         KnowProWriter.Write(ConsoleColor.White, $"Generating questions for '{Path.GetFileNameWithoutExtension(file)}'...");
 
         PromptSection transcript = new PromptSection(PromptSection.Sources.User, File.ReadAllText(file));
 
-        var response = await translator.TranslateAsync(new(transcript), [_questionGeneratorSystemPrompt]);
+        var response = await translator.TranslateAsync(new(transcript), [_questionGeneratorSystemPrompt], _translatorSettings, CancellationToken.None);
 
         // write out these questions to a file
         string outFile = Path.ChangeExtension(file, ".questions.json");
-        Json.StringifyToFile(response, outFile, true);
+        Json.StringifyToFile(response, outFile, true, true);
 
         KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:N2}s]");
     }
@@ -506,7 +530,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
         );
 
         var translator = new JsonTranslator<GradingResponse>(
-            _model,
+            new OpenAIChatModel(),
             typeValidator,
             JsonTranslatorPrompts.System
         );
@@ -539,7 +563,6 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         return gradedQuestions;
     }
-
 
     protected virtual void Dispose(bool disposing)
     {
@@ -579,7 +602,10 @@ public class BenchmarkQuestion
     public required string Category { get; set; }
 
     [JsonPropertyName("answer")]
-    public required string Answer { get; set; }
+    public required string Answer { get; set; } = string.Empty;
+
+    [JsonPropertyName("difficulty")]
+    public Difficulty Difficulty { get; set; } = Difficulty.NotSpecified;
 }
 
 public class QuestionResponse
@@ -594,24 +620,27 @@ public class GradingResponse
     public IList<GradedQuestion> GradedQuestions { get; set; } = [];
 }
 
-public class GradedQuestion
+public class GradedQuestion : BenchmarkQuestion
 {
     [JsonPropertyName("id")]
     public int Id { get; set; } = -1;
-    [JsonPropertyName("question")]
-    public required string Question { get; set; } = string.Empty;
+    //[JsonPropertyName("question")]
+    //public required string Question { get; set; } = string.Empty;
     [JsonPropertyName("correctAnswer")]
     public required string CorrectAnswer { get; set; } = string.Empty;
     [JsonPropertyName("providedAnswer")]
     public required string ProvidedAnswer { get; set; } = string.Empty;
     [JsonPropertyName("isCorrect")]
-    public Answer IsCorrect { get; set; } = Answer.Unknown;
+    public Answer IsCorrect { get; set; } = Benchmarking.Answer.Unknown;
     [JsonPropertyName("feedback")]
     public string Feedback { get; set; } = string.Empty;
-    [JsonPropertyName("category")]
-    public string Category { get; set; } = string.Empty;
+    //[JsonPropertyName("category")]
+    //public string Category { get; set; } = string.Empty;
 
     public string source { get; set; } = string.Empty;
+
+    //[JsonPropertyName("difficulty")]
+    //public Difficulty Difficulty { get; set; } = Difficulty.Moderate;
 }
 
 public enum Answer
@@ -622,6 +651,18 @@ public enum Answer
     Correct,
     [JsonPropertyName("incorrect")]
     Incorrect,
-    [JsonPropertyName("partialAnswer")]
+    [JsonPropertyName("partial")]
     Partial
+}
+
+public enum Difficulty
+{
+    [JsonPropertyName("notSpecified")]
+    NotSpecified,
+    [JsonPropertyName("easy")]
+    Easy,
+    [JsonPropertyName("medium")]
+    Moderate,
+    [JsonPropertyName("hard")]
+    Hard
 }
