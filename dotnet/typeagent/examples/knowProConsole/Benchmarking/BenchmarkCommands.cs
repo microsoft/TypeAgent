@@ -264,7 +264,6 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         KnowProWriter.Write(color1, $" {v1,VALUE_COL_WIDTH}");
         KnowProWriter.Write(color2, $" {v2,VALUE_COL_WIDTH}");
-        //}
         KnowProWriter.WriteLine(ConsoleColor.White, "");
     }
 
