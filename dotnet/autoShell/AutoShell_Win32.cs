@@ -11,7 +11,7 @@ using System.Windows;
 
 namespace autoShell
 {
-    internal partial class AutoShell
+    internal unsafe partial class AutoShell
     {
         private const int SPI_SETDESKWALLPAPER = 20;
         private const int SPIF_UPDATEINIFILE = 0x01;
@@ -55,6 +55,7 @@ namespace autoShell
         // import SetWindowPos
         [DllImport("user32.dll")]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
         // import FindWindowEx
         [DllImport("user32.dll")]
         static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
@@ -116,10 +117,6 @@ namespace autoShell
             void MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
         }
 
-        //[ComImport]
-        //[Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A")]
-        //internal class VirtualDesktopManager { }
-
         // IVirtualDesktop COM Interface (Windows 10/11)
         [ComImport]
         [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -128,6 +125,7 @@ namespace autoShell
         {
             bool IsViewVisible(IApplicationView view);
             Guid GetId();
+            // TODO: proper HSTRING custom marshaling
             [return: MarshalAs(UnmanagedType.HString)]
             string GetName();
             [return: MarshalAs(UnmanagedType.HString)]
@@ -135,24 +133,11 @@ namespace autoShell
             bool IsRemote();
         }
 
-        //// IVirtualDesktop2 COM Interface (Windows 10 20H1+ / Windows 11 - supports naming)
-        //[ComImport]
-        //[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-        //[Guid("31EBDE3F-6EC3-4CBD-B9FB-0EF6D09B41F4")]
-        //private interface IVirtualDesktop2
-        //{
-        //    bool IsViewVisible(object pView);
-        //    Guid GetID();
-        //    [return: MarshalAs(UnmanagedType.HString)]
-        //    string GetName();
-        //    void SetName([MarshalAs(UnmanagedType.HString)] string name);
-        //}
-
         // IVirtualDesktopManagerInternal COM Interface
         [ComImport]
         [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         [Guid("53F5CA0B-158F-4124-900C-057158060B27")]
-        internal interface IVirtualDesktopManagerInternal
+        internal interface IVirtualDesktopManagerInternal_BUGBUG
         {
             int GetCount();
             void MoveViewToDesktop(IApplicationView view, IVirtualDesktop desktop);
@@ -178,6 +163,36 @@ namespace autoShell
             void WaitForAnimationToComplete();
         }
 
+        // IVirtualDesktopManagerInternal COM Interface
+        [ComImport]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        [Guid("53F5CA0B-158F-4124-900C-057158060B27")]
+        internal interface IVirtualDesktopManagerInternal
+        {
+            int GetCount();
+            void MoveViewToDesktop(IApplicationView view, IVirtualDesktop desktop);
+            bool CanViewMoveDesktops(IApplicationView view);
+            IVirtualDesktop GetCurrentDesktop();
+            void GetDesktops(out IObjectArray desktops);
+            [PreserveSig]
+            int GetAdjacentDesktop(IVirtualDesktop from, int direction, out IVirtualDesktop desktop);
+            void SwitchDesktop(IVirtualDesktop desktop);
+            void SwitchDesktopAndMoveForegroundView(IVirtualDesktop desktop);
+            IVirtualDesktop CreateDesktop();
+            void MoveDesktop(IVirtualDesktop desktop, int nIndex);
+            void RemoveDesktop(IVirtualDesktop desktop, IVirtualDesktop fallback);
+            IVirtualDesktop FindDesktop(ref Guid desktopid);
+            void GetDesktopSwitchIncludeExcludeViews(IVirtualDesktop desktop, out IObjectArray unknown1, out IObjectArray unknown2);
+            void SetDesktopName(IVirtualDesktop desktop, [MarshalAs(UnmanagedType.HString)] string name);
+            void SetDesktopWallpaper(IVirtualDesktop desktop, [MarshalAs(UnmanagedType.HString)] string path);
+            void UpdateWallpaperPathForAllDesktops([MarshalAs(UnmanagedType.HString)] string path);
+            void CopyDesktopState(IApplicationView pView0, IApplicationView pView1);
+            void CreateRemoteDesktop([MarshalAs(UnmanagedType.HString)] string path, out IVirtualDesktop desktop);
+            void SwitchRemoteDesktop(IVirtualDesktop desktop, IntPtr switchtype);
+            void SwitchDesktopWithAnimation(IVirtualDesktop desktop);
+            void GetLastActiveDesktop(out IVirtualDesktop desktop);
+            void WaitForAnimationToComplete();
+        }
 
         // IObjectArray COM Interface
         [ComImport]
@@ -190,7 +205,7 @@ namespace autoShell
         }
 
         [ComImport]
-        [InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         [Guid("372E1D3B-38D3-42E4-A15B-8AB2B178F513")]
         internal interface IApplicationView
         {
@@ -292,5 +307,51 @@ namespace autoShell
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
         private static extern IntPtr GetCommandLineW();
+
+
+        #region Window Functions
+
+        // Delegate for EnumWindows callback
+        internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        // get handle of active window
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        #endregion Window Functions
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr ShellExecute(
+                IntPtr hwnd,
+                string lpOperation,
+                string lpFile,
+                string lpParameters,
+                string lpDirectory,
+                int nShowCmd);
+
+
+        [DllImport("combase.dll")]
+        internal static extern int WindowsCreateString(char* sourceString, int length, out IntPtr hstring);
+
+        [DllImport("combase.dll")]
+        internal static extern int WindowsDeleteString(IntPtr hstring);
+
+        [DllImport("combase.dll")]
+        internal static extern char* WindowsGetStringRawBuffer(IntPtr hstring, out uint length);
+
     }
 }
