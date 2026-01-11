@@ -523,7 +523,7 @@ public class TestCommands : ICommandModule
             KnowProWriter.WriteLine(ConsoleColor.DarkGray, debugContext.ToJson());
             foreach (var searchResult in searchResults)
             {
-                AnswerContext context = await AnswerContext.FromSearchResultAsync(conversation, searchResult);
+                AnswerContext context = await AnswerContext.FromSearchResultAsync(conversation, searchResult, new AnswerContextOptions() { MessagesTopK = 25, EntitiesTopK = 25 });
                 if (namedArgs.Get<bool>("debug"))
                 {
                     KnowProWriter.WriteLine(ConsoleColor.Cyan, context.ToJson());
@@ -539,7 +539,11 @@ public class TestCommands : ICommandModule
                 query,
                 null,
                 null,
-                null,
+                new AnswerContextOptions()
+                {
+                     MessagesTopK = 25,
+                      EntitiesTopK = 25
+                },
                 null
             ).ConfigureAwait(false);
 
