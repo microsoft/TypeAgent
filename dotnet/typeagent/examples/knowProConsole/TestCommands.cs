@@ -520,7 +520,7 @@ public class TestCommands : ICommandModule
         {
             LangSearchDebugContext? debugContext = new LangSearchDebugContext();
             var searchResults = await conversation.SearchAsync(query, null, null, debugContext);
-            KnowProWriter.WriteLine(ConsoleColor.Green, debugContext.ToJson());
+            KnowProWriter.WriteLine(ConsoleColor.DarkGray, debugContext.ToJson());
             foreach (var searchResult in searchResults)
             {
                 AnswerContext context = await AnswerContext.FromSearchResultAsync(conversation, searchResult);
