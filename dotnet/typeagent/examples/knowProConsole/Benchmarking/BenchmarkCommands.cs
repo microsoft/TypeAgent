@@ -360,22 +360,26 @@ Provide feedback for each answer to help improve future responses.  If the answe
         List<GradedQuestion> gradedQuestions = [];
         foreach (GradedQuestion q in answers.GradedQuestions)
         {
-            KnowProWriter.Write(ConsoleColor.White, $"Grading {q.Question}");
+            try
+            {
+                KnowProWriter.Write(ConsoleColor.White, $"Grading {q.Question}");
 
-            PromptSection transcript = new PromptSection(PromptSection.Sources.User, Json.Stringify(q));
+                PromptSection transcript = new PromptSection(PromptSection.Sources.User, Json.Stringify(q));
 
-            var response = await translator.TranslateAsync(new(transcript), [_questionGraderSystemPrompt]);
+                var response = await translator.TranslateAsync(new(transcript), [_questionGraderSystemPrompt]);
 
-            KnowProWriter.Write(ConsoleColor.Gray, Json.Stringify(response));
+                KnowProWriter.Write(ConsoleColor.Gray, Json.Stringify(response));
 
-            // mark the source of the graded question
+                gradedQuestions.AddRange(response.GradedQuestions);
 
+                Json.StringifyToFile(response, "grades.json", true);
 
-            gradedQuestions.AddRange(response.GradedQuestions);
-
-            Json.StringifyToFile(response, "grades.json", true);
-
-            KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:N2}s]");
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:N2}s]");
+            }
+            catch (Exception ex)
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Red, ex.ToString());
+            }
 
         }
 
