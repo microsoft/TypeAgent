@@ -27,6 +27,7 @@ public class BenchmarkCommands : ICommandModule, IDisposable
 {
     const int METRIC_COL_WIDTH = 12;
     const int VALUE_COL_WIDTH = 18;
+    const int CATEGORY_COL_WIDTH = 20;
 
     KnowProConsoleContext _kpContext;
     OpenAIChatModel _model;
@@ -108,6 +109,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 BenchmarkQuestion q = questions!.Questions![i];
                 // get the RAG answer
                 string question = q.Question;
+                string category = q.Category;
                 KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Question: {question}");
                 AnswerResponse? answerRAG = await conversation.AnswerQuestionRagAsync(question, 0.7, 8196, new() { MessagesTopK = 25 }, null, CancellationToken.None);
                 KnowProWriter.Write(ConsoleColor.DarkBlue, $" RAG: ");
@@ -157,6 +159,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 var graded = await EvaluateAnswersAsync(answers);
                 foreach (var g in graded)
                 {
+                    g.Category = category;
                     if (g.Id % 2 == 0)
                     {
                         g.source = "Structured Rag";
@@ -191,6 +194,125 @@ Provide feedback for each answer to help improve future responses.  If the answe
         // output combined summary table
         KnowProWriter.WriteLine(ConsoleColor.White, $"Overall Summary:");
         OutputSummary(summary);
+
+        // output category comparison table
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.White, $"Category Comparison:");
+        OutputCategoryComparison(allGradedQuestions);
+    }
+
+    private void OutputCategoryComparison(List<GradedQuestion> allGradedQuestions)
+    {
+        // Group by category and source
+        var categoryGroups = allGradedQuestions
+            .GroupBy(g => g.Category)
+            .OrderBy(g => g.Key)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(q => q.source)
+                      .ToDictionary(
+                          s => s.Key,
+                          s => (
+                              correct: s.Count(q => q.IsCorrect == Answer.Correct),
+                              incorrect: s.Count(q => q.IsCorrect == Answer.Incorrect),
+                              partial: s.Count(q => q.IsCorrect == Answer.Partial),
+                              total: s.Count()
+                          )
+                      )
+            );
+
+        var sources = allGradedQuestions.Select(g => g.source).Distinct().ToList();
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Category",-CATEGORY_COL_WIDTH}");
+        foreach (var source in sources)
+        {
+            headerBuilder.Append($" {source,VALUE_COL_WIDTH}");
+        }
+        headerBuilder.Append($" {"Count",METRIC_COL_WIDTH}");
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Track wins for each source
+        Dictionary<string, int> wins = sources.ToDictionary(s => s, _ => 0);
+
+        foreach (var category in categoryGroups)
+        {
+            string categoryName = category.Key.Length > CATEGORY_COL_WIDTH - 2
+                ? category.Key[..(CATEGORY_COL_WIDTH - 5)] + "..."
+                : category.Key;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{categoryName,-CATEGORY_COL_WIDTH}");
+
+            // Calculate scores for each source in this category
+            Dictionary<string, double> scores = [];
+            foreach (var source in sources)
+            {
+                if (category.Value.TryGetValue(source, out var stats))
+                {
+                    double score = stats.total > 0
+                        ? (stats.correct + ((double)stats.partial / 2)) / stats.total * 100D
+                        : 0;
+                    scores[source] = score;
+                }
+                else
+                {
+                    scores[source] = 0;
+                }
+            }
+
+            double maxScore = scores.Values.Max();
+            double minScore = scores.Values.Min();
+
+            // Output scores with color coding
+            foreach (var source in sources)
+            {
+                double score = scores[source];
+                ConsoleColor scoreColor = score == maxScore && maxScore != minScore
+                    ? ConsoleColor.Green
+                    : score == minScore && maxScore != minScore
+                        ? ConsoleColor.Red
+                        : ConsoleColor.Yellow;
+
+                KnowProWriter.Write(scoreColor, $" {score,VALUE_COL_WIDTH - 1:N1}%");
+            }
+
+            // Track winner
+            if (maxScore != minScore)
+            {
+                string winner = sources.First(s => scores[s] == maxScore);
+                wins[winner]++;
+            }
+
+            // Output question count for this category (divide by source count since each question appears once per source)
+            int questionCount = category.Value.Values.Sum(v => v.total) / sources.Count;
+            KnowProWriter.Write(ConsoleColor.White, $" {questionCount,METRIC_COL_WIDTH}");
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Output win totals
+        KnowProWriter.Write(ConsoleColor.Cyan, $"{"Category Wins",-CATEGORY_COL_WIDTH}");
+        int maxWins = wins.Values.Max();
+        int minWins = wins.Values.Min();
+        foreach (var source in sources)
+        {
+            int winCount = wins[source];
+            ConsoleColor winColor = winCount == maxWins && maxWins != minWins
+                ? ConsoleColor.Green
+                : winCount == minWins && maxWins != minWins
+                    ? ConsoleColor.Red
+                    : ConsoleColor.Yellow;
+            KnowProWriter.Write(winColor, $" {winCount,VALUE_COL_WIDTH}");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
     }
 
     private void OutputSummary(Dictionary<string, (int correct, int incorrect, int partial, int total)> summary)
@@ -486,6 +608,8 @@ public class GradedQuestion
     public Answer IsCorrect { get; set; } = Answer.Unknown;
     [JsonPropertyName("feedback")]
     public string Feedback { get; set; } = string.Empty;
+    [JsonPropertyName("category")]
+    public string Category { get; set; } = string.Empty;
 
     public string source { get; set; } = string.Empty;
 }
