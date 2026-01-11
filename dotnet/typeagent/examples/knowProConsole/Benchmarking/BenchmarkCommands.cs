@@ -157,6 +157,10 @@ public class BenchmarkCommands : ICommandModule, IDisposable
     /// <param name="file"></param>
     private async Task CreateQuestionsForPodcastAsync(string file)
     {
+        if (!_kpContext.Stopwatch.IsRunning)
+        {
+            _kpContext.Stopwatch.Start();
+        }
         var start = _kpContext.Stopwatch.Elapsed;
 
         SchemaText schema = new SchemaText(
@@ -200,7 +204,7 @@ public class BenchmarkCommands : ICommandModule, IDisposable
         string outFile = Path.ChangeExtension(file, ".questions.json");
         Json.StringifyToFile(response, outFile, true);
 
-        KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:2}s]");
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:N2}s]");
     }
 
     protected virtual void Dispose(bool disposing)
