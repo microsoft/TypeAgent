@@ -249,8 +249,6 @@ Provide feedback for each answer to help improve future responses.  If the answe
     private void WriteMetricRow(string metricName, List<string> sources, Func<string, double> getValue)
     {
         KnowProWriter.Write(ConsoleColor.White, $"{metricName,-METRIC_COL_WIDTH}");
-        //foreach (var source in sources)
-        //{
         var v1 = getValue(sources.First());
         var v2 = getValue(sources.Last());
         var color1 = (v1 == v2) ? ConsoleColor.Yellow : (v1 > v2) ? ConsoleColor.Green : ConsoleColor.Red;
