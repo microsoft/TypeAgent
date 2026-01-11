@@ -624,8 +624,6 @@ public class GradedQuestion : BenchmarkQuestion
 {
     [JsonPropertyName("id")]
     public int Id { get; set; } = -1;
-    //[JsonPropertyName("question")]
-    //public required string Question { get; set; } = string.Empty;
     [JsonPropertyName("correctAnswer")]
     public required string CorrectAnswer { get; set; } = string.Empty;
     [JsonPropertyName("providedAnswer")]
@@ -634,13 +632,11 @@ public class GradedQuestion : BenchmarkQuestion
     public Answer IsCorrect { get; set; } = Benchmarking.Answer.Unknown;
     [JsonPropertyName("feedback")]
     public string Feedback { get; set; } = string.Empty;
-    //[JsonPropertyName("category")]
-    //public string Category { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The source of the question (withheld from LLM to prevent any bias)
+    /// </summary>
     public string source { get; set; } = string.Empty;
-
-    //[JsonPropertyName("difficulty")]
-    //public Difficulty Difficulty { get; set; } = Difficulty.Moderate;
 }
 
 public enum Answer
