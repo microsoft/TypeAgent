@@ -104,6 +104,13 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, $"Found {questionFiles.Count} question files.");
         List<GradedQuestion> allGradedQuestions = [];
         List<TimingData> allTimingData = [];
+        Dictionary<string, int> bestAnswerTally = new()
+        {
+            ["Traditional Rag"] = 0,
+            ["Structured Rag"] = 0,
+            ["Tie"] = 0
+        };
+
         foreach (var file in questionFiles)
         {
             TimeSpan fileProcessingStartTime = _kpContext.Stopwatch.Elapsed;
@@ -179,26 +186,26 @@ Provide feedback for each answer to help improve future responses.  If the answe
                             Id = 1,
                             Question = question,
                             CorrectAnswer = q.Answer,
-                            ProvidedAnswer = answerRAG?.Answer ?? "unknown",
+                            Answer = answerRAG?.Answer ?? answerRAG?.WhyNoAnswer ?? string.Empty,
                             Category = q.Category,
                             Difficulty = q.Difficulty,
-                            Answer = Answer.Unknown.ToString()
+                            IsCorrect = Grade.Unknown
                         },
                         new GradedQuestion()
                         {
                             Id = 2,
                             Question = question,
                             CorrectAnswer = q.Answer,
-                            ProvidedAnswer = answer?.Answer ?? "unknown",
+                            Answer = answer?.Answer ?? answer?.WhyNoAnswer ?? string.Empty,
                             Category = q.Category,
                             Difficulty = q.Difficulty,
-                            Answer = Answer.Unknown.ToString()
+                            IsCorrect = Grade.Unknown
                         },
 
                     ]
                 };
 
-                var graded = await EvaluateAnswersAsync(answers);
+                var (graded, bestAnswer) = await EvaluateAnswersAsync(answers);
                 foreach (var g in graded)
                 {
                     g.Category = category;
@@ -210,6 +217,20 @@ Provide feedback for each answer to help improve future responses.  If the answe
                     {
                         g.source = "Traditional Rag";
                     }
+                }
+
+                // Tally best answer
+                if (bestAnswer == 1)
+                {
+                    bestAnswerTally["Traditional Rag"]++;
+                }
+                else if (bestAnswer == 2)
+                {
+                    bestAnswerTally["Structured Rag"]++;
+                }
+                else
+                {
+                    bestAnswerTally["Tie"]++;
                 }
 
                 allGradedQuestions.AddRange(graded);
@@ -227,17 +248,17 @@ Provide feedback for each answer to help improve future responses.  If the answe
         // summarize each group
         foreach (var group in groupedQuestions)
         {
-            int correct = group.Value.Count(g => g.IsCorrect == Answer.Correct);
-            int incorrect = group.Value.Count(g => g.IsCorrect == Answer.Incorrect);
-            int partial = group.Value.Count(g => g.IsCorrect == Answer.Partial);
-            int noAnswer = group.Value.Count(g => g.ProvidedAnswer == "unknown" || string.IsNullOrEmpty(g.ProvidedAnswer));
+            int correct = group.Value.Count(g => g.IsCorrect == Grade.Correct);
+            int incorrect = group.Value.Count(g => g.IsCorrect == Grade.Incorrect);
+            int partial = group.Value.Count(g => g.IsCorrect == Grade.Partial);
+            int noAnswer = group.Value.Count(g => g.Answer == "unknown" || string.IsNullOrEmpty(g.Answer));
             int total = group.Value.Count;
             summary.Add(group.Key, (correct, incorrect, partial, total, noAnswer));
         }
 
         // output combined summary table
         KnowProWriter.WriteLine(ConsoleColor.White, $"Overall Summary:");
-        OutputSummary(summary);
+        OutputSummary(summary, bestAnswerTally);
 
         // output category comparison table
         KnowProWriter.WriteLine(ConsoleColor.White, "");
@@ -267,9 +288,9 @@ Provide feedback for each answer to help improve future responses.  If the answe
                       .ToDictionary(
                           s => s.Key,
                           s => (
-                              correct: s.Count(q => q.IsCorrect == Answer.Correct),
-                              incorrect: s.Count(q => q.IsCorrect == Answer.Incorrect),
-                              partial: s.Count(q => q.IsCorrect == Answer.Partial),
+                              correct: s.Count(q => q.IsCorrect == Grade.Correct),
+                              incorrect: s.Count(q => q.IsCorrect == Grade.Incorrect),
+                              partial: s.Count(q => q.IsCorrect == Grade.Partial),
                               total: s.Count()
                           )
                       )
@@ -381,9 +402,9 @@ Provide feedback for each answer to help improve future responses.  If the answe
                       .ToDictionary(
                           s => s.Key,
                           s => (
-                              correct: s.Count(q => q.IsCorrect == Answer.Correct),
-                              incorrect: s.Count(q => q.IsCorrect == Answer.Incorrect),
-                              partial: s.Count(q => q.IsCorrect == Answer.Partial),
+                              correct: s.Count(q => q.IsCorrect == Grade.Correct),
+                              incorrect: s.Count(q => q.IsCorrect == Grade.Incorrect),
+                              partial: s.Count(q => q.IsCorrect == Grade.Partial),
                               total: s.Count()
                           )
                       )
@@ -481,7 +502,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, separator);
     }
 
-    private void OutputSummary(Dictionary<string, (int correct, int incorrect, int partial, int total, int noAnswer)> summary)
+    private void OutputSummary(Dictionary<string, (int correct, int incorrect, int partial, int total, int noAnswer)> summary, Dictionary<string, int> bestAnswerTally)
     {
         // Build header with metric column + source columns
         var sources = summary.Keys.ToList();
@@ -502,7 +523,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
         var scores = new Dictionary<string, double>();
         foreach (var group in summary)
         {
-            double score = (group.Value.correct + ((double)group.Value.partial / 2)) / (double)group.Value.total * 100D;
+            double score = (group.Value.correct + ((double)group.Value.partial / 2D)) / (double)group.Value.total * 100D;
             scores[group.Key] = score;
         }
 
@@ -537,6 +558,26 @@ Provide feedback for each answer to help improve future responses.  If the answe
             KnowProWriter.Write(scoreColor, $" {score,VALUE_COL_WIDTH - 1:N1}%");
         }
         KnowProWriter.WriteLine(ConsoleColor.White, "");
+
+        // Best Answer Tally
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        string tie = $"(Tie {(double)bestAnswerTally["Tie"] / (double)summary.First().Value.total * 100:N1}%)";
+        double? maxBestAnswer = bestAnswerTally.Values.Max();
+        double? minBestAnswee = bestAnswerTally.Values.Min();
+        KnowProWriter.Write(ConsoleColor.Cyan, $"{"Best Answer",-METRIC_COL_WIDTH}");
+        foreach (var source in sources)
+        {
+            int tally = bestAnswerTally[source];
+
+            ConsoleColor tallyColor = tally == maxScore && maxScore != minScore
+                ? ConsoleColor.Green
+                : tally == minScore && maxScore != minScore
+                    ? ConsoleColor.Red
+                    : ConsoleColor.Cyan;
+
+            KnowProWriter.Write(tallyColor, $" {(double)tally / (double)summary.First().Value.total * 100,VALUE_COL_WIDTH - 1:N1}");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.Yellow, $"  Tie: {tie:N1}%");
         KnowProWriter.WriteLine(ConsoleColor.White, separator);
     }
 
@@ -560,12 +601,6 @@ Provide feedback for each answer to help improve future responses.  If the answe
         {
             color1 = v1 > v2 ? ConsoleColor.Green : ConsoleColor.Red;
             color2 = v1 > v2 ? ConsoleColor.Red : ConsoleColor.Green;
-        }
-
-        // for partial lower is better
-        if (metricName == "Partial")
-        {
-            (color2, color1) = (color1, color2);
         }
 
         KnowProWriter.Write(color1, $" {v1,VALUE_COL_WIDTH}");
@@ -661,7 +696,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
     /// Given a podcast transcript get the LLM to generate some questions for the podcast content
     /// </summary>
     /// <param name="answers">The answers being graded.</param>
-    private async Task<List<GradedQuestion>> EvaluateAnswersAsync(GradingResponse answers)
+    private async Task<(List<GradedQuestion> graded, int bestAnswer)> EvaluateAnswersAsync(GradingResponse answers)
     {
         if (!_kpContext.Stopwatch.IsRunning)
         {
@@ -702,21 +737,23 @@ Provide feedback for each answer to help improve future responses.  If the answe
         );
 
         List<GradedQuestion> gradedQuestions = [];
-        foreach (GradedQuestion q in answers.GradedQuestions)
+        int bestAnswer = -1;
+        //foreach (GradedQuestion q in answers.GradedQuestions)
         {
             try
             {
-                KnowProWriter.Write(ConsoleColor.White, $"Grading {q.Question}");
+                KnowProWriter.Write(ConsoleColor.White, $"Grading {answers.GradedQuestions.First().Question}");
 
-                PromptSection transcript = new PromptSection(PromptSection.Sources.User, Json.Stringify(q));
+                PromptSection transcript = new PromptSection(PromptSection.Sources.User, Json.Stringify(answers.GradedQuestions));
 
                 var response = await translator.TranslateAsync(new(transcript), [_questionGraderSystemPrompt]);
 
                 KnowProWriter.Write(ConsoleColor.Gray, Json.Stringify(response));
 
                 gradedQuestions.AddRange(response.GradedQuestions);
+                bestAnswer = response.BestAnswer;
 
-                Json.StringifyToFile(response, "grades.json", true);
+                Json.StringifyToFile(response, "grades.json", false);
 
                 KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:N2}s]");
             }
@@ -727,7 +764,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         }
 
-        return gradedQuestions;
+        return (gradedQuestions, bestAnswer);
     }
 
     private void OutputTimingComparison(List<TimingData> allTimingData)
@@ -886,6 +923,12 @@ public class GradingResponse
 {
     [JsonPropertyName("gradedQuestions")]
     public IList<GradedQuestion> GradedQuestions { get; set; } = [];
+
+    [JsonPropertyName("bestAnswer")]
+    public int BestAnswer { get; set; } = -1;
+
+    [JsonPropertyName("whyBestAnswer")]
+    public string WhyBestAnswer { get; set; } = string.Empty;
 }
 
 public class GradedQuestion : BenchmarkQuestion
@@ -894,10 +937,10 @@ public class GradedQuestion : BenchmarkQuestion
     public int Id { get; set; } = -1;
     [JsonPropertyName("correctAnswer")]
     public required string CorrectAnswer { get; set; } = string.Empty;
-    [JsonPropertyName("providedAnswer")]
-    public required string ProvidedAnswer { get; set; } = string.Empty;
+    //[JsonPropertyName("providedAnswer")]
+    //public required string ProvidedAnswer { get; set; } = string.Empty;
     [JsonPropertyName("isCorrect")]
-    public Answer IsCorrect { get; set; } = Benchmarking.Answer.Unknown;
+    public Grade IsCorrect { get; set; } = Benchmarking.Grade.Unknown;
     [JsonPropertyName("feedback")]
     public string Feedback { get; set; } = string.Empty;
 
@@ -907,7 +950,7 @@ public class GradedQuestion : BenchmarkQuestion
     public string source { get; set; } = string.Empty;
 }
 
-public enum Answer
+public enum Grade
 {
     [JsonPropertyName("unknown")]
     Unknown,
