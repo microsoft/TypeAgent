@@ -72,7 +72,6 @@
       "uriFormat": "http://localhost:%s/chatView.html",
       "action": "openExternally"
       }
-    }
     },
     {
       "type": "node",
@@ -432,6 +431,22 @@
       "program": "./dist/index.js",
       "outFiles": ["${workspaceFolder}/**/*.js"],
       "resolveSourceMapLocations": []
-    },          
+    },  
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "CLI repro",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "program": "./bin/run.js",
+      "args": ["connect", "--request", "hello"],
+      "runtimeArgs": [
+        "--loader",
+        "ts-node/esm",
+        "--no-warnings=ExperimentalWarning"
+      ],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },            
   ]
 }
