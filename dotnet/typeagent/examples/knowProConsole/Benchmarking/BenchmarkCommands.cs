@@ -569,9 +569,9 @@ Provide feedback for each answer to help improve future responses.  If the answe
         {
             int tally = bestAnswerTally[source];
 
-            ConsoleColor tallyColor = tally == maxScore && maxScore != minScore
+            ConsoleColor tallyColor = tally == maxBestAnswer && maxBestAnswer != minBestAnswee
                 ? ConsoleColor.Green
-                : tally == minScore && maxScore != minScore
+                : tally == minScore && maxBestAnswer != minBestAnswee
                     ? ConsoleColor.Red
                     : ConsoleColor.Cyan;
 
@@ -731,7 +731,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
         );
 
         var translator = new JsonTranslator<GradingResponse>(
-            new OpenAIChatModel(),
+            _model,
             typeValidator,
             JsonTranslatorPrompts.System
         );
@@ -746,7 +746,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
                 PromptSection transcript = new PromptSection(PromptSection.Sources.User, Json.Stringify(answers.GradedQuestions));
 
-                var response = await translator.TranslateAsync(new(transcript), [_questionGraderSystemPrompt]);
+                var response = await translator.TranslateAsync(new(transcript), [_questionGraderSystemPrompt], _translatorSettings, CancellationToken.None);
 
                 KnowProWriter.Write(ConsoleColor.Gray, Json.Stringify(response));
 
