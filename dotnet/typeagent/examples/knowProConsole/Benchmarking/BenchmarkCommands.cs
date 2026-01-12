@@ -103,6 +103,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         KnowProWriter.WriteLine(ConsoleColor.White, $"Found {questionFiles.Count} question files.");
         List<GradedQuestion> allGradedQuestions = [];
+        List<TimingData> allTimingData = [];
         foreach (var file in questionFiles)
         {
             TimeSpan fileProcessingStartTime = _kpContext.Stopwatch.Elapsed;
@@ -121,8 +122,10 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 TimeSpan questionStart = _kpContext.Stopwatch.Elapsed;
                 string question = q.Question;
                 string category = q.Category;
+                KnowProWriter.Write(ConsoleColor.DarkYellow, $"[ {i + 1} / {questions.Questions.Count} ] ");
                 KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Question: {question}");
                 AnswerResponse? answerRAG = await conversation.AnswerQuestionRagAsync(question, 0.7, 8196, new() { MessagesTopK = 25 }, null, CancellationToken.None);
+                TimeSpan ragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
                 KnowProWriter.Write(ConsoleColor.DarkBlue, $" RAG: ");
                 if (answerRAG is null || answerRAG.Type == AnswerType.NoAnswer)
                 {
@@ -132,12 +135,22 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 {
                     KnowProWriter.Write(ConsoleColor.Green, $"{answerRAG.Answer}");
                 }
-                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{_kpContext.Stopwatch.Elapsed.Subtract(questionStart).TotalSeconds:N0}s]");
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{ragDuration.TotalSeconds:N0}s]");
+
+                // Track RAG timing
+                allTimingData.Add(new TimingData
+                {
+                    Source = "Traditional Rag",
+                    Duration = ragDuration,
+                    Category = category,
+                    Difficulty = q.Difficulty
+                });
 
                 // get the structured RAG answer
                 KnowProWriter.Write(ConsoleColor.DarkCyan, $"SRAG: ");
                 questionStart = _kpContext.Stopwatch.Elapsed;
                 AnswerResponse? answer = await conversation.AnswerQuestionAsync(question, new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = 8196, MaxMessageMatches = 25 }, null, null, null, CancellationToken.None);
+                TimeSpan sragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
                 if (answer is null || answer.Type == AnswerType.NoAnswer)
                 {
                     KnowProWriter.Write(ConsoleColor.Red, $"No answer returned.({answer?.WhyNoAnswer})");
@@ -146,7 +159,16 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 {
                     KnowProWriter.Write(ConsoleColor.Green, $"{answer.Answer}");
                 }
-                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{_kpContext.Stopwatch.Elapsed.Subtract(questionStart).TotalSeconds:N0}s]");
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{sragDuration.TotalSeconds:N0}s]");
+
+                // Track SRAG timing
+                allTimingData.Add(new TimingData
+                {
+                    Source = "Structured Rag",
+                    Duration = sragDuration,
+                    Category = category,
+                    Difficulty = q.Difficulty
+                });
 
                 // Grade the answer
                 GradingResponse answers = new GradingResponse()
@@ -200,7 +222,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
             .GroupBy(g => g.source)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        Dictionary<string, (int correct, int incorrect, int partial, int total)> summary = [];
+        Dictionary<string, (int correct, int incorrect, int partial, int total, int noAnswer)> summary = [];
 
         // summarize each group
         foreach (var group in groupedQuestions)
@@ -208,8 +230,9 @@ Provide feedback for each answer to help improve future responses.  If the answe
             int correct = group.Value.Count(g => g.IsCorrect == Answer.Correct);
             int incorrect = group.Value.Count(g => g.IsCorrect == Answer.Incorrect);
             int partial = group.Value.Count(g => g.IsCorrect == Answer.Partial);
+            int noAnswer = group.Value.Count(g => g.ProvidedAnswer == "unknown" || string.IsNullOrEmpty(g.ProvidedAnswer));
             int total = group.Value.Count;
-            summary.Add(group.Key, (correct, incorrect, partial, total));
+            summary.Add(group.Key, (correct, incorrect, partial, total, noAnswer));
         }
 
         // output combined summary table
@@ -220,6 +243,16 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, "");
         KnowProWriter.WriteLine(ConsoleColor.White, $"Category Comparison:");
         OutputCategoryComparison(allGradedQuestions);
+
+        // output difficulty comparison table
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.White, $"Difficulty Comparison:");
+        OutputDifficultyComparison(allGradedQuestions);
+
+        // output timing comparison table
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.White, $"Timing Comparison:");
+        OutputTimingComparison(allTimingData);
     }
 
     private void OutputCategoryComparison(List<GradedQuestion> allGradedQuestions)
@@ -336,7 +369,119 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, separator);
     }
 
-    private void OutputSummary(Dictionary<string, (int correct, int incorrect, int partial, int total)> summary)
+    private void OutputDifficultyComparison(List<GradedQuestion> allGradedQuestions)
+    {
+        // Group by difficulty and source
+        var difficultyGroups = allGradedQuestions
+            .GroupBy(g => g.Difficulty)
+            .OrderBy(g => g.Key)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(q => q.source)
+                      .ToDictionary(
+                          s => s.Key,
+                          s => (
+                              correct: s.Count(q => q.IsCorrect == Answer.Correct),
+                              incorrect: s.Count(q => q.IsCorrect == Answer.Incorrect),
+                              partial: s.Count(q => q.IsCorrect == Answer.Partial),
+                              total: s.Count()
+                          )
+                      )
+            );
+
+        var sources = allGradedQuestions.Select(g => g.source).Distinct().ToList();
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Difficulty",-CATEGORY_COL_WIDTH}");
+        foreach (var source in sources)
+        {
+            headerBuilder.Append($" {source,VALUE_COL_WIDTH}");
+        }
+        headerBuilder.Append($" {"Count",METRIC_COL_WIDTH}");
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Track wins for each source
+        Dictionary<string, int> wins = sources.ToDictionary(s => s, _ => 0);
+
+        foreach (var difficulty in difficultyGroups)
+        {
+            string difficultyName = difficulty.Key.ToString();
+
+            KnowProWriter.Write(ConsoleColor.White, $"{difficultyName,-CATEGORY_COL_WIDTH}");
+
+            // Calculate scores for each source in this difficulty
+            Dictionary<string, double> scores = [];
+            foreach (var source in sources)
+            {
+                if (difficulty.Value.TryGetValue(source, out var stats))
+                {
+                    double score = stats.total > 0
+                        ? (stats.correct + ((double)stats.partial / 2)) / stats.total * 100D
+                        : 0;
+                    scores[source] = score;
+                }
+                else
+                {
+                    scores[source] = 0;
+                }
+            }
+
+            double maxScore = scores.Values.Max();
+            double minScore = scores.Values.Min();
+
+            // Output scores with color coding
+            foreach (var source in sources)
+            {
+                double score = scores[source];
+                ConsoleColor scoreColor = score == maxScore && maxScore != minScore
+                    ? ConsoleColor.Green
+                    : score == minScore && maxScore != minScore
+                        ? ConsoleColor.Red
+                        : ConsoleColor.Yellow;
+
+                KnowProWriter.Write(scoreColor, $" {score,VALUE_COL_WIDTH - 1:N1}%");
+            }
+
+            // Track winner
+            if (maxScore != minScore)
+            {
+                string winner = sources.First(s => scores[s] == maxScore);
+                wins[winner]++;
+            }
+
+            // Output question count for this difficulty (divide by source count since each question appears once per source)
+            int questionCount = difficulty.Value.Values.Sum(v => v.total) / sources.Count;
+            KnowProWriter.Write(ConsoleColor.White, $" {questionCount,METRIC_COL_WIDTH}");
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Output win totals
+        KnowProWriter.Write(ConsoleColor.Cyan, $"{"Difficulty Wins",-CATEGORY_COL_WIDTH}");
+        int maxWins = wins.Values.Max();
+        int minWins = wins.Values.Min();
+        foreach (var source in sources)
+        {
+            int winCount = wins[source];
+            ConsoleColor winColor = winCount == maxWins && maxWins != minWins
+                ? ConsoleColor.Green
+                : winCount == minWins && maxWins != minWins
+                    ? ConsoleColor.Red
+                    : ConsoleColor.Yellow;
+            KnowProWriter.Write(winColor, $" {winCount,VALUE_COL_WIDTH}");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+    }
+
+    private void OutputSummary(Dictionary<string, (int correct, int incorrect, int partial, int total, int noAnswer)> summary)
     {
         // Build header with metric column + source columns
         var sources = summary.Keys.ToList();
@@ -363,9 +508,15 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         // Data rows for each metric
         WriteMetricRow("Correct", sources, s => summary[s].correct);
-        WriteMetricRow("Incorrect", sources, s => summary[s].incorrect);
+        WriteMetricRow("Incorrect", sources, s => summary[s].incorrect, true);
         WriteMetricRow("Partial", sources, s => summary[s].partial);
         WriteMetricRow("Total", sources, s => summary[s].total);
+
+        // Divider before No Answers
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // No Answers row (lower is better)
+        WriteMetricRow("No Answers", sources, s => summary[s].noAnswer, lowerIsBetter: true);
 
         KnowProWriter.WriteLine(ConsoleColor.White, separator);
 
@@ -389,13 +540,27 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, separator);
     }
 
-    private void WriteMetricRow(string metricName, List<string> sources, Func<string, double> getValue)
+    private void WriteMetricRow(string metricName, List<string> sources, Func<string, double> getValue, bool lowerIsBetter = false)
     {
         KnowProWriter.Write(ConsoleColor.White, $"{metricName,-METRIC_COL_WIDTH}");
         var v1 = getValue(sources.First());
         var v2 = getValue(sources.Last());
-        var color1 = (v1 == v2) ? ConsoleColor.Yellow : (v1 > v2) ? ConsoleColor.Green : ConsoleColor.Red;
-        var color2 = (v1 == v2) ? ConsoleColor.Yellow : (v1 < v2) ? ConsoleColor.Green : ConsoleColor.Red;
+
+        ConsoleColor color1, color2;
+        if (v1 == v2)
+        {
+            color1 = color2 = ConsoleColor.Yellow;
+        }
+        else if (lowerIsBetter)
+        {
+            color1 = v1 < v2 ? ConsoleColor.Green : ConsoleColor.Red;
+            color2 = v1 < v2 ? ConsoleColor.Red : ConsoleColor.Green;
+        }
+        else
+        {
+            color1 = v1 > v2 ? ConsoleColor.Green : ConsoleColor.Red;
+            color2 = v1 > v2 ? ConsoleColor.Red : ConsoleColor.Green;
+        }
 
         // for partial lower is better
         if (metricName == "Partial")
@@ -518,6 +683,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
         var actionParamConvertor = new ActionParamJsonConverter();
         var oneOrManyConvertor = new OneOrManyJsonConverter<string>();
         var s_options = Json.DefaultOptions();
+        s_options.PropertyNameCaseInsensitive = true;
         s_options.Converters.Add(enumConvertor);
         s_options.Converters.Add(dateConvertor);
         s_options.Converters.Add(facetConvertor);
@@ -564,6 +730,108 @@ Provide feedback for each answer to help improve future responses.  If the answe
         return gradedQuestions;
     }
 
+    private void OutputTimingComparison(List<TimingData> allTimingData)
+    {
+        var sources = allTimingData.Select(t => t.Source).Distinct().ToList();
+
+        // Calculate timing statistics per source
+        var timingStats = allTimingData
+            .GroupBy(t => t.Source)
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    total: g.Aggregate(TimeSpan.Zero, (sum, t) => sum + t.Duration),
+                    count: g.Count(),
+                    min: g.Min(t => t.Duration),
+                    max: g.Max(t => t.Duration),
+                    avg: TimeSpan.FromTicks(g.Sum(t => t.Duration.Ticks) / g.Count())
+                )
+            );
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Metric",-CATEGORY_COL_WIDTH}");
+        foreach (var source in sources)
+        {
+            headerBuilder.Append($" {source,VALUE_COL_WIDTH}");
+        }
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Total time row (lower is better)
+        WriteTimingRow("Total Time", sources, s => timingStats[s].total, lowerIsBetter: true);
+
+        // Question count row
+        WriteTimingRow("Questions", sources, s => TimeSpan.FromSeconds(timingStats[s].count), lowerIsBetter: false, isCount: true);
+
+        // Average time row (lower is better)
+        WriteTimingRow("Avg Time", sources, s => timingStats[s].avg, lowerIsBetter: true);
+
+        // Min time row (lower is better)
+        WriteTimingRow("Min Time", sources, s => timingStats[s].min, lowerIsBetter: true);
+
+        // Max time row (lower is better)
+        WriteTimingRow("Max Time", sources, s => timingStats[s].max, lowerIsBetter: true);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Calculate and display speed difference
+        if (sources.Count >= 2)
+        {
+            var first = timingStats[sources[0]].total;
+            var second = timingStats[sources[1]].total;
+            var faster = first < second ? sources[0] : sources[1];
+            var slower = first < second ? sources[1] : sources[0];
+            var fasterTime = first < second ? first : second;
+            var slowerTime = first < second ? second : first;
+            var speedup = slowerTime.TotalSeconds / fasterTime.TotalSeconds;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{"Speed Diff",-CATEGORY_COL_WIDTH}");
+            KnowProWriter.Write(ConsoleColor.Green, $" {faster} is {speedup:N2}x faster");
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+            KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        }
+    }
+
+    private void WriteTimingRow(string metricName, List<string> sources, Func<string, TimeSpan> getValue, bool lowerIsBetter, bool isCount = false)
+    {
+        KnowProWriter.Write(ConsoleColor.White, $"{metricName,-CATEGORY_COL_WIDTH}");
+
+        var values = sources.Select(s => getValue(s)).ToList();
+        var minValue = values.Min();
+        var maxValue = values.Max();
+
+        foreach (var source in sources)
+        {
+            var value = getValue(source);
+            ConsoleColor color;
+
+            if (minValue == maxValue)
+            {
+                color = ConsoleColor.Yellow;
+            }
+           else if (lowerIsBetter)
+            {
+                color = value == minValue ? ConsoleColor.Green : ConsoleColor.Red;
+            }
+            else
+            {
+                color = value == maxValue ? ConsoleColor.Green : ConsoleColor.Red;
+            }
+
+            string displayValue = isCount
+                ? $"{(int)value.TotalSeconds,VALUE_COL_WIDTH}"
+                : $"{value.TotalSeconds,VALUE_COL_WIDTH - 1:N2}s";
+
+            KnowProWriter.Write(color, $" {displayValue}");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+    }
+
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
@@ -602,7 +870,7 @@ public class BenchmarkQuestion
     public required string Category { get; set; }
 
     [JsonPropertyName("answer")]
-    public required string Answer { get; set; } = string.Empty;
+    public string Answer { get; set; } = string.Empty;
 
     [JsonPropertyName("difficulty")]
     public Difficulty Difficulty { get; set; } = Difficulty.NotSpecified;
@@ -661,4 +929,13 @@ public enum Difficulty
     Moderate,
     [JsonPropertyName("hard")]
     Hard
+}
+
+// Add this class near the other benchmark classes at the bottom of the file
+public class TimingData
+{
+    public string Source { get; set; } = string.Empty;
+    public TimeSpan Duration { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public Difficulty Difficulty { get; set; }
 }
