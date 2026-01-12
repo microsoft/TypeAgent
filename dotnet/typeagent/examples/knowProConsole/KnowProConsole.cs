@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Reflection;
 using KnowProConsole.Benchmarking;
 
 namespace KnowProConsole;
@@ -39,7 +40,7 @@ public class KnowProConsole : ConsoleApp
     KnowProConsoleContext _context;
 
     public KnowProConsole()
-        : base("KnowPro Console")
+        : base($"KnowPro Console {Assembly.GetEntryAssembly()?.GetName().Version}")
     {
         _context = new KnowProConsoleContext();
         AddModules(
