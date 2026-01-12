@@ -49,6 +49,11 @@ Run the application and send JSON commands via stdin:
 | `listThemes` | (none) | Outputs installed themes as JSON |
 | `listAppNames` | (none) | Outputs installed applications as JSON |
 | `createDesktop` | JSON array of names | Creates one or more virtual desktops |
+| `switchDesktop` | Index or name | Switches to a virtual desktop by index or name |
+| `nextDesktop` | (none) | Switches to the next virtual desktop |
+| `previousDesktop` | (none) | Switches to the previous virtual desktop |
+| `moveWindowToDesktop` | `{"process": "app", "desktop": "name"}` | Moves a window to a specific virtual desktop |
+| `pinWindow` | Application name | Pins a window to appear on all virtual desktops |
 | `toggleNotifications` | (none) | Toggles the Windows notification center |
 | `quit` | (none) | Exits the application |
 

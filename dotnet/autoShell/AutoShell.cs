@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -103,6 +104,7 @@ internal partial class AutoShell
     {
         string rawCmdLine = Marshal.PtrToStringUni(GetCommandLineW());
 
+        Debugger.Launch();
         // if there are command line args let's execute those one at a time and then exit
         // user can specify a single JSON object command or an array of them on the command line
         if (args.Length > 0)
@@ -110,15 +112,28 @@ internal partial class AutoShell
             string exe = $"\"{Environment.ProcessPath}\"";
             string cmdLine = rawCmdLine.Replace(exe, "");
 
-            JArray commands = JArray.Parse(cmdLine);
-            if (commands is not null)
+            if (cmdLine.StartsWith(exe, StringComparison.OrdinalIgnoreCase))
             {
+                cmdLine = cmdLine[exe.Length..];
+            }
+            else if (cmdLine.StartsWith(Path.GetFileName(Environment.ProcessPath), StringComparison.OrdinalIgnoreCase))
+            {
+                cmdLine = cmdLine[Path.GetFileName(Environment.ProcessPath).Length..];
+            }
+            else if (cmdLine.StartsWith(Path.GetFileNameWithoutExtension(Environment.ProcessPath), StringComparison.OrdinalIgnoreCase))
+            {
+                cmdLine = cmdLine[Path.GetFileNameWithoutExtension(Environment.ProcessPath).Length..];
+            }
+
+            try
+            {
+                JArray commands = JArray.Parse(cmdLine);
                 foreach (JObject jo in commands.Children<JObject>())
                 {
                     execLine(jo);
                 }
             }
-            else
+            catch (JsonReaderException)
             {
                 execLine(JObject.Parse(cmdLine));
             }
@@ -141,15 +156,29 @@ internal partial class AutoShell
                 // execute the line
                 quit = execLine(root);
             }
-            catch (JsonReaderException ex)
+            catch (Exception ex)
             {
-                Debug.WriteLine(ex);
-                ConsoleColor previousColor = Console.ForegroundColor;
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error parsing Json");
-                Console.ForegroundColor = previousColor;
+                LogError(ex);
             }
         }
+    }
+
+    static void LogError(Exception ex)
+    {
+        Debug.WriteLine(ex);
+        ConsoleColor previousColor = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("Error: " + ex.Message);
+        Console.ForegroundColor = previousColor;
+    }
+
+    static void LogWarning(string message)
+    {
+        Debug.WriteLine(message);
+        ConsoleColor previousColor = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("Warning: " + message);
+        Console.ForegroundColor = previousColor;
     }
 
     static SortedList<string, string> GetAllInstalledAppsIds()
@@ -750,11 +779,19 @@ internal partial class AutoShell
     static void PinWindow(string processName)
     {
         IntPtr hWnd = FindProcessWindowHandle(processName);
-        s_applicationViewCollection.GetViewForHwnd(hWnd, out IApplicationView view);
 
-        if (view is not null)
+        if (hWnd != IntPtr.Zero)
         {
-            s_virtualDesktopPinnedApps.PinView((IApplicationView)view);
+            s_applicationViewCollection.GetViewForHwnd(hWnd, out IApplicationView view);
+
+            if (view is not null)
+            {
+                s_virtualDesktopPinnedApps.PinView((IApplicationView)view);
+            }
+        }
+        else
+        {
+            Console.WriteLine($"The window handle for '{processName}' could not be found");
         }
     }
 
