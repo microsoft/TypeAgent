@@ -39,7 +39,7 @@ jobs:
 
       - template: include-update-package-version.yml
         parameters:
-          packageFolder: $(buildDirectory)
+          buildDirectory: $(buildDirectory)
           prerelease: $(Build.BuildId)
 
       - script: |
