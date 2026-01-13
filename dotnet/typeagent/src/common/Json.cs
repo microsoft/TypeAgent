@@ -76,10 +76,18 @@ public class Json
     /// <typeparam name="T">value type</typeparam>
     /// <param name="value">value to stringify</param>
     /// <param name="indented">if true, produce indented json</param>
+    /// <param name="filePath">file to write json to</param>
+    /// <param name="overwrite">if true, overwrite existing file</param>
     /// <returns>The stringified JSON.</returns>
-    public static string StringifyToFile<T>(T value, string filePath, bool indented = true)
+    public static string StringifyToFile<T>(T value, string filePath, bool indented = true, bool overwrite = true)
     {
         string json = Stringify<T>(value, indented);
+
+        if (File.Exists(filePath) && overwrite)
+        {
+            File.Delete(filePath);
+        }
+
         System.IO.File.WriteAllText(filePath, json);
         return json;
     }

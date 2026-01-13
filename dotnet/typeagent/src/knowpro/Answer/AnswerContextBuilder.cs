@@ -184,7 +184,8 @@ internal class AnswerContextBuilder
         {
             return [];
         }
-        List<int> ordinals = messageMatches.ToMessageOrdinals(topK, true);
+        // messages here already come in descending rank order so keep it that way
+        List<int> ordinals = messageMatches.ToMessageOrdinals(topK, false);
         IList<IMessage> messages = await _conversation.GetMessageReader().GetAsync(
             ordinals,
             cancellationToken

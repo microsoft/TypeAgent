@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type Categories =
+export type Category =
 
     // Find a where something was discussed
     | "retrieval"
@@ -21,6 +21,7 @@ export type Categories =
     // Conversation summary/highlights
     | "summary"
 
+    // Questions about how someone felt or the mood of a particular conversation
     | "sentiment"
 
     | "outcomes"
@@ -30,15 +31,23 @@ export type Categories =
     // create a new cateogry if the above categories do not suffice
     | string;
 
+export type Difficulty =
+    | "easy"
+    | "moderate"
+    | "hard";
+
 export type Question = {
     // A question about the transcript
     question: string;
 
-    // The category of this question: i.e. sentiment, metadata, fact, opinion, retreival
-    category: Categories;
-
     // A concise answer to the question
     answer: string;
+
+    // The category of this question: i.e. sentiment, metadata, fact, opinion, retreival
+    category: Category;
+
+    // The difficulty level of the question
+    difficulty: Difficulty;
 }
 
 export type QuestionGeneratorResponse = {

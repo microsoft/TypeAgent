@@ -131,7 +131,7 @@ public class KnowProWriter : ConsoleWriter
         {
             if (verbose)
             {
-                for(int i = 0; i < searchResult.MessageMatches.Count; i++)
+                for (int i = 0; i < searchResult.MessageMatches.Count; i++)
                 {
                     int position = searchResult.MessageMatches.Count - 1 - i;
                     var match = searchResult.MessageMatches[position];
@@ -148,6 +148,7 @@ public class KnowProWriter : ConsoleWriter
                 WriteScoredMessageOrdinals(conversation, searchResult.MessageMatches);
             }
         }
+
         if (!searchResult.KnowledgeMatches.IsNullOrEmpty())
         {
             WriteLineHeading("Knowledge");
