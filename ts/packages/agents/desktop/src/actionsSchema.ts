@@ -143,7 +143,7 @@ export type ToggleAirplaneModeAction = {
 export type CreateDesktopAction = {
     actionName: "createDesktop";
     parameters: {
-        names: string[] // The name(s) of the desktop(s) to create (default: Desktop 1, Desktop 2, etc.)
+        names: string[]; // The name(s) of the desktop(s) to create (default: Desktop 1, Desktop 2, etc.)
     };
 };
 
@@ -195,9 +195,8 @@ export type ToggleNotificationsAction = {
 
 export type DebugAutoShellAction = {
     actionName: "debug";
-    parameters: {
-    };
-}
+    parameters: {};
+};
 
 export type KnownPrograms =
     | "chrome"

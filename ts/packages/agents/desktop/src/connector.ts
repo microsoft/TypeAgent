@@ -214,7 +214,12 @@ export async function runDesktopActions(
             break;
         }
         case "connectWifi": {
-            actionData = { ssid: action.parameters.ssid, password: action.parameters.password ? action.parameters.password : "" } as unknown as string;
+            actionData = {
+                ssid: action.parameters.ssid,
+                password: action.parameters.password
+                    ? action.parameters.password
+                    : "",
+            } as unknown as string;
             confirmationMessage = `Connecting to WiFi network '${action.parameters.ssid}'`;
             break;
         }
@@ -234,12 +239,12 @@ export async function runDesktopActions(
             break;
         }
         case "moveWindowToDesktop": {
-            const app = { 
+            const app = {
                 process: await mapInputToAppName(
                     action.parameters.name,
-                    agentContext,                
+                    agentContext,
                 ),
-                desktop: action.parameters.desktopId
+                desktop: action.parameters.desktopId,
             };
             actionData = JSON.stringify(app);
             confirmationMessage = `Moving ${app.process} to desktop ${action.parameters.desktopId}`;
