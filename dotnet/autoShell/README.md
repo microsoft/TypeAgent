@@ -16,6 +16,7 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - **Virtual Desktop Management**: Create new virtual desktops
 - **Notification Center**: Toggle the Windows notification center
 - **Airplane Mode Control**: Enable or disable Windows airplane mode
+- **Wi-Fi Management**: Connect to Wi-Fi networks by SSID
 
 ## Requirements
 
@@ -58,6 +59,7 @@ Run the application and send JSON commands via stdin:
 | `toggleNotifications` | (none) | Toggles the Windows notification center |
 | `setAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
 | `quit` | (none) | Exits the application |
+| ``connectWifi` | SSID | Connects to a Wi-Fi network by SSID |
 
 ### Examples
 
@@ -109,6 +111,11 @@ Enable airplane mode:
 Disable airplane mode:
 ```json
 {"setAirplaneMode": false}
+```
+
+Connect to a Wi-Fi network:
+```json
+{"connectWifi": {"ssid": "MyNetwork", "password": "MyPassword123"}}
 ```
 
 ### Supported Application Friendly Names

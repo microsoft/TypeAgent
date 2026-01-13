@@ -907,6 +907,15 @@ internal partial class AutoShell
                 case "setAirplaneMode":
                     SetAirplaneMode(bool.Parse(value));
                     break;
+                case "listWifiNetworks":
+                    ListWifiNetworks();
+                    break;
+                case "connectWifi":
+                    string[] wifiParams = value.Split(',');
+                    string ssid = wifiParams[0];
+                    string password = wifiParams.Length > 1 ? wifiParams[1] : null;
+                    ConnectToWifi(ssid, password);
+                    break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);
                     break;
@@ -980,5 +989,239 @@ internal partial class AutoShell
                 Marshal.ReleaseComObject(radioManager);
             }
         }
+    }
+
+    /// <summary>
+    /// Lists all WiFi networks currently in range.
+    /// </summary>
+    static void ListWifiNetworks()
+    {
+        IntPtr clientHandle = IntPtr.Zero;
+        IntPtr wlanInterfaceList = IntPtr.Zero;
+        IntPtr networkList = IntPtr.Zero;
+
+        try
+        {
+            // Open WLAN handle
+            int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
+            if (result != 0)
+            {
+                Debug.WriteLine($"Failed to open WLAN handle: {result}");
+                return;
+            }
+
+            // Enumerate wireless interfaces
+            result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
+            if (result != 0)
+            {
+                Debug.WriteLine($"Failed to enumerate WLAN interfaces: {result}");
+                return;
+            }
+
+            WLAN_INTERFACE_INFO_LIST interfaceList = Marshal.PtrToStructure<WLAN_INTERFACE_INFO_LIST>(wlanInterfaceList);
+
+            if (interfaceList.dwNumberOfItems == 0)
+            {
+                Console.WriteLine("[]");
+                return;
+            }
+
+            var allNetworks = new List<object>();
+
+            for (int i = 0; i < interfaceList.dwNumberOfItems; i++)
+            {
+                WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[i];
+
+                // Scan for networks (trigger a refresh)
+                WlanScan(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+
+                // Small delay to allow scan to complete
+                System.Threading.Thread.Sleep(100);
+
+                // Get available networks
+                result = WlanGetAvailableNetworkList(clientHandle, ref interfaceInfo.InterfaceGuid, 0, IntPtr.Zero, out networkList);
+                if (result != 0)
+                {
+                    Debug.WriteLine($"Failed to get network list: {result}");
+                    continue;
+                }
+
+                WLAN_AVAILABLE_NETWORK_LIST availableNetworkList = Marshal.PtrToStructure<WLAN_AVAILABLE_NETWORK_LIST>(networkList);
+
+                IntPtr networkPtr = networkList + 8; // Skip dwNumberOfItems and dwIndex
+
+                for (int j = 0; j < availableNetworkList.dwNumberOfItems; j++)
+                {
+                    WLAN_AVAILABLE_NETWORK network = Marshal.PtrToStructure<WLAN_AVAILABLE_NETWORK>(networkPtr);
+
+                    string ssid = Encoding.ASCII.GetString(network.dot11Ssid.SSID, 0, (int)network.dot11Ssid.SSIDLength);
+
+                    if (!string.IsNullOrEmpty(ssid))
+                    {
+                        allNetworks.Add(new
+                        {
+                            SSID = ssid,
+                            SignalQuality = network.wlanSignalQuality,
+                            Secured = network.bSecurityEnabled,
+                            Connected = (network.dwFlags & 1) != 0 // WLAN_AVAILABLE_NETWORK_CONNECTED
+                        });
+                    }
+
+                    networkPtr += Marshal.SizeOf<WLAN_AVAILABLE_NETWORK>();
+                }
+
+                if (networkList != IntPtr.Zero)
+                {
+                    WlanFreeMemory(networkList);
+                    networkList = IntPtr.Zero;
+                }
+            }
+
+            // Remove duplicates and sort by signal strength
+            var uniqueNetworks = allNetworks
+                .GroupBy(n => ((dynamic)n).SSID)
+                .Select(g => g.OrderByDescending(n => ((dynamic)n).SignalQuality).First())
+                .OrderByDescending(n => ((dynamic)n).SignalQuality)
+                .ToList();
+
+            Console.WriteLine(JsonConvert.SerializeObject(uniqueNetworks));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error listing WiFi networks: {ex.Message}");
+            Console.WriteLine("[]");
+        }
+        finally
+        {
+            if (networkList != IntPtr.Zero)
+                WlanFreeMemory(networkList);
+            if (wlanInterfaceList != IntPtr.Zero)
+                WlanFreeMemory(wlanInterfaceList);
+            if (clientHandle != IntPtr.Zero)
+                WlanCloseHandle(clientHandle, IntPtr.Zero);
+        }
+    }
+
+    /// <summary>
+    /// Connects to a WiFi network by name (SSID). If the network requires a password and one is provided,
+    /// it will create a temporary profile. For networks with existing profiles, it connects using the profile.
+    /// </summary>
+    /// <param name="ssid">The SSID of the network to connect to.</param>
+    /// <param name="password">Optional password for secured networks.</param>
+    static void ConnectToWifi(string ssid, string password = null)
+    {
+        IntPtr clientHandle = IntPtr.Zero;
+        IntPtr wlanInterfaceList = IntPtr.Zero;
+
+        try
+        {
+            // Open WLAN handle
+            int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
+            if (result != 0)
+            {
+                LogWarning($"Failed to open WLAN handle: {result}");
+                return;
+            }
+
+            // Enumerate wireless interfaces
+            result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
+            if (result != 0)
+            {
+                LogWarning($"Failed to enumerate WLAN interfaces: {result}");
+                return;
+            }
+
+            WLAN_INTERFACE_INFO_LIST interfaceList = Marshal.PtrToStructure<WLAN_INTERFACE_INFO_LIST>(wlanInterfaceList);
+
+            if (interfaceList.dwNumberOfItems == 0)
+            {
+                LogWarning("No wireless interfaces found.");
+                return;
+            }
+
+            // Use the first available wireless interface
+            WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[0];
+
+            // If password is provided, create a profile and connect
+            if (!string.IsNullOrEmpty(password))
+            {
+                string profileXml = GenerateWifiProfileXml(ssid, password);
+
+                result = WlanSetProfile(clientHandle, ref interfaceInfo.InterfaceGuid, 0, profileXml, null, true, IntPtr.Zero, out uint reasonCode);
+                if (result != 0)
+                {
+                    LogWarning($"Failed to set WiFi profile: {result}, reason: {reasonCode}");
+                    return;
+                }
+            }
+
+            // Set up connection parameters
+            WLAN_CONNECTION_PARAMETERS connectionParams = new WLAN_CONNECTION_PARAMETERS
+            {
+                wlanConnectionMode = WLAN_CONNECTION_MODE.wlan_connection_mode_profile,
+                strProfile = ssid,
+                pDot11Ssid = IntPtr.Zero,
+                pDesiredBssidList = IntPtr.Zero,
+                dot11BssType = DOT11_BSS_TYPE.dot11_BSS_type_any,
+                dwFlags = 0
+            };
+
+            result = WlanConnect(clientHandle, ref interfaceInfo.InterfaceGuid, ref connectionParams, IntPtr.Zero);
+            if (result != 0)
+            {
+                LogWarning($"Failed to connect to WiFi network '{ssid}': {result}");
+                return;
+            }
+
+            Debug.WriteLine($"Successfully initiated connection to WiFi network: {ssid}");
+            Console.WriteLine($"Connecting to WiFi network: {ssid}");
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+        finally
+        {
+            if (wlanInterfaceList != IntPtr.Zero)
+                WlanFreeMemory(wlanInterfaceList);
+            if (clientHandle != IntPtr.Zero)
+                WlanCloseHandle(clientHandle, IntPtr.Zero);
+        }
+    }
+
+    /// <summary>
+    /// Generates a WiFi profile XML for WPA2-Personal (PSK) networks.
+    /// </summary>
+    static string GenerateWifiProfileXml(string ssid, string password)
+    {
+        // Convert SSID to hex
+        string ssidHex = BitConverter.ToString(Encoding.UTF8.GetBytes(ssid)).Replace("-", "");
+
+        return $@"<?xml version=""1.0""?>
+<WLANProfile xmlns=""http://www.microsoft.com/networking/WLAN/profile/v1"">
+    <name>{ssid}</name>
+    <SSIDConfig>
+        <SSID>
+            <hex>{ssidHex}</hex>
+            <name>{ssid}</name>
+        </SSID>
+    </SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>auto</connectionMode>
+    <MSM>
+        <security>
+            <authEncryption>
+                <authentication>WPA2PSK</authentication>
+                <encryption>AES</encryption>
+                <useOneX>false</useOneX>
+            </authEncryption>
+            <sharedKey>
+                <keyType>passPhrase</keyType>
+                <protected>false</protected>
+                <keyMaterial>{password}</keyMaterial>
+            </sharedKey>
+        </security>
+    </MSM>
+</WLANProfile>";
     }
 }
