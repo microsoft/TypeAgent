@@ -37,29 +37,29 @@ Run the application and send JSON commands via stdin:
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `launchProgram` | Application name | Opens an application (or raises if already running) |
+| `applyTheme` | Theme name | Applies a Windows theme |
 | `closeProgram` | Application name | Closes an application |
-| `switchTo` | Application name | Brings application window to foreground |
+| `connectWifi` | SSID | Connects to a Wi-Fi network by SSID |
+| `createDesktop` | JSON array of names | Creates one or more virtual desktops |
+| `launchProgram` | Application name | Opens an application (or raises if already running) |
+| `listAppNames` | (none) | Outputs installed applications as JSON |
+| `listThemes` | (none) | Outputs installed themes as JSON |
 | `maximize` | Application name | Maximizes the application window |
 | `minimize` | Application name | Minimizes the application window |
-| `tile` | `"app1,app2"` | Tiles two applications side-by-side |
-| `volume` | `0-100` | Sets system volume percentage |
-| `restoreVolume` | (none) | Restores previously saved volume level |
-| `mute` | `true`/`false` | Mutes or unmutes system audio |
-| `setWallpaper` | File path | Sets the desktop wallpaper |
-| `applyTheme` | Theme name | Applies a Windows theme |
-| `listThemes` | (none) | Outputs installed themes as JSON |
-| `listAppNames` | (none) | Outputs installed applications as JSON |
-| `createDesktop` | JSON array of names | Creates one or more virtual desktops |
-| `switchDesktop` | Index or name | Switches to a virtual desktop by index or name |
-| `nextDesktop` | (none) | Switches to the next virtual desktop |
-| `previousDesktop` | (none) | Switches to the previous virtual desktop |
 | `moveWindowToDesktop` | `{"process": "app", "desktop": "name"}` | Moves a window to a specific virtual desktop |
+| `mute` | `true`/`false` | Mutes or unmutes system audio |
+| `nextDesktop` | (none) | Switches to the next virtual desktop |
 | `pinWindow` | Application name | Pins a window to appear on all virtual desktops |
-| `toggleNotifications` | (none) | Toggles the Windows notification center |
-| `setAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
+| `previousDesktop` | (none) | Switches to the previous virtual desktop |
 | `quit` | (none) | Exits the application |
-| ``connectWifi` | SSID | Connects to a Wi-Fi network by SSID |
+| `restoreVolume` | (none) | Restores previously saved volume level |
+| `setAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
+| `setWallpaper` | File path | Sets the desktop wallpaper |
+| `switchDesktop` | Index or name | Switches to a virtual desktop by index or name |
+| `switchTo` | Application name | Brings application window to foreground |
+| `tile` | `"app1,app2"` | Tiles two applications side-by-side |
+| `toggleNotifications` | (none) | Toggles the Windows notification center |
+| `volume` | `0-100` | Sets system volume percentage |
 
 ### Examples
 
