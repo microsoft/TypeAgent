@@ -353,5 +353,149 @@ namespace autoShell
         [DllImport("combase.dll")]
         internal static extern char* WindowsGetStringRawBuffer(IntPtr hstring, out uint length);
 
+        // Add these COM interface definitions for Radio Management API
+
+        // GUIDs for Radio Management API
+        internal static readonly Guid CLSID_RadioManagementAPI = new Guid(0x581333f6, 0x28db, 0x41be, 0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6);
+        internal static readonly Guid IID_IRadioManager = new Guid(0xdb3afbfb, 0x08e6, 0x46c6, 0xaa, 0x70, 0xbf, 0x9a, 0x34, 0xc3, 0x0a, 0xb7);
+
+        [ComImport]
+        [Guid("db3afbfb-08e6-46c6-aa70-bf9a34c30ab7")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        internal interface IRadioManager
+        {
+            [PreserveSig]
+            int IsRMSupported(out uint pdwState);
+
+            [PreserveSig]
+            int GetUIRadioInstances([MarshalAs(UnmanagedType.IUnknown)] out object ppCollection);
+
+            [PreserveSig]
+            int GetSystemRadioState(out int pbEnabled, out int param2, out int pChangeReason);
+
+            [PreserveSig]
+            int SetSystemRadioState(int bEnabled);
+
+            [PreserveSig]
+            int Refresh();
+
+            [PreserveSig]
+            int OnHardwareSliderChange(int param1, int param2);
+        }
+
+        #region WiFi
+
+        // WLAN API P/Invoke declarations
+        [DllImport("wlanapi.dll")]
+        static extern int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
+
+        [DllImport("wlanapi.dll")]
+        static extern int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
+
+        [DllImport("wlanapi.dll")]
+        static extern int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
+
+        [DllImport("wlanapi.dll")]
+        static extern int WlanGetAvailableNetworkList(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, IntPtr pReserved, out IntPtr ppAvailableNetworkList);
+
+        [DllImport("wlanapi.dll")]
+        static extern int WlanScan(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pDot11Ssid, IntPtr pIeData, IntPtr pReserved);
+
+        [DllImport("wlanapi.dll")]
+        static extern void WlanFreeMemory(IntPtr pMemory);
+
+        [DllImport("wlanapi.dll")]
+        static extern int WlanConnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, ref WLAN_CONNECTION_PARAMETERS pConnectionParameters, IntPtr pReserved);
+
+        [DllImport("wlanapi.dll")]
+        static extern int WlanDisconnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pReserved);
+
+        [DllImport("wlanapi.dll")]
+        static extern int WlanSetProfile(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, [MarshalAs(UnmanagedType.LPWStr)] string strProfileXml, [MarshalAs(UnmanagedType.LPWStr)] string strAllUserProfileSecurity, bool bOverwrite, IntPtr pReserved, out uint pdwReasonCode);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WLAN_INTERFACE_INFO
+        {
+            public Guid InterfaceGuid;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+            public string strInterfaceDescription;
+            public int isState;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct WLAN_INTERFACE_INFO_LIST
+        {
+            public uint dwNumberOfItems;
+            public uint dwIndex;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1)]
+            public WLAN_INTERFACE_INFO[] InterfaceInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct DOT11_SSID
+        {
+            public uint SSIDLength;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+            public byte[] SSID;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WLAN_AVAILABLE_NETWORK
+        {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+            public string strProfileName;
+            public DOT11_SSID dot11Ssid;
+            public int dot11BssType;
+            public uint uNumberOfBssids;
+            public bool bNetworkConnectable;
+            public uint wlanNotConnectableReason;
+            public uint uNumberOfPhyTypes;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public int[] dot11PhyTypes;
+            public bool bMorePhyTypes;
+            public uint wlanSignalQuality;
+            public bool bSecurityEnabled;
+            public int dot11DefaultAuthAlgorithm;
+            public int dot11DefaultCipherAlgorithm;
+            public uint dwFlags;
+            public uint dwReserved;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct WLAN_AVAILABLE_NETWORK_LIST
+        {
+            public uint dwNumberOfItems;
+            public uint dwIndex;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WLAN_CONNECTION_PARAMETERS
+        {
+            public WLAN_CONNECTION_MODE wlanConnectionMode;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string strProfile;
+            public IntPtr pDot11Ssid;
+            public IntPtr pDesiredBssidList;
+            public DOT11_BSS_TYPE dot11BssType;
+            public uint dwFlags;
+        }
+
+        enum WLAN_CONNECTION_MODE
+        {
+            wlan_connection_mode_profile = 0,
+            wlan_connection_mode_temporary_profile = 1,
+            wlan_connection_mode_discovery_secure = 2,
+            wlan_connection_mode_discovery_unsecure = 3,
+            wlan_connection_mode_auto = 4
+        }
+
+        enum DOT11_BSS_TYPE
+        {
+            dot11_BSS_type_infrastructure = 1,
+            dot11_BSS_type_independent = 2,
+            dot11_BSS_type_any = 3
+        }
+
+        #endregion WiFi
     }
 }
