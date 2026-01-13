@@ -69,7 +69,7 @@ internal partial class AutoShell
             { "paint 3d", "C:\\Program Files\\WindowsApps\\Microsoft.MSPaint_10.1807.18022.0_x64__8wekyb3d8bbwe\\"},
             { "m365 copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
             { "copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
-            { "spotify", "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.278.418.0_x64__zpdnekdrzrea0\\spotify.exe" },
+            { "spotify", "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.279.427.0_x64__zpdnekdrzrea0\\spotify.exe" },
         };
 
         // add the entries to the hashtable
@@ -532,7 +532,11 @@ internal partial class AutoShell
                 {
                     Process.Start(path);
                 }
-                catch { }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // alternate start method
+                    Process.Start(friendlyName);
+                }
             }
             else
             {
