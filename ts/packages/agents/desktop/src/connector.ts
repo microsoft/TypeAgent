@@ -213,6 +213,70 @@ export async function runDesktopActions(
             confirmationMessage = `Changed theme to '${action.parameters.theme}'`;
             break;
         }
+        case "connectWifi": {
+            actionData = { ssid: action.parameters.ssid, password: action.parameters.password ? action.parameters.password : "" } as unknown as string;
+            confirmationMessage = `Connecting to WiFi network '${action.parameters.ssid}'`;
+            break;
+        }
+        case "disconnectWifi": {
+            actionData = "";
+            confirmationMessage = `Disconnecting from current WiFi network`;
+            break;
+        }
+        case "toggleAirplaneMode": {
+            actionData = action.parameters.enable.toString();
+            confirmationMessage = `Turning airplane mode ${action.parameters.enable ? "on" : "off"}`;
+            break;
+        }
+        case "createDesktop": {
+            actionData = JSON.stringify(action.parameters.names);
+            confirmationMessage = `Creating new desktop`;
+            break;
+        }
+        case "moveWindowToDesktop": {
+            const app = { 
+                process: await mapInputToAppName(
+                    action.parameters.name,
+                    agentContext,                
+                ),
+                desktop: action.parameters.desktopId
+            };
+            actionData = JSON.stringify(app);
+            confirmationMessage = `Moving ${app.process} to desktop ${action.parameters.desktopId}`;
+            break;
+        }
+        case "pinWindow": {
+            actionData = action.parameters.name;
+            confirmationMessage = `Pinning '${action.parameters.name}' to all desktops`;
+            break;
+        }
+        case "switchDesktop": {
+            actionData = action.parameters.desktopId.toString();
+            confirmationMessage = `Switching to desktop ${action.parameters.desktopId}`;
+            break;
+        }
+        case "nextDesktop": {
+            actionData = "";
+            confirmationMessage = `Switching to next desktop`;
+            break;
+        }
+        case "previousDesktop": {
+            actionData = "";
+            confirmationMessage = `Switching to previous desktop`;
+            break;
+        }
+        case "toggleNotifications": {
+            actionData = action.parameters.enable.toString();
+            confirmationMessage = `Toggling Action Center ${action.parameters.enable ? "on" : "off"}`;
+            break;
+        }
+        case "debug": {
+            actionData = "";
+            confirmationMessage = `Debug action executed`;
+            break;
+        }
+        default:
+            throw new Error(`Unknown action: ${actionName}`);
     }
 
     // send message to child process

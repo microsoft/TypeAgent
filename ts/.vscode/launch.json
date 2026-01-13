@@ -433,20 +433,14 @@
       "resolveSourceMapLocations": []
     },  
     {
+      "name": "Agent Server",
       "type": "node",
       "request": "launch",
-      "name": "CLI repro",
       "skipFiles": ["<node_internals>/**"],
-      "cwd": "${workspaceFolder}/packages/cli",
-      "program": "./bin/run.js",
-      "args": ["connect", "--request", "hello"],
-      "runtimeArgs": [
-        "--loader",
-        "ts-node/esm",
-        "--no-warnings=ExperimentalWarning"
-      ],
-      "console": "externalTerminal",
+      "cwd": "${workspaceFolder}/packages/agentServer/server",
+      "program": "./dist/server.js",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
-    },            
+    },          
   ]
 }
