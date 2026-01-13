@@ -104,7 +104,6 @@ internal partial class AutoShell
     {
         string rawCmdLine = Marshal.PtrToStringUni(GetCommandLineW());
 
-        Debugger.Launch();
         // if there are command line args let's execute those one at a time and then exit
         // user can specify a single JSON object command or an array of them on the command line
         if (args.Length > 0)
@@ -616,7 +615,7 @@ internal partial class AutoShell
                 try
                 {
                     // Create a new virtual desktop
-                    IVirtualDesktop newDesktop = s_virtualDesktopManagerInternal.CreateDesktop();
+                    IVirtualDesktop newDesktop = s_virtualDesktopManagerInternal_BUGBUG.CreateDesktop();
 
                     if (newDesktop != null)
                     {
@@ -668,7 +667,26 @@ internal partial class AutoShell
     {
         s_virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
         desktops.GetAt(index, typeof(IVirtualDesktop).GUID, out object od);
-        s_virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+
+        // BUGBUG: different windows versions use different COM interfaces
+        // Different Windows versions use different COM interfaces for desktop switching
+        // Windows 11 22H2 (build 22621) and later use the updated interface
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
+        {
+            // Use the BUGBUG interface for Windows 11 22H2+
+            s_virtualDesktopManagerInternal_BUGBUG.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+        }
+        else if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            // Windows 11 21H2 (build 22000)
+            s_virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+        }
+        else
+        {
+            // Windows 10 - use the original interface
+            s_virtualDesktopManagerInternal.SwitchDesktopAndMoveForegroundView((IVirtualDesktop)od);
+        }
+
         Marshal.ReleaseComObject(desktops);
     }
 
@@ -741,10 +759,15 @@ internal partial class AutoShell
         return -1;
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="value"></param>
+    /// <remarks>Currently not working correction, returns ACCESS_DENIED // TODO: investigate</remarks>
     static void MoveWindowToDesktop(JToken value)
     {
-        string process = value["process"].Value<string>();
-        string desktop = value["desktop"].Value<string>();
+        string process = value.SelectToken("process").ToString();
+        string desktop = value.SelectToken("desktop").ToString();
         if (string.IsNullOrEmpty(process))
         {
             Debug.WriteLine("No process name supplied");
@@ -762,9 +785,15 @@ internal partial class AutoShell
         if (int.TryParse(desktop, out int desktopIndex))
         {
             s_virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
-            desktops.GetAt(desktopIndex, typeof(IVirtualDesktop).GUID, out object od);
+            if (desktopIndex < 1 || desktopIndex > s_virtualDesktopManagerInternal.GetCount())
+            {
+                Debug.WriteLine("Desktop index out of range");
+                Marshal.ReleaseComObject(desktops);
+                return;
+            }
+            desktops.GetAt(desktopIndex - 1, typeof(IVirtualDesktop).GUID, out object od);
             Guid g = ((IVirtualDesktop)od).GetId();
-            s_virtualDesktopManager.MoveWindowToDesktop(hWnd, g);
+            s_virtualDesktopManager.MoveWindowToDesktop(hWnd, ref g);
             Marshal.ReleaseComObject(desktops);
             return;
         }
@@ -772,7 +801,8 @@ internal partial class AutoShell
         IVirtualDesktop ivd = FindDesktopByName(desktop);
         if (ivd is not null)
         {
-            s_virtualDesktopManager.MoveWindowToDesktop(hWnd, ivd.GetId());
+            Guid desktopGuid = ivd.GetId();
+            s_virtualDesktopManager.MoveWindowToDesktop(hWnd, ref desktopGuid);
         }
     }
 
@@ -904,7 +934,7 @@ internal partial class AutoShell
                 case "debug":
                     Debugger.Launch();
                     break;
-                case "setAirplaneMode":
+                case "toggleAirplaneMode":
                     SetAirplaneMode(bool.Parse(value));
                     break;
                 case "listWifiNetworks":

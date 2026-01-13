@@ -12,7 +12,18 @@ export type DesktopActions =
     | RestoreVolumeAction
     | MuteVolumeAction
     | SetWallpaperAction
-    | ChangeThemeAction;
+    | ChangeThemeAction
+    | ConnectWifiAction
+    | DisconnectWifiAction
+    | ToggleAirplaneModeAction
+    | CreateDesktopAction
+    | MoveWindowToDesktopAction
+    | PinWindowToAllDesktopsAction
+    | SwitchDesktopAction
+    | NextDesktopAction
+    | PreviousDesktopAction
+    | ToggleNotificationsAction
+    | DebugAutoShellAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
@@ -103,6 +114,88 @@ export type ChangeThemeAction = {
     parameters: {
         theme: KnownThemes | "previous" | string; // The name of the theme
     };
+};
+
+export type ConnectWifiAction = {
+    actionName: "connectWifi";
+    parameters: {
+        ssid: string; // The SSID of the wifi network
+        password?: string; // The password of the wifi network, if required
+    };
+};
+
+// Disconnects from the current wifi network
+export type DisconnectWifiAction = {
+    actionName: "disconnectWifi";
+    parameters: {
+        // No parameters required
+    };
+};
+
+export type ToggleAirplaneModeAction = {
+    actionName: "toggleAirplaneMode";
+    parameters: {
+        enable: boolean; // true to enable, false to disable
+    };
+};
+
+// creates a new Windows Desktop
+export type CreateDesktopAction = {
+    actionName: "createDesktop";
+    parameters: {
+        names: string[]; // The name(s) of the desktop(s) to create (default: Desktop 1, Desktop 2, etc.)
+    };
+};
+
+export type MoveWindowToDesktopAction = {
+    actionName: "moveWindowToDesktop";
+    parameters: {
+        name: KnownPrograms | string; // The name of the software application
+        desktopId: number; // The ID of the desktop to move the window to
+    };
+};
+
+export type PinWindowToAllDesktopsAction = {
+    actionName: "pinWindow";
+    parameters: {
+        name: KnownPrograms | string; // The name of the software application
+    };
+};
+
+export type SwitchDesktopAction = {
+    actionName: "switchDesktop";
+    parameters: {
+        desktopId: number; // The ID of the desktop to switch to
+    };
+};
+
+// switches to the next Windows Desktop
+export type NextDesktopAction = {
+    actionName: "nextDesktop";
+    parameters: {
+        // No parameters required
+    };
+};
+
+// switches to the previous Windows Desktop
+export type PreviousDesktopAction = {
+    actionName: "previousDesktop";
+    parameters: {
+        // No parameters required
+    };
+};
+
+// Shows/hides windows notification center
+export type ToggleNotificationsAction = {
+    actionName: "toggleNotifications";
+    parameters: {
+        enable: boolean; // true to enable, false to disable
+    };
+};
+
+export type DebugAutoShellAction = {
+    actionName: "debug";
+    parameters: {};
 };
 
 export type KnownPrograms =

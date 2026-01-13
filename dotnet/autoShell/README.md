@@ -94,9 +94,9 @@ Set the desktop wallpaper and then quit AutoShell:
 {"setWallpaper": "C:\\Users\\Public\\Pictures\\wallpaper.jpg"} {"quit": true}
 ```
 
-Create a new virtual desktop named "Design Work", and switch to it:
+Create a new virtual desktop named "Design Work":
 ```json
-{"createDesktop": ["Design Work"]} {"switchTo": "Design Work"}
+{"createDesktop": "Design Work"}
 ```
 
 Toggle the Windows notification center:
@@ -106,12 +106,12 @@ Toggle the Windows notification center:
 
 Enable airplane mode:
 ```json
-{"setAirplaneMode": true}
+{"toggleAirplaneMode": true}
 ```
 
 Disable airplane mode:
 ```json
-{"setAirplaneMode": false}
+{"toggleAirplaneMode": false}
 ```
 
 Connect to a Wi-Fi network:

@@ -72,7 +72,6 @@
       "uriFormat": "http://localhost:%s/chatView.html",
       "action": "openExternally"
       }
-    }
     },
     {
       "type": "node",
@@ -432,6 +431,16 @@
       "program": "./dist/index.js",
       "outFiles": ["${workspaceFolder}/**/*.js"],
       "resolveSourceMapLocations": []
+    },  
+    {
+      "name": "Agent Server",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/agentServer/server",
+      "program": "./dist/server.js",
+      "console": "integratedTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
     },          
   ]
 }
