@@ -911,10 +911,13 @@ internal partial class AutoShell
                     ListWifiNetworks();
                     break;
                 case "connectWifi":
-                    string[] wifiParams = value.Split(',');
-                    string ssid = wifiParams[0];
-                    string password = wifiParams.Length > 1 ? wifiParams[1] : null;
+                    JObject netInfo = JObject.Parse(value);
+                    string ssid = netInfo.Value<string>("ssid");
+                    string password = netInfo["password"] is not null ? netInfo.Value<string>("password") : "";
                     ConnectToWifi(ssid, password);
+                    break;
+                case "disconnectWifi":
+                    DisconnectFromWifi();
                     break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);
@@ -1223,5 +1226,69 @@ internal partial class AutoShell
         </security>
     </MSM>
 </WLANProfile>";
+    }
+
+    /// <summary>
+    /// Disconnects from the currently connected WiFi network.
+    /// </summary>
+    static void DisconnectFromWifi()
+    {
+        IntPtr clientHandle = IntPtr.Zero;
+        IntPtr wlanInterfaceList = IntPtr.Zero;
+
+        try
+        {
+            // Open WLAN handle
+            int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
+            if (result != 0)
+            {
+                LogWarning($"Failed to open WLAN handle: {result}");
+                return;
+            }
+
+            // Enumerate wireless interfaces
+            result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
+            if (result != 0)
+            {
+                LogWarning($"Failed to enumerate WLAN interfaces: {result}");
+                return;
+            }
+
+            WLAN_INTERFACE_INFO_LIST interfaceList = Marshal.PtrToStructure<WLAN_INTERFACE_INFO_LIST>(wlanInterfaceList);
+
+            if (interfaceList.dwNumberOfItems == 0)
+            {
+                LogWarning("No wireless interfaces found.");
+                return;
+            }
+
+            // Disconnect from all wireless interfaces
+            for (int i = 0; i < interfaceList.dwNumberOfItems; i++)
+            {
+                WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[i];
+
+                result = WlanDisconnect(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero);
+                if (result != 0)
+                {
+                    LogWarning($"Failed to disconnect from WiFi on interface {i}: {result}");
+                }
+                else
+                {
+                    Debug.WriteLine($"Successfully disconnected from WiFi on interface: {interfaceInfo.strInterfaceDescription}");
+                    Console.WriteLine("Disconnected from WiFi");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+        finally
+        {
+            if (wlanInterfaceList != IntPtr.Zero)
+                WlanFreeMemory(wlanInterfaceList);
+            if (clientHandle != IntPtr.Zero)
+                WlanCloseHandle(clientHandle, IntPtr.Zero);
+        }
     }
 }

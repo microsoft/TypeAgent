@@ -41,6 +41,7 @@ Run the application and send JSON commands via stdin:
 | `closeProgram` | Application name | Closes an application |
 | `connectWifi` | SSID | Connects to a Wi-Fi network by SSID |
 | `createDesktop` | JSON array of names | Creates one or more virtual desktops |
+| `disconnectWifi` | | Disconnects from the current Wi-Fi network |
 | `launchProgram` | Application name | Opens an application (or raises if already running) |
 | `listAppNames` | (none) | Outputs installed applications as JSON |
 | `listThemes` | (none) | Outputs installed themes as JSON |
