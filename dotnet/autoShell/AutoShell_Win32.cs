@@ -353,5 +353,34 @@ namespace autoShell
         [DllImport("combase.dll")]
         internal static extern char* WindowsGetStringRawBuffer(IntPtr hstring, out uint length);
 
+        // Add these COM interface definitions for Radio Management API
+
+        // GUIDs for Radio Management API
+        internal static readonly Guid CLSID_RadioManagementAPI = new Guid(0x581333f6, 0x28db, 0x41be, 0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6);
+        internal static readonly Guid IID_IRadioManager = new Guid(0xdb3afbfb, 0x08e6, 0x46c6, 0xaa, 0x70, 0xbf, 0x9a, 0x34, 0xc3, 0x0a, 0xb7);
+
+        [ComImport]
+        [Guid("db3afbfb-08e6-46c6-aa70-bf9a34c30ab7")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        internal interface IRadioManager
+        {
+            [PreserveSig]
+            int IsRMSupported(out uint pdwState);
+
+            [PreserveSig]
+            int GetUIRadioInstances([MarshalAs(UnmanagedType.IUnknown)] out object ppCollection);
+
+            [PreserveSig]
+            int GetSystemRadioState(out int pbEnabled, out int param2, out int pChangeReason);
+
+            [PreserveSig]
+            int SetSystemRadioState(int bEnabled);
+
+            [PreserveSig]
+            int Refresh();
+
+            [PreserveSig]
+            int OnHardwareSliderChange(int param1, int param2);
+        }
     }
 }

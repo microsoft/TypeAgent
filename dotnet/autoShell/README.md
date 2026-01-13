@@ -15,6 +15,7 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - **Desktop Customization**: Set desktop wallpaper
 - **Virtual Desktop Management**: Create new virtual desktops
 - **Notification Center**: Toggle the Windows notification center
+- **Airplane Mode Control**: Enable or disable Windows airplane mode
 
 ## Requirements
 
@@ -55,6 +56,7 @@ Run the application and send JSON commands via stdin:
 | `moveWindowToDesktop` | `{"process": "app", "desktop": "name"}` | Moves a window to a specific virtual desktop |
 | `pinWindow` | Application name | Pins a window to appear on all virtual desktops |
 | `toggleNotifications` | (none) | Toggles the Windows notification center |
+| `setAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
 | `quit` | (none) | Exits the application |
 
 ### Examples
@@ -86,7 +88,7 @@ Mute the system audio:
 
 Set the desktop wallpaper and then quit AutoShell:
 ```json
-{"setWallpaper": "C:\Users\Public\Pictures\wallpaper.jpg"} {"quit": true}
+{"setWallpaper": "C:\\Users\\Public\\Pictures\\wallpaper.jpg"} {"quit": true}
 ```
 
 Create a new virtual desktop named "Design Work", and switch to it:
@@ -97,6 +99,16 @@ Create a new virtual desktop named "Design Work", and switch to it:
 Toggle the Windows notification center:
 ```json
 {"toggleNotifications": true}
+```
+
+Enable airplane mode:
+```json
+{"setAirplaneMode": true}
+```
+
+Disable airplane mode:
+```json
+{"setAirplaneMode": false}
 ```
 
 ### Supported Application Friendly Names

@@ -904,11 +904,81 @@ internal partial class AutoShell
                 case "debug":
                     Debugger.Launch();
                     break;
+                case "setAirplaneMode":
+                    SetAirplaneMode(bool.Parse(value));
+                    break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);
                     break;
             }
         }
         return quit;
+    }
+
+    /// <summary>
+    /// Sets the airplane mode state using the Radio Management API.
+    /// </summary>
+    /// <param name="enable">True to enable airplane mode, false to disable.</param>
+    static void SetAirplaneMode(bool enable)
+    {
+        IRadioManager radioManager = null;
+        try
+        {
+            // Create the Radio Management API COM object
+            Type radioManagerType = Type.GetTypeFromCLSID(CLSID_RadioManagementAPI);
+            if (radioManagerType == null)
+            {
+                Debug.WriteLine("Failed to get Radio Management API type");
+                return;
+            }
+
+            object obj = Activator.CreateInstance(radioManagerType);
+            radioManager = (IRadioManager)obj;
+
+            if (radioManager == null)
+            {
+                Debug.WriteLine("Failed to create Radio Manager instance");
+                return;
+            }
+
+            // Get current state (for logging)
+            int hr = radioManager.GetSystemRadioState(out int currentState, out int _, out int _);
+            if (hr < 0)
+            {
+                Debug.WriteLine($"Failed to get system radio state: HRESULT 0x{hr:X8}");
+                return;
+            }
+
+            // currentState: 0 = airplane mode ON (radios off), 1 = airplane mode OFF (radios on)
+            bool airplaneModeCurrentlyOn = currentState == 0;
+            Debug.WriteLine($"Current airplane mode state: {(airplaneModeCurrentlyOn ? "on" : "off")}");
+
+            // Set the new state
+            // bEnabled: 0 = turn airplane mode ON (disable radios), 1 = turn airplane mode OFF (enable radios)
+            int newState = enable ? 0 : 1;
+            hr = radioManager.SetSystemRadioState(newState);
+            if (hr < 0)
+            {
+                Debug.WriteLine($"Failed to set system radio state: HRESULT 0x{hr:X8}");
+                return;
+            }
+
+            Debug.WriteLine($"Airplane mode set to: {(enable ? "on" : "off")}");
+        }
+        catch (COMException ex)
+        {
+            Debug.WriteLine($"COM Exception setting airplane mode: {ex.Message} (HRESULT: 0x{ex.HResult:X8})");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to set airplane mode: {ex.Message}");
+        }
+        finally
+        {
+            if (radioManager != null)
+            {
+                Marshal.ReleaseComObject(radioManager);
+            }
+        }
     }
 }
