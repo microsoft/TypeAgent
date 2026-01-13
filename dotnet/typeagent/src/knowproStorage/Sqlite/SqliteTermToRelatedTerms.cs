@@ -128,6 +128,6 @@ WHERE term IN ({SqliteDatabase.MakeInStatement(placeholderIds)})
 
     Term ReadTerm(SqliteDataReader reader, int iCol = 0)
     {
-        return new Term(reader.GetString(iCol), reader.GetFloat(iCol));
+        return new Term(reader.GetString(iCol), reader.GetFloat(iCol + 1));
     }
 }

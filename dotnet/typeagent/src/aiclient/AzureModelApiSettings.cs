@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace TypeAgent.AIClient;
 
 public class AzureModelApiSettings : ModelApiSettings
@@ -61,7 +63,9 @@ public class AzureModelApiSettings : ModelApiSettings
             ModelType.Chat,
             EnvVars.Get(
                 EnvVars.AZURE_OPENAI_ENDPOINT,
-                endpointName
+                endpointName,
+                null,
+                endpointName is not null
             ),
             EnvVars.Get(
                 EnvVars.AZURE_OPENAI_API_KEY,

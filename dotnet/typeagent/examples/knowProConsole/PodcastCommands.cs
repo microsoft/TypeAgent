@@ -53,19 +53,22 @@ public class PodcastCommands : ICommandModule
         Command cmd = new("kpPodcastUnload", "Unload the current podcast")
         {
         };
-        string name = _podcast is not null ? _podcast.Name : string.Empty;
-        cmd.SetAction((ParseResult _) => UnloadCurrent());
+        cmd.SetAction(UnloadPodcast);
 
-        if (string.IsNullOrEmpty(name))
+        return cmd;
+    }
+
+    private void UnloadPodcast(ParseResult args)
+    {
+        if (string.IsNullOrEmpty(_podcast?.Name))
         {
             KnowProWriter.WriteLine(ConsoleColor.Red, $"No podcast loaded.");
         }
         else
         {
-            KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Unloaded podcast '{name}'");
+            UnloadCurrent();
+            KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Unloaded podcast '{_podcast.Name}'");
         }
-
-        return cmd;
     }
 
     private Command PocastBulkImportDef()
@@ -220,7 +223,7 @@ public class PodcastCommands : ICommandModule
     {
         if (this._podcast is null)
         {
-            KnowProWriter.WriteError("NO podcast loaded.");
+            KnowProWriter.WriteError("No podcast loaded.");
             return;
         }
 

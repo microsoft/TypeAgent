@@ -49,19 +49,28 @@ public static class HttpEx
                     }
                     if (!response.StatusCode.IsTransientError() || retryCount >= settings.MaxRetries)
                     {
-                        // Let HttpClient throw an exception
-                        response.EnsureSuccessStatusCode();
-                        throw new HttpRequestException("GetJsonResponse", null, response.StatusCode);
+                        if (Debugger.IsAttached)
+                        {
+                            string content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+                            throw new HttpRequestException($"GetJsonResponse failed with '{content}'", null, response.StatusCode);
+                        }
+                        else
+                        {
+                            // Let HttpClient throw an exception
+                            response.EnsureSuccessStatusCode();
+                        }
                     }
                     if (response.StatusCode == (HttpStatusCode)429) // Too Many Requests
                     {
                         pauseMs = GetRetryAfterMs(response, pauseMs);
                     }
                 }
-                catch (HttpRequestException)
+                catch (HttpRequestException ex)
                 {
                     if (retryCount >= settings.MaxRetries)
                     {
+                        Debug.WriteLine(ex);
                         throw;
                     }
                 }

@@ -1,10 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json.Serialization;
 using TypeAgent.KnowPro.Query;
 
 namespace TypeAgent.KnowPro;
 
+[JsonPolymorphic(UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToNearestAncestor)]
+[JsonDerivedType(typeof(SearchTerm))]
+[JsonDerivedType(typeof(SearchTermGroup))]
+[JsonDerivedType(typeof(PropertySearchTerm))]
 public interface ISearchTerm
 {
 

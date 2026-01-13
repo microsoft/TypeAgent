@@ -106,7 +106,10 @@ public class SearchTermGroup : ISearchTerm, IEnumerable<ISearchTerm>
 
 public enum SearchTermBooleanOp
 {
+    [JsonPropertyName("or")]
     Or,
+    [JsonPropertyName("orMax")]
     OrMax,
+    [JsonPropertyName("and")]
     And
 }

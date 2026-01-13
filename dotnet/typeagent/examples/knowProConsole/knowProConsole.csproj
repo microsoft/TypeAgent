@@ -10,10 +10,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Benchmarking\AnswerGradingResponseSchema.ts" />
     <None Remove="Benchmarking\BenchmarkQuestionResponseSchema.ts" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Benchmarking\AnswerGradingResponseSchema.ts" />
     <EmbeddedResource Include="Benchmarking\BenchmarkQuestionResponseSchema.ts" />
   </ItemGroup>
 
@@ -28,11 +30,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TypeAgent.Tests.KnowPro" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="NewFolder1\" />
-    <Folder Include="NewFolder\" />
   </ItemGroup>  
 
 </Project>
