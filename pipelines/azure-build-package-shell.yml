@@ -65,7 +65,7 @@ jobs:
 
       - template: include-update-package-version.yml
         parameters:
-          packageFolder: $(shell_folder)
+          buildDirectory: $(buildDirectory)
           prerelease: $(channel).$(Build.BuildNumber)
 
       - script: |
