@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "actions": [
+    {
+      "id": "TypeAgentAction",
+      "description": "Process prompts with TypeAgent",
+      "icon": "ms-resource://Files/Assets/Square44x44Logo.png",
+      "usesGenerativeAI": true,
+      "allowedAppInvokers": ["*"],
+      "inputs": [
+        {
+          "name": "agentName",
+          "kind": "Text",
+          "required": true
+        },
+        {
+          "name": "prompt",
+          "kind": "Text",
+          "required": true
+        }
+      ],
+      "inputCombinations": [
+        {
+          "inputs": [
+            "agentName",
+            "prompt"
+          ],
+          "description": "Process a prompt from ${agentName.Text} with ${prompt.Text}"
+        }
+      ],
+      "invocation": {
+        "type": "Uri",
+        "uri": "typeagent-launcher://invoke?agentName=${agentName.Text}&prompt=${prompt.Text}"
+      }
+    }
+  ]
+}

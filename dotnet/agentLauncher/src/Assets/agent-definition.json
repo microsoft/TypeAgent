@@ -1,0 +1,9 @@
+{
+  "manifest_version": "0.1.0",
+  "version": "1.0.0",
+  "name": "com.typeagent.launcher",
+  "display_name": "TypeAgent",
+  "description": "TypeAgent launcher for processing prompts",
+  "icon": "ms-resource://Files/Assets/Square150x150Logo.png",
+  "action_id": "TypeAgentAction"
+}

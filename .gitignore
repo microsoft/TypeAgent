@@ -446,6 +446,9 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 
 # Mac OS files
 .DS_Store
-/ts/.claude
+
 /ts/packages/cli/.collection-backups
 /ts/packages/cli/.import-states
+
+# agent files
+.claude/

@@ -263,17 +263,20 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
 
 function initializeConsole(rl?: readline.promises.Interface) {
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
-    process.stdin.setRawMode(true);
-    process.stdin.on("keypress", (_, key) => {
-        if (key?.ctrl && key.name === "c") {
-            process.emit("SIGINT");
-        } else if (key.name === "escape" && rl !== undefined) {
-            // clear the input lien
-            rl!.write(null, { ctrl: true, name: "u" });
-        }
-    });
-    process.stdin.resume();
-    readline.emitKeypressEvents(process.stdin);
+    // Only set raw mode if stdin is a TTY (supports interactive mode)
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+        process.stdin.setRawMode(true);
+        process.stdin.on("keypress", (_, key) => {
+            if (key?.ctrl && key.name === "c") {
+                process.emit("SIGINT");
+            } else if (key.name === "escape" && rl !== undefined) {
+                // clear the input lien
+                rl!.write(null, { ctrl: true, name: "u" });
+            }
+        });
+        process.stdin.resume();
+        readline.emitKeypressEvents(process.stdin);
+    }
 }
 
 function isHtmlContent(data: string | DisplayContent): boolean {

@@ -18,7 +18,9 @@
   },
   "scripts": {
     "build": "npm run tsc",
-    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "build:bundle": "npm run build && npm run bundle",
+    "bundle": "node bundle-config.js",
+    "clean": "rimraf --glob dist bundle *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node ./dist/index.js",
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
+    "esbuild": "^0.25.11",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
