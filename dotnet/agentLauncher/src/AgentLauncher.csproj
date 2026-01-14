@@ -49,4 +49,10 @@
   <ItemGroup>
     <None Include="app.config" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Scripts\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace AgentLauncher;
@@ -7,9 +6,6 @@ public class AgentSettings
 {
     private static AgentSettings? _instance;
     private static readonly object _lock = new();
-
-    [JsonPropertyName("scriptPath")]
-    public string? ScriptPath { get; set; }
 
     [JsonPropertyName("nodePath")]
     public string? NodePath { get; set; }
@@ -32,83 +28,55 @@ public class AgentSettings
         {
             lock (_lock)
             {
-                return _instance ??= Load();
-            }
-        }
-    }
-
-    public static AgentSettings Load()
-    {
-        var settingsPath = GetSettingsFilePath();
-
-        try
-        {
-            if (File.Exists(settingsPath))
-            {
-                var json = File.ReadAllText(settingsPath);
-                var settings = JsonSerializer.Deserialize<AgentSettings>(json);
-                if (settings != null)
+                if (_instance == null)
                 {
-                    Program.Log($"Settings loaded from: {settingsPath}");
-                    return settings;
+                    _instance = new AgentSettings();
+                    _instance.LoadFromEnvironment();
                 }
+                return _instance;
             }
         }
-        catch (Exception ex)
-        {
-            Program.Log($"WARN: Failed to load settings: {ex.Message}");
-        }
-
-        var defaultSettings = new AgentSettings();
-        defaultSettings.Save();
-        return defaultSettings;
     }
 
-    public void Save()
+    private void LoadFromEnvironment()
     {
-        var settingsPath = GetSettingsFilePath();
-        var directory = Path.GetDirectoryName(settingsPath);
-
-        if (directory != null && !Directory.Exists(directory))
+        var nodePathEnv = System.Environment.GetEnvironmentVariable("TYPEAGENT_NODE_PATH");
+        if (!string.IsNullOrWhiteSpace(nodePathEnv))
         {
-            Directory.CreateDirectory(directory);
+            NodePath = nodePathEnv;
+            Program.Log($"Node path from environment: {NodePath}");
         }
 
-        var options = new JsonSerializerOptions
+        var timeoutEnv = System.Environment.GetEnvironmentVariable("TYPEAGENT_TIMEOUT");
+        if (!string.IsNullOrWhiteSpace(timeoutEnv) && int.TryParse(timeoutEnv, out var timeout))
         {
-            WriteIndented = true
-        };
+            TimeoutMs = timeout;
+            Program.Log($"Timeout from environment: {TimeoutMs}ms");
+        }
 
-        var json = JsonSerializer.Serialize(this, options);
-        File.WriteAllText(settingsPath, json);
-        Program.Log($"Settings saved to: {settingsPath}");
-    }
-
-    public static void Reload()
-    {
-        lock (_lock)
+        var verboseEnv = System.Environment.GetEnvironmentVariable("TYPEAGENT_VERBOSE");
+        if (!string.IsNullOrWhiteSpace(verboseEnv) && bool.TryParse(verboseEnv, out var verbose))
         {
-            _instance = Load();
+            VerboseLogging = verbose;
+            Program.Log($"Verbose logging from environment: {VerboseLogging}");
+        }
+
+        var workdirEnv = System.Environment.GetEnvironmentVariable("TYPEAGENT_WORKDIR");
+        if (!string.IsNullOrWhiteSpace(workdirEnv))
+        {
+            WorkingDirectory = workdirEnv;
+            Program.Log($"Working directory from environment: {WorkingDirectory}");
         }
     }
 
     public string GetResolvedScriptPath()
     {
-        if (!string.IsNullOrWhiteSpace(ScriptPath))
-        {
-            var expanded = System.Environment.ExpandEnvironmentVariables(ScriptPath);
-            if (File.Exists(expanded))
-            {
-                return expanded;
-            }
-            Program.Log($"WARN: Configured script path not found: {expanded}");
-        }
-
         var fallbackPaths = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "Scripts", "agent-handler.js"),
+            Path.Combine(AppContext.BaseDirectory, "Scripts", "agent-uri-handler.bundle.js"),
             Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
-                "AgentLauncher", "Scripts", "agent-handler.js"),
+                "AgentLauncher", "Scripts", "agent-uri-handler.bundle.js"),
+            "D:\\repos\\TypeAgent\\ts\\packages\\uriHandler\\bundle\\agent-uri-handler.bundle.js",
             "D:\\repos\\TypeAgent\\ts\\packages\\uriHandler\\dist\\index.js"
         };
 
@@ -116,12 +84,12 @@ public class AgentSettings
         {
             if (File.Exists(path))
             {
-                Program.Log($"Using fallback script path: {path}");
+                Program.Log($"Using script path: {path}");
                 return path;
             }
         }
 
-        Program.Log($"WARN: No script found in fallback locations");
+        Program.Log($"WARN: No script found in any fallback locations");
         return fallbackPaths[0];
     }
 
@@ -147,11 +115,5 @@ public class AgentSettings
         }
 
         return System.Environment.ExpandEnvironmentVariables(WorkingDirectory);
-    }
-
-    public static string GetSettingsFilePath()
-    {
-        var localAppData = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "AgentLauncher", "settings.json");
     }
 }

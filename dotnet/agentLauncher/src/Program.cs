@@ -36,10 +36,6 @@ class Program
                     LogTiming("PROCESS_COMPLETE", "Process complete");
                     return result;
                 }
-                else if (firstArg == "--settings" || firstArg == "-s")
-                {
-                    return HandleSettingsCommand(args.Skip(1).ToArray());
-                }
                 else if (firstArg == "--test" || firstArg == "-t")
                 {
                     var prompt = args.Length > 1 ? args[1] : "Hello, agent!";
@@ -132,111 +128,6 @@ class Program
         return result;
     }
 
-    private static int HandleSettingsCommand(string[] args)
-    {
-        var settings = AgentSettings.Instance;
-
-        if (args.Length == 0)
-        {
-            Console.WriteLine("Current Settings:");
-            Console.WriteLine($"  Script Path: {settings.ScriptPath ?? "(default)"}");
-            Console.WriteLine($"  Resolved Script: {settings.GetResolvedScriptPath()}");
-            Console.WriteLine($"  Node Path: {settings.NodePath ?? "(from PATH)"}");
-            Console.WriteLine($"  Timeout: {settings.TimeoutMs} ms");
-            Console.WriteLine($"  Verbose Logging: {settings.VerboseLogging}");
-            Console.WriteLine($"  Working Directory: {settings.WorkingDirectory ?? "(default)"}");
-            Console.WriteLine($"  Settings File: {AgentSettings.GetSettingsFilePath()}");
-
-            if (settings.Environment != null && settings.Environment.Count > 0)
-            {
-                Console.WriteLine("  Environment Variables:");
-                foreach (var (key, value) in settings.Environment)
-                {
-                    Console.WriteLine($"    {key}={value}");
-                }
-            }
-
-            return 0;
-        }
-
-        var subcommand = args[0].ToLowerInvariant();
-
-        if (subcommand == "open")
-        {
-            var settingsPath = AgentSettings.GetSettingsFilePath();
-            var directory = Path.GetDirectoryName(settingsPath);
-            if (directory != null && !Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-            if (!File.Exists(settingsPath))
-            {
-                settings.Save();
-            }
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = settingsPath,
-                UseShellExecute = true
-            });
-            Console.WriteLine($"Opened: {settingsPath}");
-            return 0;
-        }
-
-        if (subcommand == "set" && args.Length >= 3)
-        {
-            var key = args[1].ToLowerInvariant();
-            var value = args[2];
-
-            switch (key)
-            {
-                case "scriptpath":
-                case "script":
-                    settings.ScriptPath = value;
-                    break;
-                case "nodepath":
-                case "node":
-                    settings.NodePath = value;
-                    break;
-                case "timeout":
-                    if (int.TryParse(value, out var timeout))
-                    {
-                        settings.TimeoutMs = timeout;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Invalid timeout value");
-                        return 1;
-                    }
-                    break;
-                case "verbose":
-                    if (bool.TryParse(value, out var verbose))
-                    {
-                        settings.VerboseLogging = verbose;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Invalid boolean value");
-                        return 1;
-                    }
-                    break;
-                case "workingdir":
-                case "workdir":
-                    settings.WorkingDirectory = value;
-                    break;
-                default:
-                    Console.Error.WriteLine($"Unknown setting: {key}");
-                    return 1;
-            }
-
-            settings.Save();
-            Console.WriteLine($"Setting updated: {key} = {value}");
-            return 0;
-        }
-
-        Console.Error.WriteLine("Invalid settings command");
-        Console.Error.WriteLine("Usage: --settings [open | set <key> <value>]");
-        return 1;
-    }
 
     private static async Task<int> TestAgent(string prompt)
     {
@@ -337,26 +228,26 @@ class Program
         Console.WriteLine("TypeAgent Launcher");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  WindowlessAgentLauncher.exe [options]");
+        Console.WriteLine("  AgentLauncher.exe [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --settings, -s              Display current settings");
-        Console.WriteLine("  --settings open             Open settings file in default editor");
-        Console.WriteLine("  --settings set <key> <val>  Set a configuration value");
         Console.WriteLine("  --test, -t [prompt]         Test agent with a prompt");
         Console.WriteLine("  --register, -r              Register agent with On-Device Registry");
         Console.WriteLine("  --help, -h                  Show this help");
         Console.WriteLine();
-        Console.WriteLine("Settings Keys:");
-        Console.WriteLine("  scriptpath, script          Path to Node.js handler script");
-        Console.WriteLine("  nodepath, node              Path to Node.js executable");
-        Console.WriteLine("  timeout                     Timeout in milliseconds");
-        Console.WriteLine("  verbose                     Enable verbose logging (true/false)");
-        Console.WriteLine("  workingdir, workdir         Working directory for Node.js");
+        Console.WriteLine("Environment Variables:");
+        Console.WriteLine("  TYPEAGENT_NODE_PATH         Path to Node.js executable");
+        Console.WriteLine("  TYPEAGENT_TIMEOUT           Timeout in milliseconds (default: 60000)");
+        Console.WriteLine("  TYPEAGENT_VERBOSE           Enable verbose logging (true/false)");
+        Console.WriteLine("  TYPEAGENT_WORKDIR           Working directory for Node.js");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  WindowlessAgentLauncher.exe --test \"Hello, world!\"");
-        Console.WriteLine("  WindowlessAgentLauncher.exe --settings set scriptpath \"C:\\path\\to\\script.js\"");
+        Console.WriteLine("  AgentLauncher.exe --test \"Hello, world!\"");
+        Console.WriteLine("  AgentLauncher.exe --register");
+        Console.WriteLine();
+        Console.WriteLine("  SET TYPEAGENT_VERBOSE=true");
+        Console.WriteLine("  SET TYPEAGENT_TIMEOUT=120000");
+        Console.WriteLine("  AgentLauncher.exe --test \"Long running test\"");
     }
 
     public static async Task<string> ProcessWithNodeAsync(
@@ -378,7 +269,7 @@ class Program
         {
             throw new FileNotFoundException(
                 $"Script not found: {scriptPath}. " +
-                $"Configure the path with: --settings set scriptpath \"<path>\"");
+                $"The bundled script should be included in the MSIX package.");
         }
 
         var uri = BuildUriString(agentName, prompt, filePath);
@@ -448,7 +339,7 @@ class Program
                 process.Kill();
                 throw new TimeoutException(
                     $"Script execution timed out after {settings.TimeoutMs}ms. " +
-                    $"Increase timeout with: --settings set timeout <milliseconds>");
+                    $"Increase timeout by setting TYPEAGENT_TIMEOUT environment variable (in milliseconds).");
             }
 
             var exitCode = process.ExitCode;
