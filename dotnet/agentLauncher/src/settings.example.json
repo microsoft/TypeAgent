@@ -1,0 +1,10 @@
+{
+  "scriptPath": "D:\\repos\\TypeAgent\\ts\\packages\\uriHandler\\dist\\index.js",
+  "nodePath": null,
+  "timeoutMs": 60000,
+  "verboseLogging": false,
+  "environment": {
+    "ANTHROPIC_API_KEY": "your-api-key-here"
+  },
+  "workingDirectory": null
+}

@@ -6,6 +6,7 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
+import WebSocket from "isomorphic-ws";
 
 import registerDebug from "debug";
 import {
@@ -64,7 +65,8 @@ export async function connectDispatcher(
         };
         ws.onmessage = (event) => {
             debug("Received message from server:", event.data);
-            channel.notifyMessage(JSON.parse(event.data));
+
+            channel.notifyMessage(JSON.parse(event.data.toString()));
         };
         ws.onclose = (event) => {
             debug("WebSocket connection closed", event.code, event.reason);
