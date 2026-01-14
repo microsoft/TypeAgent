@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.common.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
-  },
-  "include": ["src"],
-  "references": [{ "path": "../agentServer/client" }]
-}
