@@ -2,11 +2,11 @@
   "version": 3,
   "actions": [
     {
-      "id": "TypeAgentAction",
+      "id": "TypeAgentAction.Default",
       "description": "Process prompts with TypeAgent",
       "icon": "ms-resource://Files/Assets/Square44x44Logo.png",
       "usesGenerativeAI": true,
-      "allowedAppInvokers": ["*"],
+      "allowedAppInvokers": [ "*" ],
       "inputs": [
         {
           "name": "agentName",
@@ -31,6 +31,32 @@
       "invocation": {
         "type": "Uri",
         "uri": "typeagent-launcher://invoke?agentName=${agentName.Text}&prompt=${prompt.Text}"
+      }
+    },
+    {
+      "id": "TypeAgentAction.PlayMusic",
+      "description": "Play music with TypeAgent",
+      "icon": "ms-resource://Files/Assets/Square44x44Logo.png",
+      "usesGenerativeAI": true,
+      "allowedAppInvokers": [ "*" ],
+      "inputs": [
+        {
+          "name": "request",
+          "kind": "Text",
+          "required": true
+        }
+      ],
+      "inputCombinations": [
+        {
+          "inputs": [
+            "request"
+          ],
+          "description": "Play ${request.Text}"
+        }
+      ],
+      "invocation": {
+        "type": "Uri",
+        "uri": "typeagent-launcher://invoke?agentName=blah&prompt=play ${request.Text}"
       }
     }
   ]

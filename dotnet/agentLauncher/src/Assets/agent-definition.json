@@ -5,5 +5,5 @@
   "display_name": "TypeAgent",
   "description": "TypeAgent launcher for processing prompts",
   "icon": "ms-resource://Files/Assets/Square150x150Logo.png",
-  "action_id": "TypeAgentAction"
+  "action_id": "TypeAgentAction.Default"
 }
