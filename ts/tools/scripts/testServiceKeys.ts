@@ -81,7 +81,9 @@ function printInfo(msg: string) {
 }
 
 function printHeader(msg: string) {
-    console.log(`\n${colors.bright}${colors.cyan}━━━ ${msg} ━━━${colors.reset}`);
+    console.log(
+        `\n${colors.bright}${colors.cyan}━━━ ${msg} ━━━${colors.reset}`,
+    );
 }
 
 // ============================================================================
@@ -108,7 +110,8 @@ const serviceConfigs: ServiceKeyConfig[] = [
     // Azure OpenAI - Embeddings
     {
         name: "Azure OpenAI (Embeddings)",
-        description: "Text embeddings for conversation memory and fuzzy matching",
+        description:
+            "Text embeddings for conversation memory and fuzzy matching",
         requiredKeys: [
             "AZURE_OPENAI_API_KEY_EMBEDDING",
             "AZURE_OPENAI_ENDPOINT_EMBEDDING",
@@ -150,7 +153,8 @@ const serviceConfigs: ServiceKeyConfig[] = [
         optionalKeys: ["OPENAI_API_KEY_EMBEDDING"],
         expectedFormats: {
             OPENAI_ENDPOINT_EMBEDDING: "https://api.openai.com/v1/embeddings",
-            OPENAI_MODEL_EMBEDDING: "text-embedding-ada-002, text-embedding-3-small, etc.",
+            OPENAI_MODEL_EMBEDDING:
+                "text-embedding-ada-002, text-embedding-3-small, etc.",
             OPENAI_API_KEY_EMBEDDING:
                 "sk-<alphanumeric string> (optional if OPENAI_API_KEY is set)",
         },
@@ -195,7 +199,11 @@ const serviceConfigs: ServiceKeyConfig[] = [
     {
         name: "Azure Speech SDK",
         description: "Voice input for TypeAgent Shell",
-        requiredKeys: ["SPEECH_SDK_KEY", "SPEECH_SDK_ENDPOINT", "SPEECH_SDK_REGION"],
+        requiredKeys: [
+            "SPEECH_SDK_KEY",
+            "SPEECH_SDK_ENDPOINT",
+            "SPEECH_SDK_REGION",
+        ],
         expectedFormats: {
             SPEECH_SDK_KEY: "<32-character hex string>",
             SPEECH_SDK_ENDPOINT:
@@ -216,7 +224,8 @@ const serviceConfigs: ServiceKeyConfig[] = [
         expectedFormats: {
             BING_WITH_GROUNDING_ENDPOINT:
                 "https://<resource-name>.services.ai.azure.com/agents",
-            BING_WITH_GROUNDING_AGENT_ID: "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
+            BING_WITH_GROUNDING_AGENT_ID:
+                "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
         },
         testFunction: testBingGrounding,
     },
@@ -231,9 +240,11 @@ const serviceConfigs: ServiceKeyConfig[] = [
             "MSGRAPH_APP_TENANTID",
         ],
         expectedFormats: {
-            MSGRAPH_APP_CLIENTID: "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
+            MSGRAPH_APP_CLIENTID:
+                "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
             MSGRAPH_APP_CLIENTSECRET: "<client secret string from Azure AD>",
-            MSGRAPH_APP_TENANTID: "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
+            MSGRAPH_APP_TENANTID:
+                "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
         },
         testFunction: testMicrosoftGraph,
     },
@@ -245,8 +256,10 @@ const serviceConfigs: ServiceKeyConfig[] = [
         requiredKeys: ["SPOTIFY_APP_CLI", "SPOTIFY_APP_CLISEC"],
         optionalKeys: ["SPOTIFY_APP_PORT"],
         expectedFormats: {
-            SPOTIFY_APP_CLI: "<Spotify Client ID: 32-character alphanumeric string>",
-            SPOTIFY_APP_CLISEC: "<Spotify Client Secret: 32-character alphanumeric string>",
+            SPOTIFY_APP_CLI:
+                "<Spotify Client ID: 32-character alphanumeric string>",
+            SPOTIFY_APP_CLISEC:
+                "<Spotify Client Secret: 32-character alphanumeric string>",
             SPOTIFY_APP_PORT: "8888 (default redirect port)",
         },
         testFunction: testSpotify,
@@ -259,7 +272,8 @@ const serviceConfigs: ServiceKeyConfig[] = [
         requiredKeys: ["AZURE_MAPS_ENDPOINT", "AZURE_MAPS_CLIENTID"],
         expectedFormats: {
             AZURE_MAPS_ENDPOINT: "https://atlas.microsoft.com",
-            AZURE_MAPS_CLIENTID: "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
+            AZURE_MAPS_CLIENTID:
+                "<GUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx>",
         },
     },
 
@@ -324,7 +338,10 @@ async function testAzureOpenAIChat(): Promise<TestResult> {
     }
 
     // Validate endpoint format
-    if (!endpoint.includes("openai.azure.com") && apiKey.toLowerCase() !== "identity") {
+    if (
+        !endpoint.includes("openai.azure.com") &&
+        apiKey.toLowerCase() !== "identity"
+    ) {
         return {
             success: false,
             message: "Invalid endpoint format",
@@ -335,14 +352,16 @@ async function testAzureOpenAIChat(): Promise<TestResult> {
 
     try {
         let headers: Record<string, string>;
-        
+
         if (apiKey.toLowerCase() === "identity") {
             const token = await getAzureAccessToken();
             if (!token) {
                 return {
                     success: false,
-                    message: "Failed to get Azure access token for keyless access",
-                    details: "Make sure you are logged in with 'az login' and have access to the resource",
+                    message:
+                        "Failed to get Azure access token for keyless access",
+                    details:
+                        "Make sure you are logged in with 'az login' and have access to the resource",
                 };
             }
             headers = { Authorization: `Bearer ${token}` };
@@ -366,7 +385,9 @@ async function testAzureOpenAIChat(): Promise<TestResult> {
             const data = await response.json();
             return {
                 success: true,
-                message: "Successfully connected to Azure OpenAI Chat" + (apiKey.toLowerCase() === "identity" ? " (keyless)" : ""),
+                message:
+                    "Successfully connected to Azure OpenAI Chat" +
+                    (apiKey.toLowerCase() === "identity" ? " (keyless)" : ""),
                 details: `Response received with ${data.usage?.total_tokens || "unknown"} tokens`,
             };
         } else {
@@ -396,14 +417,16 @@ async function testAzureOpenAIEmbeddings(): Promise<TestResult> {
 
     try {
         let headers: Record<string, string>;
-        
+
         if (apiKey.toLowerCase() === "identity") {
             const token = await getAzureAccessToken();
             if (!token) {
                 return {
                     success: false,
-                    message: "Failed to get Azure access token for keyless access",
-                    details: "Make sure you are logged in with 'az login' and have access to the resource",
+                    message:
+                        "Failed to get Azure access token for keyless access",
+                    details:
+                        "Make sure you are logged in with 'az login' and have access to the resource",
                 };
             }
             headers = { Authorization: `Bearer ${token}` };
@@ -504,7 +527,8 @@ async function testOpenAIEmbeddings(): Promise<TestResult> {
     const apiKey =
         process.env.OPENAI_API_KEY_EMBEDDING || process.env.OPENAI_API_KEY;
     const endpoint = process.env.OPENAI_ENDPOINT_EMBEDDING;
-    const model = process.env.OPENAI_MODEL_EMBEDDING || "text-embedding-ada-002";
+    const model =
+        process.env.OPENAI_MODEL_EMBEDDING || "text-embedding-ada-002";
 
     if (!apiKey || !endpoint) {
         return { success: false, message: "Missing required keys" };
@@ -560,14 +584,16 @@ async function testAzureOpenAIEndpoint(
 
     try {
         let headers: Record<string, string>;
-        
+
         if (apiKey.toLowerCase() === "identity") {
             const token = await getAzureAccessToken();
             if (!token) {
                 return {
                     success: false,
-                    message: "Failed to get Azure access token for keyless access",
-                    details: "Make sure you are logged in with 'az login' and have access to the resource",
+                    message:
+                        "Failed to get Azure access token for keyless access",
+                    details:
+                        "Make sure you are logged in with 'az login' and have access to the resource",
                 };
             }
             headers = { Authorization: `Bearer ${token}` };
@@ -591,7 +617,9 @@ async function testAzureOpenAIEndpoint(
             const data = await response.json();
             return {
                 success: true,
-                message: `Successfully connected to Azure OpenAI (${endpointSuffix})` + (apiKey.toLowerCase() === "identity" ? " (keyless)" : ""),
+                message:
+                    `Successfully connected to Azure OpenAI (${endpointSuffix})` +
+                    (apiKey.toLowerCase() === "identity" ? " (keyless)" : ""),
                 details: `Tokens used: ${data.usage?.total_tokens || "unknown"}`,
             };
         } else {
@@ -783,7 +811,8 @@ async function testSpotify(): Promise<TestResult> {
         return {
             success: false,
             message: "Invalid Client ID format",
-            details: "Spotify Client ID should be a 32-character alphanumeric string",
+            details:
+                "Spotify Client ID should be a 32-character alphanumeric string",
         };
     }
 
@@ -795,7 +824,9 @@ async function testSpotify(): Promise<TestResult> {
                 "Content-Type": "application/x-www-form-urlencoded",
                 Authorization:
                     "Basic " +
-                    Buffer.from(`${clientId}:${clientSecret}`).toString("base64"),
+                    Buffer.from(`${clientId}:${clientSecret}`).toString(
+                        "base64",
+                    ),
             },
             body: "grant_type=client_credentials",
         });
@@ -915,7 +946,9 @@ async function runTests() {
         if (config.optionalKeys) {
             for (const key of config.optionalKeys) {
                 if (process.env[key]) {
-                    console.log(`    ${colors.green}✓${colors.reset} ${key} (optional)`);
+                    console.log(
+                        `    ${colors.green}✓${colors.reset} ${key} (optional)`,
+                    );
                 }
             }
         }
@@ -928,13 +961,17 @@ async function runTests() {
                 if (result.success) {
                     printSuccess(result.message);
                     if (result.details) {
-                        console.log(`    ${colors.gray}${result.details}${colors.reset}`);
+                        console.log(
+                            `    ${colors.gray}${result.details}${colors.reset}`,
+                        );
                     }
                     passedCount++;
                 } else {
                     printError(result.message);
                     if (result.details) {
-                        console.log(`    ${colors.gray}${result.details}${colors.reset}`);
+                        console.log(
+                            `    ${colors.gray}${result.details}${colors.reset}`,
+                        );
                     }
                     console.log("\n  Expected key formats:");
                     for (const [key, format] of Object.entries(
@@ -947,7 +984,9 @@ async function runTests() {
             } catch (error: any) {
                 printError(`Test threw an exception: ${error.message}`);
                 console.log("\n  Expected key formats:");
-                for (const [key, format] of Object.entries(config.expectedFormats)) {
+                for (const [key, format] of Object.entries(
+                    config.expectedFormats,
+                )) {
                     printKeyExample(key, format);
                 }
                 failedCount++;

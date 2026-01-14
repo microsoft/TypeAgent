@@ -264,7 +264,7 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
 function initializeConsole(rl?: readline.promises.Interface) {
     // set the input back to raw mode and resume the input to drain key press during action and not echo them
     // Only set raw mode if stdin is a TTY (supports interactive mode)
-    if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') {
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
         process.stdin.setRawMode(true);
         process.stdin.on("keypress", (_, key) => {
             if (key?.ctrl && key.name === "c") {

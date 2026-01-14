@@ -13,36 +13,36 @@ function createNonInteractiveClientIO() {
 
     return {
         info: (message, source) => {
-            messages.push({ type: 'info', message, source });
+            messages.push({ type: "info", message, source });
             console.log(`[INFO] ${message}`);
         },
         warn: (message, source) => {
-            messages.push({ type: 'warn', message, source });
+            messages.push({ type: "warn", message, source });
             console.warn(`[WARN] ${message}`);
         },
         error: (message, source) => {
-            messages.push({ type: 'error', message, source });
+            messages.push({ type: "error", message, source });
             console.error(`[ERROR] ${message}`);
         },
         result: (message, source) => {
-            messages.push({ type: 'result', message, source });
+            messages.push({ type: "result", message, source });
             console.log(`[RESULT] ${message}`);
         },
         status: (message, source, temporary) => {
-            messages.push({ type: 'status', message, source, temporary });
+            messages.push({ type: "status", message, source, temporary });
             if (!temporary) {
                 console.log(`[STATUS] ${message}`);
             }
         },
         success: (message, source) => {
-            messages.push({ type: 'success', message, source });
+            messages.push({ type: "success", message, source });
             console.log(`[SUCCESS] ${message}`);
         },
         setDisplay: async (source, content) => {
-            messages.push({ type: 'display', source, content });
+            messages.push({ type: "display", source, content });
         },
         appendDisplay: async (source, content, mode) => {
-            messages.push({ type: 'appendDisplay', source, content, mode });
+            messages.push({ type: "appendDisplay", source, content, mode });
         },
         clear: (source) => {
             // No-op for non-interactive
@@ -51,9 +51,9 @@ function createNonInteractiveClientIO() {
             // No-op for non-interactive
         },
         notify: (event, data, source) => {
-            messages.push({ type: 'notify', event, data, source });
+            messages.push({ type: "notify", event, data, source });
         },
-        getMessages: () => messages
+        getMessages: () => messages,
     };
 }
 
@@ -79,8 +79,7 @@ function parseArgs() {
             if (isNaN(port) || port <= 0 || port >= 65536) {
                 throw new Error("Invalid port number: " + process.argv[i]);
             }
-        }
-        else {
+        } else {
             throw new Error("Unknown argument: " + arg);
         }
     }
@@ -111,7 +110,10 @@ async function run() {
 
     try {
         console.log(`Connecting to dispatcher at ws://localhost:${port}`);
-        const dispatcher = await connectDispatcher(clientIO, `ws://localhost:${port}`);
+        const dispatcher = await connectDispatcher(
+            clientIO,
+            `ws://localhost:${port}`,
+        );
 
         try {
             console.log(`Sending request: ${request}`);
@@ -126,14 +128,13 @@ async function run() {
                 request: request,
                 messages: messages,
                 result: messages
-                    .filter(m => m.type === 'result' || m.type === 'success')
-                    .map(m => m.message)
-                    .join('\n')
+                    .filter((m) => m.type === "result" || m.type === "success")
+                    .map((m) => m.message)
+                    .join("\n"),
             };
 
-            console.log('\n--- OUTPUT ---');
+            console.log("\n--- OUTPUT ---");
             console.log(JSON.stringify(output, null, 2));
-
         } finally {
             await dispatcher.close();
         }
@@ -141,9 +142,9 @@ async function run() {
         const output = {
             success: false,
             request: request,
-            error: error.message
+            error: error.message,
         };
-        console.error('\n--- ERROR ---');
+        console.error("\n--- ERROR ---");
         console.error(JSON.stringify(output, null, 2));
         throw error;
     }

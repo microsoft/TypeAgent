@@ -13,6 +13,8 @@ pnpm-lock.yaml
 .tsc-cache-*.json
 .frontend-build-cache.json
 
+.scratch
+
 # Test data
 packages/defaultAgentProvider/test/data
 packages/defaultAgentProvider/test/repo

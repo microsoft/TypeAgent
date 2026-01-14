@@ -5,7 +5,5 @@
     "outDir": "dist"
   },
   "include": ["src"],
-  "references": [
-    { "path": "../agentServer/client" }
-  ]
+  "references": [{ "path": "../agentServer/client" }]
 }
