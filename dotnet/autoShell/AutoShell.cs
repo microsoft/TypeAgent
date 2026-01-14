@@ -619,7 +619,7 @@ internal partial class AutoShell
                 try
                 {
                     // Create a new virtual desktop
-                    IVirtualDesktop newDesktop = s_virtualDesktopManagerInternal_BUGBUG.CreateDesktop();
+                    IVirtualDesktop newDesktop = s_virtualDesktopManagerInternal.CreateDesktop();
 
                     if (newDesktop != null)
                     {
