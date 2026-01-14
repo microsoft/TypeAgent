@@ -30,7 +30,6 @@ const require = createRequire(import.meta.url);
     external: [
         "node:*",
         "readline/promises",
-        "ws",
         "tty",
         "util",
         "net",

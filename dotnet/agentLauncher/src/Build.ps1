@@ -13,11 +13,19 @@ $configuration = "Debug"
 $platform = "x64"
 
 # Find MSBuild
-$msbuildPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
-if (-not (Test-Path $msbuildPath)) {
-    Write-Host "ERROR: MSBuild not found at: $msbuildPath" -ForegroundColor Red
-    Write-Host "Please update the path in this script or ensure Visual Studio 2022 is installed." -ForegroundColor Yellow
-    exit 1
+$msbuildPath2022 = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe";
+$msbuildPath2026 = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe";
+if (Test-Path $msbuildPath2022) {
+    $msbuildPath = $msbuildPath2022
+} else {
+    $msbuildPath = $msbuildPath2026
+    if (-not (Test-Path $msbuildPath)) {
+        Write-Host "ERROR: MSBuild not found at the following location:" -ForegroundColor Red
+        Write-Host "- $msbuildPath2022" -ForegroundColor Red
+        Write-Host "- $msbuildPath2026" -ForegroundColor Red
+        Write-Host "Please update the path in this script or ensure Visual Studio 2022 is installed." -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 Write-Host "Configuration:" -ForegroundColor Yellow

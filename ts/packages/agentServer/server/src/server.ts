@@ -100,6 +100,7 @@ async function main() {
                     channelProvider.on("disconnect", () => {
                         currentChannelProvider = undefined;
                         currentCloseFn = undefined;
+                        Object.assign(clientIO, nullClientIO);
                     });
 
                     const dispatcherChannel = channelProvider.createChannel(
