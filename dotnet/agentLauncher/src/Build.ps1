@@ -8,7 +8,7 @@ Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Configuration
-$projectFile = Join-Path $scriptDir "WindowlessAgentLauncher.csproj"
+$projectFile = Join-Path $scriptDir "AgentLauncher.csproj"
 $configuration = "Debug"
 $platform = "x64"
 
@@ -76,7 +76,7 @@ Write-Host "  Build complete" -ForegroundColor Green
 Write-Host ""
 
 # Verify package was created
-$packagePath = "bin\$platform\$configuration\net8.0-windows10.0.26100.0\AppPackages\WindowlessAgentLauncher_1.0.0.0_x64_Debug_Test\WindowlessAgentLauncher_1.0.0.0_x64_Debug.msix"
+$packagePath = "bin\$platform\$configuration\net8.0-windows10.0.26100.0\AppPackages\AgentLauncher_1.0.0.0_x64_Debug_Test\AgentLauncher_1.0.0.0_x64_Debug.msix"
 if (Test-Path $packagePath) {
     Write-Host "Build successful!" -ForegroundColor Green
     Write-Host ""

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace WindowlessAgentLauncher;
+namespace AgentLauncher;
 
 public class AgentSettings
 {
@@ -108,7 +108,7 @@ public class AgentSettings
         {
             Path.Combine(AppContext.BaseDirectory, "Scripts", "agent-handler.js"),
             Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
-                "WindowlessAgentLauncher", "Scripts", "agent-handler.js"),
+                "AgentLauncher", "Scripts", "agent-handler.js"),
             "D:\\repos\\TypeAgent\\ts\\packages\\uriHandler\\dist\\index.js"
         };
 
@@ -152,6 +152,6 @@ public class AgentSettings
     public static string GetSettingsFilePath()
     {
         var localAppData = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "WindowlessAgentLauncher", "settings.json");
+        return Path.Combine(localAppData, "AgentLauncher", "settings.json");
     }
 }

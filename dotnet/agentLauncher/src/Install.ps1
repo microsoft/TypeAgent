@@ -6,8 +6,8 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Paths
 $pfxPath = Join-Path $scriptDir "TypeAgent_TemporaryKey.pfx"
-$packageDir = Join-Path $scriptDir "bin\x64\Debug\net8.0-windows10.0.26100.0\AppPackages\WindowlessAgentLauncher_1.0.0.0_x64_Debug_Test"
-$msixPath = Join-Path $packageDir "WindowlessAgentLauncher_1.0.0.0_x64_Debug.msix"
+$packageDir = Join-Path $scriptDir "bin\x64\Debug\net8.0-windows10.0.26100.0\AppPackages\AgentLauncher_1.0.0.0_x64_Debug_Test"
+$msixPath = Join-Path $packageDir "AgentLauncher_1.0.0.0_x64_Debug.msix"
 
 Write-Host "TypeAgent Agent Launcher - Installation Script" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
@@ -33,7 +33,7 @@ try {
 # Step 3: Remove old package if exists
 Write-Host ""
 Write-Host "Step 2: Removing existing package (if any)..." -ForegroundColor Yellow
-$existingPackage = Get-AppxPackage -Name "TypeAgent.WindowlessAgentLauncher" -ErrorAction SilentlyContinue
+$existingPackage = Get-AppxPackage -Name "TypeAgent.AgentLauncher" -ErrorAction SilentlyContinue
 if ($existingPackage) {
     Remove-AppxPackage -Package $existingPackage.PackageFullName
     Write-Host "  Removed existing package" -ForegroundColor Green
@@ -50,7 +50,7 @@ Write-Host "  Package installed successfully" -ForegroundColor Green
 # Verify installation
 Write-Host ""
 Write-Host "Verifying installation..." -ForegroundColor Yellow
-$installed = Get-AppxPackage -Name "TypeAgent.WindowlessAgentLauncher"
+$installed = Get-AppxPackage -Name "TypeAgent.AgentLauncher"
 if ($installed) {
     Write-Host "  Installation verified!" -ForegroundColor Green
     Write-Host ""
@@ -67,6 +67,6 @@ Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
-Write-Host "  1. Configure the script path: WindowlessAgentLauncher.exe --settings set scriptpath <path>" -ForegroundColor Gray
-Write-Host "  2. Test the launcher: WindowlessAgentLauncher.exe --test 'Hello from TypeAgent'" -ForegroundColor Gray
+Write-Host "  1. Configure the script path: AgentLauncher.exe --settings set scriptpath <path>" -ForegroundColor Gray
+Write-Host "  2. Test the launcher: AgentLauncher.exe --test 'Hello from TypeAgent'" -ForegroundColor Gray
 Write-Host "  3. Check ODR registration: odr app-agents list" -ForegroundColor Gray

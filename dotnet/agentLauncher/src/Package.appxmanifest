@@ -8,7 +8,7 @@
   IgnorableNamespaces="uap uap3 desktop rescap">
 
   <Identity
-    Name="TypeAgent.WindowlessAgentLauncher"
+    Name="TypeAgent.AgentLauncher"
     Publisher="CN=TypeAgent"
     Version="1.0.0.0" />
 

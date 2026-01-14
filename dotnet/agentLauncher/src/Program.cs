@@ -1,22 +1,27 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace WindowlessAgentLauncher;
+namespace AgentLauncher;
 
 class Program
 {
     private static readonly string LogFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "WindowlessAgentLauncher",
+        "AgentLauncher",
         "agent.log");
+
+    private static readonly Stopwatch _processStopwatch = Stopwatch.StartNew();
 
     [STAThread]
     static int Main(string[] args)
     {
         try
         {
+            LogTiming("PROCESS_START", "Process started");
             Log("TypeAgent Launcher starting...");
             Log($"Arguments: {string.Join(" ", args)}");
+
+            LogTiming("ARGS_PARSED", "Arguments parsed");
 
             if (args.Length > 0)
             {
@@ -25,8 +30,11 @@ class Program
                 // COM server registration removed - using URI protocol activation instead
                 if (firstArg.StartsWith("typeagent-launcher:", StringComparison.OrdinalIgnoreCase))
                 {
+                    LogTiming("PROTOCOL_DETECTED", "Protocol activation detected");
                     Log($"Protocol activation received: {firstArg}");
-                    return HandleProtocolActivation(firstArg).GetAwaiter().GetResult();
+                    var result = HandleProtocolActivation(firstArg).GetAwaiter().GetResult();
+                    LogTiming("PROCESS_COMPLETE", "Process complete");
+                    return result;
                 }
                 else if (firstArg == "--settings" || firstArg == "-s")
                 {
@@ -63,10 +71,12 @@ class Program
     {
         try
         {
+            LogTiming("URI_PARSE_START", "Starting URI parse");
             var uri = new Uri(uriString);
             Log($"Parsing URI: {uri}");
 
             var queryParams = ParseQueryString(uri.Query);
+            LogTiming("URI_PARSE_COMPLETE", "URI parsed");
 
             var agentName = queryParams.GetValueOrDefault("agentName");
             var prompt = queryParams.GetValueOrDefault("prompt");
@@ -80,9 +90,11 @@ class Program
             }
 
             Log($"Processing protocol activation - Agent: {agentName}, Prompt: {prompt}");
+            LogTiming("NODE_CALL_START", "Starting Node.js execution");
 
             var result = await ProcessWithNodeAsync(agentName, prompt, null);
 
+            LogTiming("NODE_CALL_COMPLETE", "Node.js execution complete");
             Log($"Protocol activation completed successfully");
             Log($"Result: {result?.Substring(0, Math.Min(100, result?.Length ?? 0))}...");
 
@@ -352,9 +364,11 @@ class Program
         string prompt,
         string? filePath)
     {
+        LogTiming("SETTINGS_LOAD_START", "Loading settings");
         var settings = AgentSettings.Instance;
         var scriptPath = settings.GetResolvedScriptPath();
         var nodePath = settings.GetResolvedNodePath();
+        LogTiming("SETTINGS_LOAD_COMPLETE", "Settings loaded");
 
         Log($"Processing request - Agent: {agentName}, Prompt: {prompt?.Substring(0, Math.Min(50, prompt?.Length ?? 0))}...");
         Log($"Script: {scriptPath}");
@@ -370,6 +384,7 @@ class Program
         var uri = BuildUriString(agentName, prompt, filePath);
         Log($"URI: {uri}");
 
+        LogTiming("PROCESS_SETUP_START", "Setting up Node.js process");
         var processInfo = new ProcessStartInfo
         {
             FileName = nodePath,
@@ -419,11 +434,14 @@ class Program
 
         try
         {
+            LogTiming("PROCESS_START", "Starting Node.js process");
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            LogTiming("PROCESS_STARTED", "Process started, waiting for completion");
 
             var completed = await Task.Run(() => process.WaitForExit(settings.TimeoutMs));
+            LogTiming("PROCESS_WAIT_COMPLETE", "Process wait completed");
 
             if (!completed)
             {
@@ -438,6 +456,7 @@ class Program
             var error = errorBuilder.ToString().Trim();
 
             Log($"Exit code: {exitCode}");
+            LogTiming("OUTPUT_COLLECTED", "Output and error streams collected");
 
             if (settings.VerboseLogging)
             {
@@ -494,5 +513,11 @@ class Program
         catch
         {
         }
+    }
+
+    private static void LogTiming(string marker, string description)
+    {
+        var elapsed = _processStopwatch.ElapsedMilliseconds;
+        Log($"⏱️  TIMING [{marker}] +{elapsed}ms - {description}");
     }
 }

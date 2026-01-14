@@ -8,7 +8,7 @@ Write-Host ""
 
 # Remove the package
 Write-Host "Removing TypeAgent Agent Launcher package..." -ForegroundColor Yellow
-$package = Get-AppxPackage -Name "TypeAgent.WindowlessAgentLauncher" -ErrorAction SilentlyContinue
+$package = Get-AppxPackage -Name "TypeAgent.AgentLauncher" -ErrorAction SilentlyContinue
 if ($package) {
     Remove-AppxPackage -Package $package.PackageFullName
     Write-Host "  Package removed successfully" -ForegroundColor Green
