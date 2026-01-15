@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "com.typeagent.launcher",
   "display_name": "TypeAgent",
-  "description": "TypeAgent launcher for processing prompts",
+  "description": "Run reliable, fast actions",
   "icon": "ms-resource://Files/Assets/Square150x150Logo.png",
   "action_id": "TypeAgentAction"
 }
