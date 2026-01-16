@@ -297,6 +297,7 @@ export class RequestCommandHandler implements CommandHandler {
                 description: "Request to translate",
                 implicitQuotes: true,
                 optional: true, // can be optional since the user can supply images and no text // TODO: revisit
+                skipKnowledgeExtraction: true
             },
         },
     } as const;
@@ -349,7 +350,9 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Get the history context before adding the request to memory
             const history = getHistoryContext(systemContext);
-            addRequestToMemory(systemContext, request, cachedAttachments);
+            if (systemContext.userRequestKnowledgeExtraction === true) {
+                addRequestToMemory(systemContext, request, cachedAttachments);
+            }
             let interpretResult: InterpretResult;
             try {
                 interpretResult = await interpretRequest(
@@ -359,11 +362,13 @@ export class RequestCommandHandler implements CommandHandler {
                     history,
                 );
             } catch (e: any) {
-                addResultToMemory(
-                    systemContext,
-                    `Error translating request '${request}': ${e.message}`,
-                    DispatcherName,
-                );
+                if (systemContext.userRequestKnowledgeExtraction === true) {
+                    addResultToMemory(
+                        systemContext,
+                        `Error translating request '${request}': ${e.message}`,
+                        DispatcherName,
+                    );
+                }
                 systemContext?.logger?.logEvent("request:exception", {
                     request,
                     message: e.message,

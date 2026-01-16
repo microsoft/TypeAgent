@@ -234,27 +234,32 @@ async function pickInitialSchema(
     if (embedding && request.length > 0) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
-        const result = await agents.semanticSearchActionSchema(
-            request,
-            debugSemanticSearch.enabled ? 5 : 1,
-            (schemaName: string) => activeSchemas.has(schemaName),
-        );
-        if (result) {
-            debugSemanticSearch(
-                `Semantic search result: ${result
-                    .map(
-                        (r) =>
-                            `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
-                    )
-                    .join("\n")}`,
+        try 
+        {
+            const result = await agents.semanticSearchActionSchema(
+                request,
+                debugSemanticSearch.enabled ? 5 : 1,
+                (schemaName: string) => activeSchemas.has(schemaName),
             );
-            if (result.length > 0) {
-                const found = result[0].item.actionSchemaFile.schemaName;
-                // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
-                if (found !== DispatcherName) {
-                    schemaName = found;
+            if (result) {
+                debugSemanticSearch(
+                    `Semantic search result: ${result
+                        .map(
+                            (r) =>
+                                `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
+                        )
+                        .join("\n")}`,
+                );
+                if (result.length > 0) {
+                    const found = result[0].item.actionSchemaFile.schemaName;
+                    // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
+                    if (found !== DispatcherName) {
+                        schemaName = found;
+                    }
                 }
             }
+        } catch (e: any) {
+                debugSemanticSearch(`Semantic search failed: ${e}`);
         }
     }
 

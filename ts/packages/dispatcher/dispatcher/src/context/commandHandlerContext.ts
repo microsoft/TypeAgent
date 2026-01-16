@@ -149,6 +149,9 @@ export type CommandHandlerContext = {
     commandProfiler?: Profiler | undefined;
 
     instanceDirLock: (() => Promise<void>) | undefined;
+
+    userRequestKnowledgeExtraction: boolean;
+    actionResultKnowledgeExtraction: boolean;
 };
 
 async function getAgentCache(
@@ -231,6 +234,11 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
 
     // Use for tests so that embedding can be cached without 'persistDir'
     embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
+
+    conversationMemorySettings?: {
+        requestKnowledgeExtraction?: boolean;
+        actionResultKnowledgeExtraction?: boolean;
+    };
 };
 
 async function getSession(
@@ -496,6 +504,11 @@ export async function initializeCommandHandlerContext(
             collectCommandResult: options?.collectCommandResult ?? false,
             indexManager: IndexManager.getInstance(),
             indexingServiceRegistry: options?.indexingServiceRegistry,
+
+            // TODO: instead of disabling this let's find a way to gracefully handle this
+            // when there is no internet
+            userRequestKnowledgeExtraction: options?.conversationMemorySettings?.requestKnowledgeExtraction ?? true,
+            actionResultKnowledgeExtraction: options?.conversationMemorySettings?.actionResultKnowledgeExtraction ?? true
         };
 
         await initializeMemory(context, sessionDirPath);

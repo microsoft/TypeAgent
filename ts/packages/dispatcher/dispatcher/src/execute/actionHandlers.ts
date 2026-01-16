@@ -455,13 +455,15 @@ export async function executeActions(
         );
 
         // add the action result to memory whether it has error or not.
-        addActionResultToMemory(
-            systemContext,
-            executableAction,
-            resolvedEntities,
-            action.schemaName,
-            result,
-        );
+        if (systemContext.actionResultKnowledgeExtraction === true) {
+            addActionResultToMemory(
+                systemContext,
+                executableAction,
+                resolvedEntities,
+                action.schemaName,
+                result,
+            );
+        }
 
         if (result.error !== undefined) {
             // Stop executing further action on error.
