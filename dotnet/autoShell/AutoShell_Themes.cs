@@ -73,13 +73,11 @@ namespace autoShell
                     if (line.StartsWith("DisplayName=", StringComparison.OrdinalIgnoreCase))
                     {
                         string displayName = line.Substring("DisplayName=".Length).Trim();
-                        
                         // Handle localized strings (e.g., @%SystemRoot%\System32\themeui.dll,-2013)
                         if (displayName.StartsWith("@"))
                         {
                             displayName = ResolveLocalizedString(displayName);
                         }
-                        
                         return displayName;
                     }
                 }
@@ -102,14 +100,12 @@ namespace autoShell
             {
                 // Remove the @ prefix
                 string resourcePath = localizedString.Substring(1);
-                
                 // Expand environment variables
                 int commaIndex = resourcePath.LastIndexOf(',');
                 if (commaIndex > 0)
                 {
                     string dllPath = Environment.ExpandEnvironmentVariables(resourcePath.Substring(0, commaIndex));
                     string resourceIdStr = resourcePath.Substring(commaIndex + 1);
-                    
                     if (int.TryParse(resourceIdStr, out int resourceId))
                     {
                         StringBuilder buffer = new StringBuilder(256);
@@ -202,7 +198,6 @@ namespace autoShell
                     // Apply theme by opening the .theme file
                     Process p = Process.Start(themePath);
                     s_previousTheme = previous;
-
                     p.Exited += P_Exited;
 
                     return true;
@@ -291,5 +286,112 @@ namespace autoShell
 
             return null;
         }
+
+        /// <summary>
+        /// Sets the Windows light or dark mode by modifying registry keys.
+        /// </summary>
+        /// <param name="useLightMode">True for light mode, false for dark mode.</param>
+        /// <returns>True if the mode was set successfully, false otherwise.</returns>
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        public static bool SetLightDarkMode(bool useLightMode)
+        {
+            try
+            {
+                const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+                int value = useLightMode ? 1 : 0;
+
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(personalizePath, true))
+                {
+                    if (key == null)
+                    {
+                        return false;
+                    }
+
+                    // Set apps theme
+                    key.SetValue("AppsUseLightTheme", value, RegistryValueKind.DWord);
+
+                    // Set system theme (taskbar, Start menu, etc.)
+                    key.SetValue("SystemUsesLightTheme", value, RegistryValueKind.DWord);
+                }
+
+                // Broadcast settings change notification to update UI
+                BroadcastSettingsChange();
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Toggles between light and dark mode.
+        /// </summary>
+        /// <returns>True if the toggle was successful, false otherwise.</returns>
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        public static bool ToggleLightDarkMode()
+        {
+            bool? currentMode = GetCurrentLightMode();
+            if (currentMode.HasValue)
+            {
+                return SetLightDarkMode(!currentMode.Value);
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Broadcasts a WM_SETTINGCHANGE message to notify the system of theme changes.
+        /// </summary>
+        private static void BroadcastSettingsChange()
+        {
+            const int HWND_BROADCAST = 0xffff;
+            const int WM_SETTINGCHANGE = 0x001A;
+            const uint SMTO_ABORTIFHUNG = 0x0002;
+            IntPtr result;
+            SendMessageTimeout(
+                (IntPtr)HWND_BROADCAST,
+                WM_SETTINGCHANGE,
+                IntPtr.Zero,
+                "ImmersiveColorSet",
+                SMTO_ABORTIFHUNG,
+                1000,
+                out result);
+        }
+
+        /// <summary>
+        /// Gets the current light/dark mode setting from the registry.
+        /// </summary>
+        /// <returns>True if light mode, false if dark mode, null if unable to determine.</returns>
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static bool? GetCurrentLightMode()
+        {
+            try
+            {
+                const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(personalizePath, false))
+                {
+                    if (key == null)
+                    {
+                        return null;
+                    }
+
+                    // Read AppsUseLightTheme value (0 = dark, 1 = light)
+                    object value = key.GetValue("AppsUseLightTheme");
+                    if (value is int intValue)
+                    {
+                        return intValue == 1;
+                    }
+
+                    return null;
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
     }
 }
