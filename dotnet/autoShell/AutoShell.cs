@@ -149,6 +149,13 @@ internal partial class AutoShell
             {
                 // read a line from the console
                 string line = Console.ReadLine();
+
+                // if stdin is closed (e.g., piped input finished), exit
+                if (line == null)
+                {
+                    break;
+                }
+
                 // parse the line as a json object with one or more command keys (with values as parameters)
                 JObject root = JObject.Parse(line);
 
@@ -913,6 +920,29 @@ internal partial class AutoShell
                 case "listThemes":
                     var themes = GetInstalledThemes();
                     Console.WriteLine(JsonConvert.SerializeObject(themes));
+                    break;
+                case "setThemeMode":
+                    // value can be "light", "dark", "toggle", or boolean
+                    if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ToggleLightDarkMode();
+                    }
+                    else
+                    {
+                        bool useLightMode;
+                        if (bool.TryParse(value, out useLightMode))
+                        {
+                            SetLightDarkMode(useLightMode);
+                        }
+                        else if (value.Equals("light", StringComparison.OrdinalIgnoreCase))
+                        {
+                            SetLightDarkMode(true);
+                        }
+                        else if (value.Equals("dark", StringComparison.OrdinalIgnoreCase))
+                        {
+                            SetLightDarkMode(false);
+                        }
+                    }
                     break;
                 case "createDesktop":
                     CreateDesktop(value);

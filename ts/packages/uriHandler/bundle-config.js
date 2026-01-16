@@ -7,9 +7,6 @@ import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-console.log("TypeAgent URI Handler - Bundle Configuration");
-console.log("===========================================\n");
-
 const config = {
     entryPoints: [join(__dirname, "dist", "index.js")],
     bundle: true,
@@ -44,14 +41,6 @@ const require = createRequire(import.meta.url);
         "buffer",
     ],
 };
-
-console.log("Configuration:");
-console.log(`  Entry: ${config.entryPoints[0]}`);
-console.log(`  Output: ${config.outfile}`);
-console.log(`  Platform: ${config.platform}`);
-console.log(`  Format: ${config.format}`);
-console.log(`  Target: ${config.target}`);
-console.log("");
 
 try {
     await esbuild.build(config);

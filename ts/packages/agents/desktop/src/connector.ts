@@ -209,9 +209,9 @@ export async function runDesktopActions(
             actionData = String(action.parameters.on);
             break;
         }
-        case "applyTheme": {
-            actionData = action.parameters!.theme;
-            confirmationMessage = `Changed theme to '${action.parameters.theme}'`;
+        case "setThemeMode": {
+            actionData = action.parameters!.mode;
+            confirmationMessage = `Changed theme to '${action.parameters.mode}'`;
             break;
         }
         case "connectWifi": {

@@ -14,7 +14,9 @@ import {
 } from "@azure/ai-agents";
 import registerDebug from "debug";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Result } from "typechat";
 import * as wikipediaSchemas from "./wikipediaSchemas.js";
 import * as wikipedia from "./wikipedia.js";
@@ -469,6 +471,11 @@ export async function resolveURLWithWikipedia(
  */
 export let keyWordsToSites: Record<string, string[] | undefined> | undefined;
 
+// Build will copy the file from ../../examples/websiteAliases/cache/phrases.json
+const phrasesFile = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "phrases.json",
+);
 /**
  * Resolves a URL by keyword using the URL resolver agent.
  * @param keyword The keyword to resolve.
@@ -478,12 +485,7 @@ export function resolveURLByKeyword(
     keyword: string,
 ): string[] | undefined | null {
     if (!keyWordsToSites) {
-        const phrasesToSites = JSON.parse(
-            readFileSync(
-                "../../examples/websiteAliases/cache/phrases.json",
-                "utf-8",
-            ),
-        );
+        const phrasesToSites = JSON.parse(readFileSync(phrasesFile, "utf-8"));
         keyWordsToSites = phrasesToSites;
     }
 

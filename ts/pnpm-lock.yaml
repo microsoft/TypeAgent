@@ -2473,6 +2473,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
