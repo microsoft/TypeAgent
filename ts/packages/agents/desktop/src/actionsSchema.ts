@@ -12,7 +12,7 @@ export type DesktopActions =
     | RestoreVolumeAction
     | MuteVolumeAction
     | SetWallpaperAction
-    | ChangeThemeAction
+    | ChangeThemeModeAction
     | ConnectWifiAction
     | DisconnectWifiAction
     | ToggleAirplaneModeAction
@@ -108,11 +108,11 @@ export type SetWallpaperAction = {
     };
 };
 
-// Sets the theme of the current [windows] desktop
-export type ChangeThemeAction = {
-    actionName: "applyTheme";
+// Sets the theme mode of the current [windows] desktop
+export type ChangeThemeModeAction = {
+    actionName: "setThemeMode";
     parameters: {
-        theme: KnownThemes | "previous" | string; // The name of the theme
+        mode: "light" | "dark" | "toggle"; // the theme mode
     };
 };
 
@@ -221,16 +221,3 @@ export type KnownPrograms =
     | "task manager"
     | "spotify"
     | "m365 copilot";
-
-export type KnownThemes =
-    | "Windows (light)"
-    | "Windows (dark)"
-    | "Windows spotlight"
-    | "Glow"
-    | "Captured Motion"
-    | "Sunrise"
-    | "Flow"
-    | "High Contrast #1"
-    | "High Contrast #2"
-    | "High Contrast Black"
-    | "High Contrast White";

@@ -52,6 +52,16 @@ namespace autoShell
         [DllImport("user32.dll", EntryPoint = "SendMessage", SetLastError = true)]
         static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, UInt32 wParam, IntPtr lParam);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        static extern IntPtr SendMessageTimeout(
+            IntPtr hWnd,
+            uint Msg,
+            IntPtr wParam,
+            string lParam,
+            uint fuFlags,
+            uint uTimeout,
+            out IntPtr lpdwResult);
+
         // import SetWindowPos
         [DllImport("user32.dll")]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
