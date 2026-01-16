@@ -18,8 +18,7 @@
   },
   "scripts": {
     "build": "npm run tsc",
-    "build:bundle": "npm run build && npm run bundle",
-    "bundle": "node bundle-config.js",
+    "postbuild": "node bundle-config.js",
     "clean": "rimraf --glob dist bundle *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",

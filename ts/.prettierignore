@@ -12,6 +12,7 @@ pnpm-lock.yaml
 .rollup.cache/**
 .tsc-cache-*.json
 .frontend-build-cache.json
+packages/uriHandler/bundle/agent-uri-handler.bundle.js
 
 .scratch
 

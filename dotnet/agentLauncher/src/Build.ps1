@@ -12,6 +12,12 @@ $projectFile = Join-Path $scriptDir "AgentLauncher.csproj"
 $configuration = "Debug"
 $platform = "x64"
 
+# Calculate paths for uriHandler bundle
+$uriHandlerPath = Join-Path $scriptDir "..\..\..\ts\packages\uriHandler" | Resolve-Path -ErrorAction SilentlyContinue
+$bundleOutput = if ($uriHandlerPath) { Join-Path $uriHandlerPath "bundle\agent-uri-handler.bundle.js" } else { $null }
+$targetDir = Join-Path $scriptDir "Scripts"
+$targetPath = Join-Path $targetDir "agent-uri-handler.bundle.js"
+
 # Find MSBuild
 $msbuildPath2022 = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe";
 $msbuildPath2026 = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe";
@@ -34,14 +40,46 @@ Write-Host "  Configuration: $configuration"
 Write-Host "  Platform: $platform"
 Write-Host ""
 
+# Copy bundle from uriHandler
+Write-Host "Step 1: Copying uriHandler bundle..." -ForegroundColor Yellow
+if (-not $bundleOutput -or -not (Test-Path $bundleOutput)) {
+    Write-Host ""
+    Write-Host "ERROR: Bundle file not found at: $bundleOutput" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "You must first build the uriHandler package:" -ForegroundColor Yellow
+    if ($uriHandlerPath) {
+        Write-Host "  1. Navigate to: $uriHandlerPath" -ForegroundColor Cyan
+    } else {
+        Write-Host "  1. Navigate to the uriHandler package directory" -ForegroundColor Cyan
+    }
+    Write-Host "  2. Run: pnpm run build" -ForegroundColor Cyan
+    Write-Host ""
+    exit 1
+}
+
+$bundleSize = (Get-Item $bundleOutput).Length
+$bundleSizeKB = [Math]::Round($bundleSize / 1KB, 2)
+Write-Host "  Bundle found: $bundleSizeKB KB at $bundleOutput" -ForegroundColor Green
+
+New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+Copy-Item $bundleOutput $targetPath -Force
+
+if (Test-Path $targetPath) {
+    Write-Host "  Bundle copied successfully to: $targetPath" -ForegroundColor Green
+} else {
+    Write-Host "  ERROR: Failed to copy bundle" -ForegroundColor Red
+    exit 1
+}
+Write-Host ""
+
 # Clean previous build
-Write-Host "Step 1: Cleaning previous build..." -ForegroundColor Yellow
+Write-Host "Step 2: Cleaning previous build..." -ForegroundColor Yellow
 Remove-Item -Recurse -Force obj,bin -ErrorAction SilentlyContinue
 Write-Host "  Clean complete" -ForegroundColor Green
 Write-Host ""
 
 # Build
-Write-Host "Step 2: Building project..." -ForegroundColor Yellow
+Write-Host "Step 3: Building project..." -ForegroundColor Yellow
 $buildArgs = @(
     $projectFile,
     "-t:Restore,Build",
@@ -62,7 +100,7 @@ Write-Host "  Build complete" -ForegroundColor Green
 Write-Host ""
 
 # Package
-Write-Host "Step 3: Creating MSIX package..." -ForegroundColor Yellow
+Write-Host "Step 4: Creating MSIX package..." -ForegroundColor Yellow
 $packageArgs = @(
     $projectFile,
     "-t:_GenerateAppxPackage",
