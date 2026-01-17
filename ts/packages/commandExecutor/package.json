@@ -1,0 +1,41 @@
+{
+  "name": "command-executor-mcp",
+  "version": "0.0.1",
+  "private": true,
+  "description": "MCP server for executing user commands like playing music, managing lists, and working with calendars.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/commandExecutor"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "start": "node dist/server.js",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
+    "dotenv": "^16.3.1",
+    "isomorphic-ws": "^5.0.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "~5.4.5"
+  }
+}
