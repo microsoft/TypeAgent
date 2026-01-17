@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Helper script to view MCP server logs
 
 LOG_DIR="/tmp/typeagent-mcp"
