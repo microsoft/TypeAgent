@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "command-executor": {
+      "command": "node",
+      "args": [
+        "C:/Users/stevenlucco/src/TypeAgent/ts/packages/commandExecutor/dist/server.js"
+      ]
+    }
+  }
+}
