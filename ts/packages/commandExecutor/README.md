@@ -9,6 +9,7 @@ This MCP server acts as a bridge between Claude Code (or other MCP clients) and 
 ## Prerequisites
 
 1. **Built Package**: Build this package before using:
+
    ```bash
    pnpm run build
    ```
@@ -16,6 +17,7 @@ This MCP server acts as a bridge between Claude Code (or other MCP clients) and 
 2. **TypeAgent Server** (optional at startup): The TypeAgent dispatcher server at `ws://localhost:8999`. The MCP server will automatically connect when the TypeAgent server becomes available and reconnect if the connection is lost.
 
    Start the TypeAgent server with:
+
    ```bash
    pnpm run start:agent-server
    ```
@@ -33,20 +35,20 @@ You can set this in the `.env` file at the root of the TypeAgent repository.
 ### For Claude Code Users
 
 1. **Build the package** from the TypeAgent repository root:
+
    ```bash
    cd ts
    pnpm run build
    ```
 
 2. **Configure Claude Code** to use the MCP server. Add the following to your `.mcp.json` file in the TypeAgent repository root (create it if it doesn't exist):
+
    ```json
    {
      "mcpServers": {
        "command-executor": {
          "command": "node",
-         "args": [
-           "packages/commandExecutor/dist/server.js"
-         ]
+         "args": ["packages/commandExecutor/dist/server.js"]
        }
      }
    }
@@ -55,6 +57,7 @@ You can set this in the `.env` file at the root of the TypeAgent repository.
 3. **Restart Claude Code** to load the MCP server configuration.
 
 4. **Start the TypeAgent server** (can be done before or after starting Claude Code):
+
    ```bash
    pnpm run start:agent-server
    ```
@@ -73,9 +76,7 @@ The server is configured in `.mcp.json`:
   "mcpServers": {
     "command-executor": {
       "command": "node",
-      "args": [
-        "packages/commandExecutor/dist/server.js"
-      ]
+      "args": ["packages/commandExecutor/dist/server.js"]
     }
   }
 }
@@ -84,20 +85,25 @@ The server is configured in `.mcp.json`:
 ### Available Tools
 
 #### execute_command
+
 Execute user commands such as playing music, managing lists, or working with calendars.
 
 **Parameters:**
+
 - `request` (string): The natural language command to execute
 
 **Examples:**
+
 - "play sweet emotion by aerosmith"
 - "add jelly beans to my grocery list"
 - "schedule a meeting for tomorrow at 2pm"
 
 #### ping (debug mode)
+
 Test server connectivity.
 
 **Parameters:**
+
 - `message` (string): Message to echo back
 
 ## Architecture
@@ -113,6 +119,7 @@ TypeAgent Agents (Music, Lists, Calendar, etc.)
 ```
 
 The MCP server:
+
 1. Receives commands from the MCP client
 2. Connects to the TypeAgent dispatcher via WebSocket
 3. Forwards commands to the dispatcher's `processCommand` method
@@ -128,6 +135,7 @@ The MCP server includes automatic reconnection capabilities:
 - **Error Recovery**: If a command fails due to connection loss, the dispatcher is marked as disconnected and will automatically reconnect
 
 **Recommended workflow:**
+
 1. Start Claude Code (the MCP server starts automatically)
 2. Start the TypeAgent server: `pnpm run start:agent-server`
 3. Send commands - the MCP server will connect automatically
@@ -139,9 +147,11 @@ You can also start the TypeAgent server first, or restart it at any time without
 The MCP server automatically logs all activity to both console and a log file for debugging.
 
 ### Log File Location
+
 Logs are written to: `/tmp/typeagent-mcp/mcp-server-<timestamp>.log`
 
 ### Viewing Logs
+
 Use the provided helper script to view the most recent log file:
 
 ```bash
@@ -153,6 +163,7 @@ Use the provided helper script to view the most recent log file:
 ```
 
 ### What Gets Logged
+
 - Server initialization and configuration
 - Connection attempts to TypeAgent dispatcher
 - Connection success/failure with error details
@@ -166,16 +177,19 @@ This is particularly useful for debugging connection issues between the MCP serv
 ## Development
 
 ### Building
+
 ```bash
 pnpm run build
 ```
 
 ### Running Standalone
+
 ```bash
 pnpm run start
 ```
 
 ### Testing
+
 Use the MCP client (like Claude Code) to test commands, or use the TypeAgent CLI to verify the dispatcher is working.
 
 ## Trademarks

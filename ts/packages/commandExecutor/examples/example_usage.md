@@ -5,6 +5,7 @@
 To use this MCP server with Claude Desktop, add the following to your Claude Desktop configuration:
 
 ### Windows
+
 Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 
 ```json
@@ -21,6 +22,7 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json`:
 ```
 
 ### macOS
+
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
@@ -41,18 +43,21 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 Once configured, you can ask Claude to execute various commands:
 
 ### Music Commands
+
 - "Play shake it off by taylor swift"
 - "Skip to the next song"
 - "Pause the music"
 - "Set volume to 50%"
 
 ### List Management
+
 - "Add ham to my grocery list"
 - "Add milk, eggs, and bread to shopping list"
 - "Remove bananas from grocery list"
 - "Show me my grocery list"
 
 ### Calendar Operations
+
 - "Add meeting tomorrow at 3pm"
 - "Schedule dentist appointment for next Tuesday at 10am"
 - "What's on my calendar today?"
@@ -69,6 +74,7 @@ The server will log all incoming requests to the console. You can verify it's wo
 ## Current Behavior
 
 The MCP server currently:
+
 - Accepts command requests via the `execute_command` tool
 - Logs the request to the console
 - Returns a success message to Claude

@@ -25,9 +25,7 @@ function executeCommandRequestSchema() {
 }
 const ExecuteCommandRequestSchema = z.object(executeCommandRequestSchema());
 
-export type ExecuteCommandRequest = z.infer<
-    typeof ExecuteCommandRequestSchema
->;
+export type ExecuteCommandRequest = z.infer<typeof ExecuteCommandRequestSchema>;
 
 function toolResult(result: string): CallToolResult {
     return {
@@ -64,7 +62,9 @@ class Logger {
     }
 
     error(message: string, error?: any): void {
-        const errorDetails = error ? ` - ${error instanceof Error ? error.message : String(error)}` : "";
+        const errorDetails = error
+            ? ` - ${error instanceof Error ? error.message : String(error)}`
+            : "";
         const formatted = this.formatMessage("ERROR", message + errorDetails);
         console.error(formatted);
         this.logStream.write(formatted + "\n");
@@ -105,7 +105,7 @@ async function processHtmlImages(content: string): Promise<string> {
         const fullTag = match[0];
 
         // Just remove the img tag entirely - don't download or display artwork
-        processed = processed.replace(fullTag, '');
+        processed = processed.replace(fullTag, "");
     }
 
     return processed;
@@ -115,7 +115,10 @@ async function processHtmlImages(content: string): Promise<string> {
  * Minimal ClientIO implementation for MCP server
  * Most methods are no-ops since we just need to satisfy the interface
  */
-function createMcpClientIO(logger: Logger, responseCollector: { messages: string[] }): ClientIO {
+function createMcpClientIO(
+    logger: Logger,
+    responseCollector: { messages: string[] },
+): ClientIO {
     return {
         clear(): void {
             logger.log("ClientIO: clear() called");
@@ -126,39 +129,61 @@ function createMcpClientIO(logger: Logger, responseCollector: { messages: string
         setDisplayInfo(): void {},
         setDisplay(message: IAgentMessage): void {
             logger.log(`ClientIO: setDisplay() - ${JSON.stringify(message)}`);
-            if (typeof message === 'object' && 'message' in message) {
+            if (typeof message === "object" && "message" in message) {
                 const msg = message.message;
                 // Filter out "info" kind messages (technical translation details)
-                if (typeof msg === 'object' && msg && 'kind' in msg && msg.kind === 'info') {
+                if (
+                    typeof msg === "object" &&
+                    msg &&
+                    "kind" in msg &&
+                    msg.kind === "info"
+                ) {
                     return;
                 }
 
-                if (typeof msg === 'string') {
+                if (typeof msg === "string") {
                     responseCollector.messages.push(stripAnsi(msg));
-                } else if (typeof msg === 'object' && msg && 'content' in msg) {
-                    responseCollector.messages.push(stripAnsi(String(msg.content)));
+                } else if (typeof msg === "object" && msg && "content" in msg) {
+                    responseCollector.messages.push(
+                        stripAnsi(String(msg.content)),
+                    );
                 }
             }
         },
         appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
-            logger.log(`ClientIO: appendDisplay(mode=${mode}) - ${JSON.stringify(message)}`);
+            logger.log(
+                `ClientIO: appendDisplay(mode=${mode}) - ${JSON.stringify(message)}`,
+            );
             // Only capture block mode messages (final results), not temporary status messages
-            if (mode === 'block' && typeof message === 'object' && 'message' in message) {
+            if (
+                mode === "block" &&
+                typeof message === "object" &&
+                "message" in message
+            ) {
                 const msg = message.message;
                 // Filter out "info" kind messages (technical translation details)
-                if (typeof msg === 'object' && msg && 'kind' in msg && msg.kind === 'info') {
+                if (
+                    typeof msg === "object" &&
+                    msg &&
+                    "kind" in msg &&
+                    msg.kind === "info"
+                ) {
                     return;
                 }
 
-                if (typeof msg === 'string') {
+                if (typeof msg === "string") {
                     responseCollector.messages.push(stripAnsi(msg));
-                } else if (typeof msg === 'object' && msg && 'content' in msg) {
-                    responseCollector.messages.push(stripAnsi(String(msg.content)));
+                } else if (typeof msg === "object" && msg && "content" in msg) {
+                    responseCollector.messages.push(
+                        stripAnsi(String(msg.content)),
+                    );
                 }
             }
         },
         appendDiagnosticData(requestId: RequestId, data: any): void {
-            logger.log(`ClientIO: appendDiagnosticData(requestId=${requestId}) - ${JSON.stringify(data)}`);
+            logger.log(
+                `ClientIO: appendDiagnosticData(requestId=${requestId}) - ${JSON.stringify(data)}`,
+            );
         },
         setDynamicDisplay(): void {},
         async askYesNo(
@@ -166,7 +191,9 @@ function createMcpClientIO(logger: Logger, responseCollector: { messages: string
             requestId: RequestId,
             defaultValue?: boolean,
         ): Promise<boolean> {
-            logger.log(`ClientIO: askYesNo(requestId=${requestId}) - "${message}" (defaulting to ${defaultValue ?? false})`);
+            logger.log(
+                `ClientIO: askYesNo(requestId=${requestId}) - "${message}" (defaulting to ${defaultValue ?? false})`,
+            );
             return defaultValue ?? false;
         },
         async proposeAction(
@@ -174,7 +201,9 @@ function createMcpClientIO(logger: Logger, responseCollector: { messages: string
             requestId: RequestId,
             source: string,
         ): Promise<unknown> {
-            logger.log(`ClientIO: proposeAction(requestId=${requestId}, source=${source}) - ${JSON.stringify(actionTemplates)}`);
+            logger.log(
+                `ClientIO: proposeAction(requestId=${requestId}, source=${source}) - ${JSON.stringify(actionTemplates)}`,
+            );
             return undefined;
         },
         async popupQuestion(
@@ -183,11 +212,20 @@ function createMcpClientIO(logger: Logger, responseCollector: { messages: string
             defaultId: number | undefined,
             source: string,
         ): Promise<number> {
-            logger.log(`ClientIO: popupQuestion(source=${source}) - "${message}" choices=[${choices.join(", ")}] (defaulting to ${defaultId ?? 0})`);
+            logger.log(
+                `ClientIO: popupQuestion(source=${source}) - "${message}" choices=[${choices.join(", ")}] (defaulting to ${defaultId ?? 0})`,
+            );
             return defaultId ?? 0;
         },
-        notify(event: string, requestId: RequestId, data: any, source: string): void {
-            logger.log(`ClientIO: notify(event=${event}, requestId=${requestId}, source=${source}) - ${JSON.stringify(data)}`);
+        notify(
+            event: string,
+            requestId: RequestId,
+            data: any,
+            source: string,
+        ): void {
+            logger.log(
+                `ClientIO: notify(event=${event}, requestId=${requestId}, source=${source}) - ${JSON.stringify(data)}`,
+            );
         },
         openLocalView(port: number): void {
             logger.log(`ClientIO: openLocalView(port=${port})`);
@@ -196,7 +234,9 @@ function createMcpClientIO(logger: Logger, responseCollector: { messages: string
             logger.log(`ClientIO: closeLocalView(port=${port})`);
         },
         takeAction(action: string, data: unknown): void {
-            logger.log(`ClientIO: takeAction(action=${action}) - ${JSON.stringify(data)}`);
+            logger.log(
+                `ClientIO: takeAction(action=${action}) - ${JSON.stringify(data)}`,
+            );
         },
     };
 }
@@ -222,8 +262,13 @@ export class CommandServer {
             name: "Command-Executor-Server",
             version: "1.0.0",
         });
-        this.agentServerUrl = agentServerUrl ?? process.env.AGENT_SERVER_URL ?? "ws://localhost:8999";
-        this.logger.log(`CommandServer initializing with TypeAgent server URL: ${this.agentServerUrl}`);
+        this.agentServerUrl =
+            agentServerUrl ??
+            process.env.AGENT_SERVER_URL ??
+            "ws://localhost:8999";
+        this.logger.log(
+            `CommandServer initializing with TypeAgent server URL: ${this.agentServerUrl}`,
+        );
         this.addTools();
         if (debugMode) {
             this.addDiagnosticTools();
@@ -248,12 +293,25 @@ export class CommandServer {
 
         this.isConnecting = true;
         try {
-            const clientIO = createMcpClientIO(this.logger, this.responseCollector);
-            this.dispatcher = await connectDispatcher(clientIO, this.agentServerUrl);
-            this.logger.log(`Connected to TypeAgent dispatcher at ${this.agentServerUrl}`);
+            const clientIO = createMcpClientIO(
+                this.logger,
+                this.responseCollector,
+            );
+            this.dispatcher = await connectDispatcher(
+                clientIO,
+                this.agentServerUrl,
+            );
+            this.logger.log(
+                `Connected to TypeAgent dispatcher at ${this.agentServerUrl}`,
+            );
         } catch (error) {
-            this.logger.error(`Failed to connect to dispatcher at ${this.agentServerUrl}`, error);
-            this.logger.error("Will retry connection automatically. Make sure the TypeAgent server is running.");
+            this.logger.error(
+                `Failed to connect to dispatcher at ${this.agentServerUrl}`,
+                error,
+            );
+            this.logger.error(
+                "Will retry connection automatically. Make sure the TypeAgent server is running.",
+            );
             this.dispatcher = null;
         } finally {
             this.isConnecting = false;
@@ -264,7 +322,9 @@ export class CommandServer {
         // Check connection status periodically and reconnect if needed
         this.reconnectInterval = setInterval(async () => {
             if (!this.dispatcher && !this.isConnecting) {
-                this.logger.log("Attempting to reconnect to TypeAgent dispatcher...");
+                this.logger.log(
+                    "Attempting to reconnect to TypeAgent dispatcher...",
+                );
                 await this.connectToDispatcher();
             }
         }, this.reconnectDelayMs);
@@ -306,7 +366,9 @@ export class CommandServer {
 
         // If not connected, try to connect now (lazy connection)
         if (!this.dispatcher && !this.isConnecting) {
-            this.logger.log("Not connected to dispatcher, attempting to connect...");
+            this.logger.log(
+                "Not connected to dispatcher, attempting to connect...",
+            );
             await this.connectToDispatcher();
         }
 
@@ -321,19 +383,29 @@ export class CommandServer {
             this.responseCollector.messages = [];
 
             // Process the command through the TypeAgent dispatcher
-            this.logger.log(`Sending command to dispatcher: ${request.request}`);
-            const result = await this.dispatcher.processCommand(request.request);
+            this.logger.log(
+                `Sending command to dispatcher: ${request.request}`,
+            );
+            const result = await this.dispatcher.processCommand(
+                request.request,
+            );
 
             if (result?.lastError) {
-                this.logger.error(`Command execution error: ${result.lastError}`);
-                return toolResult(`Error executing command: ${result.lastError}`);
+                this.logger.error(
+                    `Command execution error: ${result.lastError}`,
+                );
+                return toolResult(
+                    `Error executing command: ${result.lastError}`,
+                );
             }
 
             // Return the collected messages from the dispatcher
-            this.logger.log(`Successfully executed command: ${request.request}`);
+            this.logger.log(
+                `Successfully executed command: ${request.request}`,
+            );
 
             if (this.responseCollector.messages.length > 0) {
-                const response = this.responseCollector.messages.join('\n\n');
+                const response = this.responseCollector.messages.join("\n\n");
                 // Process any HTML images in the response
                 const processedResponse = await processHtmlImages(response);
                 return toolResult(processedResponse);
