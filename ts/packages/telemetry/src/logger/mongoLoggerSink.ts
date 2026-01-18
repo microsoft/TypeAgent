@@ -38,6 +38,7 @@ class MongoDBLoggerSink implements LoggerSink {
                 await this.drain();
                 break;
             } catch (e: any) {
+                // TODO: add backoff/queuing logic for ENOTFOUND (no internet)
                 if (
                     typeof e.message === "string" &&
                     e.message.includes("Invalid key")

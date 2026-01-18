@@ -60,11 +60,15 @@ async function main() {
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),
         metrics: true,
-        dblogging: true,
+        dblogging: false,
         clientId: getClientId(),
         clientIO,
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
         constructionProvider: getDefaultConstructionProvider(),
+        conversationMemorySettings: {
+            requestKnowledgeExtraction: false,
+            actionResultKnowledgeExtraction: false,
+        },
     });
 
     // Ignore dispatcher close requests

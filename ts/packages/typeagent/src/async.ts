@@ -49,9 +49,15 @@ export async function getResultWithRetry<T = any>(
 ): Promise<Result<T>> {
     let retryCount = 0;
     while (true) {
-        const result = await asyncFn();
-        if (result.success || retryCount >= retryMaxAttempts) {
-            return result;
+        try {
+            const result = await asyncFn();
+            if (result.success || retryCount >= retryMaxAttempts) {
+                return result;
+            }
+        } catch (e: any) {
+            if (retryCount >= retryMaxAttempts) {
+                throw e;
+            }
         }
         await pause(retryPauseMs);
         retryCount++;

@@ -27,6 +27,7 @@ async function initializeDesktopContext(): Promise<DesktopActionContext> {
     return {
         desktopProcess: undefined,
         programNameIndex: undefined,
+        backupProgramNameTable: undefined,
         refreshPromise: undefined,
         abortRefresh: undefined,
     };

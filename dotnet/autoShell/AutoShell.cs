@@ -604,8 +604,7 @@ internal partial class AutoShell
 
             if (desktopNames == null || desktopNames.Count == 0)
             {
-                Debug.WriteLine("No desktop names provided");
-                return;
+                desktopNames = ["desktop X"];
             }
 
             if (s_virtualDesktopManagerInternal == null)
@@ -618,10 +617,6 @@ internal partial class AutoShell
             {
                 string desktopName = desktopNameToken.ToString();
 
-                if (string.IsNullOrWhiteSpace(desktopName))
-                {
-                    continue;
-                }
 
                 try
                 {
