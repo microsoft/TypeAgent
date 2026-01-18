@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "command-executor": {
+      "command": "node",
+      "args": ["packages/commandExecutor/dist/server.js"],
+      "env": {
+        "DEBUG": "*"
+      }
+    }
+  }
+}
