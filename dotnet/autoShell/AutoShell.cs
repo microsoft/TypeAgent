@@ -617,10 +617,6 @@ internal partial class AutoShell
             {
                 string desktopName = desktopNameToken.ToString();
 
-                if (string.IsNullOrWhiteSpace(desktopName))
-                {
-                    continue;
-                }
 
                 try
                 {
