@@ -235,7 +235,7 @@ export async function runDesktopActions(
             break;
         }
         case "createDesktop": {
-            actionData = action.parameters.names !== undefined ? JSON.stringify(action.parameters.names) : JSON.stringify(["desktop 1"]);
+            actionData = action.parameters?.names !== undefined ? JSON.stringify(action.parameters.names) : JSON.stringify(["desktop 1"]);
             confirmationMessage = `Creating new desktop`;
             break;
         }
