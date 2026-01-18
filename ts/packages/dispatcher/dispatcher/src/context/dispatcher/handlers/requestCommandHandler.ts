@@ -297,7 +297,7 @@ export class RequestCommandHandler implements CommandHandler {
                 description: "Request to translate",
                 implicitQuotes: true,
                 optional: true, // can be optional since the user can supply images and no text // TODO: revisit
-                skipKnowledgeExtraction: true
+                skipKnowledgeExtraction: true,
             },
         },
     } as const;

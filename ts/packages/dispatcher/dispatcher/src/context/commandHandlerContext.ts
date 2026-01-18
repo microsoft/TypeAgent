@@ -507,8 +507,12 @@ export async function initializeCommandHandlerContext(
 
             // TODO: instead of disabling this let's find a way to gracefully handle this
             // when there is no internet
-            userRequestKnowledgeExtraction: options?.conversationMemorySettings?.requestKnowledgeExtraction ?? true,
-            actionResultKnowledgeExtraction: options?.conversationMemorySettings?.actionResultKnowledgeExtraction ?? true
+            userRequestKnowledgeExtraction:
+                options?.conversationMemorySettings
+                    ?.requestKnowledgeExtraction ?? true,
+            actionResultKnowledgeExtraction:
+                options?.conversationMemorySettings
+                    ?.actionResultKnowledgeExtraction ?? true,
         };
 
         await initializeMemory(context, sessionDirPath);

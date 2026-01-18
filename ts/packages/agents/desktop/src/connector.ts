@@ -235,7 +235,10 @@ export async function runDesktopActions(
             break;
         }
         case "createDesktop": {
-            actionData = action.parameters?.names !== undefined ? JSON.stringify(action.parameters.names) : JSON.stringify(["desktop 1"]);
+            actionData =
+                action.parameters?.names !== undefined
+                    ? JSON.stringify(action.parameters.names)
+                    : JSON.stringify(["desktop 1"]);
             confirmationMessage = `Creating new desktop`;
             break;
         }
@@ -350,16 +353,14 @@ async function finishRefresh(agentContext: DesktopActionContext) {
 async function mapInputToAppNameFromIndex(
     input: string,
     programNameIndex: ProgramNameIndex,
-    backupProgramNameTable?: string[]
+    backupProgramNameTable?: string[],
 ): Promise<string | undefined> {
-
     try {
         let matchedNames = await programNameIndex.search(input, 1);
         if (matchedNames && matchedNames.length > 0) {
             return matchedNames[0].item.value;
         }
-    } catch (e: any)
-    {
+    } catch (e: any) {
         if (backupProgramNameTable !== undefined) {
             let stringMatches = searchTable(input, backupProgramNameTable, 1);
 
@@ -372,15 +373,19 @@ async function mapInputToAppNameFromIndex(
     return undefined;
 }
 
-function searchTable(text: string, names: string[], max: number): string[] | undefined {
+function searchTable(
+    text: string,
+    names: string[],
+    max: number,
+): string[] | undefined {
     const lowerText = text.toLowerCase();
-    
+
     // Score each name based on match quality (lower is better)
     const scored = names
         .map((name) => {
             const lowerName = name.toLowerCase();
             let score: number;
-            
+
             if (lowerName === lowerText) {
                 // Exact match (case insensitive)
                 score = 0;
@@ -390,23 +395,25 @@ function searchTable(text: string, names: string[], max: number): string[] | und
             } else if (lowerName.includes(lowerText)) {
                 // Contains the search text
                 score = 2;
-            } else if (lowerText.split(/\s+/).every((word) => lowerName.includes(word))) {
+            } else if (
+                lowerText.split(/\s+/).every((word) => lowerName.includes(word))
+            ) {
                 // All words from search text appear in name
                 score = 3;
             } else {
                 // No match
                 score = -1;
             }
-            
+
             return { name, score };
         })
         .filter((item) => item.score >= 0)
         .sort((a, b) => a.score - b.score);
-    
+
     if (scored.length === 0) {
         return undefined;
     }
-    
+
     return scored.slice(0, max).map((item) => item.name);
 }
 
@@ -419,13 +426,13 @@ async function mapInputToAppName(
         let matchedNames = await mapInputToAppNameFromIndex(
             input,
             programNameIndex,
-            agentContext.backupProgramNameTable
+            agentContext.backupProgramNameTable,
         );
         if (matchedNames === undefined && (await finishRefresh(agentContext))) {
             matchedNames = await mapInputToAppNameFromIndex(
                 input,
                 programNameIndex,
-                agentContext.backupProgramNameTable
+                agentContext.backupProgramNameTable,
             );
         }
     }

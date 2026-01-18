@@ -234,8 +234,7 @@ async function pickInitialSchema(
     if (embedding && request.length > 0) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
-        try 
-        {
+        try {
             const result = await agents.semanticSearchActionSchema(
                 request,
                 debugSemanticSearch.enabled ? 5 : 1,
@@ -259,7 +258,7 @@ async function pickInitialSchema(
                 }
             }
         } catch (e: any) {
-                debugSemanticSearch(`Semantic search failed: ${e}`);
+            debugSemanticSearch(`Semantic search failed: ${e}`);
         }
     }
 

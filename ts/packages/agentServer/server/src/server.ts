@@ -65,7 +65,10 @@ async function main() {
         clientIO,
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
         constructionProvider: getDefaultConstructionProvider(),
-        conversationMemorySettings: { requestKnowledgeExtraction: false, actionResultKnowledgeExtraction: false }
+        conversationMemorySettings: {
+            requestKnowledgeExtraction: false,
+            actionResultKnowledgeExtraction: false,
+        },
     });
 
     // Ignore dispatcher close requests
