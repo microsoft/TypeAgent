@@ -2813,6 +2813,40 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  packages/commandExecutor:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.25.2
+        version: 1.25.2(hono@4.11.3)(zod@4.1.13)
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../agentServer/client
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../dispatcher/types
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      isomorphic-ws:
+        specifier: ^5.0.0
+        version: 5.0.0(ws@8.18.2)
+      zod:
+        specifier: ^4.1.13
+        version: 4.1.13
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.5.3
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.10
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/defaultAgentProvider:
     dependencies:
       '@modelcontextprotocol/sdk':
