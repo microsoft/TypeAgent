@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Simple test of the PTY wrapper with Node REPL
 
 import { PtyWrapper } from "./dist/index.js";
