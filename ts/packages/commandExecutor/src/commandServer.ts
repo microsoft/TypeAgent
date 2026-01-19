@@ -352,7 +352,11 @@ export class CommandServer {
             {
                 inputSchema: executeCommandRequestSchema(),
                 description:
-                    "Execute a user command such as playing music, managing lists, or working with calendars",
+                    "Execute user commands including:\n" +
+                    "- Music & media: play songs, control playback\n" +
+                    "- Lists & tasks: manage shopping lists, todo lists\n" +
+                    "- Calendar: schedule events, view calendar\n" +
+                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings",
             },
             async (request: ExecuteCommandRequest) =>
                 this.executeCommand(request),

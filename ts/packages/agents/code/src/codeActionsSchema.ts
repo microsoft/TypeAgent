@@ -41,13 +41,29 @@ export type ChangeColorThemeAction = {
 };
 
 export type SplitDirection = "right" | "left" | "up" | "down";
+export type EditorPosition = "first" | "last" | "active";
 
-// Split to update the current editor window into a new editor pane to the left, right, above, or below
+// ACTION: Split an editor window into multiple panes showing the same file or different files side-by-side.
+// This creates a new editor pane (split view) for working with multiple files simultaneously.
+// USE THIS for: "split editor", "split the editor with X", "duplicate this editor to the right", "split X"
+//
+// Examples:
+// - "split editor to the right" → splits active editor
+// - "split the first editor" → splits leftmost editor
+// - "split app.tsx to the left" → finds editor showing app.tsx and splits it
+// - "split the last editor down" → splits rightmost editor downward
+// - "split the editor with utils.ts" → finds editor showing utils.ts and splits it
 export type SplitEditorAction = {
     actionName: "splitEditor";
     parameters: {
-        // e.g., "right", "left", "up", "down", only if specified by the user
+        // Direction to split: "right", "left", "up", "down". Only include if user specifies direction.
         direction?: SplitDirection;
+        // Which editor to split by position. Use "first" for leftmost editor, "last" for rightmost, "active" for current editor, or a number (0-based index).
+        editorPosition?: EditorPosition | number;
+        // Which editor to split by file name. Extract the file name or pattern from user request.
+        // Examples: "app.tsx", "main.py", "utils", "codeActionHandler"
+        // Use this when user says "split X" or "split the editor with X" where X is a file name.
+        fileName?: string;
     };
 };
 

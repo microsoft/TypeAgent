@@ -86,7 +86,7 @@ The server is configured in `.mcp.json`:
 
 #### execute_command
 
-Execute user commands such as playing music, managing lists, or working with calendars.
+Execute user commands including music playback, list management, calendar operations, and VSCode automation.
 
 **Parameters:**
 
@@ -94,9 +94,27 @@ Execute user commands such as playing music, managing lists, or working with cal
 
 **Examples:**
 
+**Music & Media:**
 - "play sweet emotion by aerosmith"
+- "play bohemian rhapsody by queen"
+
+**Lists & Tasks:**
 - "add jelly beans to my grocery list"
+- "what's on my shopping list"
+
+**Calendar:**
 - "schedule a meeting for tomorrow at 2pm"
+
+**VSCode Automation:**
+- "switch to monokai theme"
+- "change theme to dark+"
+- "open the explorer view"
+- "create a new folder called components"
+- "open file app.ts"
+- "split editor to the right"
+- "toggle zen mode"
+- "open integrated terminal"
+- "show output panel"
 
 #### ping (debug mode)
 
@@ -115,7 +133,9 @@ Command Executor MCP Server
     ↓
 TypeAgent Dispatcher (WebSocket)
     ↓
-TypeAgent Agents (Music, Lists, Calendar, etc.)
+    ├─ TypeAgent Agents (Music, Lists, Calendar, etc.)
+    └─ Coda VSCode Extension (via WebSocket on port 8082)
+       └─ VSCode APIs (theme, editor, files, terminal, etc.)
 ```
 
 The MCP server:
