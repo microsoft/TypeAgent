@@ -116,6 +116,7 @@ Execute user commands including music playback, list management, calendar operat
 - "open integrated terminal"
 - "show output panel"
 
+
 #### ping (debug mode)
 
 Test server connectivity.
