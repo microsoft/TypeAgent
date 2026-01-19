@@ -46,9 +46,7 @@ export const ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
 /**
  * Get assistant configuration by name or return default
  */
-export function getAssistantConfig(
-    assistantName?: string,
-): AssistantConfig {
+export function getAssistantConfig(assistantName?: string): AssistantConfig {
     const name = assistantName || "claude";
     const config = ASSISTANT_CONFIGS[name];
 

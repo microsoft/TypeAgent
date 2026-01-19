@@ -82,17 +82,17 @@ Edit `src/assistantConfig.ts` to add new assistants:
 
 ```typescript
 export const ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
-    claude: {
-        name: "Claude Code",
-        command: "claude",
-        args: [],
-    },
-    aider: {
-        name: "Aider",
-        command: "aider",
-        args: [],
-    },
-    // Add more...
+  claude: {
+    name: "Claude Code",
+    command: "claude",
+    args: [],
+  },
+  aider: {
+    name: "Aider",
+    command: "aider",
+    args: [],
+  },
+  // Add more...
 };
 ```
 

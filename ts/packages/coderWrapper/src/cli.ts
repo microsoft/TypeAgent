@@ -66,7 +66,9 @@ async function main() {
         const config = getAssistantConfig(assistant);
 
         console.log(`[CoderWrapper] Starting ${config.name}...`);
-        console.log(`[CoderWrapper] Command: ${config.command} ${config.args.join(" ")}`);
+        console.log(
+            `[CoderWrapper] Command: ${config.command} ${config.args.join(" ")}`,
+        );
         console.log(
             `[CoderWrapper] Press Ctrl+C to exit or type 'exit' in the assistant\n`,
         );

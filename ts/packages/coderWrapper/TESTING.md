@@ -12,6 +12,7 @@ node dist/cli.js -a node
 ```
 
 Expected behavior:
+
 - Node REPL should start
 - You should see the `>` prompt
 - Type `1+1` and press Enter → should show `2`
@@ -25,6 +26,7 @@ node dist/cli.js -a python
 ```
 
 Expected behavior:
+
 - Python REPL should start
 - You should see the `>>>` prompt
 - Type `print("Hello")` and press Enter → should show `Hello`
@@ -39,6 +41,7 @@ node dist/cli.js
 ```
 
 Expected behavior:
+
 - Claude Code CLI should start
 - All interactive features should work
 - Colors, prompts, and formatting preserved
@@ -63,13 +66,16 @@ Expected behavior:
 ## Troubleshooting
 
 ### "File not found" error
+
 - Command not in PATH
 - On Windows, ensure command ends with `.exe` or is fully qualified
 
 ### "stdin.setRawMode is not a function"
+
 - You're not running in a real terminal
 - Run directly in terminal, not through a script with pipes
 
 ### Process doesn't exit
+
 - Some commands may not handle stdin close properly
 - Use Ctrl+C to force exit - wrapper handles this gracefully
