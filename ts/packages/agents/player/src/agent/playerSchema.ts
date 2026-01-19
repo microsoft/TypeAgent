@@ -32,10 +32,18 @@ export type PlayerActions =
     | DeletePlaylistAction
     | AddCurrentTrackToPlaylistAction
     | AddToPlaylistFromCurrentTrackListAction
+    | AddSongsToPlaylistAction
     | GetQueueAction;
 
 export type PlayerEntities = MusicDevice;
 export type MusicDevice = string;
+
+// Specification for a song by title and optional artist/album
+export interface SongSpecification {
+    trackName: string;
+    artist?: string;
+    albumName?: string;
+}
 
 // Use playRandom when the user asks for some music to play
 export interface PlayRandomAction {
@@ -235,12 +243,14 @@ export interface GetFavoritesAction {
     };
 }
 
-// create a new empty playlist
+// create a new playlist, optionally with a list of songs specified by title and artist
 export interface CreatePlaylistAction {
     actionName: "createPlaylist";
     parameters: {
         // name of playlist to create
         name: string;
+        // optional list of songs to add to the playlist when creating it
+        songs?: SongSpecification[];
     };
 }
 
@@ -273,6 +283,18 @@ export interface AddToPlaylistFromCurrentTrackListAction {
         // number of tracks to add (default 1)
         // if specified, adds this many tracks starting from trackNumber; for example, to add tracks 3,4,5 set trackNumber=3 and trackCount=3
         trackCount?: number;
+    };
+}
+
+// add songs to a playlist by specifying track names and optional artists
+// this action searches for each song and adds it to the playlist
+export interface AddSongsToPlaylistAction {
+    actionName: "addSongsToPlaylist";
+    parameters: {
+        // name of playlist to add songs to
+        name: string;
+        // list of songs to add, each specified by track name and optional artist/album
+        songs: SongSpecification[];
     };
 }
 

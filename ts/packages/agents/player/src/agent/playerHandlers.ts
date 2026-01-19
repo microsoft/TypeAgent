@@ -378,6 +378,7 @@ async function getPlayerActionCompletion(
         case "deletePlaylist":
         case "addCurrentTrackToPlaylist":
         case "addToPlaylistFromCurrentTrackList":
+        case "addSongsToPlaylist":
             if (propertyName === "parameters.name") {
                 if (userData.data.playlists === undefined) {
                     await getPlaylistsFromUserData(
