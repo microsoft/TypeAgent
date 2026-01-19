@@ -298,38 +298,186 @@ export async function handleBaseEditorActions(
         }
 
         case "splitEditor": {
-            if (actionData && actionData.direction) {
-                switch (actionData.direction) {
+            console.log(
+                `[splitEditor] Starting with actionData:`,
+                JSON.stringify(actionData),
+            );
+            // Find the target editor to split
+            let targetEditor: vscode.TextEditor | undefined;
+            const editorPosition = actionData?.editorPosition;
+            const fileName = actionData?.fileName;
+            console.log(
+                `[splitEditor] editorPosition=${editorPosition}, fileName=${fileName}`,
+            );
+
+            if (fileName || editorPosition !== undefined) {
+                // Find target editor by fileName or editorPosition
+                // Use visibleTextEditors to get all currently visible editors
+                const allEditors = vscode.window.visibleTextEditors;
+                console.log(
+                    `[splitEditor] Found ${allEditors.length} visible editors:`,
+                    allEditors.map((e) => e.document.fileName),
+                );
+
+                if (fileName) {
+                    // Search by file name (case-insensitive, partial match)
+                    const pattern = fileName.toLowerCase();
+                    console.log(
+                        `[splitEditor] Searching for pattern: ${pattern}`,
+                    );
+
+                    // First try visible editors
+                    targetEditor = allEditors.find((editor) =>
+                        editor.document.fileName
+                            .toLowerCase()
+                            .includes(pattern),
+                    );
+
+                    // If not found in visible editors, search all open tabs
+                    if (!targetEditor) {
+                        console.log(
+                            `[splitEditor] Not found in visible editors, searching all tabs...`,
+                        );
+                        for (const tabGroup of vscode.window.tabGroups.all) {
+                            for (const tab of tabGroup.tabs) {
+                                const input = tab.input as any;
+                                if (input?.uri) {
+                                    const filePath =
+                                        input.uri.fsPath || input.uri.path;
+                                    if (
+                                        filePath.toLowerCase().includes(pattern)
+                                    ) {
+                                        console.log(
+                                            `[splitEditor] Found tab with matching file: ${filePath}`,
+                                        );
+                                        // Open the document to make it an editor
+                                        const document =
+                                            await vscode.workspace.openTextDocument(
+                                                input.uri,
+                                            );
+                                        targetEditor =
+                                            await vscode.window.showTextDocument(
+                                                document,
+                                                {
+                                                    viewColumn:
+                                                        tabGroup.viewColumn,
+                                                    preserveFocus: false,
+                                                },
+                                            );
+                                        break;
+                                    }
+                                }
+                            }
+                            if (targetEditor) break;
+                        }
+                    }
+
+                    if (!targetEditor) {
+                        console.log(
+                            `[splitEditor] No editor or tab found with pattern: ${pattern}`,
+                        );
+                        actionResult.handled = false;
+                        actionResult.message = `No editor found with file: ${fileName}`;
+                        break;
+                    }
+                    console.log(
+                        `[splitEditor] Found target editor: ${targetEditor.document.fileName}`,
+                    );
+                } else if (editorPosition !== undefined) {
+                    // Search by position
+                    if (typeof editorPosition === "number") {
+                        targetEditor = allEditors[editorPosition];
+                        if (!targetEditor) {
+                            actionResult.handled = false;
+                            actionResult.message = `No editor at position: ${editorPosition}`;
+                            break;
+                        }
+                    } else if (editorPosition === "first") {
+                        // Sort by viewColumn to get leftmost editor
+                        const sortedEditors = [...allEditors].sort(
+                            (a, b) => (a.viewColumn || 0) - (b.viewColumn || 0),
+                        );
+                        targetEditor = sortedEditors[0];
+                    } else if (editorPosition === "last") {
+                        // Sort by viewColumn to get rightmost editor
+                        const sortedEditors = [...allEditors].sort(
+                            (a, b) => (a.viewColumn || 0) - (b.viewColumn || 0),
+                        );
+                        targetEditor = sortedEditors[sortedEditors.length - 1];
+                    } else if (editorPosition === "active") {
+                        targetEditor = vscode.window.activeTextEditor;
+                    }
+
+                    if (!targetEditor) {
+                        actionResult.handled = false;
+                        actionResult.message = `No editor found at position: ${editorPosition}`;
+                        break;
+                    }
+                }
+
+                // Focus the target editor temporarily (only if it's not already active)
+                if (targetEditor !== vscode.window.activeTextEditor) {
+                    console.log(
+                        `[splitEditor] Focusing target editor: ${targetEditor!.document.fileName}`,
+                    );
+                    await vscode.window.showTextDocument(
+                        targetEditor!.document,
+                        {
+                            viewColumn:
+                                targetEditor!.viewColumn ??
+                                vscode.ViewColumn.One,
+                            preserveFocus: false,
+                        },
+                    );
+                }
+            }
+
+            // Execute the split command
+            const direction = actionData?.direction;
+            if (direction) {
+                switch (direction) {
                     case "right": {
-                        vscode.commands.executeCommand(
+                        await vscode.commands.executeCommand(
                             "workbench.action.splitEditorRight",
                         );
                         break;
                     }
                     case "left": {
-                        vscode.commands.executeCommand(
+                        await vscode.commands.executeCommand(
                             "workbench.action.splitEditorLeft",
                         );
                         break;
                     }
                     case "up": {
-                        vscode.commands.executeCommand(
+                        await vscode.commands.executeCommand(
                             "workbench.action.splitEditorUp",
                         );
                         break;
                     }
                     case "down": {
-                        vscode.commands.executeCommand(
+                        await vscode.commands.executeCommand(
                             "workbench.action.splitEditorDown",
                         );
                         break;
                     }
                 }
-                actionResult.message = `Split editor ${actionData.direction}`;
             } else {
-                vscode.commands.executeCommand("workbench.action.splitEditor");
-                actionResult.message = "Split editor";
+                await vscode.commands.executeCommand(
+                    "workbench.action.splitEditor",
+                );
             }
+
+            // Build result message
+            const targetInfo = fileName
+                ? ` (${fileName})`
+                : editorPosition !== undefined
+                  ? ` (${editorPosition})`
+                  : "";
+            actionResult.message =
+                `Split editor${targetInfo} ${direction || ""}`.trim();
+            console.log(
+                `[splitEditor] Completed successfully: ${actionResult.message}`,
+            );
             break;
         }
 

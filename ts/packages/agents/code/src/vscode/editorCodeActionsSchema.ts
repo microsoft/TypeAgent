@@ -160,11 +160,20 @@ export type EditorActionFixProblem = {
     };
 };
 
-// Action to move the cursor in a file to a specified position.
+// ACTION: Move the cursor to a specific position within a file (for navigation or editing preparation).
+// This moves the cursor position, NOT split/duplicate the editor view.
+// USE THIS for: "go to file X", "jump to line 50", "go to function foo", "move cursor to X"
+// DO NOT USE for: "split editor", "split X", "duplicate editor" (use splitEditor action instead)
+//
+// Examples:
+// - "go to line 50" → { target: { type: "onLine", line: 50 } }
+// - "jump to function main" → { target: { type: "insideFunction", name: "main" } }
+// - "go to app.tsx" → { target: { type: "inFile", filePath: "app.tsx" } }
+// - "move cursor to the end of file" → { target: { type: "atEndOfFile" } }
 export type EditorActionMoveCursor = {
     actionName: "moveCursorInFile";
     parameters: {
-        //Target position for the cursor. Supports symbolic locations, line-based positions, or file-relative positions.
+        // Target position for the cursor. Supports symbolic locations, line-based positions, or file-relative positions.
         target: CursorTarget;
         // Optional file where the cursor should be moved. Defaults to the active editor if not provided.
         file?: FileTarget;
