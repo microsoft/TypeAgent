@@ -21,12 +21,14 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 ### Theme & Appearance
 
 **Change Color Theme:**
+
 - "switch to monokai theme"
 - "change theme to dark+"
 - "change to light theme"
 - "set theme to solarized dark"
 
 **Display Controls:**
+
 - "toggle full screen"
 - "toggle zen mode"
 - "zoom in" (zooms in 5 levels)
@@ -36,6 +38,7 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 ### Editor Layout
 
 **Split Editor:**
+
 - "split editor to the right" (splits currently focused editor)
 - "split editor to the left"
 - "split editor up"
@@ -46,40 +49,48 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 - "split the typescript file" (splits editor with a .ts file)
 
 **Column Layout:**
+
 - "change editor to single column"
 - "change editor to double columns"
 - "change editor to three columns"
 - "toggle editor layout"
 
 **Editor Management:**
+
 - "close editor"
 
 ### File & Folder Operations
 
 **Open Files:**
+
 - "open file app.ts"
 - "open main.py"
 - "goto file index.html"
 
 **Navigate:**
+
 - "goto line 42"
 - "goto file package.json"
 
 **Create Files:**
+
 - "create new file" (untitled)
 - "create file hello.ts in src folder"
 
 **Create Folders:**
+
 - "create folder called components"
 - "create folder utils in src"
 
 **Open Folders:**
+
 - "open folder src in explorer"
 - "reveal packages folder"
 
 ### Views & Panels
 
 **Show Views:**
+
 - "show explorer"
 - "open explorer view"
 - "show search"
@@ -87,6 +98,7 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 - "show output panel"
 
 **Special Views:**
+
 - "toggle search details"
 - "replace in files"
 - "open markdown preview"
@@ -95,12 +107,15 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 ### Navigation & Commands
 
 **Command Palette:**
+
 - "show command palette"
 
 **Quick Open:**
+
 - "quick open file"
 
 **Settings:**
+
 - "open settings"
 - "show user settings"
 - "show keyboard shortcuts"
@@ -108,6 +123,7 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 ### Terminal
 
 **Open Terminal:**
+
 - "open integrated terminal"
 - "open terminal in src folder"
 - "open terminal and run npm install"
@@ -115,6 +131,7 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 ### Tasks & Build
 
 **Run Tasks:**
+
 - "build the project"
 - "clean the project"
 - "rebuild the project"
@@ -123,6 +140,7 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 ### Window Management
 
 **New Windows:**
+
 - "open new window"
 
 ## Usage Examples
@@ -130,11 +148,13 @@ The Coda VSCode extension connects to TypeAgent's dispatcher and can execute var
 ### Example 1: Change Theme
 
 **User to Claude Code:**
+
 ```
 switch to monokai theme
 ```
 
 **Claude Code calls:**
+
 ```json
 {
   "tool": "execute_command",
@@ -145,6 +165,7 @@ switch to monokai theme
 ```
 
 **Result:**
+
 ```
 Changed theme to Monokai
 ```
@@ -152,11 +173,13 @@ Changed theme to Monokai
 ### Example 2: Open File and Split Editor
 
 **User to Claude Code:**
+
 ```
 open app.ts and split the editor to the right
 ```
 
 **Claude Code can:**
+
 1. Call execute_command with "open app.ts"
 2. Call execute_command with "split editor to the right"
 
@@ -165,11 +188,13 @@ Or TypeAgent might handle both in one call.
 ### Example 3: Create Project Structure
 
 **User to Claude Code:**
+
 ```
 create folders called src, tests, and docs
 ```
 
 **Claude Code calls:**
+
 ```json
 {
   "tool": "execute_command",
@@ -221,12 +246,14 @@ See source files in `packages/coda/src/handle*.ts` for full details.
 Here are the internal action names (useful for understanding the code):
 
 **Base Editor:**
+
 - `changeColorScheme`
 - `splitEditor`
 - `changeEditorLayout`
 - `newFile`
 
 **Display:**
+
 - `toggleFullScreen`
 - `toggleEditorLayout`
 - `zoomIn`, `zoomOut`, `fontZoomReset`
@@ -240,6 +267,7 @@ Here are the internal action names (useful for understanding the code):
 - `openSettings`
 
 **General:**
+
 - `showCommandPalette`
 - `gotoFileOrLineOrSymbol`
 - `newWindowFromApp`
@@ -247,6 +275,7 @@ Here are the internal action names (useful for understanding the code):
 - `showKeyboardShortcuts`
 
 **Workbench:**
+
 - `workbenchOpenFile`
 - `workbenchOpenFolder`
 - `workbenchCreateFolderFromExplorer`
@@ -258,11 +287,13 @@ Here are the internal action names (useful for understanding the code):
 To use these VSCode capabilities:
 
 1. **TypeAgent Dispatcher** must be running:
+
    ```bash
    pnpm run start:agent-server
    ```
 
 2. **Coda Extension** must be installed and activated in VSCode:
+
    - Published as `aisystems.copilot-coda`
    - Auto-connects to dispatcher on port 8082
 

@@ -95,17 +95,21 @@ Execute user commands including music playback, list management, calendar operat
 **Examples:**
 
 **Music & Media:**
+
 - "play sweet emotion by aerosmith"
 - "play bohemian rhapsody by queen"
 
 **Lists & Tasks:**
+
 - "add jelly beans to my grocery list"
 - "what's on my shopping list"
 
 **Calendar:**
+
 - "schedule a meeting for tomorrow at 2pm"
 
 **VSCode Automation:**
+
 - "switch to monokai theme"
 - "change theme to dark+"
 - "open the explorer view"
@@ -115,7 +119,6 @@ Execute user commands including music playback, list management, calendar operat
 - "toggle zen mode"
 - "open integrated terminal"
 - "show output panel"
-
 
 #### ping (debug mode)
 
