@@ -18,6 +18,8 @@ import {
     GetFromCurrentPlaylistListAction,
     AddCurrentTrackToPlaylistAction,
     AddToPlaylistFromCurrentTrackListAction,
+    AddSongsToPlaylistAction,
+    SongSpecification,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -534,6 +536,49 @@ export async function searchForPlaylists(
     if (data && data.playlists && data.playlists.items.length > 0) {
         return data.playlists.items;
     }
+}
+
+// Search for tracks from a list of song specifications and return their URIs
+async function searchSongsAndGetUris(
+    songs: SongSpecification[],
+    context: IClientContext,
+): Promise<{ uris: string[]; notFound: string[] }> {
+    const uris: string[] = [];
+    const notFound: string[] = [];
+
+    for (const song of songs) {
+        // Build search query from track name and optional artist/album
+        let queryString = song.trackName;
+        if (song.artist) {
+            queryString += ` artist:${song.artist}`;
+        }
+        if (song.albumName) {
+            queryString += ` album:${song.albumName}`;
+        }
+
+        const trackCollection = await searchTracks(queryString, context);
+        if (trackCollection) {
+            const tracks = trackCollection.getTracks();
+            if (tracks.length > 0) {
+                // Take the first (best) match
+                uris.push(tracks[0].uri);
+            } else {
+                notFound.push(
+                    song.artist
+                        ? `${song.trackName} by ${song.artist}`
+                        : song.trackName,
+                );
+            }
+        } else {
+            notFound.push(
+                song.artist
+                    ? `${song.trackName} by ${song.artist}`
+                    : song.trackName,
+            );
+        }
+    }
+
+    return { uris, notFound };
 }
 
 async function playTrackCollection(
@@ -1300,17 +1345,40 @@ export async function handleCall(
         */
         case "createPlaylist": {
             const name = action.parameters.name;
-            // create empty playlist
+            const songs = action.parameters.songs;
+
+            let resultMessage = `playlist ${name} created`;
+            let uris: string[] = [];
+
+            // If songs are specified, search for them first
+            if (songs && songs.length > 0) {
+                const searchResult = await searchSongsAndGetUris(
+                    songs,
+                    clientContext,
+                );
+                uris = searchResult.uris;
+
+                if (uris.length > 0) {
+                    resultMessage += ` with ${uris.length} song${uris.length > 1 ? "s" : ""}`;
+                }
+
+                if (searchResult.notFound.length > 0) {
+                    resultMessage += `\nCouldn't find: ${searchResult.notFound.join(", ")}`;
+                }
+            }
+
+            // Create the playlist with the URIs (or empty if no songs)
             await createPlaylist(
                 clientContext.service,
                 name,
                 clientContext.service.retrieveUser().id!,
-                [],
+                uris,
                 name,
             );
-            console.log(`playlist ${name} created`);
+
+            console.log(resultMessage);
             return createActionResultFromTextDisplay(
-                chalk.magentaBright(`playlist ${name} created`),
+                chalk.magentaBright(resultMessage),
             );
         }
         case "deletePlaylist": {
@@ -1419,6 +1487,55 @@ export async function handleCall(
                     : `Added track number ${trackNumber} to playlist ${playlist.name}`;
             return createActionResultFromTextDisplay(
                 chalk.magentaBright(resultString),
+            );
+        }
+        case "addSongsToPlaylist": {
+            const addAction = action as AddSongsToPlaylistAction;
+            const playlistName = addAction.parameters.name;
+            const songs = addAction.parameters.songs;
+
+            if (clientContext.userData === undefined) {
+                return createErrorActionResult("No user data found");
+            }
+
+            // Find the playlist
+            const playlists = await getPlaylistsFromUserData(
+                clientContext.service,
+                clientContext.userData!.data,
+            );
+            const playlist = playlists?.find((pl) => {
+                return pl.name
+                    .toLowerCase()
+                    .includes(playlistName.toLowerCase());
+            });
+            if (!playlist) {
+                return createErrorActionResult(
+                    `playlist ${playlistName} not found`,
+                );
+            }
+
+            // Search for the songs and get their URIs
+            const { uris, notFound } = await searchSongsAndGetUris(
+                songs,
+                clientContext,
+            );
+
+            if (uris.length === 0) {
+                return createErrorActionResult(
+                    `Could not find any of the specified songs`,
+                );
+            }
+
+            // Add the tracks to the playlist
+            await addTracksToPlaylist(clientContext.service, playlist.id, uris);
+
+            let resultMessage = `Added ${uris.length} song${uris.length > 1 ? "s" : ""} to playlist ${playlist.name}`;
+            if (notFound.length > 0) {
+                resultMessage += `\nCouldn't find: ${notFound.join(", ")}`;
+            }
+
+            return createActionResultFromTextDisplay(
+                chalk.magentaBright(resultMessage),
             );
         }
         default:
