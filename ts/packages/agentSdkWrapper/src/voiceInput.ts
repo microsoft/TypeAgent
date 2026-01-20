@@ -8,33 +8,53 @@ import fetch, { FormData, Blob } from "node-fetch";
 import Mic from "mic";
 import OpenAI from "openai";
 
-export type TranscriptionProvider = "openai" | "local";
+export type TranscriptionProvider = "openai" | "azure-openai" | "local";
 
 export interface VoiceInputOptions {
     provider?: TranscriptionProvider;
     whisperServiceUrl?: string;
     openaiApiKey?: string;
+    azureOpenAIApiKey?: string;
+    azureOpenAIEndpoint?: string;
+    azureOpenAIDeploymentName?: string;
 }
 
 /**
  * Voice input handler for recording audio and transcribing
- * Supports both OpenAI Whisper API (default) and local Whisper service
+ * Supports OpenAI Whisper API, Azure OpenAI, and local Whisper service
  * Uses the 'mic' package for cross-platform audio recording
  */
 export class VoiceInputHandler {
     private provider: TranscriptionProvider;
     private whisperServiceUrl: string;
     private openaiClient: OpenAI | null = null;
+    private azureDeploymentName: string = "";
     private micInstance: any = null;
     private audioChunks: Buffer[] = [];
     private isRecording = false;
     private silenceTimer: NodeJS.Timeout | null = null;
-    private silenceThreshold = 1000; // 1 second of silence
+    private silenceThreshold = 2000; // 2 seconds of silence
+    private hasDetectedAudio = false; // Track if we've detected any audio yet
     private resolveRecording: ((value: string) => void) | null = null;
     private rejectRecording: ((reason: any) => void) | null = null;
 
     constructor(options: VoiceInputOptions = {}) {
-        this.provider = options.provider || "openai";
+        // Auto-detect provider based on available environment variables
+        if (!options.provider) {
+            if (
+                process.env.AZURE_OPENAI_API_KEY &&
+                process.env.AZURE_OPENAI_ENDPOINT
+            ) {
+                this.provider = "azure-openai";
+            } else if (process.env.OPENAI_API_KEY) {
+                this.provider = "openai";
+            } else {
+                this.provider = "local";
+            }
+        } else {
+            this.provider = options.provider;
+        }
+
         this.whisperServiceUrl =
             options.whisperServiceUrl || "http://localhost:8001";
 
@@ -50,21 +70,49 @@ export class VoiceInputHandler {
             } else {
                 this.openaiClient = new OpenAI({ apiKey });
             }
+        } else if (this.provider === "azure-openai") {
+            const apiKey =
+                options.azureOpenAIApiKey ||
+                process.env.AZURE_OPENAI_API_KEY ||
+                "";
+            const endpoint =
+                options.azureOpenAIEndpoint ||
+                process.env.AZURE_OPENAI_ENDPOINT ||
+                "";
+            this.azureDeploymentName =
+                options.azureOpenAIDeploymentName ||
+                process.env.AZURE_OPENAI_DEPLOYMENT_NAME ||
+                "whisper";
+
+            if (!apiKey || !endpoint) {
+                console.warn(
+                    "[Voice] Azure OpenAI credentials not found, falling back to local Whisper",
+                );
+                this.provider = "local";
+            } else {
+                this.openaiClient = new OpenAI({
+                    apiKey,
+                    baseURL: `${endpoint}/openai/deployments/${this.azureDeploymentName}`,
+                    defaultQuery: { "api-version": "2024-02-01" },
+                    defaultHeaders: { "api-key": apiKey },
+                });
+            }
         }
     }
 
     /**
      * Start recording audio and return transcribed text when silence detected
-     * Uses 1 second of silence as the end-of-speech threshold
+     * Uses 2 seconds of silence as the end-of-speech threshold
      */
     async recordAndTranscribe(): Promise<string> {
         return new Promise((resolve, reject) => {
             console.log(
-                "\n🎤 Recording... (speak now, 1 second of silence will end recording)\n",
+                "\n🎤 Recording... (speak now, 2 seconds of silence will end recording)\n",
             );
 
             this.audioChunks = [];
             this.isRecording = true;
+            this.hasDetectedAudio = false;
 
             // Create mic instance with proper settings for Whisper
             this.micInstance = Mic({
@@ -87,6 +135,12 @@ export class VoiceInputHandler {
                 const hasAudio = this.detectAudio(data);
 
                 if (hasAudio) {
+                    // Mark that we've detected audio
+                    if (!this.hasDetectedAudio) {
+                        this.hasDetectedAudio = true;
+                        console.log("🎙️  Audio detected, listening...\n");
+                    }
+
                     // Reset silence timer when we detect audio
                     if (this.silenceTimer) {
                         clearTimeout(this.silenceTimer);
@@ -118,11 +172,8 @@ export class VoiceInputHandler {
             // Start recording
             this.micInstance.start();
 
-            // Start initial silence timer
-            this.silenceTimer = setTimeout(() => {
-                console.log("🔇 Silence detected, processing...\n");
-                this.stopMic();
-            }, this.silenceThreshold + 5000); // Add 5 seconds buffer for initial setup
+            // Don't start silence timer yet - wait for first audio detection
+            // This prevents premature timeout before user starts speaking
         });
     }
 
@@ -187,10 +238,13 @@ export class VoiceInputHandler {
     }
 
     /**
-     * Send audio to transcription service (OpenAI or local Whisper)
+     * Send audio to transcription service (OpenAI, Azure OpenAI, or local Whisper)
      */
     private async transcribe(audioBuffer: Buffer): Promise<string> {
-        if (this.provider === "openai" && this.openaiClient) {
+        if (
+            (this.provider === "openai" || this.provider === "azure-openai") &&
+            this.openaiClient
+        ) {
             return this.transcribeWithOpenAI(audioBuffer);
         } else {
             return this.transcribeWithLocalWhisper(audioBuffer);
@@ -198,7 +252,7 @@ export class VoiceInputHandler {
     }
 
     /**
-     * Transcribe using OpenAI Whisper API
+     * Transcribe using OpenAI or Azure OpenAI Whisper API
      */
     private async transcribeWithOpenAI(audioBuffer: Buffer): Promise<string> {
         const tempDir = os.tmpdir();
@@ -209,11 +263,15 @@ export class VoiceInputHandler {
             const wavBuffer = this.createWavBuffer(audioBuffer);
             fs.writeFileSync(tempFile, wavBuffer);
 
-            // Use OpenAI API
+            // Use OpenAI API (works for both OpenAI and Azure OpenAI)
+            const model =
+                this.provider === "azure-openai"
+                    ? this.azureDeploymentName
+                    : "whisper-1";
             const transcription =
                 await this.openaiClient!.audio.transcriptions.create({
                     file: fs.createReadStream(tempFile) as any,
-                    model: "whisper-1",
+                    model,
                     language: "en", // Optional: specify language for better accuracy
                     response_format: "text",
                 });
@@ -319,8 +377,8 @@ export class VoiceInputHandler {
      * Check if transcription service is available
      */
     async isWhisperServiceAvailable(): Promise<boolean> {
-        if (this.provider === "openai") {
-            // For OpenAI, just check if we have an API key
+        if (this.provider === "openai" || this.provider === "azure-openai") {
+            // For OpenAI/Azure, just check if we have a client configured
             return this.openaiClient !== null;
         } else {
             // For local service, check if it's running

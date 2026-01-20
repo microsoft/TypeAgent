@@ -91,9 +91,27 @@ Once running, you can:
 
 ### Voice Input
 
-The Agent SDK wrapper supports voice input with two transcription options:
+The Agent SDK wrapper supports voice input with three transcription options:
 
-**Option 1: OpenAI Whisper API (Default, Recommended)**
+**Option 1: Azure OpenAI (Recommended for Enterprise)**
+
+Set your Azure OpenAI credentials as environment variables:
+
+```bash
+export AZURE_OPENAI_API_KEY=your-key
+export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+export AZURE_OPENAI_DEPLOYMENT_NAME=whisper  # Optional, defaults to "whisper"
+```
+
+Or create a `.env` file in the agentSdkWrapper directory:
+
+```
+AZURE_OPENAI_API_KEY=your-key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT_NAME=whisper
+```
+
+**Option 2: OpenAI Whisper API**
 
 Set your OpenAI API key as an environment variable:
 
@@ -107,18 +125,22 @@ Or create a `.env` file in the agentSdkWrapper directory:
 OPENAI_API_KEY=sk-...
 ```
 
-This provides the best transcription accuracy and requires no local setup.
+This provides excellent transcription accuracy and requires no local setup.
 
-**Option 2: Local Whisper Service**
+**Option 3: Local Whisper Service**
 
-If you don't have an OpenAI API key, start the local Whisper service (requires GPU for best performance):
+If you don't have cloud API credentials, start the local Whisper service (requires GPU for best performance):
 
 ```bash
 cd python/stt/whisperService
 python faster-whisper.py
 ```
 
-The system will automatically fall back to local Whisper if no OpenAI API key is found.
+The system will automatically detect and use the best available provider based on environment variables:
+
+1. Azure OpenAI (if `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT` are set)
+2. OpenAI (if `OPENAI_API_KEY` is set)
+3. Local Whisper service (fallback)
 
 **Note:** Voice input uses Node.js native audio APIs (via the `mic` package), so no external audio tools are required!
 
