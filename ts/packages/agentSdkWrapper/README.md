@@ -101,6 +101,12 @@ Set your OpenAI API key as an environment variable:
 export OPENAI_API_KEY=sk-...
 ```
 
+Or create a `.env` file in the agentSdkWrapper directory:
+
+```
+OPENAI_API_KEY=sk-...
+```
+
 This provides the best transcription accuracy and requires no local setup.
 
 **Option 2: Local Whisper Service**

@@ -793,7 +793,7 @@ importers:
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -1050,13 +1050,28 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.12
-        version: 0.2.12(zod@4.1.13)
+        version: 0.2.12
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.25.2(hono@4.11.3)(zod@4.1.13)
       coder-wrapper:
         specifier: workspace:*
         version: link:../coderWrapper
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.5.0
+      form-data:
+        specifier: ^4.0.0
+        version: 4.0.4
+      mic:
+        specifier: ^2.1.2
+        version: 2.1.2
+      node-fetch:
+        specifier: ^3.3.2
+        version: 3.3.2
+      openai:
+        specifier: ^4.73.0
+        version: 4.103.0(encoding@0.1.13)(ws@8.18.2)
     devDependencies:
       '@types/node':
         specifier: ^18.19.3
@@ -1553,7 +1568,7 @@ importers:
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -2463,7 +2478,7 @@ importers:
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -3036,7 +3051,7 @@ importers:
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -8451,6 +8466,10 @@ packages:
   dagre@0.8.5:
     resolution: {integrity: sha512-/aTqmnRta7x7MCCpExk7HQL2O4owCT2h8NT//9I1OQ9vt29Pa0BzSAkR5lwFUcQ7491yVi/3CXU9jQ5o0Mn2Sw==}
 
+  data-uri-to-buffer@4.0.1:
+    resolution: {integrity: sha512-0R9ikRb668HB7QDxT1vkpuUBtqc53YyAwMwGeUFKRojY/NWKvdZ+9UYtRfGmhqNbRkTSVpMbmyhXipFFv2cb/A==}
+    engines: {node: '>= 12'}
+
   data-uri-to-buffer@6.0.2:
     resolution: {integrity: sha512-7hvf7/GW8e86rW0ptuwS3OcBGDjIi6SZva7hCyWC0yYry2cOPmLIjXAUHI6DK2HsnwJd9ifmt57i8eV2n4YNpw==}
     engines: {node: '>= 14'}
@@ -9113,6 +9132,10 @@ packages:
       picomatch:
         optional: true
 
+  fetch-blob@3.2.0:
+    resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
+    engines: {node: ^12.20 || >= 14.13}
+
   file-size@1.0.0:
     resolution: {integrity: sha512-tLIdonWTpABkU6Axg2yGChYdrOsy4V8xcm0IcyAP8fSsu6jiXLm5pgs083e4sq5fzNRZuAYolUbZyYmPvCKfwQ==}
 
@@ -9200,6 +9223,10 @@ packages:
   formdata-node@4.4.1:
     resolution: {integrity: sha512-0iirZp3uVDjVGt9p49aTaqjk84TrglENEDuqfdlZQ1roC9CWlPk6Avf8EEnZNcAqPonwkG35x4n3ww/1THYAeQ==}
     engines: {node: '>= 12.20'}
+
+  formdata-polyfill@4.0.10:
+    resolution: {integrity: sha512-buewHzMvYL29jdeQTVILecSaZKnt/RJWjoZCF5OW60Z67/GmSLBkOFM7qh1PI3zFNtJbaZL5eQu1vLfazOwj4g==}
+    engines: {node: '>=12.20.0'}
 
   forwarded@0.2.0:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
@@ -10770,6 +10797,9 @@ packages:
     resolution: {integrity: sha512-iclAHeNqNm68zFtnZ0e+1L2yUIdvzNoauKU4WBA3VvH/vPFieF7qfRlwUZU+DA9P9bPXIS90ulxoUoCH23sV2w==}
     engines: {node: '>= 0.6'}
 
+  mic@2.1.2:
+    resolution: {integrity: sha512-rpl4tgdXX24sAzYwjRc5OZfGNAuhUIIjdd0cw8+Ubq7rp3iGhi40AdqcwurDWhEZADk60tPOxb3E2MpoeLeyxw==}
+
   micromark-core-commonmark@2.0.3:
     resolution: {integrity: sha512-RDBrHEMSxVFLg6xvnXmb1Ayr2WzLAWjeSATAoxwKYJV94TeNavgoIdA0a9ytzDSVzBy2YKFK+emCPOEibLeCrg==}
 
@@ -11162,6 +11192,10 @@ packages:
     peerDependenciesMeta:
       encoding:
         optional: true
+
+  node-fetch@3.3.2:
+    resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
+    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   node-forge@1.3.2:
     resolution: {integrity: sha512-6xKiQ+cph9KImrRh0VsjH2d8/GXA4FIMlgU4B757iI1ApvcyA9VlouP0yZJha01V+huImO+kKMU7ih+2+E14fw==}
@@ -13212,6 +13246,10 @@ packages:
   wcwidth@1.0.1:
     resolution: {integrity: sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg==}
 
+  web-streams-polyfill@3.3.3:
+    resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
+    engines: {node: '>= 8'}
+
   web-streams-polyfill@4.0.0-beta.3:
     resolution: {integrity: sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==}
     engines: {node: '>= 14'}
@@ -13629,9 +13667,7 @@ snapshots:
 
   '@antfu/utils@8.1.1': {}
 
-  '@anthropic-ai/claude-agent-sdk@0.2.12(zod@4.1.13)':
-    dependencies:
-      zod: 4.1.13
+  '@anthropic-ai/claude-agent-sdk@0.2.12':
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5
@@ -14185,7 +14221,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/ai-projects@1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)':
+  '@azure/ai-projects@1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)':
     dependencies:
       '@azure-rest/ai-inference': 1.0.0-beta.6
       '@azure-rest/core-client': 2.4.0
@@ -14210,7 +14246,7 @@ snapshots:
       '@opentelemetry/sdk-trace-node': 1.30.1(@opentelemetry/api@1.9.0)
       '@traceloop/instrumentation-langchain': 0.13.0(@opentelemetry/api@1.9.0)
       '@traceloop/instrumentation-openai': 0.13.0(@opentelemetry/api@1.9.0)
-      openai: 4.103.0(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+      openai: 4.103.0(ws@8.18.2)(zod@3.24.4)
       tslib: 2.8.1
     transitivePeerDependencies:
       - encoding
@@ -19481,6 +19517,8 @@ snapshots:
       graphlib: 2.1.8
       lodash: 4.17.21
 
+  data-uri-to-buffer@4.0.1: {}
+
   data-uri-to-buffer@6.0.2: {}
 
   data-urls@3.0.2:
@@ -20312,6 +20350,11 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.3
 
+  fetch-blob@3.2.0:
+    dependencies:
+      node-domexception: 1.0.0
+      web-streams-polyfill: 3.3.3
+
   file-size@1.0.0: {}
 
   file-uri-to-path@1.0.0: {}
@@ -20410,6 +20453,10 @@ snapshots:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 4.0.0-beta.3
+
+  formdata-polyfill@4.0.10:
+    dependencies:
+      fetch-blob: 3.2.0
 
   forwarded@0.2.0: {}
 
@@ -22606,6 +22653,8 @@ snapshots:
 
   methods@1.1.2: {}
 
+  mic@2.1.2: {}
+
   micromark-core-commonmark@2.0.3:
     dependencies:
       decode-named-character-reference: 1.1.0
@@ -23078,6 +23127,12 @@ snapshots:
     optionalDependencies:
       encoding: 0.1.13
 
+  node-fetch@3.3.2:
+    dependencies:
+      data-uri-to-buffer: 4.0.1
+      fetch-blob: 3.2.0
+      formdata-polyfill: 4.0.10
+
   node-forge@1.3.2: {}
 
   node-gyp-build@4.1.1:
@@ -23205,7 +23260,21 @@ snapshots:
       is-inside-container: 1.0.0
       is-wsl: 3.1.0
 
-  openai@4.103.0(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4):
+  openai@4.103.0(encoding@0.1.13)(ws@8.18.2):
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    optionalDependencies:
+      ws: 8.18.2
+    transitivePeerDependencies:
+      - encoding
+
+  openai@4.103.0(ws@8.18.2)(zod@3.24.4):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.12
@@ -25516,6 +25585,8 @@ snapshots:
   wcwidth@1.0.1:
     dependencies:
       defaults: 1.0.4
+
+  web-streams-polyfill@3.3.3: {}
 
   web-streams-polyfill@4.0.0-beta.3: {}
 

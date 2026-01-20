@@ -2,6 +2,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { config } from "dotenv";
+config(); // Load .env file
+
 import {
     query,
     type SDKMessage,
