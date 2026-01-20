@@ -327,17 +327,20 @@ async function main() {
     // Initialize voice input handler
     const voiceHandler = new VoiceInputHandler();
     const voiceEnabled = await voiceHandler.isWhisperServiceAvailable();
+    const provider = voiceHandler.getProvider();
 
     if (voiceEnabled) {
+        const providerName =
+            provider === "openai" ? "OpenAI Whisper API" : "Local Whisper";
         console.log(
-            `[AgentSDK] Voice input enabled - type '/voice' or press Ctrl+V`,
+            `[AgentSDK] Voice input enabled (${providerName}) - type '/voice' or press Ctrl+V`,
         );
     } else {
         console.log(
-            `[AgentSDK] Voice input disabled - Whisper service not running`,
+            `[AgentSDK] Voice input disabled - No transcription service available`,
         );
         console.log(
-            `[AgentSDK] To enable: cd python/stt/whisperService && python faster-whisper.py`,
+            `[AgentSDK] Set OPENAI_API_KEY environment variable or start local Whisper service`,
         );
     }
 

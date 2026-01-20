@@ -6,13 +6,25 @@ import * as path from "path";
 import * as os from "os";
 import fetch, { FormData, Blob } from "node-fetch";
 import Mic from "mic";
+import OpenAI from "openai";
+
+export type TranscriptionProvider = "openai" | "local";
+
+export interface VoiceInputOptions {
+    provider?: TranscriptionProvider;
+    whisperServiceUrl?: string;
+    openaiApiKey?: string;
+}
 
 /**
- * Voice input handler for recording audio and transcribing via local Whisper service
- * Uses the 'mic' package for better Windows compatibility
+ * Voice input handler for recording audio and transcribing
+ * Supports both OpenAI Whisper API (default) and local Whisper service
+ * Uses the 'mic' package for cross-platform audio recording
  */
 export class VoiceInputHandler {
+    private provider: TranscriptionProvider;
     private whisperServiceUrl: string;
+    private openaiClient: OpenAI | null = null;
     private micInstance: any = null;
     private audioChunks: Buffer[] = [];
     private isRecording = false;
@@ -21,8 +33,24 @@ export class VoiceInputHandler {
     private resolveRecording: ((value: string) => void) | null = null;
     private rejectRecording: ((reason: any) => void) | null = null;
 
-    constructor(whisperServiceUrl: string = "http://localhost:8001") {
-        this.whisperServiceUrl = whisperServiceUrl;
+    constructor(options: VoiceInputOptions = {}) {
+        this.provider = options.provider || "openai";
+        this.whisperServiceUrl =
+            options.whisperServiceUrl || "http://localhost:8001";
+
+        // Initialize OpenAI client if using that provider
+        if (this.provider === "openai") {
+            const apiKey =
+                options.openaiApiKey || process.env.OPENAI_API_KEY || "";
+            if (!apiKey) {
+                console.warn(
+                    "[Voice] No OpenAI API key found, falling back to local Whisper",
+                );
+                this.provider = "local";
+            } else {
+                this.openaiClient = new OpenAI({ apiKey });
+            }
+        }
     }
 
     /**
@@ -159,10 +187,52 @@ export class VoiceInputHandler {
     }
 
     /**
-     * Send audio to Whisper service for transcription
+     * Send audio to transcription service (OpenAI or local Whisper)
      */
     private async transcribe(audioBuffer: Buffer): Promise<string> {
-        // Save to temp file
+        if (this.provider === "openai" && this.openaiClient) {
+            return this.transcribeWithOpenAI(audioBuffer);
+        } else {
+            return this.transcribeWithLocalWhisper(audioBuffer);
+        }
+    }
+
+    /**
+     * Transcribe using OpenAI Whisper API
+     */
+    private async transcribeWithOpenAI(audioBuffer: Buffer): Promise<string> {
+        const tempDir = os.tmpdir();
+        const tempFile = path.join(tempDir, `voice-${Date.now()}.wav`);
+
+        try {
+            // Write WAV header + audio data
+            const wavBuffer = this.createWavBuffer(audioBuffer);
+            fs.writeFileSync(tempFile, wavBuffer);
+
+            // Use OpenAI API
+            const transcription =
+                await this.openaiClient!.audio.transcriptions.create({
+                    file: fs.createReadStream(tempFile) as any,
+                    model: "whisper-1",
+                    language: "en", // Optional: specify language for better accuracy
+                    response_format: "text",
+                });
+
+            return (transcription as string).trim();
+        } finally {
+            // Cleanup temp file
+            if (fs.existsSync(tempFile)) {
+                fs.unlinkSync(tempFile);
+            }
+        }
+    }
+
+    /**
+     * Transcribe using local Whisper service
+     */
+    private async transcribeWithLocalWhisper(
+        audioBuffer: Buffer,
+    ): Promise<string> {
         const tempDir = os.tmpdir();
         const tempFile = path.join(tempDir, `voice-${Date.now()}.wav`);
 
@@ -246,18 +316,31 @@ export class VoiceInputHandler {
     }
 
     /**
-     * Check if Whisper service is running and accessible
+     * Check if transcription service is available
      */
     async isWhisperServiceAvailable(): Promise<boolean> {
-        try {
-            await fetch(this.whisperServiceUrl, {
-                method: "GET",
-            });
-            // Service is available if we get any response (even 404 is ok)
-            return true;
-        } catch {
-            return false;
+        if (this.provider === "openai") {
+            // For OpenAI, just check if we have an API key
+            return this.openaiClient !== null;
+        } else {
+            // For local service, check if it's running
+            try {
+                await fetch(this.whisperServiceUrl, {
+                    method: "GET",
+                });
+                // Service is available if we get any response (even 404 is ok)
+                return true;
+            } catch {
+                return false;
+            }
         }
+    }
+
+    /**
+     * Get the current transcription provider
+     */
+    getProvider(): TranscriptionProvider {
+        return this.provider;
     }
 
     /**

@@ -91,15 +91,28 @@ Once running, you can:
 
 ### Voice Input
 
-The Agent SDK wrapper supports voice input through local Whisper transcription:
+The Agent SDK wrapper supports voice input with two transcription options:
 
-**Prerequisites:**
+**Option 1: OpenAI Whisper API (Default, Recommended)**
 
-1. Start the local Whisper service (requires GPU for best performance):
-   ```bash
-   cd python/stt/whisperService
-   python faster-whisper.py
-   ```
+Set your OpenAI API key as an environment variable:
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+This provides the best transcription accuracy and requires no local setup.
+
+**Option 2: Local Whisper Service**
+
+If you don't have an OpenAI API key, start the local Whisper service (requires GPU for best performance):
+
+```bash
+cd python/stt/whisperService
+python faster-whisper.py
+```
+
+The system will automatically fall back to local Whisper if no OpenAI API key is found.
 
 **Note:** Voice input uses Node.js native audio APIs (via the `mic` package), so no external audio tools are required!
 
