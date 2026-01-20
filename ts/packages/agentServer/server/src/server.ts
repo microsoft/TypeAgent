@@ -36,68 +36,200 @@ async function main() {
     >();
 
     // Create a routing ClientIO that forwards calls to the current request's client
+    // Wraps all methods to catch "Agent channel disconnected" errors gracefully
     const routingClientIO: ClientIO = {
         clear: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.clear?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.clear?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+                // Silently ignore disconnected client errors
+            }
         },
         exit: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.exit?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.exit?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         setDisplayInfo: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.setDisplayInfo?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.setDisplayInfo?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         setDisplay: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.setDisplay?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.setDisplay?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         appendDisplay: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.appendDisplay?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.appendDisplay?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         appendDiagnosticData: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.appendDiagnosticData?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.appendDiagnosticData?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         setDynamicDisplay: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.setDynamicDisplay?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.setDynamicDisplay?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         askYesNo: async (...args) => {
-            const client = currentClientContext.getStore();
-            return client?.askYesNo?.(...args) ?? false;
+            try {
+                const client = currentClientContext.getStore();
+                return client?.askYesNo?.(...args) ?? false;
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+                return false;
+            }
         },
         proposeAction: async (...args) => {
-            const client = currentClientContext.getStore();
-            return client?.proposeAction?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                return client?.proposeAction?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+                return undefined;
+            }
         },
         popupQuestion: async (...args) => {
-            const client = currentClientContext.getStore();
-            if (!client?.popupQuestion) {
-                throw new Error("popupQuestion not implemented");
+            try {
+                const client = currentClientContext.getStore();
+                if (!client?.popupQuestion) {
+                    throw new Error("popupQuestion not implemented");
+                }
+                return client.popupQuestion(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    error.message.includes("Agent channel disconnected")
+                ) {
+                    return 0; // Return default choice
+                }
+                throw error;
             }
-            return client.popupQuestion(...args);
         },
         notify: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.notify?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.notify?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         openLocalView: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.openLocalView?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.openLocalView?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         closeLocalView: (...args) => {
-            const client = currentClientContext.getStore();
-            client?.closeLocalView?.(...args);
+            try {
+                const client = currentClientContext.getStore();
+                client?.closeLocalView?.(...args);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    !error.message.includes("Agent channel disconnected")
+                ) {
+                    throw error;
+                }
+            }
         },
         takeAction: (action: string, data?: unknown) => {
-            const client = currentClientContext.getStore();
-            if (!client?.takeAction) {
-                throw new Error(`Action ${action} not supported`);
+            try {
+                const client = currentClientContext.getStore();
+                if (!client?.takeAction) {
+                    throw new Error(`Action ${action} not supported`);
+                }
+                return client.takeAction(action, data);
+            } catch (error) {
+                if (
+                    error instanceof Error &&
+                    error.message.includes("Agent channel disconnected")
+                ) {
+                    return; // Silently ignore
+                }
+                throw error;
             }
-            return client.takeAction(action, data);
         },
     };
 

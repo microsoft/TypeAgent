@@ -1,0 +1,41 @@
+{
+  "name": "agent-sdk-wrapper",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Direct Anthropic Agent SDK integration with TypeAgent caching support",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agentSdkWrapper"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "agent-sdk-wrapper": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "start": "node dist/cli.js",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "coder-wrapper": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.3",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "~5.4.5"
+  }
+}

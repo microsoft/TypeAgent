@@ -92,25 +92,44 @@ function stripAnsi(text: string): string {
     return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
-// downloadImage function removed - images are not downloaded or displayed
+/**
+ * Convert HTML content to plain text by stripping all HTML tags
+ */
+function htmlToPlainText(html: string): string {
+    // Remove img tags entirely
+    let text = html.replace(/<img[^>]*>/gi, "");
+
+    // Convert common HTML elements to plain text equivalents
+    text = text.replace(/<br\s*\/?>/gi, "\n"); // <br> to newline
+    text = text.replace(/<\/p>/gi, "\n\n"); // </p> to double newline
+    text = text.replace(/<\/div>/gi, "\n"); // </div> to newline
+    text = text.replace(/<\/li>/gi, "\n"); // </li> to newline
+    text = text.replace(/<li[^>]*>/gi, "• "); // <li> to bullet point
+
+    // Remove all remaining HTML tags
+    text = text.replace(/<[^>]+>/g, "");
+
+    // Decode common HTML entities
+    text = text.replace(/&amp;/g, "&");
+    text = text.replace(/&lt;/g, "<");
+    text = text.replace(/&gt;/g, ">");
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&#39;/g, "'");
+    text = text.replace(/&nbsp;/g, " ");
+
+    // Clean up excessive whitespace
+    text = text.replace(/\n\s*\n\s*\n/g, "\n\n"); // Max 2 consecutive newlines
+    text = text.replace(/[ \t]+/g, " "); // Multiple spaces to single space
+    text = text.trim();
+
+    return text;
+}
 
 /**
- * Process HTML content to download images and replace img tags with file references
+ * Process HTML content to convert it to plain text
  */
 async function processHtmlImages(content: string): Promise<string> {
-    // Find all img tags with src attributes
-    const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi;
-    let processed = content;
-    const matches = [...content.matchAll(imgRegex)];
-
-    for (const match of matches) {
-        const fullTag = match[0];
-
-        // Just remove the img tag entirely - don't download or display artwork
-        processed = processed.replace(fullTag, "");
-    }
-
-    return processed;
+    return htmlToPlainText(content);
 }
 
 /**
@@ -243,6 +262,20 @@ function createMcpClientIO(
     };
 }
 
+/**
+ * MCP server that executes commands through TypeAgent dispatcher.
+ *
+ * Lifecycle when used with Agent SDK:
+ * - Each Agent SDK query() spawns a new Claude Code process
+ * - Claude Code spawns a new instance of this MCP server
+ * - MCP server connects to agentServer (persistent shared dispatcher)
+ * - Query executes, tools are called as needed
+ * - Claude Code process exits
+ * - MCP server disconnects from agentServer
+ *
+ * This transient connection pattern is normal and expected.
+ * The agentServer maintains a persistent shared dispatcher across all MCP connections.
+ */
 export class CommandServer {
     public server: McpServer;
     private dispatcher: Dispatcher | null = null;
@@ -282,9 +315,12 @@ export class CommandServer {
         await this.server.connect(transport);
 
         // Connect to the TypeAgent dispatcher
+        // Note: When spawned by Agent SDK, this is a transient process per query
+        // Lazy connection on first tool call handles startup race conditions
         await this.connectToDispatcher();
 
-        // Start reconnection monitoring
+        // Start reconnection monitoring for cases where dispatcher restarts
+        // When spawned by Agent SDK, this process is transient per query anyway
         this.startReconnectionMonitoring();
     }
 
