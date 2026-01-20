@@ -109,6 +109,14 @@ AZURE_SPEECH_KEY=your-speech-key
 AZURE_SPEECH_REGION=your-region
 ```
 
+Alternative variable names (also supported):
+
+```
+SPEECH_SDK_KEY=your-speech-key  # or "identity" for managed identity
+SPEECH_SDK_REGION=your-region
+SPEECH_SDK_ENDPOINT=your-endpoint  # Optional, only needed for managed identity
+```
+
 This provides the best transcription accuracy using Azure Cognitive Services Speech-to-Text with built-in silence detection. No external tools or complex setup required!
 
 **Option 2: Azure OpenAI (Enterprise Whisper)**
@@ -156,7 +164,7 @@ python faster-whisper.py
 
 The system will automatically detect and use the best available provider based on environment variables:
 
-1. Azure Speech Services (if `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` are set)
+1. Azure Speech Services (if `AZURE_SPEECH_KEY`/`SPEECH_SDK_KEY` and `AZURE_SPEECH_REGION`/`SPEECH_SDK_REGION` are set)
 2. Azure OpenAI (if `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT` are set)
 3. OpenAI (if `OPENAI_API_KEY` is set)
 4. Local Whisper service (fallback)

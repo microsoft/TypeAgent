@@ -50,8 +50,9 @@ export class VoiceInputHandler {
         // Auto-detect provider based on available environment variables
         if (!options.provider) {
             if (
-                process.env.AZURE_SPEECH_KEY &&
-                process.env.AZURE_SPEECH_REGION
+                (process.env.AZURE_SPEECH_KEY || process.env.SPEECH_SDK_KEY) &&
+                (process.env.AZURE_SPEECH_REGION ||
+                    process.env.SPEECH_SDK_REGION)
             ) {
                 this.provider = "azure-speech";
             } else if (
@@ -74,10 +75,14 @@ export class VoiceInputHandler {
         // Initialize Azure Speech SDK if using that provider
         if (this.provider === "azure-speech") {
             const speechKey =
-                options.azureSpeechKey || process.env.AZURE_SPEECH_KEY || "";
+                options.azureSpeechKey ||
+                process.env.AZURE_SPEECH_KEY ||
+                process.env.SPEECH_SDK_KEY ||
+                "";
             const speechRegion =
                 options.azureSpeechRegion ||
                 process.env.AZURE_SPEECH_REGION ||
+                process.env.SPEECH_SDK_REGION ||
                 "";
 
             if (!speechKey || !speechRegion) {
@@ -86,11 +91,25 @@ export class VoiceInputHandler {
                 );
                 this.provider = "local";
             } else {
-                this.azureSpeechConfig =
-                    speechSDK.SpeechConfig.fromSubscription(
-                        speechKey,
-                        speechRegion,
-                    );
+                // Handle special case where key is "identity" (managed identity)
+                if (speechKey === "identity") {
+                    // For managed identity, we need the endpoint
+                    const endpoint =
+                        process.env.SPEECH_SDK_ENDPOINT ||
+                        `https://${speechRegion}.api.cognitive.microsoft.com/`;
+                    this.azureSpeechConfig =
+                        speechSDK.SpeechConfig.fromEndpoint(
+                            new URL(endpoint),
+                            speechKey,
+                        );
+                } else {
+                    // Regular subscription key
+                    this.azureSpeechConfig =
+                        speechSDK.SpeechConfig.fromSubscription(
+                            speechKey,
+                            speechRegion,
+                        );
+                }
                 this.azureSpeechConfig.speechRecognitionLanguage = "en-US";
             }
         } else if (this.provider === "openai") {
