@@ -9,7 +9,8 @@ import { fileURLToPath } from "url";
 // Load .env file from the TypeAgent repository root (ts directory)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, "../../../..");
+// From dist/ go up to: agentSdkWrapper/ -> packages/ -> ts/
+const repoRoot = path.resolve(__dirname, "../../..");
 config({ path: path.join(repoRoot, ".env") });
 
 import {
