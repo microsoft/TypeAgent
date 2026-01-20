@@ -2602,46 +2602,6 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.99.8)
 
-  packages/chat-rpc-server:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../agentSdk
-      agent-dispatcher:
-        specifier: workspace:*
-        version: link:../dispatcher/dispatcher
-      debug:
-        specifier: ^4.3.7
-        version: 4.4.3(supports-color@8.1.1)
-      ws:
-        specifier: ^8.18.0
-        version: 8.18.2
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.12
-        version: 4.1.12
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      '@types/node':
-        specifier: ^20
-        version: 20.19.23
-      '@types/ws':
-        specifier: ^8.5.13
-        version: 8.18.1
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.23)(ts-node@10.9.2(@types/node@20.19.23)(typescript@5.4.5))
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
   packages/cli:
     dependencies:
       '@oclif/core':
@@ -2677,9 +2637,6 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
-      chat-rpc-server:
-        specifier: workspace:*
-        version: link:../chat-rpc-server
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -3800,9 +3757,6 @@ importers:
       browser-typeagent:
         specifier: workspace:*
         version: link:../agents/browser
-      chat-rpc-server:
-        specifier: workspace:*
-        version: link:../chat-rpc-server
       debug:
         specifier: ^4.4.0
         version: 4.4.1
