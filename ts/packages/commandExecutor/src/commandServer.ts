@@ -17,6 +17,7 @@ import { DisplayAppendMode } from "@typeagent/agent-sdk";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { convert } from "html-to-text";
 
 function executeCommandRequestSchema() {
     return {
@@ -92,25 +93,26 @@ function stripAnsi(text: string): string {
     return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
-// downloadImage function removed - images are not downloaded or displayed
+/**
+ * Convert HTML content to plain text using html-to-text library
+ * This provides secure HTML parsing instead of regex-based sanitization
+ */
+function htmlToPlainText(html: string): string {
+    return convert(html, {
+        wordwrap: false,
+        preserveNewlines: true,
+        selectors: [
+            { selector: "img", format: "skip" }, // Skip images entirely
+            { selector: "a", options: { ignoreHref: true } }, // Keep link text, ignore URLs
+        ],
+    });
+}
 
 /**
- * Process HTML content to download images and replace img tags with file references
+ * Process HTML content to convert it to plain text
  */
 async function processHtmlImages(content: string): Promise<string> {
-    // Find all img tags with src attributes
-    const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi;
-    let processed = content;
-    const matches = [...content.matchAll(imgRegex)];
-
-    for (const match of matches) {
-        const fullTag = match[0];
-
-        // Just remove the img tag entirely - don't download or display artwork
-        processed = processed.replace(fullTag, "");
-    }
-
-    return processed;
+    return htmlToPlainText(content);
 }
 
 /**
@@ -243,6 +245,20 @@ function createMcpClientIO(
     };
 }
 
+/**
+ * MCP server that executes commands through TypeAgent dispatcher.
+ *
+ * Lifecycle when used with Agent SDK:
+ * - Each Agent SDK query() spawns a new Claude Code process
+ * - Claude Code spawns a new instance of this MCP server
+ * - MCP server connects to agentServer (persistent shared dispatcher)
+ * - Query executes, tools are called as needed
+ * - Claude Code process exits
+ * - MCP server disconnects from agentServer
+ *
+ * This transient connection pattern is normal and expected.
+ * The agentServer maintains a persistent shared dispatcher across all MCP connections.
+ */
 export class CommandServer {
     public server: McpServer;
     private dispatcher: Dispatcher | null = null;
@@ -282,9 +298,12 @@ export class CommandServer {
         await this.server.connect(transport);
 
         // Connect to the TypeAgent dispatcher
+        // Note: When spawned by Agent SDK, this is a transient process per query
+        // Lazy connection on first tool call handles startup race conditions
         await this.connectToDispatcher();
 
-        // Start reconnection monitoring
+        // Start reconnection monitoring for cases where dispatcher restarts
+        // When spawned by Agent SDK, this process is transient per query anyway
         this.startReconnectionMonitoring();
     }
 
