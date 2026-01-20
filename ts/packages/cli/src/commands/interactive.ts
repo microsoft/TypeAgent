@@ -22,16 +22,7 @@ import {
     withConsoleClientIO,
 } from "agent-dispatcher/helpers/console";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
-import {
-    ChatRpcServer,
-    CliHostAdapter,
-    ProtocolRequestManager,
-    createProtocolClientIOWrapper,
-} from "chat-rpc-server";
-import registerDebug from "debug";
 import { getFsStorageProvider } from "dispatcher-node-providers";
-
-const debugInteractive = registerDebug("typeagent:cli:interactive");
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -69,11 +60,6 @@ export default class Interactive extends Command {
             default: true,
             allowNo: true,
         }),
-        port: Flags.integer({
-            description: "Port for protocol server for external clients",
-            default: 3100,
-            char: "p",
-        }),
     };
     static args = {
         input: Args.file({
@@ -89,18 +75,7 @@ export default class Interactive extends Command {
             inspector.open(undefined, undefined, true);
         }
 
-        // Create protocol request manager if port is specified
-        const requestManager = flags.port
-            ? new ProtocolRequestManager()
-            : undefined;
-        let protocolServer: ChatRpcServer | undefined;
-
-        await withConsoleClientIO(async (consoleClientIO) => {
-            // Wrap ClientIO to route protocol requests to WebSocket if port specified
-            const clientIO = requestManager
-                ? createProtocolClientIOWrapper(consoleClientIO, requestManager)
-                : consoleClientIO;
-
+        await withConsoleClientIO(async (clientIO) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: defaultAppAgentProviders,
@@ -122,20 +97,6 @@ export default class Interactive extends Command {
                 constructionProvider: getDefaultConstructionProvider(),
             });
 
-            // Start protocol server if port specified
-            if (flags.port && requestManager) {
-                debugInteractive(
-                    `Starting protocol server on port ${flags.port}`,
-                );
-                protocolServer = new ChatRpcServer({ port: flags.port });
-                const adapter = new CliHostAdapter(dispatcher, requestManager);
-                protocolServer.attachHost(adapter);
-                await protocolServer.start();
-                console.log(
-                    `Chat RPC server started on port ${flags.port} for external clients`,
-                );
-            }
-
             try {
                 if (args.input) {
                     await dispatcher.processCommand(`@run ${args.input}`);
@@ -156,16 +117,7 @@ export default class Interactive extends Command {
                     dispatcher,
                 );
             } finally {
-                if (protocolServer) {
-                    debugInteractive("Stopping protocol server");
-                    await protocolServer.stop();
-                }
-                if (requestManager) {
-                    requestManager.clear();
-                }
-                if (dispatcher) {
-                    await dispatcher.close();
-                }
+                await dispatcher.close();
             }
         });
 

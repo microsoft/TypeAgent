@@ -55,7 +55,6 @@
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
-    "chat-rpc-server": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
