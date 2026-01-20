@@ -17,6 +17,7 @@ import { DisplayAppendMode } from "@typeagent/agent-sdk";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { convert } from "html-to-text";
 
 function executeCommandRequestSchema() {
     return {
@@ -93,36 +94,18 @@ function stripAnsi(text: string): string {
 }
 
 /**
- * Convert HTML content to plain text by stripping all HTML tags
+ * Convert HTML content to plain text using html-to-text library
+ * This provides secure HTML parsing instead of regex-based sanitization
  */
 function htmlToPlainText(html: string): string {
-    // Remove img tags entirely
-    let text = html.replace(/<img[^>]*>/gi, "");
-
-    // Convert common HTML elements to plain text equivalents
-    text = text.replace(/<br\s*\/?>/gi, "\n"); // <br> to newline
-    text = text.replace(/<\/p>/gi, "\n\n"); // </p> to double newline
-    text = text.replace(/<\/div>/gi, "\n"); // </div> to newline
-    text = text.replace(/<\/li>/gi, "\n"); // </li> to newline
-    text = text.replace(/<li[^>]*>/gi, "• "); // <li> to bullet point
-
-    // Remove all remaining HTML tags
-    text = text.replace(/<[^>]+>/g, "");
-
-    // Decode common HTML entities
-    text = text.replace(/&amp;/g, "&");
-    text = text.replace(/&lt;/g, "<");
-    text = text.replace(/&gt;/g, ">");
-    text = text.replace(/&quot;/g, '"');
-    text = text.replace(/&#39;/g, "'");
-    text = text.replace(/&nbsp;/g, " ");
-
-    // Clean up excessive whitespace
-    text = text.replace(/\n\s*\n\s*\n/g, "\n\n"); // Max 2 consecutive newlines
-    text = text.replace(/[ \t]+/g, " "); // Multiple spaces to single space
-    text = text.trim();
-
-    return text;
+    return convert(html, {
+        wordwrap: false,
+        preserveNewlines: true,
+        selectors: [
+            { selector: "img", format: "skip" }, // Skip images entirely
+            { selector: "a", options: { ignoreHref: true } }, // Keep link text, ignore URLs
+        ],
+    });
 }
 
 /**
