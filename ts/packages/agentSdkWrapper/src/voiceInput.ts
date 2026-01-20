@@ -7,8 +7,13 @@ import * as os from "os";
 import fetch, { FormData, Blob } from "node-fetch";
 import Mic from "mic";
 import OpenAI from "openai";
+import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 
-export type TranscriptionProvider = "openai" | "azure-openai" | "local";
+export type TranscriptionProvider =
+    | "azure-speech"
+    | "openai"
+    | "azure-openai"
+    | "local";
 
 export interface VoiceInputOptions {
     provider?: TranscriptionProvider;
@@ -17,18 +22,21 @@ export interface VoiceInputOptions {
     azureOpenAIApiKey?: string;
     azureOpenAIEndpoint?: string;
     azureOpenAIDeploymentName?: string;
+    azureSpeechKey?: string;
+    azureSpeechRegion?: string;
 }
 
 /**
  * Voice input handler for recording audio and transcribing
- * Supports OpenAI Whisper API, Azure OpenAI, and local Whisper service
- * Uses the 'mic' package for cross-platform audio recording
+ * Supports Azure Speech Services, OpenAI Whisper API, Azure OpenAI, and local Whisper service
+ * Uses Azure Speech SDK for best accuracy or 'mic' package for other providers
  */
 export class VoiceInputHandler {
     private provider: TranscriptionProvider;
     private whisperServiceUrl: string;
     private openaiClient: OpenAI | null = null;
     private azureDeploymentName: string = "";
+    private azureSpeechConfig: speechSDK.SpeechConfig | null = null;
     private micInstance: any = null;
     private audioChunks: Buffer[] = [];
     private isRecording = false;
@@ -42,6 +50,11 @@ export class VoiceInputHandler {
         // Auto-detect provider based on available environment variables
         if (!options.provider) {
             if (
+                process.env.AZURE_SPEECH_KEY &&
+                process.env.AZURE_SPEECH_REGION
+            ) {
+                this.provider = "azure-speech";
+            } else if (
                 process.env.AZURE_OPENAI_API_KEY &&
                 process.env.AZURE_OPENAI_ENDPOINT
             ) {
@@ -58,8 +71,30 @@ export class VoiceInputHandler {
         this.whisperServiceUrl =
             options.whisperServiceUrl || "http://localhost:8001";
 
-        // Initialize OpenAI client if using that provider
-        if (this.provider === "openai") {
+        // Initialize Azure Speech SDK if using that provider
+        if (this.provider === "azure-speech") {
+            const speechKey =
+                options.azureSpeechKey || process.env.AZURE_SPEECH_KEY || "";
+            const speechRegion =
+                options.azureSpeechRegion ||
+                process.env.AZURE_SPEECH_REGION ||
+                "";
+
+            if (!speechKey || !speechRegion) {
+                console.warn(
+                    "[Voice] Azure Speech credentials not found, falling back to local Whisper",
+                );
+                this.provider = "local";
+            } else {
+                this.azureSpeechConfig =
+                    speechSDK.SpeechConfig.fromSubscription(
+                        speechKey,
+                        speechRegion,
+                    );
+                this.azureSpeechConfig.speechRecognitionLanguage = "en-US";
+            }
+        } else if (this.provider === "openai") {
+            // Initialize OpenAI client if using that provider
             const apiKey =
                 options.openaiApiKey || process.env.OPENAI_API_KEY || "";
             if (!apiKey) {
@@ -102,9 +137,15 @@ export class VoiceInputHandler {
 
     /**
      * Start recording audio and return transcribed text when silence detected
-     * Uses 2 seconds of silence as the end-of-speech threshold
+     * Uses Azure Speech SDK for azure-speech provider, or custom silence detection for others
      */
     async recordAndTranscribe(): Promise<string> {
+        // Use Azure Speech SDK for azure-speech provider
+        if (this.provider === "azure-speech" && this.azureSpeechConfig) {
+            return this.recordWithAzureSpeech();
+        }
+
+        // Use mic package with manual silence detection for other providers
         return new Promise((resolve, reject) => {
             console.log(
                 "\n🎤 Recording... (speak now, 2 seconds of silence will end recording)\n",
@@ -174,6 +215,77 @@ export class VoiceInputHandler {
 
             // Don't start silence timer yet - wait for first audio detection
             // This prevents premature timeout before user starts speaking
+        });
+    }
+
+    /**
+     * Record and transcribe using Azure Speech Services
+     * Uses the Speech SDK's built-in silence detection and recognition
+     */
+    private async recordWithAzureSpeech(): Promise<string> {
+        return new Promise((resolve, reject) => {
+            console.log("\n🎤 Recording... (speak now)\n");
+
+            const audioConfig =
+                speechSDK.AudioConfig.fromDefaultMicrophoneInput();
+            const recognizer = new speechSDK.SpeechRecognizer(
+                this.azureSpeechConfig!,
+                audioConfig,
+            );
+
+            // Show interim results while recognizing
+            recognizer.recognizing = (
+                _s: any,
+                e: speechSDK.SpeechRecognitionEventArgs,
+            ) => {
+                if (e.result.text) {
+                    console.log(`🎙️  Recognizing: ${e.result.text}`);
+                }
+            };
+
+            // Perform one-shot recognition
+            recognizer.recognizeOnceAsync(
+                (result: speechSDK.SpeechRecognitionResult) => {
+                    recognizer.close();
+
+                    switch (result.reason) {
+                        case speechSDK.ResultReason.RecognizedSpeech:
+                            console.log(`\n📝 Transcribed: "${result.text}"\n`);
+                            resolve(result.text);
+                            break;
+                        case speechSDK.ResultReason.NoMatch:
+                            reject(new Error("Speech could not be recognized"));
+                            break;
+                        case speechSDK.ResultReason.Canceled:
+                            const cancellation =
+                                speechSDK.CancellationDetails.fromResult(
+                                    result,
+                                );
+                            if (
+                                cancellation.reason ===
+                                speechSDK.CancellationReason.Error
+                            ) {
+                                reject(
+                                    new Error(
+                                        `Recognition error: ${cancellation.errorDetails} (code:${cancellation.ErrorCode})`,
+                                    ),
+                                );
+                            } else {
+                                reject(new Error("Recognition cancelled"));
+                            }
+                            break;
+                        default:
+                            reject(
+                                new Error(`Unknown reason: ${result.reason}`),
+                            );
+                            break;
+                    }
+                },
+                (err: string) => {
+                    recognizer.close();
+                    reject(new Error(`Recognition failed: ${err}`));
+                },
+            );
         });
     }
 
@@ -377,8 +489,14 @@ export class VoiceInputHandler {
      * Check if transcription service is available
      */
     async isWhisperServiceAvailable(): Promise<boolean> {
-        if (this.provider === "openai" || this.provider === "azure-openai") {
-            // For OpenAI/Azure, just check if we have a client configured
+        if (this.provider === "azure-speech") {
+            // For Azure Speech, check if we have config
+            return this.azureSpeechConfig !== null;
+        } else if (
+            this.provider === "openai" ||
+            this.provider === "azure-openai"
+        ) {
+            // For OpenAI/Azure OpenAI, check if we have a client configured
             return this.openaiClient !== null;
         } else {
             // For local service, check if it's running

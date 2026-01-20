@@ -91,9 +91,27 @@ Once running, you can:
 
 ### Voice Input
 
-The Agent SDK wrapper supports voice input with three transcription options:
+The Agent SDK wrapper supports voice input with four transcription options:
 
-**Option 1: Azure OpenAI (Recommended for Enterprise)**
+**Option 1: Azure Speech Services (Recommended - Most Accurate)**
+
+Set your Azure Speech credentials as environment variables:
+
+```bash
+export AZURE_SPEECH_KEY=your-speech-key
+export AZURE_SPEECH_REGION=your-region  # e.g., westus2, eastus
+```
+
+Or create a `.env` file in the TypeAgent repository root (`ts` directory):
+
+```
+AZURE_SPEECH_KEY=your-speech-key
+AZURE_SPEECH_REGION=your-region
+```
+
+This provides the best transcription accuracy using Azure Cognitive Services Speech-to-Text with built-in silence detection. No external tools or complex setup required!
+
+**Option 2: Azure OpenAI (Enterprise Whisper)**
 
 Set your Azure OpenAI credentials as environment variables:
 
@@ -111,7 +129,7 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_DEPLOYMENT_NAME=whisper
 ```
 
-**Option 2: OpenAI Whisper API**
+**Option 3: OpenAI Whisper API**
 
 Set your OpenAI API key as an environment variable:
 
@@ -127,7 +145,7 @@ OPENAI_API_KEY=sk-...
 
 This provides excellent transcription accuracy and requires no local setup.
 
-**Option 3: Local Whisper Service**
+**Option 4: Local Whisper Service**
 
 If you don't have cloud API credentials, start the local Whisper service (requires GPU for best performance):
 
@@ -138,11 +156,15 @@ python faster-whisper.py
 
 The system will automatically detect and use the best available provider based on environment variables:
 
-1. Azure OpenAI (if `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT` are set)
-2. OpenAI (if `OPENAI_API_KEY` is set)
-3. Local Whisper service (fallback)
+1. Azure Speech Services (if `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` are set)
+2. Azure OpenAI (if `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT` are set)
+3. OpenAI (if `OPENAI_API_KEY` is set)
+4. Local Whisper service (fallback)
 
-**Note:** Voice input uses Node.js native audio APIs (via the `mic` package), so no external audio tools are required!
+**Note:**
+
+- Azure Speech Services uses the Speech SDK's built-in audio capture - no external tools required!
+- Other providers use Node.js native audio APIs (via the `mic` package) - no external tools required!
 
 **Using Voice Input:**
 
