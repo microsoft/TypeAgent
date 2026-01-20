@@ -381,8 +381,12 @@ export class CommandServer {
         if (!this.dispatcher) {
             // During cache check, return cache miss instead of error to avoid startup race condition messages
             if (request.cacheCheck) {
-                this.logger.log("Cache check requested but not connected yet - returning cache miss");
-                return toolResult("CACHE_MISS: Not connected to TypeAgent dispatcher yet");
+                this.logger.log(
+                    "Cache check requested but not connected yet - returning cache miss",
+                );
+                return toolResult(
+                    "CACHE_MISS: Not connected to TypeAgent dispatcher yet",
+                );
             }
             const errorMsg = `Cannot execute command: not connected to TypeAgent dispatcher at ${this.agentServerUrl}. Make sure the TypeAgent server is running with: pnpm run start:agent-server`;
             this.logger.error(errorMsg);
@@ -392,7 +396,9 @@ export class CommandServer {
         // If cacheCheck is requested, check cache and execute if hit
         if (request.cacheCheck) {
             try {
-                this.logger.log(`Cache check requested for: ${request.request}`);
+                this.logger.log(
+                    `Cache check requested for: ${request.request}`,
+                );
 
                 // Clear response collector before cache check
                 this.responseCollector.messages = [];
@@ -411,21 +417,29 @@ export class CommandServer {
                 this.logger.log(`Cache hit - executed successfully`);
 
                 if (this.responseCollector.messages.length > 0) {
-                    const response = this.responseCollector.messages.join("\n\n");
+                    const response =
+                        this.responseCollector.messages.join("\n\n");
                     const processedResponse = await processHtmlImages(response);
                     // Return with CACHE_HIT prefix for detection (cacheClient strips it)
                     return toolResult(`CACHE_HIT: ${processedResponse}`);
                 }
 
                 // Fallback if no messages were collected
-                return toolResult(`CACHE_HIT: Successfully executed from cache`);
+                return toolResult(
+                    `CACHE_HIT: Successfully executed from cache`,
+                );
             } catch (error) {
                 const errorMsg = `Cache check failed: ${error instanceof Error ? error.message : String(error)}`;
                 this.logger.error(errorMsg);
 
                 // If the error is "Agent channel disconnected", reset the dispatcher to trigger reconnection
-                if (error instanceof Error && error.message.includes("Agent channel disconnected")) {
-                    this.logger.log("Dispatcher connection lost, will reconnect on next request");
+                if (
+                    error instanceof Error &&
+                    error.message.includes("Agent channel disconnected")
+                ) {
+                    this.logger.log(
+                        "Dispatcher connection lost, will reconnect on next request",
+                    );
                     this.dispatcher = null;
                 }
 

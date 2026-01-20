@@ -57,7 +57,10 @@ export class PtyWrapper {
 
         // Initialize cache client if enabled
         if (this.options.enableCache) {
-            this.cacheClient = new CacheClient(undefined, this.debugLogger || undefined);
+            this.cacheClient = new CacheClient(
+                undefined,
+                this.debugLogger || undefined,
+            );
             if (this.debugLogger) {
                 this.debugLogger.log("Cache client initialized");
             }
@@ -113,7 +116,9 @@ export class PtyWrapper {
             const input = data.toString();
 
             if (this.debugLogger) {
-                this.debugLogger.log(`stdin data received: ${JSON.stringify(input)} (length: ${input.length})`);
+                this.debugLogger.log(
+                    `stdin data received: ${JSON.stringify(input)} (length: ${input.length})`,
+                );
             }
 
             // If the last input was \r and this input is \n, skip it (Windows sends both separately)
@@ -128,7 +133,7 @@ export class PtyWrapper {
             // Check for Enter key (carriage return, newline, or both)
             if (input === "\r" || input === "\n" || input === "\r\n") {
                 // Track if this was a \r so we can skip the following \n
-                this.lastInputWasCarriageReturn = (input === "\r");
+                this.lastInputWasCarriageReturn = input === "\r";
 
                 // User pressed Enter - check if we should check cache
                 if (this.inputBuffer.trim() && this.cacheClient) {
@@ -142,7 +147,9 @@ export class PtyWrapper {
             } else if (input.includes("\r") || input.includes("\n")) {
                 // Input contains newline but with other characters - pass through
                 if (this.debugLogger) {
-                    this.debugLogger.log(`Mixed input with newline detected, passing through: ${JSON.stringify(input)}`);
+                    this.debugLogger.log(
+                        `Mixed input with newline detected, passing through: ${JSON.stringify(input)}`,
+                    );
                 }
                 this.ptyProcess.write(input);
                 this.inputBuffer = "";
@@ -192,7 +199,9 @@ export class PtyWrapper {
         // Prevent concurrent execution - skip if already processing
         if (this.processingCommand) {
             if (this.debugLogger) {
-                this.debugLogger.log(`Skipping duplicate command (already processing): "${command}"`);
+                this.debugLogger.log(
+                    `Skipping duplicate command (already processing): "${command}"`,
+                );
             }
             return;
         }

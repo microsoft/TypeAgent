@@ -75,7 +75,9 @@ async function main() {
             `[CoderWrapper] Command: ${config.command} ${config.args.join(" ")}`,
         );
         if (debug) {
-            console.log(`[CoderWrapper] Debug mode enabled - cache timing will be logged`);
+            console.log(
+                `[CoderWrapper] Debug mode enabled - cache timing will be logged`,
+            );
         }
         console.log(
             `[CoderWrapper] Press Ctrl+C to exit or type 'exit' in the assistant\n`,

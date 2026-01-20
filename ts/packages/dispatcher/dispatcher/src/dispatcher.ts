@@ -94,10 +94,12 @@ async function checkCache(
     const matches = agentCache.match(request, {
         wildcard: context.session.getConfig().cache.matchWildcard,
         entityWildcard: context.session.getConfig().cache.matchEntityWildcard,
-        rejectReferences: context.session
-            .getConfig()
-            .explainer.filter.reference.list,
-        namespaceKeys: agentCache.getNamespaceKeys(activeSchemaNames, undefined),
+        rejectReferences:
+            context.session.getConfig().explainer.filter.reference.list,
+        namespaceKeys: agentCache.getNamespaceKeys(
+            activeSchemaNames,
+            undefined,
+        ),
     });
 
     if (matches.length === 0) {

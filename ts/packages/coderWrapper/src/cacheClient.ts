@@ -111,13 +111,18 @@ export class CacheClient {
 
         if (!this.client) {
             if (this.logger) {
-                this.logger.log("Client not connected, attempting to connect...");
+                this.logger.log(
+                    "Client not connected, attempting to connect...",
+                );
             }
             try {
                 await this.connect();
             } catch (error) {
                 if (this.logger) {
-                    this.logger.error("Connection failed during checkCache", error);
+                    this.logger.error(
+                        "Connection failed during checkCache",
+                        error,
+                    );
                 }
                 return {
                     hit: false,
@@ -138,7 +143,9 @@ export class CacheClient {
 
         try {
             if (this.logger) {
-                this.logger.log("Calling MCP execute_command tool with cacheCheck=true");
+                this.logger.log(
+                    "Calling MCP execute_command tool with cacheCheck=true",
+                );
             }
 
             const result = await this.client.callTool({

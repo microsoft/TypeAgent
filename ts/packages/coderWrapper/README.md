@@ -68,12 +68,14 @@ coder-wrapper --debug
 ### Debug Mode
 
 When `--debug` is enabled, the wrapper logs:
+
 - Cache check attempts with command text
 - Cache hit/miss status with timing (in milliseconds)
 - Whether request was forwarded to assistant
 - Total time for cache hits
 
 Example debug output:
+
 ```
 [CoderWrapper:Debug] Checking cache for: "play hello by adele"
 [CoderWrapper:Debug] ✓ Cache HIT (234.56ms)

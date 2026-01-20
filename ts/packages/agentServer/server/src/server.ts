@@ -30,7 +30,10 @@ async function main() {
     const instanceDir = getInstanceDir();
 
     // Track all connected clients and their ClientIO
-    const connectedClients = new Map<ChannelProvider, { clientIO: ClientIO; closeFn: () => void }>();
+    const connectedClients = new Map<
+        ChannelProvider,
+        { clientIO: ClientIO; closeFn: () => void }
+    >();
 
     // Create a routing ClientIO that forwards calls to the current request's client
     const routingClientIO: ClientIO = {
@@ -145,26 +148,44 @@ async function main() {
 
                     channelProvider.on("disconnect", () => {
                         connectedClients.delete(channelProvider);
-                        console.log(`Client disconnected. Active connections: ${connectedClients.size}`);
+                        console.log(
+                            `Client disconnected. Active connections: ${connectedClients.size}`,
+                        );
                     });
 
                     // Wrap the dispatcher RPC server to set context for each request
                     const wrappedDispatcher = {
                         ...dispatcher,
-                        processCommand: async (command: string, requestId?: string, attachments?: string[]) => {
-                            return currentClientContext.run(clientIORpcClient, () =>
-                                dispatcher.processCommand(command, requestId, attachments)
+                        processCommand: async (
+                            command: string,
+                            requestId?: string,
+                            attachments?: string[],
+                        ) => {
+                            return currentClientContext.run(
+                                clientIORpcClient,
+                                () =>
+                                    dispatcher.processCommand(
+                                        command,
+                                        requestId,
+                                        attachments,
+                                    ),
                             );
                         },
                         checkCache: async (request: string) => {
-                            return currentClientContext.run(clientIORpcClient, () =>
-                                dispatcher.checkCache(request)
+                            return currentClientContext.run(
+                                clientIORpcClient,
+                                () => dispatcher.checkCache(request),
                             );
                         },
                     };
 
-                    createDispatcherRpcServer(wrappedDispatcher as any, dispatcherChannel);
-                    console.log(`Client connected. Active connections: ${connectedClients.size}`);
+                    createDispatcherRpcServer(
+                        wrappedDispatcher as any,
+                        dispatcherChannel,
+                    );
+                    console.log(
+                        `Client connected. Active connections: ${connectedClients.size}`,
+                    );
                 },
             };
 

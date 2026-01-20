@@ -18,7 +18,11 @@ export class DebugLogger {
 
         if (enabled) {
             // Use ~/.tmp instead of system temp directory
-            const logDir = path.join(os.homedir(), ".tmp", "typeagent-coder-wrapper");
+            const logDir = path.join(
+                os.homedir(),
+                ".tmp",
+                "typeagent-coder-wrapper",
+            );
             if (!fs.existsSync(logDir)) {
                 fs.mkdirSync(logDir, { recursive: true });
             }
