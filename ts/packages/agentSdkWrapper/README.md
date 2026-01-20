@@ -89,6 +89,48 @@ Once running, you can:
 - Type `exit`, `quit`, `.exit`, or `.quit` to quit
 - Press Ctrl+C to exit
 
+### Voice Input
+
+The Agent SDK wrapper supports voice input through local Whisper transcription:
+
+**Prerequisites:**
+
+1. Start the local Whisper service (requires GPU for best performance):
+   ```bash
+   cd python/stt/whisperService
+   python faster-whisper.py
+   ```
+
+**Note:** Voice input uses Node.js native audio APIs (via the `mic` package), so no external audio tools are required!
+
+**Using Voice Input:**
+
+- **Type `/voice` or `/v` or `:v`** - Press Enter to start recording
+- **Press `Ctrl+V`** - Hotkey to start recording immediately
+
+When recording:
+
+- Speak your question naturally
+- Wait 1 second of silence to end recording
+- Your speech will be transcribed and processed automatically
+
+**Example:**
+
+```
+> /voice
+🎤 Recording... (speak now, 1 second of silence will end recording)
+
+[speak: "what is the capital of France"]
+
+🔇 Silence detected, processing...
+
+📝 Transcribed: "what is the capital of France"
+
+Claude will respond with the answer...
+```
+
+**Note:** If the Whisper service is not running, voice input will be disabled and you'll see a message on startup with instructions to enable it.
+
 ## How It Works
 
 1. **User Input**: Reads prompts via readline interface
@@ -254,12 +296,22 @@ npm run prettier:fix
 - `@modelcontextprotocol/sdk`: MCP protocol for cache communication
 - `coder-wrapper`: Reuses CacheClient and DebugLogger utilities
 
+## Features
+
+- ✅ **Voice Input**: Local Whisper transcription with silence detection
+- ✅ **Cache Integration**: Automatic caching of requests and responses
+- ✅ **MCP Server**: Integration with TypeAgent's command executor
+- ✅ **Context Injection**: Cached results are available in conversation context
+- ✅ **Multiple Models**: Support for Sonnet, Opus, and custom model IDs
+- ✅ **Tool Selection**: Configurable tool permissions
+- ✅ **Debug Mode**: Detailed timing and logging information
+
 ## Future Enhancements
 
 Possible improvements:
 
-1. **Streaming Output**: Implement real-time streaming of responses
-2. **Multi-turn Conversations**: Maintain conversation context
+1. **Cloud Transcription**: Add OpenAI Whisper API support for systems without GPU
+2. **Streaming Output**: Implement real-time streaming of responses
 3. **File Attachments**: Support uploading files with prompts
 4. **Custom Tools**: Allow registering custom tool implementations
 5. **Response Formatting**: Better markdown rendering in terminal

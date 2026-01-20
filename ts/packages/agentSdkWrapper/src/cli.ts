@@ -12,6 +12,7 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { CacheClient } from "coder-wrapper";
 import { DebugLogger } from "coder-wrapper";
+import { VoiceInputHandler } from "./voiceInput.js";
 
 /**
  * ClaudeSDKClient wrapper for continuous conversation with memory.
@@ -323,6 +324,23 @@ async function main() {
     } else {
         console.log(`[AgentSDK] Tools: ${allowedTools.join(", ")}`);
     }
+    // Initialize voice input handler
+    const voiceHandler = new VoiceInputHandler();
+    const voiceEnabled = await voiceHandler.isWhisperServiceAvailable();
+
+    if (voiceEnabled) {
+        console.log(
+            `[AgentSDK] Voice input enabled - type '/voice' or press Ctrl+V`,
+        );
+    } else {
+        console.log(
+            `[AgentSDK] Voice input disabled - Whisper service not running`,
+        );
+        console.log(
+            `[AgentSDK] To enable: cd python/stt/whisperService && python faster-whisper.py`,
+        );
+    }
+
     console.log(`[AgentSDK] Type 'exit' or press Ctrl+C to quit\n`);
 
     // Create readline interface
@@ -331,6 +349,62 @@ async function main() {
         output: process.stdout,
         prompt: "> ",
     });
+
+    // Enable keypress events for Ctrl+V hotkey
+    let isProcessingVoice = false;
+    readline.emitKeypressEvents(process.stdin);
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+        process.stdin.setRawMode(true);
+
+        // Handle keypress events
+        process.stdin.on("keypress", async (str, key) => {
+            // Ctrl+V triggers voice input
+            if (
+                key &&
+                key.ctrl &&
+                key.name === "v" &&
+                voiceEnabled &&
+                !isProcessingVoice
+            ) {
+                isProcessingVoice = true;
+
+                try {
+                    const transcribedText =
+                        await voiceHandler.recordAndTranscribe();
+                    if (transcribedText) {
+                        console.log(`📝 Transcribed: "${transcribedText}"\n`);
+                        // Emit as a line event to process it
+                        rl.write(transcribedText + "\n");
+                    } else {
+                        console.log("⚠️  No speech detected\n");
+                        rl.prompt();
+                    }
+                } catch (error) {
+                    console.error(
+                        `❌ Voice input error: ${error instanceof Error ? error.message : String(error)}\n`,
+                    );
+                    rl.prompt();
+                } finally {
+                    isProcessingVoice = false;
+                }
+                return;
+            }
+
+            // Ctrl+C to exit
+            if (key && key.ctrl && key.name === "c") {
+                console.log("\n[AgentSDK] Goodbye!");
+                client.disconnect();
+                rl.close();
+                if (cacheClient) {
+                    await cacheClient.close();
+                }
+                if (debugLogger) {
+                    debugLogger.close();
+                }
+                process.exit(0);
+            }
+        });
+    }
 
     rl.prompt();
 
@@ -354,6 +428,31 @@ async function main() {
                 debugLogger.close();
             }
             process.exit(0);
+        }
+
+        // Handle voice input command
+        if (
+            (trimmed === "/voice" || trimmed === ":v" || trimmed === "/v") &&
+            voiceEnabled
+        ) {
+            try {
+                const transcribedText =
+                    await voiceHandler.recordAndTranscribe();
+                if (transcribedText) {
+                    console.log(`📝 Transcribed: "${transcribedText}"\n`);
+                    // Recursively process the transcribed text
+                    rl.write(transcribedText + "\n");
+                } else {
+                    console.log("⚠️  No speech detected\n");
+                    rl.prompt();
+                }
+            } catch (error) {
+                console.error(
+                    `❌ Voice input error: ${error instanceof Error ? error.message : String(error)}\n`,
+                );
+                rl.prompt();
+            }
+            return;
         }
 
         // Skip empty inputs

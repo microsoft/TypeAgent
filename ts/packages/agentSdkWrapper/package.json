@@ -30,7 +30,10 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "coder-wrapper": "workspace:*"
+    "coder-wrapper": "workspace:*",
+    "form-data": "^4.0.0",
+    "mic": "^2.1.2",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/node": "^18.19.3",
