@@ -3,7 +3,14 @@
 // Licensed under the MIT License.
 
 import { config } from "dotenv";
-config(); // Load .env file
+import * as path from "path";
+import { fileURLToPath } from "url";
+
+// Load .env file from the TypeAgent repository root (ts directory)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "../../../..");
+config({ path: path.join(repoRoot, ".env") });
 
 import {
     query,
@@ -11,8 +18,6 @@ import {
     type Options,
 } from "@anthropic-ai/claude-agent-sdk";
 import * as readline from "readline";
-import * as path from "path";
-import { fileURLToPath } from "url";
 import { CacheClient } from "coder-wrapper";
 import { DebugLogger } from "coder-wrapper";
 import { VoiceInputHandler } from "./voiceInput.js";

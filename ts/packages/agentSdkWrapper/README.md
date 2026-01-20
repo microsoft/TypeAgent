@@ -103,7 +103,7 @@ export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 export AZURE_OPENAI_DEPLOYMENT_NAME=whisper  # Optional, defaults to "whisper"
 ```
 
-Or create a `.env` file in the agentSdkWrapper directory:
+Or create a `.env` file in the TypeAgent repository root (`ts` directory):
 
 ```
 AZURE_OPENAI_API_KEY=your-key
@@ -119,7 +119,7 @@ Set your OpenAI API key as an environment variable:
 export OPENAI_API_KEY=sk-...
 ```
 
-Or create a `.env` file in the agentSdkWrapper directory:
+Or create a `.env` file in the TypeAgent repository root (`ts` directory):
 
 ```
 OPENAI_API_KEY=sk-...
