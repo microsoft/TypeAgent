@@ -120,5 +120,8 @@ export interface Dispatcher {
         prefix: string,
     ): Promise<CommandCompletionResult | undefined>;
 
+    // Check if a request can be handled by cache without executing
+    checkCache(request: string): Promise<CommandResult | undefined>;
+
     getStatus(): Promise<DispatcherStatus>;
 }

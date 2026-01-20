@@ -2815,6 +2815,9 @@ importers:
 
   packages/coderWrapper:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.0.4
+        version: 1.25.2(hono@4.11.3)(zod@4.1.13)
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../agentServer/client

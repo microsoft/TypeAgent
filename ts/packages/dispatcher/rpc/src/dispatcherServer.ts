@@ -26,6 +26,9 @@ export function createDispatcherRpcServer(
         getCommandCompletion: async (...args) => {
             return dispatcher.getCommandCompletion(...args);
         },
+        checkCache: async (...args) => {
+            return dispatcher.checkCache(...args);
+        },
         close: async () => {
             await dispatcher.close();
         },

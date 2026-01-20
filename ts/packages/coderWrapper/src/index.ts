@@ -7,3 +7,5 @@ export {
     ASSISTANT_CONFIGS,
     getAssistantConfig,
 } from "./assistantConfig.js";
+export { CacheClient, CacheCheckResult } from "./cacheClient.js";
+export { DebugLogger } from "./debugLogger.js";

@@ -8,10 +8,11 @@ import { getAssistantConfig } from "./assistantConfig.js";
 /**
  * Parse command line arguments
  */
-function parseArgs(): { assistant: string; help: boolean } {
+function parseArgs(): { assistant: string; help: boolean; debug: boolean } {
     const args = process.argv.slice(2);
     let assistant = "claude";
     let help = false;
+    let debug = false;
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -19,10 +20,12 @@ function parseArgs(): { assistant: string; help: boolean } {
             help = true;
         } else if (arg === "--assistant" || arg === "-a") {
             assistant = args[++i];
+        } else if (arg === "--debug" || arg === "-d") {
+            debug = true;
         }
     }
 
-    return { assistant, help };
+    return { assistant, help, debug };
 }
 
 /**
@@ -34,6 +37,7 @@ Usage: coder-wrapper [options]
 
 Options:
   -a, --assistant <name>  Specify the assistant to use (default: claude)
+  -d, --debug            Enable debug logging with cache timing information
   -h, --help             Show this help message
 
 Available assistants:
@@ -42,11 +46,12 @@ Available assistants:
 Examples:
   coder-wrapper                    # Use Claude Code (default)
   coder-wrapper -a claude          # Explicitly use Claude Code
+  coder-wrapper --debug            # Enable debug logging
 
 Description:
   Wraps CLI coding assistants in a pseudo terminal with caching support.
-  The wrapper transparently passes through all I/O to/from the assistant.
-  Future versions will add TypeAgent cache checking before forwarding requests.
+  The wrapper checks the TypeAgent cache before forwarding requests to the assistant.
+  Cache hits are executed and returned immediately without calling the assistant.
 `);
 }
 
@@ -54,7 +59,7 @@ Description:
  * Main CLI entry point
  */
 async function main() {
-    const { assistant, help } = parseArgs();
+    const { assistant, help, debug } = parseArgs();
 
     if (help) {
         printUsage();
@@ -69,6 +74,9 @@ async function main() {
         console.log(
             `[CoderWrapper] Command: ${config.command} ${config.args.join(" ")}`,
         );
+        if (debug) {
+            console.log(`[CoderWrapper] Debug mode enabled - cache timing will be logged`);
+        }
         console.log(
             `[CoderWrapper] Press Ctrl+C to exit or type 'exit' in the assistant\n`,
         );
@@ -77,6 +85,7 @@ async function main() {
         const wrapper = new PtyWrapper(config, {
             cols: process.stdout.columns,
             rows: process.stdout.rows,
+            debug,
         });
 
         wrapper.spawn();
