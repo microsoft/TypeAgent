@@ -23,6 +23,7 @@ function executeCommandRequestSchema() {
     return {
         request: z.string(),
         cacheCheck: z.boolean().optional(),
+        confirmed: z.boolean().optional(),
     };
 }
 const ExecuteCommandRequestSchema = z.object(executeCommandRequestSchema());
@@ -122,6 +123,7 @@ async function processHtmlImages(content: string): Promise<string> {
 function createMcpClientIO(
     logger: Logger,
     responseCollector: { messages: string[] },
+    getConfirmedFlag: () => boolean,
 ): ClientIO {
     return {
         clear(): void {
@@ -195,10 +197,19 @@ function createMcpClientIO(
             requestId: RequestId,
             defaultValue?: boolean,
         ): Promise<boolean> {
+            // Check if this request was pre-confirmed
+            if (getConfirmedFlag()) {
+                logger.log(
+                    `ClientIO: askYesNo(requestId=${requestId}) - "${message}" (auto-approved due to confirmed=true)`,
+                );
+                return true;
+            }
+
+            // Otherwise, throw error requiring user confirmation
             logger.log(
-                `ClientIO: askYesNo(requestId=${requestId}) - "${message}" (defaulting to ${defaultValue ?? false})`,
+                `ClientIO: askYesNo(requestId=${requestId}) - "${message}" (requires user confirmation)`,
             );
-            return defaultValue ?? false;
+            throw new Error(`USER_CONFIRMATION_REQUIRED: ${message}`);
         },
         async proposeAction(
             actionTemplates: TemplateEditConfig,
@@ -268,6 +279,7 @@ export class CommandServer {
     private reconnectDelayMs: number = 5000; // 5 seconds between reconnection attempts
     private logger: Logger;
     private responseCollector: { messages: string[] } = { messages: [] };
+    private currentRequestConfirmed: boolean = false;
 
     /**
      * Creates a new CommandServer instance
@@ -317,6 +329,7 @@ export class CommandServer {
             const clientIO = createMcpClientIO(
                 this.logger,
                 this.responseCollector,
+                () => this.currentRequestConfirmed,
             );
             this.dispatcher = await connectDispatcher(
                 clientIO,
@@ -377,7 +390,15 @@ export class CommandServer {
                     "- Music & media: play songs, control playback\n" +
                     "- Lists & tasks: manage shopping lists, todo lists\n" +
                     "- Calendar: schedule events, view calendar\n" +
-                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings",
+                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n\n" +
+                    "Parameters:\n" +
+                    "- request: The command to execute\n" +
+                    "- cacheCheck: (optional) Check cache before executing\n" +
+                    "- confirmed: (optional) Set to true if user has already confirmed any yes/no prompts\n\n" +
+                    "Confirmation Flow:\n" +
+                    "Some commands (like deleting sessions or clearing data) require user confirmation. " +
+                    "If a command requires confirmation, the tool will return an error message indicating what needs to be confirmed. " +
+                    "Ask the user for confirmation, then retry the same command with confirmed=true if they approve.",
             },
             async (request: ExecuteCommandRequest) =>
                 this.executeCommand(request),
@@ -388,6 +409,12 @@ export class CommandServer {
         request: ExecuteCommandRequest,
     ): Promise<CallToolResult> {
         this.logger.log(`User request: ${request.request}`);
+
+        // Set confirmation flag for this request
+        this.currentRequestConfirmed = request.confirmed ?? false;
+        if (this.currentRequestConfirmed) {
+            this.logger.log("Request has confirmed=true flag");
+        }
 
         // If not connected, try to connect now (lazy connection)
         if (!this.dispatcher && !this.isConnecting) {
@@ -502,6 +529,26 @@ export class CommandServer {
             // Fallback if no messages were collected
             return toolResult(`Successfully executed: ${request.request}`);
         } catch (error) {
+            // Check if this is a user confirmation request
+            if (
+                error instanceof Error &&
+                error.message.startsWith("USER_CONFIRMATION_REQUIRED:")
+            ) {
+                const question = error.message.replace(
+                    "USER_CONFIRMATION_REQUIRED: ",
+                    "",
+                );
+                this.logger.log(
+                    `Command requires user confirmation: ${question}`,
+                );
+                return toolResult(
+                    `⚠️  Confirmation Required\n\n` +
+                        `The action you requested requires confirmation:\n\n` +
+                        `"${question}"\n\n` +
+                        `Please confirm with the user, then retry the command with confirmed=true if they approve.`,
+                );
+            }
+
             const errorMsg = `Failed to execute command: ${error instanceof Error ? error.message : String(error)}`;
             this.logger.error(errorMsg);
 
@@ -509,6 +556,9 @@ export class CommandServer {
             this.dispatcher = null;
 
             return toolResult(errorMsg);
+        } finally {
+            // Always reset confirmation flag after request completes
+            this.currentRequestConfirmed = false;
         }
     }
 
