@@ -68,6 +68,51 @@ async function getTemplateCompletion(
     );
 }
 
+async function checkCache(
+    request: string,
+    context: CommandHandlerContext,
+): Promise<import("@typeagent/dispatcher-types").CommandResult | undefined> {
+    const agentCache = context.agentCache;
+
+    // Check if cache is enabled
+    if (!agentCache.isEnabled()) {
+        return {
+            lastError: "Cache is not enabled",
+        };
+    }
+
+    // Get active schema names from enabled agents
+    const activeSchemaNames = context.agents.getActiveSchemas();
+
+    if (activeSchemaNames.length === 0) {
+        return {
+            lastError: "No active agents",
+        };
+    }
+
+    // Attempt to match the request against the cache
+    const matches = agentCache.match(request, {
+        wildcard: context.session.getConfig().cache.matchWildcard,
+        entityWildcard: context.session.getConfig().cache.matchEntityWildcard,
+        rejectReferences:
+            context.session.getConfig().explainer.filter.reference.list,
+        namespaceKeys: agentCache.getNamespaceKeys(
+            activeSchemaNames,
+            undefined,
+        ),
+    });
+
+    if (matches.length === 0) {
+        return {
+            lastError: "No cache match found",
+        };
+    }
+
+    // Cache hit - execute the command normally to get the full result
+    // This will execute the cached actions and return proper results through ClientIO
+    return await processCommand(request, context);
+}
+
 /**
  * Create a instance of the dispatcher.
  *
@@ -86,6 +131,9 @@ export async function createDispatcher(
         },
         getCommandCompletion(prefix) {
             return getCommandCompletion(prefix, context);
+        },
+        checkCache(request) {
+            return checkCache(request, context);
         },
 
         getDynamicDisplay(appAgentName, type, id) {

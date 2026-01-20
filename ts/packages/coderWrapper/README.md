@@ -38,6 +38,7 @@ coder-wrapper [options]
 
 Options:
   -a, --assistant <name>  Specify the assistant to use (default: claude)
+  -d, --debug            Enable debug logging with cache timing information
   -h, --help             Show this help message
 ```
 
@@ -49,14 +50,38 @@ coder-wrapper
 
 # Explicitly specify Claude
 coder-wrapper -a claude
+
+# Enable debug mode to see cache hit/miss timing
+coder-wrapper --debug
 ```
 
 ## How It Works
 
 1. **PTY Wrapper**: Uses `node-pty` to spawn the assistant in a pseudo terminal
-2. **Transparent I/O**: All stdin/stdout/stderr is passed through unchanged
-3. **Terminal Features**: Supports colors, cursor control, and terminal resizing
-4. **Clean Exit**: Handles Ctrl+C and process termination gracefully
+2. **Cache Checking**: Intercepts user input and checks TypeAgent cache before forwarding to assistant
+3. **Cache Hit**: Executes cached actions and returns results immediately (bypasses assistant)
+4. **Cache Miss**: Forwards input to the assistant normally
+5. **Transparent I/O**: All stdin/stdout/stderr is passed through unchanged
+6. **Terminal Features**: Supports colors, cursor control, and terminal resizing
+7. **Clean Exit**: Handles Ctrl+C and process termination gracefully
+
+### Debug Mode
+
+When `--debug` is enabled, the wrapper logs:
+
+- Cache check attempts with command text
+- Cache hit/miss status with timing (in milliseconds)
+- Whether request was forwarded to assistant
+- Total time for cache hits
+
+Example debug output:
+
+```
+[CoderWrapper:Debug] Checking cache for: "play hello by adele"
+[CoderWrapper:Debug] ✓ Cache HIT (234.56ms)
+[Action result displayed here]
+[CoderWrapper:Debug] Command completed from cache in 234.56ms
+```
 
 ## Architecture
 
@@ -96,13 +121,19 @@ export const ASSISTANT_CONFIGS: Record<string, AssistantConfig> = {
 };
 ```
 
+## Features
+
+- [x] Cache checking before forwarding to assistant
+- [x] Debug mode with timing metrics for cache operations
+- [x] Transparent PTY passthrough
+- [x] Support for multiple CLI assistants
+
 ## Future Enhancements
 
-- [ ] Cache checking before forwarding to assistant
-- [ ] Request/response logging
-- [ ] Performance metrics
-- [ ] Cache hit/miss statistics
+- [ ] Request/response logging to file
+- [ ] Cumulative cache hit/miss statistics
 - [ ] Support for intercepting and modifying requests
+- [ ] Configuration file support
 
 ## Development
 

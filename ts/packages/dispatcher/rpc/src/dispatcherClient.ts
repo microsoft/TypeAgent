@@ -25,6 +25,9 @@ export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
         async getCommandCompletion(...args) {
             return rpc.invoke("getCommandCompletion", ...args);
         },
+        async checkCache(...args) {
+            return rpc.invoke("checkCache", ...args);
+        },
         async close() {
             return rpc.invoke("close");
         },

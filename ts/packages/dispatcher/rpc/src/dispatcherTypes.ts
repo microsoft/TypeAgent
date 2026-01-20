@@ -41,6 +41,8 @@ export type DispatcherInvokeFunctions = {
         prefix: string,
     ): Promise<CommandCompletionResult | undefined>;
 
+    checkCache(request: string): Promise<CommandResult | undefined>;
+
     close(): Promise<void>;
 
     getStatus(): Promise<DispatcherStatus>;
