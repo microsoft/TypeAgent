@@ -1054,6 +1054,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.25.2(hono@4.11.3)(zod@4.1.13)
+      aiclient:
+        specifier: workspace:*
+        version: link:../aiclient
       coder-wrapper:
         specifier: workspace:*
         version: link:../coderWrapper
@@ -1066,6 +1069,9 @@ importers:
       mic:
         specifier: ^2.1.2
         version: 2.1.2
+      microsoft-cognitiveservices-speech-sdk:
+        specifier: ^1.38.0
+        version: 1.43.1
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2

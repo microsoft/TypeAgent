@@ -8,6 +8,12 @@ import fetch, { FormData, Blob } from "node-fetch";
 import Mic from "mic";
 import OpenAI from "openai";
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
+import {
+    AzureTokenScopes,
+    createAzureTokenProvider,
+    type AuthTokenProvider,
+} from "aiclient";
+import { AudioCapture } from "./audioCapture.js";
 
 export type TranscriptionProvider =
     | "azure-speech"
@@ -24,6 +30,8 @@ export interface VoiceInputOptions {
     azureOpenAIDeploymentName?: string;
     azureSpeechKey?: string;
     azureSpeechRegion?: string;
+    azureSpeechEndpoint?: string;
+    audioDevice?: string; // Microphone device name or ID
 }
 
 /**
@@ -37,6 +45,11 @@ export class VoiceInputHandler {
     private openaiClient: OpenAI | null = null;
     private azureDeploymentName: string = "";
     private azureSpeechConfig: speechSDK.SpeechConfig | null = null;
+    private azureSpeechKey: string = "";
+    private azureSpeechRegion: string = "";
+    private azureSpeechEndpoint: string = "";
+    private azureTokenProvider: AuthTokenProvider | null = null;
+    private audioDevice: string | undefined;
     private micInstance: any = null;
     private audioChunks: Buffer[] = [];
     private isRecording = false;
@@ -47,6 +60,14 @@ export class VoiceInputHandler {
     private rejectRecording: ((reason: any) => void) | null = null;
 
     constructor(options: VoiceInputOptions = {}) {
+        // Store audio device preference
+        this.audioDevice = options.audioDevice || process.env.AUDIO_DEVICE;
+
+        // Log the selected audio device if specified
+        if (this.audioDevice) {
+            console.log(`[Voice] Using audio device: ${this.audioDevice}`);
+        }
+
         // Auto-detect provider based on available environment variables
         if (!options.provider) {
             if (
@@ -84,6 +105,10 @@ export class VoiceInputHandler {
                 process.env.AZURE_SPEECH_REGION ||
                 process.env.SPEECH_SDK_REGION ||
                 "";
+            const speechEndpoint =
+                options.azureSpeechEndpoint ||
+                process.env.SPEECH_SDK_ENDPOINT ||
+                "";
 
             if (!speechKey || !speechRegion) {
                 console.warn(
@@ -91,26 +116,28 @@ export class VoiceInputHandler {
                 );
                 this.provider = "local";
             } else {
+                // Store credentials for use in recordWithAzureSpeech
+                this.azureSpeechKey = speechKey;
+                this.azureSpeechRegion = speechRegion;
+                this.azureSpeechEndpoint = speechEndpoint;
+
                 // Handle special case where key is "identity" (managed identity)
-                if (speechKey === "identity") {
-                    // For managed identity, we need the endpoint
-                    const endpoint =
-                        process.env.SPEECH_SDK_ENDPOINT ||
-                        `https://${speechRegion}.api.cognitive.microsoft.com/`;
-                    this.azureSpeechConfig =
-                        speechSDK.SpeechConfig.fromEndpoint(
-                            new URL(endpoint),
-                            speechKey,
-                        );
+                if (speechKey.toLowerCase() === "identity") {
+                    // For managed identity, we need to get a token asynchronously
+                    // So we'll create the config lazily in recordWithAzureSpeech
+                    // Initialize the token provider now
+                    this.azureTokenProvider = createAzureTokenProvider(
+                        AzureTokenScopes.CogServices,
+                    );
                 } else {
-                    // Regular subscription key
+                    // Regular subscription key - create config now
                     this.azureSpeechConfig =
                         speechSDK.SpeechConfig.fromSubscription(
                             speechKey,
                             speechRegion,
                         );
+                    this.azureSpeechConfig.speechRecognitionLanguage = "en-US";
                 }
-                this.azureSpeechConfig.speechRecognitionLanguage = "en-US";
             }
         } else if (this.provider === "openai") {
             // Initialize OpenAI client if using that provider
@@ -160,7 +187,7 @@ export class VoiceInputHandler {
      */
     async recordAndTranscribe(): Promise<string> {
         // Use Azure Speech SDK for azure-speech provider
-        if (this.provider === "azure-speech" && this.azureSpeechConfig) {
+        if (this.provider === "azure-speech") {
             return this.recordWithAzureSpeech();
         }
 
@@ -175,13 +202,20 @@ export class VoiceInputHandler {
             this.hasDetectedAudio = false;
 
             // Create mic instance with proper settings for Whisper
-            this.micInstance = Mic({
+            const micOptions: any = {
                 rate: "16000", // 16kHz sample rate for Whisper
                 channels: "1", // Mono
                 debug: false,
                 exitOnSilence: 0, // We'll handle silence detection manually
                 fileType: "wav",
-            });
+            };
+
+            // Add device if specified
+            if (this.audioDevice) {
+                micOptions.device = this.audioDevice;
+            }
+
+            this.micInstance = Mic(micOptions);
 
             // Get the audio stream
             const micInputStream = this.micInstance.getAudioStream();
@@ -239,18 +273,84 @@ export class VoiceInputHandler {
 
     /**
      * Record and transcribe using Azure Speech Services
-     * Uses the Speech SDK's built-in silence detection and recognition
+     * Uses the Speech SDK with PushAudioInputStream for Node.js compatibility
      */
     private async recordWithAzureSpeech(): Promise<string> {
-        return new Promise((resolve, reject) => {
-            console.log("\n🎤 Recording... (speak now)\n");
+        // If using managed identity, get token and create config first
+        if (this.azureSpeechKey.toLowerCase() === "identity") {
+            if (!this.azureTokenProvider) {
+                throw new Error(
+                    "Azure token provider not initialized for managed identity",
+                );
+            }
 
+            const tokenResult = await this.azureTokenProvider.getAccessToken();
+            if (!tokenResult.success) {
+                throw new Error(
+                    `Failed to get Azure token for managed identity: ${tokenResult.message}`,
+                );
+            }
+
+            // Create speech config with authorization token
+            // Format: aad#endpoint#token
+            this.azureSpeechConfig =
+                speechSDK.SpeechConfig.fromAuthorizationToken(
+                    `aad#${this.azureSpeechEndpoint}#${tokenResult.data}`,
+                    this.azureSpeechRegion,
+                );
+            this.azureSpeechConfig.speechRecognitionLanguage = "en-US";
+        }
+
+        return new Promise((resolve, reject) => {
+            const deviceMsg = this.audioDevice
+                ? ` using device: ${this.audioDevice}`
+                : " using default device";
+            console.log(`\n🎤 Recording${deviceMsg}... (speak now)\n`);
+
+            // Create push stream for audio input
+            // Use 16kHz sample rate, 16-bit, mono PCM format
+            const pushStream = speechSDK.AudioInputStream.createPushStream(
+                speechSDK.AudioStreamFormat.getWaveFormatPCM(16000, 16, 1),
+            );
+
+            // Create audio config from push stream
             const audioConfig =
-                speechSDK.AudioConfig.fromDefaultMicrophoneInput();
+                speechSDK.AudioConfig.fromStreamInput(pushStream);
             const recognizer = new speechSDK.SpeechRecognizer(
                 this.azureSpeechConfig!,
                 audioConfig,
             );
+
+            // Create audio capture instance with device selection support
+            const audioCapture = new AudioCapture({
+                rate: "16000",
+                channels: "1",
+                device: this.audioDevice || "default",
+                debug: false,
+            });
+
+            const micInputStream = audioCapture.getAudioStream();
+            let audioStarted = false;
+
+            // The mic package outputs raw PCM data (when fileType is 'raw')
+            micInputStream.on("data", (data: Buffer) => {
+                if (!audioStarted) {
+                    audioStarted = true;
+                }
+                // Create a proper ArrayBuffer from the Buffer
+                const arrayBuffer = data.buffer.slice(
+                    data.byteOffset,
+                    data.byteOffset + data.byteLength,
+                );
+                pushStream.write(arrayBuffer as ArrayBuffer);
+            });
+
+            micInputStream.on("error", (error: Error) => {
+                audioCapture.stop();
+                pushStream.close();
+                recognizer.close();
+                reject(error);
+            });
 
             // Show interim results while recognizing
             recognizer.recognizing = (
@@ -265,21 +365,39 @@ export class VoiceInputHandler {
             // Perform one-shot recognition
             recognizer.recognizeOnceAsync(
                 (result: speechSDK.SpeechRecognitionResult) => {
-                    recognizer.close();
+                    // Stop audio capture and close streams
+                    audioCapture.stop();
+                    pushStream.close();
 
                     switch (result.reason) {
                         case speechSDK.ResultReason.RecognizedSpeech:
-                            console.log(`\n📝 Transcribed: "${result.text}"\n`);
+                            // Don't print here - let the CLI handler print it
+                            recognizer.close();
                             resolve(result.text);
                             break;
                         case speechSDK.ResultReason.NoMatch:
-                            reject(new Error("Speech could not be recognized"));
+                            recognizer.close();
+                            // Provide more context about why NoMatch occurred
+                            if (!audioStarted) {
+                                reject(
+                                    new Error(
+                                        "No audio detected - please check your microphone",
+                                    ),
+                                );
+                            } else {
+                                reject(
+                                    new Error(
+                                        "Speech could not be recognized - please speak more clearly",
+                                    ),
+                                );
+                            }
                             break;
                         case speechSDK.ResultReason.Canceled:
                             const cancellation =
                                 speechSDK.CancellationDetails.fromResult(
                                     result,
                                 );
+                            recognizer.close();
                             if (
                                 cancellation.reason ===
                                 speechSDK.CancellationReason.Error
@@ -294,6 +412,7 @@ export class VoiceInputHandler {
                             }
                             break;
                         default:
+                            recognizer.close();
                             reject(
                                 new Error(`Unknown reason: ${result.reason}`),
                             );
@@ -301,10 +420,15 @@ export class VoiceInputHandler {
                     }
                 },
                 (err: string) => {
+                    audioCapture.stop();
+                    pushStream.close();
                     recognizer.close();
                     reject(new Error(`Recognition failed: ${err}`));
                 },
             );
+
+            // Start recording
+            audioCapture.start();
         });
     }
 
@@ -509,8 +633,11 @@ export class VoiceInputHandler {
      */
     async isWhisperServiceAvailable(): Promise<boolean> {
         if (this.provider === "azure-speech") {
-            // For Azure Speech, check if we have config
-            return this.azureSpeechConfig !== null;
+            // For Azure Speech, check if we have config or token provider (for managed identity)
+            return (
+                this.azureSpeechConfig !== null ||
+                this.azureTokenProvider !== null
+            );
         } else if (
             this.provider === "openai" ||
             this.provider === "azure-openai"
@@ -543,5 +670,88 @@ export class VoiceInputHandler {
      */
     getIsRecording(): boolean {
         return this.isRecording;
+    }
+
+    /**
+     * Get information about the current audio setup
+     */
+    async getAudioDeviceInfo(): Promise<string> {
+        if (this.audioDevice) {
+            return `Configured device: ${this.audioDevice}`;
+        }
+
+        // Try to get default device info
+        if (process.platform === "win32") {
+            try {
+                const { exec } = await import("child_process");
+                const { promisify } = await import("util");
+                const execAsync = promisify(exec);
+
+                // Get default recording device using PowerShell
+                const { stdout } = await execAsync(
+                    "powershell -Command \"Get-CimInstance Win32_SoundDevice | Where-Object {$_.Status -eq 'OK'} | Select-Object -First 1 -ExpandProperty Name\"",
+                );
+                return `Default device: ${stdout.trim() || "Unknown"}`;
+            } catch {
+                return "Default device: Unable to determine";
+            }
+        }
+
+        return "Default device";
+    }
+
+    /**
+     * List available audio input devices
+     * Note: This is platform-specific and may require SoX on Windows
+     */
+    static async listAudioDevices(): Promise<string[]> {
+        const { exec } = await import("child_process");
+        const { promisify } = await import("util");
+        const execAsync = promisify(exec);
+
+        const platform = process.platform;
+        const devices: string[] = [];
+
+        try {
+            if (platform === "win32") {
+                // On Windows, try to use SoX to list devices
+                // SoX format: "device_name" (device_id)
+                const { stdout } = await execAsync(
+                    'sox --show-all-devices 2>&1 || echo ""',
+                );
+                const lines = stdout.split("\n");
+                for (const line of lines) {
+                    if (line.includes("(") && line.includes(")")) {
+                        devices.push(line.trim());
+                    }
+                }
+            } else if (platform === "darwin") {
+                // On macOS, use system_profiler
+                const { stdout } = await execAsync(
+                    "system_profiler SPAudioDataType 2>/dev/null || echo ''",
+                );
+                const lines = stdout.split("\n");
+                for (const line of lines) {
+                    if (line.includes("Input Source:")) {
+                        devices.push(line.trim());
+                    }
+                }
+            } else {
+                // On Linux, use arecord -L
+                const { stdout } = await execAsync(
+                    "arecord -L 2>/dev/null || echo ''",
+                );
+                const lines = stdout.split("\n");
+                for (const line of lines) {
+                    if (line && !line.startsWith(" ")) {
+                        devices.push(line.trim());
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn("[Voice] Could not list audio devices:", error);
+        }
+
+        return devices;
     }
 }

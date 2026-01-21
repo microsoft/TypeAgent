@@ -340,16 +340,24 @@ async function main() {
 
     if (voiceEnabled) {
         const providerName =
-            provider === "openai" ? "OpenAI Whisper API" : "Local Whisper";
+            provider === "azure-speech"
+                ? "Azure Speech Services"
+                : provider === "azure-openai"
+                  ? "Azure OpenAI Whisper"
+                  : provider === "openai"
+                    ? "OpenAI Whisper API"
+                    : "Local Whisper";
+        const deviceInfo = await voiceHandler.getAudioDeviceInfo();
         console.log(
-            `[AgentSDK] Voice input enabled (${providerName}) - type '/voice' or press Ctrl+V`,
+            `[AgentSDK] Voice input enabled (${providerName}) - type '/voice' or press Alt+M`,
         );
+        console.log(`[AgentSDK] Microphone: ${deviceInfo}`);
     } else {
         console.log(
             `[AgentSDK] Voice input disabled - No transcription service available`,
         );
         console.log(
-            `[AgentSDK] Set OPENAI_API_KEY environment variable or start local Whisper service`,
+            `[AgentSDK] Set AZURE_SPEECH_KEY/OPENAI_API_KEY or start local Whisper service`,
         );
     }
 
@@ -362,7 +370,7 @@ async function main() {
         prompt: "> ",
     });
 
-    // Enable keypress events for Ctrl+V hotkey
+    // Enable keypress events for Alt+M hotkey
     let isProcessingVoice = false;
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY && process.stdin.setRawMode) {
@@ -370,11 +378,11 @@ async function main() {
 
         // Handle keypress events
         process.stdin.on("keypress", async (str, key) => {
-            // Ctrl+V triggers voice input
+            // Alt+M triggers voice input
             if (
                 key &&
-                key.ctrl &&
-                key.name === "v" &&
+                key.meta &&
+                key.name === "m" &&
                 voiceEnabled &&
                 !isProcessingVoice
             ) {

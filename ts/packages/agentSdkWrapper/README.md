@@ -95,6 +95,20 @@ The Agent SDK wrapper supports voice input with four transcription options:
 
 **Option 1: Azure Speech Services (Recommended - Most Accurate)**
 
+**Microphone Selection:**
+
+If you have multiple microphones, you can specify which one to use by setting:
+
+```bash
+export AUDIO_DEVICE="device-name-or-number"
+```
+
+Or in your `.env` file:
+
+```
+AUDIO_DEVICE=device-name-or-number
+```
+
 Set your Azure Speech credentials as environment variables:
 
 ```bash
@@ -114,7 +128,7 @@ Alternative variable names (also supported):
 ```
 SPEECH_SDK_KEY=your-speech-key  # or "identity" for managed identity
 SPEECH_SDK_REGION=your-region
-SPEECH_SDK_ENDPOINT=your-endpoint  # Optional, only needed for managed identity
+SPEECH_SDK_ENDPOINT=your-endpoint  # Required when using "identity" for managed identity
 ```
 
 This provides the best transcription accuracy using Azure Cognitive Services Speech-to-Text with built-in silence detection. No external tools or complex setup required!
@@ -177,7 +191,7 @@ The system will automatically detect and use the best available provider based o
 **Using Voice Input:**
 
 - **Type `/voice` or `/v` or `:v`** - Press Enter to start recording
-- **Press `Ctrl+V`** - Hotkey to start recording immediately
+- **Press `Alt+M`** - Hotkey to start recording immediately
 
 When recording:
 
