@@ -89,6 +89,133 @@ Once running, you can:
 - Type `exit`, `quit`, `.exit`, or `.quit` to quit
 - Press Ctrl+C to exit
 
+### Voice Input
+
+The Agent SDK wrapper supports voice input with four transcription options:
+
+**Option 1: Azure Speech Services (Recommended - Most Accurate)**
+
+**Microphone Selection:**
+
+If you have multiple microphones, you can specify which one to use by setting:
+
+```bash
+export AUDIO_DEVICE="device-name-or-number"
+```
+
+Or in your `.env` file:
+
+```
+AUDIO_DEVICE=device-name-or-number
+```
+
+Set your Azure Speech credentials as environment variables:
+
+```bash
+export AZURE_SPEECH_KEY=your-speech-key
+export AZURE_SPEECH_REGION=your-region  # e.g., westus2, eastus
+```
+
+Or create a `.env` file in the TypeAgent repository root (`ts` directory):
+
+```
+AZURE_SPEECH_KEY=your-speech-key
+AZURE_SPEECH_REGION=your-region
+```
+
+Alternative variable names (also supported):
+
+```
+SPEECH_SDK_KEY=your-speech-key  # or "identity" for managed identity
+SPEECH_SDK_REGION=your-region
+SPEECH_SDK_ENDPOINT=your-endpoint  # Required when using "identity" for managed identity
+```
+
+This provides the best transcription accuracy using Azure Cognitive Services Speech-to-Text with built-in silence detection. No external tools or complex setup required!
+
+**Option 2: Azure OpenAI (Enterprise Whisper)**
+
+Set your Azure OpenAI credentials as environment variables:
+
+```bash
+export AZURE_OPENAI_API_KEY=your-key
+export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+export AZURE_OPENAI_DEPLOYMENT_NAME=whisper  # Optional, defaults to "whisper"
+```
+
+Or create a `.env` file in the TypeAgent repository root (`ts` directory):
+
+```
+AZURE_OPENAI_API_KEY=your-key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT_NAME=whisper
+```
+
+**Option 3: OpenAI Whisper API**
+
+Set your OpenAI API key as an environment variable:
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+Or create a `.env` file in the TypeAgent repository root (`ts` directory):
+
+```
+OPENAI_API_KEY=sk-...
+```
+
+This provides excellent transcription accuracy and requires no local setup.
+
+**Option 4: Local Whisper Service**
+
+If you don't have cloud API credentials, start the local Whisper service (requires GPU for best performance):
+
+```bash
+cd python/stt/whisperService
+python faster-whisper.py
+```
+
+The system will automatically detect and use the best available provider based on environment variables:
+
+1. Azure Speech Services (if `AZURE_SPEECH_KEY`/`SPEECH_SDK_KEY` and `AZURE_SPEECH_REGION`/`SPEECH_SDK_REGION` are set)
+2. Azure OpenAI (if `AZURE_OPENAI_API_KEY` and `AZURE_OPENAI_ENDPOINT` are set)
+3. OpenAI (if `OPENAI_API_KEY` is set)
+4. Local Whisper service (fallback)
+
+**Note:**
+
+- Azure Speech Services uses the Speech SDK's built-in audio capture - no external tools required!
+- Other providers use Node.js native audio APIs (via the `mic` package) - no external tools required!
+
+**Using Voice Input:**
+
+- **Type `/voice` or `/v` or `:v`** - Press Enter to start recording
+- **Press `Alt+M`** - Hotkey to start recording immediately
+
+When recording:
+
+- Speak your question naturally
+- Wait 1 second of silence to end recording
+- Your speech will be transcribed and processed automatically
+
+**Example:**
+
+```
+> /voice
+🎤 Recording... (speak now, 1 second of silence will end recording)
+
+[speak: "what is the capital of France"]
+
+🔇 Silence detected, processing...
+
+📝 Transcribed: "what is the capital of France"
+
+Claude will respond with the answer...
+```
+
+**Note:** If the Whisper service is not running, voice input will be disabled and you'll see a message on startup with instructions to enable it.
+
 ## How It Works
 
 1. **User Input**: Reads prompts via readline interface
@@ -254,12 +381,22 @@ npm run prettier:fix
 - `@modelcontextprotocol/sdk`: MCP protocol for cache communication
 - `coder-wrapper`: Reuses CacheClient and DebugLogger utilities
 
+## Features
+
+- ✅ **Voice Input**: Local Whisper transcription with silence detection
+- ✅ **Cache Integration**: Automatic caching of requests and responses
+- ✅ **MCP Server**: Integration with TypeAgent's command executor
+- ✅ **Context Injection**: Cached results are available in conversation context
+- ✅ **Multiple Models**: Support for Sonnet, Opus, and custom model IDs
+- ✅ **Tool Selection**: Configurable tool permissions
+- ✅ **Debug Mode**: Detailed timing and logging information
+
 ## Future Enhancements
 
 Possible improvements:
 
-1. **Streaming Output**: Implement real-time streaming of responses
-2. **Multi-turn Conversations**: Maintain conversation context
+1. **Cloud Transcription**: Add OpenAI Whisper API support for systems without GPU
+2. **Streaming Output**: Implement real-time streaming of responses
 3. **File Attachments**: Support uploading files with prompts
 4. **Custom Tools**: Allow registering custom tool implementations
 5. **Response Formatting**: Better markdown rendering in terminal

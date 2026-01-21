@@ -30,7 +30,14 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "coder-wrapper": "workspace:*"
+    "aiclient": "workspace:*",
+    "coder-wrapper": "workspace:*",
+    "dotenv": "^16.4.5",
+    "form-data": "^4.0.0",
+    "mic": "^2.1.2",
+    "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.73.0"
   },
   "devDependencies": {
     "@types/node": "^18.19.3",

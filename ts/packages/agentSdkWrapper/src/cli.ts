@@ -2,16 +2,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { config } from "dotenv";
+import * as path from "path";
+import { fileURLToPath } from "url";
+
+// Load .env file from the TypeAgent repository root (ts directory)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// From dist/ go up to: agentSdkWrapper/ -> packages/ -> ts/
+const repoRoot = path.resolve(__dirname, "../../..");
+config({ path: path.join(repoRoot, ".env") });
+
 import {
     query,
     type SDKMessage,
     type Options,
 } from "@anthropic-ai/claude-agent-sdk";
 import * as readline from "readline";
-import * as path from "path";
-import { fileURLToPath } from "url";
 import { CacheClient } from "coder-wrapper";
 import { DebugLogger } from "coder-wrapper";
+import { VoiceInputHandler } from "./voiceInput.js";
 
 /**
  * ClaudeSDKClient wrapper for continuous conversation with memory.
@@ -323,6 +333,34 @@ async function main() {
     } else {
         console.log(`[AgentSDK] Tools: ${allowedTools.join(", ")}`);
     }
+    // Initialize voice input handler
+    const voiceHandler = new VoiceInputHandler();
+    const voiceEnabled = await voiceHandler.isWhisperServiceAvailable();
+    const provider = voiceHandler.getProvider();
+
+    if (voiceEnabled) {
+        const providerName =
+            provider === "azure-speech"
+                ? "Azure Speech Services"
+                : provider === "azure-openai"
+                  ? "Azure OpenAI Whisper"
+                  : provider === "openai"
+                    ? "OpenAI Whisper API"
+                    : "Local Whisper";
+        const deviceInfo = await voiceHandler.getAudioDeviceInfo();
+        console.log(
+            `[AgentSDK] Voice input enabled (${providerName}) - type '/voice' or press Alt+M`,
+        );
+        console.log(`[AgentSDK] Microphone: ${deviceInfo}`);
+    } else {
+        console.log(
+            `[AgentSDK] Voice input disabled - No transcription service available`,
+        );
+        console.log(
+            `[AgentSDK] Set AZURE_SPEECH_KEY/OPENAI_API_KEY or start local Whisper service`,
+        );
+    }
+
     console.log(`[AgentSDK] Type 'exit' or press Ctrl+C to quit\n`);
 
     // Create readline interface
@@ -331,6 +369,62 @@ async function main() {
         output: process.stdout,
         prompt: "> ",
     });
+
+    // Enable keypress events for Alt+M hotkey
+    let isProcessingVoice = false;
+    readline.emitKeypressEvents(process.stdin);
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+        process.stdin.setRawMode(true);
+
+        // Handle keypress events
+        process.stdin.on("keypress", async (str, key) => {
+            // Alt+M triggers voice input
+            if (
+                key &&
+                key.meta &&
+                key.name === "m" &&
+                voiceEnabled &&
+                !isProcessingVoice
+            ) {
+                isProcessingVoice = true;
+
+                try {
+                    const transcribedText =
+                        await voiceHandler.recordAndTranscribe();
+                    if (transcribedText) {
+                        console.log(`📝 Transcribed: "${transcribedText}"\n`);
+                        // Emit as a line event to process it
+                        rl.write(transcribedText + "\n");
+                    } else {
+                        console.log("⚠️  No speech detected\n");
+                        rl.prompt();
+                    }
+                } catch (error) {
+                    console.error(
+                        `❌ Voice input error: ${error instanceof Error ? error.message : String(error)}\n`,
+                    );
+                    rl.prompt();
+                } finally {
+                    isProcessingVoice = false;
+                }
+                return;
+            }
+
+            // Ctrl+C to exit
+            if (key && key.ctrl && key.name === "c") {
+                console.log("\n[AgentSDK] Goodbye!");
+                client.disconnect();
+                rl.close();
+                if (cacheClient) {
+                    await cacheClient.close();
+                }
+                if (debugLogger) {
+                    debugLogger.close();
+                }
+                process.exit(0);
+            }
+        });
+    }
 
     rl.prompt();
 
@@ -354,6 +448,31 @@ async function main() {
                 debugLogger.close();
             }
             process.exit(0);
+        }
+
+        // Handle voice input command
+        if (
+            (trimmed === "/voice" || trimmed === ":v" || trimmed === "/v") &&
+            voiceEnabled
+        ) {
+            try {
+                const transcribedText =
+                    await voiceHandler.recordAndTranscribe();
+                if (transcribedText) {
+                    console.log(`📝 Transcribed: "${transcribedText}"\n`);
+                    // Recursively process the transcribed text
+                    rl.write(transcribedText + "\n");
+                } else {
+                    console.log("⚠️  No speech detected\n");
+                    rl.prompt();
+                }
+            } catch (error) {
+                console.error(
+                    `❌ Voice input error: ${error instanceof Error ? error.message : String(error)}\n`,
+                );
+                rl.prompt();
+            }
+            return;
         }
 
         // Skip empty inputs
