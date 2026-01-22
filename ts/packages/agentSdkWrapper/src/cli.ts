@@ -22,6 +22,7 @@ import * as readline from "readline";
 import { CacheClient } from "coder-wrapper";
 import { DebugLogger } from "coder-wrapper";
 import { VoiceInputHandler } from "./voiceInput.js";
+import { Spinner } from "./spinner.js";
 
 /**
  * ClaudeSDKClient wrapper for continuous conversation with memory.
@@ -493,6 +494,9 @@ async function main() {
         const terminalWidth = process.stdout.columns || 80;
         const startTime = performance.now();
 
+        // Create spinner for thinking animation (will start after cache check)
+        const spinner = new Spinner();
+
         try {
             // Check cache first if enabled
             if (cacheClient) {
@@ -547,11 +551,16 @@ async function main() {
 
             const apiStartTime = performance.now();
 
+            // Start thinking animation
+            spinner.start();
+
             // Query client and receive responses
             let finalResult = "";
-            let hasShownReasoning = false;
             for await (const message of client.queryAndReceive(trimmed)) {
                 if (message.type === "result") {
+                    // Stop spinner before showing result
+                    spinner.stop();
+
                     // Final result from the agent
                     if (message.subtype === "success") {
                         finalResult = message.result || "";
@@ -569,27 +578,25 @@ async function main() {
                     const msg = message.message;
                     const content = msg.content;
 
-                    if (Array.isArray(content)) {
-                        // Look for thinking/reasoning blocks
-                        for (const block of content) {
-                            if (block.type === "thinking" && block.thinking) {
-                                // Display reasoning in gray
-                                if (!hasShownReasoning) {
-                                    const grayColor = "\x1b[90m";
-                                    const resetColor = "\x1b[0m";
-                                    console.log(
-                                        `\n${grayColor}${block.thinking}${resetColor}\n`,
-                                    );
-                                    hasShownReasoning = true;
-                                }
-                            }
-                        }
-                    }
+                    // Thinking blocks are no longer supported in the SDK
+                    // if (Array.isArray(content)) {
+                    //     for (const block of content) {
+                    //         if (block.type === "thinking") {
+                    //             // Display reasoning
+                    //         }
+                    //     }
+                    // }
 
                     if (options.debug && debugLogger) {
-                        const textContent = Array.isArray(content)
-                            ? content.find((c: any) => c.type === "text")?.text
-                            : "";
+                        let textContent = "";
+                        if (Array.isArray(content)) {
+                            const textBlock = content.find(
+                                (c) => c.type === "text",
+                            );
+                            if (textBlock && textBlock.type === "text") {
+                                textContent = textBlock.text;
+                            }
+                        }
                         debugLogger.log(
                             `Assistant message: ${textContent?.substring(0, 100) || "(no text)"}...`,
                         );
@@ -612,6 +619,9 @@ async function main() {
                 console.log(formatOutput(finalResult, terminalWidth));
             }
         } catch (error) {
+            // Make sure spinner is stopped on error
+            spinner.stop();
+
             const elapsedMs = performance.now() - startTime;
             const errorMsg = `Error: ${error instanceof Error ? error.message : String(error)}`;
 

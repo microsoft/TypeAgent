@@ -32,6 +32,7 @@ import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
 import chalk from "chalk";
 import registerDebug from "debug";
+import { getRequestActionLogger } from "./requestActionLogger.js";
 
 const debugExplain = registerDebug("typeagent:action:explain");
 
@@ -131,6 +132,29 @@ export class ActionCommandHandler implements CommandHandler {
             actions: [{ action }],
         };
 
+        // Log request/action pair to file for benchmarking (if enabled via env var)
+        const logger = getRequestActionLogger();
+        if (logger.isLoggingEnabled()) {
+            logger.log(requestAction);
+            console.log(
+                chalk.gray(`  [Logged to: ${logger.getLogFilePath()}]`),
+            );
+        }
+
+        // Log the request/action pair being processed
+        console.log(chalk.cyan("\n[CACHE] Processing request/action pair:"));
+        console.log(chalk.cyan(`  Request: "${requestAction.request}"`));
+        console.log(
+            chalk.cyan(`  Action: ${action.schemaName}.${action.actionName}`),
+        );
+        if (action.parameters) {
+            console.log(
+                chalk.cyan(
+                    `  Parameters: ${JSON.stringify(action.parameters)}`,
+                ),
+            );
+        }
+
         // Get explainer options similar to requestCommandHandler
         const { list, value, translate } =
             context.session.getConfig().explainer.filter.reference;
@@ -168,6 +192,11 @@ export class ActionCommandHandler implements CommandHandler {
                 );
 
             if (context.explanationAsynchronousMode) {
+                console.log(
+                    chalk.grey(
+                        `[CACHE] Generating explanation asynchronously for: '${naturalLanguage}'`,
+                    ),
+                );
                 processRequestActionP
                     .then((result: ProcessRequestActionResult) => {
                         const explanationResult =
@@ -188,6 +217,35 @@ export class ActionCommandHandler implements CommandHandler {
                             DispatcherName,
                         );
 
+                        // Print the full explanation result
+                        console.log(
+                            chalk.cyan(
+                                `\n[CACHE] Explanation completed for: "${naturalLanguage}"`,
+                            ),
+                        );
+                        printProcessRequestActionResult(result);
+
+                        // Log construction status
+                        if (result.constructionResult) {
+                            const status = result.constructionResult.added
+                                ? chalk.green("[CACHE] ✓ Construction added")
+                                : chalk.yellow(
+                                      "[CACHE] ⚠ Construction not added (duplicate?)",
+                                  );
+                            console.log(status);
+                            console.log(
+                                chalk.cyan(
+                                    `  ${result.constructionResult.message}`,
+                                ),
+                            );
+                        } else {
+                            console.log(
+                                chalk.yellow(
+                                    "[CACHE] ⚠ No construction result returned",
+                                ),
+                            );
+                        }
+
                         if (explanationResult.success) {
                             debugExplain(
                                 `Cache population succeeded for "${naturalLanguage}"`,
@@ -199,6 +257,15 @@ export class ActionCommandHandler implements CommandHandler {
                         }
                     })
                     .catch((e) => {
+                        console.error(
+                            chalk.red(
+                                `\n[CACHE] ✗ Error generating explanation for: "${naturalLanguage}"`,
+                            ),
+                        );
+                        console.error(chalk.red(`  ${e.message}`));
+                        if (e.stack) {
+                            debugExplain(`Stack trace: ${e.stack}`);
+                        }
                         debugExplain(
                             `Cache population error for "${naturalLanguage}": ${e.message}`,
                         );
@@ -240,6 +307,19 @@ export class ActionCommandHandler implements CommandHandler {
                 );
 
                 printProcessRequestActionResult(result);
+
+                // Log construction status
+                if (result.constructionResult) {
+                    const status = result.constructionResult.added
+                        ? chalk.green("[CACHE] ✓ Construction added")
+                        : chalk.yellow(
+                              "[CACHE] ⚠ Construction not added (duplicate?)",
+                          );
+                    console.log(status);
+                    console.log(
+                        chalk.cyan(`  ${result.constructionResult.message}`),
+                    );
+                }
 
                 if (explanationResult.success) {
                     debugExplain(
