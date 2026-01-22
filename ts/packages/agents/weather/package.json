@@ -1,6 +1,7 @@
 {
   "name": "weather-agent",
   "version": "0.0.1",
+  "private": true,
   "description": "Weather agent for TypeAgent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -32,6 +33,5 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
-  },
-  "private": true
+  }
 }
