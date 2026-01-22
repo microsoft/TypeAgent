@@ -4,6 +4,7 @@
 import { ActionManifest, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createRequire } from "module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
     AgentProcess,
     createAgentProcess,
@@ -60,7 +61,7 @@ async function loadManifest(info: NpmAppAgentInfo, requirePath: string) {
         // For path-based agents, load manifest directly from the file system
         // Resolve path relative to the requirePath directory
         const requireDir = requirePath.startsWith("file://")
-            ? path.dirname(new URL(requirePath).pathname)
+            ? path.dirname(fileURLToPath(requirePath))
             : path.dirname(requirePath);
         const resolvedAgentPath = path.resolve(requireDir, info.path);
         const packageJsonPath = path.resolve(resolvedAgentPath, "package.json");
@@ -104,7 +105,7 @@ async function loadModuleAgent(
         // For path-based agents, resolve handler path from package.json exports
         // Resolve path relative to the requirePath directory
         const requireDir = requirePath.startsWith("file://")
-            ? path.dirname(new URL(requirePath).pathname)
+            ? path.dirname(fileURLToPath(requirePath))
             : path.dirname(requirePath);
         const resolvedAgentPath = path.resolve(requireDir, info.path);
         const packageJsonPath = path.resolve(resolvedAgentPath, "package.json");
