@@ -1,0 +1,35 @@
+{
+  "name": "agr-language",
+  "displayName": "Action Grammar Language",
+  "description": "Syntax highlighting for Action Grammar (.agr) files",
+  "version": "0.0.1",
+  "publisher": "typeagent",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "agr",
+        "aliases": [
+          "Action Grammar",
+          "agr"
+        ],
+        "extensions": [
+          ".agr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "agr",
+        "scopeName": "source.agr",
+        "path": "./syntaxes/agr.tmLanguage.json"
+      }
+    ]
+  }
+}
