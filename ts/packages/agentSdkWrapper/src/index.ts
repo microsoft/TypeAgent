@@ -14,3 +14,15 @@ export {
     type ActionInfo,
     type ParameterValidationInfo,
 } from "./schemaReader.js";
+
+// Export grammar generation utilities
+export {
+    SchemaToGrammarGenerator,
+    type SchemaGrammarConfig,
+    type SchemaGrammarResult,
+} from "./schemaToGrammarGenerator.js";
+
+export {
+    ClaudeGrammarGenerator,
+    type GrammarAnalysis,
+} from "./grammarGenerator.js";

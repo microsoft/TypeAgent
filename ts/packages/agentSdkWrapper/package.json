@@ -17,7 +17,8 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "agent-sdk-wrapper": "./dist/cli.js"
+    "agent-sdk-wrapper": "./dist/cli.js",
+    "generate-grammar": "./dist/generate-grammar-cli.js"
   },
   "scripts": {
     "build": "npm run tsc",
@@ -32,6 +33,7 @@
     "@anthropic-ai/sdk": "^0.35.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@typeagent/action-schema": "workspace:*",
+    "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
     "coder-wrapper": "workspace:*",
