@@ -58,7 +58,12 @@ async function loadManifest(info: NpmAppAgentInfo, requirePath: string) {
 
     if (info.path) {
         // For path-based agents, load manifest directly from the file system
-        const packageJsonPath = path.resolve(info.path, "package.json");
+        // Resolve path relative to the requirePath directory
+        const requireDir = requirePath.startsWith("file://")
+            ? path.dirname(new URL(requirePath).pathname)
+            : path.dirname(requirePath);
+        const resolvedAgentPath = path.resolve(requireDir, info.path);
+        const packageJsonPath = path.resolve(resolvedAgentPath, "package.json");
         const packageJson = require(packageJsonPath);
 
         // Get manifest path from package.json exports
@@ -67,7 +72,7 @@ async function loadManifest(info: NpmAppAgentInfo, requirePath: string) {
             throw new Error(`No manifest export found in ${packageJsonPath}`);
         }
 
-        manifestPath = path.resolve(info.path, manifestExport);
+        manifestPath = path.resolve(resolvedAgentPath, manifestExport);
         // Use dynamic import for JSON files to avoid require cache issues
         const fs = await import("fs");
         config = JSON.parse(
@@ -97,7 +102,12 @@ async function loadModuleAgent(
 
     if (info.path) {
         // For path-based agents, resolve handler path from package.json exports
-        const packageJsonPath = path.resolve(info.path, "package.json");
+        // Resolve path relative to the requirePath directory
+        const requireDir = requirePath.startsWith("file://")
+            ? path.dirname(new URL(requirePath).pathname)
+            : path.dirname(requirePath);
+        const resolvedAgentPath = path.resolve(requireDir, info.path);
+        const packageJsonPath = path.resolve(resolvedAgentPath, "package.json");
         const packageJson = require(packageJsonPath);
 
         // Get handler path from package.json exports
@@ -106,7 +116,7 @@ async function loadModuleAgent(
             throw new Error(`No handlers export found in ${packageJsonPath}`);
         }
 
-        handlerPath = `file://${path.resolve(info.path, handlerExport)}`;
+        handlerPath = `file://${path.resolve(resolvedAgentPath, handlerExport)}`;
     } else {
         // For npm package agents, use standard resolution
         // file:// is require so that on windows the drive name doesn't get confused with the protocol name for `import()`
