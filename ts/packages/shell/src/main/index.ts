@@ -345,7 +345,12 @@ async function initialize() {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
         if (getShellWindow() === undefined)
-            initializeInstance(instanceDir, shellSettings, mockGreetings);
+            initializeInstance(
+                instanceDir,
+                shellSettings,
+                mockGreetings,
+                parsedArgs.inputOnly,
+            );
     });
 
     // Start up the first instance
@@ -353,6 +358,7 @@ async function initialize() {
         instanceDir,
         shellSettings,
         mockGreetings,
+        parsedArgs.inputOnly,
         time,
     );
 
@@ -376,7 +382,12 @@ export async function reloadInstance() {
     try {
         await closeInstance();
         const shellSettings = new ShellSettingManager(instanceDir);
-        await initializeInstance(instanceDir, shellSettings, mockGreetings);
+        await initializeInstance(
+            instanceDir,
+            shellSettings,
+            mockGreetings,
+            parsedArgs.inputOnly,
+        );
     } finally {
         reloadingInstance = false;
     }

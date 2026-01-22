@@ -47,11 +47,12 @@ export class ChatView {
 
     public userGivenName: string = "";
     public chatInput: ChatInput | undefined;
+    public tts?: TTS | undefined;
 
     constructor(
         private idGenerator: IdGenerator,
         private readonly agents: Map<string, string>,
-        public tts?: TTS,
+        inputOnly: boolean,
     ) {
         // the main container
         this.topDiv = document.createElement("div");
@@ -73,6 +74,10 @@ export class ChatView {
                 this.messageDiv.scrollTo(0, 0);
             }
         });
+        if (inputOnly) {
+            this.titleDiv.style.visibility = "hidden";
+            this.messageDiv.style.visibility = "hidden";
+        }
 
         this.topDiv.appendChild(this.messageDiv);
 

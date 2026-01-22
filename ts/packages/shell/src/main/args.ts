@@ -12,6 +12,7 @@ type ShellCommandLineArgs = {
     data?: string;
     env?: string;
     mockGreetings?: boolean;
+    inputOnly?: boolean;
 };
 
 export function parseShellCommandLine() {
@@ -80,6 +81,11 @@ export function parseShellCommandLine() {
 
             if (arg === "--mock-greetings") {
                 result.mockGreetings = true;
+                continue;
+            }
+
+            if (arg === "--input-only") {
+                result.inputOnly = true;
                 continue;
             }
         }
