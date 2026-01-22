@@ -131,6 +131,20 @@ export class ActionCommandHandler implements CommandHandler {
             actions: [{ action }],
         };
 
+        // Log the request/action pair being processed
+        console.log(chalk.cyan("\n[CACHE] Processing request/action pair:"));
+        console.log(chalk.cyan(`  Request: "${requestAction.request}"`));
+        console.log(
+            chalk.cyan(`  Action: ${action.schemaName}.${action.actionName}`),
+        );
+        if (action.parameters) {
+            console.log(
+                chalk.cyan(
+                    `  Parameters: ${JSON.stringify(action.parameters)}`,
+                ),
+            );
+        }
+
         // Get explainer options similar to requestCommandHandler
         const { list, value, translate } =
             context.session.getConfig().explainer.filter.reference;
@@ -240,6 +254,19 @@ export class ActionCommandHandler implements CommandHandler {
                 );
 
                 printProcessRequestActionResult(result);
+
+                // Log construction status
+                if (result.constructionResult) {
+                    const status = result.constructionResult.added
+                        ? chalk.green("[CACHE] ✓ Construction added")
+                        : chalk.yellow(
+                              "[CACHE] ⚠ Construction not added (duplicate?)",
+                          );
+                    console.log(status);
+                    console.log(
+                        chalk.cyan(`  ${result.constructionResult.message}`),
+                    );
+                }
 
                 if (explanationResult.success) {
                     debugExplain(
