@@ -202,6 +202,21 @@ export class ActionCommandHandler implements CommandHandler {
                             DispatcherName,
                         );
 
+                        // Log construction status
+                        if (result.constructionResult) {
+                            const status = result.constructionResult.added
+                                ? chalk.green("[CACHE] ✓ Construction added")
+                                : chalk.yellow(
+                                      "[CACHE] ⚠ Construction not added (duplicate?)",
+                                  );
+                            console.log(status);
+                            console.log(
+                                chalk.cyan(
+                                    `  ${result.constructionResult.message}`,
+                                ),
+                            );
+                        }
+
                         if (explanationResult.success) {
                             debugExplain(
                                 `Cache population succeeded for "${naturalLanguage}"`,
