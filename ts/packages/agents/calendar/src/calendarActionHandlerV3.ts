@@ -135,6 +135,11 @@ export class CalendarActionHandlerV3 implements AppAgent {
     }
 }
 
+// Instantiate function required by the agent loader
+export function instantiate(): AppAgent {
+    return new CalendarActionHandlerV3();
+}
+
 // Validation functions for entity types
 // These will be called by the grammar matcher to validate wildcard matches
 

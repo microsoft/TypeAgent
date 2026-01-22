@@ -18,13 +18,14 @@ import {
     InstanceConfigProvider,
 } from "./utils/config.js";
 import { getDefaultMcpAppAgentProvider } from "./mcpDefaultAgentProvider.js";
+import { getPackageFilePath } from "./utils/getPackageFilePath.js";
 
 let defaultAppAgentProvider: AppAgentProvider | undefined;
 function getDefaultNpmAppAgentProvider(): AppAgentProvider {
     if (defaultAppAgentProvider === undefined) {
         defaultAppAgentProvider = createNpmAppAgentProvider(
             getProviderConfig().agents,
-            import.meta.url,
+            getPackageFilePath("./package.json"),
         );
     }
     return defaultAppAgentProvider;
