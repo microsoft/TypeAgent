@@ -1,8 +1,17 @@
 {
   "name": "agr-language",
-  "displayName": "Action Grammar Language",
-  "description": "Syntax highlighting for Action Grammar (.agr) files",
   "version": "0.0.1",
+  "private": true,
+  "description": "Syntax highlighting for Action Grammar (.agr) files",
+  "displayName": "Action Grammar Language",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/extensions/agr-language"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
   "publisher": "typeagent",
   "engines": {
     "vscode": "^1.90.0"
