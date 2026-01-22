@@ -1,0 +1,2 @@
+{"request": "play on bedroom", "schemaName": "player", "action": {"actionName": "selectDevice", "parameters": {"deviceName": "bedroom"}}}
+{"request": "play the third track", "schemaName": "player", "action": {"actionName": "playFromCurrentTrackList", "parameters": {"trackNumber": 3}}}

@@ -1,0 +1,4 @@
+{"request": "add it to my playlist", "schemaName": "player", "action": {"actionName": "addCurrentTrackToPlaylist", "parameters": {"name": "my playlist"}}, "note": "Reference to conversation history - 'it' refers to current track"}
+{"request": "play that song again", "schemaName": "player", "action": {"actionName": "playTrack", "parameters": {"trackName": "that song"}}, "note": "Referential phrase 'that' - depends on context"}
+{"request": "search for rock music", "schemaName": "player", "action": {"actionName": "searchTracks", "parameters": {"query": "rock music"}}, "note": "Query parameter captures everything - too broad"}
+{"request": "play shake it off by taylor swift", "schemaName": "player", "action": {"actionName": "playTrack", "parameters": {"trackName": "shake it off", "artists": ["taylor swift"]}}, "note": "GOOD case - both trackName and artists have checked_wildcard validation"}

@@ -1,0 +1,12 @@
+{"request": "schedule a meeting tomorrow at 2pm", "schemaName": "calendar", "action": {"actionName": "scheduleEvent", "parameters": {"description": "meeting", "date": "tomorrow", "time": "2pm"}}, "note": "Basic scheduling with date and time"}
+{"request": "add a dentist appointment on Friday at 3pm", "schemaName": "calendar", "action": {"actionName": "scheduleEvent", "parameters": {"description": "dentist appointment", "date": "Friday", "time": "3pm"}}, "note": "Event with description and time"}
+{"request": "schedule lunch with Sarah next Monday at noon", "schemaName": "calendar", "action": {"actionName": "scheduleEvent", "parameters": {"description": "lunch", "date": "next Monday", "time": "noon", "participant": "Sarah"}}, "note": "Event with participant"}
+{"request": "add team standup on Monday at 9am in conference room", "schemaName": "calendar", "action": {"actionName": "scheduleEvent", "parameters": {"description": "team standup", "date": "Monday", "time": "9am", "location": "conference room"}}, "note": "Event with location"}
+{"request": "find my meetings today", "schemaName": "calendar", "action": {"actionName": "findEvents", "parameters": {"description": "meetings", "date": "today"}}, "note": "Search with description and date"}
+{"request": "show meetings with Bob", "schemaName": "calendar", "action": {"actionName": "findEvents", "parameters": {"participant": "Bob"}}, "note": "Search by participant only"}
+{"request": "what's on my calendar for tomorrow", "schemaName": "calendar", "action": {"actionName": "findEvents", "parameters": {"date": "tomorrow"}}, "note": "Search by date only"}
+{"request": "add John to the meeting", "schemaName": "calendar", "action": {"actionName": "addParticipant", "parameters": {"description": "meeting", "participant": "John"}}, "note": "Add participant to named event"}
+{"request": "invite Sarah to lunch", "schemaName": "calendar", "action": {"actionName": "addParticipant", "parameters": {"description": "lunch", "participant": "Sarah"}}, "note": "Add participant with different phrasing"}
+{"request": "what do I have today", "schemaName": "calendar", "action": {"actionName": "findTodaysEvents", "parameters": {}}, "note": "Find today's events"}
+{"request": "show me today's schedule", "schemaName": "calendar", "action": {"actionName": "findTodaysEvents", "parameters": {}}, "note": "Today's schedule alternative phrasing"}
+{"request": "what do I have this week", "schemaName": "calendar", "action": {"actionName": "findThisWeeksEvents", "parameters": {}}, "note": "Find this week's events"}

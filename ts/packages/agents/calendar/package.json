@@ -14,10 +14,11 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/calendarManifest.json",
-    "./agent/handlers": "./dist/calendarActionHandlerV2.js"
+    "./agent/handlers": "./dist/calendarActionHandlerV3.js"
   },
   "scripts": {
-    "build": "npm run tsc",
+    "asc": "asc -i ./src/calendarActionsSchemaV3.ts -o ./dist/calendarSchema.pas.json -t CalendarActionV3 -e CalendarEntities",
+    "build": "npm run tsc && npm run asc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -32,6 +33,7 @@
     "typechat-utils": "workspace:*"
   },
   "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",

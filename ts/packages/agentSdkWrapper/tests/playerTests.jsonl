@@ -1,0 +1,7 @@
+{"request": "play Bohemian Rhapsody by Queen", "schemaName": "player", "action": {"actionName": "playTrack", "parameters": {"trackName": "Bohemian Rhapsody", "artists": ["Queen"]}}}
+{"request": "pause the music", "schemaName": "player", "action": {"actionName": "pause", "parameters": {}}}
+{"request": "play on bedroom", "schemaName": "player", "action": {"actionName": "selectDevice", "parameters": {"deviceName": "bedroom"}}}
+{"request": "select the living room device", "schemaName": "player", "action": {"actionName": "selectDevice", "parameters": {"deviceName": "living room"}}}
+{"request": "play the third track", "schemaName": "player", "action": {"actionName": "playFromCurrentTrackList", "parameters": {"trackNumber": 3}}}
+{"request": "play track number 5", "schemaName": "player", "action": {"actionName": "playFromCurrentTrackList", "parameters": {"trackNumber": 5}}}
+{"request": "set volume to 50", "schemaName": "player", "action": {"actionName": "setVolume", "parameters": {"newVolumeLevel": 50}}}
