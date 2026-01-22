@@ -6,6 +6,8 @@ namespace TypeAgent.AIClient;
 
 public class OpenAIChatModel : ModelApi, IChatModel
 {
+    public TokenCounter TokenCounter => new TokenCounter();
+
     public OpenAIChatModel()
         : this(ModelApiSettings.FromEnv(ModelType.Chat))
     {
@@ -75,6 +77,7 @@ public class OpenAIChatModel : ModelApi, IChatModel
                     ? await Settings.ApiTokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false)
                     : null;
 
+        Stopwatch timeTaken = Stopwatch.StartNew();
         Response response = await Client.GetJsonResponseAsync<Request, Response>(
             Settings.Endpoint,
             request,
@@ -82,6 +85,9 @@ public class OpenAIChatModel : ModelApi, IChatModel
             Settings.Retry,
             cancellationToken
         ).ConfigureAwait(false);
+
+        // Track usage
+        this.TokenCounter.Add(response.usage, timeTaken.Elapsed);
 
         response.ThrowIfInvalid();
 
@@ -120,9 +126,15 @@ public class OpenAIChatModel : ModelApi, IChatModel
         public int? top_p { get; set; }
     }
 
+    // TODO: Add prompt_filter_results for content moderation results
+    // TODO: track other meta data? object, id, created, etc.
     private struct Response
     {
+        public string id { get; set; }
+
         public Choice[] choices { get; set; }
+
+        public Usage usage { get; set; }
 
         public string GetText()
         {
@@ -173,5 +185,33 @@ public class OpenAIChatModel : ModelApi, IChatModel
     private struct Choice
     {
         public Message message { get; set; }
+    }
+
+    internal struct Usage
+    {
+        [JsonPropertyName("completion_tokens")]
+        public uint CompletionTokens { get; set; }
+        [JsonPropertyName("completion_tokens_details")]
+        public TokenDetails CompletionTokenDetails { get; set; }
+        [JsonPropertyName("prompt_tokens")]
+        public uint PromptTokens { get; set; }
+        [JsonPropertyName("prompt_tokens_details")]
+        public TokenDetails PromptTokenDetails { get; set; }
+        [JsonPropertyName("total_tokens")]
+        public uint TotalTokens { get; set; }
+    }
+
+    public struct TokenDetails
+    {
+        [JsonPropertyName("accepted_prediction_tokens")]
+        public uint? AcceptedPredictionTokens { get; set; }
+        [JsonPropertyName("audio_tokens")]
+        public uint? AudioTokens { get; set; }
+        [JsonPropertyName("reasoning_tokens")]
+        public uint? ReasoningTokens { get; set; }
+        [JsonPropertyName("rejected_prediction_tokens")]
+        public uint? RejectedPredictionTokens { get; set; }
+        [JsonPropertyName("cached_tokens")]
+        public uint? CachedTokens { get; set; }
     }
 }

@@ -12,7 +12,7 @@ public class MemorySettings
     {
     }
 
-    public MemorySettings(IChatModel languageModel,  ITextEmbeddingModel embeddingModel)
+    public MemorySettings(IChatModel languageModel, ITextEmbeddingModel embeddingModel)
         : this(new ConversationSettings(languageModel, embeddingModel))
     {
     }
