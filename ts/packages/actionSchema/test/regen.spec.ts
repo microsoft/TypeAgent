@@ -84,10 +84,31 @@ const defaultAgentProviderRequire = createRequire(
     `${defaultAgentProviderPath}/src`,
 );
 for (const [name, entry] of Object.entries(config.agents) as [string, any][]) {
-    const manifestModulePath = `${entry.name}/agent/manifest`;
-    const manifestPath =
-        defaultAgentProviderRequire.resolve(manifestModulePath);
-    const manifest = defaultAgentProviderRequire(manifestPath);
+    let manifestPath: string;
+    let manifest: any;
+
+    if (entry.path) {
+        // Handle agents with custom path (like weather agent)
+        const agentPath = path.resolve(defaultAgentProviderPath, entry.path);
+        const packageJsonPath = path.join(agentPath, "package.json");
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+
+        // Find the manifest from package.json exports
+        const manifestExport = packageJson.exports?.["./agent/manifest"];
+        if (!manifestExport) {
+            throw new Error(`No manifest export found in ${packageJsonPath}`);
+        }
+
+        manifestPath = path.join(agentPath, manifestExport);
+        manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+    } else {
+        // Handle regular package-based agents
+        const manifestModulePath = `${entry.name}/agent/manifest`;
+        manifestPath =
+            defaultAgentProviderRequire.resolve(manifestModulePath);
+        manifest = defaultAgentProviderRequire(manifestPath);
+    }
+
     const manifestDir = path.dirname(manifestPath);
     addTest(name, manifest, manifestDir);
 }
