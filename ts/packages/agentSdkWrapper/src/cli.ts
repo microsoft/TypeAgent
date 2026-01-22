@@ -267,6 +267,15 @@ async function main() {
         systemPrompt: {
             type: "preset",
             preset: "claude_code",
+            append:
+                "# TypeAgent MCP Integration\n\n" +
+                "You have access to TypeAgent capabilities via the command-executor MCP server. " +
+                "For commands like music, lists, calendar, and VSCode automation, you can use natural language (execute_command) or discover new capabilities dynamically.\n\n" +
+                "**Discovery Pattern:**\n" +
+                "- If a user asks for a capability you don't see (e.g., weather, email), call discover_schemas({query: \"domain\"}) to check if it's available\n" +
+                '- Once discovered, use typeagent_action({agent: "name", action: "actionName", parameters: {...}}) to execute structured actions\n' +
+                "- This approach provides better reasoning and cache efficiency than natural language translation\n\n" +
+                '**Example:** User asks "What\'s the weather in Seattle?" → Call discover_schemas({query: "weather"}) → Call typeagent_action({agent: "weather", action: "getCurrentConditions", parameters: {location: "Seattle"}})',
         },
         model: options.model,
         permissionMode: "acceptEdits",

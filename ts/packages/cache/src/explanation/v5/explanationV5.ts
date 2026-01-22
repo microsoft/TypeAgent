@@ -482,19 +482,37 @@ function addPolitePrefixParts(
     }
 }
 
+/* Strip common prepositions from the beginning of a string */
+function stripLeadingPreposition(text: string): string {
+    const commonPrepositions = ["in ", "at ", "to ", "from ", "on ", "for "];
+    const lowerText = text.toLowerCase();
+    for (const prep of commonPrepositions) {
+        if (lowerText.startsWith(prep)) {
+            return text.substring(prep.length);
+        }
+    }
+    return text;
+}
+
 /* true if the property value is a direct copy of the sub-phrase text. */
 function isValueCopiedFromSubPhrase(
     phrase: SubPhrase,
     paramInfo: PropertyValue,
 ) {
-    const ltext = normalizeParamString(phrase.text);
+    let ltext = normalizeParamString(phrase.text);
     const lval = normalizeParamString(paramInfo.propertyValue.toString());
+
+    // Try direct match first
+    if (ltext === lval || ltext === `'${lval}'` || ltext === `"${lval}"`) {
+        return true;
+    }
+
+    // If direct match fails, try stripping leading prepositions from the phrase text
+    const ltextWithoutPrep = stripLeadingPreposition(ltext);
     return (
-        // Only handle direct copy of the text to value
-        ltext === lval ||
-        // REVIEW: a hack to ignore quote mismatch
-        ltext === `'${lval}'` ||
-        ltext === `"${lval}"`
+        ltextWithoutPrep === lval ||
+        ltextWithoutPrep === `'${lval}'` ||
+        ltextWithoutPrep === `"${lval}"`
     );
 }
 
