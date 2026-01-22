@@ -137,9 +137,7 @@ export class ActionCommandHandler implements CommandHandler {
         if (logger.isLoggingEnabled()) {
             logger.log(requestAction);
             console.log(
-                chalk.gray(
-                    `  [Logged to: ${logger.getLogFilePath()}]`,
-                ),
+                chalk.gray(`  [Logged to: ${logger.getLogFilePath()}]`),
             );
         }
 
