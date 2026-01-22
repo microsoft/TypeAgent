@@ -54,8 +54,9 @@ export function loadSchemaInfo(pasJsonPath: string): SchemaInfo {
     const json: ParsedActionSchemaJSON = JSON.parse(jsonContent);
     const parsedSchema = fromJSONParsedActionSchema(json);
 
-    const schemaName =
-        pasJsonPath.match(/([^/\\]+)\.pas\.json$/)?.[1] || "unknown";
+    // Extract schema name from path - use path.basename to avoid regex issues
+    const fileName = pasJsonPath.split(/[/\\]/).pop() || "";
+    const schemaName = fileName.replace(/\.pas\.json$/, "") || "unknown";
     const actions = new Map<string, ActionInfo>();
     const entityTypes = new Set<string>();
 
