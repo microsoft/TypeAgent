@@ -22,6 +22,7 @@ import * as readline from "readline";
 import { CacheClient } from "coder-wrapper";
 import { DebugLogger } from "coder-wrapper";
 import { VoiceInputHandler } from "./voiceInput.js";
+import { Spinner } from "./spinner.js";
 
 /**
  * ClaudeSDKClient wrapper for continuous conversation with memory.
@@ -493,6 +494,9 @@ async function main() {
         const terminalWidth = process.stdout.columns || 80;
         const startTime = performance.now();
 
+        // Create spinner for thinking animation (will start after cache check)
+        const spinner = new Spinner();
+
         try {
             // Check cache first if enabled
             if (cacheClient) {
@@ -547,11 +551,17 @@ async function main() {
 
             const apiStartTime = performance.now();
 
+            // Start thinking animation
+            spinner.start();
+
             // Query client and receive responses
             let finalResult = "";
             let hasShownReasoning = false;
             for await (const message of client.queryAndReceive(trimmed)) {
                 if (message.type === "result") {
+                    // Stop spinner before showing result
+                    spinner.stop();
+
                     // Final result from the agent
                     if (message.subtype === "success") {
                         finalResult = message.result || "";
@@ -573,6 +583,9 @@ async function main() {
                         // Look for thinking/reasoning blocks
                         for (const block of content) {
                             if (block.type === "thinking" && block.thinking) {
+                                // Stop spinner before showing reasoning
+                                spinner.stop();
+
                                 // Display reasoning in gray
                                 if (!hasShownReasoning) {
                                     const grayColor = "\x1b[90m";
@@ -612,6 +625,9 @@ async function main() {
                 console.log(formatOutput(finalResult, terminalWidth));
             }
         } catch (error) {
+            // Make sure spinner is stopped on error
+            spinner.stop();
+
             const elapsedMs = performance.now() - startTime;
             const errorMsg = `Error: ${error instanceof Error ? error.message : String(error)}`;
 
