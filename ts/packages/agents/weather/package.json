@@ -1,0 +1,37 @@
+{
+  "name": "weather-agent",
+  "version": "0.0.1",
+  "description": "Weather agent for TypeAgent",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/weather"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/weatherManifest.json",
+    "./agent/handlers": "./dist/weatherActionHandler.js"
+  },
+  "scripts": {
+    "asc": "asc -i ./src/weatherSchema.ts -o ./dist/weatherSchema.pas.json -t WeatherAction",
+    "build": "concurrently npm:tsc npm:asc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -p ."
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "private": true
+}

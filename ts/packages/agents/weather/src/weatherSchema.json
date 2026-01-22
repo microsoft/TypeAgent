@@ -1,0 +1,26 @@
+{
+  "paramSpec": {
+    "getCurrentConditions": {
+      "location": "checked_wildcard"
+    },
+    "getForecast": {
+      "location": "checked_wildcard",
+      "days": "number"
+    },
+    "getAlerts": {
+      "location": "checked_wildcard"
+    }
+  },
+  "paramCompletionEmojis": {
+    "getCurrentConditions": {
+      "location": "📍"
+    },
+    "getForecast": {
+      "location": "📍",
+      "days": "📅"
+    },
+    "getAlerts": {
+      "location": "📍"
+    }
+  }
+}
