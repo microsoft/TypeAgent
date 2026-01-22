@@ -182,6 +182,11 @@ export class ActionCommandHandler implements CommandHandler {
                 );
 
             if (context.explanationAsynchronousMode) {
+                console.log(
+                    chalk.grey(
+                        `[CACHE] Generating explanation asynchronously for: '${naturalLanguage}'`,
+                    ),
+                );
                 processRequestActionP
                     .then((result: ProcessRequestActionResult) => {
                         const explanationResult =
@@ -202,6 +207,14 @@ export class ActionCommandHandler implements CommandHandler {
                             DispatcherName,
                         );
 
+                        // Print the full explanation result
+                        console.log(
+                            chalk.cyan(
+                                `\n[CACHE] Explanation completed for: "${naturalLanguage}"`,
+                            ),
+                        );
+                        printProcessRequestActionResult(result);
+
                         // Log construction status
                         if (result.constructionResult) {
                             const status = result.constructionResult.added
@@ -213,6 +226,12 @@ export class ActionCommandHandler implements CommandHandler {
                             console.log(
                                 chalk.cyan(
                                     `  ${result.constructionResult.message}`,
+                                ),
+                            );
+                        } else {
+                            console.log(
+                                chalk.yellow(
+                                    "[CACHE] ⚠ No construction result returned",
                                 ),
                             );
                         }
@@ -228,6 +247,15 @@ export class ActionCommandHandler implements CommandHandler {
                         }
                     })
                     .catch((e) => {
+                        console.error(
+                            chalk.red(
+                                `\n[CACHE] ✗ Error generating explanation for: "${naturalLanguage}"`,
+                            ),
+                        );
+                        console.error(chalk.red(`  ${e.message}`));
+                        if (e.stack) {
+                            debugExplain(`Stack trace: ${e.stack}`);
+                        }
                         debugExplain(
                             `Cache population error for "${naturalLanguage}": ${e.message}`,
                         );
