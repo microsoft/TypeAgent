@@ -23,6 +23,8 @@ public class MockModel_No_JSON_Response : IChatModel
     {
         return Task.Run(() => "Mock response", cancelToken);
     }
+
+    public TokenCounter TokenCounter => new TokenCounter();
 }
 
 public class MockModel_Partial_JSON_Response : IChatModel
@@ -37,4 +39,6 @@ public class MockModel_Partial_JSON_Response : IChatModel
     {
         return Task.Run(() => "{ \"text\": \"partial json\"", cancelToken);
     }
+
+    public TokenCounter TokenCounter => new TokenCounter();
 }
