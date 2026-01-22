@@ -91,7 +91,9 @@ for (const [name, entry] of Object.entries(config.agents) as [string, any][]) {
         // Handle agents with custom path (like weather agent)
         const agentPath = path.resolve(defaultAgentProviderPath, entry.path);
         const packageJsonPath = path.join(agentPath, "package.json");
-        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+        const packageJson = JSON.parse(
+            fs.readFileSync(packageJsonPath, "utf-8"),
+        );
 
         // Find the manifest from package.json exports
         const manifestExport = packageJson.exports?.["./agent/manifest"];
@@ -104,8 +106,7 @@ for (const [name, entry] of Object.entries(config.agents) as [string, any][]) {
     } else {
         // Handle regular package-based agents
         const manifestModulePath = `${entry.name}/agent/manifest`;
-        manifestPath =
-            defaultAgentProviderRequire.resolve(manifestModulePath);
+        manifestPath = defaultAgentProviderRequire.resolve(manifestModulePath);
         manifest = defaultAgentProviderRequire(manifestPath);
     }
 
