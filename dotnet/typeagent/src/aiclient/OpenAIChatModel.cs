@@ -6,12 +6,11 @@ namespace TypeAgent.AIClient;
 
 public class OpenAIChatModel : ModelApi, IChatModel
 {
-    public TokenCounter TokenCounter => new TokenCounter();
+    public TokenCounter TokenCounter { get; private set; } = new TokenCounter();
 
     public OpenAIChatModel()
         : this(ModelApiSettings.FromEnv(ModelType.Chat))
     {
-
     }
 
     public OpenAIChatModel(ModelApiSettings settings, CompletionSettings? completionSettings = null, HttpClient? client = null)

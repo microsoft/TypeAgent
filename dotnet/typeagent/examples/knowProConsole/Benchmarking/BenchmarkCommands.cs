@@ -104,6 +104,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, $"Found {questionFiles.Count} question files.");
         List<GradedQuestion> allGradedQuestions = [];
         List<TimingData> allTimingData = [];
+        List<TokenData> allTokenData = [];
         Dictionary<string, int> bestAnswerTally = new()
         {
             ["Traditional Rag"] = 0,
@@ -131,8 +132,23 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 string category = q.Category;
                 KnowProWriter.Write(ConsoleColor.DarkYellow, $"[ {i + 1} / {questions.Questions.Count} ] ");
                 KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Question: {question}");
+
+                // Get token counter before RAG call
+                var generatorModel = conversation.Settings.AnswerGenerator.Settings.GeneratorModel;
+                var languageModel = conversation.Settings.LanguageModel;
+
+                uint ragTokensInBefore = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn;
+                uint ragTokensOutBefore = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensOut;
+                int ragCallCountBefore = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count;
+
                 AnswerResponse? answerRAG = await conversation.AnswerQuestionRagAsync(question, 0.7, 8196, new() { MessagesTopK = 25 }, null, CancellationToken.None);
                 TimeSpan ragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
+
+                // Calculate RAG token usage
+                uint ragTokensIn = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn - ragTokensInBefore;
+                uint ragTokensOut = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensIn - ragTokensOutBefore;
+                int ragCallCount = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count - ragCallCountBefore;
+
                 KnowProWriter.Write(ConsoleColor.DarkBlue, $" RAG: ");
                 if (answerRAG is null || answerRAG.Type == AnswerType.NoAnswer)
                 {
@@ -142,7 +158,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 {
                     KnowProWriter.Write(ConsoleColor.Green, $"{answerRAG.Answer}");
                 }
-                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{ragDuration.TotalSeconds:N0}s]");
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{ragDuration.TotalSeconds:N0}s] [Tokens: {ragTokensIn}+{ragTokensOut}={ragTokensIn + ragTokensOut}] [Calls: {ragCallCount}]");
 
                 // Track RAG timing
                 allTimingData.Add(new TimingData
@@ -153,11 +169,34 @@ Provide feedback for each answer to help improve future responses.  If the answe
                     Difficulty = q.Difficulty
                 });
 
+                // Track RAG tokens
+                allTokenData.Add(new TokenData
+                {
+                    Source = "Traditional Rag",
+                    TokensIn = ragTokensIn,
+                    TokensOut = ragTokensOut,
+                    LlmCalls = ragCallCount,
+                    Category = category,
+                    Difficulty = q.Difficulty
+                });
+
                 // get the structured RAG answer
                 KnowProWriter.Write(ConsoleColor.DarkCyan, $"SRAG: ");
                 questionStart = _kpContext.Stopwatch.Elapsed;
+
+                // Get token counter before SRAG call
+                uint sragTokensInBefore = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn;
+                uint sragTokensOutBefore = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensOut;
+                int sragCallCountBefore = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count;
+
                 AnswerResponse? answer = await conversation.AnswerQuestionAsync(question, new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = 8196, MaxMessageMatches = 25 }, null, null, null, CancellationToken.None);
                 TimeSpan sragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
+
+                // Calculate SRAG token usage
+                uint sragTokensIn = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn - sragTokensInBefore;
+                uint sragTokensOut = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensOut - sragTokensOutBefore;
+                int sragCallCount = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count - sragCallCountBefore;
+
                 if (answer is null || answer.Type == AnswerType.NoAnswer)
                 {
                     KnowProWriter.Write(ConsoleColor.Red, $"No answer returned.({answer?.WhyNoAnswer})");
@@ -166,13 +205,24 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 {
                     KnowProWriter.Write(ConsoleColor.Green, $"{answer.Answer}");
                 }
-                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{sragDuration.TotalSeconds:N0}s]");
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $" [{sragDuration.TotalSeconds:N0}s] [Tokens: {sragTokensIn}+{sragTokensOut}={sragTokensIn + sragTokensOut}] [Calls: {sragCallCount}]");
 
                 // Track SRAG timing
                 allTimingData.Add(new TimingData
                 {
                     Source = "Structured Rag",
                     Duration = sragDuration,
+                    Category = category,
+                    Difficulty = q.Difficulty
+                });
+
+                // Track SRAG tokens
+                allTokenData.Add(new TokenData
+                {
+                    Source = "Structured Rag",
+                    TokensIn = sragTokensIn,
+                    TokensOut = sragTokensOut,
+                    LlmCalls = sragCallCount,
                     Category = category,
                     Difficulty = q.Difficulty
                 });
@@ -274,6 +324,11 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, "");
         KnowProWriter.WriteLine(ConsoleColor.White, $"Timing Comparison:");
         OutputTimingComparison(allTimingData);
+
+        // output token comparison table
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.White, $"Token Usage Comparison:");
+        OutputTokenComparison(allTokenData);
     }
 
     private void OutputCategoryComparison(List<GradedQuestion> allGradedQuestions)
@@ -869,6 +924,162 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, "");
     }
 
+    private void OutputTokenComparison(List<TokenData> allTokenData)
+    {
+        var sources = allTokenData.Select(t => t.Source).Distinct().ToList();
+
+        // Calculate token statistics per source
+        var tokenStats = allTokenData
+            .GroupBy(t => t.Source)
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    totalIn: g.Sum(t => (long)t.TokensIn),
+                    totalOut: g.Sum(t => (long)t.TokensOut),
+                    totalTokens: g.Sum(t => (long)(t.TokensIn + t.TokensOut)),
+                    totalCalls: g.Sum(t => t.LlmCalls),
+                    count: g.Count(),
+                    minIn: g.Min(t => t.TokensIn),
+                    maxIn: g.Max(t => t.TokensIn),
+                    minOut: g.Min(t => t.TokensOut),
+                    maxOut: g.Max(t => t.TokensOut),
+                    avgIn: (double)g.Sum(t => (long)t.TokensIn) / g.Count(),
+                    avgOut: (double)g.Sum(t => (long)t.TokensOut) / g.Count(),
+                    avgCalls: (double)g.Sum(t => t.LlmCalls) / g.Count()
+                )
+            );
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Metric",-CATEGORY_COL_WIDTH}");
+        foreach (var source in sources)
+        {
+            headerBuilder.Append($" {source,VALUE_COL_WIDTH}");
+        }
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Total tokens row (lower is better for cost)
+        WriteTokenRow("Total Tokens", sources, s => tokenStats[s].totalTokens, lowerIsBetter: true);
+
+        // Total input tokens row (lower is better)
+        WriteTokenRow("Total In", sources, s => tokenStats[s].totalIn, lowerIsBetter: true);
+
+        // Total output tokens row (lower is better)
+        WriteTokenRow("Total Out", sources, s => tokenStats[s].totalOut, lowerIsBetter: true);
+
+        // Total LLM calls row (lower is better)
+        WriteTokenRow("Total LLM Calls", sources, s => tokenStats[s].totalCalls, lowerIsBetter: true);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Average tokens per question
+        WriteTokenRow("Avg Total", sources, s => (long)(tokenStats[s].avgIn + tokenStats[s].avgOut), lowerIsBetter: true);
+
+        // Average input tokens
+        WriteTokenRow("Avg In", sources, s => (long)tokenStats[s].avgIn, lowerIsBetter: true);
+
+        // Average output tokens
+        WriteTokenRow("Avg Out", sources, s => (long)tokenStats[s].avgOut, lowerIsBetter: true);
+
+        // Average LLM calls per question
+        WriteTokenRowDouble("Avg LLM Calls", sources, s => tokenStats[s].avgCalls, lowerIsBetter: true);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Min/Max rows
+        WriteTokenRow("Min In", sources, s => tokenStats[s].minIn, lowerIsBetter: true);
+        WriteTokenRow("Max In", sources, s => tokenStats[s].maxIn, lowerIsBetter: true);
+        WriteTokenRow("Min Out", sources, s => tokenStats[s].minOut, lowerIsBetter: true);
+        WriteTokenRow("Max Out", sources, s => tokenStats[s].maxOut, lowerIsBetter: true);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        // Calculate and display token savings
+        if (sources.Count >= 2)
+        {
+            var first = tokenStats[sources[0]].totalTokens;
+            var second = tokenStats[sources[1]].totalTokens;
+            var cheaper = first < second ? sources[0] : sources[1];
+            var moreExpensive = first < second ? sources[1] : sources[0];
+            var cheaperTokens = first < second ? first : second;
+            var moreExpensiveTokens = first < second ? second : first;
+            var savings = (double)(moreExpensiveTokens - cheaperTokens) / moreExpensiveTokens * 100;
+            var ratio = (double)moreExpensiveTokens / cheaperTokens;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{"Token Savings",-CATEGORY_COL_WIDTH}");
+            KnowProWriter.Write(ConsoleColor.Green, $" {cheaper} uses {ratio:N2}x fewer tokens ({savings:N1}% savings)");
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+            KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        }
+    }
+
+    private void WriteTokenRow(string metricName, List<string> sources, Func<string, long> getValue, bool lowerIsBetter)
+    {
+        KnowProWriter.Write(ConsoleColor.White, $"{metricName,-CATEGORY_COL_WIDTH}");
+
+        var values = sources.Select(s => getValue(s)).ToList();
+        var minValue = values.Min();
+        var maxValue = values.Max();
+
+        foreach (var source in sources)
+        {
+            var value = getValue(source);
+            ConsoleColor color;
+
+            if (minValue == maxValue)
+            {
+                color = ConsoleColor.Yellow;
+            }
+            else if (lowerIsBetter)
+            {
+                color = value == minValue ? ConsoleColor.Green : ConsoleColor.Red;
+            }
+            else
+            {
+                color = value == maxValue ? ConsoleColor.Green : ConsoleColor.Red;
+            }
+
+            KnowProWriter.Write(color, $" {value,VALUE_COL_WIDTH:N0}");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+    }
+
+    private void WriteTokenRowDouble(string metricName, List<string> sources, Func<string, double> getValue, bool lowerIsBetter)
+    {
+        KnowProWriter.Write(ConsoleColor.White, $"{metricName,-CATEGORY_COL_WIDTH}");
+
+        var values = sources.Select(s => getValue(s)).ToList();
+        var minValue = values.Min();
+        var maxValue = values.Max();
+
+        foreach (var source in sources)
+        {
+            var value = getValue(source);
+            ConsoleColor color;
+
+            if (Math.Abs(minValue - maxValue) < 0.001)
+            {
+                color = ConsoleColor.Yellow;
+            }
+            else if (lowerIsBetter)
+            {
+                color = Math.Abs(value - minValue) < 0.001 ? ConsoleColor.Green : ConsoleColor.Red;
+            }
+            else
+            {
+                color = Math.Abs(value - maxValue) < 0.001 ? ConsoleColor.Green : ConsoleColor.Red;
+            }
+
+            KnowProWriter.Write(color, $" {value,VALUE_COL_WIDTH:N2}");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+    }
+
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
@@ -979,6 +1190,16 @@ public class TimingData
 {
     public string Source { get; set; } = string.Empty;
     public TimeSpan Duration { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public Difficulty Difficulty { get; set; }
+}
+
+public class TokenData
+{
+    public string Source { get; set; } = string.Empty;
+    public uint TokensIn { get; set; }
+    public uint TokensOut { get; set; }
+    public int LlmCalls { get; set; }
     public string Category { get; set; } = string.Empty;
     public Difficulty Difficulty { get; set; }
 }
