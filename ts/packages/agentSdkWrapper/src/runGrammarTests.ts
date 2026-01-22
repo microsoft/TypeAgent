@@ -44,8 +44,8 @@ async function generateGrammar(
     output += `# Parameter Mappings:\n`;
     for (const mapping of analysis.parameterMappings) {
         output += `#   ${mapping.parameterName}: "${mapping.sourceText}" -> ${JSON.stringify(mapping.targetValue)}`;
-        if (mapping.transformation && mapping.transformation.type !== "none") {
-            output += ` [${mapping.transformation.type}: ${mapping.transformation.description}]`;
+        if (mapping.conversion && mapping.conversion.type !== "none") {
+            output += ` [${mapping.conversion.type}: ${mapping.conversion.description}]`;
         }
         output += `\n`;
     }

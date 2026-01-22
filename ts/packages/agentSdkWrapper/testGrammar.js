@@ -147,9 +147,9 @@ async function main() {
                         `    Value: ${JSON.stringify(mapping.targetValue)}`,
                     );
                     console.log(`    Wildcard: ${mapping.isWildcard}`);
-                    if (mapping.transformation) {
+                    if (mapping.conversion) {
                         console.log(
-                            `    Transformation: ${mapping.transformation.type} - ${mapping.transformation.description}`,
+                            `    Conversion: ${mapping.conversion.type} - ${mapping.conversion.description}`,
                         );
                     }
                 }

@@ -38,13 +38,13 @@ export interface ParameterMapping {
     sourceText: string;
     // The target value in the action
     targetValue: any;
-    // What transformation is needed (if any)
-    transformation?: Transformation;
+    // What conversion is needed (if any)
+    conversion?: Conversion;
     // Whether this should be a wildcard or fixed text
     isWildcard: boolean;
 }
 
-export interface Transformation {
+export interface Conversion {
     type:
         | "none"
         | "string-to-number"
@@ -79,14 +79,14 @@ const GRAMMAR_GENERATION_SYSTEM_PROMPT = `You are an expert at analyzing natural
 Your task is to:
 1. Parse the request linguistically (parts of speech, dependencies)
 2. Map request phrases to action parameters
-3. Identify what transformations are needed
+3. Identify what conversions are needed
 4. Generate a grammar pattern that captures the structure
 
 CRITICAL RULES:
 - Interrogative words (what, where, when, who, why, how, which) must NEVER be wildcards - they must be FIXED
 - Articles (the, a, an) should generally be FIXED, not wildcards
 - Only the actual variable content (names, numbers, values) should be wildcards
-- Be explicit about transformations from source text to parameter values
+- Be explicit about conversions from source text to parameter values
 
 REJECTION CASES - DO NOT generate grammar when:
 1. Adjacent UNQUALIFIED wildcards: Two plain string wildcards next to each other with no fixed separator
@@ -142,7 +142,7 @@ ACCEPT CASE (grammar should be generated):
       "parameterName": "location",
       "sourceText": "Seattle",
       "targetValue": "Seattle",
-      "transformation": {"type": "none", "description": "Direct string match"},
+      "conversion": {"type": "none", "description": "Direct string match"},
       "isWildcard": true
     }
   ],
@@ -261,7 +261,7 @@ export class ClaudeGrammarGenerator {
 
         prompt += `2. Map request phrases to parameters:\n`;
         prompt += `   - Identify which part of the request corresponds to each parameter\n`;
-        prompt += `   - Determine if any transformation is needed (e.g., "third" -> 3)\n`;
+        prompt += `   - Determine if any conversion is needed (e.g., "third" -> 3)\n`;
         prompt += `   - Mark whether each should be a wildcard or fixed text\n\n`;
 
         prompt += `3. Identify fixed vs optional phrases:\n`;
@@ -280,12 +280,12 @@ export class ClaudeGrammarGenerator {
         prompt += `     * "(please)? play $(track:string)" - matches "play X" or "please play X"\n`;
         prompt += `     * "(would you)? (please)? show" - matches "show", "please show", "would you show", "would you please show"\n\n`;
 
-        prompt += `Transformation types available:\n`;
+        prompt += `Conversion types available:\n`;
         prompt += `- "none": Direct string match\n`;
         prompt += `- "string-to-number": Convert text like "50" to number 50\n`;
         prompt += `- "parse-ordinal": Convert "third" to 3, "fifth" to 5, etc.\n`;
         prompt += `- "string-to-boolean": Convert "on"/"off", "yes"/"no" to boolean\n`;
-        prompt += `- "custom": Other transformations (describe what's needed)\n`;
+        prompt += `- "custom": Other conversions (describe what's needed)\n`;
 
         return prompt;
     }
