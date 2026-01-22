@@ -63,7 +63,7 @@
     },
     "weather": {
       "name": "weather-agent",
-      "path": "../agents/weather"
+      "path": "../../agents/weather"
     }
   },
   "mcpServers": {
