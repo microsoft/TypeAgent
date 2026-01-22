@@ -447,6 +447,8 @@ export class IdGenerator {
 }
 
 document.addEventListener("DOMContentLoaded", async function () {
+    const inputOnly =
+        new URLSearchParams(window.location.search).get("inputOnly") === "true";
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
     const agents = new Map<string, string>();
@@ -465,7 +467,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     };
 
-    const chatView = new ChatView(idGenerator, agents);
+    const chatView = new ChatView(idGenerator, agents, inputOnly);
     const chatInput = new ChatInput({}, "phraseDiv");
 
     chatView.setChatInput(chatInput);

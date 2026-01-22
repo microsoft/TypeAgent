@@ -234,6 +234,7 @@ export function initializeInstance(
     instanceDir: string,
     shellSettings: ShellSettingManager,
     mockGreetings: boolean,
+    inputOnly: boolean = false,
     startTime: number = performance.now(),
 ) {
     if (instance !== undefined) {
@@ -245,7 +246,7 @@ export function initializeInstance(
         performance.now() - startTime,
     );
 
-    const shellWindow = new ShellWindow(shellSettings);
+    const shellWindow = new ShellWindow(shellSettings, inputOnly);
     const { chatView } = shellWindow;
     let title: string = "";
     async function updateTitle(dispatcher: Dispatcher) {
