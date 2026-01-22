@@ -208,60 +208,38 @@ function getConvertersForSchema(
 
     if (entityTypes.has("CalendarTime")) {
         converters.set("CalendarTime", {
-            name: "Calendar.Time or Calendar.TimeRange",
-            description:
-                "Parses time expressions - BOTH single times AND time ranges. The same CalendarTime type handles both.",
+            name: "Calendar.Time",
+            description: "Parses single time expressions (not ranges)",
             examples: [
-                "2pm → CalendarTime (single time)",
-                "14:00 → CalendarTime (single time)",
-                "noon → CalendarTime (single time)",
-                "3:30pm → CalendarTime (single time)",
-                "2pm to 3pm → CalendarTime (range)",
-                "9am-10am → CalendarTime (range)",
-                "from 2pm until 4pm → CalendarTime (range)",
-                "1-2pm → CalendarTime (compact range)",
+                "2pm → CalendarTime",
+                "14:00 → CalendarTime",
+                "noon → CalendarTime",
+                "3:30pm → CalendarTime",
+                "midnight → CalendarTime",
             ],
         });
     }
 
-    if (entityTypes.has("EventDescription")) {
-        converters.set("EventDescription", {
-            name: "Calendar.EventDescription",
-            description:
-                "Validates event descriptions (typically no special parsing needed)",
+    if (entityTypes.has("CalendarTimeRange")) {
+        converters.set("CalendarTimeRange", {
+            name: "Calendar.TimeRange",
+            description: "Parses time range expressions",
             examples: [
-                "meeting → EventDescription",
-                "dentist appointment → EventDescription",
-                "lunch → EventDescription",
+                "2pm to 3pm → CalendarTimeRange",
+                "9am-10am → CalendarTimeRange",
+                "from 2pm until 4pm → CalendarTimeRange",
+                "1-2pm → CalendarTimeRange",
+                "9:00am to 5:00pm → CalendarTimeRange",
             ],
         });
     }
 
-    if (entityTypes.has("ParticipantName")) {
-        converters.set("ParticipantName", {
-            name: "Calendar.ParticipantName",
-            description:
-                "Validates participant names (typically no special parsing needed)",
-            examples: [
-                "John → ParticipantName",
-                "Sarah → ParticipantName",
-                "Bob → ParticipantName",
-            ],
-        });
-    }
-
-    if (entityTypes.has("LocationName")) {
-        converters.set("LocationName", {
-            name: "Calendar.LocationName",
-            description:
-                "Validates location names (typically no special parsing needed)",
-            examples: [
-                "conference room → LocationName",
-                "Starbucks → LocationName",
-                "home → LocationName",
-            ],
-        });
-    }
+    // Note: EventDescription, ParticipantName, and LocationName are NOT included
+    // because they cannot be deterministically recognized. They can be arbitrary strings
+    // like "under the water tower" for location or any event description.
+    // For now, these must use plain string wildcards in grammars.
+    // Future strategy: Generate two rules - one with entity type (when recognizable)
+    // and one without (if it doesn't violate adjacent wildcard rules).
 
     // Music player converters
     if (entityTypes.has("MusicDevice")) {
