@@ -51,6 +51,12 @@ public static class MessageCollectionExtensions
     )
     {
         int messageCount = messageOrdinals.Count;
+
+        if (messageCount == 0)
+        {
+            return 0;
+        }
+
         var messageLengths = await messages.GetMessageLengthAsync(
             messageOrdinals,
             cancellationToken

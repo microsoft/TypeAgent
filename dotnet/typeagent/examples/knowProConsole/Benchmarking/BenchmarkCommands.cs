@@ -137,17 +137,17 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 var generatorModel = conversation.Settings.AnswerGenerator.Settings.GeneratorModel;
                 var languageModel = conversation.Settings.LanguageModel;
 
-                uint ragTokensInBefore = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn;
-                uint ragTokensOutBefore = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensOut;
-                int ragCallCountBefore = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count;
+                uint ragTokensInBefore = generatorModel.TokenCounter.TokensIn;
+                uint ragTokensOutBefore = generatorModel.TokenCounter.TokensOut;
+                int ragCallCountBefore = generatorModel.TokenCounter.Latencies.Count;
 
                 AnswerResponse? answerRAG = await conversation.AnswerQuestionRagAsync(question, 0.7, 8196, new() { MessagesTopK = 25 }, null, CancellationToken.None);
                 TimeSpan ragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
 
                 // Calculate RAG token usage
-                uint ragTokensIn = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn - ragTokensInBefore;
-                uint ragTokensOut = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensIn - ragTokensOutBefore;
-                int ragCallCount = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count - ragCallCountBefore;
+                uint ragTokensIn = generatorModel.TokenCounter.TokensIn - ragTokensInBefore;
+                uint ragTokensOut = generatorModel.TokenCounter.TokensOut - ragTokensOutBefore;
+                int ragCallCount = generatorModel.TokenCounter.Latencies.Count - ragCallCountBefore;
 
                 KnowProWriter.Write(ConsoleColor.DarkBlue, $" RAG: ");
                 if (answerRAG is null || answerRAG.Type == AnswerType.NoAnswer)
@@ -185,17 +185,17 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 questionStart = _kpContext.Stopwatch.Elapsed;
 
                 // Get token counter before SRAG call
-                uint sragTokensInBefore = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn;
-                uint sragTokensOutBefore = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensOut;
-                int sragCallCountBefore = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count;
+                uint sragTokensInBefore = generatorModel.TokenCounter.TokensIn;
+                uint sragTokensOutBefore = generatorModel.TokenCounter.TokensOut;
+                int sragCallCountBefore = generatorModel.TokenCounter.Latencies.Count;
 
                 AnswerResponse? answer = await conversation.AnswerQuestionAsync(question, new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = 8196, MaxMessageMatches = 25 }, null, null, null, CancellationToken.None);
                 TimeSpan sragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
 
                 // Calculate SRAG token usage
-                uint sragTokensIn = generatorModel.TokenCounter.TokensIn + languageModel.TokenCounter.TokensIn - sragTokensInBefore;
-                uint sragTokensOut = generatorModel.TokenCounter.TokensOut + languageModel.TokenCounter.TokensOut - sragTokensOutBefore;
-                int sragCallCount = generatorModel.TokenCounter.Latencies.Count + languageModel.TokenCounter.Latencies.Count - sragCallCountBefore;
+                uint sragTokensIn = generatorModel.TokenCounter.TokensIn - sragTokensInBefore;
+                uint sragTokensOut = generatorModel.TokenCounter.TokensOut - sragTokensOutBefore;
+                int sragCallCount = generatorModel.TokenCounter.Latencies.Count - sragCallCountBefore;
 
                 if (answer is null || answer.Type == AnswerType.NoAnswer)
                 {
