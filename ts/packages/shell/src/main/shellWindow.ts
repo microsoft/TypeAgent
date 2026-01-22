@@ -115,7 +115,10 @@ export class ShellWindow {
         return activeBrowserView.webContentsView;
     }
 
-    constructor(private readonly settings: ShellSettingManager) {
+    constructor(
+        private readonly settings: ShellSettingManager,
+        private readonly inputOnly: boolean,
+    ) {
         const state = this.settings.window;
         this.chatWidth = state.chatWidth;
         this.chatHeight = state.chatHeight;
@@ -127,7 +130,7 @@ export class ShellWindow {
         const uiSettings = this.settings.user.ui;
         // Calculate the initial window bound.
         this.verticalLayout = uiSettings.verticalLayout;
-        const mainWindow = createMainWindow();
+        const mainWindow = createMainWindow(inputOnly);
 
         setupDevicePermissions(mainWindow);
 
@@ -166,6 +169,7 @@ export class ShellWindow {
         });
 
         const chatView = createChatView(state);
+        chatView.setBackgroundColor("#00000000");
         this.setupZoomHandlers(chatView.webContents, (zoomFactor) => {
             this.updateOverlayBounds();
             this.updateZoomInTitle(zoomFactor);
@@ -233,13 +237,21 @@ export class ShellWindow {
         }
 
         const contentLoadP: Promise<void>[] = [];
-        contentLoadP.push(
-            loadLocalWebContents(chatView.webContents, "chatView.html"),
-        );
+        if (inputOnly) {
+            contentLoadP.push(
+                loadLocalWebContents(chatView.webContents, "chatView.html", {
+                    inputOnly: "true",
+                }),
+            );
+        } else {
+            contentLoadP.push(
+                loadLocalWebContents(chatView.webContents, "chatView.html"),
+            );
 
-        contentLoadP.push(
-            loadLocalWebContents(mainWindow.webContents, "viewHost.html"),
-        );
+            contentLoadP.push(
+                loadLocalWebContents(mainWindow.webContents, "viewHost.html"),
+            );
+        }
         this.contentLoadP = contentLoadP;
     }
 
@@ -263,7 +275,7 @@ export class ShellWindow {
     private async restoreBrowserTabs() {
         // Restore browser tabs if they were previously open
         const states = this.settings.window;
-        if (states.browserTabsJson) {
+        if (!this.inputOnly && states.browserTabsJson) {
             try {
                 const browserTabsState: BrowserTabState[] = JSON.parse(
                     states.browserTabsJson,
@@ -773,6 +785,11 @@ export class ShellWindow {
         url: URL = new URL("about:blank"),
         options?: { background?: boolean; waitForPageLoad?: boolean },
     ): Promise<string> {
+        if (this.inputOnly) {
+            throw new Error(
+                "Browser tabs are not supported in input-only mode",
+            );
+        }
         // Handle custom typeagent-browser protocol
         let resolvedUrl = url;
         if (url.protocol === "typeagent-browser:") {
@@ -1200,14 +1217,23 @@ export class ShellWindow {
     }
 }
 
-function createMainWindow(): BrowserWindow {
+function createMainWindow(inputOnly: boolean): BrowserWindow {
     const isMac = process.platform === "darwin";
     const isWindows = process.platform === "win32";
+
+    const inputOnlyOptions = inputOnly
+        ? {
+              transparent: true,
+              backgroundColor: "#00000000", // Fully transparent background
+              hasShadow: false,
+              titleBarOverlay: false,
+          }
+        : {};
 
     const mainWindow = new BrowserWindow({
         show: false,
         frame: false, // Remove default frame
-        //transparent: true,
+
         titleBarStyle: isMac ? "hiddenInset" : "hidden", // Hide title bar
         titleBarOverlay: isWindows
             ? {
@@ -1223,6 +1249,7 @@ function createMainWindow(): BrowserWindow {
             sandbox: false,
             zoomFactor: 1,
         },
+        ...inputOnlyOptions,
     });
 
     mainWindow.removeMenu();
