@@ -556,7 +556,6 @@ async function main() {
 
             // Query client and receive responses
             let finalResult = "";
-            let hasShownReasoning = false;
             for await (const message of client.queryAndReceive(trimmed)) {
                 if (message.type === "result") {
                     // Stop spinner before showing result
@@ -579,30 +578,25 @@ async function main() {
                     const msg = message.message;
                     const content = msg.content;
 
-                    if (Array.isArray(content)) {
-                        // Look for thinking/reasoning blocks
-                        for (const block of content) {
-                            if (block.type === "thinking" && block.thinking) {
-                                // Stop spinner before showing reasoning
-                                spinner.stop();
-
-                                // Display reasoning in gray
-                                if (!hasShownReasoning) {
-                                    const grayColor = "\x1b[90m";
-                                    const resetColor = "\x1b[0m";
-                                    console.log(
-                                        `\n${grayColor}${block.thinking}${resetColor}\n`,
-                                    );
-                                    hasShownReasoning = true;
-                                }
-                            }
-                        }
-                    }
+                    // Thinking blocks are no longer supported in the SDK
+                    // if (Array.isArray(content)) {
+                    //     for (const block of content) {
+                    //         if (block.type === "thinking") {
+                    //             // Display reasoning
+                    //         }
+                    //     }
+                    // }
 
                     if (options.debug && debugLogger) {
-                        const textContent = Array.isArray(content)
-                            ? content.find((c: any) => c.type === "text")?.text
-                            : "";
+                        let textContent = "";
+                        if (Array.isArray(content)) {
+                            const textBlock = content.find(
+                                (c) => c.type === "text",
+                            );
+                            if (textBlock && textBlock.type === "text") {
+                                textContent = textBlock.text;
+                            }
+                        }
                         debugLogger.log(
                             `Assistant message: ${textContent?.substring(0, 100) || "(no text)"}...`,
                         );

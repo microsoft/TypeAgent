@@ -1,0 +1,5 @@
+{"request": "what's the weather in Seattle", "schemaName": "weather", "action": {"actionName": "getCurrentConditions", "parameters": {"location": "Seattle"}}}
+{"request": "tell me the weather in New York", "schemaName": "weather", "action": {"actionName": "getCurrentConditions", "parameters": {"location": "New York"}}}
+{"request": "how's the weather in Paris", "schemaName": "weather", "action": {"actionName": "getCurrentConditions", "parameters": {"location": "Paris"}}}
+{"request": "weather forecast for Tokyo", "schemaName": "weather", "action": {"actionName": "getForecast", "parameters": {"location": "Tokyo"}}}
+{"request": "show me the forecast for London", "schemaName": "weather", "action": {"actionName": "getForecast", "parameters": {"location": "London"}}}

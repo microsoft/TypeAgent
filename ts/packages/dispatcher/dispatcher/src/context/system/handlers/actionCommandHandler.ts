@@ -32,6 +32,7 @@ import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
 import chalk from "chalk";
 import registerDebug from "debug";
+import { getRequestActionLogger } from "./requestActionLogger.js";
 
 const debugExplain = registerDebug("typeagent:action:explain");
 
@@ -130,6 +131,17 @@ export class ActionCommandHandler implements CommandHandler {
             request: naturalLanguage,
             actions: [{ action }],
         };
+
+        // Log request/action pair to file for benchmarking (if enabled via env var)
+        const logger = getRequestActionLogger();
+        if (logger.isLoggingEnabled()) {
+            logger.log(requestAction);
+            console.log(
+                chalk.gray(
+                    `  [Logged to: ${logger.getLogFilePath()}]`,
+                ),
+            );
+        }
 
         // Log the request/action pair being processed
         console.log(chalk.cyan("\n[CACHE] Processing request/action pair:"));
