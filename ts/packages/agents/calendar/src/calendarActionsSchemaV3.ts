@@ -11,10 +11,7 @@ export type CalendarTimeRange = string; // "2pm to 3pm", "9am-10am", "1-2pm", "f
 // Note: Only includes deterministically recognizable entities (dates, times, and time ranges)
 // EventDescription, LocationName, and ParticipantName cannot be deterministically
 // recognized and must use plain string wildcards for now
-export type CalendarEntities =
-    | CalendarDate
-    | CalendarTime
-    | CalendarTimeRange;
+export type CalendarEntities = CalendarDate | CalendarTime | CalendarTimeRange;
 
 export type CalendarActionV3 =
     | ScheduleEventAction
