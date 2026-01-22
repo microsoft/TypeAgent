@@ -66,8 +66,9 @@ public class PodcastCommands : ICommandModule
         }
         else
         {
+            string name = _podcast.Name ?? string.Empty;
             UnloadCurrent();
-            KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Unloaded podcast '{_podcast.Name}'");
+            KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Unloaded podcast '{name}'");
         }
     }
 

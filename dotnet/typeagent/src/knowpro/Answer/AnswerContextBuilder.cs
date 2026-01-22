@@ -24,12 +24,12 @@ internal class AnswerContextBuilder
     {
         ArgumentVerify.ThrowIfNull(searchResult, nameof(searchResult));
 
-        if (!searchResult.HasResults)
-        {
-            throw new KnowProException(KnowProException.ErrorCode.EmptySearchResults);
-        }
 
         AnswerContext context = new AnswerContext();
+        if (!searchResult.HasResults)
+        {
+            return context;
+        }
 
         foreach (var resultForType in searchResult.KnowledgeMatches)
         {
