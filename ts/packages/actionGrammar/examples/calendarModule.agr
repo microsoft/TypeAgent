@@ -1,0 +1,49 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Module declaration - symbols in this module will be namespaced as Calendar.*
+// module Calendar
+
+// Import symbols from other modules
+// import { Ordinal, Cardinal } from Global
+
+// CalendarDate - matches date-like strings
+// Note: The actual matching/conversion logic is in the TypeScript converter
+@ <CalendarDate> = $(date:CalendarDate)
+
+// Example: Schedule event with date
+@ <ScheduleEvent> =
+    schedule $(event:string) on $(date:CalendarDate) -> {
+        actionName: "scheduleEvent",
+        parameters: {
+            eventName: $(event),
+            date: $(date)
+        }
+    }
+
+// Example: Using imported Ordinal from Global module
+// Within this module, we can use Ordinal without qualification
+// External modules would reference it as Global.Ordinal
+@ <ScheduleOrdinalEvent> =
+    schedule $(event:string) on (the)? $(ordinal:Ordinal) -> {
+        actionName: "scheduleEvent",
+        parameters: {
+            eventName: $(event),
+            dayOfMonth: $(ordinal)
+        }
+    }
+
+// Example: Find events by date
+@ <FindEvents> =
+    find events on $(date:CalendarDate) -> {
+        actionName: "findEvents",
+        parameters: {
+            date: $(date)
+        }
+    }
+|   what\'s on $(date:CalendarDate) -> {
+        actionName: "findEvents",
+        parameters: {
+            date: $(date)
+        }
+    }

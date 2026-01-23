@@ -54,6 +54,7 @@ export type GrammarRule = {
 
 export type Grammar = {
     rules: GrammarRule[];
+    moduleName?: string | undefined; // e.g. "Calendar", "Global"
 };
 
 /**
