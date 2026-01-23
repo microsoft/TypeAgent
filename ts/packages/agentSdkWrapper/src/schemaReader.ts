@@ -123,6 +123,25 @@ export function loadSchemaInfo(pasJsonPath: string): SchemaInfo {
                             validationInfo.entityTypeName = elementTypeName;
                             validationInfo.isEntityType = true;
                         }
+                    } else if (field.type.type === "type-union") {
+                        // Handle union types like CalendarTime | CalendarTimeRange
+                        // Collect all entity types in the union
+                        const unionEntityTypes: string[] = [];
+                        for (const unionType of field.type.types) {
+                            if (unionType.type === "type-reference") {
+                                const typeName = unionType.name;
+                                if (entityTypes.has(typeName)) {
+                                    unionEntityTypes.push(typeName);
+                                }
+                            }
+                        }
+
+                        if (unionEntityTypes.length > 0) {
+                            // Use all entity types joined with |
+                            validationInfo.entityTypeName =
+                                unionEntityTypes.join(" | ");
+                            validationInfo.isEntityType = true;
+                        }
                     }
 
                     actionInfo.parameters.set(paramName, validationInfo);

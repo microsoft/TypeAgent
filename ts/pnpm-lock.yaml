@@ -1060,6 +1060,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      action-grammar:
+        specifier: workspace:*
+        version: link:../actionGrammar
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -3291,37 +3294,6 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
-  packages/explanationBenchmark:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../agentSdk
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../utils/commonUtils
-      agent-cache:
-        specifier: workspace:*
-        version: link:../cache
-      chalk:
-        specifier: ^5.3.0
-        version: 5.6.2
-      commander:
-        specifier: ^12.0.0
-        version: 12.1.0
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.5
-        version: 22.15.18
-      prettier:
-        specifier: ^3.2.5
-        version: 3.5.3
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.10
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
