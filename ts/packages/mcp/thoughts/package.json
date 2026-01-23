@@ -30,7 +30,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@anthropic-ai/sdk": "^0.35.0",
-    "openai": "^4.20.0"
+    "microsoft-cognitiveservices-speech-sdk": "^1.40.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",

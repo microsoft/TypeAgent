@@ -6,9 +6,11 @@ Convert raw text, stream-of-consciousness, and unstructured notes into well-form
 
 - **MCP Server**: Expose thoughts processing as MCP tools
 - **CLI Utility**: Use directly from command line
-- **Audio Transcription**: Automatically transcribe WAV files using OpenAI's Whisper
+- **Audio Transcription**: Automatically transcribe WAV files using Azure Cognitive Services
 - **Flexible Input**: Read from text files, audio files, or stdin
 - **Custom Instructions**: Guide the formatting with additional instructions
+- **Keyword Tags**: Add tags for later lookup and organization
+- **Inline Tags**: Say "tag this as X" during audio recording to mark specific sections
 - **Markdown Output**: Clean, well-organized markdown with proper structure
 
 ## Installation
@@ -21,7 +23,8 @@ npm install @typeagent/thoughts
 
 For audio transcription support, set:
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+export AZURE_SPEECH_KEY="your-azure-speech-key"
+export AZURE_SPEECH_REGION="your-region"  # e.g., "eastus"
 ```
 
 ## Usage
@@ -47,6 +50,12 @@ thoughts notes.txt -o output.md --instructions "Format as a technical document"
 # Transcribe audio with custom formatting
 thoughts voice_memo.wav -o notes.md --instructions "Format as meeting notes with action items"
 
+# Add tags for later lookup
+thoughts notes.txt -o output.md --tags "meeting,q1-2026,planning"
+
+# Transcribe audio with tags and instructions
+thoughts meeting.wav -o notes.md --tags "team-meeting,2026-01-23" --instructions "Format as meeting notes"
+
 # Using pipe
 cat stream_of_consciousness.txt | thoughts > organized.md
 ```
@@ -57,11 +66,38 @@ cat stream_of_consciousness.txt | thoughts > organized.md
 -i, --input <file>         Input file - text or .wav (or "-" for stdin, default: stdin)
 -o, --output <file>        Output file (or "-" for stdout, default: stdout)
 --instructions <text>      Additional formatting instructions
+-t, --tags <tags>          Comma-separated tags/keywords (e.g., "meeting,q1-2026,planning")
 -m, --model <model>        Claude model to use (default: claude-sonnet-4-20250514)
 -h, --help                 Show help message
 ```
 
-**Note**: WAV files are automatically detected by the `.wav` extension and transcribed using OpenAI's Whisper API before being processed by Claude.
+**Notes**:
+- WAV files are automatically detected by the `.wav` extension and transcribed using Azure Cognitive Services before being processed by Claude
+- Tags are added as a markdown heading section at the end of the document for easy searching and filtering
+
+### Inline Tags
+
+While recording audio or writing text, you can mark specific sections with inline tags by saying or writing phrases like:
+- "tag this as marshmallow colors"
+- "tag design ideas"
+- "tag this as action item"
+
+Claude will automatically:
+1. Remove the tag phrase from the content
+2. Insert a tag marker at that location: **🏷️ tag-name**
+3. Convert the tag to lowercase with hyphens
+
+**Example**:
+```
+Input: "I think we should use blue and purple. Tag this as color scheme. The fonts need to be modern..."
+
+Output:
+I think we should use blue and purple.
+
+**🏷️ color-scheme**
+
+The fonts need to be modern...
+```
 
 ### As MCP Server
 
@@ -129,13 +165,13 @@ thoughts raw_ideas.txt -o blog_post.md --instructions "Format as a blog post wit
 ### Voice Memo to Meeting Notes
 
 ```bash
-thoughts meeting_recording.wav -o notes.md --instructions "Format as meeting notes with action items"
+thoughts meeting_recording.wav -o notes.md --instructions "Format as meeting notes with action items" --tags "team-meeting,2026-01-23,action-items"
 ```
 
 ### Audio Brainstorm to Technical Documentation
 
 ```bash
-thoughts voice_ideas.wav -o docs.md --instructions "Format as technical documentation with clear sections"
+thoughts voice_ideas.wav -o docs.md --instructions "Format as technical documentation with clear sections" --tags "project-alpha,design,brainstorm"
 ```
 
 ### Meeting Notes from Text

@@ -12,6 +12,7 @@ interface CliOptions {
     output?: string; // Output file path or "-" for stdout
     instructions?: string; // Additional formatting instructions
     model?: string; // Claude model to use
+    tags?: string[]; // Tags/keywords for later lookup
     help?: boolean;
 }
 
@@ -37,6 +38,15 @@ function parseArgs(): CliOptions {
             case "-m":
             case "--model":
                 options.model = args[++i];
+                break;
+            case "-t":
+            case "--tags":
+                // Parse comma-separated tags
+                const tagsArg = args[++i];
+                options.tags = tagsArg
+                    .split(",")
+                    .map((tag) => tag.trim())
+                    .filter((tag) => tag.length > 0);
                 break;
             case "-h":
             case "--help":
@@ -67,12 +77,16 @@ Options:
                              Examples: "Create a technical document"
                                        "Format as meeting notes"
                                        "Organize as a blog post"
+  -t, --tags <tags>          Comma-separated tags/keywords for later lookup
+                             Examples: "meeting,q1-2026,action-items"
+                                       "project-alpha,design,brainstorm"
   -m, --model <model>        Claude model to use
                              Default: claude-sonnet-4-20250514
   -h, --help                 Show this help message
 
 Environment Variables:
-  OPENAI_API_KEY             OpenAI API key for audio transcription
+  AZURE_SPEECH_KEY           Azure Speech Services key
+  AZURE_SPEECH_REGION        Azure Speech Services region (e.g., "eastus")
 
 Examples:
   # Read from stdin, write to stdout
@@ -84,11 +98,14 @@ Examples:
   # Transcribe audio file and convert to markdown
   thoughts recording.wav -o output.md
 
-  # Read from file, write to output file
-  thoughts -i notes.txt -o output.md
+  # Read from file with tags
+  thoughts -i notes.txt -o output.md --tags "meeting,q1-2026,planning"
 
-  # With custom instructions
-  thoughts notes.txt -o output.md --instructions "Format as a technical document"
+  # With custom instructions and tags
+  thoughts notes.txt -o output.md --instructions "Format as a technical document" --tags "project-alpha,design"
+
+  # Transcribe audio with tags
+  thoughts meeting.wav -o notes.md --tags "team-meeting,2026-01-23" --instructions "Format as meeting notes"
 
   # Using pipe
   cat stream_of_consciousness.txt | thoughts > organized.md
@@ -173,6 +190,9 @@ async function main() {
         }
         if (options.model) {
             processOptions.model = options.model;
+        }
+        if (options.tags) {
+            processOptions.tags = options.tags;
         }
         const result = await processor.processThoughts(processOptions);
 
