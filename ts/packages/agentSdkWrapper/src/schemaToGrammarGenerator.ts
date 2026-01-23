@@ -18,6 +18,10 @@ export interface SchemaGrammarConfig {
     includeCommonPatterns?: boolean;
     // Maximum number of retries for fixing grammar errors
     maxRetries?: number;
+    // Existing grammar text to extend/improve (optional)
+    existingGrammar?: string;
+    // Additional instructions for how to improve the grammar and what examples to generate
+    improvementInstructions?: string;
 }
 
 /**
@@ -108,6 +112,36 @@ Generate a complete, syntactically correct .agr grammar file that:
 5. Includes the Start rule
 
 Response format: Return ONLY the complete .agr file content, starting with copyright header.`;
+
+const SCHEMA_GRAMMAR_EXTENSION_PROMPT = `You are an expert at improving and extending Action Grammar (.agr) files for natural language interfaces.
+
+Your task is to extend/improve an existing grammar based on a schema, new examples, and specific improvement instructions.
+
+EXISTING GRAMMAR:
+{existingGrammar}
+
+COMPLETE SCHEMA:
+{schemaInfo}
+
+NEW EXAMPLE REQUESTS:
+{examples}
+
+IMPROVEMENT INSTRUCTIONS:
+{improvementInstructions}
+
+AVAILABLE ENTITY TYPES AND CONVERTERS:
+{entityTypes}
+
+Your task:
+1. Analyze the existing grammar and identify areas for improvement
+2. Incorporate the new examples by extending or refining existing rules
+3. Follow the improvement instructions to enhance the grammar
+4. Maintain consistency with existing patterns and style
+5. Ensure all actions in the schema are covered
+6. Keep shared sub-rules and don't duplicate patterns
+7. Follow all AGR syntax rules (see above)
+
+Response format: Return ONLY the complete improved .agr file content, starting with copyright header.`;
 
 const COMMON_ACTIONS_PROMPT = `You are analyzing an action schema to identify the most commonly used actions.
 
@@ -206,6 +240,7 @@ export class SchemaToGrammarGenerator {
         let grammarText = await this.generateCompleteGrammar(
             schemaInfo,
             examplesByAction,
+            config,
         );
 
         // Step 4: Validate and fix grammar
@@ -343,18 +378,35 @@ export class SchemaToGrammarGenerator {
     private async generateCompleteGrammar(
         schemaInfo: SchemaInfo,
         examplesByAction: Map<string, string[]>,
+        config: SchemaGrammarConfig = {},
     ): Promise<string> {
         const schemaDescription = this.formatSchemaForPrompt(schemaInfo);
         const examplesDescription =
             this.formatExamplesForPrompt(examplesByAction);
         const entityTypes = this.formatEntityTypes(schemaInfo);
 
-        const prompt = SCHEMA_GRAMMAR_PROMPT.replace(
-            "{entityTypes}",
-            entityTypes,
-        )
-            .replace("{schemaInfo}", schemaDescription)
-            .replace("{examples}", examplesDescription);
+        // Choose prompt based on whether we're extending an existing grammar
+        let prompt: string;
+        if (config.existingGrammar) {
+            // Extension mode
+            prompt = SCHEMA_GRAMMAR_EXTENSION_PROMPT.replace(
+                "{existingGrammar}",
+                config.existingGrammar,
+            )
+                .replace("{schemaInfo}", schemaDescription)
+                .replace("{examples}", examplesDescription)
+                .replace(
+                    "{improvementInstructions}",
+                    config.improvementInstructions ||
+                        "No specific instructions",
+                )
+                .replace("{entityTypes}", entityTypes);
+        } else {
+            // New grammar mode
+            prompt = SCHEMA_GRAMMAR_PROMPT.replace("{entityTypes}", entityTypes)
+                .replace("{schemaInfo}", schemaDescription)
+                .replace("{examples}", examplesDescription);
+        }
 
         const queryInstance = query({
             prompt,

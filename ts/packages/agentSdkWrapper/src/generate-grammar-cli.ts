@@ -21,6 +21,8 @@ interface GenerateGrammarOptions {
     output?: string;
     examplesPerAction?: number;
     model?: string;
+    inputGrammar?: string;
+    improve?: string;
     help?: boolean;
 }
 
@@ -51,6 +53,13 @@ function parseArgs(): GenerateGrammarOptions {
             case "-m":
                 options.model = args[++i];
                 break;
+            case "--input":
+            case "-i":
+                options.inputGrammar = args[++i];
+                break;
+            case "--improve":
+                options.improve = args[++i];
+                break;
             case "--help":
             case "-h":
                 options.help = true;
@@ -76,14 +85,24 @@ Arguments:
   schema-path                 Path to the .pas.json schema file
 
 Options:
-  -o, --output <path>        Output path for the .agr file (default: <schema-name>.agr)
+  -o, --output <path>        Output path for the .agr file
+                             Default: <schema-name>.agr (new grammar)
+                                      <schema-name>.extended.agr (when extending)
   -e, --examples <number>    Number of examples per action (default: 3)
   -m, --model <model>        Claude model to use (default: claude-sonnet-4-20250514)
+  -i, --input <path>         Existing .agr file to extend/improve (optional)
+  --improve <instructions>   Instructions for how to improve the grammar (optional)
   -h, --help                 Show this help message
 
 Examples:
-  # Generate grammar from player schema
+  # Generate new grammar from schema
   generate-grammar packages/agents/player/dist/playerSchema.pas.json
+
+  # Extend existing grammar (outputs to playerSchema.extended.agr)
+  generate-grammar -i player.agr packages/agents/player/dist/playerSchema.pas.json
+
+  # Extend existing grammar with specific improvements
+  generate-grammar -i player.agr --improve "Add more polite variations" packages/agents/player/dist/playerSchema.pas.json
 
   # Generate with custom output path
   generate-grammar -o player.agr packages/agents/player/dist/playerSchema.pas.json
@@ -110,17 +129,42 @@ async function main() {
             `Schema: ${schemaInfo.schemaName} (${schemaInfo.actions.size} actions)`,
         );
 
+        // Load existing grammar if provided
+        let existingGrammar: string | undefined;
+        if (options.inputGrammar) {
+            console.log(
+                `Loading existing grammar from: ${options.inputGrammar}`,
+            );
+            existingGrammar = fs.readFileSync(options.inputGrammar, "utf8");
+        }
+
         // Determine output path
-        const outputPath =
-            options.output ||
-            path.join(
+        let outputPath: string;
+        if (options.output) {
+            outputPath = options.output;
+        } else if (existingGrammar) {
+            // When extending, default to a new file to avoid overwriting the original
+            outputPath = path.join(
+                path.dirname(options.schema),
+                `${schemaInfo.schemaName}.extended.agr`,
+            );
+        } else {
+            // When creating new grammar, use the schema name
+            outputPath = path.join(
                 path.dirname(options.schema),
                 `${schemaInfo.schemaName}.agr`,
             );
+        }
 
         console.log(`\nGenerating grammar...`);
         console.log(`  Model: ${options.model}`);
         console.log(`  Examples per action: ${options.examplesPerAction}`);
+        if (existingGrammar) {
+            console.log(`  Mode: Extending existing grammar`);
+            if (options.improve) {
+                console.log(`  Improvement instructions: ${options.improve}`);
+            }
+        }
 
         // Generate grammar
         const generator = new SchemaToGrammarGenerator({
@@ -128,9 +172,25 @@ async function main() {
             examplesPerAction: options.examplesPerAction!,
         });
 
-        const result = await generator.generateGrammar(schemaInfo, {
+        // Build config object, only including optional properties if they're defined
+        const grammarConfig: {
+            examplesPerAction: number;
+            existingGrammar?: string;
+            improvementInstructions?: string;
+        } = {
             examplesPerAction: options.examplesPerAction!,
-        });
+        };
+        if (existingGrammar) {
+            grammarConfig.existingGrammar = existingGrammar;
+        }
+        if (options.improve) {
+            grammarConfig.improvementInstructions = options.improve;
+        }
+
+        const result = await generator.generateGrammar(
+            schemaInfo,
+            grammarConfig,
+        );
 
         // Write output
         fs.writeFileSync(outputPath, result.grammarText, "utf8");
