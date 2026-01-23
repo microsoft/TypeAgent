@@ -18,6 +18,10 @@ namespace autoShell
         private const int SPIF_SENDCHANGE = 0x02;
         private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
 
+        // Text scaling constants
+        private const uint WM_SETTINGCHANGE = 0x001A;
+        private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
+
         // window rect structure
         internal struct RECT
         {

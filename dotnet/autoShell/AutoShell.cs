@@ -978,6 +978,12 @@ internal partial class AutoShell
                 case "disconnectWifi":
                     DisconnectFromWifi();
                     break;
+                case "setTextSize":
+                    if (int.TryParse(value, out int textSizePct))
+                    {
+                        SetTextSize(textSizePct);
+                    }
+                    break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);
                     break;
@@ -1290,6 +1296,313 @@ internal partial class AutoShell
     /// <summary>
     /// Disconnects from the currently connected WiFi network.
     /// </summary>
+    /// <summary>
+    /// Sets the system text scaling factor (percentage).
+    /// Valid values are typically 100, 125, 150, 175, 200, 225, 250, 300, 350.
+    /// </summary>
+    /// <param name="percentage">The text scaling percentage (100-350).</param>
+    static void SetTextSize(int percentage)
+    {
+        try
+        {
+            if (percentage == -1)
+            {
+                percentage = new Random().Next(100, 351);
+            }
+
+            // Clamp the percentage to valid range
+            if (percentage < 100)
+            {
+                percentage = 100;
+            }
+            else if (percentage > 350)
+            {
+                percentage = 350;
+            }
+
+            // Open the Settings app to the ease of access page
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "ms-settings:easeofaccess",
+                UseShellExecute = true
+            });
+
+            // Use UI Automation to navigate and set the text size
+            SetTextSizeViaUIAutomation(percentage);
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+    }
+
+    /// <summary>
+    /// Uses UI Automation to navigate the Settings app and set the text size.
+    /// </summary>
+    /// <param name="percentage">The text scaling percentage (100-350).</param>
+    static void SetTextSizeViaUIAutomation(int percentage)
+    {
+        // UI Automation Property IDs (from UIAutomationClient.h)
+        const int UIA_AutomationIdPropertyId = 30011;
+
+        // UI Automation Pattern IDs
+        const int UIA_RangeValuePatternId = 10003;
+
+        const int maxRetries = 10;
+        const int retryDelayMs = 500;
+
+        try
+        {
+            // Create UI Automation instance
+            var uiAutomation = new UIAutomationClient.CUIAutomation();
+            UIAutomationClient.IUIAutomationElement settingsWindow = null;
+
+            // Wait for Settings window to appear and get it via FindWindow
+            for (int i = 0; i < maxRetries; i++)
+            {
+                System.Threading.Thread.Sleep(retryDelayMs);
+
+                // Find the Settings window by enumerating top-level windows with "Settings" in the title
+                // UWP apps use ApplicationFrameWindow class
+                IntPtr hWnd = IntPtr.Zero;
+                while ((hWnd = FindWindowEx(IntPtr.Zero, hWnd, "ApplicationFrameWindow", null)) != IntPtr.Zero)
+                {
+                    StringBuilder windowTitle = new StringBuilder(256);
+                    GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
+                    Debug.WriteLine(windowTitle);
+                    if (windowTitle.ToString().Contains("Settings", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Get the automation element directly from the window handle
+                        settingsWindow = uiAutomation.ElementFromHandle(hWnd);
+                        break;
+                    }
+                }
+
+                if (settingsWindow != null)
+                {
+                    break;
+                }
+            }
+
+            if (settingsWindow == null)
+            {
+                LogWarning("Could not find Settings window.");
+                return;
+            }
+
+            Debug.WriteLine("Found Settings window via FindWindowEx");
+
+            // Wait a moment for the UI to fully load
+            System.Threading.Thread.Sleep(500);
+
+            // Find and click the "Text Size" navigation item
+            var textSizeNavItem = FindTextSizeNavigationItem(uiAutomation, settingsWindow);
+            if (textSizeNavItem != null)
+            {
+                Debug.WriteLine("Found Text Size navigation item, clicking...");
+                ClickElement(textSizeNavItem);
+                System.Threading.Thread.Sleep(500); // Wait for page to load
+            }
+            else
+            {
+                Debug.WriteLine("Text Size navigation item not found, may already be on the page");
+            }
+
+            // Find the text size slider
+            var sliderCondition = uiAutomation.CreatePropertyCondition(
+                UIA_AutomationIdPropertyId,
+                "SystemSettings_EaseOfAccess_Experience_TextScalingDesktop_Slider");
+
+            UIAutomationClient.IUIAutomationElement slider = null;
+            for (int i = 0; i < maxRetries; i++)
+            {
+                slider = settingsWindow.FindFirst(
+                    UIAutomationClient.TreeScope.TreeScope_Descendants,
+                    sliderCondition);
+
+                if (slider != null)
+                {
+                    break;
+                }
+
+                System.Threading.Thread.Sleep(retryDelayMs);
+            }
+
+            if (slider == null)
+            {
+                LogWarning("Could not find text size slider.");
+                return;
+            }
+
+            Debug.WriteLine("Found text size slider");
+
+            // Set the slider value using RangeValue pattern
+            var rangeValuePattern = (UIAutomationClient.IUIAutomationRangeValuePattern)slider.GetCurrentPattern(
+                UIA_RangeValuePatternId);
+
+            if (rangeValuePattern != null)
+            {
+                Debug.WriteLine($"Setting slider value to {percentage}");
+                rangeValuePattern.SetValue(percentage);
+            }
+            else
+            {
+                LogWarning("Slider does not support RangeValue pattern.");
+                return;
+            }
+
+            // Wait a moment for the value to be applied
+            System.Threading.Thread.Sleep(300);
+
+            // Find and click the Apply button
+            var applyButtonCondition = uiAutomation.CreatePropertyCondition(
+                UIA_AutomationIdPropertyId,
+                "SystemSettings_EaseOfAccess_Experience_TextScalingDesktop_ButtonRemove");
+
+            UIAutomationClient.IUIAutomationElement applyButton = null;
+            for (int i = 0; i < maxRetries; i++)
+            {
+                applyButton = settingsWindow.FindFirst(
+                    UIAutomationClient.TreeScope.TreeScope_Descendants,
+                    applyButtonCondition);
+
+                if (applyButton != null)
+                {
+                    break;
+                }
+
+                System.Threading.Thread.Sleep(retryDelayMs);
+            }
+
+            if (applyButton != null)
+            {
+                Debug.WriteLine("Found Apply button, clicking...");
+                ClickElement(applyButton);
+                Console.WriteLine($"Text size set to {percentage}%");
+            }
+            else
+            {
+                LogWarning("Could not find Apply button. The setting may need to be applied manually.");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+    }
+
+    /// <summary>
+    /// Finds the "Text Size" navigation item in the Settings window.
+    /// </summary>
+    static UIAutomationClient.IUIAutomationElement FindTextSizeNavigationItem(
+        UIAutomationClient.CUIAutomation uiAutomation,
+        UIAutomationClient.IUIAutomationElement settingsWindow)
+    {
+        // UI Automation Property IDs
+        const int UIA_NamePropertyId = 30005;
+        const int UIA_ControlTypePropertyId = 30003;
+        const int UIA_ListItemControlTypeId = 50007;
+
+        try
+        {
+            // Look for elements that contain "Text Size" in their name
+            var nameCondition = uiAutomation.CreatePropertyCondition(
+                UIA_NamePropertyId,
+                "Text size");
+
+            var textSizeElement = settingsWindow.FindFirst(
+                UIAutomationClient.TreeScope.TreeScope_Descendants,
+                nameCondition);
+
+            if (textSizeElement != null)
+            {
+                return textSizeElement;
+            }
+
+            // Alternative: search for ListItem or similar control containing "Text Size"
+            var listItemCondition = uiAutomation.CreatePropertyCondition(
+                UIA_ControlTypePropertyId,
+                UIA_ListItemControlTypeId);
+
+            var listItems = settingsWindow.FindAll(
+                UIAutomationClient.TreeScope.TreeScope_Descendants,
+                listItemCondition);
+
+            for (int i = 0; i < listItems.Length; i++)
+            {
+                var item = listItems.GetElement(i);
+                string name = item.CurrentName;
+                if (name != null && name.Contains("Text size", StringComparison.OrdinalIgnoreCase))
+                {
+                    return item;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error finding Text Size navigation item: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Clicks a UI Automation element using the Invoke pattern or simulated click.
+    /// </summary>
+    static void ClickElement(UIAutomationClient.IUIAutomationElement element)
+    {
+        // UI Automation Pattern IDs
+        const int UIA_InvokePatternId = 10000;
+        const int UIA_SelectionItemPatternId = 10010;
+
+        try
+        {
+            // Try using the Invoke pattern first
+            var invokePattern = (UIAutomationClient.IUIAutomationInvokePattern)element.GetCurrentPattern(
+                UIA_InvokePatternId);
+
+            if (invokePattern != null)
+            {
+                invokePattern.Invoke();
+                return;
+            }
+
+            // Try using the SelectionItem pattern
+            var selectionItemPattern = (UIAutomationClient.IUIAutomationSelectionItemPattern)element.GetCurrentPattern(
+                UIA_SelectionItemPatternId);
+
+            if (selectionItemPattern != null)
+            {
+                selectionItemPattern.Select();
+                return;
+            }
+
+            // Fall back to simulating a click at the element's center
+            var rect = element.CurrentBoundingRectangle;
+            int x = (rect.left + rect.right) / 2;
+            int y = (rect.top + rect.bottom) / 2;
+
+            // Move cursor and click
+            SetCursorPos(x, y);
+            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error clicking element: {ex.Message}");
+        }
+    }
+
+    // Mouse event constants for simulated clicks
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetCursorPos(int X, int Y);
+
+    [DllImport("user32.dll")]
+    private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
+
     static void DisconnectFromWifi()
     {
         IntPtr clientHandle = IntPtr.Zero;
