@@ -1298,9 +1298,8 @@ internal partial class AutoShell
     /// </summary>
     /// <summary>
     /// Sets the system text scaling factor (percentage).
-    /// Valid values are typically 100, 125, 150, 175, 200, 225, 250, 300, 350.
     /// </summary>
-    /// <param name="percentage">The text scaling percentage (100-350).</param>
+    /// <param name="percentage">The text scaling percentage (100-225).</param>
     static void SetTextSize(int percentage)
     {
         try
