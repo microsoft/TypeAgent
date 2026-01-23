@@ -337,6 +337,9 @@ export class ClaudeGrammarGenerator {
     /**
      * Convert the analysis into a full .agr format grammar rule
      * Returns empty string if grammar should not be generated
+     *
+     * Uses the exact action name as the rule name (e.g., @ <scheduleEvent> = ...)
+     * to enable easy targeting when extending grammars for specific actions.
      */
     formatAsGrammarRule(
         testCase: GrammarTestCase,
@@ -347,7 +350,8 @@ export class ClaudeGrammarGenerator {
         }
 
         const actionName = testCase.action.actionName;
-        let grammar = `@ <${this.capitalize(actionName)}> = `;
+        // Use exact action name as rule name for easy targeting
+        let grammar = `@ <${actionName}> = `;
         grammar += analysis.grammarPattern;
         grammar += ` -> {\n`;
         grammar += `    actionName: "${actionName}"`;
@@ -383,9 +387,5 @@ export class ClaudeGrammarGenerator {
         grammar += `\n}`;
 
         return grammar;
-    }
-
-    private capitalize(str: string): string {
-        return str.charAt(0).toUpperCase() + str.slice(1);
     }
 }

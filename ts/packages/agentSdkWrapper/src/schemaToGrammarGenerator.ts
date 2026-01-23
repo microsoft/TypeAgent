@@ -75,6 +75,11 @@ CRITICAL SYNTAX RULES:
      @ <TimeExpr> = $(time:CalendarTime)
    WRONG: $(time:CalendarTime | CalendarTimeRange)
 
+5. Action rule names MUST match the exact action name (not capitalized)
+   CORRECT: @ <scheduleEvent> = ... for action "scheduleEvent"
+   WRONG: @ <ScheduleEvent> = ... for action "scheduleEvent"
+   This enables easy targeting of specific actions when extending grammars incrementally.
+
 EFFICIENCY GUIDELINES:
 1. Identify common patterns across actions and extract them as sub-rules
    Example: If multiple actions use date expressions, create @ <DateExpr> = ('on' | 'for') $(date:CalendarDate)
@@ -90,9 +95,13 @@ EFFICIENCY GUIDELINES:
 5. The Start rule should reference all top-level action rules
 
 GRAMMAR STRUCTURE:
-1. Start with @ <Start> rule listing all actions
-2. Define action rules (one per action)
-3. Define shared sub-rules used by multiple actions
+1. Start with @ <Start> rule listing all actions by their exact action names
+   Example: @ <Start> = <scheduleEvent> | <findEvents> | <addParticipant>
+2. Define action rules using EXACT action names as rule names (not capitalized)
+   Example: @ <scheduleEvent> = ... for action "scheduleEvent"
+   Example: @ <findEvents> = ... for action "findEvents"
+3. Define shared sub-rules used by multiple actions (these can be capitalized)
+   Example: @ <Polite> = ..., @ <DateSpec> = ...
 4. Include common patterns (Cardinal, Ordinal, etc.)
 
 AVAILABLE ENTITY TYPES AND CONVERTERS:
@@ -140,6 +149,8 @@ Your task:
 5. Ensure all actions in the schema are covered
 6. Keep shared sub-rules and don't duplicate patterns
 7. Follow all AGR syntax rules (see above)
+8. IMPORTANT: Use exact action names for action rules (e.g., @ <scheduleEvent> = ..., not @ <ScheduleEvent> = ...)
+   This enables easy targeting of specific actions when extending grammars incrementally
 
 Response format: Return ONLY the complete improved .agr file content, starting with copyright header.`;
 
