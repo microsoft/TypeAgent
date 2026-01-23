@@ -200,9 +200,7 @@ async function main() {
             process.exit(1);
         }
 
-        console.error(
-            `Processing ${rawText.length} characters with Claude...`,
-        );
+        console.error(`Processing ${rawText.length} characters with Claude...`);
 
         // Process thoughts
         const processor = new ThoughtsProcessor(options.model);

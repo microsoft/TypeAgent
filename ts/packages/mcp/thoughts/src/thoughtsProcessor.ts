@@ -101,7 +101,9 @@ export class ThoughtsProcessor {
         }
 
         // Extract markdown from code blocks if present
-        const codeBlockMatch = markdown.match(/```(?:markdown)?\n([\s\S]*?)\n```/);
+        const codeBlockMatch = markdown.match(
+            /```(?:markdown)?\n([\s\S]*?)\n```/,
+        );
         if (codeBlockMatch) {
             markdown = codeBlockMatch[1];
         }
