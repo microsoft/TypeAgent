@@ -72,7 +72,7 @@ namespace autoShell
 
         // import FindWindowEx
         [DllImport("user32.dll")]
-        static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
+        internal static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
@@ -226,7 +226,7 @@ namespace autoShell
             int SetFocus();
             int SwitchTo();
             int TryInvokeBack(IntPtr /* IAsyncCallback* */ callback);
-            int GetThumbnailWindow(out IntPtr hwnd);
+            int humbnailWindow(out IntPtr hwnd);
             int GetMonitor(out IntPtr /* IImmersiveMonitor */ immersiveMonitor);
             int GetVisibility(out int visibility);
             int SetCloak(APPLICATION_VIEW_CLOAK_TYPE cloakType, int unknown);
@@ -333,7 +333,7 @@ namespace autoShell
         static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+        internal static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
