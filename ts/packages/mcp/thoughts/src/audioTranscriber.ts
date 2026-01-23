@@ -113,51 +113,91 @@ export async function transcribeWavFile(
     );
 
     return new Promise((resolve, reject) => {
-        recognizer.recognizeOnceAsync(
-            (result: speechSDK.SpeechRecognitionResult) => {
-                recognizer.close();
+        const recognizedTexts: string[] = [];
+        let totalDuration = 0;
+        let hasError = false;
 
-                switch (result.reason) {
-                    case speechSDK.ResultReason.RecognizedSpeech:
-                        resolve({
-                            text: result.text.trim(),
-                            metadata: {
-                                fileSize,
-                                duration: result.duration / 10000000, // Convert from 100ns units to seconds
-                            },
-                        });
-                        break;
-                    case speechSDK.ResultReason.NoMatch:
-                        reject(
-                            new Error(
-                                "Speech could not be recognized from the audio file",
-                            ),
-                        );
-                        break;
-                    case speechSDK.ResultReason.Canceled:
-                        const cancellation =
-                            speechSDK.CancellationDetails.fromResult(result);
-                        if (
-                            cancellation.reason ===
-                            speechSDK.CancellationReason.Error
-                        ) {
-                            reject(
-                                new Error(
-                                    `Recognition error: ${cancellation.errorDetails}`,
-                                ),
-                            );
+        // Collect recognized text segments
+        recognizer.recognized = (_s, e) => {
+            if (e.result.reason === speechSDK.ResultReason.RecognizedSpeech) {
+                if (e.result.text) {
+                    recognizedTexts.push(e.result.text);
+                    totalDuration = Math.max(
+                        totalDuration,
+                        e.result.duration / 10000000,
+                    );
+                }
+            }
+        };
+
+        // Handle errors
+        recognizer.canceled = (_s, e) => {
+            hasError = true;
+            recognizer.stopContinuousRecognitionAsync(
+                () => {
+                    recognizer.close();
+                    if (e.reason === speechSDK.CancellationReason.Error) {
+                        reject(new Error(`Recognition error: ${e.errorDetails}`));
+                    } else {
+                        // If cancelled but we have text, that's ok (end of file)
+                        if (recognizedTexts.length > 0) {
+                            resolve({
+                                text: recognizedTexts.join(" ").trim(),
+                                metadata: {
+                                    fileSize,
+                                    duration: totalDuration,
+                                },
+                            });
                         } else {
                             reject(new Error("Recognition cancelled"));
                         }
-                        break;
-                    default:
-                        reject(new Error(`Unknown reason: ${result.reason}`));
-                        break;
-                }
+                    }
+                },
+                (err) => {
+                    recognizer.close();
+                    reject(new Error(`Failed to stop recognition: ${err}`));
+                },
+            );
+        };
+
+        // Handle session stopped (end of audio file)
+        recognizer.sessionStopped = (_s, _e) => {
+            if (!hasError) {
+                recognizer.stopContinuousRecognitionAsync(
+                    () => {
+                        recognizer.close();
+                        if (recognizedTexts.length === 0) {
+                            reject(
+                                new Error(
+                                    "Speech could not be recognized from the audio file",
+                                ),
+                            );
+                        } else {
+                            resolve({
+                                text: recognizedTexts.join(" ").trim(),
+                                metadata: {
+                                    fileSize,
+                                    duration: totalDuration,
+                                },
+                            });
+                        }
+                    },
+                    (err) => {
+                        recognizer.close();
+                        reject(new Error(`Failed to stop recognition: ${err}`));
+                    },
+                );
+            }
+        };
+
+        // Start continuous recognition
+        recognizer.startContinuousRecognitionAsync(
+            () => {
+                // Recognition started successfully
             },
-            (err: string) => {
+            (err) => {
                 recognizer.close();
-                reject(new Error(`Recognition failed: ${err}`));
+                reject(new Error(`Failed to start recognition: ${err}`));
             },
         );
     });
