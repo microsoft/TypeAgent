@@ -3,6 +3,7 @@
 // Licensed under the MIT License.
 
 import { ThoughtsProcessor } from "./thoughtsProcessor.js";
+import { transcribeWavFile } from "./audioTranscriber.js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -55,12 +56,12 @@ function parseArgs(): CliOptions {
 
 function printHelp() {
     console.log(`
-thoughts - Convert raw text into well-formatted markdown
+thoughts - Convert raw text or audio into well-formatted markdown
 
 Usage: thoughts [options] [input-file]
 
 Options:
-  -i, --input <file>         Input file (or "-" for stdin, default: stdin)
+  -i, --input <file>         Input file (text or .wav, or "-" for stdin, default: stdin)
   -o, --output <file>        Output file (or "-" for stdout, default: stdout)
   --instructions <text>      Additional formatting instructions
                              Examples: "Create a technical document"
@@ -70,12 +71,18 @@ Options:
                              Default: claude-sonnet-4-20250514
   -h, --help                 Show this help message
 
+Environment Variables:
+  OPENAI_API_KEY             OpenAI API key for audio transcription
+
 Examples:
   # Read from stdin, write to stdout
   echo "my raw thoughts here" | thoughts
 
-  # Read from file, write to stdout
+  # Read from text file, write to stdout
   thoughts notes.txt
+
+  # Transcribe audio file and convert to markdown
+  thoughts recording.wav -o output.md
 
   # Read from file, write to output file
   thoughts -i notes.txt -o output.md
@@ -103,8 +110,20 @@ async function readInput(inputPath?: string): Promise<string> {
             process.stdin.on("error", reject);
         });
     } else {
-        // Read from file
-        return fs.readFileSync(inputPath, "utf8");
+        // Check if this is a WAV file
+        if (inputPath.toLowerCase().endsWith(".wav")) {
+            console.error("Transcribing audio file...");
+            const result = await transcribeWavFile({
+                wavFilePath: inputPath,
+            });
+            console.error(
+                `✓ Transcribed ${result.metadata?.fileSize} bytes of audio`,
+            );
+            return result.text;
+        } else {
+            // Read text file
+            return fs.readFileSync(inputPath, "utf8");
+        }
     }
 }
 

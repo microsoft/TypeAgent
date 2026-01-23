@@ -1,12 +1,13 @@
 # Thoughts MCP Server
 
-Convert raw text, stream-of-consciousness, and unstructured notes into well-formatted markdown documents using Claude.
+Convert raw text, stream-of-consciousness, and unstructured notes into well-formatted markdown documents using Claude. Also supports audio transcription from WAV files.
 
 ## Features
 
 - **MCP Server**: Expose thoughts processing as MCP tools
 - **CLI Utility**: Use directly from command line
-- **Flexible Input**: Read from files or stdin
+- **Audio Transcription**: Automatically transcribe WAV files using OpenAI's Whisper
+- **Flexible Input**: Read from text files, audio files, or stdin
 - **Custom Instructions**: Guide the formatting with additional instructions
 - **Markdown Output**: Clean, well-organized markdown with proper structure
 
@@ -14,6 +15,13 @@ Convert raw text, stream-of-consciousness, and unstructured notes into well-form
 
 ```bash
 npm install @typeagent/thoughts
+```
+
+## Environment Variables
+
+For audio transcription support, set:
+```bash
+export OPENAI_API_KEY="your-api-key-here"
 ```
 
 ## Usage
@@ -24,14 +32,20 @@ npm install @typeagent/thoughts
 # Read from stdin, write to stdout
 echo "my raw thoughts here" | thoughts
 
-# Read from file
+# Read from text file
 thoughts notes.txt
+
+# Transcribe audio file and convert to markdown
+thoughts recording.wav -o output.md
 
 # Write to output file
 thoughts -i notes.txt -o output.md
 
 # With custom instructions
 thoughts notes.txt -o output.md --instructions "Format as a technical document"
+
+# Transcribe audio with custom formatting
+thoughts voice_memo.wav -o notes.md --instructions "Format as meeting notes with action items"
 
 # Using pipe
 cat stream_of_consciousness.txt | thoughts > organized.md
@@ -40,12 +54,14 @@ cat stream_of_consciousness.txt | thoughts > organized.md
 ### CLI Options
 
 ```
--i, --input <file>         Input file (or "-" for stdin, default: stdin)
+-i, --input <file>         Input file - text or .wav (or "-" for stdin, default: stdin)
 -o, --output <file>        Output file (or "-" for stdout, default: stdout)
 --instructions <text>      Additional formatting instructions
 -m, --model <model>        Claude model to use (default: claude-sonnet-4-20250514)
 -h, --help                 Show help message
 ```
+
+**Note**: WAV files are automatically detected by the `.wav` extension and transcribed using OpenAI's Whisper API before being processed by Claude.
 
 ### As MCP Server
 
@@ -110,7 +126,19 @@ Save markdown to a file:
 thoughts raw_ideas.txt -o blog_post.md --instructions "Format as a blog post with engaging introduction"
 ```
 
-### Meeting Notes
+### Voice Memo to Meeting Notes
+
+```bash
+thoughts meeting_recording.wav -o notes.md --instructions "Format as meeting notes with action items"
+```
+
+### Audio Brainstorm to Technical Documentation
+
+```bash
+thoughts voice_ideas.wav -o docs.md --instructions "Format as technical documentation with clear sections"
+```
+
+### Meeting Notes from Text
 
 ```bash
 thoughts meeting_transcript.txt -o notes.md --instructions "Format as meeting notes with action items"
