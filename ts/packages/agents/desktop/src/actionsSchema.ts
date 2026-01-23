@@ -200,12 +200,12 @@ export type DebugAutoShellAction = {
     parameters: {};
 };
 
-// Changes the text size that appears throughout Windows and your apps 
+// Changes the text size that appears throughout Windows and your apps
 export type SetTextSizeAction = {
     actionName: "setTextSize";
     parameters: {
         // small changes are 5% increments, large changes are 25% increments
-        size: number // size in percentage (100% is default) (range is 100 - 225)
+        size: number; // size in percentage (100% is default) (range is 100 - 225)
     };
 };
 
