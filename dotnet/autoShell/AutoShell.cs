@@ -1307,7 +1307,7 @@ internal partial class AutoShell
         {
             if (percentage == -1)
             {
-                percentage = new Random().Next(100, 351);
+                percentage = new Random().Next(100, 225 + 1);
             }
 
             // Clamp the percentage to valid range
@@ -1315,9 +1315,9 @@ internal partial class AutoShell
             {
                 percentage = 100;
             }
-            else if (percentage > 350)
+            else if (percentage > 225)
             {
-                percentage = 350;
+                percentage = 225;
             }
 
             // Open the Settings app to the ease of access page

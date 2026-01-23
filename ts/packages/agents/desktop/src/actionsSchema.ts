@@ -23,7 +23,8 @@ export type DesktopActions =
     | NextDesktopAction
     | PreviousDesktopAction
     | ToggleNotificationsAction
-    | DebugAutoShellAction;
+    | DebugAutoShellAction
+    | SetTextSizeAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
@@ -193,9 +194,19 @@ export type ToggleNotificationsAction = {
     };
 };
 
+// Attaches the debugger to the AutoShell process
 export type DebugAutoShellAction = {
     actionName: "debug";
     parameters: {};
+};
+
+// Changes the text size that appears throughout Windows and your apps 
+export type SetTextSizeAction = {
+    actionName: "setTextSize";
+    parameters: {
+        // small changes are 5% increments, large changes are 25% increments
+        size: number // size in percentage (100% is default) (range is 100 - 225)
+    };
 };
 
 export type KnownPrograms =

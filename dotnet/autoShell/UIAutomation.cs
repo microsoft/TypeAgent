@@ -42,8 +42,6 @@ internal sealed class UIAutomation
             // Wait for Settings window to appear and get it via FindWindow
             for (int i = 0; i < maxRetries; i++)
             {
-                System.Threading.Thread.Sleep(retryDelayMs);
-
                 // Find the Settings window by enumerating top-level windows with "Settings" in the title
                 // UWP apps use ApplicationFrameWindow class
                 IntPtr hWnd = IntPtr.Zero;
@@ -65,6 +63,8 @@ internal sealed class UIAutomation
                 {
                     break;
                 }
+
+                System.Threading.Thread.Sleep(retryDelayMs);
             }
 
             if (settingsWindow == null)
@@ -136,6 +136,28 @@ internal sealed class UIAutomation
 
             // Wait a moment for the value to be applied
             System.Threading.Thread.Sleep(300);
+
+            // Focus the slider and simulate a keyboard event to trigger the Apply button to become enabled
+            // The Apply button only enables when it detects actual user input on the slider
+            try
+            {
+                slider.SetFocus();
+                System.Threading.Thread.Sleep(100);
+
+                // Send a neutral key event (press and release a key that doesn't change the value)
+                // Using VK_DELETE followed by setting the value again ensures the UI registers the change
+                keybd_event(VK_DELETE, 0, 0, IntPtr.Zero);
+                keybd_event(VK_DELETE, 0, KEYEVENTF_KEYUP, IntPtr.Zero);
+                System.Threading.Thread.Sleep(100);
+
+                // Reset to the desired value in case the key changed it
+                rangeValuePattern.SetValue(percentage);
+                System.Threading.Thread.Sleep(200);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error simulating input on slider: {ex.Message}");
+            }
 
             // Find and click the Apply button
             var applyButtonCondition = uiAutomation.CreatePropertyCondition(
@@ -280,10 +302,17 @@ internal sealed class UIAutomation
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     private const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
+    // Keyboard event constants
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const byte VK_DELETE = 0x2E;
+
     [DllImport("user32.dll")]
     private static extern bool SetCursorPos(int X, int Y);
 
     [DllImport("user32.dll")]
     private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
 
 }
