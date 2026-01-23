@@ -2,6 +2,14 @@
   "name": "@typeagent/thoughts",
   "version": "0.1.0",
   "description": "CLI to convert raw text and stream-of-consciousness into markdown documents using Claude",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/mcp/thoughts"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
   "type": "module",
   "main": "./dist/thoughtsProcessor.js",
   "types": "./dist/thoughtsProcessor.d.ts",
@@ -14,8 +22,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "watch": "tsc --watch",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "watch": "tsc --watch"
   },
   "keywords": [
     "mcp",
@@ -25,8 +33,6 @@
     "thoughts",
     "claude"
   ],
-  "author": "Microsoft Corporation",
-  "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@anthropic-ai/sdk": "^0.35.0",
