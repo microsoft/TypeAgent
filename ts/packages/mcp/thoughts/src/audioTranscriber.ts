@@ -3,6 +3,10 @@
 
 import * as fs from "fs";
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
+import {
+    AzureTokenScopes,
+    createAzureTokenProvider,
+} from "aiclient";
 
 export interface TranscribeOptions {
     // Path to the WAV file to transcribe
@@ -56,6 +60,7 @@ export async function transcribeWavFile(
         azureSpeechRegion ||
         process.env.AZURE_SPEECH_REGION ||
         process.env.SPEECH_SDK_REGION;
+    const speechEndpoint = process.env.SPEECH_SDK_ENDPOINT || "";
 
     if (!speechKey || !speechRegion) {
         throw new Error(
@@ -64,10 +69,36 @@ export async function transcribeWavFile(
     }
 
     // Create speech config
-    const speechConfig = speechSDK.SpeechConfig.fromSubscription(
-        speechKey,
-        speechRegion,
-    );
+    let speechConfig: speechSDK.SpeechConfig;
+
+    // Handle special case where key is "identity" (managed identity)
+    if (speechKey.toLowerCase() === "identity") {
+        // For managed identity, we need to get a token
+        const tokenProvider = createAzureTokenProvider(
+            AzureTokenScopes.CogServices,
+        );
+        const tokenResult = await tokenProvider.getAccessToken();
+
+        if (!tokenResult.success) {
+            throw new Error(
+                `Failed to get Azure token for managed identity: ${tokenResult.message}`,
+            );
+        }
+
+        // Create speech config with authorization token
+        // Format: aad#endpoint#token
+        speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(
+            `aad#${speechEndpoint}#${tokenResult.data}`,
+            speechRegion,
+        );
+    } else {
+        // Regular subscription key
+        speechConfig = speechSDK.SpeechConfig.fromSubscription(
+            speechKey,
+            speechRegion,
+        );
+    }
+
     speechConfig.speechRecognitionLanguage = language;
 
     // Create audio config from file

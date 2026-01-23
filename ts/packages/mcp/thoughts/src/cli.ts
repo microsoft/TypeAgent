@@ -2,10 +2,32 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { config } from "dotenv";
+import * as path from "path";
+import { fileURLToPath } from "url";
+import * as fs from "fs";
 import { ThoughtsProcessor } from "./thoughtsProcessor.js";
 import { transcribeWavFile } from "./audioTranscriber.js";
-import * as fs from "fs";
-import * as path from "path";
+
+// Load .env file from the TypeAgent repository root (ts directory)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// From dist/ go up to: thoughts/ -> mcp/ -> packages/ -> ts/
+const repoRoot = path.resolve(__dirname, "../../../..");
+const envPath = path.join(repoRoot, ".env");
+
+// Check if .env file exists
+if (!fs.existsSync(envPath)) {
+    console.error(`Warning: .env file not found at ${envPath}`);
+    console.error(
+        "Azure Speech credentials will need to be set via environment variables.",
+    );
+} else {
+    const result = config({ path: envPath });
+    if (result.error) {
+        console.error(`Warning: Error loading .env file: ${result.error}`);
+    }
+}
 
 interface CliOptions {
     input?: string; // Input file path or "-" for stdin

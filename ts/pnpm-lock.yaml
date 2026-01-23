@@ -3517,6 +3517,12 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.35.0
         version: 0.35.0(encoding@0.1.13)
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.5.0
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.40.0
         version: 1.43.1
