@@ -21,7 +21,7 @@ internal sealed class UIAutomation
     /// <summary>
     /// Uses UI Automation to navigate the Settings app and set the text size.
     /// </summary>
-    /// <param name="percentage">The text scaling percentage (100-350).</param>
+    /// <param name="percentage">The text scaling percentage (100-225).</param>
     internal static void SetTextSizeViaUIAutomation(int percentage)
     {
         // UI Automation Property IDs (from UIAutomationClient.h)
