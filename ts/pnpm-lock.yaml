@@ -1050,7 +1050,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.12
-        version: 0.2.12
+        version: 0.2.12(zod@4.1.13)
       '@anthropic-ai/sdk':
         specifier: ^0.35.0
         version: 0.35.0(encoding@0.1.13)
@@ -3508,6 +3508,22 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.99.8)
+
+  packages/mcp/thoughts:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.1.13)
+      '@anthropic-ai/sdk':
+        specifier: ^0.35.0
+        version: 0.35.0(encoding@0.1.13)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.11.19
+        version: 20.19.25
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
 
   packages/memory/conversation:
     dependencies:
@@ -13023,6 +13039,11 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   typical@4.0.0:
     resolution: {integrity: sha512-VAH4IvQ7BDFYglMd7BPRDfLgxZZX4O4TFcRDA6EN5X7erNJJq+McIEp8np9aVtxrCJ6qx4GTYVfOWNjcqwZgRw==}
     engines: {node: '>=8'}
@@ -13716,7 +13737,9 @@ snapshots:
 
   '@antfu/utils@8.1.1': {}
 
-  '@anthropic-ai/claude-agent-sdk@0.2.12':
+  '@anthropic-ai/claude-agent-sdk@0.2.12(zod@4.1.13)':
+    dependencies:
+      zod: 4.1.13
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5
@@ -25386,6 +25409,8 @@ snapshots:
       underscore: 1.13.6
 
   typescript@5.4.5: {}
+
+  typescript@5.9.3: {}
 
   typical@4.0.0: {}
 
