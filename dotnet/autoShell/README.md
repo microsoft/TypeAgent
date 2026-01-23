@@ -55,6 +55,7 @@ Run the application and send JSON commands via stdin:
 | `quit` | (none) | Exits the application |
 | `restoreVolume` | (none) | Restores previously saved volume level |
 | `setAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
+| `setTextSize` | `100-225` | Sets system text scaling percentage |
 | `setWallpaper` | File path | Sets the desktop wallpaper |
 | `switchDesktop` | Index or name | Switches to a virtual desktop by index or name |
 | `switchTo` | Application name | Brings application window to foreground |
@@ -117,6 +118,11 @@ Disable airplane mode:
 Connect to a Wi-Fi network:
 ```json
 {"connectWifi": {"ssid": "MyNetwork", "password": "MyPassword123"}}
+```
+
+Set system text size to 125%:
+```json
+{"setTextSize": 125}
 ```
 
 ### Supported Application Friendly Names
