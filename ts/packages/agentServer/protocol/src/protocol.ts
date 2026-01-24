@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 export type AgentServerInvokeFunctions = {
-    join: () => Promise<void>;
+    join: () => Promise<string>;
 };
 
 export const enum ChannelName {

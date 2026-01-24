@@ -67,10 +67,14 @@ export type DispatcherStatus = {
     details: string;
 };
 
+export type ConnectionId = string;
+
 /**
  * A dispatcher instance
  */
 export interface Dispatcher {
+    readonly connectionId: ConnectionId | undefined;
+
     /**
      * Process a single user request.
      *

@@ -1146,25 +1146,10 @@ importers:
 
   packages/agentServer/protocol:
     dependencies:
-      '@typeagent/agent-rpc':
-        specifier: workspace:*
-        version: link:../../agentRpc
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
-      debug:
-        specifier: ^4.4.0
-        version: 4.4.3(supports-color@8.1.1)
-      isomorphic-ws:
-        specifier: ^5.0.0
-        version: 5.0.0(ws@8.18.2)
     devDependencies:
-      '@types/debug':
-        specifier: ^4.1.12
-        version: 4.1.12
-      '@types/ws':
-        specifier: ^8.5.10
-        version: 8.18.1
       prettier:
         specifier: ^3.5.3
         version: 3.5.3

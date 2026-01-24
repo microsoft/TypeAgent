@@ -45,11 +45,12 @@ export async function connectDispatcher(
         ws.onopen = () => {
             debug("WebSocket connection established", ws.readyState);
             rpc.invoke("join")
-                .then(() => {
+                .then((connectionId) => {
                     debug("Connected to dispatcher");
                     resolved = true;
                     const dispatcher = createDispatcherRpcClient(
                         channel.createChannel(ChannelName.Dispatcher),
+                        connectionId,
                     );
                     // Override the close method to close the WebSocket connection
                     dispatcher.close = async () => {

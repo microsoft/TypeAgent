@@ -6,7 +6,7 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import { Dispatcher } from "@typeagent/dispatcher-types";
+import { ConnectionId, Dispatcher } from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import {
@@ -113,19 +113,15 @@ async function checkCache(
     return await processCommand(request, context);
 }
 
-/**
- * Create a instance of the dispatcher.
- *
- * @param hostName A name use to identify the application that hosts the dispatcher for logging purposes.
- * @param options A set of options to initialize the dispatcher.  See `DispatcherOptions` for more details.
- * @returns a new dispatcher instance.
- */
-export async function createDispatcher(
-    hostName: string,
-    options?: DispatcherOptions,
-): Promise<Dispatcher> {
-    const context = await initializeCommandHandlerContext(hostName, options);
-    return {
+export function createDispatcherFromContext(
+    context: CommandHandlerContext,
+    connectionId?: ConnectionId,
+    closeFn?: () => Promise<void>,
+): Dispatcher {
+    const dispatcher: Dispatcher = {
+        get connectionId() {
+            return connectionId;
+        },
         processCommand(command, requestId, attachments) {
             return processCommand(command, context, requestId, attachments);
         },
@@ -162,10 +158,37 @@ export async function createDispatcher(
             );
         },
         async close() {
-            await closeCommandHandlerContext(context);
+            await closeFn?.();
+            const descriptors = Object.getOwnPropertyDescriptors(this);
+            for (const [name] of Object.entries(descriptors)) {
+                // TODO: Note this doesn't prevent the function continue to be call if is saved.
+                Object.defineProperty(this, name, {
+                    get: () => {
+                        throw new Error("Dispatcher is closed.");
+                    },
+                });
+            }
         },
         async getStatus() {
             return getDispatcherStatus(context);
         },
     };
+    return dispatcher;
+}
+
+/**
+ * Create a instance of the dispatcher.
+ *
+ * @param hostName A name use to identify the application that hosts the dispatcher for logging purposes.
+ * @param options A set of options to initialize the dispatcher.  See `DispatcherOptions` for more details.
+ * @returns a new dispatcher instance.
+ */
+export async function createDispatcher(
+    hostName: string,
+    options?: DispatcherOptions,
+): Promise<Dispatcher> {
+    const context = await initializeCommandHandlerContext(hostName, options);
+    return createDispatcherFromContext(context, undefined, async () =>
+        closeCommandHandlerContext(context),
+    );
 }
