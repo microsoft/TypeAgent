@@ -1,0 +1,5 @@
+thinking about the new grammar generator, it's really cool how we can use Claude to generate grammars from schemas
+the key insight is using exact action names like scheduleEvent instead of ScheduleEvent so we can target specific actions when extending
+also important that we use agr text files not JSON because they're way more compact and readable for Claude
+next step is to think about incremental updates - when a new example comes in for scheduleEvent we just extend that one rule
+we'll need to pass the existing grammar plus the new example plus info about shared symbols like <Polite>

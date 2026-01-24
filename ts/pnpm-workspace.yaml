@@ -6,6 +6,7 @@ packages:
   - packages/agentServer/*
   - packages/dispatcher/*
   - packages/utils/*
+  - packages/mcp/*
   - examples/*
   - examples/agentExamples/*
   - tools
