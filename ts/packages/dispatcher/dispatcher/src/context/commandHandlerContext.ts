@@ -197,7 +197,7 @@ async function getAgentCache(
  * - metrics: whether to enable collection of timing metrics. Default is false.
  * - collectCommandResult: whether to collect command result in the return for `processCommand`. Default is false.
  * - dblogging: whether to enable database logging. If not specified, no logging is done.
- * - clientId: An optional client ID to use for logging identification.
+ * - traceId: An optional trace ID to use for logging identification.
  */
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
@@ -225,7 +225,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     metrics?: boolean; // default to false
     collectCommandResult?: boolean; // default to false
     dblogging?: boolean; // default to false
-    clientId?: string; // optional additional for logging identification
+    traceId?: string; // optional additional for logging identification
 
     // Additional integration options
     agentInstaller?: AppAgentInstaller;
@@ -448,7 +448,7 @@ export async function initializeCommandHandlerContext(
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
-            clientId: options?.clientId,
+            traceId: options?.traceId,
             sessionId: () =>
                 context.session.sessionDirPath
                     ? getSessionName(context.session.sessionDirPath)

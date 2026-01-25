@@ -4,7 +4,7 @@
 import { createWebSocketChannelServer } from "websocket-channel-server";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { createSharedDispatcher } from "./sharedDispatcher.js";
-import { getInstanceDir, getClientId } from "agent-dispatcher/helpers/data";
+import { getInstanceDir, getTraceId } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getIndexingServiceRegistry,
@@ -32,7 +32,7 @@ async function main() {
         storageProvider: getFsStorageProvider(),
         metrics: true,
         dblogging: false,
-        clientId: getClientId(),
+        traceId: getTraceId(),
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
         constructionProvider: getDefaultConstructionProvider(),
         conversationMemorySettings: {
@@ -55,7 +55,10 @@ async function main() {
                     const clientIORpcClient =
                         createClientIORpcClient(clientIOChannel);
 
-                    const dispatcher = sharedDispatcher.join(clientIORpcClient, closeFn);
+                    const dispatcher = sharedDispatcher.join(
+                        clientIORpcClient,
+                        closeFn,
+                    );
                     channelProvider.on("disconnect", () => {
                         dispatcher.close();
                     });

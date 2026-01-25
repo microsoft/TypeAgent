@@ -10,7 +10,7 @@ import {
 import { getChatModelNames } from "aiclient";
 import { getAllActionConfigProvider } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
-import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 
 const modelNames = await getChatModelNames();
@@ -120,7 +120,7 @@ export default class TranslateCommand extends Command {
                 dblogging: true,
                 indexingServiceRegistry:
                     await getIndexingServiceRegistry(instanceDir),
-                clientId: getClientId(),
+                traceId: getTraceId(),
             });
             try {
                 await dispatcher.processCommand(

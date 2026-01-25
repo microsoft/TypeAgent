@@ -19,7 +19,7 @@ import {
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
-import { getClientId } from "agent-dispatcher/helpers/data";
+import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { ClientIO, createDispatcher, Dispatcher } from "agent-dispatcher";
@@ -134,7 +134,7 @@ async function initializeDispatcher(
             storageProvider: getFsStorageProvider(),
             metrics: true,
             dblogging: true,
-            clientId: getClientId(),
+            traceId: getTraceId(),
             clientIO,
             indexingServiceRegistry:
                 await getIndexingServiceRegistry(instanceDir),

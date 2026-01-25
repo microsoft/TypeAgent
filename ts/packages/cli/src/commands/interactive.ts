@@ -7,7 +7,7 @@ import {
     getCacheFactory,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -93,7 +93,7 @@ export default class Interactive extends Command {
                 dblogging: true,
                 indexingServiceRegistry:
                     await getIndexingServiceRegistry(persistDir),
-                clientId: getClientId(),
+                traceId: getTraceId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });
 

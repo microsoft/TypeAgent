@@ -26,18 +26,19 @@ export async function createSharedDispatcher(
             "SharedDispatcher manages ClientIO internally; do not provide one in options",
         );
     }
-    let nextCurrentId = 0;
+    let nextConnectionId = 0;
     const clients = new Map<string, ClientIO>();
     const broadcast = (
         name: string,
         fn: (clientIO: ClientIO, connectionId: ConnectionId) => void,
     ) =>
-        clients.forEach((client, clientId) => {
+        clients.forEach((client, connectionId) => {
             try {
-                fn(client, clientId);
+                fn(client, connectionId);
             } catch (error) {
+                // Ignore errors in server mode.
                 debugClientIOError(
-                    `ClientIO error on ${name} for client ${clientId}: ${error}`,
+                    `ClientIO error on ${name} for client ${connectionId}: ${error}`,
                 );
             }
         });
@@ -102,21 +103,21 @@ export async function createSharedDispatcher(
     });
     return {
         join(clientIO: ClientIO, closeFn?: () => void): Dispatcher {
-            const clientId = (nextCurrentId++).toString();
-            clients.set(clientId, clientIO);
+            const connectionId = (nextConnectionId++).toString();
+            clients.set(connectionId, clientIO);
             const dispatcher = createDispatcherFromContext(
                 context,
-                clientId,
+                connectionId,
                 async () => {
-                    clients.delete(clientId);
+                    clients.delete(connectionId);
                     closeFn?.();
                     debugConnect(
-                        `Client disconnected: ${clientId} (total clients: ${clients.size})`,
+                        `Client disconnected: ${connectionId} (total clients: ${clients.size})`,
                     );
                 },
             );
             debugConnect(
-                `Client connected: ${clientId} (total clients: ${clients.size})`,
+                `Client connected: ${connectionId} (total clients: ${clients.size})`,
             );
             return dispatcher;
         },
