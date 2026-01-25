@@ -3,10 +3,7 @@
 
 import * as fs from "fs";
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
-import {
-    AzureTokenScopes,
-    createAzureTokenProvider,
-} from "aiclient";
+import { AzureTokenScopes, createAzureTokenProvider } from "aiclient";
 
 export interface TranscribeOptions {
     // Path to the WAV file to transcribe
@@ -137,7 +134,9 @@ export async function transcribeWavFile(
                 () => {
                     recognizer.close();
                     if (e.reason === speechSDK.CancellationReason.Error) {
-                        reject(new Error(`Recognition error: ${e.errorDetails}`));
+                        reject(
+                            new Error(`Recognition error: ${e.errorDetails}`),
+                        );
                     } else {
                         // If cancelled but we have text, that's ok (end of file)
                         if (recognizedTexts.length > 0) {

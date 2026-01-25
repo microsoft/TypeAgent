@@ -1,0 +1,8 @@
+# Audio files (test recordings)
+*.wav
+*.m4a
+*.mp3
+
+# Test output files
+Grammars*.md
+test-*.md
