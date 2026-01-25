@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Module declaration - symbols in this module will be namespaced as Global.*
-// module Global
+// This grammar defines common number patterns (Ordinal and Cardinal)
+// These are defined inline and don't require entity declarations
 
 // Ordinal numbers
 @ <Ordinal> =

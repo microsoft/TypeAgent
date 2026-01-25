@@ -1,11 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Module declaration - symbols in this module will be namespaced as Calendar.*
-// module Calendar
-
-// Import symbols from other modules
-// import { Ordinal, Cardinal } from Global
+// Entity declarations - these entities must be registered at runtime
+entity CalendarDate, Ordinal;
 
 // CalendarDate - matches date-like strings
 // Note: The actual matching/conversion logic is in the TypeScript converter
