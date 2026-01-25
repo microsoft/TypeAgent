@@ -284,6 +284,11 @@ export async function runDesktopActions(
             confirmationMessage = `Debug action executed`;
             break;
         }
+        case "setTextSize": {
+            actionData = action.parameters.size.toString();
+            confirmationMessage = `Set text size to ${action.parameters.size}%`;
+            break;
+        }
         default:
             throw new Error(`Unknown action: ${actionName}`);
     }
