@@ -159,18 +159,25 @@ function tryTransition(
                     }
                 } else {
                     // Check if symbol type is registered
-                    const matcher = globalSymbolRegistry.getMatcher(trans.typeName);
+                    const matcher = globalSymbolRegistry.getMatcher(
+                        trans.typeName,
+                    );
                     if (matcher) {
                         // Use the symbol's matcher
                         if (!matcher.match(token)) {
                             return undefined;
                         }
                         // Try to convert if converter is available
-                        const converter = globalSymbolRegistry.getConverter(trans.typeName);
+                        const converter = globalSymbolRegistry.getConverter(
+                            trans.typeName,
+                        );
                         if (converter && trans.variable) {
                             const converted = converter.convert(token);
                             if (converted !== undefined) {
-                                newCaptures.set(trans.variable, converted as string | number);
+                                newCaptures.set(
+                                    trans.variable,
+                                    converted as string | number,
+                                );
                             } else {
                                 // Conversion failed
                                 return undefined;
@@ -296,7 +303,10 @@ function formatTransition(trans: NFATransition): string {
 /**
  * Print match result for debugging
  */
-export function printMatchResult(result: NFAMatchResult, tokens: string[]): string {
+export function printMatchResult(
+    result: NFAMatchResult,
+    tokens: string[],
+): string {
     const lines: string[] = [];
 
     lines.push(`Match result: ${result.matched ? "SUCCESS" : "FAILED"}`);

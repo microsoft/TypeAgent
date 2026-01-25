@@ -49,11 +49,11 @@ registerBuiltInSymbols();
 
 // Start with base grammar
 const baseGrammar: Grammar = {
-    rules: [
-        {
-            parts: [{ type: "string", value: ["pause"] }],
-        },
-    ],
+  rules: [
+    {
+      parts: [{ type: "string", value: ["pause"] }],
+    },
+  ],
 };
 const baseNFA = compileGrammarToNFA(baseGrammar, "base");
 
@@ -65,10 +65,10 @@ const generatedRule = `@ <play> = play $(track:string) by $(artist:string)`;
 const result = cache.addRules(generatedRule);
 
 if (result.success) {
-    console.log("Rule added successfully!");
-    console.log(`Grammar now has ${cache.getStats().ruleCount} rules`);
+  console.log("Rule added successfully!");
+  console.log(`Grammar now has ${cache.getStats().ruleCount} rules`);
 } else {
-    console.error("Failed to add rule:", result.errors);
+  console.error("Failed to add rule:", result.errors);
 }
 
 // Use the updated cache for matching
@@ -88,34 +88,34 @@ const cache = new DynamicGrammarCache(initialGrammar, initialNFA);
 
 // User makes a request
 const testCase = {
-    request: "play Shake It Off by Taylor Swift",
-    action: {
-        actionName: "playTrack",
-        parameters: {
-            trackName: "Shake It Off",
-            artist: "Taylor Swift",
-        },
+  request: "play Shake It Off by Taylor Swift",
+  action: {
+    actionName: "playTrack",
+    parameters: {
+      trackName: "Shake It Off",
+      artist: "Taylor Swift",
     },
+  },
 };
 
 // Generate grammar from example
 const analysis = await generator.generateGrammar(testCase, schemaInfo);
 
 if (analysis.shouldGenerateGrammar) {
-    // Format as .agr rule
-    const agrRule = generator.formatAsGrammarRule(testCase, analysis);
+  // Format as .agr rule
+  const agrRule = generator.formatAsGrammarRule(testCase, analysis);
 
-    // Add to cache
-    const result = cache.addRules(agrRule);
+  // Add to cache
+  const result = cache.addRules(agrRule);
 
-    if (result.success) {
-        console.log("Grammar updated! Similar requests will now match.");
-    } else {
-        console.error("Failed to add rule:", result.errors);
-        if (result.unresolvedSymbols) {
-            console.error("Unresolved symbols:", result.unresolvedSymbols);
-        }
+  if (result.success) {
+    console.log("Grammar updated! Similar requests will now match.");
+  } else {
+    console.error("Failed to add rule:", result.errors);
+    if (result.unresolvedSymbols) {
+      console.error("Unresolved symbols:", result.unresolvedSymbols);
     }
+  }
 }
 ```
 
@@ -134,14 +134,15 @@ const rule = `@ <schedule> = schedule $(event:string) on $(date:CalendarDate)`;
 const result = loader.load(rule);
 
 if (!result.success) {
-    console.log("Unresolved symbols:", result.unresolvedSymbols);
-    // Output: ["CalendarDate"]
+  console.log("Unresolved symbols:", result.unresolvedSymbols);
+  // Output: ["CalendarDate"]
 }
 ```
 
 ### Resolution Requirements
 
 A symbol is considered resolved if:
+
 1. It's a built-in type (`string`, `number`)
 2. It's registered in `globalSymbolRegistry`
 
@@ -205,8 +206,8 @@ const result2 = matchNFA(cache.getNFA(), ["play", "Song", "by", "Artist"]);
 const result = cache.addRules(`@ <invalid> = this is not valid grammar`);
 
 if (!result.success) {
-    console.error("Parse errors:", result.errors);
-    // Cache remains unchanged
+  console.error("Parse errors:", result.errors);
+  // Cache remains unchanged
 }
 ```
 
@@ -214,14 +215,14 @@ if (!result.success) {
 
 ```typescript
 const result = cache.addRules(
-    `@ <schedule> = schedule $(event:string) on $(date:UnknownType)`,
+  `@ <schedule> = schedule $(event:string) on $(date:UnknownType)`,
 );
 
 if (!result.success) {
-    console.error("Errors:", result.errors);
-    console.log("Unresolved:", result.unresolvedSymbols);
-    // Output: ["UnknownType"]
-    // Cache remains unchanged
+  console.error("Errors:", result.errors);
+  console.log("Unresolved:", result.unresolvedSymbols);
+  // Output: ["UnknownType"]
+  // Cache remains unchanged
 }
 ```
 
@@ -232,8 +233,8 @@ if (!result.success) {
 const result = cache.addRules(invalidRule);
 
 if (!result.success) {
-    console.error("Compilation failed:", result.errors);
-    // Cache remains unchanged
+  console.error("Compilation failed:", result.errors);
+  // Cache remains unchanged
 }
 ```
 
@@ -282,8 +283,8 @@ const agrText = `
 const result = loader.load(agrText);
 
 if (result.success) {
-    const cache = new DynamicGrammarCache(result.grammar!, result.nfa!);
-    // Cache ready with all rules
+  const cache = new DynamicGrammarCache(result.grammar!, result.nfa!);
+  // Cache ready with all rules
 }
 ```
 
@@ -294,23 +295,23 @@ const cache = new DynamicGrammarCache(baseGrammar, baseNFA);
 
 // As users make requests, incrementally add rules
 function handleUserRequest(request: string, action: Action) {
-    // Generate grammar for this request/action pair
-    const analysis = await generator.generateGrammar(testCase, schemaInfo);
+  // Generate grammar for this request/action pair
+  const analysis = await generator.generateGrammar(testCase, schemaInfo);
 
-    if (analysis.shouldGenerateGrammar) {
-        const rule = generator.formatAsGrammarRule(testCase, analysis);
+  if (analysis.shouldGenerateGrammar) {
+    const rule = generator.formatAsGrammarRule(testCase, analysis);
 
-        // Add to cache immediately
-        const result = cache.addRules(rule);
+    // Add to cache immediately
+    const result = cache.addRules(rule);
 
-        if (result.success) {
-            // Similar requests will now match from cache
-            console.log("Grammar learned from this example");
-        }
+    if (result.success) {
+      // Similar requests will now match from cache
+      console.log("Grammar learned from this example");
     }
+  }
 
-    // Execute the action
-    executeAction(action);
+  // Execute the action
+  executeAction(action);
 }
 ```
 
@@ -321,25 +322,25 @@ const loader = new DynamicGrammarLoader();
 
 // Check what symbols would be needed
 function checkSymbolRequirements(agrText: string): string[] {
-    const errors: string[] = [];
-    const grammar = loadGrammarRules("<check>", agrText, errors);
+  const errors: string[] = [];
+  const grammar = loadGrammarRules("<check>", agrText, errors);
 
-    if (!grammar) {
-        return []; // Parse error
-    }
+  if (!grammar) {
+    return []; // Parse error
+  }
 
-    // Validate symbols
-    const result = loader.load(agrText);
-    return result.unresolvedSymbols || [];
+  // Validate symbols
+  const result = loader.load(agrText);
+  return result.unresolvedSymbols || [];
 }
 
 const unresolved = checkSymbolRequirements(generatedRule);
 if (unresolved.length > 0) {
-    console.log("Need to register symbols:", unresolved);
-    // Register them first
-    for (const symbol of unresolved) {
-        registerSymbol(symbol);
-    }
+  console.log("Need to register symbols:", unresolved);
+  // Register them first
+  for (const symbol of unresolved) {
+    registerSymbol(symbol);
+  }
 }
 
 // Now safe to load
@@ -371,11 +372,11 @@ const userRequest = "play Shake It Off by Taylor Swift";
 
 // 5. Execute action (assume this happens)
 const action = {
-    actionName: "playTrack",
-    parameters: {
-        trackName: "Shake It Off",
-        artist: "Taylor Swift",
-    },
+  actionName: "playTrack",
+  parameters: {
+    trackName: "Shake It Off",
+    artist: "Taylor Swift",
+  },
 };
 
 // 6. Learn from this example
@@ -383,13 +384,13 @@ const testCase = { request: userRequest, action };
 const analysis = await generator.generateGrammar(testCase, schemaInfo);
 
 if (analysis.shouldGenerateGrammar) {
-    const rule = generator.formatAsGrammarRule(testCase, analysis);
-    const result = cache.addRules(rule);
+  const rule = generator.formatAsGrammarRule(testCase, analysis);
+  const result = cache.addRules(rule);
 
-    if (result.success) {
-        console.log("✓ Grammar updated");
-        console.log(`Pattern: ${analysis.grammarPattern}`);
-    }
+  if (result.success) {
+    console.log("✓ Grammar updated");
+    console.log(`Pattern: ${analysis.grammarPattern}`);
+  }
 }
 
 // 7. Next similar request matches from cache
@@ -398,10 +399,10 @@ const tokens = similarRequest.split(" ");
 const matchResult = matchNFA(cache.getNFA(), tokens);
 
 if (matchResult.matched) {
-    console.log("✓ Matched from cache!");
-    console.log("trackName:", matchResult.captures.get("trackName"));
-    console.log("artist:", matchResult.captures.get("artist"));
-    // Execute without needing LLM
+  console.log("✓ Matched from cache!");
+  console.log("trackName:", matchResult.captures.get("trackName"));
+  console.log("artist:", matchResult.captures.get("artist"));
+  // Execute without needing LLM
 }
 ```
 

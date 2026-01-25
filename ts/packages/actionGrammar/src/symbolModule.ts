@@ -88,9 +88,7 @@ export const globalSymbolRegistry = new SymbolRegistry();
 /**
  * Helper to create a simple matcher from a predicate function
  */
-export function createMatcher(
-    test: (token: string) => boolean,
-): SymbolMatcher {
+export function createMatcher(test: (token: string) => boolean): SymbolMatcher {
     return { match: test };
 }
 

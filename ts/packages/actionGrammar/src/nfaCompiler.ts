@@ -41,7 +41,12 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
         const ruleEntry = builder.createState(false);
         builder.addEpsilonTransition(startState, ruleEntry);
 
-        const ruleEnd = compileRuleFromState(builder, rule, ruleEntry, acceptState);
+        const ruleEnd = compileRuleFromState(
+            builder,
+            rule,
+            ruleEntry,
+            acceptState,
+        );
 
         // If rule didn't connect to accept state, add epsilon transition
         if (ruleEnd !== acceptState) {
@@ -100,9 +105,7 @@ function compilePart(
             return compileRulesPart(builder, part, fromState, toState);
 
         default:
-            throw new Error(
-                `Unknown part type: ${(part as any).type}`,
-            );
+            throw new Error(`Unknown part type: ${(part as any).type}`);
     }
 }
 
@@ -178,7 +181,12 @@ function compileNumberPart(
     // A more sophisticated version could have a "number" transition type
     if (part.optional) {
         builder.addEpsilonTransition(fromState, toState);
-        builder.addWildcardTransition(fromState, toState, part.variable, "number");
+        builder.addWildcardTransition(
+            fromState,
+            toState,
+            part.variable,
+            "number",
+        );
         return toState;
     }
 

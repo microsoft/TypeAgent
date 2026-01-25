@@ -23,7 +23,10 @@ export function registerBuiltInSymbols(): void {
     globalSymbolRegistry.registerConverter("Global.Cardinal", Cardinal);
 
     // Calendar module symbols
-    globalSymbolRegistry.registerConverter("Calendar.CalendarDate", CalendarDate);
+    globalSymbolRegistry.registerConverter(
+        "Calendar.CalendarDate",
+        CalendarDate,
+    );
 
     // Also register unqualified names for use within their own modules
     globalSymbolRegistry.registerConverter("Ordinal", Ordinal);

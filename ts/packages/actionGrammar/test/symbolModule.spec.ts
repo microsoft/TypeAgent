@@ -23,12 +23,16 @@ describe("Symbol Module System", () => {
         });
 
         it("should have registered Global.Cardinal", () => {
-            expect(globalSymbolRegistry.hasSymbol("Global.Cardinal")).toBe(true);
+            expect(globalSymbolRegistry.hasSymbol("Global.Cardinal")).toBe(
+                true,
+            );
             expect(globalSymbolRegistry.hasSymbol("Cardinal")).toBe(true);
         });
 
         it("should have registered Calendar.CalendarDate", () => {
-            expect(globalSymbolRegistry.hasSymbol("Calendar.CalendarDate")).toBe(true);
+            expect(
+                globalSymbolRegistry.hasSymbol("Calendar.CalendarDate"),
+            ).toBe(true);
             expect(globalSymbolRegistry.hasSymbol("CalendarDate")).toBe(true);
         });
     });
@@ -41,7 +45,8 @@ describe("Symbol Module System", () => {
             expect(matcher!.match("third")).toBe(true);
             expect(matcher!.match("invalid")).toBe(false);
 
-            const converter = globalSymbolRegistry.getConverter<number>("Ordinal");
+            const converter =
+                globalSymbolRegistry.getConverter<number>("Ordinal");
             expect(converter).toBeDefined();
             expect(converter!.convert("first")).toBe(1);
             expect(converter!.convert("third")).toBe(3);
@@ -58,7 +63,8 @@ describe("Symbol Module System", () => {
 
     describe("Cardinal Symbol", () => {
         it("should match and convert cardinals", () => {
-            const converter = globalSymbolRegistry.getConverter<number>("Cardinal");
+            const converter =
+                globalSymbolRegistry.getConverter<number>("Cardinal");
             expect(converter).toBeDefined();
             expect(converter!.convert("five")).toBe(5);
             expect(converter!.convert("42")).toBe(42);
@@ -103,7 +109,11 @@ describe("Symbol Module System", () => {
                         parts: [
                             { type: "string", value: ["play"] },
                             { type: "string", value: ["the"] },
-                            { type: "wildcard", variable: "n", typeName: "Ordinal" },
+                            {
+                                type: "wildcard",
+                                variable: "n",
+                                typeName: "Ordinal",
+                            },
                             { type: "string", value: ["track"] },
                         ],
                     },
@@ -123,7 +133,11 @@ describe("Symbol Module System", () => {
                     {
                         parts: [
                             { type: "string", value: ["play"] },
-                            { type: "wildcard", variable: "n", typeName: "Ordinal" },
+                            {
+                                type: "wildcard",
+                                variable: "n",
+                                typeName: "Ordinal",
+                            },
                         ],
                     },
                 ],
@@ -141,7 +155,11 @@ describe("Symbol Module System", () => {
                     {
                         parts: [
                             { type: "string", value: ["track"] },
-                            { type: "wildcard", variable: "n", typeName: "Cardinal" },
+                            {
+                                type: "wildcard",
+                                variable: "n",
+                                typeName: "Cardinal",
+                            },
                         ],
                     },
                 ],
@@ -166,9 +184,17 @@ describe("Symbol Module System", () => {
                     {
                         parts: [
                             { type: "string", value: ["schedule"] },
-                            { type: "wildcard", variable: "event", typeName: "string" },
+                            {
+                                type: "wildcard",
+                                variable: "event",
+                                typeName: "string",
+                            },
                             { type: "string", value: ["on"] },
-                            { type: "wildcard", variable: "date", typeName: "CalendarDate" },
+                            {
+                                type: "wildcard",
+                                variable: "date",
+                                typeName: "CalendarDate",
+                            },
                         ],
                     },
                 ],
@@ -176,7 +202,12 @@ describe("Symbol Module System", () => {
 
             const nfa = compileGrammarToNFA(grammar, "calendar-test");
 
-            const result = matchNFA(nfa, ["schedule", "meeting", "on", "tomorrow"]);
+            const result = matchNFA(nfa, [
+                "schedule",
+                "meeting",
+                "on",
+                "tomorrow",
+            ]);
             expect(result.matched).toBe(true);
             expect(result.captures.get("event")).toBe("meeting");
 
@@ -193,7 +224,11 @@ describe("Symbol Module System", () => {
                     {
                         parts: [
                             { type: "string", value: ["play"] },
-                            { type: "wildcard", variable: "n", typeName: "Ordinal" },
+                            {
+                                type: "wildcard",
+                                variable: "n",
+                                typeName: "Ordinal",
+                            },
                         ],
                     },
                 ],
@@ -216,10 +251,18 @@ describe("Symbol Module System", () => {
                     {
                         parts: [
                             { type: "string", value: ["schedule"] },
-                            { type: "wildcard", variable: "event", typeName: "string" },
+                            {
+                                type: "wildcard",
+                                variable: "event",
+                                typeName: "string",
+                            },
                             { type: "string", value: ["on"] },
                             { type: "string", value: ["the"] },
-                            { type: "wildcard", variable: "day", typeName: "Ordinal" },
+                            {
+                                type: "wildcard",
+                                variable: "day",
+                                typeName: "Ordinal",
+                            },
                         ],
                     },
                 ],

@@ -36,7 +36,10 @@ describe("Dynamic Grammar Loader", () => {
             expect(result.errors).toEqual([]);
 
             // Test matching
-            const matchResult = matchNFA(result.nfa!, ["play", "Bohemian Rhapsody"]);
+            const matchResult = matchNFA(result.nfa!, [
+                "play",
+                "Bohemian Rhapsody",
+            ]);
             expect(matchResult.matched).toBe(true);
             expect(matchResult.captures.get("track")).toBe("Bohemian Rhapsody");
         });
@@ -86,7 +89,11 @@ describe("Dynamic Grammar Loader", () => {
             expect(result.success).toBe(true);
 
             // Test with "please"
-            const result1 = matchNFA(result.nfa!, ["please", "play", "Yesterday"]);
+            const result1 = matchNFA(result.nfa!, [
+                "please",
+                "play",
+                "Yesterday",
+            ]);
             expect(result1.matched).toBe(true);
             expect(result1.captures.get("track")).toBe("Yesterday");
 
@@ -149,9 +156,7 @@ describe("Dynamic Grammar Loader", () => {
             const existingGrammar: Grammar = {
                 rules: [
                     {
-                        parts: [
-                            { type: "string", value: ["pause"] },
-                        ],
+                        parts: [{ type: "string", value: ["pause"] }],
                     },
                 ],
             };
@@ -165,7 +170,11 @@ describe("Dynamic Grammar Loader", () => {
     }
 }`;
 
-            const result = loader.loadAndMerge(agrText, existingGrammar, "merged");
+            const result = loader.loadAndMerge(
+                agrText,
+                existingGrammar,
+                "merged",
+            );
 
             expect(result.success).toBe(true);
             expect(result.grammar!.rules.length).toBe(2); // pause + play (Start refs play)
@@ -187,7 +196,11 @@ describe("Dynamic Grammar Loader", () => {
                     {
                         parts: [
                             { type: "string", value: ["play"] },
-                            { type: "wildcard", variable: "track", typeName: "string" },
+                            {
+                                type: "wildcard",
+                                variable: "track",
+                                typeName: "string",
+                            },
                         ],
                     },
                 ],
@@ -212,7 +225,12 @@ describe("Dynamic Grammar Loader", () => {
             const simple = matchNFA(result.nfa!, ["play", "Song"]);
             expect(simple.matched).toBe(true);
 
-            const withArtist = matchNFA(result.nfa!, ["play", "Song", "by", "Artist"]);
+            const withArtist = matchNFA(result.nfa!, [
+                "play",
+                "Song",
+                "by",
+                "Artist",
+            ]);
             expect(withArtist.matched).toBe(true);
         });
     });
@@ -309,9 +327,9 @@ describe("Dynamic Grammar Loader", () => {
             expect(matchNFA(nfa, ["pause"]).matched).toBe(true);
             expect(matchNFA(nfa, ["resume"]).matched).toBe(true);
             expect(matchNFA(nfa, ["play", "Song"]).matched).toBe(true);
-            expect(matchNFA(nfa, ["play", "Song", "by", "Artist"]).matched).toBe(
-                true,
-            );
+            expect(
+                matchNFA(nfa, ["play", "Song", "by", "Artist"]).matched,
+            ).toBe(true);
         });
 
         it("should reject invalid additions and maintain state", () => {

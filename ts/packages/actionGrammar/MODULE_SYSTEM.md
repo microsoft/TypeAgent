@@ -1,6 +1,7 @@
 # Grammar Module System
 
 This document describes the module system for grammar symbols, which provides:
+
 1. **Namespace support** for symbols (e.g., `Global.Ordinal`, `Calendar.CalendarDate`)
 2. **Static TypeScript linking** via imports/exports
 3. **Dual client support**: Cache clients (matching only) and Agent clients (matching + conversion)
@@ -17,6 +18,7 @@ This document describes the module system for grammar symbols, which provides:
 ### Static Linking
 
 Grammar symbols are **statically linked** using standard TypeScript imports:
+
 - No dynamic registry service
 - No runtime grammar loading
 - All symbol resolution happens at compile time
@@ -27,72 +29,81 @@ Grammar symbols are **statically linked** using standard TypeScript imports:
 ### Global Module
 
 #### `Global.Ordinal` (or just `Ordinal` within Global module)
+
 Converts ordinal words to numbers.
 
 ```typescript
 import { Ordinal, convertOrdinalValue } from "./symbols/ordinal.js";
 
 // Matcher (for cache)
-Ordinal.match("first");  // true
-Ordinal.match("tenth");  // true
+Ordinal.match("first"); // true
+Ordinal.match("tenth"); // true
 
 // Converter (for agents)
-Ordinal.convert("first");  // 1
-Ordinal.convert("twenty-third");  // 23
+Ordinal.convert("first"); // 1
+Ordinal.convert("twenty-third"); // 23
 
 // Helper function
-convertOrdinalValue("first");  // 1
+convertOrdinalValue("first"); // 1
 ```
 
 **Supported values:**
+
 - `first` → 1
 - `second` → 2
 - `third` → 3
 - ... through `thirtieth` → 30
 
 #### `Global.Cardinal` (or just `Cardinal` within Global module)
+
 Converts cardinal words and numeric strings to numbers.
 
 ```typescript
 import { Cardinal, convertCardinalValue } from "./symbols/cardinal.js";
 
 // Matches both word numbers and numeric strings
-Cardinal.match("five");  // true
-Cardinal.match("42");    // true
+Cardinal.match("five"); // true
+Cardinal.match("42"); // true
 
-Cardinal.convert("five");  // 5
-Cardinal.convert("42");    // 42
+Cardinal.convert("five"); // 5
+Cardinal.convert("42"); // 42
 
-convertCardinalValue("thirty");  // 30
+convertCardinalValue("thirty"); // 30
 ```
 
 **Supported values:**
+
 - Word numbers: `one`, `two`, `three`, ... through `thirty`
 - Numeric strings: `"1"`, `"42"`, `"999"`, etc.
 
 ### Calendar Module
 
 #### `Calendar.CalendarDate` (or just `CalendarDate` within Calendar module)
+
 Converts date-like strings to Date objects.
 
 ```typescript
-import { CalendarDate, convertCalendarDateValue } from "./symbols/calendarDate.js";
+import {
+  CalendarDate,
+  convertCalendarDateValue,
+} from "./symbols/calendarDate.js";
 
 // Matcher
-CalendarDate.match("today");      // true
-CalendarDate.match("tomorrow");   // true
+CalendarDate.match("today"); // true
+CalendarDate.match("tomorrow"); // true
 CalendarDate.match("2026-01-23"); // true
-CalendarDate.match("monday");     // true
+CalendarDate.match("monday"); // true
 
 // Converter
-CalendarDate.convert("today");     // Date object for today
-CalendarDate.convert("tomorrow");  // Date object for tomorrow
-CalendarDate.convert("2026-01-23");  // Date object for Jan 23, 2026
+CalendarDate.convert("today"); // Date object for today
+CalendarDate.convert("tomorrow"); // Date object for tomorrow
+CalendarDate.convert("2026-01-23"); // Date object for Jan 23, 2026
 
-convertCalendarDateValue("today");  // Date object
+convertCalendarDateValue("today"); // Date object
 ```
 
 **Supported formats:**
+
 - Relative: `today`, `tomorrow`, `yesterday`
 - ISO dates: `YYYY-MM-DD` (e.g., `2026-01-23`)
 - Weekdays: `monday`, `tuesday`, etc. (next occurrence)
@@ -113,12 +124,14 @@ registerBuiltInSymbols();
 
 // Define grammar using symbol types
 const grammar: Grammar = {
-    rules: [{
-        parts: [
-            { type: "string", value: ["play"] },
-            { type: "wildcard", variable: "n", typeName: "Ordinal" }
-        ]
-    }]
+  rules: [
+    {
+      parts: [
+        { type: "string", value: ["play"] },
+        { type: "wildcard", variable: "n", typeName: "Ordinal" },
+      ],
+    },
+  ],
 };
 
 // Compile to NFA
@@ -128,8 +141,8 @@ const nfa = compileGrammarToNFA(grammar);
 const result = matchNFA(nfa, ["play", "first"]);
 
 if (result.matched) {
-    console.log("Request matches cached pattern!");
-    // Cache hit - no need to use captured values
+  console.log("Request matches cached pattern!");
+  // Cache hit - no need to use captured values
 }
 ```
 
@@ -149,14 +162,16 @@ registerBuiltInSymbols();
 
 // Define grammar
 const grammar: Grammar = {
-    rules: [{
-        parts: [
-            { type: "string", value: ["schedule"] },
-            { type: "wildcard", variable: "event", typeName: "string" },
-            { type: "string", value: ["on"] },
-            { type: "wildcard", variable: "date", typeName: "CalendarDate" }
-        ]
-    }]
+  rules: [
+    {
+      parts: [
+        { type: "string", value: ["schedule"] },
+        { type: "wildcard", variable: "event", typeName: "string" },
+        { type: "string", value: ["on"] },
+        { type: "wildcard", variable: "date", typeName: "CalendarDate" },
+      ],
+    },
+  ],
 };
 
 // Compile and match
@@ -164,22 +179,22 @@ const nfa = compileGrammarToNFA(grammar);
 const result = matchNFA(nfa, ["schedule", "meeting", "on", "tomorrow"]);
 
 if (result.matched) {
-    // Extract typed values
-    const eventName = result.captures.get("event") as string;
-    const date = result.captures.get("date") as Date;
+  // Extract typed values
+  const eventName = result.captures.get("event") as string;
+  const date = result.captures.get("date") as Date;
 
-    // Use converted values for action execution
-    scheduleEvent(eventName, date);
+  // Use converted values for action execution
+  scheduleEvent(eventName, date);
 }
 
 // Or convert parameters received as strings
 function handleScheduleAction(params: { date: string }) {
-    // Convert the CalendarDate string to a Date object
-    const dateObj = convertCalendarDateValue(params.date);
-    if (dateObj) {
-        // Use the Date object
-        calendar.addEvent(dateObj);
-    }
+  // Convert the CalendarDate string to a Date object
+  const dateObj = convertCalendarDateValue(params.date);
+  if (dateObj) {
+    // Use the Date object
+    calendar.addEvent(dateObj);
+  }
 }
 ```
 
@@ -194,25 +209,25 @@ Create a new file in `src/symbols/`:
 import { SymbolConverter, createConverter } from "../symbolModule.js";
 
 function matchMySymbol(token: string): boolean {
-    // Implement matching logic
-    return token.toLowerCase() === "valid";
+  // Implement matching logic
+  return token.toLowerCase() === "valid";
 }
 
 function convertMySymbol(token: string): MyType | undefined {
-    // Implement conversion logic
-    if (token.toLowerCase() === "valid") {
-        return { type: "MyType", value: token };
-    }
-    return undefined;
+  // Implement conversion logic
+  if (token.toLowerCase() === "valid") {
+    return { type: "MyType", value: token };
+  }
+  return undefined;
 }
 
 export const MySymbol: SymbolConverter<MyType> = createConverter(
-    matchMySymbol,
-    convertMySymbol
+  matchMySymbol,
+  convertMySymbol,
 );
 
 export function convertMySymbolValue(token: string): MyType | undefined {
-    return MySymbol.convert(token);
+  return MySymbol.convert(token);
 }
 ```
 
@@ -224,13 +239,13 @@ Add to `src/symbols/index.ts`:
 import { MySymbol } from "./mySymbol.js";
 
 export function registerBuiltInSymbols(): void {
-    // ... existing registrations ...
+  // ... existing registrations ...
 
-    // Register with module namespace
-    globalSymbolRegistry.registerConverter("MyModule.MySymbol", MySymbol);
+  // Register with module namespace
+  globalSymbolRegistry.registerConverter("MyModule.MySymbol", MySymbol);
 
-    // Register unqualified for use within MyModule
-    globalSymbolRegistry.registerConverter("MySymbol", MySymbol);
+  // Register unqualified for use within MyModule
+  globalSymbolRegistry.registerConverter("MySymbol", MySymbol);
 }
 
 export { MySymbol, convertMySymbolValue } from "./mySymbol.js";
@@ -240,12 +255,12 @@ export { MySymbol, convertMySymbolValue } from "./mySymbol.js";
 
 ```typescript
 const grammar: Grammar = {
-    rules: [{
-        parts: [
-            { type: "wildcard", variable: "x", typeName: "MySymbol" }
-        ]
-    }],
-    moduleName: "MyModule"  // Optional module name
+  rules: [
+    {
+      parts: [{ type: "wildcard", variable: "x", typeName: "MySymbol" }],
+    },
+  ],
+  moduleName: "MyModule", // Optional module name
 };
 ```
 
@@ -294,23 +309,27 @@ When the NFA interpreter encounters a wildcard with a type name:
 ## Benefits of This Design
 
 ### For Cache Clients
+
 - Fast matching without conversion overhead
 - Only need to know if pattern matches
 - Can skip converter registration if only matching
 
 ### For Agent Clients
+
 - Type-safe conversion to proper TypeScript types
 - Helper functions provide clean API
 - Converters linked via standard TypeScript imports
 - No runtime registry lookup needed in agent code
 
 ### For Grammar Authors
+
 - Module namespace prevents name collisions
 - Symbols can be shared across grammars
 - Standard TypeScript tooling (imports, type checking)
 - No special build or registration system needed
 
 ### For System Architecture
+
 - Static linking via TypeScript
 - No dynamic loading or runtime registry service
 - Tree-shaking works naturally
@@ -326,6 +345,7 @@ npm test -- symbolModule.spec
 ```
 
 Tests cover:
+
 - Symbol registration
 - Matcher functionality
 - Converter functionality
@@ -336,6 +356,7 @@ Tests cover:
 ## Future Extensions
 
 ### DFA Compilation
+
 When DFA compilation is implemented, the same symbol system will work:
 
 ```typescript
@@ -345,6 +366,7 @@ const result = matchDFA(dfa, tokens);
 ```
 
 ### Grammar Merging
+
 Combine grammars from different modules:
 
 ```typescript
@@ -364,36 +386,38 @@ registerBuiltInSymbols();
 
 // 2. Load and compile grammar
 const grammar: Grammar = {
-    rules: [{
-        parts: [
-            { type: "string", value: ["play"] },
-            { type: "string", value: ["track"] },
-            { type: "wildcard", variable: "n", typeName: "Cardinal" }
-        ]
-    }]
+  rules: [
+    {
+      parts: [
+        { type: "string", value: ["play"] },
+        { type: "string", value: ["track"] },
+        { type: "wildcard", variable: "n", typeName: "Cardinal" },
+      ],
+    },
+  ],
 };
 const nfa = compileGrammarToNFA(grammar, "player");
 
 // 3. Cache client - just match
 const cacheResult = matchNFA(nfa, ["play", "track", "5"]);
 if (cacheResult.matched) {
-    console.log("Cache hit!");
+  console.log("Cache hit!");
 }
 
 // 4. Agent client - match and convert
 const agentResult = matchNFA(nfa, ["play", "track", "five"]);
 if (agentResult.matched) {
-    const trackNum = agentResult.captures.get("n") as number;
-    player.playTrack(trackNum);  // trackNum is 5 (number type)
+  const trackNum = agentResult.captures.get("n") as number;
+  player.playTrack(trackNum); // trackNum is 5 (number type)
 }
 
 // 5. Agent parameter conversion
 function playTrackAction(params: { trackNumber: string }) {
-    // Parameter comes as string but is actually a Cardinal
-    import { convertCardinalValue } from "./symbols/cardinal.js";
-    const trackNum = convertCardinalValue(params.trackNumber);
-    if (trackNum !== undefined) {
-        player.playTrack(trackNum);
-    }
+  // Parameter comes as string but is actually a Cardinal
+  import { convertCardinalValue } from "./symbols/cardinal.js";
+  const trackNum = convertCardinalValue(params.trackNumber);
+  if (trackNum !== undefined) {
+    player.playTrack(trackNum);
+  }
 }
 ```

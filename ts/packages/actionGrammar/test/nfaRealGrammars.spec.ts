@@ -22,7 +22,11 @@ describe("NFA with Real Grammars", () => {
             const content = fs.readFileSync(playerGrammarPath, "utf-8");
 
             const errors: string[] = [];
-            const grammar = loadGrammarRules("playerGrammar.agr", content, errors);
+            const grammar = loadGrammarRules(
+                "playerGrammar.agr",
+                content,
+                errors,
+            );
 
             if (errors.length > 0) {
                 console.log("Grammar errors:", errors);
@@ -121,10 +125,14 @@ describe("NFA with Real Grammars", () => {
             // expect(result2.captures.get("x")).toBe("bedroom");
 
             // Test: "play on living room device"
-            const result3 = matchNFA(
-                nfa,
-                ["play", "on", "the", "living", "room", "device"],
-            );
+            const result3 = matchNFA(nfa, [
+                "play",
+                "on",
+                "the",
+                "living",
+                "room",
+                "device",
+            ]);
             // Note: This might not match because "living room" is two tokens
             // The grammar expects single-token device names
             console.log("\n--- Test: play on living room device ---");
@@ -151,7 +159,11 @@ describe("NFA with Real Grammars", () => {
             const content = fs.readFileSync(calendarGrammarPath, "utf-8");
 
             const errors: string[] = [];
-            const grammar = loadGrammarRules("calendarSchema.agr", content, errors);
+            const grammar = loadGrammarRules(
+                "calendarSchema.agr",
+                content,
+                errors,
+            );
 
             if (errors.length > 0) {
                 console.log("Grammar errors:", errors);
@@ -218,7 +230,10 @@ describe("NFA with Real Grammars", () => {
                 "calendarSchema.agr",
                 calendarContent,
             );
-            const calendarNFA = compileGrammarToNFA(calendarGrammar, "calendar");
+            const calendarNFA = compileGrammarToNFA(
+                calendarGrammar,
+                "calendar",
+            );
 
             console.log("\n=== Grammar Sizes ===");
             console.log(`Player NFA: ${playerNFA.states.length} states`);
@@ -254,7 +269,9 @@ describe("NFA with Real Grammars", () => {
             const nfa = compileGrammarToNFA(grammar, "player-simple");
 
             // Print first 20 states for visualization
-            console.log("\n=== Player Grammar NFA Structure (first 20 states) ===");
+            console.log(
+                "\n=== Player Grammar NFA Structure (first 20 states) ===",
+            );
             console.log(
                 printNFA({
                     ...nfa,
