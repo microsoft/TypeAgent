@@ -9,10 +9,10 @@ import { writeGrammarRules } from "../src/grammarRuleWriter.js";
 import { escapedSpaces, spaces } from "./testUtils.js";
 
 function validateRoundTrip(grammar: string) {
-    const rules = parseGrammarRules("orig", grammar, false);
-    const str = writeGrammarRules(rules);
-    const parsed = parseGrammarRules("test", str, false);
-    expect(parsed).toStrictEqual(rules);
+    const result = parseGrammarRules("orig", grammar, false);
+    const str = writeGrammarRules(result.definitions);
+    const parsedResult = parseGrammarRules("test", str, false);
+    expect(parsedResult).toStrictEqual(result);
 }
 
 describe("Grammar Rule Writer", () => {
