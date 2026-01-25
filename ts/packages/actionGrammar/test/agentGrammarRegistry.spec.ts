@@ -146,6 +146,88 @@ describe("Agent Grammar Registry", () => {
             expect(stats.ruleCount).toBe(1);
             expect(stats.stateCount).toBeGreaterThan(0);
         });
+
+        it("should recompile NFA when adding multiple rules", () => {
+            const baseGrammar: Grammar = {
+                rules: [
+                    {
+                        parts: [{ type: "string", value: ["pause"] }],
+                    },
+                ],
+            };
+
+            const nfa = compileGrammarToNFA(baseGrammar, "player");
+            const agentGrammar = new AgentGrammar("player", baseGrammar, nfa);
+
+            // Get initial stats
+            const initialStats = agentGrammar.getStats();
+            expect(initialStats.ruleCount).toBe(1);
+            const initialStateCount = initialStats.stateCount;
+
+            // Add first rule - simpler format like in cache hit workflow test
+            const firstRule = `@ <Start> = <play>
+@ <play> = play $(track:string)`;
+
+            const firstResult = agentGrammar.addGeneratedRules(firstRule);
+            expect(firstResult.success).toBe(true);
+
+            // Verify NFA was recompiled (state count should change)
+            const afterFirstStats = agentGrammar.getStats();
+            expect(afterFirstStats.ruleCount).toBe(2);
+            expect(afterFirstStats.stateCount).toBeGreaterThan(
+                initialStateCount,
+            );
+
+            // Test matching with new rule
+            const trackMatch = agentGrammar.match(["play", "Yesterday"]);
+            expect(trackMatch.matched).toBe(true);
+            expect(trackMatch.captures.get("track")).toBe("Yesterday");
+
+            // Add second rule
+            const secondRule = `@ <Start> = <resume>
+@ <resume> = resume`;
+
+            const secondResult = agentGrammar.addGeneratedRules(secondRule);
+            expect(secondResult.success).toBe(true);
+
+            // Verify stats updated again
+            const finalStats = agentGrammar.getStats();
+            expect(finalStats.ruleCount).toBe(3);
+            expect(finalStats.stateCount).toBeGreaterThan(
+                afterFirstStats.stateCount,
+            );
+
+            // Test all three rules work
+            expect(agentGrammar.match(["pause"]).matched).toBe(true);
+            expect(agentGrammar.match(["play", "Bad Blood"]).matched).toBe(
+                true,
+            );
+            expect(agentGrammar.match(["resume"]).matched).toBe(true);
+
+            // Add third rule with entity declaration to test merging
+            const thirdRule = `entity Ordinal;
+@ <Start> = <skip>
+@ <skip> = skip`;
+
+            const thirdResult = agentGrammar.addGeneratedRules(thirdRule);
+            expect(thirdResult.success).toBe(true);
+
+            // Verify entity is in grammar
+            const grammar = agentGrammar.getGrammar();
+            expect(grammar.entities).toContain("Ordinal");
+
+            // Final stats check - should have 4 rules now
+            const veryFinalStats = agentGrammar.getStats();
+            expect(veryFinalStats.ruleCount).toBe(4);
+
+            // Test new rule works
+            expect(agentGrammar.match(["skip"]).matched).toBe(true);
+
+            // Verify all original rules still work after multiple additions
+            expect(agentGrammar.match(["pause"]).matched).toBe(true);
+            expect(agentGrammar.match(["play", "Song"]).matched).toBe(true);
+            expect(agentGrammar.match(["resume"]).matched).toBe(true);
+        });
     });
 
     describe("AgentGrammarRegistry", () => {
