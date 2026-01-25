@@ -6,13 +6,13 @@ import { loadGrammarRules } from "./grammarLoader.js";
 import { mergeGrammarRules } from "./grammarMerger.js";
 import { compileGrammarToNFA } from "./nfaCompiler.js";
 import { NFA } from "./nfa.js";
-import { globalSymbolRegistry } from "./symbolModule.js";
+import { globalEntityRegistry } from "./entityRegistry.js";
 
 /**
  * Dynamic Grammar Loader
  *
  * Loads grammar rules dynamically at runtime and merges them into
- * an existing grammar. Validates that all referenced symbols are resolved.
+ * an existing grammar. Validates that all referenced entities are resolved.
  */
 
 /**
@@ -55,15 +55,15 @@ export class DynamicGrammarLoader {
             };
         }
 
-        // Step 2: Validate symbol references
-        const unresolvedSymbols = this.validateSymbolReferences(newGrammar);
-        if (unresolvedSymbols.length > 0) {
+        // Step 2: Validate entity references
+        const unresolvedEntities = this.validateEntityReferences(newGrammar);
+        if (unresolvedEntities.length > 0) {
             return {
                 success: false,
                 errors: [
-                    "Grammar references unresolved symbols. These symbols must be registered before the grammar can be loaded.",
+                    "Grammar references unresolved entities. These entities must be registered before the grammar can be loaded.",
                 ],
-                unresolvedSymbols,
+                unresolvedSymbols: unresolvedEntities,
             };
         }
 
@@ -71,8 +71,16 @@ export class DynamicGrammarLoader {
         const mergedGrammar = mergeGrammarRules(
             existingGrammar,
             newGrammar.rules,
-            existingGrammar.moduleName,
         );
+
+        // Merge entity declarations
+        if (newGrammar.entities) {
+            const existingEntities = new Set(existingGrammar.entities || []);
+            for (const entity of newGrammar.entities) {
+                existingEntities.add(entity);
+            }
+            mergedGrammar.entities = Array.from(existingEntities);
+        }
 
         // Step 4: Compile to NFA
         let nfa: NFA;
@@ -118,15 +126,15 @@ export class DynamicGrammarLoader {
             };
         }
 
-        // Step 2: Validate symbol references
-        const unresolvedSymbols = this.validateSymbolReferences(grammar);
-        if (unresolvedSymbols.length > 0) {
+        // Step 2: Validate entity references
+        const unresolvedEntities = this.validateEntityReferences(grammar);
+        if (unresolvedEntities.length > 0) {
             return {
                 success: false,
                 errors: [
-                    "Grammar references unresolved symbols. These symbols must be registered before the grammar can be loaded.",
+                    "Grammar references unresolved entities. These entities must be registered before the grammar can be loaded.",
                 ],
-                unresolvedSymbols,
+                unresolvedSymbols: unresolvedEntities,
             };
         }
 
@@ -152,27 +160,41 @@ export class DynamicGrammarLoader {
     }
 
     /**
-     * Validate that all symbol references in the grammar are resolved
+     * Validate that all entity references in the grammar are resolved
      *
-     * Checks wildcard type names and ensures they're either:
-     * 1. Built-in types (string, number)
-     * 2. Registered in the symbol registry
+     * Checks both:
+     * 1. Declared entities (from "entity" declarations)
+     * 2. Wildcard type names in grammar rules
+     *
+     * Ensures they're either:
+     * - Built-in types (string, number)
+     * - Registered in the entity registry
      *
      * @param grammar Grammar to validate
-     * @returns List of unresolved symbol names (empty if all resolved)
+     * @returns List of unresolved entity names (empty if all resolved)
      */
-    private validateSymbolReferences(grammar: Grammar): string[] {
+    private validateEntityReferences(grammar: Grammar): string[] {
         const unresolved = new Set<string>();
         const builtInTypes = new Set(["string", "number"]);
 
+        // Check declared entities
+        if (grammar.entities) {
+            for (const entity of grammar.entities) {
+                if (!globalEntityRegistry.hasEntity(entity)) {
+                    unresolved.add(entity);
+                }
+            }
+        }
+
+        // Check wildcard types in rules
         for (const rule of grammar.rules) {
-            this.checkPartsForSymbols(rule.parts, unresolved, builtInTypes);
+            this.checkPartsForEntities(rule.parts, unresolved, builtInTypes);
         }
 
         return Array.from(unresolved);
     }
 
-    private checkPartsForSymbols(
+    private checkPartsForEntities(
         parts: GrammarPart[],
         unresolved: Set<string>,
         builtInTypes: Set<string>,
@@ -182,14 +204,14 @@ export class DynamicGrammarLoader {
                 // Check if type is resolved
                 if (
                     !builtInTypes.has(part.typeName) &&
-                    !globalSymbolRegistry.hasSymbol(part.typeName)
+                    !globalEntityRegistry.hasEntity(part.typeName)
                 ) {
                     unresolved.add(part.typeName);
                 }
             } else if (part.type === "rules") {
                 // Recursively check nested rules
                 for (const nestedRule of part.rules) {
-                    this.checkPartsForSymbols(
+                    this.checkPartsForEntities(
                         nestedRule.parts,
                         unresolved,
                         builtInTypes,

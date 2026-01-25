@@ -18,62 +18,75 @@ import { Grammar, GrammarRule } from "./grammarTypes.js";
  *
  * @param existingGrammar The existing grammar to extend
  * @param newRules Rules to merge in
- * @param moduleName Optional module name for the merged grammar
  * @returns A new Grammar containing both existing and new rules
  */
 export function mergeGrammarRules(
     existingGrammar: Grammar,
     newRules: GrammarRule[],
-    moduleName?: string,
 ): Grammar {
     // Simple merge - just concatenate the rules
     // All rules become alternatives at the top level
-    return {
+    const result: Grammar = {
         rules: [...existingGrammar.rules, ...newRules],
-        moduleName: moduleName ?? existingGrammar.moduleName,
     };
+
+    // Preserve entities from existing grammar
+    if (existingGrammar.entities) {
+        result.entities = [...existingGrammar.entities];
+    }
+
+    return result;
 }
 
 /**
  * Create a new grammar from rules
  *
  * @param rules Grammar rules
- * @param moduleName Optional module name
+ * @param entities Optional entity declarations
  * @returns A new Grammar
  */
 export function createGrammar(
     rules: GrammarRule[],
-    moduleName?: string,
+    entities?: string[],
 ): Grammar {
-    return {
-        rules,
-        moduleName,
-    };
+    const grammar: Grammar = { rules };
+    if (entities && entities.length > 0) {
+        grammar.entities = entities;
+    }
+    return grammar;
 }
 
 /**
  * Merge multiple grammars into one
  *
  * All rules from all grammars become alternatives in the merged grammar.
+ * Entities from all grammars are combined.
  *
  * @param grammars Grammars to merge
- * @param moduleName Optional module name for the merged grammar
  * @returns A new Grammar containing all rules
  */
-export function mergeGrammars(
-    grammars: Grammar[],
-    moduleName?: string,
-): Grammar {
+export function mergeGrammars(grammars: Grammar[]): Grammar {
     const allRules: GrammarRule[] = [];
+    const allEntities = new Set<string>();
 
     for (const grammar of grammars) {
         allRules.push(...grammar.rules);
+        if (grammar.entities) {
+            for (const entity of grammar.entities) {
+                allEntities.add(entity);
+            }
+        }
     }
 
-    return {
+    const result: Grammar = {
         rules: allRules,
-        moduleName,
     };
+
+    if (allEntities.size > 0) {
+        result.entities = Array.from(allEntities);
+    }
+
+    return result;
 }
 
 /**

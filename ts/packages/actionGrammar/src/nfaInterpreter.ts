@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { NFA, NFATransition } from "./nfa.js";
-import { globalSymbolRegistry } from "./symbolModule.js";
+import { globalEntityRegistry } from "./entityRegistry.js";
 
 /**
  * NFA Interpreter
@@ -158,17 +158,17 @@ function tryTransition(
                         return undefined;
                     }
                 } else {
-                    // Check if symbol type is registered
-                    const matcher = globalSymbolRegistry.getMatcher(
+                    // Check if entity type is registered
+                    const validator = globalEntityRegistry.getValidator(
                         trans.typeName,
                     );
-                    if (matcher) {
-                        // Use the symbol's matcher
-                        if (!matcher.match(token)) {
+                    if (validator) {
+                        // Use the entity's validator
+                        if (!validator.validate(token)) {
                             return undefined;
                         }
                         // Try to convert if converter is available
-                        const converter = globalSymbolRegistry.getConverter(
+                        const converter = globalEntityRegistry.getConverter(
                             trans.typeName,
                         );
                         if (converter && trans.variable) {

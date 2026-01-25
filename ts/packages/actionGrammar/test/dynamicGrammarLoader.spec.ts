@@ -8,11 +8,11 @@ import {
     DynamicGrammarLoader,
     DynamicGrammarCache,
 } from "../src/dynamicGrammarLoader.js";
-import { registerBuiltInSymbols } from "../src/symbols/index.js";
+import { registerBuiltInEntities } from "../src/builtInEntities.js";
 
 describe("Dynamic Grammar Loader", () => {
     beforeAll(() => {
-        registerBuiltInSymbols();
+        registerBuiltInEntities();
     });
 
     describe("DynamicGrammarLoader", () => {

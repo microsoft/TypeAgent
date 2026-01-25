@@ -11,3 +11,30 @@ export {
     matchGrammarCompletion,
     GrammarCompletionResult,
 } from "./grammarMatcher.js";
+
+// Entity system
+export type { EntityValidator, EntityConverter } from "./entityRegistry.js";
+export {
+    EntityRegistry,
+    globalEntityRegistry,
+    createValidator,
+    createConverter,
+} from "./entityRegistry.js";
+export {
+    Ordinal,
+    Cardinal,
+    CalendarDate,
+    registerBuiltInEntities,
+} from "./builtInEntities.js";
+
+// Dynamic loading
+export type { DynamicLoadResult } from "./dynamicGrammarLoader.js";
+export {
+    DynamicGrammarLoader,
+    DynamicGrammarCache,
+} from "./dynamicGrammarLoader.js";
+
+// NFA system
+export type { NFA, NFAState, NFATransition } from "./nfa.js";
+export { matchNFA, type NFAMatchResult } from "./nfaInterpreter.js";
+export { compileGrammarToNFA } from "./nfaCompiler.js";

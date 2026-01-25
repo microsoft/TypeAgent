@@ -36,8 +36,8 @@ export function loadGrammarRules(
     errors?: string[],
     warnings?: string[],
 ): Grammar | undefined {
-    const definitions = parseGrammarRules(fileName, content);
-    const result = compileGrammar(definitions, start);
+    const parseResult = parseGrammarRules(fileName, content);
+    const result = compileGrammar(parseResult.definitions, start);
 
     if (result.warnings.length > 0 && warnings !== undefined) {
         warnings.push(
@@ -51,7 +51,12 @@ export function loadGrammarRules(
     }
 
     if (result.errors.length === 0) {
-        return result.grammar;
+        // Add entity declarations to the grammar
+        const grammar = result.grammar;
+        if (parseResult.entities.length > 0) {
+            grammar.entities = parseResult.entities;
+        }
+        return grammar;
     }
     const errorMessages = convertCompileError(
         fileName,

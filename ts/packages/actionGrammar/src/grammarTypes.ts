@@ -54,7 +54,7 @@ export type GrammarRule = {
 
 export type Grammar = {
     rules: GrammarRule[];
-    moduleName?: string | undefined; // e.g. "Calendar", "Global"
+    entities?: string[] | undefined; // Entity types this grammar depends on (e.g. ["Ordinal", "CalendarDate"])
 };
 
 /**
