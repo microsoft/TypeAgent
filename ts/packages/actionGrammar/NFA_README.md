@@ -29,14 +29,14 @@ import { matchNFA } from "./nfaInterpreter.js";
 
 // Define a grammar
 const grammar: Grammar = {
-    rules: [
-        {
-            parts: [
-                { type: "string", value: ["hello"] },
-                { type: "wildcard", variable: "name", typeName: "string" },
-            ],
-        },
-    ],
+  rules: [
+    {
+      parts: [
+        { type: "string", value: ["hello"] },
+        { type: "wildcard", variable: "name", typeName: "string" },
+      ],
+    },
+  ],
 };
 
 // Compile to NFA
@@ -53,36 +53,36 @@ console.log(result.captures.get("name")); // "Alice"
 
 ```typescript
 const grammar: Grammar = {
-    rules: [
-        {
-            parts: [{ type: "string", value: ["hello"] }],
-        },
-        {
-            parts: [{ type: "string", value: ["hi"] }],
-        },
-    ],
+  rules: [
+    {
+      parts: [{ type: "string", value: ["hello"] }],
+    },
+    {
+      parts: [{ type: "string", value: ["hi"] }],
+    },
+  ],
 };
 
 const nfa = compileGrammarToNFA(grammar, "greeting");
 
 matchNFA(nfa, ["hello"]); // { matched: true, ... }
-matchNFA(nfa, ["hi"]);    // { matched: true, ... }
-matchNFA(nfa, ["bye"]);   // { matched: false, ... }
+matchNFA(nfa, ["hi"]); // { matched: true, ... }
+matchNFA(nfa, ["bye"]); // { matched: false, ... }
 ```
 
 ### Grammar with Sequence
 
 ```typescript
 const grammar: Grammar = {
-    rules: [
-        {
-            parts: [
-                { type: "string", value: ["start"] },
-                { type: "wildcard", variable: "command", typeName: "string" },
-                { type: "string", value: ["end"] },
-            ],
-        },
-    ],
+  rules: [
+    {
+      parts: [
+        { type: "string", value: ["start"] },
+        { type: "wildcard", variable: "command", typeName: "string" },
+        { type: "string", value: ["end"] },
+      ],
+    },
+  ],
 };
 ```
 
@@ -90,25 +90,25 @@ const grammar: Grammar = {
 
 ```typescript
 const grammar: Grammar = {
-    rules: [
+  rules: [
+    {
+      parts: [
+        { type: "string", value: ["hello"] },
         {
-            parts: [
-                { type: "string", value: ["hello"] },
-                {
-                    type: "wildcard",
-                    variable: "name",
-                    typeName: "string",
-                    optional: true, // Can be skipped
-                },
-            ],
+          type: "wildcard",
+          variable: "name",
+          typeName: "string",
+          optional: true, // Can be skipped
         },
-    ],
+      ],
+    },
+  ],
 };
 
 const nfa = compileGrammarToNFA(grammar);
 
 matchNFA(nfa, ["hello", "Alice"]); // matches, captures name="Alice"
-matchNFA(nfa, ["hello"]);          // also matches, no capture
+matchNFA(nfa, ["hello"]); // also matches, no capture
 ```
 
 ### Combining NFAs
@@ -162,14 +162,14 @@ Visited states: [0, 1, 2]
 
 ```typescript
 const grammar: Grammar = {
-    rules: [
-        {
-            parts: [
-                { type: "string", value: ["count"] },
-                { type: "number", variable: "n" },
-            ],
-        },
-    ],
+  rules: [
+    {
+      parts: [
+        { type: "string", value: ["count"] },
+        { type: "number", variable: "n" },
+      ],
+    },
+  ],
 };
 
 const nfa = compileGrammarToNFA(grammar);
@@ -184,6 +184,7 @@ console.log(result.captures.get("n")); // 42 (as number)
 ### NFA Structure
 
 An NFA consists of:
+
 - **States**: Nodes in the automaton with unique IDs
 - **Transitions**: Edges between states, can be:
   - `token`: Match specific token(s)
@@ -206,6 +207,7 @@ The compiler converts grammar rules to NFAs using these patterns:
 ### Token-Based Matching
 
 Unlike character-based regex engines, this NFA works at the token level:
+
 - Input is an array of strings (tokens)
 - Each transition consumes one token (except epsilon)
 - Wildcards match exactly one token
@@ -220,6 +222,7 @@ start → preamble command postamble
 ```
 
 Where:
+
 - `preamble` and `postamble` are optional boilerplate (politeness, greetings)
 - `command` is the core action
 - Everything is regular (no recursive nesting)
@@ -228,40 +231,41 @@ Where:
 
 ```typescript
 const grammar: Grammar = {
-    rules: [
+  rules: [
+    {
+      parts: [
+        // Optional preamble
         {
-            parts: [
-                // Optional preamble
-                {
-                    type: "rules",
-                    optional: true,
-                    rules: [
-                        { parts: [{ type: "string", value: ["please"] }] },
-                        { parts: [{ type: "string", value: ["kindly"] }] },
-                    ],
-                },
-                // Core command
-                {
-                    type: "wildcard",
-                    variable: "command",
-                    typeName: "string",
-                },
-                // Optional postamble
-                {
-                    type: "rules",
-                    optional: true,
-                    rules: [
-                        { parts: [{ type: "string", value: ["thanks"] }] },
-                        { parts: [{ type: "string", value: ["thank you"] }] },
-                    ],
-                },
-            ],
+          type: "rules",
+          optional: true,
+          rules: [
+            { parts: [{ type: "string", value: ["please"] }] },
+            { parts: [{ type: "string", value: ["kindly"] }] },
+          ],
         },
-    ],
+        // Core command
+        {
+          type: "wildcard",
+          variable: "command",
+          typeName: "string",
+        },
+        // Optional postamble
+        {
+          type: "rules",
+          optional: true,
+          rules: [
+            { parts: [{ type: "string", value: ["thanks"] }] },
+            { parts: [{ type: "string", value: ["thank you"] }] },
+          ],
+        },
+      ],
+    },
+  ],
 };
 ```
 
 This matches:
+
 - "schedule meeting" (just command)
 - "please schedule meeting" (preamble + command)
 - "schedule meeting thanks" (command + postamble)
@@ -309,6 +313,7 @@ npm test -- nfa.spec
 ```
 
 Tests cover:
+
 - NFA builder operations
 - Grammar compilation
 - Alternatives, sequences, optionals
@@ -335,6 +340,7 @@ The existing `grammarMatcher.ts` is optimized for the current use case. This new
 4. **Grammar composition**: Formal operations for combining grammars
 
 Both systems can coexist:
+
 - Use NFA infrastructure for grammar development and debugging
 - Compile to existing matcher for production performance
 - Or replace existing matcher with DFA compiler (future)

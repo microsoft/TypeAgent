@@ -44,10 +44,12 @@ export interface NFAState {
     accepting: boolean;
 
     // Optional: capture variable value when reaching this state
-    capture?: {
-        variable: string;
-        typeName?: string | undefined;
-    } | undefined;
+    capture?:
+        | {
+              variable: string;
+              typeName?: string | undefined;
+          }
+        | undefined;
 }
 
 /**
@@ -183,7 +185,10 @@ export function combineNFAs(
     if (operation === "sequence") {
         // Connect nfa1 accepting states to nfa2 start with epsilon
         for (const acc of nfa1.acceptingStates) {
-            builder.addEpsilonTransition(acc + offset1, nfa2.startState + offset2);
+            builder.addEpsilonTransition(
+                acc + offset1,
+                nfa2.startState + offset2,
+            );
             // Remove accepting from intermediate states
             builder.getState(acc + offset1).accepting = false;
         }
