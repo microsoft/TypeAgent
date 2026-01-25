@@ -277,7 +277,9 @@ describe("NFA with Real Grammars", () => {
                     "calendar",
                 );
 
-                console.log(`Calendar NFA: ${calendarNFA.states.length} states`);
+                console.log(
+                    `Calendar NFA: ${calendarNFA.states.length} states`,
+                );
 
                 const calendarTransitions = calendarNFA.states.reduce(
                     (sum, s) => sum + s.transitions.length,
