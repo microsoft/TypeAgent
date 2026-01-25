@@ -60,7 +60,9 @@ export class AgentGrammar {
         if (!newGrammar) {
             return {
                 success: false,
-                errors: [`Failed to parse generated rules: ${errors.join(", ")}`],
+                errors: [
+                    `Failed to parse generated rules: ${errors.join(", ")}`,
+                ],
             };
         }
 
@@ -228,11 +230,7 @@ export class AgentGrammarRegistry {
      * @param nfa Optional pre-compiled NFA (will compile if not provided)
      * @returns The registered AgentGrammar
      */
-    registerAgent(
-        agentId: string,
-        grammar: Grammar,
-        nfa?: NFA,
-    ): AgentGrammar {
+    registerAgent(agentId: string, grammar: Grammar, nfa?: NFA): AgentGrammar {
         const compiledNFA = nfa ?? compileGrammarToNFA(grammar, agentId);
         const agentGrammar = new AgentGrammar(agentId, grammar, compiledNFA);
         this.agents.set(agentId, agentGrammar);
@@ -246,7 +244,10 @@ export class AgentGrammarRegistry {
      * @param agrText Grammar rules in .agr format
      * @returns Success status with the AgentGrammar or errors
      */
-    registerAgentFromText(agentId: string, agrText: string): {
+    registerAgentFromText(
+        agentId: string,
+        agrText: string,
+    ): {
         success: boolean;
         agentGrammar?: AgentGrammar;
         errors?: string[];
@@ -338,10 +339,7 @@ export class AgentGrammarRegistry {
      * @param agentIds Optional list of specific agents to try (in order)
      * @returns Match result with the agent that matched
      */
-    matchAcrossAgents(
-        tokens: string[],
-        agentIds?: string[],
-    ): AgentMatchResult {
+    matchAcrossAgents(tokens: string[], agentIds?: string[]): AgentMatchResult {
         const attemptedAgents: string[] = [];
         const agentsToTry = agentIds
             ? agentIds

@@ -184,7 +184,10 @@ describe("Agent Grammar Registry", () => {
         it("should handle registration errors", () => {
             const invalidAgr = `invalid grammar syntax here`;
 
-            const result = registry.registerAgentFromText("bad-agent", invalidAgr);
+            const result = registry.registerAgentFromText(
+                "bad-agent",
+                invalidAgr,
+            );
 
             expect(result.success).toBe(false);
             expect(result.errors).toBeDefined();
@@ -281,7 +284,9 @@ describe("Agent Grammar Registry", () => {
             ]);
             expect(playerResult.matched).toBe(true);
             expect(playerResult.agentId).toBe("player");
-            expect(playerResult.captures.get("track")).toBe("Bohemian Rhapsody");
+            expect(playerResult.captures.get("track")).toBe(
+                "Bohemian Rhapsody",
+            );
 
             // Test calendar match
             const calendarResult = registry.matchAcrossAgents([
@@ -311,9 +316,10 @@ describe("Agent Grammar Registry", () => {
             });
 
             // Match only against calendar
-            const result = registry.matchAcrossAgents(["schedule"], [
-                "calendar",
-            ]);
+            const result = registry.matchAcrossAgents(
+                ["schedule"],
+                ["calendar"],
+            );
             expect(result.matched).toBe(true);
             expect(result.agentId).toBe("calendar");
             expect(result.attemptedAgents).toEqual(["calendar"]);
@@ -410,10 +416,7 @@ describe("Agent Grammar Registry", () => {
             expect(addResult.success).toBe(true);
 
             // Second similar request matches - cache hit!
-            const secondTry = registry.matchAcrossAgents([
-                "play",
-                "Yesterday",
-            ]);
+            const secondTry = registry.matchAcrossAgents(["play", "Yesterday"]);
             expect(secondTry.matched).toBe(true);
             expect(secondTry.agentId).toBe("player");
             expect(secondTry.captures.get("track")).toBe("Yesterday");
