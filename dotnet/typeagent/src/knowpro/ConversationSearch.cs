@@ -210,13 +210,13 @@ public static class ConversationSearch
             return null;
         }
 
+        // message matches come in the wrong oder for our purposes, so reverse them
+        messageMatches = [.. messageMatches.Reverse()];
+
         if (maxCharsInBudget is not null)
         {
-            // reverse the message matches so we start with the highest ranked results first
-            var messageOrdinals = messageMatches.ToMessageOrdinals(null, true);
-
             int messageCountInBudget = await conversation.Messages.GetCountInCharBudgetAsync(
-                messageOrdinals,
+                messageMatches.ToMessageOrdinals(null),
                 maxCharsInBudget.Value,
                 cancellationToken
             ).ConfigureAwait(false);
