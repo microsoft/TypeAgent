@@ -22,8 +22,8 @@ import { MetricsView } from "./chat/metricsView";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
-import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher, IAgentMessage } from "agent-dispatcher";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
@@ -234,7 +234,7 @@ function registerClient(
                 // TODO: Design for toast notifications in shell
                 case AppAgentEvent.Inline:
                 case AppAgentEvent.Toast:
-                    handleInlineNotification(data, source, requestId, chatView);
+                    chatView.addNotificationMessage(data, source, requestId);
                     // Also add to notifications list for @notify show
                     notifications.push({
                         event,
@@ -370,7 +370,7 @@ function registerClient(
 }
 
 function showNotifications(
-    requestId: string,
+    requestId: RequestId,
     chatView: ChatView,
     messages: Array<any>,
     showRead: boolean = false,
@@ -387,20 +387,19 @@ function showNotifications(
     }
 
     html += "</ul><br/>";
-    console.log(requestId + chatView);
 
     chatView.addAgentMessage(
         {
             message: { type: "html", content: html },
             source: "shell.showNotifications",
-            requestId: requestId,
+            requestId,
         },
         { notification: true },
     );
 }
 
 function summarizeNotifications(
-    requestId: string,
+    requestId: RequestId,
     chatView: ChatView,
     messages: Array<any>,
 ) {
@@ -432,7 +431,7 @@ function summarizeNotifications(
             type: "html",
             content: summary,
         },
-        requestId: requestId,
+        requestId,
         source: "shell.notificationSummary",
     });
 }
@@ -607,35 +606,4 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     } else {
         return date1.toLocaleDateString("en-US", { weekday: "long" });
     }
-}
-
-function handleInlineNotification(
-    data: string | DisplayContent,
-    source: string,
-    requestId: string | undefined,
-    chatView: ChatView,
-): void {
-    // Check if this request uses eventSetId pattern for notification replacement
-    const isEventSetNotification = requestId?.startsWith("agent-eventset-");
-
-    // Use the provided requestId if it follows eventSetId pattern, otherwise generate new one
-    const agentRequestId =
-        requestId && requestId.startsWith("agent-")
-            ? requestId
-            : `agent-${source}-${Date.now()}`;
-
-    const agentMessage: IAgentMessage = {
-        message: data,
-        requestId: agentRequestId,
-        source: source,
-        actionIndex: 0,
-    };
-
-    // Add to chat view with notification flag
-    // Use dynamicUpdate for eventSet notifications to replace previous messages
-    chatView.addAgentMessage(agentMessage, {
-        appendMode: "temporary",
-        notification: true,
-        dynamicUpdate: isEventSetNotification,
-    });
 }

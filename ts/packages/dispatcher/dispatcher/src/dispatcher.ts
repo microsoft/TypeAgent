@@ -6,7 +6,11 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import { ConnectionId, Dispatcher } from "@typeagent/dispatcher-types";
+import {
+    ConnectionId,
+    Dispatcher,
+    RequestId,
+} from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import {
@@ -15,6 +19,7 @@ import {
     DispatcherOptions,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
+import { randomUUID } from "node:crypto";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -71,6 +76,7 @@ async function getTemplateCompletion(
 async function checkCache(
     request: string,
     context: CommandHandlerContext,
+    requestId: RequestId,
 ): Promise<import("@typeagent/dispatcher-types").CommandResult | undefined> {
     const agentCache = context.agentCache;
 
@@ -110,7 +116,7 @@ async function checkCache(
 
     // Cache hit - execute the command normally to get the full result
     // This will execute the cached actions and return proper results through ClientIO
-    return await processCommand(request, context);
+    return await processCommand(request, context, requestId);
 }
 
 export function createDispatcherFromContext(
@@ -122,14 +128,26 @@ export function createDispatcherFromContext(
         get connectionId() {
             return connectionId;
         },
-        processCommand(command, requestId, attachments) {
-            return processCommand(command, context, requestId, attachments);
+        processCommand(command, clientRequestId, attachments) {
+            return processCommand(
+                command,
+                context,
+                {
+                    connectionId,
+                    requestId: randomUUID(),
+                    clientRequestId,
+                },
+                attachments,
+            );
         },
         getCommandCompletion(prefix) {
             return getCommandCompletion(prefix, context);
         },
         checkCache(request) {
-            return checkCache(request, context);
+            return checkCache(request, context, {
+                connectionId,
+                requestId: randomUUID(),
+            });
         },
 
         getDynamicDisplay(appAgentName, type, id) {

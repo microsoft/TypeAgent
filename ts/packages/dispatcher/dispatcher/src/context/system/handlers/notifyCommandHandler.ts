@@ -9,6 +9,7 @@ import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { NotifyCommands } from "../../interactiveIO.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
+import { getRequestId } from "../../../command/command.js";
 
 class NotifyInfoCommandHandler implements CommandHandlerNoParams {
     description: string = "Shows the number of notifications available";
@@ -19,7 +20,7 @@ class NotifyInfoCommandHandler implements CommandHandlerNoParams {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
             "showNotifications",
-            systemContext.requestId,
+            getRequestId(systemContext),
             NotifyCommands.ShowSummary,
             DispatcherName,
         );
@@ -35,7 +36,7 @@ class NotifyClearCommandHandler implements CommandHandlerNoParams {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
             "showNotifications",
-            systemContext.requestId,
+            getRequestId(systemContext),
             NotifyCommands.Clear,
             DispatcherName,
         );
@@ -51,7 +52,7 @@ class NotifyShowUnreadCommandHandler implements CommandHandlerNoParams {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
             "showNotifications",
-            systemContext.requestId,
+            getRequestId(systemContext),
             NotifyCommands.ShowUnread,
             DispatcherName,
         );
@@ -68,7 +69,7 @@ class NotifyShowAllCommandHandler implements CommandHandlerNoParams {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
             "showNotifications",
-            systemContext.requestId,
+            getRequestId(systemContext),
             NotifyCommands.ShowAll,
             DispatcherName,
         );

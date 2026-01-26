@@ -11,6 +11,7 @@ import {
     IAgentMessage,
     ClientIO,
 } from "@typeagent/dispatcher-types";
+import { requestIdToString, getRequestId } from "../command/command.js";
 
 export enum NotifyCommands {
     ShowSummary = "summarize",
@@ -65,10 +66,9 @@ export function makeClientIOMessage(
         source,
         sourceIcon,
         actionIndex,
-        metrics:
-            requestId !== undefined
-                ? context.metricsManager?.getMetrics(requestId)
-                : undefined,
+        metrics: context.metricsManager?.getMetrics(
+            requestIdToString(requestId),
+        ),
     };
 }
 
@@ -79,7 +79,11 @@ export async function askYesNoWithContext(
 ) {
     return context?.batchMode
         ? defaultValue
-        : context.clientIO.askYesNo(message, context.requestId, defaultValue);
+        : context.clientIO.askYesNo(
+              message,
+              getRequestId(context),
+              defaultValue,
+          );
 }
 
 export const nullClientIO: ClientIO = {

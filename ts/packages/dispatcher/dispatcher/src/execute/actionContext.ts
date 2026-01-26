@@ -10,6 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
+import { RequestId } from "@typeagent/dispatcher-types";
 
 export type ActionContextWithClose = {
     actionContext: ActionContext<unknown>;
@@ -20,7 +21,7 @@ export type ActionContextWithClose = {
 export function getActionContext(
     appAgentName: string,
     systemContext: CommandHandlerContext,
-    requestId: string,
+    requestId: RequestId,
     actionIndex?: number,
     action?: TypeAgentAction | string[],
 ): ActionContextWithClose {

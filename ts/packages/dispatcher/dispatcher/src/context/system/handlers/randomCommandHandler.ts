@@ -4,7 +4,10 @@
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import fs from "node:fs";
 import { randomInt } from "crypto";
-import { processCommandNoLock } from "../../../command/command.js";
+import {
+    processCommandNoLock,
+    getRequestId,
+} from "../../../command/command.js";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
@@ -51,9 +54,10 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
         const randomRequest = this.list[randomInt(0, this.list.length)];
 
         const systemContext = context.sessionContext.agentContext;
+        const requestId = getRequestId(systemContext);
         systemContext.clientIO.notify(
             "randomCommandSelected",
-            systemContext.requestId,
+            requestId,
             {
                 message: randomRequest,
             },
@@ -61,7 +65,7 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
         );
         systemContext.clientIO.notify(
             AppAgentEvent.Info,
-            systemContext.requestId,
+            requestId,
             randomRequest,
             DispatcherName,
         );
@@ -124,7 +128,7 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
             const systemContext = context.sessionContext.agentContext;
             systemContext.clientIO.notify(
                 "randomCommandSelected",
-                systemContext.requestId,
+                getRequestId(systemContext),
                 {
                     message: message,
                 },

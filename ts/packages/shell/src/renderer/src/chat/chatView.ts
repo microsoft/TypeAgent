@@ -27,6 +27,11 @@ import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
+
+function getMessageGroupId(requestId: RequestId): string | undefined {
+    return requestId.clientRequestId as string | undefined;
+}
+
 export class ChatView {
     private readonly topDiv: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
@@ -49,6 +54,7 @@ export class ChatView {
     public chatInput: ChatInput | undefined;
     public tts?: TTS | undefined;
 
+    private notificationCount = 0;
     constructor(
         private idGenerator: IdGenerator,
         private readonly agents: Map<string, string>,
@@ -176,7 +182,7 @@ export class ChatView {
 
     private dynamicDisplays: {
         source: string;
-        id: string;
+        id: RequestId;
         actionIndex: number;
         displayId: string;
         nextRefreshTime: number;
@@ -185,7 +191,7 @@ export class ChatView {
     private scheduledRefreshTime: number | undefined = undefined;
     setDynamicDisplay(
         source: string,
-        id: RequestId,
+        requestId: RequestId,
         actionIndex: number,
         displayId: string,
         nextRefreshMs: number,
@@ -193,7 +199,7 @@ export class ChatView {
         const now = Date.now();
         const agentMessage = this.ensureAgentMessage({
             message: "",
-            requestId: id,
+            requestId,
             source: source,
             actionIndex: actionIndex,
         });
@@ -202,7 +208,7 @@ export class ChatView {
         }
         this.dynamicDisplays.push({
             source,
-            id: id as string,
+            id: requestId,
             actionIndex,
             displayId,
             nextRefreshTime:
@@ -264,7 +270,7 @@ export class ChatView {
                         source: source,
                         actionIndex: actionIndex,
                     },
-                    { dynamicUpdate: true },
+                    { scrollToMessage: true },
                 );
                 if (result.nextRefreshMs !== -1) {
                     this.dynamicDisplays.push({
@@ -291,7 +297,7 @@ export class ChatView {
                         source: source,
                         actionIndex: actionIndex,
                     },
-                    { dynamicUpdate: true },
+                    { scrollToMessage: true },
                 );
             }
 
@@ -300,7 +306,8 @@ export class ChatView {
         this.scheduleDynamicDisplayRefresh(now);
     }
 
-    private getMessageGroup(id?: string) {
+    private getMessageGroup(requestId: RequestId) {
+        const id = getMessageGroupId(requestId);
         const messageGroup = id ? this.idToMessageGroup.get(id) : undefined;
         if (messageGroup === undefined) {
             // for agent initiated messages we need to create an associated message group
@@ -435,18 +442,56 @@ export class ChatView {
         this.getMessageGroup(requestId)?.setActionData(requestId, data);
     }
 
+    private getNotificationMessageGroupId(
+        requestId: string | RequestId | undefined,
+        source: string,
+    ) {
+        if (requestId !== undefined) {
+            if (typeof requestId === "string") {
+                return `notification-async-${source}-${requestId}`;
+            }
+            const messageGroupId = getMessageGroupId(requestId);
+            if (messageGroupId !== undefined) {
+                return `notification-request-${messageGroupId}`;
+            }
+        }
+        return `notification-generic-${this.notificationCount++}`;
+    }
+
+    public addNotificationMessage(
+        message: string | DisplayContent,
+        source: string,
+        requestId: string | RequestId | undefined,
+    ) {
+        const agentMessage: IAgentMessage = {
+            message,
+            requestId: {
+                requestId: "",
+                clientRequestId: this.getNotificationMessageGroupId(
+                    requestId,
+                    source,
+                ),
+            },
+            source,
+            actionIndex: 0,
+        };
+        this.addAgentMessage(agentMessage, {
+            appendMode: "temporary",
+            notification: true,
+            scrollToMessage: typeof requestId === "string",
+        });
+    }
     addAgentMessage(
         msg: IAgentMessage,
         options?: {
             appendMode?: DisplayAppendMode;
-            dynamicUpdate?: boolean;
+            scrollToMessage?: boolean;
             notification?: boolean;
         },
     ) {
-        const dynamicUpdate = options?.dynamicUpdate ?? false;
+        const scrollToMessage = options?.scrollToMessage ?? false;
         const notification = options?.notification ?? false;
         const content: DisplayContent = msg.message;
-        //const source: string = msg.source;
 
         const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
@@ -455,7 +500,7 @@ export class ChatView {
 
         agentMessage.setMessage(content, msg.source, options?.appendMode);
 
-        if (!dynamicUpdate) {
+        if (!scrollToMessage) {
             this.updateScroll();
             this.chatInputFocus();
         }

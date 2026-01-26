@@ -33,6 +33,7 @@ import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
 import chalk from "chalk";
 import registerDebug from "debug";
 import { getRequestActionLogger } from "./requestActionLogger.js";
+import { getRequestId } from "../../../command/command.js";
 
 const debugExplain = registerDebug("typeagent:action:explain");
 
@@ -179,7 +180,7 @@ export class ActionCommandHandler implements CommandHandler {
         };
 
         try {
-            const requestId = context.requestId;
+            const requestId = getRequestId(context);
             debugExplain(
                 `Populating cache for natural language: "${naturalLanguage}" -> ${action.schemaName}.${action.actionName}`,
             );

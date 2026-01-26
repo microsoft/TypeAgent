@@ -9,7 +9,11 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 
-export type RequestId = string | undefined;
+export type RequestId = {
+    connectionId?: string | undefined;
+    requestId: string;
+    clientRequestId?: unknown | undefined;
+};
 
 export type Timing = {
     duration: number;
@@ -84,7 +88,7 @@ export interface Dispatcher {
      */
     processCommand(
         command: string,
-        requestId?: RequestId,
+        clientRequestId?: unknown,
         attachments?: string[],
     ): Promise<CommandResult | undefined>;
 

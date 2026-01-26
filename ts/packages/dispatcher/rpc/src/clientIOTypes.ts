@@ -52,7 +52,7 @@ export type ClientIOCallFunctions = {
 
     notify(
         event: string,
-        requestId: RequestId,
+        notificationId: string | RequestId | undefined,
         data: any,
         source: string,
     ): void;

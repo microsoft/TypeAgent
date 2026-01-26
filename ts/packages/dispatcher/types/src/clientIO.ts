@@ -26,7 +26,7 @@ export type TemplateEditConfig = {
 
 export interface IAgentMessage {
     message: DisplayContent;
-    requestId?: string | undefined;
+    requestId: RequestId;
     source: string;
     sourceIcon?: string | undefined;
     actionIndex?: number | undefined;
@@ -86,7 +86,7 @@ export interface ClientIO {
     // Notification (TODO: turn these in to dispatcher events)
     notify(
         event: string,
-        requestId: RequestId,
+        notificationId: string | RequestId | undefined,
         data: any,
         source: string,
     ): void;
