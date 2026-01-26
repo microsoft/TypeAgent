@@ -62,7 +62,8 @@ Provide feedback for each answer to help improve future responses.  If the answe
     {
         return [
             BenchmarkCreatePodcastQuestionsDef(),
-            BenchmarkRunDef()
+            BenchmarkRunDef(),
+            BenchmarkCompareDef()
         ];
     }
 
@@ -361,6 +362,364 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         string outputPath = namedArgs.Get<string>("outputPath") ?? ".";
         SaveBenchmarkResults(benchmarkResults, outputPath);
+    }
+
+    private Command BenchmarkCompareDef()
+    {
+        Command cmd = new("benchmarkCompare", "Compare benchmark result files to show improvements or regressions.")
+        {
+            Args.Arg<string>("path", "The benchmark results file or folder containing *.run.json files to compare."),
+            Options.Arg<string>("baseline", "The baseline benchmark results file (*.run.json) to compare against. If not specified, the oldest file in the folder is used.", "")
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(BenchmarkCompareAsync);
+        return cmd;
+    }
+
+    private Task BenchmarkCompareAsync(ParseResult args)
+    {
+        NamedArgs namedArgs = new(args);
+        string path = namedArgs.GetRequired("path");
+        string baselinePath = namedArgs.Get<string>("baseline") ?? string.Empty;
+
+        // Load all results from path
+        List<(string name, string filePath, BenchmarkResults results)> allResults = [];
+
+        if (File.Exists(path))
+        {
+            var result = Json.ParseFile<BenchmarkResults>(path);
+            if (result is not null)
+            {
+                allResults.Add((Path.GetFileNameWithoutExtension(path), path, result));
+            }
+        }
+        else if (Directory.Exists(path))
+        {
+            var files = Directory.GetFiles(path, "*.run.json");
+            if (files.Length == 0)
+            {
+                throw new FileNotFoundException($"No *.run.json files found in: '{path}'");
+            }
+
+            foreach (var file in files)
+            {
+                var result = Json.ParseFile<BenchmarkResults>(file);
+                if (result is not null)
+                {
+                    allResults.Add((Path.GetFileNameWithoutExtension(file), file, result));
+                }
+            }
+        }
+        else
+        {
+            throw new FileNotFoundException($"Path not found: '{path}'");
+        }
+
+        if (allResults.Count == 0)
+        {
+            throw new InvalidOperationException("No valid benchmark result files found.");
+        }
+
+        // Sort by run date
+        allResults = allResults.OrderBy(r => r.results.RunDate).ToList();
+
+        // Determine baseline
+        BenchmarkResults baseline;
+        string baselineDisplayName;
+        List<(string name, BenchmarkResults results)> currentResults;
+
+        if (!string.IsNullOrEmpty(baselinePath))
+        {
+            // Use specified baseline
+            if (!File.Exists(baselinePath))
+            {
+                throw new FileNotFoundException($"Baseline file not found: '{baselinePath}'");
+            }
+
+            var baselineResult = Json.ParseFile<BenchmarkResults>(baselinePath);
+            if (baselineResult is null)
+            {
+                throw new InvalidOperationException($"Failed to parse baseline file: '{baselinePath}'");
+            }
+
+            baseline = baselineResult;
+            baselineDisplayName = Path.GetFileName(baselinePath);
+
+            // Remove baseline from results if it's in the list
+            currentResults = allResults
+                .Where(r => !r.filePath.Equals(baselinePath, StringComparison.OrdinalIgnoreCase))
+                .Select(r => (r.name, r.results))
+                .ToList();
+        }
+        else
+        {
+            // Use oldest file as baseline
+            var oldestResult = allResults.First();
+            baseline = oldestResult.results;
+            baselineDisplayName = Path.GetFileName(oldestResult.filePath);
+
+            // All other files are current results
+            currentResults = allResults
+                .Skip(1)
+                .Select(r => (r.name, r.results))
+                .ToList();
+        }
+
+        if (currentResults.Count == 0)
+        {
+            throw new InvalidOperationException("Need at least two benchmark result files to compare.");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, "=== Benchmark Comparison ===");
+        KnowProWriter.WriteLine(ConsoleColor.White, $"Baseline: {baselineDisplayName} ({baseline.RunDate:yyyy-MM-dd HH:mm:ss})");
+        foreach (var (name, results) in currentResults)
+        {
+            KnowProWriter.WriteLine(ConsoleColor.White, $"Current:  {name} ({results.RunDate:yyyy-MM-dd HH:mm:ss})");
+        }
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+
+        // Compare overall scores
+        CompareOverallScores(baseline, currentResults);
+
+        // Compare timing
+        CompareTimingStats(baseline, currentResults);
+
+        // Compare token usage
+        CompareTokenStats(baseline, currentResults);
+
+        // Compare best answer tally
+        CompareBestAnswerTally(baseline, currentResults);
+
+        return Task.CompletedTask;
+    }
+
+    private void CompareOverallScores(BenchmarkResults baseline, List<(string name, BenchmarkResults results)> currentResults)
+    {
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, "Overall Score Comparison:");
+
+        var sources = baseline.OverallSummary.Keys
+            .Union(currentResults.SelectMany(c => c.results.OverallSummary.Keys))
+            .Distinct()
+            .ToList();
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Source",-CATEGORY_COL_WIDTH}");
+        headerBuilder.Append($" {"Baseline",METRIC_COL_WIDTH}");
+        foreach (var (name, _) in currentResults)
+        {
+            string colName = name.Length > METRIC_COL_WIDTH - 2 ? name[..(METRIC_COL_WIDTH - 2)] : name;
+            headerBuilder.Append($" {colName,METRIC_COL_WIDTH}");
+        }
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        foreach (var source in sources)
+        {
+            double baselineScore = baseline.OverallSummary.TryGetValue(source, out var bs) ? bs.Score : 0;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{source,-CATEGORY_COL_WIDTH}");
+            KnowProWriter.Write(ConsoleColor.White, $" {baselineScore,METRIC_COL_WIDTH - 1:N1}%");
+
+            foreach (var (_, results) in currentResults)
+            {
+                double currentScore = results.OverallSummary.TryGetValue(source, out var cs) ? cs.Score : 0;
+                double change = currentScore - baselineScore;
+
+                ConsoleColor changeColor = change > 0.5 ? ConsoleColor.Green : change < -0.5 ? ConsoleColor.Red : ConsoleColor.Yellow;
+                KnowProWriter.Write(changeColor, $" {currentScore,METRIC_COL_WIDTH - 1:N1}%");
+            }
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+    }
+
+    private void CompareTimingStats(BenchmarkResults baseline, List<(string name, BenchmarkResults results)> currentResults)
+    {
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, "Timing Comparison (Average Seconds per Question):");
+
+        var sources = baseline.TimingStats.Keys
+            .Union(currentResults.SelectMany(c => c.results.TimingStats.Keys))
+            .Distinct()
+            .ToList();
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Source",-CATEGORY_COL_WIDTH}");
+        headerBuilder.Append($" {"Baseline",METRIC_COL_WIDTH}");
+        foreach (var (name, _) in currentResults)
+        {
+            string colName = name.Length > METRIC_COL_WIDTH - 2 ? name[..(METRIC_COL_WIDTH - 2)] : name;
+            headerBuilder.Append($" {colName,METRIC_COL_WIDTH}");
+        }
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        foreach (var source in sources)
+        {
+            double baselineAvg = baseline.TimingStats.TryGetValue(source, out var bt) ? bt.AvgSeconds : 0;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{source,-CATEGORY_COL_WIDTH}");
+            KnowProWriter.Write(ConsoleColor.White, $" {baselineAvg,METRIC_COL_WIDTH - 1:N2}s");
+
+            foreach (var (_, results) in currentResults)
+            {
+                double currentAvg = results.TimingStats.TryGetValue(source, out var ct) ? ct.AvgSeconds : 0;
+                double changePct = baselineAvg > 0 ? ((currentAvg - baselineAvg) / baselineAvg) * 100 : 0;
+
+                // Lower is better for timing
+                ConsoleColor changeColor = changePct < -5 ? ConsoleColor.Green : changePct > 5 ? ConsoleColor.Red : ConsoleColor.Yellow;
+                KnowProWriter.Write(changeColor, $" {currentAvg,METRIC_COL_WIDTH - 1:N2}s");
+            }
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+    }
+
+    private void CompareTokenStats(BenchmarkResults baseline, List<(string name, BenchmarkResults results)> currentResults)
+    {
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, "Token Usage Comparison:");
+
+        var sources = baseline.TokenStats.Keys
+            .Union(currentResults.SelectMany(c => c.results.TokenStats.Keys))
+            .Distinct()
+            .ToList();
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Source",-CATEGORY_COL_WIDTH}");
+        headerBuilder.Append($" {"Baseline",METRIC_COL_WIDTH}");
+        foreach (var (name, _) in currentResults)
+        {
+            string colName = name.Length > METRIC_COL_WIDTH - 2 ? name[..(METRIC_COL_WIDTH - 2)] : name;
+            headerBuilder.Append($" {colName,METRIC_COL_WIDTH}");
+        }
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        // Total tokens section
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.DarkCyan, "Total Tokens:");
+
+        foreach (var source in sources)
+        {
+            long baselineTotal = baseline.TokenStats.TryGetValue(source, out var bt) ? bt.TotalTokens : 0;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{source,-CATEGORY_COL_WIDTH}");
+            KnowProWriter.Write(ConsoleColor.White, $" {baselineTotal,METRIC_COL_WIDTH:N0}");
+
+            foreach (var (_, results) in currentResults)
+            {
+                long currentTotal = results.TokenStats.TryGetValue(source, out var ct) ? ct.TotalTokens : 0;
+                double changePct = baselineTotal > 0 ? ((double)(currentTotal - baselineTotal) / baselineTotal) * 100 : 0;
+
+                // Lower is better for tokens (cost)
+                ConsoleColor changeColor = changePct < -5 ? ConsoleColor.Green : changePct > 5 ? ConsoleColor.Red : ConsoleColor.Yellow;
+                KnowProWriter.Write(changeColor, $" {currentTotal,METRIC_COL_WIDTH:N0}");
+            }
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+        }
+
+        // Average tokens per question section
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.DarkCyan, "Average per Question:");
+
+        foreach (var source in sources)
+        {
+            double baselineAvg = baseline.TokenStats.TryGetValue(source, out var bt) ? bt.AvgIn + bt.AvgOut : 0;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{source,-CATEGORY_COL_WIDTH}");
+            KnowProWriter.Write(ConsoleColor.White, $" {baselineAvg,METRIC_COL_WIDTH:N0}");
+
+            foreach (var (_, results) in currentResults)
+            {
+                double currentAvg = results.TokenStats.TryGetValue(source, out var ct) ? ct.AvgIn + ct.AvgOut : 0;
+                double changePct = baselineAvg > 0 ? ((currentAvg - baselineAvg) / baselineAvg) * 100 : 0;
+
+                // Lower is better for tokens (cost)
+                ConsoleColor changeColor = changePct < -5 ? ConsoleColor.Green : changePct > 5 ? ConsoleColor.Red : ConsoleColor.Yellow;
+                KnowProWriter.Write(changeColor, $" {currentAvg,METRIC_COL_WIDTH:N0}");
+            }
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.White, "");
+    }
+
+    private void CompareBestAnswerTally(BenchmarkResults baseline, List<(string name, BenchmarkResults results)> currentResults)
+    {
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, "Best Answer Tally Comparison:");
+
+        var sources = baseline.BestAnswerTally.Keys
+            .Union(currentResults.SelectMany(c => c.results.BestAnswerTally.Keys))
+            .Distinct()
+            .ToList();
+
+        int baselineTotal = baseline.BestAnswerTally.Values.Sum();
+
+        // Build header
+        StringBuilder headerBuilder = new();
+        headerBuilder.Append($"{"Source",-CATEGORY_COL_WIDTH}");
+        headerBuilder.Append($" {"Baseline",METRIC_COL_WIDTH}");
+        foreach (var (name, _) in currentResults)
+        {
+            string colName = name.Length > METRIC_COL_WIDTH - 2 ? name[..(METRIC_COL_WIDTH - 2)] : name;
+            headerBuilder.Append($" {colName,METRIC_COL_WIDTH}");
+        }
+        string header = headerBuilder.ToString();
+        string separator = new string('-', header.Length);
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+        KnowProWriter.WriteLine(ConsoleColor.Cyan, header);
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
+
+        foreach (var source in sources)
+        {
+            double baselinePct = baseline.BestAnswerTally.TryGetValue(source, out var bv) && baselineTotal > 0
+                ? (double)bv / baselineTotal * 100 : 0;
+
+            KnowProWriter.Write(ConsoleColor.White, $"{source,-CATEGORY_COL_WIDTH}");
+            KnowProWriter.Write(ConsoleColor.White, $" {baselinePct,METRIC_COL_WIDTH - 1:N1}%");
+
+            foreach (var (_, results) in currentResults)
+            {
+                int currentTotal = results.BestAnswerTally.Values.Sum();
+                double currentPct = results.BestAnswerTally.TryGetValue(source, out var cv) && currentTotal > 0
+                    ? (double)cv / currentTotal * 100 : 0;
+                double change = currentPct - baselinePct;
+
+                // Higher is better for best answer (except Tie)
+                ConsoleColor changeColor;
+                if (source == "Tie")
+                {
+                    changeColor = ConsoleColor.Yellow;
+                }
+                else
+                {
+                    changeColor = change > 1 ? ConsoleColor.Green : change < -1 ? ConsoleColor.Red : ConsoleColor.Yellow;
+                }
+                KnowProWriter.Write(changeColor, $" {currentPct,METRIC_COL_WIDTH - 1:N1}%");
+            }
+            KnowProWriter.WriteLine(ConsoleColor.White, "");
+        }
+
+        KnowProWriter.WriteLine(ConsoleColor.White, separator);
     }
 
     private void OutputCategoryComparison(List<GradedQuestion> allGradedQuestions)
@@ -1266,7 +1625,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
     private void SaveBenchmarkResults(BenchmarkResults results, string outputPath)
     {
         string timestamp = results.RunDate.ToString("yyyyMMdd_HHmmss");
-        string fileName = Path.Combine(outputPath, $"benchmark_results_{timestamp}.json");
+        string fileName = Path.Combine(outputPath, $"benchmark_results_{timestamp}.run.json");
         Json.StringifyToFile(results, fileName, true, true);
         KnowProWriter.WriteLine(ConsoleColor.Green, $"Results saved to: {fileName}");
     }
