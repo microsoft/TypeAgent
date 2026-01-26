@@ -74,7 +74,9 @@ Provide feedback for each answer to help improve future responses.  If the answe
             Args.Arg<string>("path", "The file or folder to load questions files (*.question.json) from."),
             Options.Arg<int>("maxQuestions", "The maximum number of questions to process.", 0),
             Options.Arg<string>("outputPath", "The folder to save the results JSON file.", "."),
-            Options.Arg<int>("maxCharsInBudget", "The number of characters for any given LLM call.", 16 * 1024)
+            Options.Arg<int>("maxCharsInBudget", "The number of characters for any given LLM call.", 16 * 1024),
+            Options.Arg<int>("messagesTopK", "The maximum number of messages to incldue in the answer context.", 25),
+            Options.Arg<double>("minScore", "The minimum search result score.", 0.7)
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(BenchmarkRunAsync);
@@ -90,6 +92,8 @@ Provide feedback for each answer to help improve future responses.  If the answe
         string path = namedArgs.GetRequired("path");
         int maxQuestions = namedArgs.Get<int>("maxQuestions");
         int maxCharsInBudget = namedArgs.Get<int>("maxCharsInBudget");
+        int messagesTopK = namedArgs.Get<int>("messagesTopK");
+        double minScore = namedArgs.Get<double>("minScore");
         List<string> questionFiles = [];
         if (File.Exists(path))
         {
@@ -137,9 +141,8 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 KnowProWriter.Write(ConsoleColor.DarkYellow, $"[ {i + 1} / {questions.Questions.Count} ] ");
                 KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Question: {question}");
 
-                AnswerContextOptions answerOptions = new AnswerContextOptions() { MaxCharsInBudget = maxCharsInBudget };
-                LangSearchOptions langSearchOptions = new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = maxCharsInBudget, MaxMessageMatches = 25 };
-
+                AnswerContextOptions answerOptions = new AnswerContextOptions() { MaxCharsInBudget = maxCharsInBudget, MessagesTopK = messagesTopK };
+                LangSearchOptions langSearchOptions = new LangSearchOptions() { ThresholdScore = minScore, MaxCharsInBudget = maxCharsInBudget, MaxMessageMatches = messagesTopK };
 
                 // Get token counter before RAG call
                 var generatorModel = conversation.Settings.AnswerGenerator.Settings.GeneratorModel;
