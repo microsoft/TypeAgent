@@ -733,6 +733,52 @@ class HistoryLimitCommandHandler implements CommandHandler {
         );
     }
 }
+
+class GrammarSystemCommandHandler implements CommandHandler {
+    public readonly description = "Set grammar system (completionBased or nfa)";
+    public readonly parameters = {
+        args: {
+            system: {
+                description: "Grammar system to use",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const system = params.args.system;
+        if (system !== "completionBased" && system !== "nfa") {
+            displayWarn(
+                `Invalid grammar system '${system}'. Must be 'completionBased' or 'nfa'.`,
+                context,
+            );
+            return;
+        }
+        await changeContextConfig(
+            { cache: { grammarSystem: system } },
+            context,
+        );
+        displayResult(`Grammar system set to '${system}'.`, context);
+    }
+
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "system") {
+                completions.push({
+                    name,
+                    completions: ["completionBased", "nfa"],
+                });
+            }
+        }
+        return completions;
+    }
+}
 const configTranslationCommandHandlers: CommandHandlerTable = {
     description: "Translation configuration",
     defaultSubCommand: "on",
@@ -1270,6 +1316,12 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                             );
                         },
                     ),
+                },
+            },
+            cache: {
+                description: "Configure cache behavior",
+                commands: {
+                    grammarSystem: new GrammarSystemCommandHandler(),
                 },
             },
             translation: configTranslationCommandHandlers,

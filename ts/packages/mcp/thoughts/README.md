@@ -22,6 +22,7 @@ npm install @typeagent/thoughts
 ## Environment Variables
 
 For audio transcription support, set:
+
 ```bash
 export AZURE_SPEECH_KEY="your-azure-speech-key"
 export AZURE_SPEECH_REGION="your-region"  # e.g., "eastus"
@@ -72,22 +73,26 @@ cat stream_of_consciousness.txt | thoughts > organized.md
 ```
 
 **Notes**:
+
 - WAV files are automatically detected by the `.wav` extension and transcribed using Azure Cognitive Services before being processed by Claude
 - Tags are added as a markdown heading section at the end of the document for easy searching and filtering
 
 ### Inline Tags
 
 While recording audio or writing text, you can mark specific sections with inline tags by saying or writing phrases like:
+
 - "tag this as marshmallow colors"
 - "tag design ideas"
 - "tag this as action item"
 
 Claude will automatically:
+
 1. Remove the tag phrase from the content
 2. Insert a tag marker at that location: **🏷️ tag-name**
 3. Convert the tag to lowercase with hyphens
 
 **Example**:
+
 ```
 Input: "I think we should use blue and purple. Tag this as color scheme. The fonts need to be modern..."
 
@@ -108,9 +113,7 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
   "mcpServers": {
     "thoughts": {
       "command": "node",
-      "args": [
-        "/path/to/TypeAgent/ts/packages/mcp/thoughts/dist/index.js"
-      ]
+      "args": ["/path/to/TypeAgent/ts/packages/mcp/thoughts/dist/index.js"]
     }
   }
 }

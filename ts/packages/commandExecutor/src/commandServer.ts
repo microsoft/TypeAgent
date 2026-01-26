@@ -18,6 +18,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { convert } from "html-to-text";
+import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
 
 function executeCommandRequestSchema() {
     return {
@@ -458,6 +459,7 @@ export class CommandServer {
     private logger: Logger;
     private responseCollector: { messages: string[] } = { messages: [] };
     private currentRequestConfirmed: boolean = false;
+    private config: ResolvedAgentServerConfig;
 
     /**
      * Creates a new CommandServer instance
@@ -466,6 +468,35 @@ export class CommandServer {
      */
     constructor(debugMode: boolean = true, agentServerUrl?: string) {
         this.logger = new Logger();
+
+        // Load agent server configuration
+        const configResult = loadConfig();
+        this.config = configResult.config;
+
+        if (configResult.source) {
+            this.logger.log(
+                `Loaded configuration from: ${configResult.source}`,
+            );
+            this.logger.log(
+                `Grammar system: ${this.config.cache.grammarSystem}`,
+            );
+            this.logger.log(`Cache enabled: ${this.config.cache.enabled}`);
+            if (this.config.agents.length > 0) {
+                this.logger.log(
+                    `Configured agents: ${this.config.agents.map((a: { name: string }) => a.name).join(", ")}`,
+                );
+            }
+        } else {
+            this.logger.log("No configuration file found, using defaults");
+        }
+
+        if (configResult.errors.length > 0) {
+            this.logger.error(
+                "Configuration validation errors:",
+                configResult.errors.join(", "),
+            );
+        }
+
         this.server = new McpServer({
             name: "Command-Executor-Server",
             version: "1.0.0",
@@ -481,6 +512,13 @@ export class CommandServer {
         if (debugMode) {
             this.addDiagnosticTools();
         }
+    }
+
+    /**
+     * Get the current configuration
+     */
+    public getConfig(): ResolvedAgentServerConfig {
+        return this.config;
     }
 
     public async start(transport?: StdioServerTransport): Promise<void> {
@@ -516,6 +554,9 @@ export class CommandServer {
             this.logger.log(
                 `Connected to TypeAgent dispatcher at ${this.agentServerUrl}`,
             );
+
+            // Apply configuration settings via @config commands
+            await this.applyConfigurationSettings();
         } catch (error) {
             this.logger.error(
                 `Failed to connect to dispatcher at ${this.agentServerUrl}`,
@@ -527,6 +568,35 @@ export class CommandServer {
             this.dispatcher = null;
         } finally {
             this.isConnecting = false;
+        }
+    }
+
+    /**
+     * Apply configuration settings by sending @config commands to the dispatcher
+     */
+    private async applyConfigurationSettings(): Promise<void> {
+        if (!this.dispatcher) {
+            return;
+        }
+
+        try {
+            // Apply cache.grammarSystem setting if it differs from default
+            if (this.config.cache.grammarSystem !== "completionBased") {
+                this.logger.log(
+                    `Applying configuration: cache.grammarSystem = ${this.config.cache.grammarSystem}`,
+                );
+                await this.dispatcher.processCommand(
+                    `@config cache.grammarSystem ${this.config.cache.grammarSystem}`,
+                );
+            }
+
+            this.logger.log("Configuration settings applied successfully");
+        } catch (error) {
+            this.logger.error(
+                "Failed to apply some configuration settings",
+                error,
+            );
+            // Don't throw - continue even if config application fails
         }
     }
 
