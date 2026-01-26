@@ -14,7 +14,12 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
-    "./rules": "./dist/indexRules.js"
+    "./rules": "./dist/indexRules.js",
+    "./generation": "./dist/generation/index.js"
+  },
+  "bin": {
+    "generate-grammar": "./dist/generation/generate-grammar-cli.js",
+    "test-grammar": "./dist/generation/test-grammar-cli.js"
   },
   "files": [
     "dist",
@@ -31,9 +36,11 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@typeagent/action-schema": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
+    "dotenv": "^16.4.5",
     "regexp.escape": "^2.0.1"
   },
   "devDependencies": {

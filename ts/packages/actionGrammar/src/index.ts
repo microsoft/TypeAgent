@@ -46,3 +46,15 @@ export {
     AgentGrammarRegistry,
     globalAgentGrammarRegistry,
 } from "./agentGrammarRegistry.js";
+
+// Grammar Store (dynamic rule persistence)
+export type {
+    StoredGrammarRule,
+    GrammarStoreData,
+    GrammarStoreInfo,
+} from "./grammarStore.js";
+export {
+    GrammarStore,
+    getSessionGrammarDirPath,
+    getSessionGrammarStorePath,
+} from "./grammarStore.js";

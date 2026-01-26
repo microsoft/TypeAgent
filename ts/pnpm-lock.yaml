@@ -889,6 +889,9 @@ importers:
 
   packages/actionGrammar:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.1.13)
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -898,6 +901,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.5.0
       regexp.escape:
         specifier: ^2.0.1
         version: 2.0.1
