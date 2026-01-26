@@ -72,6 +72,8 @@ Provide feedback for each answer to help improve future responses.  If the answe
         {
             Args.Arg<string>("path", "The file or folder to load questions files (*.question.json) from."),
             Options.Arg<int>("maxQuestions", "The maximum number of questions to process.", 0),
+            Options.Arg<string>("outputPath", "The folder to save the results JSON file.", "."),
+            Options.Arg<int>("maxCharsInBudget", "The number of characters for any given LLM call.", 16 * 1024)
         };
         cmd.TreatUnmatchedTokensAsErrors = false;
         cmd.SetAction(BenchmarkRunAsync);
@@ -86,6 +88,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
         NamedArgs namedArgs = new(args);
         string path = namedArgs.GetRequired("path");
         int maxQuestions = namedArgs.Get<int>("maxQuestions");
+        int maxCharsInBudget = namedArgs.Get<int>("maxCharsInBudget");
         List<string> questionFiles = [];
         if (File.Exists(path))
         {
@@ -133,6 +136,10 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 KnowProWriter.Write(ConsoleColor.DarkYellow, $"[ {i + 1} / {questions.Questions.Count} ] ");
                 KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Question: {question}");
 
+                AnswerContextOptions answerOptions = new AnswerContextOptions() { MaxCharsInBudget = maxCharsInBudget };
+                LangSearchOptions langSearchOptions = new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = maxCharsInBudget, MaxMessageMatches = 25 };
+
+
                 // Get token counter before RAG call
                 var generatorModel = conversation.Settings.AnswerGenerator.Settings.GeneratorModel;
                 var languageModel = conversation.Settings.LanguageModel;
@@ -141,7 +148,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 uint ragTokensOutBefore = generatorModel.TokenCounter.TokensOut;
                 int ragCallCountBefore = generatorModel.TokenCounter.Latencies.Count;
 
-                AnswerResponse? answerRAG = await conversation.AnswerQuestionRagAsync(question, 0.7, 8196, new() { MessagesTopK = 25 }, null, CancellationToken.None);
+                AnswerResponse? answerRAG = await conversation.AnswerQuestionRagAsync(question, langSearchOptions.ThresholdScore.Value, langSearchOptions.MaxCharsInBudget.Value, answerOptions, null, CancellationToken.None);
                 TimeSpan ragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
 
                 // Calculate RAG token usage
@@ -189,7 +196,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
                 uint sragTokensOutBefore = generatorModel.TokenCounter.TokensOut;
                 int sragCallCountBefore = generatorModel.TokenCounter.Latencies.Count;
 
-                AnswerResponse? answer = await conversation.AnswerQuestionAsync(question, new LangSearchOptions() { ThresholdScore = 0.7, MaxCharsInBudget = 8196, MaxMessageMatches = 25 }, null, null, null, CancellationToken.None);
+                AnswerResponse? answer = await conversation.AnswerQuestionAsync(question, langSearchOptions, null, answerOptions, null, CancellationToken.None);
                 TimeSpan sragDuration = _kpContext.Stopwatch.Elapsed.Subtract(questionStart);
 
                 // Calculate SRAG token usage
@@ -329,6 +336,31 @@ Provide feedback for each answer to help improve future responses.  If the answe
         KnowProWriter.WriteLine(ConsoleColor.White, "");
         KnowProWriter.WriteLine(ConsoleColor.White, $"Token Usage Comparison:");
         OutputTokenComparison(allTokenData);
+
+        // Build and save benchmark results to JSON
+        BenchmarkSearchParameters searchParams = new()
+        {
+            RagThresholdScore = 0.7,
+            RagMaxCharsInBudget = 8196,
+            RagMessagesTopK = 25,
+            SragThresholdScore = 0.7,
+            SragMaxCharsInBudget = 8196,
+            SragMaxMessageMatches = 25,
+            MaxQuestions = maxQuestions,
+            QuestionFiles = questionFiles
+        };
+
+        BenchmarkResults benchmarkResults = BuildBenchmarkResults(
+            allGradedQuestions,
+            allTimingData,
+            allTokenData,
+            bestAnswerTally,
+            summary,
+            searchParams
+        );
+
+        string outputPath = namedArgs.Get<string>("outputPath") ?? ".";
+        SaveBenchmarkResults(benchmarkResults, outputPath);
     }
 
     private void OutputCategoryComparison(List<GradedQuestion> allGradedQuestions)
@@ -1107,6 +1139,137 @@ Provide feedback for each answer to help improve future responses.  If the answe
             ? _kpContext.Conversation!
             : throw new InvalidOperationException("No conversation loaded");
     }
+
+    private BenchmarkResults BuildBenchmarkResults(
+        List<GradedQuestion> allGradedQuestions,
+        List<TimingData> allTimingData,
+        List<TokenData> allTokenData,
+        Dictionary<string, int> bestAnswerTally,
+        Dictionary<string, (int correct, int incorrect, int partial, int total, int noAnswer)> summary,
+        BenchmarkSearchParameters searchParameters)
+    {
+        var results = new BenchmarkResults
+        {
+            RunDate = System.DateTime.UtcNow,
+            SearchParameters = searchParameters,
+            BestAnswerTally = bestAnswerTally,
+            GradedQuestions = allGradedQuestions
+        };
+
+        // Build overall summary
+        foreach (var group in summary)
+        {
+            double score = (group.Value.correct + ((double)group.Value.partial / 2D)) / (double)group.Value.total * 100D;
+            results.OverallSummary[group.Key] = new SourceSummary
+            {
+                Correct = group.Value.correct,
+                Incorrect = group.Value.incorrect,
+                Partial = group.Value.partial,
+                Total = group.Value.total,
+                NoAnswer = group.Value.noAnswer,
+                Score = score
+            };
+        }
+
+        // Build category comparison
+        var categoryGroups = allGradedQuestions
+            .GroupBy(g => g.Category)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(q => q.source)
+                      .ToDictionary(
+                          s => s.Key,
+                          s =>
+                          {
+                              int correct = s.Count(q => q.IsCorrect == Grade.Correct);
+                              int incorrect = s.Count(q => q.IsCorrect == Grade.Incorrect);
+                              int partial = s.Count(q => q.IsCorrect == Grade.Partial);
+                              int total = s.Count();
+                              double score = total > 0 ? (correct + ((double)partial / 2)) / total * 100D : 0;
+                              return new CategoryStats
+                              {
+                                  Correct = correct,
+                                  Incorrect = incorrect,
+                                  Partial = partial,
+                                  Total = total,
+                                  Score = score
+                              };
+                          }
+                      )
+            );
+        results.CategoryComparison = categoryGroups;
+
+        // Build difficulty comparison
+        var difficultyGroups = allGradedQuestions
+            .GroupBy(g => g.Difficulty.ToString())
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(q => q.source)
+                      .ToDictionary(
+                          s => s.Key,
+                          s =>
+                          {
+                              int correct = s.Count(q => q.IsCorrect == Grade.Correct);
+                              int incorrect = s.Count(q => q.IsCorrect == Grade.Incorrect);
+                              int partial = s.Count(q => q.IsCorrect == Grade.Partial);
+                              int total = s.Count();
+                              double score = total > 0 ? (correct + ((double)partial / 2)) / total * 100D : 0;
+                              return new CategoryStats
+                              {
+                                  Correct = correct,
+                                  Incorrect = incorrect,
+                                  Partial = partial,
+                                  Total = total,
+                                  Score = score
+                              };
+                          }
+                      )
+            );
+        results.DifficultyComparison = difficultyGroups;
+
+        // Build timing stats
+        results.TimingStats = allTimingData
+            .GroupBy(t => t.Source)
+            .ToDictionary(
+                g => g.Key,
+                g => new TimingStats
+                {
+                    TotalSeconds = g.Aggregate(TimeSpan.Zero, (sum, t) => sum + t.Duration).TotalSeconds,
+                    Count = g.Count(),
+                    MinSeconds = g.Min(t => t.Duration).TotalSeconds,
+                    MaxSeconds = g.Max(t => t.Duration).TotalSeconds,
+                    AvgSeconds = g.Sum(t => t.Duration.Ticks) / g.Count() / TimeSpan.TicksPerSecond
+                }
+            );
+
+        // Build token stats
+        results.TokenStats = allTokenData
+            .GroupBy(t => t.Source)
+            .ToDictionary(
+                g => g.Key,
+                g => new TokenStats
+                {
+                    TotalIn = g.Sum(t => (long)t.TokensIn),
+                    TotalOut = g.Sum(t => (long)t.TokensOut),
+                    TotalTokens = g.Sum(t => (long)(t.TokensIn + t.TokensOut)),
+                    TotalLlmCalls = g.Sum(t => t.LlmCalls),
+                    Count = g.Count(),
+                    AvgIn = (double)g.Sum(t => (long)t.TokensIn) / g.Count(),
+                    AvgOut = (double)g.Sum(t => (long)t.TokensOut) / g.Count(),
+                    AvgLlmCalls = (double)g.Sum(t => t.LlmCalls) / g.Count()
+                }
+            );
+
+        return results;
+    }
+
+    private void SaveBenchmarkResults(BenchmarkResults results, string outputPath)
+    {
+        string timestamp = results.RunDate.ToString("yyyyMMdd_HHmmss");
+        string fileName = Path.Combine(outputPath, $"benchmark_results_{timestamp}.json");
+        Json.StringifyToFile(results, fileName, true, true);
+        KnowProWriter.WriteLine(ConsoleColor.Green, $"Results saved to: {fileName}");
+    }
 }
 
 public class BenchmarkQuestion
@@ -1185,7 +1348,6 @@ public enum Difficulty
     Hard
 }
 
-// Add this class near the other benchmark classes at the bottom of the file
 public class TimingData
 {
     public string Source { get; set; } = string.Empty;
@@ -1202,4 +1364,145 @@ public class TokenData
     public int LlmCalls { get; set; }
     public string Category { get; set; } = string.Empty;
     public Difficulty Difficulty { get; set; }
+}
+
+public class BenchmarkResults
+{
+    [JsonPropertyName("runDate")]
+    public System.DateTime RunDate { get; set; } = System.DateTime.UtcNow;
+
+    [JsonPropertyName("searchParameters")]
+    public BenchmarkSearchParameters SearchParameters { get; set; } = new();
+
+    [JsonPropertyName("overallSummary")]
+    public Dictionary<string, SourceSummary> OverallSummary { get; set; } = [];
+
+    [JsonPropertyName("bestAnswerTally")]
+    public Dictionary<string, int> BestAnswerTally { get; set; } = [];
+
+    [JsonPropertyName("categoryComparison")]
+    public Dictionary<string, Dictionary<string, CategoryStats>> CategoryComparison { get; set; } = [];
+
+    [JsonPropertyName("difficultyComparison")]
+    public Dictionary<string, Dictionary<string, CategoryStats>> DifficultyComparison { get; set; } = [];
+
+    [JsonPropertyName("timingStats")]
+    public Dictionary<string, TimingStats> TimingStats { get; set; } = [];
+
+    [JsonPropertyName("tokenStats")]
+    public Dictionary<string, TokenStats> TokenStats { get; set; } = [];
+
+    [JsonPropertyName("gradedQuestions")]
+    public List<GradedQuestion> GradedQuestions { get; set; } = [];
+}
+
+public class BenchmarkSearchParameters
+{
+    [JsonPropertyName("ragThresholdScore")]
+    public double RagThresholdScore { get; set; }
+
+    [JsonPropertyName("ragMaxCharsInBudget")]
+    public int RagMaxCharsInBudget { get; set; }
+
+    [JsonPropertyName("ragMessagesTopK")]
+    public int RagMessagesTopK { get; set; }
+
+    [JsonPropertyName("sragThresholdScore")]
+    public double SragThresholdScore { get; set; }
+
+    [JsonPropertyName("sragMaxCharsInBudget")]
+    public int SragMaxCharsInBudget { get; set; }
+
+    [JsonPropertyName("sragMaxMessageMatches")]
+    public int SragMaxMessageMatches { get; set; }
+
+    [JsonPropertyName("maxQuestions")]
+    public int MaxQuestions { get; set; }
+
+    [JsonPropertyName("questionFiles")]
+    public List<string> QuestionFiles { get; set; } = [];
+}
+
+public class SourceSummary
+{
+    [JsonPropertyName("correct")]
+    public int Correct { get; set; }
+
+    [JsonPropertyName("incorrect")]
+    public int Incorrect { get; set; }
+
+    [JsonPropertyName("partial")]
+    public int Partial { get; set; }
+
+    [JsonPropertyName("total")]
+    public int Total { get; set; }
+
+    [JsonPropertyName("noAnswer")]
+    public int NoAnswer { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+}
+
+public class CategoryStats
+{
+    [JsonPropertyName("correct")]
+    public int Correct { get; set; }
+
+    [JsonPropertyName("incorrect")]
+    public int Incorrect { get; set; }
+
+    [JsonPropertyName("partial")]
+    public int Partial { get; set; }
+
+    [JsonPropertyName("total")]
+    public int Total { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+}
+
+public class TimingStats
+{
+    [JsonPropertyName("totalSeconds")]
+    public double TotalSeconds { get; set; }
+
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("minSeconds")]
+    public double MinSeconds { get; set; }
+
+    [JsonPropertyName("maxSeconds")]
+    public double MaxSeconds { get; set; }
+
+    [JsonPropertyName("avgSeconds")]
+    public double AvgSeconds { get; set; }
+}
+
+public class TokenStats
+{
+    [JsonPropertyName("totalIn")]
+    public long TotalIn { get; set; }
+
+    [JsonPropertyName("totalOut")]
+    public long TotalOut { get; set; }
+
+    [JsonPropertyName("totalTokens")]
+    public long TotalTokens { get; set; }
+
+    [JsonPropertyName("totalLlmCalls")]
+    public int TotalLlmCalls { get; set; }
+
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("avgIn")]
+    public double AvgIn { get; set; }
+
+    [JsonPropertyName("avgOut")]
+    public double AvgOut { get; set; }
+
+    [JsonPropertyName("avgLlmCalls")]
+    public double AvgLlmCalls { get; set; }
 }
