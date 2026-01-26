@@ -6,11 +6,7 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 import { createDispatcherRpcClient } from "@typeagent/dispatcher-rpc/dispatcher/client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
-import WebSocket, {
-    type MessageEvent,
-    type CloseEvent,
-    type ErrorEvent,
-} from "isomorphic-ws";
+import WebSocket from "isomorphic-ws";
 
 import registerDebug from "debug";
 import {
@@ -67,19 +63,19 @@ export async function connectDispatcher(
                     reject(err);
                 });
         };
-        ws.onmessage = (event: MessageEvent) => {
+        ws.onmessage = (event: WebSocket.MessageEvent) => {
             debug("Received message from server:", event.data);
 
             channel.notifyMessage(JSON.parse(event.data.toString()));
         };
-        ws.onclose = (event: CloseEvent) => {
+        ws.onclose = (event: WebSocket.CloseEvent) => {
             debug("WebSocket connection closed", event.code, event.reason);
             channel.notifyDisconnected();
             if (!resolved) {
                 reject(new Error(`Failed to connect to dispatcher at ${url}`));
             }
         };
-        ws.onerror = (error: ErrorEvent) => {
+        ws.onerror = (error: WebSocket.ErrorEvent) => {
             debugErr("WebSocket error:", error);
         };
     });
