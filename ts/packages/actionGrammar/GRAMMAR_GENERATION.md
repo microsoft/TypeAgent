@@ -27,26 +27,29 @@ Two command-line tools are provided:
 The primary integration point for agentServer is the `populateCache` function:
 
 ```typescript
-import { populateCache, CachePopulationRequest } from "action-grammar/generation";
+import {
+  populateCache,
+  CachePopulationRequest,
+} from "action-grammar/generation";
 
 const result = await populateCache({
-    request: "play Bohemian Rhapsody by Queen",
-    schemaName: "player",
-    action: {
-        actionName: "playTrack",
-        parameters: {
-            trackName: "Bohemian Rhapsody",
-            artistName: "Queen"
-        }
+  request: "play Bohemian Rhapsody by Queen",
+  schemaName: "player",
+  action: {
+    actionName: "playTrack",
+    parameters: {
+      trackName: "Bohemian Rhapsody",
+      artistName: "Queen",
     },
-    schemaPath: "./packages/agents/player/dist/playerSchema.pas.json"
+  },
+  schemaPath: "./packages/agents/player/dist/playerSchema.pas.json",
 });
 
 if (result.success) {
-    console.log("Generated rule:", result.generatedRule);
-    // Add rule to cache
+  console.log("Generated rule:", result.generatedRule);
+  // Add rule to cache
 } else {
-    console.log("Rejected:", result.rejectionReason);
+  console.log("Rejected:", result.rejectionReason);
 }
 ```
 
@@ -63,17 +66,17 @@ if (result.success) {
 
 ```typescript
 interface CachePopulationRequest {
-    // The natural language request from the user
-    request: string;
-    // The schema name (agent name) this action belongs to
-    schemaName: string;
-    // The action that was confirmed by the user
-    action: {
-        actionName: string;
-        parameters: Record<string, any>;
-    };
-    // Path to the .pas.json schema file for validation info
-    schemaPath: string;
+  // The natural language request from the user
+  request: string;
+  // The schema name (agent name) this action belongs to
+  schemaName: string;
+  // The action that was confirmed by the user
+  action: {
+    actionName: string;
+    parameters: Record<string, any>;
+  };
+  // Path to the .pas.json schema file for validation info
+  schemaPath: string;
 }
 ```
 
@@ -81,16 +84,16 @@ interface CachePopulationRequest {
 
 ```typescript
 interface CachePopulationResult {
-    // Whether the grammar rule was successfully generated and added
-    success: boolean;
-    // The generated grammar rule text (if successful)
-    generatedRule?: string;
-    // Reason for rejection (if not successful)
-    rejectionReason?: string;
-    // The grammar analysis performed
-    analysis?: GrammarAnalysis;
-    // Warning messages
-    warnings?: string[];
+  // Whether the grammar rule was successfully generated and added
+  success: boolean;
+  // The generated grammar rule text (if successful)
+  generatedRule?: string;
+  // Reason for rejection (if not successful)
+  rejectionReason?: string;
+  // The grammar analysis performed
+  analysis?: GrammarAnalysis;
+  // Warning messages
+  warnings?: string[];
 }
 ```
 
@@ -101,6 +104,7 @@ The system follows strict rules to ensure generated grammars are unambiguous:
 ### Acceptance Criteria
 
 ✅ **ACCEPT** patterns with:
+
 - Clear boundaries between wildcards (fixed words, entity types, or validation)
 - Entity types that provide validation (e.g., `$(device:MusicDevice)`)
 - Checked wildcards with paramSpec validation
@@ -109,6 +113,7 @@ The system follows strict rules to ensure generated grammars are unambiguous:
 ### Rejection Criteria
 
 ❌ **REJECT** patterns with:
+
 - **Adjacent unqualified wildcards**: Two plain string wildcards next to each other
   - Example: `$(description:EventDescription) $(participant:ParticipantName)` - ambiguous boundary
 - **Third-person referential pronouns**: it, that, this, them, those, these
@@ -136,6 +141,7 @@ generate-grammar -o player.agr -e 5 packages/agents/player/dist/playerSchema.pas
 ```
 
 Options:
+
 - `-s, --schema <path>`: Path to .pas.json schema file
 - `-o, --output <path>`: Output path for .agr file
 - `-e, --examples <number>`: Number of examples per action (default: 3)
@@ -162,6 +168,7 @@ test-grammar -v -s packages/agents/calendar/dist/calendarSchema.pas.json \
 ```
 
 Options:
+
 - `-s, --schema <path>`: Path to .pas.json schema file (required)
 - `-r, --request <text>`: Natural language request (required)
 - `-a, --action <name>`: Action name (required)
@@ -179,6 +186,7 @@ npm test
 ```
 
 Tests include:
+
 - Basic grammar generation for simple patterns
 - Rejection of ambiguous patterns
 - Cache population API
@@ -193,16 +201,19 @@ Tests include:
 The system performs linguistic analysis of each request:
 
 1. **Parse request linguistically**
+
    - Identify parts of speech
    - Build dependency tree
    - Create S-expression parse
 
 2. **Map parameters**
+
    - Match request phrases to action parameters
    - Identify required conversions
    - Determine fixed vs. wildcard parts
 
 3. **Generate pattern**
+
    - Use `$(paramName:type)` for wildcards
    - Use `(phrase)?` for optional parts
    - Include fixed phrases exactly
@@ -215,6 +226,7 @@ The system performs linguistic analysis of each request:
 ### Wildcard Qualification
 
 Wildcards are considered "qualified" if they have:
+
 - **Entity type**: `$(device:MusicDevice)` - validated against entity registry
 - **ParamSpec**: `$(index:ordinal)` - validated with paramSpec parser
 - **Checked wildcard**: Parameters with `checked_wildcard` paramSpec
@@ -224,9 +236,18 @@ Unqualified wildcards are plain strings with no validation: `$(name:string)`
 ## Future Enhancements
 
 Planned improvements:
+
 - Automatic duplicate detection across existing rules
 - Confidence scoring for generated patterns
 - Pattern similarity analysis
 - Grammar optimization and merging
 - Real-time feedback during generation
 - Support for multi-turn patterns
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.

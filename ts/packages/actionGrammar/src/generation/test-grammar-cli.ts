@@ -110,7 +110,12 @@ Examples:
 async function main() {
     const options = parseArgs();
 
-    if (options.help || !options.schema || !options.request || !options.action) {
+    if (
+        options.help ||
+        !options.schema ||
+        !options.request ||
+        !options.action
+    ) {
         printHelp();
         process.exit(options.help ? 0 : 1);
     }

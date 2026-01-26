@@ -6,12 +6,13 @@ This document describes how the TypeAgent configuration system works, how dynami
 
 TypeAgent provides two cache systems for learning natural language patterns:
 
-| System | Type | Storage | Use Case |
-|--------|------|---------|----------|
-| **completionBased** | Construction cache with wildcards | `<session>/constructions/` | Flexible pattern matching, handling variations |
-| **nfa** | Compiled NFA with Action Grammar | `<session>/grammars/` | Precise matching, complex patterns, entity types |
+| System              | Type                              | Storage                    | Use Case                                         |
+| ------------------- | --------------------------------- | -------------------------- | ------------------------------------------------ |
+| **completionBased** | Construction cache with wildcards | `<session>/constructions/` | Flexible pattern matching, handling variations   |
+| **nfa**             | Compiled NFA with Action Grammar  | `<session>/grammars/`      | Precise matching, complex patterns, entity types |
 
 **Current Status**:
+
 - ✅ Both systems fully functional
 - ✅ Runtime switching via `@config cache.grammarSystem`
 - ✅ File-based configuration for MCP server startup
@@ -19,6 +20,7 @@ TypeAgent provides two cache systems for learning natural language patterns:
 - 🔄 Future: Permissions system for user confirmation
 
 **Key Integration Points**:
+
 1. **MCP Server** (commandExecutor): Exposes tools for Claude to call TypeAgent
 2. **Action Command Handler** (dispatcher): Handles `@action` commands with automatic cache population
 3. **Grammar Store** (actionGrammar): Persists NFA grammar rules per-session
@@ -29,6 +31,7 @@ TypeAgent provides two cache systems for learning natural language patterns:
 ### Overview
 
 The configuration system allows control of:
+
 - **Active Agents**: Which agents are enabled
 - **Grammar System Selection**: Choose between `completionBased` (existing cache) or `nfa` (new grammar registry)
 - **Cache Behavior**: Wildcard matching, conflict caching, etc.
@@ -209,10 +212,10 @@ await store.setAutoSave(true);
 
 // Add a new rule (auto-saves if enabled)
 await store.addRule({
-    grammarText: '@ <playTrack> = "play" $(track:string)',
-    schemaName: "player",
-    sourceRequest: "play music",
-    actionName: "playTrack"
+  grammarText: '@ <playTrack> = "play" $(track:string)',
+  schemaName: "player",
+  sourceRequest: "play music",
+  actionName: "playTrack",
 });
 
 // Query rules
@@ -226,8 +229,8 @@ fs.writeFileSync("player-dynamic.agr", agrFile);
 // Compile to Grammar object for loading into registry
 const grammar = store.compileToGrammar();
 if (grammar) {
-    // Load into agent grammar registry
-    agentRegistry.addGrammar("player", grammar);
+  // Load into agent grammar registry
+  agentRegistry.addGrammar("player", grammar);
 }
 ```
 
@@ -244,13 +247,13 @@ Claude uses the `typeagent_action` MCP tool to execute actions with cache popula
 ```typescript
 // Claude calls typeagent_action with the user's natural language request
 const result = await typeagent_action({
-    agent: "player",
-    action: "playTrack",
-    parameters: {
-        trackName: "Bohemian Rhapsody",
-        artistName: "Queen"
-    },
-    naturalLanguage: "play Bohemian Rhapsody by Queen"  // REQUIRED
+  agent: "player",
+  action: "playTrack",
+  parameters: {
+    trackName: "Bohemian Rhapsody",
+    artistName: "Queen",
+  },
+  naturalLanguage: "play Bohemian Rhapsody by Queen", // REQUIRED
 });
 
 // This sends to dispatcher:
@@ -510,6 +513,7 @@ await populateCache(...);
 ### Hybrid Approach
 
 Both systems can coexist:
+
 1. Use NFA for precise, high-confidence matches
 2. Fall back to completion-based for flexible matching
 3. Learn new patterns and add to NFA over time
@@ -519,6 +523,7 @@ Both systems can coexist:
 The commandExecutor MCP server exposes the following tools for Claude to interact with TypeAgent:
 
 ### execute_command
+
 Legacy natural language command execution with cache checking.
 
 ```typescript
@@ -534,6 +539,7 @@ Legacy natural language command execution with cache checking.
 **Confirmation flow**: Some commands require user confirmation. If the tool returns an error indicating confirmation is needed, ask the user and retry with `confirmed: true`.
 
 ### discover_schemas
+
 Check if TypeAgent has capabilities for a user request not covered by existing tools.
 
 ```typescript
@@ -548,6 +554,7 @@ Check if TypeAgent has capabilities for a user request not covered by existing t
 **Example**: User asks "What's the weather?" → Call `discover_schemas({query: "weather"})` to see if weather agent is available
 
 ### load_schema
+
 Dynamically load a schema and register its actions as tools in the current session.
 
 ```typescript
@@ -562,6 +569,7 @@ Dynamically load a schema and register its actions as tools in the current sessi
 **Note**: Only use after `discover_schemas` confirms schema availability
 
 ### typeagent_action ⭐
+
 **PRIMARY TOOL**: Execute a TypeAgent action with automatic cache population.
 
 ```typescript
@@ -576,20 +584,22 @@ Dynamically load a schema and register its actions as tools in the current sessi
 **Cache Population**: This tool automatically populates TypeAgent's cache so future similar requests execute faster. The `naturalLanguage` parameter MUST contain the user's exact original request.
 
 **Example**:
+
 ```typescript
 // User: "play Bohemian Rhapsody by Queen"
 await typeagent_action({
-    agent: "player",
-    action: "playTrack",
-    parameters: {
-        trackName: "Bohemian Rhapsody",
-        artistName: "Queen"
-    },
-    naturalLanguage: "play Bohemian Rhapsody by Queen"  // User's exact phrase
+  agent: "player",
+  action: "playTrack",
+  parameters: {
+    trackName: "Bohemian Rhapsody",
+    artistName: "Queen",
+  },
+  naturalLanguage: "play Bohemian Rhapsody by Queen", // User's exact phrase
 });
 ```
 
 **When to use**:
+
 1. Action exists but isn't exposed as individual tool
 2. Invoking newly discovered action before loading schema
 3. Rarely-used action that doesn't warrant dedicated tool
@@ -636,12 +646,14 @@ generate-grammar -i existing.agr schema.pas.json
 ### Current Implementation (No User Confirmation)
 
 **When cache population happens**:
+
 - ✅ Action executes successfully
 - ✅ No errors occurred
 - ✅ No clarifying questions needed
 - ✅ `naturalLanguage` parameter was provided
 
 **When cache population does NOT happen**:
+
 - ❌ Action execution failed with error
 - ❌ Action returned clarifying question
 - ❌ Caching disabled for schema
@@ -654,15 +666,15 @@ Claude should ALWAYS pass the user's exact original natural language request in 
 ```typescript
 // ✅ CORRECT: Pass user's exact phrase
 await typeagent_action({
-    agent: "player",
-    action: "playTrack",
-    parameters: { trackName: "Imagine", artistName: "John Lennon" },
-    naturalLanguage: "play Imagine by John Lennon"  // User's exact words
+  agent: "player",
+  action: "playTrack",
+  parameters: { trackName: "Imagine", artistName: "John Lennon" },
+  naturalLanguage: "play Imagine by John Lennon", // User's exact words
 });
 
 // ❌ WRONG: Don't paraphrase or describe
-naturalLanguage: "execute playTrack action"  // Too generic
-naturalLanguage: "user wants to play a song" // Paraphrased
+naturalLanguage: "execute playTrack action"; // Too generic
+naturalLanguage: "user wants to play a song"; // Paraphrased
 ```
 
 **Why this matters**: The `naturalLanguage` parameter trains the cache so future similar requests can be handled directly without Claude invocation, making the system faster and more efficient.
@@ -674,14 +686,14 @@ A permissions system will be added to allow Claude to query users before populat
 ```typescript
 // Future capability
 if (requiresPermission(action)) {
-    const confirmed = await askUserForCachePermission({
-        request: naturalLanguage,
-        action: action,
-        schemaName: schemaName
-    });
-    if (!confirmed) {
-        return; // Don't populate cache
-    }
+  const confirmed = await askUserForCachePermission({
+    request: naturalLanguage,
+    action: action,
+    schemaName: schemaName,
+  });
+  if (!confirmed) {
+    return; // Don't populate cache
+  }
 }
 ```
 
@@ -703,6 +715,7 @@ This will enable fine-grained control over which patterns get cached.
 ### Grammar Not Loading
 
 Check session directory structure:
+
 ```bash
 ls -la ~/.typeagent/sessions/$(ls -t ~/.typeagent/sessions | head -1)/grammars/
 ```
@@ -710,6 +723,7 @@ ls -la ~/.typeagent/sessions/$(ls -t ~/.typeagent/sessions | head -1)/grammars/
 ### Configuration Not Applied
 
 Verify config file location:
+
 ```bash
 cd packages/commandExecutor
 node test-config-loading.mjs
@@ -729,3 +743,11 @@ node test-config-loading.mjs
 - **Usage Statistics**: Track which rules match most often
 - **Rule Optimization**: Simplify complex patterns
 - **Cross-Session Learning**: Share rules across sessions
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.

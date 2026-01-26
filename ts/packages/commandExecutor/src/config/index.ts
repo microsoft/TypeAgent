@@ -12,8 +12,4 @@ export {
     mergeConfig,
 } from "./agentServerConfig.js";
 
-export {
-    loadConfig,
-    saveConfig,
-    createSampleConfig,
-} from "./configLoader.js";
+export { loadConfig, saveConfig, createSampleConfig } from "./configLoader.js";

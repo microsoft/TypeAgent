@@ -157,9 +157,7 @@ export function loadConfig(): {
     // Validate loaded config
     const validation = validateConfig(loadedConfig);
     if (!validation.valid) {
-        console.warn(
-            `Configuration validation warnings from ${configSource}:`,
-        );
+        console.warn(`Configuration validation warnings from ${configSource}:`);
         validation.errors.forEach((error) => console.warn(`  - ${error}`));
     }
 
@@ -176,10 +174,7 @@ export function loadConfig(): {
 /**
  * Save configuration to file
  */
-export function saveConfig(
-    config: AgentServerConfig,
-    filePath?: string,
-): void {
+export function saveConfig(config: AgentServerConfig, filePath?: string): void {
     const targetPath =
         filePath ??
         path.join(os.homedir(), ".typeagent", "agentServerConfig.json");

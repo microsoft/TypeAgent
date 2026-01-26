@@ -173,7 +173,7 @@ describe("GrammarStore", () => {
             await store.save(testFile);
 
             const stat1 = fs.statSync(testFile);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise((resolve) => setTimeout(resolve, 10));
 
             const saved = await store.save();
             expect(saved).toBe(false);
@@ -212,7 +212,7 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             store.addRule({
-                grammarText: '@ <Start> = <playTrack>',
+                grammarText: "@ <Start> = <playTrack>",
                 schemaName: "player",
             });
 
@@ -232,9 +232,7 @@ describe("GrammarStore", () => {
             const sessionDir = "/home/user/.typeagent/sessions/2026-01-25-001";
 
             const grammarDir = getSessionGrammarDirPath(sessionDir);
-            expect(grammarDir).toBe(
-                path.join(sessionDir, "grammars"),
-            );
+            expect(grammarDir).toBe(path.join(sessionDir, "grammars"));
 
             const storePath = getSessionGrammarStorePath(sessionDir);
             expect(storePath).toBe(

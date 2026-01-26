@@ -480,9 +480,7 @@ export class CommandServer {
             this.logger.log(
                 `Grammar system: ${this.config.cache.grammarSystem}`,
             );
-            this.logger.log(
-                `Cache enabled: ${this.config.cache.enabled}`,
-            );
+            this.logger.log(`Cache enabled: ${this.config.cache.enabled}`);
             if (this.config.agents.length > 0) {
                 this.logger.log(
                     `Configured agents: ${this.config.agents.map((a: { name: string }) => a.name).join(", ")}`,

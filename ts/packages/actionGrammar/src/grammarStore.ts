@@ -112,7 +112,9 @@ export class GrammarStore {
     /**
      * Add a new grammar rule to the store
      */
-    public async addRule(rule: Omit<StoredGrammarRule, "timestamp">): Promise<void> {
+    public async addRule(
+        rule: Omit<StoredGrammarRule, "timestamp">,
+    ): Promise<void> {
         const storedRule: StoredGrammarRule = {
             ...rule,
             timestamp: Date.now(),
@@ -149,7 +151,10 @@ export class GrammarStore {
     /**
      * Delete a rule by index within a schema
      */
-    public async deleteRule(schemaName: string, index: number): Promise<boolean> {
+    public async deleteRule(
+        schemaName: string,
+        index: number,
+    ): Promise<boolean> {
         const rules = this.data.schemas[schemaName];
         if (!rules || index < 0 || index >= rules.length) {
             return false;
@@ -271,7 +276,7 @@ export class GrammarStore {
 
         // Concatenate all grammar texts
         const combinedGrammarText = allRules
-            .map(rule => rule.grammarText)
+            .map((rule) => rule.grammarText)
             .join("\n\n");
 
         // Parse the combined grammar
@@ -304,7 +309,7 @@ export class GrammarStore {
 
         // Combine all rules
         const grammarText = rules
-            .map(rule => {
+            .map((rule) => {
                 const comment = rule.sourceRequest
                     ? `# Source: "${rule.sourceRequest}"\n# Added: ${new Date(rule.timestamp).toISOString()}\n`
                     : `# Added: ${new Date(rule.timestamp).toISOString()}\n`;
