@@ -12,4 +12,6 @@ public class AnswerContextOptions
     public int? MessagesTopK { get; set; } = null;
 
     public bool Chunking { get; set; } = true;
+
+    public int MaxCharsInBudget { get; set; } = 16 * 1024;
 }
