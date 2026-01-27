@@ -84,13 +84,22 @@ The server is configured in `.mcp.json`:
 
 ### Available Tools
 
+The MCP server provides four main tool categories:
+
+1. **Natural Language Execution** - Execute commands via natural language (`execute_command`)
+2. **Schema Discovery** - Discover available TypeAgent capabilities (`discover_schemas`)
+3. **Dynamic Loading** - Load new schemas at runtime (`load_schema`)
+4. **Direct Action Invocation** - Execute structured actions directly (`typeagent_action`)
+
 #### execute_command
 
-Execute user commands including music playback, list management, calendar operations, and VSCode automation.
+Execute user commands including music playback, list management, calendar operations, and VSCode automation using natural language.
 
 **Parameters:**
 
 - `request` (string): The natural language command to execute
+- `cacheCheck` (boolean, optional): Check cache before executing
+- `confirmed` (boolean, optional): Set to true if user has confirmed yes/no prompts
 
 **Examples:**
 
@@ -119,6 +128,70 @@ Execute user commands including music playback, list management, calendar operat
 - "toggle zen mode"
 - "open integrated terminal"
 - "show output panel"
+
+#### discover_schemas
+
+Check if TypeAgent has capabilities for a user request that isn't covered by existing tools. Use this BEFORE telling the user a capability isn't available.
+
+**Parameters:**
+
+- `query` (string): Natural language description of what the user wants (e.g., "weather", "send email", "analyze code")
+- `includeActions` (boolean, optional): If true, return detailed action schemas and TypeScript source. If false, just return agent names and descriptions (default: false)
+
+**Examples:**
+
+- User asks "What's the weather?" → Call `discover_schemas({query: "weather"})`
+- Explore weather actions → Call `discover_schemas({query: "weather", includeActions: true})`
+
+**Mock Implementation:**
+
+Currently includes a mock weather agent with 3 actions:
+
+- `getCurrentConditions`: Get current weather for a location
+- `getForecast`: Get multi-day forecast
+- `getAlerts`: Get weather alerts
+
+#### load_schema
+
+Load a TypeAgent schema dynamically and register its actions as tools. After loading, the agent's actions become available for direct invocation in this session.
+
+**Parameters:**
+
+- `schemaName` (string): The schema/agent name returned by discover_schemas (e.g., "weather", "email")
+- `exposeAs` (string, optional): How to expose actions - "individual" or "composite" (default: "composite")
+  - `individual`: Creates one tool per action (e.g., `weather_getCurrentConditions`, `weather_getForecast`)
+  - `composite`: Creates one tool (e.g., `weather_action`) with action as a parameter
+
+**Examples:**
+
+- Load weather schema: `load_schema({schemaName: "weather"})`
+- Load with individual tools: `load_schema({schemaName: "weather", exposeAs: "individual"})`
+
+**Note:** Currently mock implementation - prints interactions but doesn't register real tools yet.
+
+#### typeagent_action
+
+Generic execution tool for any TypeAgent action not available as a direct tool. Use this as a fallback when:
+
+1. An action exists but isn't exposed as an individual tool
+2. You want to invoke an action from a newly discovered schema before loading it
+3. The action is rarely used and doesn't warrant a dedicated tool
+
+**Parameters:**
+
+- `agent` (string): The agent/schema name (e.g., "player", "list", "calendar", "weather")
+- `action` (string): The action name (e.g., "playTrack", "addItem", "getCurrentConditions")
+- `parameters` (object, optional): Action-specific parameters
+- `naturalLanguage` (string, optional): Natural language description for cache population
+
+**Examples:**
+
+- Get weather: `typeagent_action({agent: "weather", action: "getCurrentConditions", parameters: {location: "Seattle"}})`
+- With cache population: `typeagent_action({agent: "weather", action: "getCurrentConditions", parameters: {location: "Seattle"}, naturalLanguage: "what's the weather in Seattle"})`
+
+**Mock Implementation:**
+
+Returns mock weather data and prints interaction details to logs. In production, this will call the real TypeAgent dispatcher with structured actions.
 
 #### ping (debug mode)
 

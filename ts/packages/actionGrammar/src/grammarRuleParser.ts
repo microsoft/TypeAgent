@@ -52,11 +52,11 @@ export function parseGrammarRules(
     fileName: string,
     content: string,
     position: boolean = true,
-): RuleDefinition[] {
+): GrammarParseResult {
     const parser = new GrammarRuleParser(fileName, content, position);
-    const definitions = parser.parse();
-    debugParse(JSON.stringify(definitions, undefined, 2));
-    return definitions;
+    const result = parser.parse();
+    debugParse(JSON.stringify(result, undefined, 2));
+    return result;
 }
 
 // Expr
@@ -118,6 +118,12 @@ export type RuleDefinition = {
     name: string;
     rules: Rule[];
     pos?: number | undefined;
+};
+
+// Grammar Parse Result (includes entity declarations)
+export type GrammarParseResult = {
+    entities: string[]; // Entity types this grammar depends on
+    definitions: RuleDefinition[];
 };
 
 export function isWhitespace(char: string) {
@@ -640,12 +646,49 @@ class GrammarRuleParser {
         return this.curr >= this.content.length;
     }
 
-    public parse(): RuleDefinition[] {
+    private parseEntityDeclaration(): string[] {
+        // entity Ordinal;
+        // entity Ordinal, CalendarDate;
+        this.skipWhitespace(6); // skip "entity"
+
+        const entities: string[] = [];
+        while (true) {
+            const entityName = this.parseId("entity name");
+            entities.push(entityName);
+
+            if (this.isAt(",")) {
+                this.skipWhitespace(1);
+                continue;
+            }
+
+            if (this.isAt(";")) {
+                this.skipWhitespace(1);
+                break;
+            }
+
+            this.throwUnexpectedCharError(
+                "Expected ',' or ';' after entity name",
+            );
+        }
+
+        return entities;
+    }
+
+    public parse(): GrammarParseResult {
+        const entities: string[] = [];
         const definitions: RuleDefinition[] = [];
         this.skipWhitespace();
         while (!this.isAtEnd()) {
-            definitions.push(this.parseRuleDefinition());
+            if (this.isAt("entity")) {
+                entities.push(...this.parseEntityDeclaration());
+            } else if (this.isAt("@")) {
+                definitions.push(this.parseRuleDefinition());
+            } else {
+                this.throwUnexpectedCharError(
+                    "Expected 'entity' declaration or '@' rule definition",
+                );
+            }
         }
-        return definitions;
+        return { entities, definitions };
     }
 }

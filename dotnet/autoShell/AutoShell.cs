@@ -169,7 +169,7 @@ internal partial class AutoShell
         }
     }
 
-    static void LogError(Exception ex)
+    internal static void LogError(Exception ex)
     {
         Debug.WriteLine(ex);
         ConsoleColor previousColor = Console.ForegroundColor;
@@ -178,7 +178,7 @@ internal partial class AutoShell
         Console.ForegroundColor = previousColor;
     }
 
-    static void LogWarning(string message)
+    internal static void LogWarning(string message)
     {
         Debug.WriteLine(message);
         ConsoleColor previousColor = Console.ForegroundColor;
@@ -978,6 +978,12 @@ internal partial class AutoShell
                 case "disconnectWifi":
                     DisconnectFromWifi();
                     break;
+                case "setTextSize":
+                    if (int.TryParse(value, out int textSizePct))
+                    {
+                        SetTextSize(textSizePct);
+                    }
+                    break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);
                     break;
@@ -1290,6 +1296,45 @@ internal partial class AutoShell
     /// <summary>
     /// Disconnects from the currently connected WiFi network.
     /// </summary>
+    /// <summary>
+    /// Sets the system text scaling factor (percentage).
+    /// </summary>
+    /// <param name="percentage">The text scaling percentage (100-225).</param>
+    static void SetTextSize(int percentage)
+    {
+        try
+        {
+            if (percentage == -1)
+            {
+                percentage = new Random().Next(100, 225 + 1);
+            }
+
+            // Clamp the percentage to valid range
+            if (percentage < 100)
+            {
+                percentage = 100;
+            }
+            else if (percentage > 225)
+            {
+                percentage = 225;
+            }
+
+            // Open the Settings app to the ease of access page
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "ms-settings:easeofaccess",
+                UseShellExecute = true
+            });
+
+            // Use UI Automation to navigate and set the text size
+            UIAutomation.SetTextSizeViaUIAutomation(percentage);
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+    }
+
     static void DisconnectFromWifi()
     {
         IntPtr clientHandle = IntPtr.Zero;

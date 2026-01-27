@@ -14,7 +14,13 @@ import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getParameterNames, validateAction } from "@typeagent/action-schema";
 import { executeActions } from "../../../execute/actionHandlers.js";
-import { FullAction, toExecutableActions } from "agent-cache";
+import {
+    FullAction,
+    toExecutableActions,
+    RequestAction,
+    ProcessRequestActionResult,
+    printProcessRequestActionResult,
+} from "agent-cache";
 import {
     DeepPartialUndefined,
     getObjectProperty,
@@ -22,6 +28,13 @@ import {
 import { getActionParamCompletion } from "../../../translation/requestCompletion.js";
 import { getActionSchema } from "../../../translation/actionSchemaUtils.js";
 import { tryGetActionSchema } from "../../../translation/actionSchemaFileCache.js";
+import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js";
+import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
+import chalk from "chalk";
+import registerDebug from "debug";
+import { getRequestActionLogger } from "./requestActionLogger.js";
+
+const debugExplain = registerDebug("typeagent:action:explain");
 
 export class ActionCommandHandler implements CommandHandler {
     public readonly description = "Execute an action";
@@ -39,6 +52,12 @@ export class ActionCommandHandler implements CommandHandler {
                 description: "Action parameter",
                 optional: true,
                 type: "json",
+            },
+            naturalLanguage: {
+                description:
+                    "Natural language phrase to associate with this action for cache population",
+                optional: true,
+                type: "string",
             },
         },
     } as const;
@@ -66,11 +85,258 @@ export class ActionCommandHandler implements CommandHandler {
 
         validateAction(actionSchema, action, true);
 
-        return executeActions(
+        // Execute the action
+        await executeActions(
             toExecutableActions([action as FullAction]),
             undefined,
             context,
         );
+
+        // If naturalLanguage parameter is provided, populate cache
+        const naturalLanguage = params.flags.naturalLanguage;
+        if (naturalLanguage !== undefined && naturalLanguage.trim() !== "") {
+            await this.populateCache(
+                systemContext,
+                naturalLanguage,
+                action as FullAction,
+            );
+        }
+    }
+
+    private async populateCache(
+        context: CommandHandlerContext,
+        naturalLanguage: string,
+        action: FullAction,
+    ): Promise<void> {
+        // Check if explanation/cache is enabled
+        if (!context.session.explanation) {
+            debugExplain(
+                `Cache population skipped: explanation disabled for natural language "${naturalLanguage}"`,
+            );
+            return;
+        }
+
+        // Check if caching is enabled for this schema
+        if (
+            context.agents.getActionConfig(action.schemaName).cached === false
+        ) {
+            debugExplain(
+                `Cache population skipped: caching disabled for schema "${action.schemaName}"`,
+            );
+            return;
+        }
+
+        // Create a RequestAction for cache population
+        const requestAction: RequestAction = {
+            request: naturalLanguage,
+            actions: [{ action }],
+        };
+
+        // Log request/action pair to file for benchmarking (if enabled via env var)
+        const logger = getRequestActionLogger();
+        if (logger.isLoggingEnabled()) {
+            logger.log(requestAction);
+            console.log(
+                chalk.gray(`  [Logged to: ${logger.getLogFilePath()}]`),
+            );
+        }
+
+        // Log the request/action pair being processed
+        console.log(chalk.cyan("\n[CACHE] Processing request/action pair:"));
+        console.log(chalk.cyan(`  Request: "${requestAction.request}"`));
+        console.log(
+            chalk.cyan(`  Action: ${action.schemaName}.${action.actionName}`),
+        );
+        if (action.parameters) {
+            console.log(
+                chalk.cyan(
+                    `  Parameters: ${JSON.stringify(action.parameters)}`,
+                ),
+            );
+        }
+
+        // Get explainer options similar to requestCommandHandler
+        const { list, value, translate } =
+            context.session.getConfig().explainer.filter.reference;
+
+        const options = {
+            namespaceSuffix: getActivityNamespaceSuffix(
+                context,
+                requestAction.history?.activityContext,
+            ),
+            checkExplainable: translate
+                ? async (requestAction: RequestAction) => {
+                      if (requestAction.history === undefined) {
+                          return;
+                      }
+                      // For @action commands, we skip the context-less translation check
+                      // since we don't have history context
+                      return;
+                  }
+                : undefined,
+            valueInRequest: value,
+            noReferences: list,
+        };
+
+        try {
+            const requestId = context.requestId;
+            debugExplain(
+                `Populating cache for natural language: "${naturalLanguage}" -> ${action.schemaName}.${action.actionName}`,
+            );
+
+            const processRequestActionP =
+                context.agentCache.processRequestAction(
+                    requestAction,
+                    true,
+                    options,
+                );
+
+            if (context.explanationAsynchronousMode) {
+                console.log(
+                    chalk.grey(
+                        `[CACHE] Generating explanation asynchronously for: '${naturalLanguage}'`,
+                    ),
+                );
+                processRequestActionP
+                    .then((result: ProcessRequestActionResult) => {
+                        const explanationResult =
+                            result.explanationResult.explanation;
+                        const error = explanationResult.success
+                            ? undefined
+                            : explanationResult?.message;
+
+                        context.clientIO.notify(
+                            "explained",
+                            requestId,
+                            {
+                                time: new Date().toLocaleTimeString(),
+                                fromCache: false,
+                                fromUser: false,
+                                error,
+                            },
+                            DispatcherName,
+                        );
+
+                        // Print the full explanation result
+                        console.log(
+                            chalk.cyan(
+                                `\n[CACHE] Explanation completed for: "${naturalLanguage}"`,
+                            ),
+                        );
+                        printProcessRequestActionResult(result);
+
+                        // Log construction status
+                        if (result.constructionResult) {
+                            const status = result.constructionResult.added
+                                ? chalk.green("[CACHE] ✓ Construction added")
+                                : chalk.yellow(
+                                      "[CACHE] ⚠ Construction not added (duplicate?)",
+                                  );
+                            console.log(status);
+                            console.log(
+                                chalk.cyan(
+                                    `  ${result.constructionResult.message}`,
+                                ),
+                            );
+                        } else {
+                            console.log(
+                                chalk.yellow(
+                                    "[CACHE] ⚠ No construction result returned",
+                                ),
+                            );
+                        }
+
+                        if (explanationResult.success) {
+                            debugExplain(
+                                `Cache population succeeded for "${naturalLanguage}"`,
+                            );
+                        } else {
+                            debugExplain(
+                                `Cache population failed for "${naturalLanguage}": ${error}`,
+                            );
+                        }
+                    })
+                    .catch((e) => {
+                        console.error(
+                            chalk.red(
+                                `\n[CACHE] ✗ Error generating explanation for: "${naturalLanguage}"`,
+                            ),
+                        );
+                        console.error(chalk.red(`  ${e.message}`));
+                        if (e.stack) {
+                            debugExplain(`Stack trace: ${e.stack}`);
+                        }
+                        debugExplain(
+                            `Cache population error for "${naturalLanguage}": ${e.message}`,
+                        );
+                        context.clientIO.notify(
+                            "explained",
+                            requestId,
+                            {
+                                time: new Date().toLocaleTimeString(),
+                                fromCache: false,
+                                fromUser: false,
+                                error: e.message,
+                            },
+                            DispatcherName,
+                        );
+                    });
+            } else {
+                console.log(
+                    chalk.grey(
+                        `Generating explanation for action: '${naturalLanguage}'`,
+                    ),
+                );
+                const result = await processRequestActionP;
+
+                const explanationResult = result.explanationResult.explanation;
+                const error = explanationResult.success
+                    ? undefined
+                    : explanationResult?.message;
+
+                context.clientIO.notify(
+                    "explained",
+                    requestId,
+                    {
+                        time: new Date().toLocaleTimeString(),
+                        fromCache: false,
+                        fromUser: false,
+                        error,
+                    },
+                    DispatcherName,
+                );
+
+                printProcessRequestActionResult(result);
+
+                // Log construction status
+                if (result.constructionResult) {
+                    const status = result.constructionResult.added
+                        ? chalk.green("[CACHE] ✓ Construction added")
+                        : chalk.yellow(
+                              "[CACHE] ⚠ Construction not added (duplicate?)",
+                          );
+                    console.log(status);
+                    console.log(
+                        chalk.cyan(`  ${result.constructionResult.message}`),
+                    );
+                }
+
+                if (explanationResult.success) {
+                    debugExplain(
+                        `Cache population succeeded for "${naturalLanguage}"`,
+                    );
+                } else {
+                    debugExplain(
+                        `Cache population failed for "${naturalLanguage}": ${error}`,
+                    );
+                }
+            }
+        } catch (e: any) {
+            debugExplain(
+                `Exception during cache population for "${naturalLanguage}": ${e.message}`,
+            );
+            // Don't throw - cache population failure shouldn't fail the action execution
+        }
     }
     public async getCompletion(
         context: SessionContext<CommandHandlerContext>,

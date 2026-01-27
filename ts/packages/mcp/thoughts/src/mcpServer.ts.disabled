@@ -1,0 +1,165 @@
+#!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+    CallToolRequestSchema,
+    ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import { ThoughtsProcessor } from "./thoughtsProcessor.js";
+import * as fs from "fs";
+import * as path from "path";
+
+const processor = new ThoughtsProcessor();
+
+const server = new Server(
+    {
+        name: "thoughts",
+        version: "0.1.0",
+    },
+    {
+        capabilities: {
+            tools: {},
+        },
+    },
+);
+
+// List available tools
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+        tools: [
+            {
+                name: "process_thoughts",
+                description:
+                    "Convert raw text, stream-of-consciousness, or unstructured notes into a well-formatted markdown document. Takes raw text and optional formatting instructions, returns organized markdown.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        rawText: {
+                            type: "string",
+                            description:
+                                "The raw text, notes, or stream-of-consciousness to convert",
+                        },
+                        instructions: {
+                            type: "string",
+                            description:
+                                "Optional additional instructions for how to format or structure the markdown (e.g., 'Create a technical document', 'Format as meeting notes', 'Organize as a blog post')",
+                        },
+                        model: {
+                            type: "string",
+                            description:
+                                "Optional Claude model to use (default: claude-sonnet-4-20250514)",
+                        },
+                    },
+                    required: ["rawText"],
+                },
+            },
+            {
+                name: "save_markdown",
+                description:
+                    "Save markdown content to a file. Useful after processing thoughts to persist the result.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        content: {
+                            type: "string",
+                            description: "The markdown content to save",
+                        },
+                        filePath: {
+                            type: "string",
+                            description:
+                                "Path where to save the markdown file (should end in .md)",
+                        },
+                    },
+                    required: ["content", "filePath"],
+                },
+            },
+        ],
+    };
+});
+
+// Handle tool calls
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    try {
+        const { name, arguments: args } = request.params;
+
+        switch (name) {
+            case "process_thoughts": {
+                const { rawText, instructions, model } = args as {
+                    rawText: string;
+                    instructions?: string;
+                    model?: string;
+                };
+
+                const result = await processor.processThoughts({
+                    rawText,
+                    instructions,
+                    model,
+                });
+
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `Processed ${result.metadata?.inputLength} characters into ${result.metadata?.outputLength} characters of markdown.\n\n${result.markdown}`,
+                        },
+                    ],
+                };
+            }
+
+            case "save_markdown": {
+                const { content, filePath } = args as {
+                    content: string;
+                    filePath: string;
+                };
+
+                // Ensure directory exists
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+
+                // Write file
+                fs.writeFileSync(filePath, content, "utf8");
+
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `Markdown saved to: ${filePath}`,
+                        },
+                    ],
+                };
+            }
+
+            default:
+                throw new Error(`Unknown tool: ${name}`);
+        }
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error);
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Error: ${errorMessage}`,
+                },
+            ],
+            isError: true,
+        };
+    }
+});
+
+// Start the server
+async function main() {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("Thoughts MCP server running on stdio");
+}
+
+main().catch((error) => {
+    console.error("Fatal error in main():", error);
+    process.exit(1);
+});

@@ -1,0 +1,30 @@
+{"request": "play 5 random songs", "schemaName": "player", "action": {"actionName": "playRandom", "parameters": {"quantity": 5}}, "note": "Number transformation"}
+{"request": "could you play some random music", "schemaName": "player", "action": {"actionName": "playRandom", "parameters": {}}, "note": "Optional politeness, no quantity"}
+{"request": "pause", "schemaName": "player", "action": {"actionName": "pause", "parameters": {}}, "note": "Single word command"}
+{"request": "please pause the music", "schemaName": "player", "action": {"actionName": "pause", "parameters": {}}, "note": "Polite with optional article"}
+{"request": "resume playback", "schemaName": "player", "action": {"actionName": "resume", "parameters": {}}, "note": "Command with object noun"}
+{"request": "skip to the next track", "schemaName": "player", "action": {"actionName": "next", "parameters": {}}, "note": "Verbose form"}
+{"request": "next", "schemaName": "player", "action": {"actionName": "next", "parameters": {}}, "note": "Minimal form"}
+{"request": "go back to the previous song", "schemaName": "player", "action": {"actionName": "previous", "parameters": {}}, "note": "Verbose navigation"}
+{"request": "turn shuffle on", "schemaName": "player", "action": {"actionName": "shuffle", "parameters": {"on": true}}, "note": "Boolean transformation"}
+{"request": "disable shuffle", "schemaName": "player", "action": {"actionName": "shuffle", "parameters": {"on": false}}, "note": "Boolean from verb"}
+{"request": "play Dark Side of the Moon by Pink Floyd", "schemaName": "player", "action": {"actionName": "playAlbum", "parameters": {"albumName": "Dark Side of the Moon", "artists": ["Pink Floyd"]}}, "note": "Album with artist"}
+{"request": "play some Beatles", "schemaName": "player", "action": {"actionName": "playArtist", "parameters": {"artist": "Beatles"}}, "note": "Play artist with article"}
+{"request": "play jazz music", "schemaName": "player", "action": {"actionName": "playGenre", "parameters": {"genre": "jazz"}}, "note": "Genre request"}
+{"request": "play 10 rock songs", "schemaName": "player", "action": {"actionName": "playGenre", "parameters": {"genre": "rock", "quantity": 10}}, "note": "Genre with quantity"}
+{"request": "what's playing", "schemaName": "player", "action": {"actionName": "status", "parameters": {}}, "note": "Question form for status"}
+{"request": "show me what's currently playing", "schemaName": "player", "action": {"actionName": "status", "parameters": {}}, "note": "Verbose status query"}
+{"request": "set volume to 75", "schemaName": "player", "action": {"actionName": "setVolume", "parameters": {"newVolumeLevel": 75}}, "note": "Volume with number"}
+{"request": "turn the volume up by 20 percent", "schemaName": "player", "action": {"actionName": "changeVolume", "parameters": {"volumeChangePercentage": 20}}, "note": "Percentage change positive"}
+{"request": "lower volume by 15 percent", "schemaName": "player", "action": {"actionName": "changeVolume", "parameters": {"volumeChangePercentage": -15}}, "note": "Percentage change negative"}
+{"request": "switch to bedroom speaker", "schemaName": "player", "action": {"actionName": "selectDevice", "parameters": {"deviceName": "bedroom speaker"}}, "note": "Device selection with type"}
+{"request": "use the kitchen device", "schemaName": "player", "action": {"actionName": "selectDevice", "parameters": {"deviceName": "kitchen"}}, "note": "Alternative phrasing for device"}
+{"request": "make living room the default", "schemaName": "player", "action": {"actionName": "setDefaultDevice", "parameters": {"deviceName": "living room"}}, "note": "Set default device"}
+{"request": "show my playlists", "schemaName": "player", "action": {"actionName": "listPlaylists", "parameters": {}}, "note": "List command"}
+{"request": "play my workout playlist", "schemaName": "player", "action": {"actionName": "getPlaylist", "parameters": {"name": "workout"}}, "note": "Playlist by name"}
+{"request": "get my chill vibes playlist", "schemaName": "player", "action": {"actionName": "getPlaylist", "parameters": {"name": "chill vibes"}}, "note": "Multi-word playlist name"}
+{"request": "play the second playlist", "schemaName": "player", "action": {"actionName": "getFromCurrentPlaylistList", "parameters": {"playlistNumber": 2}}, "note": "Ordinal for playlist selection"}
+{"request": "play track 7", "schemaName": "player", "action": {"actionName": "playFromCurrentTrackList", "parameters": {"trackNumber": 7}}, "note": "Cardinal number for track"}
+{"request": "play the tenth song", "schemaName": "player", "action": {"actionName": "playFromCurrentTrackList", "parameters": {"trackNumber": 10}}, "note": "Ordinal word for track"}
+{"request": "show me the current album", "schemaName": "player", "action": {"actionName": "getAlbum", "parameters": {}}, "note": "Get album context"}
+{"request": "play my top 50 favorites", "schemaName": "player", "action": {"actionName": "getFavorites", "parameters": {"count": 50}}, "note": "Favorites with count"}
