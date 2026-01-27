@@ -268,9 +268,10 @@ function initializeConsole(rl?: readline.promises.Interface) {
         process.stdin.setRawMode(true);
         process.stdin.on("keypress", (_, key) => {
             if (key?.ctrl && key.name === "c") {
+                process.stdin.setRawMode(false);
                 process.emit("SIGINT");
             } else if (key.name === "escape" && rl !== undefined) {
-                // clear the input lien
+                // clear the input line
                 rl!.write(null, { ctrl: true, name: "u" });
             }
         });
