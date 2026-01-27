@@ -13,6 +13,7 @@ type ShellCommandLineArgs = {
     env?: string;
     mockGreetings?: boolean;
     inputOnly?: boolean;
+    connect: boolean;
 };
 
 export function parseShellCommandLine() {
@@ -20,6 +21,7 @@ export function parseShellCommandLine() {
         reset: false,
         clean: false,
         test: false,
+        connect: false,
     };
     for (let i = 1; i < process.argv.length; i++) {
         const arg = process.argv[i];
@@ -86,6 +88,10 @@ export function parseShellCommandLine() {
 
             if (arg === "--input-only") {
                 result.inputOnly = true;
+                continue;
+            }
+            if (arg === "--connect") {
+                result.connect = true;
                 continue;
             }
         }

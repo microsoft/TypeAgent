@@ -346,20 +346,23 @@ async function initialize() {
         // dock icon is clicked and there are no other windows open.
         if (getShellWindow() === undefined)
             initializeInstance(
-                instanceDir,
+                parsedArgs.connect ? undefined : instanceDir,
                 shellSettings,
                 mockGreetings,
                 parsedArgs.inputOnly,
+                performance.now(),
+                parsedArgs.connect,
             );
     });
 
     // Start up the first instance
     const shellWindow = initializeInstance(
-        instanceDir,
+        parsedArgs.connect ? undefined : instanceDir,
         shellSettings,
         mockGreetings,
         parsedArgs.inputOnly,
         time,
+        parsedArgs.connect,
     );
 
     shellWindow.waitForReady().then(() => {
@@ -383,10 +386,12 @@ export async function reloadInstance() {
         await closeInstance();
         const shellSettings = new ShellSettingManager(instanceDir);
         await initializeInstance(
-            instanceDir,
+            parsedArgs.connect ? undefined : instanceDir,
             shellSettings,
             mockGreetings,
             parsedArgs.inputOnly,
+            performance.now(),
+            parsedArgs.connect,
         );
     } finally {
         reloadingInstance = false;
