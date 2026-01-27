@@ -272,11 +272,13 @@ function initializeConsole(rl?: readline.promises.Interface) {
                 process.emit("SIGINT");
             } else if (key.name === "escape" && rl !== undefined) {
                 // clear the input line
-                rl!.write(null, { ctrl: true, name: "u" });
+                process.stdin.setRawMode(false);
+                rl!.write(null, { ctrl: true, name: 'u' });
+                process.stdin.setRawMode(true);
             }
         });
         process.stdin.resume();
-        readline.emitKeypressEvents(process.stdin);
+        readline.emitKeypressEvents(process.stdin, rl);
     }
 }
 
@@ -373,9 +375,9 @@ export async function withConsoleClientIO(
         throw new Error("Cannot have multiple console clients");
     }
     usingConsole = true;
-    try {
+    try {        
         initializeConsole(rl);
-        await callback(createConsoleClientIO(rl));
+        await callback(createConsoleClientIO(rl));        
     } finally {
         process.stdin.pause();
         usingConsole = false;
