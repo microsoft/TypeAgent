@@ -102,7 +102,7 @@ export default class Interactive extends Command {
                     await getIndexingServiceRegistry(persistDir),
                 clientId: getClientId(),
                 constructionProvider: getDefaultConstructionProvider(),
-            }, );
+            });
 
             try {
                 if (args.input) {
