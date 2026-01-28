@@ -1187,34 +1187,43 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         List<GradedQuestion> gradedQuestions = [];
         int bestAnswer = -1;
-        //foreach (GradedQuestion q in answers.GradedQuestions)
+
+        try
         {
-            try
-            {
-                KnowProWriter.Write(ConsoleColor.White, $"Grading {answers.GradedQuestions.First().Question}");
+            KnowProWriter.Write(ConsoleColor.White, $"Grading {answers.GradedQuestions.First().Question}");
 
-                PromptSection transcript = new PromptSection(PromptSection.Sources.User, Json.Stringify(answers.GradedQuestions));
+            PromptSection transcript = new PromptSection(PromptSection.Sources.User, Json.Stringify(answers.GradedQuestions));
 
-                var response = await translator.TranslateAsync(new(transcript), [_questionGraderSystemPrompt], _translatorSettings, CancellationToken.None);
+            var response = await translator.TranslateAsync(new(transcript), [_questionGraderSystemPrompt], _translatorSettings, CancellationToken.None);
 
-                KnowProWriter.Write(ConsoleColor.Gray, Json.Stringify(response));
+            KnowProWriter.Write(ConsoleColor.Gray, Json.Stringify(response));
 
-                gradedQuestions.AddRange(response.GradedQuestions);
-                bestAnswer = response.BestAnswer;
+            gradedQuestions.AddRange(response.GradedQuestions);
+            bestAnswer = response.BestAnswer;
 
-                Json.StringifyToFile(response, "grades.json", false);
-
-                KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:N2}s]");
-            }
-            catch (Exception ex)
-            {
-                KnowProWriter.WriteLine(ConsoleColor.Red, ex.ToString());
-            }
-
+            KnowProWriter.WriteLine(ConsoleColor.Cyan, $"done. [{_kpContext.Stopwatch.Elapsed.Subtract(start).TotalSeconds:N2}s]");
+        }
+        catch (Exception ex)
+        {
+            KnowProWriter.WriteLine(ConsoleColor.Red, ex.ToString());
         }
 
         return (gradedQuestions, bestAnswer);
     }
+
+    /// <summary>
+    /// Converts a Grade enum to a numeric score for comparison purposes.
+    /// </summary>
+    /// <param name="grade">The grade to convert.</param>
+    /// <returns>A numeric score where higher is better: Correct=2, Partial=1, Incorrect/Unknown=0</returns>
+    private static int GradeToScore(Grade grade) => grade switch
+    {
+        Grade.Correct => 2,
+        Grade.Partial => 1,
+        Grade.Incorrect => 0,
+        Grade.Unknown => 0,
+        _ => 0
+    };
 
     private void OutputTimingComparison(List<TimingData> allTimingData)
     {
@@ -1515,8 +1524,35 @@ Provide feedback for each answer to help improve future responses.  If the answe
             RunDate = System.DateTime.UtcNow,
             SearchParameters = searchParameters,
             BestAnswerTally = bestAnswerTally,
-            GradedQuestions = allGradedQuestions
+            GradedQuestions = allGradedQuestions,
         };
+
+        // Get the questions where RAG performed better vs SRAG
+        // Group questions by their question text and compare grades
+        var questionGroups = allGradedQuestions
+            .GroupBy(q => q.Question)
+            .ToList();
+
+        foreach (var group in questionGroups)
+        {
+            var ragQuestion = group.FirstOrDefault(q => q.source == "Traditional Rag");
+            var sragQuestion = group.FirstOrDefault(q => q.source == "Structured Rag");
+
+            if (ragQuestion != null && sragQuestion != null)
+            {
+                int ragScore = GradeToScore(ragQuestion.IsCorrect);
+                int sragScore = GradeToScore(sragQuestion.IsCorrect);
+
+                if (ragScore > sragScore)
+                {
+                    results.RAGOutPerformedQuestions.Add(ragQuestion.Question);
+                }
+                else if (sragScore > ragScore)
+                {
+                    results.SRAGOutPerformedQuestions.Add(sragQuestion.Question);
+                }
+            }
+        }
 
         // Build overall summary
         foreach (var group in summary)
@@ -1686,6 +1722,12 @@ public class GradedQuestion : BenchmarkQuestion
     public string source { get; set; } = string.Empty;
 }
 
+public enum MemoryType
+{
+    RAG,
+    StructuredRAG
+}
+
 public enum Grade
 {
     [JsonPropertyName("unknown")]
@@ -1756,6 +1798,12 @@ public class BenchmarkResults
 
     [JsonPropertyName("gradedQuestions")]
     public List<GradedQuestion> GradedQuestions { get; set; } = [];
+
+    [JsonPropertyName("ragBetter")]
+    public List<string> RAGOutPerformedQuestions { get; set; } = [];
+
+    [JsonPropertyName("sRagBetter")]
+    public List<string> SRAGOutPerformedQuestions { get; set; } = [];
 }
 
 public class BenchmarkSearchParameters
