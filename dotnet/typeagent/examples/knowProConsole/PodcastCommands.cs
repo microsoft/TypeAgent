@@ -16,6 +16,15 @@ public class PodcastCommands : ICommandModule
     public PodcastCommands(KnowProConsoleContext context)
     {
         _kpContext = context;
+
+        _kpContext.ModelChanged += (sender, args) =>
+        {
+            if (_podcast is not null)
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Updating language model for '{_podcast.Name}' to new model ({_kpContext.ModelSuffix}).");
+                _podcast.Settings.ConversationSettings.LanguageModel = _kpContext.ChatModel;
+            }
+        };
     }
 
     public IList<Command> GetCommands()
@@ -303,7 +312,7 @@ public class PodcastCommands : ICommandModule
 
     private Podcast CreatePodcast(string name, bool createNew)
     {
-        MemorySettings settings = new MemorySettings();
+        MemorySettings settings = new MemorySettings(_kpContext.ChatModel, _kpContext.EmbeddingModel);
         var provider = _kpContext.CreateStorageProvider<PodcastMessage, PodcastMessageMeta>(
             settings.ConversationSettings,
             name,
