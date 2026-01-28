@@ -41,7 +41,7 @@ public class PodcastCommands : ICommandModule
 
     private async void ShowPodcastInfoAsync(ParseResult args)
     {
-         if (string.IsNullOrEmpty(_podcast?.Name))
+        if (string.IsNullOrEmpty(_podcast?.Name))
         {
             KnowProWriter.WriteLine(ConsoleColor.Red, $"No podcast loaded.");
         }
@@ -70,7 +70,6 @@ public class PodcastCommands : ICommandModule
             }
         }
     }
- 
     private Command PodcastUnloadDef()
     {
         Command cmd = new("kpPodcastUnload", "Unload the current podcast")
@@ -293,7 +292,7 @@ public class PodcastCommands : ICommandModule
             KnowProWriter.WriteLine($"{count} properties imported");
 
             await podcast.UpdateMessageIndexAsync(false, cancellationToken);
-            await podcast.BuildSecondaryIndexesAsync(cancellationToken);            
+            await podcast.BuildSecondaryIndexesAsync(cancellationToken);
         }
         catch
         {
@@ -319,11 +318,8 @@ public class PodcastCommands : ICommandModule
     private void UnloadCurrent()
     {
         _kpContext.UnloadCurrent();
-        if (_podcast is not null)
-        {
-            _podcast.Dispose();
-            _podcast = null;
-        }
+        _podcast?.Dispose();
+        _podcast = null;
     }
 
     private void SetCurrent(Podcast? podcast)

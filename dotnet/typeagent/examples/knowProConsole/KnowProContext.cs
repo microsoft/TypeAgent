@@ -17,13 +17,40 @@ public class KnowProContext
         this.Stopwatch = new Stopwatch();
     }
 
+    /// <summary>
+    /// The base path for storing data files.
+    /// </summary>
     public string BasePath { get; set; }
+
+    /// <summary>
+    /// The path for storing .NET related data files.
+    /// </summary>
     public string DotnetPath { get; set; }
 
+    /// <summary>
+    /// The model suffix to use for this context.
+    /// </summary>
+    public string ModelSuffix { get; set; } = string.Empty;
+
+    /// <summary>
+    /// A reusable stopwatch for timing.
+    /// </summary>
     public Stopwatch Stopwatch { get; }
 
+    /// <summary>
+    /// The current conversation.
+    /// </summary>
     public IConversation? Conversation { get; set; }
 
+    /// <summary>
+    /// Creates a new SQLite storage provider.
+    /// </summary>
+    /// <typeparam name="TMessage">The message type.</typeparam>
+    /// <typeparam name="TMeta">The metadata type</typeparam>
+    /// <param name="settings">Storage provider settings.</param>
+    /// <param name="name">The name of the database file.</param>
+    /// <param name="createNew">Flag indicating if a new db should be created or existing one reused.</param>
+    /// <returns></returns>
     public SqliteStorageProvider<TMessage, TMeta> CreateStorageProvider<TMessage, TMeta>(
         ConversationSettings settings,
         string name,
