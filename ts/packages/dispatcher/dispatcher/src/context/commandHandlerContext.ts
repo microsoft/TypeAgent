@@ -278,8 +278,8 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
             isDbEnabled,
             (e: string) => {
                 clientIO.notify(
-                    AppAgentEvent.Warning,
                     undefined,
+                    AppAgentEvent.Warning,
                     e,
                     DispatcherName,
                 );
@@ -287,8 +287,8 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
         );
     } catch (e) {
         clientIO.notify(
-            AppAgentEvent.Warning,
             undefined,
+            AppAgentEvent.Warning,
             `DB logging disabled. ${e}`,
             DispatcherName,
         );
@@ -549,8 +549,8 @@ async function setAppAgentStates(context: CommandHandlerContext) {
 
     const rollback = processSetAppAgentStateResult(result, context, (message) =>
         context.clientIO.notify(
-            AppAgentEvent.Error,
             undefined,
+            AppAgentEvent.Error,
             message,
             DispatcherName,
         ),

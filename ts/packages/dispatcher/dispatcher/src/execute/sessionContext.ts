@@ -94,7 +94,7 @@ export function createSessionContext<T = unknown>(
             message: string | DisplayContent,
             notificationId?: string,
         ) {
-            context.clientIO.notify(event, notificationId, message, name);
+            context.clientIO.notify(notificationId, event, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {

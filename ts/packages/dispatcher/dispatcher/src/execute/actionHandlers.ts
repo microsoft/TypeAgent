@@ -88,8 +88,8 @@ function getStreamingActionContext(
 
     // If we are reusing the streaming action context, we need to update the action.
     systemContext.clientIO.setDisplayInfo(
-        appAgentName,
         getRequestId(systemContext),
+        appAgentName,
         actionIndex,
         fullAction,
     );
@@ -135,7 +135,7 @@ async function executeAction(
         getActionContext(
             appAgentName,
             systemContext,
-            getRequestId(systemContext),
+            requestId,
             actionIndex,
             action,
         );
@@ -179,8 +179,8 @@ async function executeAction(
         }
         if (result.dynamicDisplayId !== undefined) {
             systemContext.clientIO.setDynamicDisplay(
-                schemaName,
                 requestId,
+                schemaName,
                 actionIndex,
                 result.dynamicDisplayId,
                 result.dynamicDisplayNextRefreshMs!,
@@ -409,14 +409,20 @@ export async function executeActions(
                     const port =
                         systemContext.agents.getLocalHostPort(appAgentName);
                     if (port !== undefined) {
-                        await systemContext.clientIO.openLocalView(port);
+                        await systemContext.clientIO.openLocalView(
+                            getRequestId(systemContext),
+                            port,
+                        );
                     }
                 } else if (prevActivityContext !== undefined) {
                     const port = systemContext.agents.getLocalHostPort(
                         prevActivityContext.appAgentName,
                     );
                     if (port !== undefined) {
-                        await systemContext.clientIO.closeLocalView(port);
+                        await systemContext.clientIO.closeLocalView(
+                            getRequestId(systemContext),
+                            port,
+                        );
                     }
                 }
             }

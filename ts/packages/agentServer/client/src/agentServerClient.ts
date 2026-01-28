@@ -12,6 +12,7 @@ import registerDebug from "debug";
 import {
     AgentServerInvokeFunctions,
     ChannelName,
+    DispatcherConnectOptions,
 } from "@typeagent/agent-server-protocol";
 
 const debug = registerDebug("typeagent:agent-server-client");
@@ -20,6 +21,7 @@ const debugErr = registerDebug("typeagent:agent-server-client:error");
 export async function connectDispatcher(
     clientIO: ClientIO,
     url: string | URL,
+    options?: DispatcherConnectOptions,
 ): Promise<Dispatcher> {
     return new Promise((resolve, reject: (e: Error) => void) => {
         const ws = new WebSocket(url); // Replace with the actual WebSocket server URL
@@ -44,7 +46,7 @@ export async function connectDispatcher(
         );
         ws.onopen = () => {
             debug("WebSocket connection established", ws.readyState);
-            rpc.invoke("join")
+            rpc.invoke("join", options)
                 .then((connectionId) => {
                     debug("Connected to dispatcher");
                     resolved = true;

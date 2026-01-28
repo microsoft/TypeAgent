@@ -141,8 +141,8 @@ function registerClient(
         exit: () => {
             window.close();
         },
-        setDisplayInfo: (source, requestId, actionIndex, action) => {
-            chatView.setDisplayInfo(source, requestId, actionIndex, action);
+        setDisplayInfo: (requestId, source, actionIndex, action) => {
+            chatView.setDisplayInfo(requestId, source, actionIndex, action);
         },
         setDisplay: (message) => {
             chatView.addAgentMessage(message);
@@ -155,30 +155,30 @@ function registerClient(
             chatView.setActionData(requestId, data);
         },
         setDynamicDisplay: (
-            source,
             requestId,
+            source,
             actionIndex,
             displayId,
             nextRefreshMs,
         ) => {
             chatView.setDynamicDisplay(
-                source,
                 requestId,
+                source,
                 actionIndex,
                 displayId,
                 nextRefreshMs,
             );
         },
-        askYesNo: async (message, requestId, _defaultValue) => {
-            return chatView.askYesNo(message, requestId, "");
+        askYesNo: async (requestId, message, _defaultValue) => {
+            return chatView.askYesNo(requestId, message, "");
         },
-        proposeAction: async (actionTemplates, requestId, source) => {
-            return chatView.proposeAction(actionTemplates, requestId, source);
+        proposeAction: async (requestId, actionTemplates, source) => {
+            return chatView.proposeAction(requestId, actionTemplates, source);
         },
         popupQuestion: () => {
             throw new Error("Main process should have handled popupQuestion");
         },
-        notify: (event, requestId, data, source) => {
+        notify: (requestId, event, data, source) => {
             switch (event) {
                 case "explained":
                     chatView.notifyExplained(requestId, data);
@@ -249,13 +249,13 @@ function registerClient(
                 // ignore
             }
         },
-        openLocalView: () => {
+        openLocalView: async () => {
             throw new Error("Main process should have handled openLocalView");
         },
-        closeLocalView: () => {
+        closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
         },
-        takeAction: (action, data) => {
+        takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
             try {
                 console.log(`Take Action '${action}' Data: ${data}`);

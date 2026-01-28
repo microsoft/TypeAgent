@@ -207,8 +207,8 @@ export class ActionCommandHandler implements CommandHandler {
                             : explanationResult?.message;
 
                         context.clientIO.notify(
-                            "explained",
                             requestId,
+                            "explained",
                             {
                                 time: new Date().toLocaleTimeString(),
                                 fromCache: false,
@@ -271,8 +271,8 @@ export class ActionCommandHandler implements CommandHandler {
                             `Cache population error for "${naturalLanguage}": ${e.message}`,
                         );
                         context.clientIO.notify(
-                            "explained",
                             requestId,
+                            "explained",
                             {
                                 time: new Date().toLocaleTimeString(),
                                 fromCache: false,
@@ -296,8 +296,8 @@ export class ActionCommandHandler implements CommandHandler {
                     : explanationResult?.message;
 
                 context.clientIO.notify(
-                    "explained",
                     requestId,
+                    "explained",
                     {
                         time: new Date().toLocaleTimeString(),
                         fromCache: false,

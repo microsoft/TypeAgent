@@ -102,28 +102,32 @@ if (process.platform === "win32") {
 }
 
 const instanceDir =
-    parsedArgs.data ??
-    (app.isPackaged
-        ? path.join(app.getPath("userData"), "data")
-        : getInstanceDir());
+    parsedArgs.connect !== undefined
+        ? undefined
+        : (parsedArgs.data ??
+          (app.isPackaged
+              ? path.join(app.getPath("userData"), "data")
+              : getInstanceDir()));
 
-debugShell("Instance Dir", instanceDir);
-if (parsedArgs.clean) {
-    // Delete all files in the instance dir.
-    if (fs.existsSync(instanceDir)) {
-        await fs.promises.rm(instanceDir, { recursive: true });
-        debugShell("Cleaned data dir", instanceDir);
+if (instanceDir) {
+    debugShell("Instance Dir", instanceDir);
+    if (parsedArgs.clean) {
+        // Delete all files in the instance dir.
+        if (fs.existsSync(instanceDir)) {
+            await fs.promises.rm(instanceDir, { recursive: true });
+            debugShell("Cleaned data dir", instanceDir);
+        }
+    } else if (parsedArgs.reset) {
+        // Delete shell setting files.
+        const shellDataDir = getShellDataDir(instanceDir);
+        if (fs.existsSync(shellDataDir)) {
+            await fs.promises.rm(shellDataDir, { recursive: true });
+            debugShell("Cleaned shell data dir", shellDataDir);
+        }
     }
-} else if (parsedArgs.reset) {
-    // Delete shell setting files.
-    const shellDataDir = getShellDataDir(instanceDir);
-    if (fs.existsSync(shellDataDir)) {
-        await fs.promises.rm(shellDataDir, { recursive: true });
-        debugShell("Cleaned shell data dir", shellDataDir);
-    }
+
+    ensureShellDataDir(instanceDir);
 }
-
-ensureShellDataDir(instanceDir);
 
 if (parsedArgs.update) {
     if (!fs.existsSync(parsedArgs.update)) {
@@ -137,13 +141,11 @@ if (parsedArgs.update) {
 const time = performance.now();
 debugShellInit("Starting...");
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-async function initialize() {
-    debugShellInit("Ready", performance.now() - time);
-
-    const appPath = app.getAppPath();
+async function initializeKeys(appPath: string) {
+    if (parsedArgs.connect !== undefined) {
+        // No keys needed for connect mode.
+        return;
+    }
     const envFile = parsedArgs.env
         ? path.resolve(appPath, parsedArgs.env)
         : undefined;
@@ -153,13 +155,25 @@ async function initialize() {
         }
         await loadKeysFromEnvFile(envFile);
     } else {
+        if (instanceDir === undefined) {
+            throw new Error("Unable to load keys. Instance dir is undefined");
+        }
         await loadKeys(
             instanceDir,
             parsedArgs.reset || parsedArgs.clean,
             envFile,
         );
     }
+}
 
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+async function initialize() {
+    debugShellInit("Ready", performance.now() - time);
+
+    const appPath = app.getAppPath();
+    await initializeKeys(appPath);
     protocol.handle("typeagent-browser", (request) => {
         const url = new URL(request.url);
         const pathname = url.pathname;
@@ -190,24 +204,33 @@ async function initialize() {
 
     const shellSettings = new ShellSettingManager(instanceDir);
     const settings = shellSettings.user;
-    const dataDir = getShellDataDir(instanceDir);
-    const chatHistory: string = path.join(dataDir, "chat_history.html");
+
+    const chatHistory = instanceDir
+        ? path.join(getShellDataDir(instanceDir), "chat_history.html")
+        : undefined;
     ipcMain.handle("get-chat-history", async (event) => {
+        if (chatHistory === undefined || !settings.chatHistory)
+            return undefined;
+
         // Make sure the event is from the chat view of the current shell window
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
-        if (!shellWindow) return;
-        if (settings.chatHistory) {
-            // Load chat history if enabled
-            if (existsSync(chatHistory)) {
-                return readFileSync(chatHistory, "utf-8");
-            }
+        if (!shellWindow) return undefined;
+
+        // Load chat history if enabled
+        if (existsSync(chatHistory)) {
+            return readFileSync(chatHistory, "utf-8");
         }
+
         return undefined;
     });
 
     // Store the chat history whenever the DOM changes
     // this let's us rehydrate the chat when reopening the shell
     ipcMain.on("save-chat-history", async (event, html) => {
+        if (chatHistory === undefined || !settings.chatHistory) {
+            return;
+        }
+
         // Make sure the event is from the chat view of the current shell window
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
         if (!shellWindow) return;
@@ -346,7 +369,7 @@ async function initialize() {
         // dock icon is clicked and there are no other windows open.
         if (getShellWindow() === undefined)
             initializeInstance(
-                parsedArgs.connect ? undefined : instanceDir,
+                instanceDir,
                 shellSettings,
                 mockGreetings,
                 parsedArgs.inputOnly,
@@ -357,7 +380,7 @@ async function initialize() {
 
     // Start up the first instance
     const shellWindow = initializeInstance(
-        parsedArgs.connect ? undefined : instanceDir,
+        instanceDir,
         shellSettings,
         mockGreetings,
         parsedArgs.inputOnly,

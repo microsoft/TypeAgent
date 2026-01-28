@@ -45,6 +45,7 @@ import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
 import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 import { getIndexCommandHandlers } from "./handlers/indexCommandHandler.js";
 import { getMemoryCommandHandlers } from "../memory.js";
+import { getRequestId } from "../../command/command.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -62,7 +63,8 @@ export const systemHandlers: CommandHandlerTable = {
         clear: {
             description: "Clear the console",
             async run(context: ActionContext<CommandHandlerContext>) {
-                context.sessionContext.agentContext.clientIO.clear();
+                const systemContext = context.sessionContext.agentContext;
+                systemContext.clientIO.clear(getRequestId(systemContext));
             },
         },
         run: new RunCommandScriptHandler(),
@@ -70,7 +72,7 @@ export const systemHandlers: CommandHandlerTable = {
             description: "Exit the program",
             async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
-                systemContext.clientIO.exit();
+                systemContext.clientIO.exit(getRequestId(systemContext));
             },
         },
         random: getRandomCommandHandlers(),

@@ -10,13 +10,13 @@ import type {
 
 export type ClientIOInvokeFunctions = {
     askYesNo(
-        message: string,
         requestId: RequestId,
+        message: string,
         defaultValue?: boolean,
     ): Promise<boolean>;
     proposeAction(
-        actionTemplates: TemplateEditConfig,
         requestId: RequestId,
+        actionTemplates: TemplateEditConfig,
         source: string,
     ): Promise<unknown>;
     popupQuestion(
@@ -25,17 +25,17 @@ export type ClientIOInvokeFunctions = {
         defaultId: number | undefined,
         source: string,
     ): Promise<number>;
-    openLocalView(port: number): Promise<void>;
-    closeLocalView(port: number): Promise<void>;
+    openLocalView(requestId: RequestId, port: number): Promise<void>;
+    closeLocalView(requestId: RequestId, port: number): Promise<void>;
 };
 
 export type ClientIOCallFunctions = {
-    clear(): void;
-    exit(): void;
+    clear(requestId: RequestId): void;
+    exit(requestId: RequestId): void;
 
     setDisplayInfo(
-        source: string,
         requestId: RequestId,
+        source: string,
         actionIndex?: number,
         action?: TypeAgentAction | string[],
     ): void;
@@ -43,19 +43,19 @@ export type ClientIOCallFunctions = {
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
     appendDiagnosticData(requestId: RequestId, data: any): void;
     setDynamicDisplay(
-        source: string,
         requestId: RequestId,
+        source: string,
         actionIndex: number,
         displayId: string,
         nextRefreshMs: number,
     ): void;
 
     notify(
-        event: string,
         notificationId: string | RequestId | undefined,
+        event: string,
         data: any,
         source: string,
     ): void;
 
-    takeAction(action: string, data: unknown): void;
+    takeAction(requestId: RequestId, action: string, data: unknown): void;
 };

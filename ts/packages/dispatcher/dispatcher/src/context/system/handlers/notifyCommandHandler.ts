@@ -19,8 +19,8 @@ class NotifyInfoCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
-            "showNotifications",
             getRequestId(systemContext),
+            "showNotifications",
             NotifyCommands.ShowSummary,
             DispatcherName,
         );
@@ -35,8 +35,8 @@ class NotifyClearCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
-            "showNotifications",
             getRequestId(systemContext),
+            "showNotifications",
             NotifyCommands.Clear,
             DispatcherName,
         );
@@ -51,8 +51,8 @@ class NotifyShowUnreadCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
-            "showNotifications",
             getRequestId(systemContext),
+            "showNotifications",
             NotifyCommands.ShowUnread,
             DispatcherName,
         );
@@ -68,8 +68,8 @@ class NotifyShowAllCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
-            "showNotifications",
             getRequestId(systemContext),
+            "showNotifications",
             NotifyCommands.ShowAll,
             DispatcherName,
         );

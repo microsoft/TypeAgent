@@ -190,8 +190,8 @@ export class ChatView {
     private timer: number | undefined = undefined;
     private scheduledRefreshTime: number | undefined = undefined;
     setDynamicDisplay(
-        source: string,
         requestId: RequestId,
+        source: string,
         actionIndex: number,
         displayId: string,
         nextRefreshMs: number,
@@ -426,8 +426,8 @@ export class ChatView {
     }
 
     setDisplayInfo(
-        source: string,
         requestId: RequestId,
+        source: string,
         actionIndex?: number,
         action?: TypeAgentAction | string[],
     ) {
@@ -535,8 +535,8 @@ export class ChatView {
     }
 
     public async askYesNo(
-        message: string,
         requestId: RequestId,
+        message: string,
         source: string,
     ): Promise<boolean> {
         const agentMessage = this.ensureAgentMessage({
@@ -573,8 +573,8 @@ export class ChatView {
     }
 
     public async proposeAction(
-        actionTemplates: TemplateEditConfig,
         requestId: RequestId,
+        actionTemplates: TemplateEditConfig,
         source: string,
     ) {
         const agentMessage = this.ensureAgentMessage({

@@ -173,8 +173,8 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
             // Ignored
         },
         setDynamicDisplay(
-            source: string,
             requestId: RequestId,
+            source: string,
             actionIndex: number,
             displayId: string,
             nextRefreshMs: number,
@@ -184,16 +184,16 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
 
         // Input
         async askYesNo(
-            message: string,
             requestId: RequestId,
+            message: string,
             defaultValue?: boolean,
         ): Promise<boolean> {
             const input = await question(`${message} (y/n)`, rl);
             return input.toLowerCase() === "y";
         },
         async proposeAction(
-            actionTemplates: TemplateEditConfig,
             requestId: RequestId,
+            actionTemplates: TemplateEditConfig,
             source: string,
         ): Promise<unknown> {
             // TODO: Not implemented
@@ -212,8 +212,8 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
 
         // Notification (TODO: turn these in to dispatcher events)
         notify(
-            event: string,
             requestId: RequestId,
+            event: string,
             data: any,
             source: string,
         ): void {
@@ -243,14 +243,17 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
                 // ignored.
             }
         },
-        async openLocalView(port: number): Promise<void> {
+        async openLocalView(requestId: RequestId, port: number): Promise<void> {
             await open(`http://localhost:${port}`);
         },
-        closeLocalView(port: number): void {
+        async closeLocalView(
+            requestId: RequestId,
+            port: number,
+        ): Promise<void> {
             // TODO: Ignored
         },
         // Host specific (TODO: Formalize the API)
-        takeAction(action: string, data: unknown): void {
+        takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
                 open(data as string);
                 return;

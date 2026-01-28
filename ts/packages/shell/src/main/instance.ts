@@ -22,7 +22,12 @@ import {
 import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
-import { ClientIO, createDispatcher, Dispatcher } from "agent-dispatcher";
+import {
+    ClientIO,
+    createDispatcher,
+    Dispatcher,
+    RequestId,
+} from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import {
     hasPendingUpdate,
@@ -47,7 +52,7 @@ async function initializeDispatcher(
     shellWindow: ShellWindow,
     updateSummary: (dispatcher: Dispatcher) => Promise<string>,
     startTime: number,
-    connect: boolean,
+    connect?: number,
 ): Promise<Dispatcher | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -87,15 +92,14 @@ async function initializeDispatcher(
                 );
                 return result.response;
             },
-            openLocalView: (port: number) => {
+            openLocalView: async (_: RequestId, port: number) => {
                 debugShell(`Opening local view on port ${port}`);
                 shellWindow.createBrowserTab(
                     new URL(`http://localhost:${port}/`),
                     { background: false },
                 );
-                return Promise.resolve();
             },
-            closeLocalView: (port: number) => {
+            closeLocalView: async (_: RequestId, port: number) => {
                 const targetUrl = `http://localhost:${port}/`;
                 debugShell(
                     `Closing local view on port ${port}, target url: ${targetUrl}`,
@@ -123,15 +127,21 @@ async function initializeDispatcher(
 
         // Set up dispatcher
         let newDispatcher: Dispatcher;
-        if (connect) {
+        if (connect !== undefined) {
             // Connect to remote dispatcher instead of creating one
             newDispatcher = await connectDispatcher(
                 clientIO,
-                `ws://localhost:${isProd ? 9000 : 9000}`,
+                `ws://localhost:${connect}`,
+            );
+            debugShellInit(
+                "Connected to remote dispatcher",
+                performance.now() - startTime,
             );
         } else {
             if (!instanceDir) {
-                throw new Error("instanceDir is required when not in connect mode");
+                throw new Error(
+                    "instanceDir is required when not in connect mode",
+                );
             }
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
@@ -241,7 +251,7 @@ export function initializeInstance(
     mockGreetings: boolean,
     inputOnly: boolean = false,
     startTime: number = performance.now(),
-    connect: boolean = false,
+    connect?: number,
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");

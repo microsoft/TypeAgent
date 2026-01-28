@@ -56,16 +56,16 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
         const systemContext = context.sessionContext.agentContext;
         const requestId = getRequestId(systemContext);
         systemContext.clientIO.notify(
-            "randomCommandSelected",
             requestId,
+            "randomCommandSelected",
             {
                 message: randomRequest,
             },
             DispatcherName,
         );
         systemContext.clientIO.notify(
-            AppAgentEvent.Info,
             requestId,
+            AppAgentEvent.Info,
             randomRequest,
             DispatcherName,
         );
@@ -127,8 +127,8 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
 
             const systemContext = context.sessionContext.agentContext;
             systemContext.clientIO.notify(
-                "randomCommandSelected",
                 getRequestId(systemContext),
+                "randomCommandSelected",
                 {
                     message: message,
                 },

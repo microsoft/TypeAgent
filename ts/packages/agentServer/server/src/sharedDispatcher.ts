@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { DispatcherConnectOptions } from "@typeagent/agent-server-protocol";
 import {
     Dispatcher,
     DispatcherOptions,
     ClientIO,
-    ConnectionId,
+    RequestId,
 } from "agent-dispatcher";
 import {
     closeCommandHandlerContext,
@@ -17,6 +18,11 @@ import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
 const debugClientIOError = registerDebug("agent-server:clientIO:error");
 
+type ClientRecord = {
+    clientIO: ClientIO;
+    filter: boolean;
+};
+
 export async function createSharedDispatcher(
     hostName: string,
     options?: DispatcherOptions,
@@ -27,90 +33,138 @@ export async function createSharedDispatcher(
         );
     }
     let nextConnectionId = 0;
-    const clients = new Map<string, ClientIO>();
+    const clients = new Map<string, ClientRecord>();
     const broadcast = (
         name: string,
-        fn: (clientIO: ClientIO, connectionId: ConnectionId) => void,
-    ) =>
-        clients.forEach((client, connectionId) => {
+        requestId: RequestId | undefined,
+        fn: (clientIO: ClientIO) => void,
+    ) => {
+        for (const [connectionId, clientRecord] of clients) {
+            if (
+                clientRecord.filter &&
+                requestId?.connectionId !== connectionId
+            ) {
+                continue;
+            }
             try {
-                fn(client, connectionId);
+                fn(clientRecord.clientIO);
             } catch (error) {
                 // Ignore errors in server mode.
                 debugClientIOError(
                     `ClientIO error on ${name} for client ${connectionId}: ${error}`,
                 );
             }
-        });
+        }
+    };
+
+    const callback = <T>(
+        requestId: RequestId,
+        fn: (clientIO: ClientIO) => T,
+    ) => {
+        const connectionId = requestId.connectionId;
+        if (connectionId === undefined) {
+            throw new Error(
+                "Cannot perform async call without a connectionId in the requestId",
+            );
+        }
+        const record = clients.get(connectionId);
+        if (record === undefined) {
+            throw new Error(
+                `ClientIO not found for connectionId ${connectionId}`,
+            );
+        }
+        return fn(record.clientIO);
+    };
 
     // Create a routing ClientIO that forwards calls to the current request's client
     // Wraps all methods to catch "Agent channel disconnected" errors gracefully
     const clientIO: ClientIO = {
-        clear: (...args) => {
-            broadcast("clear", (clientIO) => clientIO.clear(...args));
-        },
-        exit: (...args) => {
-            broadcast("exit", (clientIO) => clientIO.exit(...args));
-        },
-        setDisplayInfo: (...args) => {
-            broadcast("setDisplayInfo", (clientIO) =>
-                clientIO.setDisplayInfo(...args),
+        clear: (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.clear(requestId, ...args),
+            ),
+        exit: (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.exit(requestId, ...args),
+            ),
+        setDisplayInfo: (requestId, ...args) => {
+            broadcast("setDisplayInfo", requestId, (clientIO) =>
+                clientIO.setDisplayInfo(requestId, ...args),
             );
         },
-        setDisplay: (...args) => {
-            broadcast("setDisplay", (clientIO) => clientIO.setDisplay(...args));
-        },
-        appendDisplay: (...args) => {
-            broadcast("appendDisplay", (clientIO) =>
-                clientIO.appendDisplay(...args),
+        setDisplay: (message) => {
+            broadcast("setDisplay", message.requestId, (clientIO) =>
+                clientIO.setDisplay(message),
             );
         },
-        appendDiagnosticData: (...args) => {
-            broadcast("appendDiagnosticData", (clientIO) =>
-                clientIO.appendDiagnosticData(...args),
+        appendDisplay: (message, ...args) => {
+            broadcast("appendDisplay", message.requestId, (clientIO) =>
+                clientIO.appendDisplay(message, ...args),
             );
         },
-        setDynamicDisplay: (...args) => {
-            broadcast("setDynamicDisplay", (clientIO) =>
-                clientIO.setDynamicDisplay(...args),
+        appendDiagnosticData: (requestId, ...args) => {
+            broadcast("appendDiagnosticData", requestId, (clientIO) =>
+                clientIO.appendDiagnosticData(requestId, ...args),
             );
         },
-        askYesNo: async () => {
-            throw new Error("askYesNo not supported in SharedDispatcher");
+        setDynamicDisplay: (requestId, ...args) => {
+            broadcast("setDynamicDisplay", requestId, (clientIO) =>
+                clientIO.setDynamicDisplay(requestId, ...args),
+            );
         },
-        proposeAction: async () => {
-            throw new Error("proposeAction not supported in SharedDispatcher");
-        },
+        askYesNo: async (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.askYesNo(requestId, ...args),
+            ),
+        proposeAction: async (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.proposeAction(requestId, ...args),
+            ),
+
         popupQuestion: async () => {
-            throw new Error("popupQuestion not supported in SharedDispatcher");
+            throw new Error("Not supported in server mode");
         },
-        notify: (...args) => {
-            broadcast("notify", (clientIO) => clientIO.notify(...args));
+        notify: (notificationId, ...args) => {
+            broadcast(
+                "notify",
+                typeof notificationId === "string" ? undefined : notificationId,
+                (clientIO) => clientIO.notify(notificationId, ...args),
+            );
         },
-        openLocalView: () => {
-            throw new Error("openLocalView not supported in SharedDispatcher");
-        },
-        closeLocalView: () => {
-            throw new Error("closeLocalView not supported in SharedDispatcher");
-        },
-        takeAction: () => {
-            throw new Error("takeAction not supported in SharedDispatcher");
-        },
+        openLocalView: async (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.openLocalView(requestId, ...args),
+            ),
+        closeLocalView: async (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.closeLocalView(requestId, ...args),
+            ),
+        takeAction: (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.takeAction(requestId, ...args),
+            ),
     };
     const context = await initializeCommandHandlerContext(hostName, {
         ...options,
         clientIO,
     });
     return {
-        join(clientIO: ClientIO, closeFn?: () => void): Dispatcher {
+        join(
+            clientIO: ClientIO,
+            closeFn: () => void,
+            options?: DispatcherConnectOptions,
+        ): Dispatcher {
             const connectionId = (nextConnectionId++).toString();
-            clients.set(connectionId, clientIO);
+            clients.set(connectionId, {
+                clientIO,
+                filter: options?.filter ?? false,
+            });
             const dispatcher = createDispatcherFromContext(
                 context,
                 connectionId,
                 async () => {
                     clients.delete(connectionId);
-                    closeFn?.();
+                    closeFn();
                     debugConnect(
                         `Client disconnected: ${connectionId} (total clients: ${clients.size})`,
                     );

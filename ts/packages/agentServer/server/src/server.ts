@@ -16,6 +16,7 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     AgentServerInvokeFunctions,
     ChannelName,
+    DispatcherConnectOptions,
 } from "@typeagent/agent-server-protocol";
 import dotenv from "dotenv";
 const envPath = new URL("../../../../.env", import.meta.url);
@@ -45,7 +46,7 @@ async function main() {
         { port: 8999 },
         (channelProvider, closeFn) => {
             const invokeFunctions: AgentServerInvokeFunctions = {
-                join: async () => {
+                join: async (options?: DispatcherConnectOptions) => {
                     const dispatcherChannel = channelProvider.createChannel(
                         ChannelName.Dispatcher,
                     );
@@ -58,6 +59,7 @@ async function main() {
                     const dispatcher = sharedDispatcher.join(
                         clientIORpcClient,
                         closeFn,
+                        options,
                     );
                     channelProvider.on("disconnect", () => {
                         dispatcher.close();

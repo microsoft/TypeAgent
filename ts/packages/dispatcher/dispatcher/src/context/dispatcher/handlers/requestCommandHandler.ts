@@ -229,8 +229,8 @@ async function requestExplain(
 
     const notifyExplained = (error?: string) => {
         context.clientIO.notify(
-            "explained",
             requestId,
+            "explained",
             {
                 time: new Date().toLocaleTimeString(),
                 fromCache,

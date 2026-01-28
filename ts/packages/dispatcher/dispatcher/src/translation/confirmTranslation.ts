@@ -84,8 +84,8 @@ export async function confirmTranslation(
     );
 
     const newActions = await systemContext.clientIO.proposeAction(
-        templateSequence,
         getRequestId(systemContext),
+        templateSequence,
         DispatcherName,
     );
 

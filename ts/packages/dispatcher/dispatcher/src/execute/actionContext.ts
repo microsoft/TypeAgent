@@ -29,8 +29,8 @@ export function getActionContext(
     const sessionContext = context.agents.getSessionContext(appAgentName);
 
     context.clientIO.setDisplayInfo(
-        appAgentName,
         requestId,
+        appAgentName,
         actionIndex,
         action,
     );
@@ -62,7 +62,7 @@ export function getActionContext(
             );
         },
         takeAction(action: string, data: unknown): void {
-            context.clientIO.takeAction(action, data);
+            context.clientIO.takeAction(requestId, action, data);
         },
         appendDiagnosticData(data): void {
             context.clientIO.appendDiagnosticData(requestId, data);
