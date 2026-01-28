@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import {
+    type CommandHandlerContext,
+    getRequestId,
+} from "../../commandHandlerContext.js";
 import fs from "node:fs";
 import { randomInt } from "crypto";
-import {
-    processCommandNoLock,
-    getRequestId,
-} from "../../../command/command.js";
+import { processCommandNoLock } from "../../../command/command.js";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";

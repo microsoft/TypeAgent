@@ -8,6 +8,8 @@ import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
     ensureCommandResult,
+    getRequestId,
+    requestIdToString,
 } from "../context/commandHandlerContext.js";
 
 import {
@@ -303,18 +305,6 @@ export async function processCommandNoLock(
             stack: e.stack,
         });
     }
-}
-
-export function getRequestId(context: CommandHandlerContext): RequestId {
-    const requestId = context.currentRequestId;
-    if (requestId === undefined) {
-        throw new Error("Internal Error: RequestId is not set in the context.");
-    }
-    return requestId;
-}
-
-export function requestIdToString(requestId: RequestId): string {
-    return requestId.requestId;
 }
 
 function beginProcessCommand(

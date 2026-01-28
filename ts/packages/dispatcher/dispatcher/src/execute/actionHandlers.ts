@@ -8,8 +8,9 @@ import {
     PromptEntity,
 } from "agent-cache";
 import {
-    CommandHandlerContext,
+    type CommandHandlerContext,
     getCommandResult,
+    getRequestId,
 } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
@@ -55,7 +56,6 @@ import {
 } from "../context/memory.js";
 import { setActivityContext } from "./activityContext.js";
 import { tryGetActionSchema } from "../translation/actionSchemaFileCache.js";
-import { getRequestId } from "../command/command.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 const debugCommandExecError = registerDebug(

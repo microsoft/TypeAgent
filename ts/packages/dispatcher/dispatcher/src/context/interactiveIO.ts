@@ -4,6 +4,8 @@
 import {
     CommandHandlerContext,
     getCommandResult,
+    requestIdToString,
+    getRequestId,
 } from "./commandHandlerContext.js";
 import { DisplayContent, MessageContent } from "@typeagent/agent-sdk";
 import {
@@ -11,7 +13,6 @@ import {
     IAgentMessage,
     ClientIO,
 } from "@typeagent/dispatcher-types";
-import { requestIdToString, getRequestId } from "../command/command.js";
 
 export enum NotifyCommands {
     ShowSummary = "summarize",

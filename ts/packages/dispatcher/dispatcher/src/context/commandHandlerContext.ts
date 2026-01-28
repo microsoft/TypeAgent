@@ -154,6 +154,18 @@ export type CommandHandlerContext = {
     actionResultKnowledgeExtraction: boolean;
 };
 
+export function getRequestId(context: CommandHandlerContext): RequestId {
+    const requestId = context.currentRequestId;
+    if (requestId === undefined) {
+        throw new Error("Internal Error: RequestId is not set in the context.");
+    }
+    return requestId;
+}
+
+export function requestIdToString(requestId: RequestId): string {
+    return requestId.requestId;
+}
+
 async function getAgentCache(
     session: Session,
     provider: ActionConfigProvider,

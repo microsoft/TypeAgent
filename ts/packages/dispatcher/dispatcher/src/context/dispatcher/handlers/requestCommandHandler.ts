@@ -13,8 +13,9 @@ import {
 } from "agent-cache";
 
 import {
-    CommandHandlerContext,
+    type CommandHandlerContext,
     getCommandResult,
+    getRequestId,
 } from "../../commandHandlerContext.js";
 import { CachedImageWithDetails } from "typechat-utils";
 import { Logger } from "telemetry";
@@ -48,7 +49,7 @@ import {
     interpretRequest,
     InterpretResult,
 } from "../../../translation/interpretRequest.js";
-import { getRequestId } from "../../../command/command.js";
+
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(

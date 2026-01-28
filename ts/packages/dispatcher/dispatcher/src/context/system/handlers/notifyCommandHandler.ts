@@ -5,11 +5,13 @@ import {
     CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import {
+    type CommandHandlerContext,
+    getRequestId,
+} from "../../commandHandlerContext.js";
 import { NotifyCommands } from "../../interactiveIO.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
-import { getRequestId } from "../../../command/command.js";
 
 class NotifyInfoCommandHandler implements CommandHandlerNoParams {
     description: string = "Shows the number of notifications available";
