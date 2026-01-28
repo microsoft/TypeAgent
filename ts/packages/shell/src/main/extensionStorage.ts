@@ -24,29 +24,30 @@ function getExtensionStoragePath(instanceDir: string) {
 export class ExtensionStorageManager {
     private readonly storage: ExtensionStorageData;
 
-    constructor(private readonly instanceDir: string) {
-        const storagePath = getExtensionStoragePath(instanceDir);
-        debugShell(
-            `Loading extension storage from '${storagePath}'`,
-            performance.now(),
-        );
-
+    constructor(private readonly instanceDir: string | undefined) {
         this.storage = { ...defaultExtensionStorage };
+        if (instanceDir !== undefined) {
+            const storagePath = getExtensionStoragePath(instanceDir);
+            debugShell(
+                `Loading extension storage from '${storagePath}'`,
+                performance.now(),
+            );
 
-        if (existsSync(storagePath)) {
-            try {
-                const existingStorage = JSON.parse(
-                    readFileSync(storagePath, "utf-8"),
-                );
-                Object.assign(this.storage, existingStorage);
-            } catch (e) {
-                debugShell(`Error loading extension storage: ${e}`);
+            if (existsSync(storagePath)) {
+                try {
+                    const existingStorage = JSON.parse(
+                        readFileSync(storagePath, "utf-8"),
+                    );
+                    Object.assign(this.storage, existingStorage);
+                } catch (e) {
+                    debugShell(`Error loading extension storage: ${e}`);
+                }
             }
-        }
 
-        debugShell(
-            `Extension storage loaded: ${JSON.stringify(this.storage, undefined, 2)}`,
-        );
+            debugShell(
+                `Extension storage loaded: ${JSON.stringify(this.storage, undefined, 2)}`,
+            );
+        }
     }
 
     public get(keys: string[]): Record<string, any> {
@@ -88,9 +89,14 @@ export class ExtensionStorageManager {
     }
 
     private save(): void {
-        const storagePath = getExtensionStoragePath(this.instanceDir);
-        debugShell(`Saving extension storage to '${storagePath}'.`);
-        debugShell(JSON.stringify(this.storage, undefined, 2));
-        writeFileSync(storagePath, JSON.stringify(this.storage, undefined, 2));
+        if (this.instanceDir) {
+            const storagePath = getExtensionStoragePath(this.instanceDir);
+            debugShell(`Saving extension storage to '${storagePath}'.`);
+            debugShell(JSON.stringify(this.storage, undefined, 2));
+            writeFileSync(
+                storagePath,
+                JSON.stringify(this.storage, undefined, 2),
+            );
+        }
     }
 }

@@ -26,12 +26,12 @@ import {
 import { AgentInterfaceFunctionName } from "./server.js";
 
 export type AgentContextCallFunctions = {
-    notify(param: {
-        contextId: number;
-        event: AppAgentEvent;
-        message: string | DisplayContent;
-        requestId?: string;
-    }): void;
+    notify(
+        contextId: number,
+        event: AppAgentEvent,
+        message: string | DisplayContent,
+        notificationId?: string,
+    ): void;
     setDisplay: (param: {
         actionContextId: number;
         content: DisplayContent;

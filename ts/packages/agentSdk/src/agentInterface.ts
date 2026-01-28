@@ -176,7 +176,7 @@ export interface SessionContext<T = unknown> {
     notify(
         event: AppAgentEvent,
         message: string | DisplayContent,
-        eventSetId?: string,
+        notificationId?: string,
     ): void;
 
     // choices default to ["Yes", "No"]

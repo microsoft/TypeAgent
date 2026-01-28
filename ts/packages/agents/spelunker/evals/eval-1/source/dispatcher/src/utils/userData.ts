@@ -92,17 +92,7 @@ function saveGlobalUserConfig(userConfig: GlobalUserConfig) {
     fs.writeFileSync(getGlobalUserConfigFilePath(), content);
 }
 
-function migrateOldUserDataDir() {
-    const newDir = getUserDataDir();
-    const oldDir = path.join(os.homedir(), ".aisystems");
-    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
-        fs.renameSync(oldDir, newDir);
-    }
-}
-
 function ensureGlobalUserConfig(): GlobalUserConfig {
-    migrateOldUserDataDir();
-
     const existingUserConfig = readGlobalUserConfig();
     if (existingUserConfig === undefined) {
         const userConfig = { userid: randomUUID() };

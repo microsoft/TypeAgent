@@ -92,31 +92,34 @@ function getSettingsPath(instanceDir: string) {
 export class ShellSettingManager {
     private readonly settings: ShellSettings;
     private readonly savedSettings: DeepPartialUndefined<ShellSettings>;
-    constructor(private readonly instanceDir: string) {
-        const settingsPath = getSettingsPath(instanceDir);
-        debugShell(
-            `Loading shell settings from '${settingsPath}'`,
-            performance.now(),
-        );
-
+    constructor(private readonly instanceDir: string | undefined) {
         const settings = cloneConfig(defaultSettings);
         this.settings = settings;
         this.savedSettings = {};
-        if (existsSync(settingsPath)) {
-            try {
-                const existingSettings = JSON.parse(
-                    readFileSync(settingsPath, "utf-8"),
-                );
-                this.savedSettings = existingSettings;
-                mergeConfig(settings, existingSettings);
-            } catch (e) {
-                debugShell(`Error loading shell settings: ${e}`);
-            }
-        }
 
-        debugShell(
-            `Shell loaded settings: ${JSON.stringify(this.savedSettings, undefined, 2)}`,
-        );
+        if (instanceDir) {
+            const settingsPath = getSettingsPath(instanceDir);
+            debugShell(
+                `Loading shell settings from '${settingsPath}'`,
+                performance.now(),
+            );
+
+            if (existsSync(settingsPath)) {
+                try {
+                    const existingSettings = JSON.parse(
+                        readFileSync(settingsPath, "utf-8"),
+                    );
+                    this.savedSettings = existingSettings;
+                    mergeConfig(settings, existingSettings);
+                } catch (e) {
+                    debugShell(`Error loading shell settings: ${e}`);
+                }
+            }
+
+            debugShell(
+                `Shell loaded settings: ${JSON.stringify(this.savedSettings, undefined, 2)}`,
+            );
+        }
         debugShell(
             `Shell settings: ${JSON.stringify(this.settings, undefined, 2)}`,
         );
@@ -205,6 +208,9 @@ export class ShellSettingManager {
     }
 
     public save(windowState: ShellWindowState) {
+        if (this.instanceDir === undefined) {
+            return;
+        }
         const settingsPath = getSettingsPath(this.instanceDir);
         debugShell(`Saving settings to '${settingsPath}'.`);
 

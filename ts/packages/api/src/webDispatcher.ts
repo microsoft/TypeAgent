@@ -3,7 +3,7 @@
 
 import { CommandResult, createDispatcher } from "agent-dispatcher";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
-import { getInstanceDir, getClientId } from "agent-dispatcher/helpers/data";
+import { getInstanceDir, getTraceId } from "agent-dispatcher/helpers/data";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
@@ -49,7 +49,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         storageProvider: getFsStorageProvider(),
         metrics: true,
         dblogging: true,
-        clientId: getClientId(),
+        traceId: getTraceId(),
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
