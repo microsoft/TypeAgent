@@ -17,7 +17,7 @@ internal static class ArgumentVerify
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfNull(object argument, string paramName)
+    public static void ThrowIfNull(object? argument, string paramName)
     {
         if (argument is null)
         {
@@ -26,7 +26,7 @@ internal static class ArgumentVerify
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void ThrowIfNullOrEmpty(string argument, string paramName)
+    public static void ThrowIfNullOrEmpty(string? argument, string paramName)
     {
         ThrowIfNull(argument, paramName);
         if (string.IsNullOrEmpty(argument))
