@@ -60,6 +60,10 @@
     "settings": {
       "name": "settings-agent",
       "execMode": "dispatcher"
+    },
+    "weather": {
+      "name": "weather-agent",
+      "path": "../agents/weather"
     }
   },
   "mcpServers": {

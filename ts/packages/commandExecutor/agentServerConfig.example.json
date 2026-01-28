@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "cache": {
+    "enabled": true,
+    "grammarSystem": "nfa",
+    "matchWildcard": false,
+    "matchEntityWildcard": false,
+    "mergeMatchSets": true,
+    "cacheConflicts": false
+  },
+  "agents": [
+    {
+      "name": "player",
+      "enabled": true,
+      "grammarFile": "../agents/player/src/agent/playerGrammar.agr"
+    },
+    {
+      "name": "calendar",
+      "enabled": true,
+      "grammarFile": "../agents/calendar/dist/calendarSchema.agr"
+    }
+  ],
+  "dispatcher": {
+    "persistSession": true,
+    "persistDir": "~/.typeagent",
+    "metrics": true,
+    "dbLogging": false,
+    "conversationMemory": {
+      "requestKnowledgeExtraction": false,
+      "actionResultKnowledgeExtraction": false
+    }
+  }
+}

@@ -18,6 +18,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { convert } from "html-to-text";
+import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
 
 function executeCommandRequestSchema() {
     return {
@@ -29,6 +30,39 @@ function executeCommandRequestSchema() {
 const ExecuteCommandRequestSchema = z.object(executeCommandRequestSchema());
 
 export type ExecuteCommandRequest = z.infer<typeof ExecuteCommandRequestSchema>;
+
+function discoverSchemasRequestSchema() {
+    return {
+        query: z.string(),
+        includeActions: z.boolean().optional(),
+    };
+}
+const DiscoverSchemasRequestSchema = z.object(discoverSchemasRequestSchema());
+export type DiscoverSchemasRequest = z.infer<
+    typeof DiscoverSchemasRequestSchema
+>;
+
+function loadSchemaRequestSchema() {
+    return {
+        schemaName: z.string(),
+        exposeAs: z.enum(["individual", "composite"]).optional(),
+    };
+}
+const LoadSchemaRequestSchema = z.object(loadSchemaRequestSchema());
+export type LoadSchemaRequest = z.infer<typeof LoadSchemaRequestSchema>;
+
+function typeagentActionRequestSchema() {
+    return {
+        agent: z.string(),
+        action: z.string(),
+        parameters: z.record(z.string(), z.any()).optional(),
+        naturalLanguage: z.string(),
+    };
+}
+const TypeagentActionRequestSchema = z.object(typeagentActionRequestSchema());
+export type TypeagentActionRequest = z.infer<
+    typeof TypeagentActionRequestSchema
+>;
 
 function toolResult(result: string): CallToolResult {
     return {
@@ -257,6 +291,151 @@ function createMcpClientIO(
 }
 
 /**
+ * Load weather schema and manifest from the actual weather agent package
+ */
+function getWeatherAgentInfo(): { manifest: any; schemaSource: string } {
+    // Resolve the path to the weather agent's src directory
+    const weatherAgentSrcPath = path.join(
+        process.cwd(),
+        "packages/agents/weather/src",
+    );
+
+    try {
+        // Read the manifest
+        const manifestPath = path.join(
+            weatherAgentSrcPath,
+            "weatherManifest.json",
+        );
+        const manifestContent = fs.readFileSync(manifestPath, "utf-8");
+        const manifest = JSON.parse(manifestContent);
+
+        // Read the schema source file
+        const schemaPath = path.join(weatherAgentSrcPath, "weatherSchema.ts");
+        const schemaSource = fs.readFileSync(schemaPath, "utf-8");
+
+        return { manifest, schemaSource };
+    } catch (error) {
+        // Fallback: return hardcoded values if file reading fails
+        const fallbackSchema = `export type WeatherAction =
+    | GetCurrentConditionsAction
+    | GetForecastAction
+    | GetAlertsAction;
+
+export type GetCurrentConditionsAction = {
+    actionName: "getCurrentConditions";
+    parameters: {
+        location: string;
+        units?: "celsius" | "fahrenheit";
+    };
+};
+
+export type GetForecastAction = {
+    actionName: "getForecast";
+    parameters: {
+        location: string;
+        days?: number; // 1-7 days
+        units?: "celsius" | "fahrenheit";
+    };
+};
+
+export type GetAlertsAction = {
+    actionName: "getAlerts";
+    parameters: {
+        location: string;
+    };
+};`;
+
+        const fallbackManifest = {
+            emojiChar: "⛅",
+            description:
+                "Agent to get weather information including current conditions, forecasts, and alerts",
+            schema: {
+                description:
+                    "Weather agent with actions to get current conditions, forecasts, and alerts",
+                schemaFile: "./weatherSchema.ts",
+                schemaType: {
+                    action: "WeatherAction",
+                },
+            },
+        };
+
+        return { manifest: fallbackManifest, schemaSource: fallbackSchema };
+    }
+}
+
+/**
+ * Schema registry using real TypeAgent agents
+ * Currently includes the weather agent for testing discovery
+ */
+interface SchemaInfo {
+    name: string;
+    description: string;
+    schemaSource: string; // TypeScript schema definition
+    actions: {
+        name: string;
+        description: string;
+        parameters: any;
+    }[];
+}
+
+// Load weather agent info at module initialization
+const weatherAgentInfo = getWeatherAgentInfo();
+
+const SCHEMA_REGISTRY: SchemaInfo[] = [
+    {
+        name: "weather",
+        description: weatherAgentInfo.manifest.description,
+        schemaSource: weatherAgentInfo.schemaSource,
+        actions: [
+            {
+                name: "getCurrentConditions",
+                description: "Get current weather conditions for a location",
+                parameters: {
+                    location: {
+                        type: "string",
+                        description: "City name or zip code",
+                    },
+                    units: {
+                        type: "string",
+                        enum: ["celsius", "fahrenheit"],
+                        description: "Temperature units (optional)",
+                    },
+                },
+            },
+            {
+                name: "getForecast",
+                description: "Get weather forecast for upcoming days",
+                parameters: {
+                    location: {
+                        type: "string",
+                        description: "City name or zip code",
+                    },
+                    days: {
+                        type: "number",
+                        description: "Number of days (1-7, optional)",
+                    },
+                    units: {
+                        type: "string",
+                        enum: ["celsius", "fahrenheit"],
+                        description: "Temperature units (optional)",
+                    },
+                },
+            },
+            {
+                name: "getAlerts",
+                description: "Get active weather alerts for a location",
+                parameters: {
+                    location: {
+                        type: "string",
+                        description: "City name or zip code",
+                    },
+                },
+            },
+        ],
+    },
+];
+
+/**
  * MCP server that executes commands through TypeAgent dispatcher.
  *
  * Lifecycle when used with Agent SDK:
@@ -280,6 +459,7 @@ export class CommandServer {
     private logger: Logger;
     private responseCollector: { messages: string[] } = { messages: [] };
     private currentRequestConfirmed: boolean = false;
+    private config: ResolvedAgentServerConfig;
 
     /**
      * Creates a new CommandServer instance
@@ -288,6 +468,35 @@ export class CommandServer {
      */
     constructor(debugMode: boolean = true, agentServerUrl?: string) {
         this.logger = new Logger();
+
+        // Load agent server configuration
+        const configResult = loadConfig();
+        this.config = configResult.config;
+
+        if (configResult.source) {
+            this.logger.log(
+                `Loaded configuration from: ${configResult.source}`,
+            );
+            this.logger.log(
+                `Grammar system: ${this.config.cache.grammarSystem}`,
+            );
+            this.logger.log(`Cache enabled: ${this.config.cache.enabled}`);
+            if (this.config.agents.length > 0) {
+                this.logger.log(
+                    `Configured agents: ${this.config.agents.map((a: { name: string }) => a.name).join(", ")}`,
+                );
+            }
+        } else {
+            this.logger.log("No configuration file found, using defaults");
+        }
+
+        if (configResult.errors.length > 0) {
+            this.logger.error(
+                "Configuration validation errors:",
+                configResult.errors.join(", "),
+            );
+        }
+
         this.server = new McpServer({
             name: "Command-Executor-Server",
             version: "1.0.0",
@@ -303,6 +512,13 @@ export class CommandServer {
         if (debugMode) {
             this.addDiagnosticTools();
         }
+    }
+
+    /**
+     * Get the current configuration
+     */
+    public getConfig(): ResolvedAgentServerConfig {
+        return this.config;
     }
 
     public async start(transport?: StdioServerTransport): Promise<void> {
@@ -338,6 +554,9 @@ export class CommandServer {
             this.logger.log(
                 `Connected to TypeAgent dispatcher at ${this.agentServerUrl}`,
             );
+
+            // Apply configuration settings via @config commands
+            await this.applyConfigurationSettings();
         } catch (error) {
             this.logger.error(
                 `Failed to connect to dispatcher at ${this.agentServerUrl}`,
@@ -349,6 +568,35 @@ export class CommandServer {
             this.dispatcher = null;
         } finally {
             this.isConnecting = false;
+        }
+    }
+
+    /**
+     * Apply configuration settings by sending @config commands to the dispatcher
+     */
+    private async applyConfigurationSettings(): Promise<void> {
+        if (!this.dispatcher) {
+            return;
+        }
+
+        try {
+            // Apply cache.grammarSystem setting if it differs from default
+            if (this.config.cache.grammarSystem !== "completionBased") {
+                this.logger.log(
+                    `Applying configuration: cache.grammarSystem = ${this.config.cache.grammarSystem}`,
+                );
+                await this.dispatcher.processCommand(
+                    `@config cache.grammarSystem ${this.config.cache.grammarSystem}`,
+                );
+            }
+
+            this.logger.log("Configuration settings applied successfully");
+        } catch (error) {
+            this.logger.error(
+                "Failed to apply some configuration settings",
+                error,
+            );
+            // Don't throw - continue even if config application fails
         }
     }
 
@@ -381,6 +629,7 @@ export class CommandServer {
     }
 
     private addTools() {
+        // Legacy natural language command execution
         this.server.registerTool(
             "execute_command",
             {
@@ -402,6 +651,66 @@ export class CommandServer {
             },
             async (request: ExecuteCommandRequest) =>
                 this.executeCommand(request),
+        );
+
+        // Discovery tool
+        this.server.registerTool(
+            "discover_schemas",
+            {
+                inputSchema: discoverSchemasRequestSchema(),
+                description:
+                    "Check if TypeAgent has capabilities for a user request that isn't covered by existing tools. " +
+                    "Returns available schemas/agents that match the request, along with their actions. " +
+                    "Use this BEFORE telling the user a capability isn't available.\n\n" +
+                    "Example: User asks 'What's the weather?' → Call discover_schemas({query: 'weather'}) to see if a weather agent is installed.\n\n" +
+                    "Parameters:\n" +
+                    "- query: Natural language description of what the user wants (e.g., 'weather', 'send email', 'analyze code')\n" +
+                    "- includeActions: If true, return detailed action schemas and TypeScript source. If false, just return agent names and descriptions (default: false)",
+            },
+            async (request: DiscoverSchemasRequest) =>
+                this.discoverSchemas(request),
+        );
+
+        // Schema loading tool
+        this.server.registerTool(
+            "load_schema",
+            {
+                inputSchema: loadSchemaRequestSchema(),
+                description:
+                    "Load a TypeAgent schema dynamically and register its actions as tools. " +
+                    "After loading, the agent's actions become available for direct invocation in this session. " +
+                    "Only use this after discover_schemas confirms the schema is available.\n\n" +
+                    "Parameters:\n" +
+                    "- schemaName: The schema/agent name returned by discover_schemas (e.g., 'weather', 'email')\n" +
+                    "- exposeAs: How to expose actions - 'individual' creates one tool per action (e.g., weather_getCurrentConditions), 'composite' creates one tool (e.g., weather_action) with action as a parameter (default: composite)",
+            },
+            async (request: LoadSchemaRequest) => this.loadSchema(request),
+        );
+
+        // Generic action execution tool
+        this.server.registerTool(
+            "typeagent_action",
+            {
+                inputSchema: typeagentActionRequestSchema(),
+                description:
+                    "Execute a TypeAgent action with cache population for future natural language queries.\n\n" +
+                    "Use this tool when:\n" +
+                    "1. An action exists but isn't exposed as an individual tool\n" +
+                    "2. You want to invoke an action from a newly discovered schema before loading it\n" +
+                    "3. The action is rarely used and doesn't warrant a dedicated tool\n\n" +
+                    "IMPORTANT - Cache Population:\n" +
+                    "This tool populates TypeAgent's cache so future similar natural language requests will execute faster.\n" +
+                    "You MUST pass the user's original natural language request in the 'naturalLanguage' parameter.\n\n" +
+                    "Parameters:\n" +
+                    "- agent: The agent/schema name (e.g., 'player', 'list', 'calendar', 'weather')\n" +
+                    "- action: The action name (e.g., 'playTrack', 'addItem', 'getCurrentConditions')\n" +
+                    "- parameters: Action-specific parameters (optional)\n" +
+                    "- naturalLanguage: REQUIRED - The user's exact original natural language request that led to this action.\n" +
+                    '  Example: If user asked "what\'s the weather in seattle in celsius", pass that exact string here.\n' +
+                    "  This enables TypeAgent to match future similar requests directly from cache without needing to call this tool again.",
+            },
+            async (request: TypeagentActionRequest) =>
+                this.executeTypeagentAction(request),
         );
     }
 
@@ -559,6 +868,217 @@ export class CommandServer {
         } finally {
             // Always reset confirmation flag after request completes
             this.currentRequestConfirmed = false;
+        }
+    }
+
+    /**
+     * Discover available schemas based on user query
+     * Mock implementation for testing - prints interaction details
+     */
+    private async discoverSchemas(
+        request: DiscoverSchemasRequest,
+    ): Promise<CallToolResult> {
+        this.logger.log(
+            `[DISCOVERY] Query: "${request.query}", includeActions: ${request.includeActions ?? false}`,
+        );
+
+        // Simple keyword matching for mock implementation
+        const query = request.query.toLowerCase();
+        const matches = SCHEMA_REGISTRY.filter(
+            (schema) =>
+                schema.name.toLowerCase().includes(query) ||
+                schema.description.toLowerCase().includes(query),
+        );
+
+        if (matches.length === 0) {
+            this.logger.log(
+                `[DISCOVERY] No schemas found matching query: "${request.query}"`,
+            );
+            return toolResult(
+                `No TypeAgent schemas found matching "${request.query}".\n\n` +
+                    `Available schemas: ${SCHEMA_REGISTRY.map((s) => s.name).join(", ")}`,
+            );
+        }
+
+        this.logger.log(
+            `[DISCOVERY] Found ${matches.length} schema(s): ${matches.map((m) => m.name).join(", ")}`,
+        );
+
+        // Build response
+        let response = `Found ${matches.length} matching schema(s):\n\n`;
+
+        for (const schema of matches) {
+            response += `**${schema.name}**\n`;
+            response += `${schema.description}\n\n`;
+
+            if (request.includeActions) {
+                response += `Actions:\n`;
+                for (const action of schema.actions) {
+                    response += `- **${action.name}**: ${action.description}\n`;
+                    response += `  Parameters: ${JSON.stringify(action.parameters, null, 2)}\n`;
+                }
+                response += `\nTypeScript Schema:\n\`\`\`typescript\n${schema.schemaSource}\n\`\`\`\n\n`;
+            } else {
+                response += `Available actions: ${schema.actions.map((a) => a.name).join(", ")}\n`;
+                response += `(Use includeActions: true to see detailed schemas)\n\n`;
+            }
+        }
+
+        response += `\nTo use these capabilities:\n`;
+        response += `1. Call typeagent_action directly with agent="${matches[0].name}", action="<actionName>", parameters=<params>\n`;
+        response += `2. Or call load_schema({schemaName: "${matches[0].name}"}) to register tools for this session\n`;
+
+        return toolResult(response);
+    }
+
+    /**
+     * Load a schema dynamically (mock implementation)
+     * In production, this would compile TypeScript and register real tools
+     */
+    private async loadSchema(
+        request: LoadSchemaRequest,
+    ): Promise<CallToolResult> {
+        this.logger.log(
+            `[LOAD_SCHEMA] Loading schema: "${request.schemaName}", exposeAs: ${request.exposeAs ?? "composite"}`,
+        );
+
+        const schema = SCHEMA_REGISTRY.find(
+            (s) => s.name === request.schemaName,
+        );
+
+        if (!schema) {
+            this.logger.log(
+                `[LOAD_SCHEMA] Schema not found: "${request.schemaName}"`,
+            );
+            return toolResult(
+                `Schema "${request.schemaName}" not found.\n\n` +
+                    `Available schemas: ${SCHEMA_REGISTRY.map((s) => s.name).join(", ")}`,
+            );
+        }
+
+        this.logger.log(
+            `[LOAD_SCHEMA] Mock loading schema "${request.schemaName}" with ${schema.actions.length} actions`,
+        );
+
+        // In production, this would:
+        // 1. Compile TypeScript schema to JSON Schema
+        // 2. Register MCP tools dynamically
+        // 3. Store in loadedSchemas map
+
+        let response = `✓ Schema "${request.schemaName}" loaded successfully!\n\n`;
+
+        if (request.exposeAs === "individual") {
+            response += `Registered ${schema.actions.length} individual tools:\n`;
+            for (const action of schema.actions) {
+                response += `- ${request.schemaName}_${action.name}\n`;
+            }
+        } else {
+            response += `Registered composite tool: ${request.schemaName}_action\n`;
+            response += `Available actions: ${schema.actions.map((a) => a.name).join(", ")}\n`;
+        }
+
+        response += `\n(Mock implementation - tools not actually registered yet)\n`;
+
+        return toolResult(response);
+    }
+
+    /**
+     * Execute a TypeAgent action and populate cache with natural language mapping
+     */
+    private async executeTypeagentAction(
+        request: TypeagentActionRequest,
+    ): Promise<CallToolResult> {
+        this.logger.log(
+            `[TYPEAGENT_ACTION] Agent: "${request.agent}", Action: "${request.action}"`,
+        );
+        this.logger.log(
+            `[TYPEAGENT_ACTION] Parameters: ${JSON.stringify(request.parameters, null, 2)}`,
+        );
+        this.logger.log(
+            `[TYPEAGENT_ACTION] Natural language: "${request.naturalLanguage}"`,
+        );
+
+        // Verify schema exists
+        const schema = SCHEMA_REGISTRY.find((s) => s.name === request.agent);
+
+        if (!schema) {
+            this.logger.log(
+                `[TYPEAGENT_ACTION] Unknown agent: "${request.agent}"`,
+            );
+            return toolResult(
+                `Unknown agent "${request.agent}".\n\n` +
+                    `Available agents: ${SCHEMA_REGISTRY.map((s) => s.name).join(", ")}`,
+            );
+        }
+
+        // Verify action exists
+        const action = schema.actions.find((a) => a.name === request.action);
+
+        if (!action) {
+            this.logger.log(
+                `[TYPEAGENT_ACTION] Unknown action "${request.action}" for agent "${request.agent}"`,
+            );
+            return toolResult(
+                `Unknown action "${request.action}" for agent "${request.agent}".\n\n` +
+                    `Available actions: ${schema.actions.map((a) => a.name).join(", ")}`,
+            );
+        }
+
+        // Connect to dispatcher if needed
+        if (!this.dispatcher && !this.isConnecting) {
+            this.logger.log(
+                "Not connected to dispatcher, attempting to connect...",
+            );
+            await this.connectToDispatcher();
+        }
+
+        if (!this.dispatcher) {
+            const errorMsg = `Cannot execute action: not connected to TypeAgent dispatcher at ${this.agentServerUrl}. Make sure the TypeAgent server is running with: pnpm run start:agent-server`;
+            this.logger.error(errorMsg);
+            return toolResult(errorMsg);
+        }
+
+        // Format the @action command for dispatcher
+        // Format: @action agentName actionName --parameters '{"param": "value"}' --naturalLanguage "phrase"
+        const paramStr =
+            request.parameters && Object.keys(request.parameters).length > 0
+                ? `--parameters '${JSON.stringify(request.parameters).replaceAll("'", "\\'")}'`
+                : "";
+
+        const nlStr = `--naturalLanguage '${request.naturalLanguage.replaceAll("'", "\\'")}'`;
+
+        const actionCommand =
+            `@action ${request.agent} ${request.action} ${paramStr} ${nlStr}`.trim();
+
+        this.logger.log(
+            `[TYPEAGENT_ACTION] Executing via dispatcher: ${actionCommand}`,
+        );
+
+        // Clear response collector before executing
+        this.responseCollector.messages = [];
+
+        try {
+            // Execute the action through dispatcher
+            // This will:
+            // 1. Call the agent's executeAction handler
+            // 2. Return the result
+            // 3. If naturalLanguage is provided, populate cache with NL → action mapping
+            await this.dispatcher.processCommand(actionCommand);
+
+            // Get the collected response
+            if (this.responseCollector.messages.length > 0) {
+                const response = this.responseCollector.messages.join("\n\n");
+                const processedResponse = await processHtmlImages(response);
+
+                return toolResult(processedResponse);
+            }
+
+            // Fallback if no messages were collected
+            return toolResult(`✓ Action executed successfully`);
+        } catch (error) {
+            const errorMsg = `Action execution failed: ${error instanceof Error ? error.message : String(error)}`;
+            this.logger.error(errorMsg);
+            return toolResult(errorMsg);
         }
     }
 

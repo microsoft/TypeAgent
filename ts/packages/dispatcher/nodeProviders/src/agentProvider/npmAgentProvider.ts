@@ -4,6 +4,7 @@
 import { ActionManifest, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createRequire } from "module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
     AgentProcess,
     createAgentProcess,
@@ -53,8 +54,37 @@ function getRequire(info: NpmAppAgentInfo, requirePath: string) {
 
 async function loadManifest(info: NpmAppAgentInfo, requirePath: string) {
     const require = getRequire(info, requirePath);
-    const manifestPath = require.resolve(`${info.name}/agent/manifest`);
-    const config = require(manifestPath) as AppAgentManifest;
+    let manifestPath: string;
+    let config: AppAgentManifest;
+
+    if (info.path) {
+        // For path-based agents, load manifest directly from the file system
+        // Resolve path relative to the requirePath directory
+        const requireDir = requirePath.startsWith("file://")
+            ? path.dirname(fileURLToPath(requirePath))
+            : path.dirname(requirePath);
+        const resolvedAgentPath = path.resolve(requireDir, info.path);
+        const packageJsonPath = path.resolve(resolvedAgentPath, "package.json");
+        const packageJson = require(packageJsonPath);
+
+        // Get manifest path from package.json exports
+        const manifestExport = packageJson.exports?.["./agent/manifest"];
+        if (!manifestExport) {
+            throw new Error(`No manifest export found in ${packageJsonPath}`);
+        }
+
+        manifestPath = path.resolve(resolvedAgentPath, manifestExport);
+        // Use dynamic import for JSON files to avoid require cache issues
+        const fs = await import("fs");
+        config = JSON.parse(
+            fs.readFileSync(manifestPath, "utf-8"),
+        ) as AppAgentManifest;
+    } else {
+        // For npm package agents, use standard resolution
+        manifestPath = require.resolve(`${info.name}/agent/manifest`);
+        config = require(manifestPath) as AppAgentManifest;
+    }
+
     patchPaths(config, path.dirname(manifestPath));
     return config;
 }
@@ -69,8 +99,31 @@ async function loadModuleAgent(
     requirePath: string,
 ): Promise<AgentProcess> {
     const require = getRequire(info, requirePath);
-    // file:// is require so that on windows the drive name doesn't get confused with the protocol name for `import()`
-    const handlerPath = `file://${require.resolve(`${info.name}/agent/handlers`)}`;
+    let handlerPath: string;
+
+    if (info.path) {
+        // For path-based agents, resolve handler path from package.json exports
+        // Resolve path relative to the requirePath directory
+        const requireDir = requirePath.startsWith("file://")
+            ? path.dirname(fileURLToPath(requirePath))
+            : path.dirname(requirePath);
+        const resolvedAgentPath = path.resolve(requireDir, info.path);
+        const packageJsonPath = path.resolve(resolvedAgentPath, "package.json");
+        const packageJson = require(packageJsonPath);
+
+        // Get handler path from package.json exports
+        const handlerExport = packageJson.exports?.["./agent/handlers"];
+        if (!handlerExport) {
+            throw new Error(`No handlers export found in ${packageJsonPath}`);
+        }
+
+        handlerPath = `file://${path.resolve(resolvedAgentPath, handlerExport)}`;
+    } else {
+        // For npm package agents, use standard resolution
+        // file:// is require so that on windows the drive name doesn't get confused with the protocol name for `import()`
+        handlerPath = `file://${require.resolve(`${info.name}/agent/handlers`)}`;
+    }
+
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
         return createAgentProcess(appAgentName, handlerPath);

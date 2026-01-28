@@ -17,7 +17,8 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "agent-sdk-wrapper": "./dist/cli.js"
+    "agent-sdk-wrapper": "./dist/cli.js",
+    "generate-grammar": "./dist/generate-grammar-cli.js"
   },
   "scripts": {
     "build": "npm run tsc",
@@ -29,7 +30,11 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
+    "@anthropic-ai/sdk": "^0.35.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@typeagent/action-schema": "workspace:*",
+    "action-grammar": "workspace:*",
+    "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
     "coder-wrapper": "workspace:*",
     "dotenv": "^16.4.5",

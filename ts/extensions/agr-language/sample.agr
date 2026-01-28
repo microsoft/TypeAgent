@@ -1,0 +1,85 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Sample Action Grammar file demonstrating syntax highlighting
+// This file shows all the major syntax elements
+
+// Simple rule definition
+@ <Start> = <Greeting> | <Command>
+
+// Rule with captures and types
+@ <Greeting> =
+    hello $(name:PersonName) -> {
+        actionName: "greet",
+        parameters: {
+            name: $(name)
+        }
+    }
+  | hi there -> { actionName: "greet" }
+
+// Rule with optional elements
+@ <Command> =
+    play (the)? $(track:TrackName)
+    by $(artist:ArtistName) -> {
+        actionName: "playTrack",
+        parameters: {
+            trackName: $(track),
+            artists: [$(artist)]
+        }
+    }
+  | pause (the)? music? -> { actionName: "pause" }
+
+// Rule with multiple patterns
+@ <Volume> =
+    (turn | set) (the)? volume to $(level:number) -> {
+        actionName: "setVolume",
+        parameters: { level: $(level) }
+    }
+  | volume up -> { actionName: "volumeUp" }
+  | volume down -> { actionName: "volumeDown" }
+
+// Numeric patterns
+@ <Cardinal> =
+    $(x:number)
+  | one -> 1
+  | two -> 2
+  | three -> 3
+  | four -> 4
+  | five -> 5
+
+// String type references
+@ <TrackName> = $(x:string)
+@ <ArtistName> = $(x:string)
+@ <PersonName> = $(x:string)
+
+// Complex nested rule
+@ <PlayCommand> =
+    <PlayTrack> | <PlayAlbum> | <PlayArtist>
+
+@ <PlayTrack> =
+    play track $(n:<Cardinal>) -> {
+        actionName: "playTrackNumber",
+        parameters: {
+            trackNumber: $(n),
+            source: "current"
+        }
+    }
+
+@ <PlayAlbum> =
+    play (the)? album $(album:<AlbumName>) -> {
+        actionName: "playAlbum",
+        parameters: { albumName: $(album) }
+    }
+
+@ <PlayArtist> =
+    play music by $(artist:<ArtistName>) -> {
+        actionName: "playArtist",
+        parameters: { artistName: $(artist) }
+    }
+
+@ <AlbumName> = $(x:string)
+
+// Operators demonstration
+@ <Operators> =
+    one? two* three+ four  // optional, zero-or-more, one-or-more
+  | (first | second | third)  // alternation with grouping

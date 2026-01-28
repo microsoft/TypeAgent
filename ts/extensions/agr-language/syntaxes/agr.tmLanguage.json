@@ -1,0 +1,156 @@
+{
+  "scopeName": "source.agr",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#rule-definition" },
+    { "include": "#action-object" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.agr",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "rule-definition": {
+      "patterns": [
+        {
+          "begin": "^\\s*(@)\\s*(<)([A-Za-z_][A-Za-z0-9_]*)(>)\\s*(=)",
+          "end": "(?=^\\s*@|^\\s*//|\\z)",
+          "beginCaptures": {
+            "1": { "name": "keyword.operator.rule.agr" },
+            "2": { "name": "punctuation.definition.rule-name.begin.agr" },
+            "3": { "name": "entity.name.type.rule.agr" },
+            "4": { "name": "punctuation.definition.rule-name.end.agr" },
+            "5": { "name": "keyword.operator.assignment.agr" }
+          },
+          "patterns": [{ "include": "#rule-body" }]
+        }
+      ]
+    },
+    "rule-body": {
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#action-object" },
+        { "include": "#capture" },
+        { "include": "#rule-reference" },
+        { "include": "#string-literal" },
+        { "include": "#operators" },
+        { "include": "#keywords" }
+      ]
+    },
+    "capture": {
+      "patterns": [
+        {
+          "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(:)([A-Za-z_<>][A-Za-z0-9_<>]*)(\\))",
+          "captures": {
+            "1": { "name": "keyword.operator.capture.agr" },
+            "2": { "name": "punctuation.definition.capture.begin.agr" },
+            "3": { "name": "variable.parameter.capture.agr" },
+            "4": { "name": "punctuation.separator.type.agr" },
+            "5": { "name": "entity.name.type.agr" },
+            "6": { "name": "punctuation.definition.capture.end.agr" }
+          }
+        },
+        {
+          "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))",
+          "captures": {
+            "1": { "name": "keyword.operator.capture-ref.agr" },
+            "2": { "name": "punctuation.definition.capture-ref.begin.agr" },
+            "3": { "name": "variable.parameter.capture-ref.agr" },
+            "4": { "name": "punctuation.definition.capture-ref.end.agr" }
+          }
+        }
+      ]
+    },
+    "rule-reference": {
+      "patterns": [
+        {
+          "match": "(<)([A-Za-z_][A-Za-z0-9_]*)(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.rule-reference.begin.agr" },
+            "2": { "name": "entity.name.type.rule-reference.agr" },
+            "3": { "name": "punctuation.definition.rule-reference.end.agr" }
+          }
+        }
+      ]
+    },
+    "string-literal": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.agr",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.agr",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.agr",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.agr",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "action-object": {
+      "patterns": [
+        {
+          "begin": "(->)\\s*(\\{)",
+          "end": "\\}",
+          "beginCaptures": {
+            "1": { "name": "keyword.operator.arrow.agr" },
+            "2": { "name": "punctuation.definition.action.begin.agr" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.action.end.agr" }
+          },
+          "contentName": "meta.embedded.block.javascript",
+          "patterns": [{ "include": "source.js" }]
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.alternation.agr",
+          "match": "\\|"
+        },
+        {
+          "name": "keyword.operator.optional.agr",
+          "match": "\\?"
+        },
+        {
+          "name": "keyword.operator.zero-or-more.agr",
+          "match": "\\*"
+        },
+        {
+          "name": "keyword.operator.one-or-more.agr",
+          "match": "\\+"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "constant.language.agr",
+          "match": "\\b(true|false|null|undefined)\\b"
+        },
+        {
+          "name": "constant.numeric.agr",
+          "match": "\\b\\d+\\b"
+        }
+      ]
+    }
+  }
+}

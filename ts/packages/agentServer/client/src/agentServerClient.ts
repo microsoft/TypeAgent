@@ -63,19 +63,19 @@ export async function connectDispatcher(
                     reject(err);
                 });
         };
-        ws.onmessage = (event) => {
+        ws.onmessage = (event: WebSocket.MessageEvent) => {
             debug("Received message from server:", event.data);
 
             channel.notifyMessage(JSON.parse(event.data.toString()));
         };
-        ws.onclose = (event) => {
+        ws.onclose = (event: WebSocket.CloseEvent) => {
             debug("WebSocket connection closed", event.code, event.reason);
             channel.notifyDisconnected();
             if (!resolved) {
                 reject(new Error(`Failed to connect to dispatcher at ${url}`));
             }
         };
-        ws.onerror = (error) => {
+        ws.onerror = (error: WebSocket.ErrorEvent) => {
             debugErr("WebSocket error:", error);
         };
     });

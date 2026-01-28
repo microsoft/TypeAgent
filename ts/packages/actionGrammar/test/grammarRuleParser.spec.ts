@@ -5,7 +5,7 @@ import { parseGrammarRules } from "../src/grammarRuleParser.js";
 import { escapedSpaces, spaces } from "./testUtils.js";
 
 const testParamGrammarRules = (fileName: string, content: string) =>
-    parseGrammarRules(fileName, content, false);
+    parseGrammarRules(fileName, content, false).definitions;
 
 describe("Grammar Rule Parser", () => {
     describe("Basic Rule Definitions", () => {
@@ -708,7 +708,7 @@ describe("Grammar Rule Parser", () => {
             const grammar = "<greeting> = hello";
             expect(() =>
                 testParamGrammarRules("test.grammar", grammar),
-            ).toThrow("'@' expected");
+            ).toThrow("Expected 'entity' declaration or '@' rule definition");
         });
 
         it("should throw error for malformed rule name", () => {

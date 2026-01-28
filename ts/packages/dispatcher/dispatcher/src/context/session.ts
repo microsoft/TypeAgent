@@ -154,6 +154,7 @@ export type DispatcherConfig = {
     cache: CacheConfig & {
         enabled: boolean;
         grammar: boolean;
+        grammarSystem: "completionBased" | "nfa"; // Which grammar system to use for matching
         autoSave: boolean;
         builtInCache: boolean;
         matchWildcard: boolean;
@@ -237,6 +238,7 @@ const defaultSessionConfig: SessionConfig = {
     cache: {
         enabled: true,
         grammar: true,
+        grammarSystem: "completionBased", // default to completion-based grammar system
         autoSave: true,
         mergeMatchSets: true, // the session default is different then the default in the cache
         cacheConflicts: true, // the session default is different then the default in the cache

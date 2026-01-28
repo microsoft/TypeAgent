@@ -889,6 +889,9 @@ importers:
 
   packages/actionGrammar:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.1.13)
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -898,6 +901,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.5.0
       regexp.escape:
         specifier: ^2.0.1
         version: 2.0.1
@@ -1050,10 +1056,22 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.12
-        version: 0.2.12
+        version: 0.2.12(zod@4.1.13)
+      '@anthropic-ai/sdk':
+        specifier: ^0.35.0
+        version: 0.35.0(encoding@0.1.13)
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.25.2(hono@4.11.3)(zod@4.1.13)
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
+      action-grammar:
+        specifier: workspace:*
+        version: link:../actionGrammar
+      agent-cache:
+        specifier: workspace:*
+        version: link:../cache
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -1554,6 +1572,9 @@ importers:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -2349,6 +2370,28 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/weather:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/aiclient:
     dependencies:
       '@azure/identity':
@@ -2867,6 +2910,9 @@ importers:
       isomorphic-ws:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.18.2)
+      weather-agent:
+        specifier: workspace:*
+        version: link:../agents/weather
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -3468,6 +3514,31 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.99.8)
+
+  packages/mcp/thoughts:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.1.13)
+      '@anthropic-ai/sdk':
+        specifier: ^0.35.0
+        version: 0.35.0(encoding@0.1.13)
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.5.0
+      microsoft-cognitiveservices-speech-sdk:
+        specifier: ^1.40.0
+        version: 1.43.1
+    devDependencies:
+      '@types/node':
+        specifier: ^20.11.19
+        version: 20.19.25
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
 
   packages/memory/conversation:
     dependencies:
@@ -4255,6 +4326,9 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^4.0.0
+
+  '@anthropic-ai/sdk@0.35.0':
+    resolution: {integrity: sha512-JxVuNIRLjcXZbDW/rJa3vSIoYB5c0wgIQUPsjueeqli9OJyCJpInj0UlvKSSk6R2oCYyg0y2M0H8n8Wyt0l1IA==}
 
   '@asamuzakjp/css-color@3.1.7':
     resolution: {integrity: sha512-Ok5fYhtwdyJQmU1PpEv6Si7Y+A4cYb8yNM9oiIJC9TzXPMuN9fvdonKJqcnz9TbFqV6bQ8z0giRq0iaOpGZV2g==}
@@ -12980,6 +13054,11 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   typical@4.0.0:
     resolution: {integrity: sha512-VAH4IvQ7BDFYglMd7BPRDfLgxZZX4O4TFcRDA6EN5X7erNJJq+McIEp8np9aVtxrCJ6qx4GTYVfOWNjcqwZgRw==}
     engines: {node: '>=8'}
@@ -13673,7 +13752,9 @@ snapshots:
 
   '@antfu/utils@8.1.1': {}
 
-  '@anthropic-ai/claude-agent-sdk@0.2.12':
+  '@anthropic-ai/claude-agent-sdk@0.2.12(zod@4.1.13)':
+    dependencies:
+      zod: 4.1.13
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5
@@ -13683,6 +13764,18 @@ snapshots:
       '@img/sharp-linuxmusl-arm64': 0.33.5
       '@img/sharp-linuxmusl-x64': 0.33.5
       '@img/sharp-win32-x64': 0.33.5
+
+  '@anthropic-ai/sdk@0.35.0(encoding@0.1.13)':
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    transitivePeerDependencies:
+      - encoding
 
   '@asamuzakjp/css-color@3.1.7':
     dependencies:
@@ -25331,6 +25424,8 @@ snapshots:
       underscore: 1.13.6
 
   typescript@5.4.5: {}
+
+  typescript@5.9.3: {}
 
   typical@4.0.0: {}
 

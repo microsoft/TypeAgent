@@ -1,0 +1,4 @@
+{"request": "would you please play shake it off by taylor swift", "schemaName": "player", "action": {"actionName": "playTrack", "parameters": {"trackName": "shake it off", "artists": ["taylor swift"]}}}
+{"request": "play shake it off by taylor swift", "schemaName": "player", "action": {"actionName": "playTrack", "parameters": {"trackName": "shake it off", "artists": ["taylor swift"]}}}
+{"request": "could you tell me the weather in Boston", "schemaName": "weather", "action": {"actionName": "getCurrentConditions", "parameters": {"location": "Boston"}}}
+{"request": "please show me the forecast for Miami", "schemaName": "weather", "action": {"actionName": "getForecast", "parameters": {"location": "Miami"}}}
