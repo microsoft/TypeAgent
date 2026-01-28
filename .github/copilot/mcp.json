@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "typeagent": {
+      "command": "node",
+      "args": ["ts/packages/commandExecutor/dist/server.js"]
+    }
+  }
+}
