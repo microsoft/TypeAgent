@@ -37,7 +37,7 @@ import {
 import { loadAssistantSelectionJsonTranslator } from "./unknownSwitcher.js";
 import {
     getSchemaNamePrefix,
-    startStreamPartialAction
+    startStreamPartialAction,
 } from "../execute/actionHandlers.js";
 import { ProfileNames } from "../utils/profileNames.js";
 import {
