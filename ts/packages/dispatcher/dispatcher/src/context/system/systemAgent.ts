@@ -13,7 +13,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { executeSessionAction } from "./action/sessionActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
-import { type CommandHandlerContext, getRequestId } from "../commandHandlerContext.js";
+import {
+    type CommandHandlerContext,
+    getRequestId,
+} from "../commandHandlerContext.js";
 
 import {
     getSystemTemplateCompletion,
