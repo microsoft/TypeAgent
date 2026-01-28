@@ -3,13 +3,19 @@
 
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
-import type { Dispatcher } from "@typeagent/dispatcher-types";
+import type { ConnectionId, Dispatcher } from "@typeagent/dispatcher-types";
 import type { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
 
-export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
+export function createDispatcherRpcClient(
+    channel: RpcChannel,
+    connectionId?: ConnectionId,
+): Dispatcher {
     const rpc = createRpc<DispatcherInvokeFunctions>("dispatcher", channel);
 
     return {
+        get connectionId() {
+            return connectionId;
+        },
         async processCommand(...args) {
             return rpc.invoke("processCommand", ...args);
         },

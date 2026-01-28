@@ -138,7 +138,7 @@ export type CommandHandlerContext = {
     agentCache: AgentCache;
     currentScriptDir: string;
     logger?: Logger | undefined;
-    requestId?: RequestId;
+    currentRequestId: RequestId | undefined;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
@@ -153,6 +153,18 @@ export type CommandHandlerContext = {
     userRequestKnowledgeExtraction: boolean;
     actionResultKnowledgeExtraction: boolean;
 };
+
+export function getRequestId(context: CommandHandlerContext): RequestId {
+    const requestId = context.currentRequestId;
+    if (requestId === undefined) {
+        throw new Error("Internal Error: RequestId is not set in the context.");
+    }
+    return requestId;
+}
+
+export function requestIdToString(requestId: RequestId): string {
+    return requestId.requestId;
+}
 
 async function getAgentCache(
     session: Session,
@@ -197,7 +209,7 @@ async function getAgentCache(
  * - metrics: whether to enable collection of timing metrics. Default is false.
  * - collectCommandResult: whether to collect command result in the return for `processCommand`. Default is false.
  * - dblogging: whether to enable database logging. If not specified, no logging is done.
- * - clientId: An optional client ID to use for logging identification.
+ * - traceId: An optional trace ID to use for logging identification.
  */
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
@@ -225,7 +237,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     metrics?: boolean; // default to false
     collectCommandResult?: boolean; // default to false
     dblogging?: boolean; // default to false
-    clientId?: string; // optional additional for logging identification
+    traceId?: string; // optional additional for logging identification
 
     // Additional integration options
     agentInstaller?: AppAgentInstaller;
@@ -278,8 +290,8 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
             isDbEnabled,
             (e: string) => {
                 clientIO.notify(
-                    AppAgentEvent.Warning,
                     undefined,
+                    AppAgentEvent.Warning,
                     e,
                     DispatcherName,
                 );
@@ -287,8 +299,8 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
         );
     } catch (e) {
         clientIO.notify(
-            AppAgentEvent.Warning,
             undefined,
+            AppAgentEvent.Warning,
             `DB logging disabled. ${e}`,
             DispatcherName,
         );
@@ -448,7 +460,7 @@ export async function initializeCommandHandlerContext(
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
-            clientId: options?.clientId,
+            traceId: options?.traceId,
             sessionId: () =>
                 context.session.sessionDirPath
                     ? getSessionName(context.session.sessionDirPath)
@@ -483,6 +495,7 @@ export async function initializeCommandHandlerContext(
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
+            currentRequestId: undefined,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,
@@ -548,8 +561,8 @@ async function setAppAgentStates(context: CommandHandlerContext) {
 
     const rollback = processSetAppAgentStateResult(result, context, (message) =>
         context.clientIO.notify(
-            AppAgentEvent.Error,
             undefined,
+            AppAgentEvent.Error,
             message,
             DispatcherName,
         ),

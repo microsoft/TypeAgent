@@ -10,7 +10,11 @@ import {
     matchRequest,
 } from "./matchRequest.js";
 import { translateRequest } from "./translateRequest.js";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getRequestId,
+    requestIdToString,
+} from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails } from "typechat-utils";
 import { unicodeChar } from "../command/command.js";
@@ -274,7 +278,7 @@ export async function interpretRequest(
             developerMode: systemContext.developerMode,
             config: translateResult.config,
             metrics: systemContext.metricsManager?.getMeasures(
-                systemContext.requestId!,
+                requestIdToString(getRequestId(systemContext)),
                 ProfileNames.translate,
             ),
             allMatches: translateResult.allMatches,

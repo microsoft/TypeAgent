@@ -13,6 +13,7 @@ type ShellCommandLineArgs = {
     env?: string;
     mockGreetings?: boolean;
     inputOnly?: boolean;
+    connect?: number;
 };
 
 export function parseShellCommandLine() {
@@ -36,7 +37,10 @@ export function parseShellCommandLine() {
 
             if (arg === "--env") {
                 i++;
-                if (i < process.argv.length) {
+                if (
+                    i < process.argv.length ||
+                    process.argv[i].startsWith("--")
+                ) {
                     result.env = process.argv[i];
                 } else {
                     debugShell("Missing value for --env argument");
@@ -46,7 +50,10 @@ export function parseShellCommandLine() {
 
             if (arg === "--update") {
                 i++;
-                if (i < process.argv.length) {
+                if (
+                    i < process.argv.length ||
+                    process.argv[i].startsWith("--")
+                ) {
                     result.update = process.argv[i];
                 } else {
                     debugShell("Missing value for --update argument");
@@ -56,10 +63,13 @@ export function parseShellCommandLine() {
 
             if (arg === "--data") {
                 i++;
-                if (i < process.argv.length) {
+                if (
+                    i < process.argv.length ||
+                    process.argv[i].startsWith("--")
+                ) {
                     result.data = process.argv[i];
                 } else {
-                    debugShell("Missing value for --dir argument");
+                    debugShell("Missing value for --data argument");
                 }
                 continue;
             }
@@ -88,9 +98,46 @@ export function parseShellCommandLine() {
                 result.inputOnly = true;
                 continue;
             }
+            if (arg === "--connect") {
+                i++;
+                if (
+                    i < process.argv.length &&
+                    !process.argv[i].startsWith("--")
+                ) {
+                    const port = parseInt(process.argv[i]);
+
+                    if (
+                        isNaN(port) ||
+                        port.toString() !== process.argv[i] ||
+                        port <= 0 ||
+                        port > 65535
+                    ) {
+                        debugShell(
+                            `Invalid number value '${process.argv[i]}' for --connect argument`,
+                        );
+                    } else {
+                        result.connect = port;
+                    }
+                } else {
+                    result.connect = 8999; // default port
+                }
+                continue;
+            }
         }
 
         debugShell("Unknown command line argument", arg);
+    }
+
+    if (result.connect !== undefined) {
+        if (result.data !== undefined) {
+            debugShell("--data ignored with --connect");
+        }
+        if (result.clean) {
+            debugShell("--clean ignored with --connect");
+        }
+        if (result.reset) {
+            debugShell("--reset ignored with --connect");
+        }
     }
     return result;
 }
