@@ -1,3 +1,8 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+-->
+
 # Testing Discovery Flow
 
 This document explains how to test the TypeAgent MCP discovery mechanism with Claude Code.
@@ -193,3 +198,9 @@ We'll move to:
 3. **How does Claude choose actions?** Does it match keywords or reason about intent?
 4. **Parameter extraction accuracy?** How often does Claude get location/days/units correct?
 5. **Error recovery?** What happens if Claude passes wrong parameters?
+
+---
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.

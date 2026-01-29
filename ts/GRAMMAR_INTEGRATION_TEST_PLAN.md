@@ -1,3 +1,8 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+-->
+
 # NFA Grammar Integration Test Plan
 
 ## Overview
@@ -11,9 +16,11 @@ This document outlines the comprehensive testing strategy for the NFA grammar in
 ## Test Coverage Areas
 
 ### 1. Unit Tests: Grammar Sync Mechanisms
+
 **Location**: `packages/cache/test/grammarIntegration.spec.ts` (CREATED)
 
 **What's tested**:
+
 - ✅ Grammar loading into both GrammarStoreImpl and AgentGrammarRegistry
 - ✅ `syncAgentGrammar()` properly updates GrammarStoreImpl after adding dynamic rules
 - ✅ Multiple dynamic rule additions with sync
@@ -24,9 +31,11 @@ This document outlines the comprehensive testing strategy for the NFA grammar in
 **Status**: Test file created, ready to run
 
 ### 2. Unit Tests: Initialization with Persisted Rules
+
 **Location**: `packages/cache/test/grammarIntegration.spec.ts` (CREATED)
 
 **What's tested**:
+
 - ✅ Loading persisted GrammarStore from disk
 - ✅ Merging persisted rules into AgentGrammarRegistry
 - ✅ Syncing merged grammar to GrammarStoreImpl
@@ -36,11 +45,13 @@ This document outlines the comprehensive testing strategy for the NFA grammar in
 **Status**: Test file created, ready to run
 
 ### 3. Integration Tests: Dispatcher Level (TODO)
+
 **Location**: `packages/dispatcher/dispatcher/test/grammarCache.spec.ts` (TO BE CREATED)
 
 **What needs to be tested**:
 
 #### Test 1: Agent Loading with Grammar Registration
+
 ```typescript
 it("should register grammars in both stores when loading agents (NFA mode)", async () => {
   // Setup dispatcher with grammarSystem: "nfa"
@@ -61,6 +72,7 @@ it("should only register in GrammarStoreImpl when using completionBased mode", a
 ```
 
 #### Test 2: Session Initialization with Persisted Rules
+
 ```typescript
 it("should load persisted dynamic rules on session start", async () => {
   // 1. Create session with NFA mode
@@ -86,6 +98,7 @@ it("should handle missing grammar store file gracefully", async () => {
 ```
 
 #### Test 3: Cache Consultation Flow
+
 ```typescript
 it("should consult cache with NFA grammars for active agents", async () => {
   // Setup dispatcher with multiple agents
@@ -108,6 +121,7 @@ it("should handle wildcards with entity validation (when implemented)", async ()
 ```
 
 #### Test 4: Grammar Generation Flow (TODO - waiting for schema path implementation)
+
 ```typescript
 // This test will be implemented after grammar generation is complete
 it("should generate grammar from request/action pair and add to cache", async () => {
@@ -132,6 +146,7 @@ it("should auto-save generated grammars when configured", async () => {
 ```
 
 #### Test 5: Configuration System
+
 ```typescript
 it("should respect grammarSystem configuration setting", async () => {
   // Test both "completionBased" and "nfa" settings
@@ -150,9 +165,11 @@ it("should respect cache.autoSave setting", async () => {
 ```
 
 ### 4. End-to-End Tests: Full Flow (TODO)
+
 **Location**: `packages/dispatcher/dispatcher/test/e2e/grammarE2E.spec.ts` (TO BE CREATED)
 
 **Scenario 1: Learning from User Interaction**
+
 ```typescript
 it("should learn new grammar patterns from user confirmations", async () => {
   // 1. User sends novel request: "play some jazz"
@@ -168,6 +185,7 @@ it("should learn new grammar patterns from user confirmations", async () => {
 ```
 
 **Scenario 2: Multi-Agent Scenario**
+
 ```typescript
 it("should handle grammar for multiple agents", async () => {
   // Load player, calendar, and list agents
@@ -178,6 +196,7 @@ it("should handle grammar for multiple agents", async () => {
 ```
 
 **Scenario 3: Grammar Evolution**
+
 ```typescript
 it("should accumulate grammar rules over time", async () => {
   // Session 1: Learn rules A, B, C
@@ -188,9 +207,11 @@ it("should accumulate grammar rules over time", async () => {
 ```
 
 ### 5. Error Handling Tests (TODO)
+
 **Location**: Various test files
 
 **Error scenarios to test**:
+
 - Invalid grammar syntax in persisted store
 - Corrupted grammar store JSON file
 - Grammar compilation errors during NFA compilation
@@ -199,9 +220,11 @@ it("should accumulate grammar rules over time", async () => {
 - Out of sync scenarios between registries
 
 ### 6. Performance Tests (TODO)
+
 **Location**: `packages/cache/test/grammarPerformance.spec.ts` (TO BE CREATED)
 
 **Performance scenarios**:
+
 - Matching performance with 100+ dynamic rules
 - Grammar compilation time for large schemas
 - Memory usage with multiple agents
@@ -210,6 +233,7 @@ it("should accumulate grammar rules over time", async () => {
 ## Test Execution Plan
 
 ### Phase 1: Unit Tests (READY)
+
 ```bash
 cd packages/cache
 npm test -- grammarIntegration.spec.ts
@@ -218,6 +242,7 @@ npm test -- grammarIntegration.spec.ts
 **Expected result**: All unit tests for sync mechanisms and initialization pass
 
 ### Phase 2: Build Verification (READY)
+
 ```bash
 cd packages/cache && npm run build
 cd packages/actionGrammar && npm run build
@@ -227,19 +252,23 @@ cd packages/dispatcher/dispatcher && npm run build
 **Expected result**: No TypeScript errors, all packages build successfully
 
 ### Phase 3: Integration Tests (TODO)
+
 1. Create `packages/dispatcher/dispatcher/test/grammarCache.spec.ts`
 2. Implement Tests 1-5 from section 3 above
 3. Run tests: `cd packages/dispatcher/dispatcher && npm test -- grammarCache.spec.ts`
 
 ### Phase 4: End-to-End Tests (TODO)
+
 1. Create `packages/dispatcher/dispatcher/test/e2e/grammarE2E.spec.ts`
 2. Implement scenarios from section 4 above
 3. Run tests: `cd packages/dispatcher/dispatcher && npm test -- e2e/grammarE2E.spec.ts`
 
 ### Phase 5: Manual Testing (TODO)
+
 After automated tests pass, perform manual testing:
 
 1. **Manual Test 1**: Start typeagent with NFA mode
+
    ```bash
    # In config, set cache.grammarSystem = "nfa"
    # Start typeagent
@@ -249,6 +278,7 @@ After automated tests pass, perform manual testing:
    ```
 
 2. **Manual Test 2**: Persistence across restarts
+
    ```bash
    # Start session, test requests
    # Note which requests match cache
@@ -266,6 +296,7 @@ After automated tests pass, perform manual testing:
 ## Success Criteria
 
 ### Must Pass
+
 - ✅ All unit tests in grammarIntegration.spec.ts pass
 - ⬜ All dispatcher integration tests pass
 - ⬜ Grammar loading works for both completionBased and NFA modes
@@ -275,12 +306,14 @@ After automated tests pass, perform manual testing:
 - ⬜ No regressions in existing cache functionality
 
 ### Should Pass (when grammar generation implemented)
+
 - ⬜ Grammar generation produces valid rules
 - ⬜ Generated rules are persisted correctly
 - ⬜ Auto-save works as configured
 - ⬜ All end-to-end scenarios work
 
 ### Performance Targets
+
 - ⬜ Cache matching with 100 rules: < 50ms
 - ⬜ Session startup with 500 persisted rules: < 500ms
 - ⬜ Grammar sync operation: < 10ms
@@ -288,6 +321,7 @@ After automated tests pass, perform manual testing:
 ## Current Status
 
 ### Completed ✅
+
 1. Unit test file created: `packages/cache/test/grammarIntegration.spec.ts`
 2. Core integration code implemented in:
    - `packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts`
@@ -300,9 +334,11 @@ After automated tests pass, perform manual testing:
 5. All packages building successfully
 
 ### In Progress ⬜
+
 - Running the unit tests (next step)
 
 ### Not Started ⬜
+
 - Dispatcher-level integration tests
 - End-to-end tests
 - Performance tests
@@ -310,12 +346,14 @@ After automated tests pass, perform manual testing:
 - Manual testing
 
 ### Blocked 🚫
+
 - Grammar generation tests (waiting for schema file path implementation)
 - Entity validation tests (waiting for entity validation implementation)
 
 ## Next Steps
 
 1. **Immediate**: Run unit tests
+
    ```bash
    cd packages/cache
    npm test -- grammarIntegration.spec.ts
@@ -341,3 +379,9 @@ After automated tests pass, perform manual testing:
 - All tests use Jest and follow existing test patterns in the codebase
 - Tests use temporary directories and clean up after themselves
 - Tests verify both NFA and completionBased modes work correctly
+
+---
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.

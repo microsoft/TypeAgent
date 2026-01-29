@@ -23,8 +23,8 @@ export class AgentGrammar {
     private grammar: Grammar;
     private nfa: NFA;
     private ruleCount: number;
-    private readonly baseGrammar: Grammar;  // Store original grammar for reset
-    private readonly baseNFA: NFA;           // Store original NFA for reset
+    private readonly baseGrammar: Grammar; // Store original grammar for reset
+    private readonly baseNFA: NFA; // Store original NFA for reset
 
     constructor(
         public readonly agentId: string,
@@ -36,7 +36,7 @@ export class AgentGrammar {
         this.ruleCount = grammar.rules.length;
         // Store deep copy of base grammar for reset capability
         this.baseGrammar = JSON.parse(JSON.stringify(grammar));
-        this.baseNFA = nfa;  // NFA is immutable, safe to share reference
+        this.baseNFA = nfa; // NFA is immutable, safe to share reference
     }
 
     /**
@@ -435,7 +435,9 @@ export class AgentGrammarRegistry {
      * the original static grammar rules intact.
      */
     resetAllToBase(): void {
-        console.log(`\n[Grammar Cache] Resetting ${this.agents.size} agent(s) to base grammar`);
+        console.log(
+            `\n[Grammar Cache] Resetting ${this.agents.size} agent(s) to base grammar`,
+        );
         for (const agent of this.agents.values()) {
             agent.resetToBase();
         }

@@ -62,8 +62,12 @@ describe("Grammar Generator", () => {
             );
 
             expect(analysis.shouldGenerateGrammar).toBe(true);
-            expect(analysis.grammarPattern.matchPattern).toContain("$(trackName:");
-            expect(analysis.grammarPattern.matchPattern).toContain("$(artistName:");
+            expect(analysis.grammarPattern.matchPattern).toContain(
+                "$(trackName:",
+            );
+            expect(analysis.grammarPattern.matchPattern).toContain(
+                "$(artistName:",
+            );
             expect(analysis.grammarPattern.matchPattern).toContain("by");
 
             const grammarRule = generator.formatAsGrammarRule(
@@ -494,8 +498,12 @@ describe("Grammar Generator", () => {
                 );
 
                 // Should use percentage paramSpec
-                expect(percentageRule).toContain("$(volumeChangePercentage:percentage)");
-                expect(percentageRule).not.toContain("$(volumeChangePercentage:string)");
+                expect(percentageRule).toContain(
+                    "$(volumeChangePercentage:percentage)",
+                );
+                expect(percentageRule).not.toContain(
+                    "$(volumeChangePercentage:string)",
+                );
             }
         }, 45000);
 
@@ -551,7 +559,9 @@ describe("Grammar Generator", () => {
                 expect(grammar).toBeDefined();
                 expect(grammar?.rules.length).toBeGreaterThan(0);
             } catch (error: any) {
-                fail(`Generated grammar rule failed to compile: ${error.message}\n\nGenerated rule:\n${grammarRule}`);
+                fail(
+                    `Generated grammar rule failed to compile: ${error.message}\n\nGenerated rule:\n${grammarRule}`,
+                );
             }
         }, 45000);
 
@@ -590,13 +600,20 @@ describe("Grammar Generator", () => {
             // This might be accepted or rejected depending on complexity
             // If accepted, verify it extracted the parameters correctly
             if (analysis.shouldGenerateGrammar) {
-                expect(analysis.grammarPattern.matchPattern).toContain("$(trackName:string)");
-                expect(analysis.grammarPattern.matchPattern).toContain("$(artistName:string)");
+                expect(analysis.grammarPattern.matchPattern).toContain(
+                    "$(trackName:string)",
+                );
+                expect(analysis.grammarPattern.matchPattern).toContain(
+                    "$(artistName:string)",
+                );
                 expect(analysis.grammarPattern.matchPattern).toContain("by");
             } else {
                 // If rejected, it should have a reasonable rejection reason
                 expect(analysis.rejectionReason).toBeDefined();
-                console.log("Complex request rejected:", analysis.rejectionReason);
+                console.log(
+                    "Complex request rejected:",
+                    analysis.rejectionReason,
+                );
             }
         }, 30000);
 
@@ -634,8 +651,12 @@ describe("Grammar Generator", () => {
 
             // Should be accepted - has clear structure with "by" separator
             expect(analysis.shouldGenerateGrammar).toBe(true);
-            expect(analysis.grammarPattern.matchPattern).toContain("$(trackName:string)");
-            expect(analysis.grammarPattern.matchPattern).toContain("$(artistName:string)");
+            expect(analysis.grammarPattern.matchPattern).toContain(
+                "$(trackName:string)",
+            );
+            expect(analysis.grammarPattern.matchPattern).toContain(
+                "$(artistName:string)",
+            );
             expect(analysis.grammarPattern.matchPattern).toContain("by");
         }, 30000);
     });

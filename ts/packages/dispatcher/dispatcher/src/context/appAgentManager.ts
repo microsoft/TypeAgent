@@ -281,7 +281,10 @@ export class AppAgentManager implements ActionConfigProvider {
                     useNFAGrammar,
                 );
             } catch (error) {
-                console.error(`[AGENT PROVIDER] Failed to load agent ${name}:`, error);
+                console.error(
+                    `[AGENT PROVIDER] Failed to load agent ${name}:`,
+                    error,
+                );
                 // Continue loading other agents even if one fails
             }
         }
@@ -338,9 +341,18 @@ export class AppAgentManager implements ActionConfigProvider {
                             // Also add to NFA grammar registry if using NFA system
                             if (useNFAGrammar && agentGrammarRegistry) {
                                 try {
-                                    const nfa = compileGrammarToNFA(g, schemaName);
-                                    agentGrammarRegistry.registerAgent(schemaName, g, nfa);
-                                    debug(`Added NFA grammar for schema: ${schemaName}`);
+                                    const nfa = compileGrammarToNFA(
+                                        g,
+                                        schemaName,
+                                    );
+                                    agentGrammarRegistry.registerAgent(
+                                        schemaName,
+                                        g,
+                                        nfa,
+                                    );
+                                    debug(
+                                        `Added NFA grammar for schema: ${schemaName}`,
+                                    );
                                 } catch (nfaError) {
                                     debugError(
                                         `Failed to compile NFA for schema: ${schemaName}\n${nfaError}`,
@@ -356,7 +368,10 @@ export class AppAgentManager implements ActionConfigProvider {
                     }
                 }
             } catch (e: any) {
-                console.error(`[SCHEMA] Error loading schema file for ${schemaName}:`, e);
+                console.error(
+                    `[SCHEMA] Error loading schema file for ${schemaName}:`,
+                    e,
+                );
                 schemaErrors.set(schemaName, e);
             }
         }

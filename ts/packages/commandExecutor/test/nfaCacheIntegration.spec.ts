@@ -157,7 +157,9 @@ describe("NFA Cache Integration", () => {
         it(
             "should populate cache on first execution",
             async () => {
-                console.log("\n=== Phase 1: Initial Requests (Cache Population) ===");
+                console.log(
+                    "\n=== Phase 1: Initial Requests (Cache Population) ===",
+                );
 
                 for (const request of initialRequests) {
                     console.log(`\nExecuting: "${request}"`);
@@ -199,7 +201,9 @@ describe("NFA Cache Integration", () => {
 
                 console.log("Wait complete. Re-executing same requests...\n");
 
-                console.log("\n=== Phase 3: Repeated Requests (Cache Hit Verification) ===");
+                console.log(
+                    "\n=== Phase 3: Repeated Requests (Cache Hit Verification) ===",
+                );
 
                 let hitCount = 0;
                 let missCount = 0;
@@ -227,12 +231,16 @@ describe("NFA Cache Integration", () => {
                 }
 
                 console.log(`\n✓ Repeated execution complete`);
-                console.log(`  Cache hits: ${hitCount}/${initialRequests.length}`);
-                console.log(`  Cache misses: ${missCount}/${initialRequests.length}`);
+                console.log(
+                    `  Cache hits: ${hitCount}/${initialRequests.length}`,
+                );
+                console.log(
+                    `  Cache misses: ${missCount}/${initialRequests.length}`,
+                );
 
                 // Log results for analysis
                 console.log(
-                    `\n📊 Cache Hit Rate: ${(hitCount / initialRequests.length * 100).toFixed(1)}%`,
+                    `\n📊 Cache Hit Rate: ${((hitCount / initialRequests.length) * 100).toFixed(1)}%`,
                 );
             },
             TEST_TIMEOUT,
@@ -268,9 +276,7 @@ describe("NFA Cache Integration", () => {
 
                     if (isCacheHit) {
                         hitCount++;
-                        console.log(
-                            "  ✓ Grammar generalization successful!",
-                        );
+                        console.log("  ✓ Grammar generalization successful!");
                     } else if (isCacheMiss) {
                         missCount++;
                         console.log(
@@ -288,15 +294,13 @@ describe("NFA Cache Integration", () => {
                 );
 
                 console.log(
-                    `\n📊 Generalization Rate: ${(hitCount / similarRequests.length * 100).toFixed(1)}%`,
+                    `\n📊 Generalization Rate: ${((hitCount / similarRequests.length) * 100).toFixed(1)}%`,
                 );
 
                 // The key insight: If NFA grammar generation is working correctly,
                 // similar requests should hit the cache because they match the same
                 // grammar patterns (e.g., "play $track by $artist")
-                console.log(
-                    "\n💡 Expected behavior:",
-                );
+                console.log("\n💡 Expected behavior:");
                 console.log(
                     "   - High generalization rate = NFA grammar is working correctly",
                 );

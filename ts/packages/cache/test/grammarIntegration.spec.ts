@@ -16,7 +16,12 @@ import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
 import { AgentCache } from "../src/cache/cache.js";
-import { AgentGrammarRegistry, GrammarStore as PersistedGrammarStore, compileGrammarToNFA, loadGrammarRules } from "action-grammar";
+import {
+    AgentGrammarRegistry,
+    GrammarStore as PersistedGrammarStore,
+    compileGrammarToNFA,
+    loadGrammarRules,
+} from "action-grammar";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,7 +69,11 @@ describe("Grammar Integration", () => {
             expect(grammar).toBeDefined();
 
             // Create AgentCache
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
 
             // Add grammar to cache's internal store
             cache.grammarStore.addGrammar("player", grammar!);
@@ -75,7 +84,9 @@ describe("Grammar Integration", () => {
                 namespaceKeys,
             });
             expect(matches.length).toBeGreaterThan(0);
-            expect(matches[0].match.actions[0].action.actionName).toBe("playTrack");
+            expect(matches[0].match.actions[0].action.actionName).toBe(
+                "playTrack",
+            );
         });
     });
 
@@ -92,11 +103,19 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules("player", staticGrammarText, []);
+            const staticGrammar = loadGrammarRules(
+                "player",
+                staticGrammarText,
+                [],
+            );
             const nfa = compileGrammarToNFA(staticGrammar!, "player");
 
             // Create AgentCache and AgentGrammarRegistry
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             // Add static grammar to both stores
@@ -125,7 +144,11 @@ describe("Grammar Integration", () => {
             expect(matchesBefore.length).toBe(0); // pause is not in static grammar
 
             // Configure grammar generation and sync
-            cache.configureGrammarGeneration(agentGrammarRegistry, undefined, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
             cache.syncAgentGrammar("player");
 
             // After sync, cache should match both static and dynamic rules
@@ -133,14 +156,18 @@ describe("Grammar Integration", () => {
                 namespaceKeys,
             });
             expect(matchesAfter.length).toBeGreaterThan(0);
-            expect(matchesAfter[0].match.actions[0].action.actionName).toBe("pause");
+            expect(matchesAfter[0].match.actions[0].action.actionName).toBe(
+                "pause",
+            );
 
             // Static rule should still work
             const staticMatches = cache.match("play music", {
                 namespaceKeys,
             });
             expect(staticMatches.length).toBeGreaterThan(0);
-            expect(staticMatches[0].match.actions[0].action.actionName).toBe("playTrack");
+            expect(staticMatches[0].match.actions[0].action.actionName).toBe(
+                "playTrack",
+            );
         });
 
         it("should handle multiple dynamic rule additions with sync", () => {
@@ -154,16 +181,28 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules("player", staticGrammarText, []);
+            const staticGrammar = loadGrammarRules(
+                "player",
+                staticGrammarText,
+                [],
+            );
             const nfa = compileGrammarToNFA(staticGrammar!, "player");
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             cache.grammarStore.addGrammar("player", staticGrammar!);
             agentGrammarRegistry.registerAgent("player", staticGrammar!, nfa);
 
-            cache.configureGrammarGeneration(agentGrammarRegistry, undefined, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
 
             const agentGrammar = agentGrammarRegistry.getAgent("player");
 
@@ -185,9 +224,15 @@ describe("Grammar Integration", () => {
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
             // All three rules should work
-            expect(cache.match("play music", { namespaceKeys }).length).toBeGreaterThan(0);
-            expect(cache.match("pause", { namespaceKeys }).length).toBeGreaterThan(0);
-            expect(cache.match("stop", { namespaceKeys }).length).toBeGreaterThan(0);
+            expect(
+                cache.match("play music", { namespaceKeys }).length,
+            ).toBeGreaterThan(0);
+            expect(
+                cache.match("pause", { namespaceKeys }).length,
+            ).toBeGreaterThan(0);
+            expect(
+                cache.match("stop", { namespaceKeys }).length,
+            ).toBeGreaterThan(0);
         });
     });
 
@@ -230,10 +275,18 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules("player", staticGrammarText, []);
+            const staticGrammar = loadGrammarRules(
+                "player",
+                staticGrammarText,
+                [],
+            );
             const nfa = compileGrammarToNFA(staticGrammar!, "player");
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             cache.grammarStore.addGrammar("player", staticGrammar!);
@@ -269,7 +322,11 @@ describe("Grammar Integration", () => {
             }
 
             // Sync to cache's grammar store
-            cache.configureGrammarGeneration(agentGrammarRegistry, loadedStore, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                loadedStore,
+                true,
+            );
             cache.syncAgentGrammar("player");
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -277,15 +334,21 @@ describe("Grammar Integration", () => {
             // Verify all rules work (static + dynamic)
             const playMatches = cache.match("play music", { namespaceKeys });
             expect(playMatches.length).toBeGreaterThan(0);
-            expect(playMatches[0].match.actions[0].action.actionName).toBe("playTrack");
+            expect(playMatches[0].match.actions[0].action.actionName).toBe(
+                "playTrack",
+            );
 
             const pauseMatches = cache.match("pause", { namespaceKeys });
             expect(pauseMatches.length).toBeGreaterThan(0);
-            expect(pauseMatches[0].match.actions[0].action.actionName).toBe("pause");
+            expect(pauseMatches[0].match.actions[0].action.actionName).toBe(
+                "pause",
+            );
 
             const stopMatches = cache.match("stop", { namespaceKeys });
             expect(stopMatches.length).toBeGreaterThan(0);
-            expect(stopMatches[0].match.actions[0].action.actionName).toBe("stop");
+            expect(stopMatches[0].match.actions[0].action.actionName).toBe(
+                "stop",
+            );
         });
 
         it("should handle multiple schemas with persisted rules", async () => {
@@ -316,29 +379,49 @@ describe("Grammar Integration", () => {
             await persistedStore.save();
 
             // Load static grammars for both schemas
-            const playerGrammar = loadGrammarRules("player", `@ <Start> = <playTrack>
+            const playerGrammar = loadGrammarRules(
+                "player",
+                `@ <Start> = <playTrack>
 @ <playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
         track: $(track)
     }
-}`, []);
-            const calendarGrammar = loadGrammarRules("calendar", `@ <Start> = <addEvent>
+}`,
+                [],
+            );
+            const calendarGrammar = loadGrammarRules(
+                "calendar",
+                `@ <Start> = <addEvent>
 @ <addEvent> = add $(event:string) -> {
     actionName: "addEvent",
     parameters: {
         event: $(event)
     }
-}`, []);
+}`,
+                [],
+            );
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             cache.grammarStore.addGrammar("player", playerGrammar!);
             cache.grammarStore.addGrammar("calendar", calendarGrammar!);
 
-            agentGrammarRegistry.registerAgent("player", playerGrammar!, compileGrammarToNFA(playerGrammar!, "player"));
-            agentGrammarRegistry.registerAgent("calendar", calendarGrammar!, compileGrammarToNFA(calendarGrammar!, "calendar"));
+            agentGrammarRegistry.registerAgent(
+                "player",
+                playerGrammar!,
+                compileGrammarToNFA(playerGrammar!, "player"),
+            );
+            agentGrammarRegistry.registerAgent(
+                "calendar",
+                calendarGrammar!,
+                compileGrammarToNFA(calendarGrammar!, "calendar"),
+            );
 
             // Load and merge persisted rules
             const loadedStore = new PersistedGrammarStore();
@@ -354,7 +437,11 @@ describe("Grammar Integration", () => {
                 schemaRules.get(rule.schemaName)!.push(rule.grammarText);
             }
 
-            cache.configureGrammarGeneration(agentGrammarRegistry, loadedStore, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                loadedStore,
+                true,
+            );
 
             for (const [schemaName, rules] of schemaRules) {
                 const agentGrammar = agentGrammarRegistry.getAgent(schemaName);
@@ -368,19 +455,29 @@ describe("Grammar Integration", () => {
                 const combinedRules = startRule + "\n\n" + rules.join("\n\n");
                 const result = agentGrammar!.addGeneratedRules(combinedRules);
                 if (!result.success) {
-                    console.error(`Failed to add rules for ${schemaName}:`, result);
+                    console.error(
+                        `Failed to add rules for ${schemaName}:`,
+                        result,
+                    );
                 }
                 cache.syncAgentGrammar(schemaName);
             }
 
             // Verify both schemas have their rules
             const playerKeys = cache.getNamespaceKeys(["player"], undefined);
-            const calendarKeys = cache.getNamespaceKeys(["calendar"], undefined);
+            const calendarKeys = cache.getNamespaceKeys(
+                ["calendar"],
+                undefined,
+            );
 
-            const pauseMatches = cache.match("pause", { namespaceKeys: playerKeys });
+            const pauseMatches = cache.match("pause", {
+                namespaceKeys: playerKeys,
+            });
             expect(pauseMatches.length).toBeGreaterThan(0);
 
-            const scheduleMatches = cache.match("schedule meeting", { namespaceKeys: calendarKeys });
+            const scheduleMatches = cache.match("schedule meeting", {
+                namespaceKeys: calendarKeys,
+            });
             expect(scheduleMatches.length).toBeGreaterThan(0);
         });
     });
@@ -401,13 +498,25 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules("player", staticGrammarText, []);
+            const staticGrammar = loadGrammarRules(
+                "player",
+                staticGrammarText,
+                [],
+            );
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             cache.grammarStore.addGrammar("player", staticGrammar!);
-            agentGrammarRegistry.registerAgent("player", staticGrammar!, compileGrammarToNFA(staticGrammar!, "player"));
+            agentGrammarRegistry.registerAgent(
+                "player",
+                staticGrammar!,
+                compileGrammarToNFA(staticGrammar!, "player"),
+            );
 
             // Add dynamic rule for simple "pause" without "music"
             const agentGrammar = agentGrammarRegistry.getAgent("player");
@@ -417,13 +526,19 @@ describe("Grammar Integration", () => {
     parameters: {}
 }`);
 
-            cache.configureGrammarGeneration(agentGrammarRegistry, undefined, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
             cache.syncAgentGrammar("player");
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
             // Both static and dynamic pause rules should work
-            const pauseMusicMatches = cache.match("pause music", { namespaceKeys });
+            const pauseMusicMatches = cache.match("pause music", {
+                namespaceKeys,
+            });
             expect(pauseMusicMatches.length).toBeGreaterThan(0);
 
             const pauseMatches = cache.match("pause", { namespaceKeys });
@@ -437,41 +552,69 @@ describe("Grammar Integration", () => {
 
         it("should filter matches by namespaceKeys correctly", () => {
             // Setup two schemas
-            const playerGrammar = loadGrammarRules("player", `@ <Start> = <play>
+            const playerGrammar = loadGrammarRules(
+                "player",
+                `@ <Start> = <play>
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
         track: $(track)
     }
-}`, []);
-            const calendarGrammar = loadGrammarRules("calendar", `@ <Start> = <schedule>
+}`,
+                [],
+            );
+            const calendarGrammar = loadGrammarRules(
+                "calendar",
+                `@ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) -> {
     actionName: "schedule",
     parameters: {
         event: $(event)
     }
-}`, []);
+}`,
+                [],
+            );
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("player", playerGrammar!);
             cache.grammarStore.addGrammar("calendar", calendarGrammar!);
 
             const playerKeys = cache.getNamespaceKeys(["player"], undefined);
-            const calendarKeys = cache.getNamespaceKeys(["calendar"], undefined);
-            const bothKeys = cache.getNamespaceKeys(["player", "calendar"], undefined);
+            const calendarKeys = cache.getNamespaceKeys(
+                ["calendar"],
+                undefined,
+            );
+            const bothKeys = cache.getNamespaceKeys(
+                ["player", "calendar"],
+                undefined,
+            );
 
             // Should only match player
-            const playerMatches = cache.match("play music", { namespaceKeys: playerKeys });
+            const playerMatches = cache.match("play music", {
+                namespaceKeys: playerKeys,
+            });
             expect(playerMatches.length).toBeGreaterThan(0);
-            expect(playerMatches[0].match.actions[0].action.schemaName).toBe("player");
+            expect(playerMatches[0].match.actions[0].action.schemaName).toBe(
+                "player",
+            );
 
             // Should only match calendar
-            const calendarMatches = cache.match("schedule meeting", { namespaceKeys: calendarKeys });
+            const calendarMatches = cache.match("schedule meeting", {
+                namespaceKeys: calendarKeys,
+            });
             expect(calendarMatches.length).toBeGreaterThan(0);
-            expect(calendarMatches[0].match.actions[0].action.schemaName).toBe("calendar");
+            expect(calendarMatches[0].match.actions[0].action.schemaName).toBe(
+                "calendar",
+            );
 
             // Should match both when both namespaceKeys provided
-            const bothMatches = cache.match("play music", { namespaceKeys: bothKeys });
+            const bothMatches = cache.match("play music", {
+                namespaceKeys: bothKeys,
+            });
             expect(bothMatches.length).toBeGreaterThan(0);
         });
     });
@@ -487,14 +630,26 @@ describe("Grammar Integration", () => {
 }`;
             const grammar = loadGrammarRules("player", grammarText, []);
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             cache.grammarStore.addGrammar("player", grammar!);
-            agentGrammarRegistry.registerAgent("player", grammar!, compileGrammarToNFA(grammar!, "player"));
+            agentGrammarRegistry.registerAgent(
+                "player",
+                grammar!,
+                compileGrammarToNFA(grammar!, "player"),
+            );
 
             // Configure with NFA
-            cache.configureGrammarGeneration(agentGrammarRegistry, undefined, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
@@ -513,7 +668,11 @@ describe("Grammar Integration", () => {
 }`;
             const grammar = loadGrammarRules("player", grammarText, []);
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("player", grammar!);
 
             // Configure with completionBased (no AgentGrammarRegistry)
@@ -545,14 +704,26 @@ describe("Grammar Integration", () => {
     parameters: {}
 }`;
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             cache.grammarStore.addGrammar("player", grammar!);
-            agentGrammarRegistry.registerAgent("player", grammar!, compileGrammarToNFA(grammar!, "player"));
+            agentGrammarRegistry.registerAgent(
+                "player",
+                grammar!,
+                compileGrammarToNFA(grammar!, "player"),
+            );
 
             // Configure with NFA
-            cache.configureGrammarGeneration(agentGrammarRegistry, undefined, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
@@ -563,7 +734,9 @@ describe("Grammar Integration", () => {
             // May or may not have completions depending on grammar structure
             // Main assertion is that completion() works without error in NFA mode
             if (completions && completions.completions.length > 0) {
-                const completionStrings = completions.completions.map(c => c.toLowerCase());
+                const completionStrings = completions.completions.map((c) =>
+                    c.toLowerCase(),
+                );
                 console.log("NFA completions:", completionStrings);
             }
         });
@@ -581,7 +754,11 @@ describe("Grammar Integration", () => {
     parameters: {}
 }`;
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
 
             cache.grammarStore.addGrammar("player", grammar!);
 
@@ -596,7 +773,10 @@ describe("Grammar Integration", () => {
 
             // Completion system exists and works in completion-based mode
             if (completions && completions.completions.length > 0) {
-                console.log("Completion-based completions:", completions.completions);
+                console.log(
+                    "Completion-based completions:",
+                    completions.completions,
+                );
             }
         });
 
@@ -610,29 +790,48 @@ describe("Grammar Integration", () => {
     }
 }`;
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             cache.grammarStore.addGrammar("player", grammar!);
-            agentGrammarRegistry.registerAgent("player", grammar!, compileGrammarToNFA(grammar!, "player"));
+            agentGrammarRegistry.registerAgent(
+                "player",
+                grammar!,
+                compileGrammarToNFA(grammar!, "player"),
+            );
 
             // Configure with NFA
-            cache.configureGrammarGeneration(agentGrammarRegistry, undefined, true);
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
             // Test completion with partial parameter filling
-            const completions = cache.completion("play Bohemian Rhapsody by", { namespaceKeys });
+            const completions = cache.completion("play Bohemian Rhapsody by", {
+                namespaceKeys,
+            });
             expect(completions).toBeDefined();
 
             // Should suggest the artist parameter (may be "artist" or "parameters.artist")
             if (completions!.properties && completions!.properties.length > 0) {
-                const propertyNames = completions!.properties.flatMap(p => p.names);
+                const propertyNames = completions!.properties.flatMap(
+                    (p) => p.names,
+                );
                 console.log("Property names:", propertyNames);
 
                 // Check if artist parameter is mentioned (with or without "parameters." prefix)
-                const hasArtist = propertyNames.some(name =>
-                    name === "artist" || name === "parameters.artist" || name.endsWith(".artist")
+                const hasArtist = propertyNames.some(
+                    (name) =>
+                        name === "artist" ||
+                        name === "parameters.artist" ||
+                        name.endsWith(".artist"),
                 );
                 expect(hasArtist).toBe(true);
             } else {
@@ -652,22 +851,37 @@ describe("Grammar Integration", () => {
     }
 }`;
             const grammar = loadGrammarRules("player", staticGrammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             const agentGrammarRegistry = new AgentGrammarRegistry();
             const persistedStore = new PersistedGrammarStore();
 
             await persistedStore.newStore(grammarStoreFile);
 
             cache.grammarStore.addGrammar("player", grammar!);
-            agentGrammarRegistry.registerAgent("player", grammar!, compileGrammarToNFA(grammar!, "player"));
+            agentGrammarRegistry.registerAgent(
+                "player",
+                grammar!,
+                compileGrammarToNFA(grammar!, "player"),
+            );
 
             // Use real player schema file from the agents package
-            const playerSchemaPath = path.join(__dirname, "../../../agents/player/dist/agent/playerSchema.pas.json");
+            const playerSchemaPath = path.join(
+                __dirname,
+                "../../../agents/player/dist/agent/playerSchema.pas.json",
+            );
 
             // Verify schema file exists
             if (!fs.existsSync(playerSchemaPath)) {
-                console.log(`⚠ Player schema not found at ${playerSchemaPath}`);
-                console.log("Run 'npm run build' in packages/agents/player to generate the schema");
+                console.log(
+                    `⚠ Player schema not found at ${playerSchemaPath}`,
+                );
+                console.log(
+                    "Run 'npm run build' in packages/agents/player to generate the schema",
+                );
                 return; // Skip test if schema not built
             }
 
@@ -711,26 +925,45 @@ describe("Grammar Integration", () => {
                         grammarText: genResult.generatedRule,
                     });
 
-                    const agentGrammar = agentGrammarRegistry.getAgent("player");
-                    const addResult = agentGrammar!.addGeneratedRules(genResult.generatedRule);
-                    console.log("addGeneratedRules result:", JSON.stringify(addResult, null, 2));
+                    const agentGrammar =
+                        agentGrammarRegistry.getAgent("player");
+                    const addResult = agentGrammar!.addGeneratedRules(
+                        genResult.generatedRule,
+                    );
+                    console.log(
+                        "addGeneratedRules result:",
+                        JSON.stringify(addResult, null, 2),
+                    );
                     if (!addResult.success) {
-                        console.log("Failed to add generated rules - this may be expected if the rule format is invalid");
+                        console.log(
+                            "Failed to add generated rules - this may be expected if the rule format is invalid",
+                        );
                         // Don't fail test if rule addition fails - focus on validating the generation worked
                     } else {
-                        console.log("✓ Successfully added generated rule to agent grammar");
+                        console.log(
+                            "✓ Successfully added generated rule to agent grammar",
+                        );
 
                         cache.syncAgentGrammar("player");
 
                         // After generation, "pause" should match
-                        const matchesAfter = cache.match("pause", { namespaceKeys });
+                        const matchesAfter = cache.match("pause", {
+                            namespaceKeys,
+                        });
                         expect(matchesAfter.length).toBeGreaterThan(0);
-                        expect(matchesAfter[0].match.actions[0].action.actionName).toBe("pause");
+                        expect(
+                            matchesAfter[0].match.actions[0].action.actionName,
+                        ).toBe("pause");
 
-                        console.log("✓ Grammar generation and integration successful");
+                        console.log(
+                            "✓ Grammar generation and integration successful",
+                        );
                     }
                 } else {
-                    console.log("Grammar generation was rejected:", genResult.rejectionReason);
+                    console.log(
+                        "Grammar generation was rejected:",
+                        genResult.rejectionReason,
+                    );
                     // Don't fail test if generation was legitimately rejected
                 }
             } catch (error: any) {
@@ -743,7 +976,9 @@ describe("Grammar Integration", () => {
         it("should handle grammar generation errors gracefully", async () => {
             // Test that populateCache handles errors gracefully (e.g., invalid schema path)
             try {
-                const { populateCache } = await import("action-grammar/generation");
+                const { populateCache } = await import(
+                    "action-grammar/generation"
+                );
 
                 const result = await populateCache({
                     request: "test request",
@@ -758,10 +993,16 @@ describe("Grammar Integration", () => {
                 // Should fail gracefully with invalid schema path
                 expect(result.success).toBe(false);
                 expect(result.rejectionReason).toBeDefined();
-                console.log("Handled error gracefully:", result.rejectionReason);
+                console.log(
+                    "Handled error gracefully:",
+                    result.rejectionReason,
+                );
             } catch (error: any) {
                 // Error during file reading is expected and acceptable
-                console.log("Expected error for invalid schema path:", error.message);
+                console.log(
+                    "Expected error for invalid schema path:",
+                    error.message,
+                );
                 expect(error).toBeDefined();
             }
         });

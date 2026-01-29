@@ -1,3 +1,8 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+-->
+
 # Command Executor MCP Server Tests
 
 ## NFA Cache Integration Test
@@ -90,12 +95,14 @@ Phase 4: Similar Requests (Grammar Generalization)
 ### Test Output
 
 The test provides detailed console output showing:
+
 - Each request being executed
 - Cache hit/miss status
 - Cache hit rates for each phase
 - Grammar generalization success rate
 
 Example output:
+
 ```
 === Phase 1: Initial Requests (Cache Population) ===
 
@@ -124,6 +131,7 @@ Similar:  "play Stairway to Heaven by Led Zeppelin"
 ### Timeout Configuration
 
 The test has a 4-minute timeout (240 seconds) to accommodate:
+
 - Server startup and connection
 - Initial request processing (with potential explainer invocations)
 - 120-second wait for cache persistence
@@ -133,17 +141,20 @@ The test has a 4-minute timeout (240 seconds) to accommodate:
 ### Troubleshooting
 
 **Test times out connecting to dispatcher**:
+
 - Ensure `pnpm run start:agent-server` is running
 - Verify dispatcher is accessible at `ws://localhost:8999`
 - Check firewall settings
 
 **Low cache hit rates**:
+
 - Verify `@config cache.grammarSystem nfa` is set in dispatcher
 - Check that grammar generation is enabled: `@config cache.grammar on`
 - Verify persisted grammar store is being saved: check `~/.typeagent/sessions/<session>/grammars/dynamic.json`
 - Check dispatcher logs for grammar generation errors
 
 **Test fails to build**:
+
 ```bash
 # Ensure dependencies are installed
 npm install
@@ -181,3 +192,9 @@ node test/testClient.js
 - Configuration is cleaned up after test completion
 - The test focuses on cache behavior, not actual action execution
 - Grammar rules persist across test runs in the dispatcher session
+
+---
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.

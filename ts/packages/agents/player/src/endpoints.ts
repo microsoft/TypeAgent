@@ -404,10 +404,10 @@ export async function transferPlayback(
             params,
         );
     } catch (error: any) {
-        if (error.message && error.message.includes('404')) {
+        if (error.message && error.message.includes("404")) {
             throw new Error(
                 `Device not found. The device may have gone offline. ` +
-                `Use 'list devices' to see available devices.`
+                    `Use 'list devices' to see available devices.`,
             );
         }
         throw error;
@@ -443,10 +443,10 @@ export async function play(
         await fetchPutEmptyResult(service, playUrl, smallTrack);
     } catch (error: any) {
         // If we get a 404, the device_id is likely stale or the device is offline
-        if (error.message && error.message.includes('404')) {
+        if (error.message && error.message.includes("404")) {
             throw new Error(
                 `Device not found or offline. The selected device may have disconnected. ` +
-                `Please check available devices with 'list devices' or select a different device with 'select device <name>'.`
+                    `Please check available devices with 'list devices' or select a different device with 'select device <name>'.`,
             );
         }
         throw error;
@@ -469,10 +469,10 @@ export async function pause(service: SpotifyService, deviceId: string) {
     try {
         return await fetchPutEmptyResult(service, pauseUrl);
     } catch (error: any) {
-        if (error.message && error.message.includes('404')) {
+        if (error.message && error.message.includes("404")) {
             throw new Error(
                 `Device not found or offline. The selected device may have disconnected. ` +
-                `Please use 'list devices' or 'select device <name>' to choose an available device.`
+                    `Please use 'list devices' or 'select device <name>' to choose an available device.`,
             );
         }
         throw error;

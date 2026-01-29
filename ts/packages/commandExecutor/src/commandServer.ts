@@ -577,7 +577,9 @@ export class CommandServer {
      */
     private async applyConfigurationSettings(): Promise<void> {
         if (!this.dispatcher) {
-            this.logger.log("⚠️  No dispatcher connection - skipping config application");
+            this.logger.log(
+                "⚠️  No dispatcher connection - skipping config application",
+            );
             return;
         }
 
@@ -593,14 +595,23 @@ export class CommandServer {
                 );
 
                 const configCommand = `@config cache grammarSystem ${this.config.cache.grammarSystem}`;
-                this.logger.log(`📤 Sending command to dispatcher: "${configCommand}"`);
+                this.logger.log(
+                    `📤 Sending command to dispatcher: "${configCommand}"`,
+                );
 
-                const result = await this.dispatcher.processCommand(configCommand);
+                const result =
+                    await this.dispatcher.processCommand(configCommand);
 
-                this.logger.log(`📥 Dispatcher response: ${JSON.stringify(result)}`);
-                this.logger.log("✅ Configuration settings applied successfully");
+                this.logger.log(
+                    `📥 Dispatcher response: ${JSON.stringify(result)}`,
+                );
+                this.logger.log(
+                    "✅ Configuration settings applied successfully",
+                );
             } else {
-                this.logger.log("ℹ️  Using default grammar system (completionBased), no config command needed");
+                this.logger.log(
+                    "ℹ️  Using default grammar system (completionBased), no config command needed",
+                );
             }
         } catch (error) {
             this.logger.error(

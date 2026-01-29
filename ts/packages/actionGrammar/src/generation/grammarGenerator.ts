@@ -439,7 +439,9 @@ export class ClaudeGrammarGenerator {
         // Clean critical string fields in RuleRHS structure
         if (analysis.grammarPattern) {
             if (analysis.grammarPattern.matchPattern) {
-                const cleaned = cleanString(analysis.grammarPattern.matchPattern);
+                const cleaned = cleanString(
+                    analysis.grammarPattern.matchPattern,
+                );
                 if (cleaned !== undefined) {
                     analysis.grammarPattern.matchPattern = cleaned;
                 }

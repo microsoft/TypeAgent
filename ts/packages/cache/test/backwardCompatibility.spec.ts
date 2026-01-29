@@ -36,53 +36,85 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
             expect(grammar).toBeDefined();
 
             // Create cache without any NFA configuration
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
 
             // Add grammar the old way - just to GrammarStoreImpl
             cache.grammarStore.addGrammar("player", grammar!);
 
             // Match should work without any NFA setup
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
-            const matches = cache.match("play Bohemian Rhapsody", { namespaceKeys });
+            const matches = cache.match("play Bohemian Rhapsody", {
+                namespaceKeys,
+            });
 
             expect(matches.length).toBeGreaterThan(0);
             expect(matches[0]!.match.actions[0].action.actionName).toBe("play");
-            expect(matches[0]!.match.actions[0].action.parameters?.track).toBe("Bohemian Rhapsody");
+            expect(matches[0]!.match.actions[0].action.parameters?.track).toBe(
+                "Bohemian Rhapsody",
+            );
         });
 
         it("should match multiple grammars without NFA", () => {
-            const playerGrammar = loadGrammarRules("player", `@ <Start> = <play>
+            const playerGrammar = loadGrammarRules(
+                "player",
+                `@ <Start> = <play>
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
         track: $(track)
     }
-}`, []);
+}`,
+                [],
+            );
 
-            const calendarGrammar = loadGrammarRules("calendar", `@ <Start> = <schedule>
+            const calendarGrammar = loadGrammarRules(
+                "calendar",
+                `@ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) -> {
     actionName: "schedule",
     parameters: {
         event: $(event)
     }
-}`, []);
+}`,
+                [],
+            );
 
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
 
             cache.grammarStore.addGrammar("player", playerGrammar!);
             cache.grammarStore.addGrammar("calendar", calendarGrammar!);
 
             // Should match player
             const playerKeys = cache.getNamespaceKeys(["player"], undefined);
-            const playerMatches = cache.match("play Yesterday", { namespaceKeys: playerKeys });
+            const playerMatches = cache.match("play Yesterday", {
+                namespaceKeys: playerKeys,
+            });
             expect(playerMatches.length).toBeGreaterThan(0);
-            expect(playerMatches[0]!.match.actions[0].action.schemaName).toBe("player");
+            expect(playerMatches[0]!.match.actions[0].action.schemaName).toBe(
+                "player",
+            );
 
             // Should match calendar
-            const calendarKeys = cache.getNamespaceKeys(["calendar"], undefined);
-            const calendarMatches = cache.match("schedule dentist appointment", { namespaceKeys: calendarKeys });
+            const calendarKeys = cache.getNamespaceKeys(
+                ["calendar"],
+                undefined,
+            );
+            const calendarMatches = cache.match(
+                "schedule dentist appointment",
+                { namespaceKeys: calendarKeys },
+            );
             expect(calendarMatches.length).toBeGreaterThan(0);
-            expect(calendarMatches[0]!.match.actions[0].action.schemaName).toBe("calendar");
+            expect(calendarMatches[0]!.match.actions[0].action.schemaName).toBe(
+                "calendar",
+            );
         });
     });
 
@@ -97,15 +129,23 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("player", grammar!);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
             const matches = cache.match("set volume to 50", { namespaceKeys });
 
             expect(matches.length).toBeGreaterThan(0);
-            expect(matches[0]!.match.actions[0].action.actionName).toBe("setVolume");
-            expect(matches[0]!.match.actions[0].action.parameters?.level).toBe(50);
+            expect(matches[0]!.match.actions[0].action.actionName).toBe(
+                "setVolume",
+            );
+            expect(matches[0]!.match.actions[0].action.parameters?.level).toBe(
+                50,
+            );
         });
 
         it("should handle string wildcards", () => {
@@ -118,15 +158,26 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("search", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("search", grammar!);
 
             const namespaceKeys = cache.getNamespaceKeys(["search"], undefined);
-            const matches = cache.match("search for machine learning tutorials", { namespaceKeys });
+            const matches = cache.match(
+                "search for machine learning tutorials",
+                { namespaceKeys },
+            );
 
             expect(matches.length).toBeGreaterThan(0);
-            expect(matches[0]!.match.actions[0].action.actionName).toBe("search");
-            expect(matches[0]!.match.actions[0].action.parameters?.query).toBe("machine learning tutorials");
+            expect(matches[0]!.match.actions[0].action.actionName).toBe(
+                "search",
+            );
+            expect(matches[0]!.match.actions[0].action.parameters?.query).toBe(
+                "machine learning tutorials",
+            );
         });
     });
 
@@ -149,7 +200,11 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("player", grammar!);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -157,15 +212,21 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
             // Test each alternative
             const playMatches = cache.match("play Hello", { namespaceKeys });
             expect(playMatches.length).toBeGreaterThan(0);
-            expect(playMatches[0].match.actions[0].action.actionName).toBe("play");
+            expect(playMatches[0].match.actions[0].action.actionName).toBe(
+                "play",
+            );
 
             const pauseMatches = cache.match("pause", { namespaceKeys });
             expect(pauseMatches.length).toBeGreaterThan(0);
-            expect(pauseMatches[0].match.actions[0].action.actionName).toBe("pause");
+            expect(pauseMatches[0].match.actions[0].action.actionName).toBe(
+                "pause",
+            );
 
             const stopMatches = cache.match("stop", { namespaceKeys });
             expect(stopMatches.length).toBeGreaterThan(0);
-            expect(stopMatches[0].match.actions[0].action.actionName).toBe("stop");
+            expect(stopMatches[0].match.actions[0].action.actionName).toBe(
+                "stop",
+            );
         });
     });
 
@@ -180,7 +241,11 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("player", grammar!);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -189,13 +254,19 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
             const matches1 = cache.match("play Yesterday", { namespaceKeys });
             expect(matches1.length).toBeGreaterThan(0);
 
-            const matches2 = cache.match("play the Yesterday", { namespaceKeys });
+            const matches2 = cache.match("play the Yesterday", {
+                namespaceKeys,
+            });
             expect(matches2.length).toBeGreaterThan(0);
 
-            const matches3 = cache.match("play song Yesterday", { namespaceKeys });
+            const matches3 = cache.match("play song Yesterday", {
+                namespaceKeys,
+            });
             expect(matches3.length).toBeGreaterThan(0);
 
-            const matches4 = cache.match("play the song Yesterday", { namespaceKeys });
+            const matches4 = cache.match("play the song Yesterday", {
+                namespaceKeys,
+            });
             expect(matches4.length).toBeGreaterThan(0);
         });
     });
@@ -211,7 +282,11 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("test", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
 
             // Add grammar WITHOUT calling configureGrammarGeneration
             cache.grammarStore.addGrammar("test", grammar!);
@@ -222,7 +297,9 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 
             expect(matches.length).toBeGreaterThan(0);
             expect(matches[0]!.match.actions[0].action.actionName).toBe("test");
-            expect(matches[0]!.match.actions[0].action.parameters?.value).toBe("hello world");
+            expect(matches[0]!.match.actions[0].action.parameters?.value).toBe(
+                "hello world",
+            );
         });
 
         it("should work when configureGrammarGeneration is called with completionBased mode", () => {
@@ -235,7 +312,11 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("test", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
 
             cache.grammarStore.addGrammar("test", grammar!);
 
@@ -243,7 +324,9 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
             cache.configureGrammarGeneration(undefined, undefined, false);
 
             const namespaceKeys = cache.getNamespaceKeys(["test"], undefined);
-            const matches = cache.match("test completion based", { namespaceKeys });
+            const matches = cache.match("test completion based", {
+                namespaceKeys,
+            });
 
             expect(matches.length).toBeGreaterThan(0);
             expect(matches[0]!.match.actions[0].action.actionName).toBe("test");
@@ -261,7 +344,11 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("player", grammar!);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -280,12 +367,18 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 }`;
 
             const grammar = loadGrammarRules("player", grammarText, []);
-            const cache = new AgentCache("test", mockExplainerFactory, undefined);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
             cache.grammarStore.addGrammar("player", grammar!);
 
             // Use wrong namespace key
             const wrongKeys = cache.getNamespaceKeys(["calendar"], undefined);
-            const matches = cache.match("play Hello", { namespaceKeys: wrongKeys });
+            const matches = cache.match("play Hello", {
+                namespaceKeys: wrongKeys,
+            });
 
             expect(matches).toEqual([]);
         });

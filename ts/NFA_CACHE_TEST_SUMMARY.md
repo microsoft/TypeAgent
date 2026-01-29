@@ -1,3 +1,8 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+-->
+
 # NFA Cache Integration Test - Implementation Summary
 
 ## Overview
@@ -9,16 +14,19 @@ Created a comprehensive integration test for the NFA grammar cache system in the
 ### New Files
 
 1. **[packages/commandExecutor/test/nfaCacheIntegration.spec.ts](packages/commandExecutor/test/nfaCacheIntegration.spec.ts)**
+
    - Complete integration test with 4 test phases
    - Tests cache population, persistence, hit detection, and grammar generalization
    - ~350 lines with detailed logging and verification
 
 2. **[packages/commandExecutor/jest.config.js](packages/commandExecutor/jest.config.js)**
+
    - Jest configuration for ESM modules
    - 4-minute timeout for long-running integration tests
    - Proper TypeScript handling with ts-jest
 
 3. **[packages/commandExecutor/TEST_README.md](packages/commandExecutor/TEST_README.md)**
+
    - Complete documentation on running the tests
    - Prerequisites and setup instructions
    - Troubleshooting guide
@@ -161,13 +169,10 @@ private async applyConfigurationSettings(): Promise<void> {
 
 ```typescript
 class GrammarSystemCommandHandler implements CommandHandler {
-    public async run(context, params) {
-        const system = params.args.system; // "nfa" or "completionBased"
-        await changeContextConfig(
-            { cache: { grammarSystem: system } },
-            context
-        );
-    }
+  public async run(context, params) {
+    const system = params.args.system; // "nfa" or "completionBased"
+    await changeContextConfig({ cache: { grammarSystem: system } }, context);
+  }
 }
 ```
 
@@ -177,9 +182,9 @@ The test uses `cacheCheck: true` parameter to detect cache hits/misses:
 
 ```typescript
 const { result, isCacheHit, isCacheMiss } = await executeCommand(
-    server,
-    "play Bohemian Rhapsody",
-    true  // ← cacheCheck parameter
+  server,
+  "play Bohemian Rhapsody",
+  true, // ← cacheCheck parameter
 );
 
 // Returns:
@@ -191,13 +196,13 @@ const { result, isCacheHit, isCacheMiss } = await executeCommand(
 
 ```typescript
 if (request.cacheCheck) {
-    const cacheResult = await this.dispatcher.checkCache(request.request);
+  const cacheResult = await this.dispatcher.checkCache(request.request);
 
-    if (cacheResult?.lastError) {
-        return toolResult(`CACHE_MISS: ${cacheResult.lastError}`);
-    }
+  if (cacheResult?.lastError) {
+    return toolResult(`CACHE_MISS: ${cacheResult.lastError}`);
+  }
 
-    return toolResult(`CACHE_HIT: ${processedResponse}`);
+  return toolResult(`CACHE_HIT: ${processedResponse}`);
 }
 ```
 
@@ -206,12 +211,14 @@ if (request.cacheCheck) {
 ### Prerequisites
 
 1. **Start the dispatcher server**:
+
 ```bash
 cd ts
 pnpm run start:agent-server
 ```
 
 2. **Build the commandExecutor package**:
+
 ```bash
 cd packages/commandExecutor
 npm run build
@@ -277,10 +284,12 @@ NFA Cache Integration
 ### Files Referenced
 
 1. **Configuration System**:
+
    - [agentServerConfig.ts](packages/commandExecutor/src/config/agentServerConfig.ts) - Config types
    - [configLoader.ts](packages/commandExecutor/src/config/configLoader.ts) - Config loading logic
 
 2. **Dispatcher Integration**:
+
    - [commandServer.ts](packages/commandExecutor/src/commandServer.ts) - MCP server implementation
    - [configCommandHandlers.ts](packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts) - Config command handling
    - [session.ts](packages/dispatcher/dispatcher/src/context/session.ts) - Session config management
@@ -292,26 +301,31 @@ NFA Cache Integration
 ## Key Insights
 
 ### 1. Default is Backward Compatible
+
 - `grammarSystem: "completionBased"` is the default
 - Existing systems continue working without changes
 - Opt-in to NFA mode via configuration
 
 ### 2. File-Based Configuration
+
 - Easy to switch modes without code changes
 - Configuration can be per-instance or per-session
 - Environment variable override for testing
 
 ### 3. Command-Based Application
+
 - Uses existing `@config` command infrastructure
 - Configuration changes are logged and reversible
 - Validation prevents invalid settings
 
 ### 4. Grammar Generalization
+
 - NFA system learns patterns from request/action pairs
 - Similar requests match via grammar rules
 - Example: "play X by Y" → matches any song/artist combination
 
 ### 5. Persistence
+
 - Dynamic rules saved to `~/.typeagent/sessions/<session>/grammars/dynamic.json`
 - Rules persist across sessions
 - Sync mechanism keeps both stores (AgentGrammarRegistry + GrammarStoreImpl) aligned
@@ -342,6 +356,7 @@ NFA Cache Integration
 This test suite provides comprehensive verification of the NFA cache integration in the Command Executor MCP server. It validates the complete flow from configuration loading through grammar generalization, ensuring that the cache system works correctly in real-world scenarios.
 
 The test demonstrates:
+
 - ✅ Configuration switching works correctly
 - ✅ Cache populates from user interactions
 - ✅ Grammar rules persist across sessions
@@ -354,3 +369,9 @@ The test demonstrates:
 - [TEST_README.md](packages/commandExecutor/TEST_README.md) - Test execution guide
 - [backwardCompatibility.spec.ts](packages/cache/test/backwardCompatibility.spec.ts) - Backward compatibility tests
 - [grammarIntegration.spec.ts](packages/cache/test/grammarIntegration.spec.ts) - Unit tests for grammar integration
+
+---
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.

@@ -354,7 +354,8 @@ async function addAppAgentProviders(
             }
         }
 
-        const useNFAGrammar = context.session.getConfig().cache.grammarSystem === "nfa";
+        const useNFAGrammar =
+            context.session.getConfig().cache.grammarSystem === "nfa";
 
         const inlineAppProvider = createBuiltinAppAgentProvider(context);
         await context.agents.addProvider(
@@ -410,7 +411,8 @@ export async function installAppProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
 ) {
-    const useNFAGrammar = context.session.getConfig().cache.grammarSystem === "nfa";
+    const useNFAGrammar =
+        context.session.getConfig().cache.grammarSystem === "nfa";
 
     // Don't use embedding cache for a new agent.
     await context.agents.addProvider(
@@ -556,7 +558,6 @@ export async function initializeCommandHandlerContext(
 
         // Initialize grammar generation if using NFA system
         await setupGrammarGeneration(context);
-
 
         const appAgentStateSettings = getAppAgentStateSettings(
             options?.agents,

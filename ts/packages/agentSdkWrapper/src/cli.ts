@@ -311,7 +311,9 @@ async function main() {
             debugLogger.log(`Created NFA config at: ${nfaConfigFilePath}`);
         }
 
-        console.log(`[AgentSDK] NFA cache mode enabled - config: ${nfaConfigFilePath}`);
+        console.log(
+            `[AgentSDK] NFA cache mode enabled - config: ${nfaConfigFilePath}`,
+        );
     }
 
     // Build MCP server config

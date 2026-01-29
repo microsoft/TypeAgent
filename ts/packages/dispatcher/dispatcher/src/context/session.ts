@@ -576,7 +576,7 @@ export async function setupAgentCache(
     session: Session,
     agentCache: AgentCache,
     provider?: ConstructionProvider,
-    agentGrammarRegistry?: any,  // Optional registry to reset when using NFA
+    agentGrammarRegistry?: any, // Optional registry to reset when using NFA
 ) {
     const config = session.getConfig();
     agentCache.model = config.explainer.model;
@@ -628,7 +628,6 @@ export async function setupAgentCache(
     await agentCache.constructionStore.setAutoSave(config.cache.autoSave);
 
     agentCache.grammarStore.setEnabled(config.cache.grammar);
-
 }
 
 export async function setupBuiltInCache(

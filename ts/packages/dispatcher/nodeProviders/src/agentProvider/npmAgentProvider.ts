@@ -165,7 +165,10 @@ export function createNpmAppAgentProvider(
                 manifests.set(appAgentName, newManifests);
                 return newManifests;
             } catch (error) {
-                console.error(`[AGENT LOAD] Failed to load manifest for ${appAgentName}:`, error);
+                console.error(
+                    `[AGENT LOAD] Failed to load manifest for ${appAgentName}:`,
+                    error,
+                );
                 throw error;
             }
         },
