@@ -1,0 +1,88 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Generated grammar for calendarSchema
+// This file contains common patterns for user requests
+
+// scheduleEvent
+@ <ScheduleEvent> = schedule a $(description:string) for $(date:string) at $(time:string) in $(location:string) with $(participant:string)
+  | (can you)? set up $(description:string) on $(date:string) at $(time:string)
+  | book $(description:string) with $(participant:string) at $(location:string) $(date:string) at $(time:string) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description: $(description),
+        date: $(date),
+        time: $(time),
+        location: $(location),
+        participant: $(participant)
+    }
+}
+
+// findEvents
+@ <FindEvents> = find all events on $(date:string) that include $(participant:string)
+  | show me meetings about $(description:string) scheduled for $(date:string)
+  | what events do I have with $(participant:string) on $(date:string) about (the)? $(description:string) -> {
+    actionName: "findEvents",
+    parameters: {
+        date: $(date),
+        participant: $(participant)
+    }
+}
+
+// addParticipant
+@ <AddParticipant> = include $(participant:string) in $(description:string) -> {
+    actionName: "addParticipant",
+    parameters: {
+        description: $(description),
+        participant: $(participant)
+    }
+}
+
+// findTodaysEvents
+@ <FindTodaysEvents> = what's on my calendar $(date:string)
+  | show me all my appointments and meetings for $(date:string)
+  | (can you)? (tell me)? what (do)? I have scheduled for today -> {
+    actionName: "findTodaysEvents"
+}
+
+// findThisWeeksEvents
+
+@ <Start> = <ScheduleEvent>
+  | <FindEvents>
+  | <AddParticipant>
+  | <FindTodaysEvents>
+  | <FindThisWeeksEvents>
+
+@ <FindThisWeeksEvents> = what's happening this week
+  | show me all my events for this week starting $(startDay:string)
+  | (can you)? find what I have scheduled this week -> {
+    actionName: "findThisWeeksEvents"
+}
+
+// Common entity types and patterns
+
+@ <Cardinal> = 
+  $(x:number)
+| one -> 1
+| two -> 2
+| three -> 3
+| four -> 4
+| five -> 5
+| six -> 6
+| seven -> 7
+| eight -> 8
+| nine -> 9
+| ten -> 10
+
+@ <Ordinal> = 
+  first -> 1
+| second -> 2
+| third -> 3
+| fourth -> 4
+| fifth -> 5
+| sixth -> 6
+| seventh -> 7
+| eighth -> 8
+| ninth -> 9
+| tenth -> 10
+

@@ -396,11 +396,22 @@ export async function transferPlayback(
     play = false,
 ) {
     const params = { device_ids: [deviceId], play };
-    await fetchPutEmptyResult(
-        service,
-        "https://api.spotify.com/v1/me/player/",
-        params,
-    );
+
+    try {
+        await fetchPutEmptyResult(
+            service,
+            "https://api.spotify.com/v1/me/player/",
+            params,
+        );
+    } catch (error: any) {
+        if (error.message && error.message.includes("404")) {
+            throw new Error(
+                `Device not found. The device may have gone offline. ` +
+                    `Use 'list devices' to see available devices.`,
+            );
+        }
+        throw error;
+    }
 }
 
 export async function play(
@@ -427,7 +438,19 @@ export async function play(
         "https://api.spotify.com/v1/me/player/play",
         { device_id: deviceId },
     );
-    await fetchPutEmptyResult(service, playUrl, smallTrack);
+
+    try {
+        await fetchPutEmptyResult(service, playUrl, smallTrack);
+    } catch (error: any) {
+        // If we get a 404, the device_id is likely stale or the device is offline
+        if (error.message && error.message.includes("404")) {
+            throw new Error(
+                `Device not found or offline. The selected device may have disconnected. ` +
+                    `Please check available devices with 'list devices' or select a different device with 'select device <name>'.`,
+            );
+        }
+        throw error;
+    }
 }
 
 export async function getUserDevices(service: SpotifyService) {
@@ -442,7 +465,18 @@ export async function pause(service: SpotifyService, deviceId: string) {
         "https://api.spotify.com/v1/me/player/pause",
         { device_id: deviceId },
     );
-    return fetchPutEmptyResult(service, pauseUrl);
+
+    try {
+        return await fetchPutEmptyResult(service, pauseUrl);
+    } catch (error: any) {
+        if (error.message && error.message.includes("404")) {
+            throw new Error(
+                `Device not found or offline. The selected device may have disconnected. ` +
+                    `Please use 'list devices' or 'select device <name>' to choose an available device.`,
+            );
+        }
+        throw error;
+    }
 }
 
 export async function getQueue(service: SpotifyService) {

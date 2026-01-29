@@ -62,7 +62,7 @@ Create `agentServerConfig.json` in one of these locations (in order of precedenc
     {
       "name": "player",
       "enabled": true,
-      "grammarFile": "./packages/agents/player/src/agent/playerGrammar.agr"
+      "grammarFile": "./packages/agents/player/src/agent/playerSchema.agr"
     },
     {
       "name": "calendar",

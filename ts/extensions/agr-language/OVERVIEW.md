@@ -111,7 +111,7 @@ To activate:
 
 ## Testing
 
-Test file: [playerGrammar.agr](../../packages/agents/player/src/agent/playerGrammar.agr)
+Test file: [playerSchema.agr](../../packages/agents/player/src/agent/playerSchema.agr)
 
 Expected highlighting:
 

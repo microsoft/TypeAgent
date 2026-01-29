@@ -1,0 +1,95 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Generated grammar for listSchema
+// This file contains common patterns for user requests
+
+// addItems - add one or more items to a list
+@ <AddItems> = add $(item:string) to (my)? $(listName:string) list -> {
+    actionName: "addItems",
+    parameters: {
+        items: [$(item)],
+        listName: $(listName)
+    }
+}
+  | (can you)? add $(item:string) to $(listName:string) -> {
+    actionName: "addItems",
+    parameters: {
+        items: [$(item)],
+        listName: $(listName)
+    }
+}
+  | put $(item:string) on (my)? $(listName:string) (list)? -> {
+    actionName: "addItems",
+    parameters: {
+        items: [$(item)],
+        listName: $(listName)
+    }
+}
+  | add $(item1:string) and $(item2:string) to $(listName:string) -> {
+    actionName: "addItems",
+    parameters: {
+        items: [$(item1), $(item2)],
+        listName: $(listName)
+    }
+}
+
+// removeItems - remove one or more items from a list
+@ <RemoveItems> = remove $(item:string) from (my)? $(listName:string) list -> {
+    actionName: "removeItems",
+    parameters: {
+        items: [$(item)],
+        listName: $(listName)
+    }
+}
+  | (can you)? delete $(item:string) from $(listName:string) -> {
+    actionName: "removeItems",
+    parameters: {
+        items: [$(item)],
+        listName: $(listName)
+    }
+}
+  | take $(item:string) off (my)? $(listName:string) (list)? -> {
+    actionName: "removeItems",
+    parameters: {
+        items: [$(item)],
+        listName: $(listName)
+    }
+}
+
+// createList - create a new list
+@ <CreateList> = create (a)? (new)? $(listName:string) list
+  | (can you)? make (me)? (a)? $(listName:string) list
+  | start (a)? (new)? $(listName:string) list -> {
+    actionName: "createList",
+    parameters: {
+        listName: $(listName)
+    }
+}
+
+// getList - show what's on the list
+@ <GetList> = (what's)? (show)? (me)? (my)? $(listName:string) list
+  | what (is)? on (my)? $(listName:string) (list)?
+  | (can you)? show (me)? (the)? $(listName:string) list
+  | what (do)? I have on (my)? $(listName:string) list -> {
+    actionName: "getList",
+    parameters: {
+        listName: $(listName)
+    }
+}
+
+// clearList - clear all items from a list
+@ <ClearList> = clear (my)? $(listName:string) list
+  | (can you)? empty (my)? $(listName:string) (list)?
+  | delete (everything)? (all items)? from (my)? $(listName:string) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName: $(listName)
+    }
+}
+
+@ <Start> = <AddItems>
+  | <RemoveItems>
+  | <CreateList>
+  | <GetList>
+  | <ClearList>

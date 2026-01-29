@@ -6,6 +6,19 @@ import { GrammarTestCase } from "./testTypes.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
 
 /**
+ * Structured grammar rule right-hand side
+ */
+export interface RuleRHS {
+    // The grammar pattern like "play $(track:string) by $(artist:string)"
+    matchPattern: string;
+    // Parameters that map to the action
+    actionParameters: Array<{
+        parameterName: string;
+        parameterValue: string; // e.g., "$(track)" or fixed value like "kitchen"
+    }>;
+}
+
+/**
  * Linguistic analysis of the request
  */
 export interface RequestAnalysis {
@@ -68,98 +81,115 @@ export interface GrammarAnalysis {
     parameterMappings: ParameterMapping[];
     // Parts of the request that should be fixed (not wildcards)
     fixedPhrases: string[];
-    // The generated grammar pattern (empty if shouldGenerateGrammar is false)
-    grammarPattern: string;
+    // The generated grammar pattern (structured with matchPattern and actionParameters)
+    grammarPattern: RuleRHS;
     // Reasoning about the choices made
     reasoning: string;
 }
 
-const GRAMMAR_GENERATION_SYSTEM_PROMPT = `You are an expert at analyzing natural language requests and generating grammar patterns for action-based systems.
+const GRAMMAR_GENERATION_SYSTEM_PROMPT = `You are a grammar pattern generator. Your job is to create a pattern, specifically the right-hand-side of a grammar rule, that matches natural language requests to actions.
 
-Your task is to:
-1. Parse the request linguistically (parts of speech, dependencies)
-2. Map request phrases to action parameters
-3. Identify what conversions are needed
-4. Generate a grammar pattern that captures the structure
+WILDCARD RULES:
+1. Variable content (names, values, numbers) = wildcards
+2. Structure words (the, a, in, by, to, for, etc.) = fixed text
+3. Question words (what, where, when, who, why, how) = fixed text
+4. For array parameters: if only one item is given, use singular variable name
+   - Example Pattern: "by $(artist:EntityType)" → maps to artists: [$(artist)]
 
-CRITICAL RULES:
-- Interrogative words (what, where, when, who, why, how, which) must NEVER be wildcards - they must be FIXED
-- Articles (the, a, an) should generally be FIXED, not wildcards
-- Only the actual variable content (names, numbers, values) should be wildcards
-- Be explicit about conversions from source text to parameter values
+WILDCARD TYPES:
+- Entity types (capitalized): $(varName:MusicDevice), $(varName:CalendarDate)
+- ParamSpec types (lowercase): $(varName:number), $(varName:ordinal), $(varName:percentage)
+- Validated strings: $(varName:string) - when marked "(validated)"
+- CRITICAL: ParamSpec types MUST be lowercase: "number" not "Number", "ordinal" not "Ordinal"
+- CRITICAL: Only use entity types that are explicitly listed in the schema
 
-REJECTION CASES - DO NOT generate grammar when:
-1. Adjacent UNQUALIFIED wildcards: Two plain string wildcards next to each other with no fixed separator
-   - BAD: "invite $(description:EventDescription) $(participant:ParticipantName)" - ambiguous boundary between unqualified strings
-   - OK: "$(trackName:string) by $(artist:string)" - "by" separates them
-   - OK: "$(trackName:string) $(artist:string)" - BOTH have checked_wildcard validation, so QUALIFIED and OK
-   - OK: "play on $(deviceName:MusicDevice)" - entity type provides validation, so QUALIFIED and OK
-   - The key: wildcards with entity types OR paramSpec validation (checked_wildcard, ordinal, etc.) are QUALIFIED
-2. Third-person referential pronouns requiring conversation history:
-   - "it", "that", "this", "them", "those", "these" - require prior context to resolve
-   - Example: "add it to playlist" - "it" refers to current track from history
-   - Example: "schedule that for tomorrow" - "that" refers to previous event mentioned
-   - IMPORTANT EXCEPTIONS - These pronouns ARE acceptable:
-     * First-person (I, me, my, we, us, our) - refers to current user (always available)
-     * Second-person (you, your) - refers to the system
-     * Any pronoun in a completely fixed phrase (not a wildcard): "what do I have today" is fine
-3. Query/search parameters: Parameters that capture arbitrary text without validation
-   - "query", "search", "filter" parameters are too open-ended
-   - Example: "search for rock music" - "query" could be anything
-4. Missing critical context beyond current user: Request depends on conversation history
-   - Example: "play that again" - "that" requires knowing what was played before
-   - Note: Current user context (I, me, my) is always available and not considered "missing"
+REJECT when:
+1. Adjacent UNVALIDATED wildcards with NO FIXED TEXT between them
+   - "Adjacent" means wildcards directly next to each other with only whitespace between
+   - Wildcards separated by fixed words (by, to, from, in, on, etc.) are NOT adjacent
+   - ACCEPT: "invite $(name) to $(event)" - "to" separates them, not adjacent
+   - ACCEPT: "play $(track) by $(artist)" - "by" separates them, not adjacent
+   - ACCEPT: "play $(track) $(artist)" if AT LEAST ONE is validated (can parse validated first, then remainder)
+   - REJECT: "play $(track) $(artist)" if NEITHER is validated (ambiguous without separator or validation)
+2. References to conversation history: "it", "that", "this", "them"
 
-When rejecting, set shouldGenerateGrammar=false and provide rejectionReason.
+ACCEPT in all other cases.
 
-OPTIONAL PHRASES:
-Politeness phrases and conversational variations should be marked as optional using ()?:
-- Single word: (please)? or (the)?
-- Multiple words: (would you)? or (could you please)?
-- Examples:
-  - "play the song" + "play song" → "play (the)? song"
-  - "please play" + "play" → "(please)? play"
-  - "would you please play" + "play" → "(would you please)? play" OR "(would you)? (please)? play"
+OUTPUT FORMAT (TypeScript interface):
 
-Response format: JSON with this structure:
-
-ACCEPT CASE (grammar should be generated):
-{
-  "shouldGenerateGrammar": true,
-  "requestAnalysis": {
-    "sentences": [{
-      "text": "...",
-      "parse": "(S (WH what) (VP (V is) (NP (DET the) (N weather) (PP (P in) (NP Seattle)))))",
-      "tokens": [
-        {"text": "what", "pos": "WH", "role": "interrogative", "dependencies": []},
-        {"text": "is", "pos": "V", "role": "copula", "dependencies": [0]},
-        ...
-      ]
-    }]
-  },
-  "parameterMappings": [
-    {
-      "parameterName": "location",
-      "sourceText": "Seattle",
-      "targetValue": "Seattle",
-      "conversion": {"type": "none", "description": "Direct string match"},
-      "isWildcard": true
-    }
-  ],
-  "fixedPhrases": ["what's the weather in"],
-  "grammarPattern": "what's the weather in $(location:string)",
-  "reasoning": "The interrogative 'what' and the core phrase 'the weather in' are fixed. Only the location name varies."
+interface RuleRHS {
+    matchPattern: string;  // The grammar pattern like "play $(track:string) by $(artist:string)"
+    actionParameters: Array<{
+        parameterName: string;
+        parameterValue: string; // e.g., "$(track)" or fixed value like "kitchen"
+    }>;
+}
+    
+Your output MUST be a JSON object matching the following TypeScript interface:
+interface GrammarAnalysis {
+  shouldGenerateGrammar: boolean;
+  rejectionReason?: string;  // Only if shouldGenerateGrammar = false
+  requestAnalysis: {
+    sentences: Array<{
+      text: string;
+      parse: string;  // Simple parse like "(request (verb) (params))"
+      tokens: Array<{ text: string; pos: string; role: string; dependencies: number[] }>;
+    }>;
+  };
+  parameterMappings: Array<{
+    parameterName: string;
+    sourceText: string;
+    targetValue: any;
+    conversion?: { type: string; description: string };
+    isWildcard: boolean;
+  }>;
+  fixedPhrases: string[];
+  grammarPattern: RuleRHS;  // The actual pattern like "play $(track:TrackName) by $(artist:ArtistName)"
+  reasoning: string;
 }
 
-REJECT CASE (grammar should NOT be generated):
+CRITICAL OUTPUT RULES:
+- Output ONLY valid JSON matching the interface above
+- NO markdown, NO comments, NO extra text before or after, NO undefined or null values
+- Start with { and end with }
+- Use exact entity type names from the schema (case-sensitive)
+
+EXAMPLE 1 (Entity type):
+
+Request: "select kitchen device"
+Action: selectDevice
+Parameters: { deviceName: "kitchen" }
+Entity types available: MusicDevice
+
+Output:
 {
-  "shouldGenerateGrammar": false,
-  "rejectionReason": "Adjacent unqualified wildcards without separator: description and participant have no fixed word between them and neither has validation, making boundary ambiguous",
-  "requestAnalysis": { ... },
-  "parameterMappings": [ ... ],
-  "fixedPhrases": [],
-  "grammarPattern": "",
-  "reasoning": "This pattern would create $(description:EventDescription) $(participant:ParticipantName) which cannot reliably parse where description ends and participant begins, since both are unqualified string wildcards."
+  "shouldGenerateGrammar": true,
+  "requestAnalysis": { "sentences": [{ "text": "select kitchen device", "parse": "(S (V select) (NP device))", "tokens": [] }] },
+  "parameterMappings": [
+    { "parameterName": "deviceName", "sourceText": "kitchen", "targetValue": "kitchen", "isWildcard": true }
+  ],
+  "fixedPhrases": ["select", "device"],
+  "grammarPattern": { "matchPattern": "select $(deviceName:MusicDevice) device", "actionParameters": [ { "parameterName": "deviceName", "parameterValue": "$(deviceName)" } ] },
+  "reasoning": "Fixed structure 'select...device'. Parameter deviceName has entity type MusicDevice."
+}
+
+EXAMPLE 2 (Validated wildcards):
+
+Request: "play bohemian rhapsody by queen"
+Action: playTrack
+Parameters: { trackName: "bohemian rhapsody" (validated), artists: ["queen"] (validated) }
+
+Output:
+{
+  "shouldGenerateGrammar": true,
+  "requestAnalysis": { "sentences": [{ "text": "play bohemian rhapsody by queen", "parse": "(S (V play) (NP track) (PP by artist))", "tokens": [] }] },
+  "parameterMappings": [
+    { "parameterName": "trackName", "sourceText": "bohemian rhapsody", "targetValue": "bohemian rhapsody", "isWildcard": true },
+    { "parameterName": "artists", "sourceText": "queen", "targetValue": ["queen"], "isWildcard": true }
+  ],
+  "fixedPhrases": ["play", "by"],
+  "grammarPattern": { "matchPattern": "play $(trackName:string) by $(artist:string)", "actionParameters": [ { "parameterName": "trackName", "parameterValue": "$(trackName)" }, { "parameterName": "artists", "parameterValue": "[$(artist)]" } ] },
+  "reasoning": "Fixed structure 'play...by'. Both parameters are validated so adjacent wildcards are OK. Use singular 'artist' for array parameter 'artists'."
 }`;
 
 export class ClaudeGrammarGenerator {
@@ -228,15 +258,30 @@ export class ClaudeGrammarGenerator {
             testCase.action.parameters,
         )) {
             const paramInfo = actionInfo.parameters.get(paramName);
+
+            // Format the expected wildcard pattern
+            const isArray = Array.isArray(paramValue);
+            const varName = isArray
+                ? this.getSingularVariableName(paramName)
+                : paramName;
+
+            // Use getWildcardType to determine the correct type (handles entity types, paramSpecs, and defaults)
             const wildcardType = paramInfo
                 ? getWildcardType(paramInfo)
                 : "string";
-            const paramSpec = paramInfo?.paramSpec || "none";
-            const entityType = paramInfo?.isEntityType
-                ? ` (entity type: ${paramInfo.entityTypeName})`
-                : "";
+            const expectedPattern = `$(${varName}:${wildcardType})`;
 
-            prompt += `  - ${paramName}: ${JSON.stringify(paramValue)} [type: ${wildcardType}, spec: ${paramSpec}${entityType}]\n`;
+            // Check if this parameter is validated (has checked_wildcard paramSpec)
+            const isValidated = paramInfo?.paramSpec === "checked_wildcard";
+
+            prompt += `  - ${paramName}: ${JSON.stringify(paramValue)}`;
+            if (isArray) {
+                prompt += ` (ARRAY)`;
+            }
+            if (isValidated) {
+                prompt += ` (validated)`;
+            }
+            prompt += ` → USE: ${expectedPattern}\n`;
         }
 
         if (schemaInfo.entityTypes.size > 0) {
@@ -252,59 +297,66 @@ export class ClaudeGrammarGenerator {
             }
         }
 
-        prompt += `\nSteps to follow:\n`;
-        prompt += `1. Parse the request linguistically:\n`;
-        prompt += `   - Break into sentences\n`;
-        prompt += `   - Identify parts of speech for each word\n`;
-        prompt += `   - Show dependencies between words\n`;
-        prompt += `   - Express as S-expression parse tree\n\n`;
+        prompt += `\nYOUR TASK:\n`;
+        prompt += `Generate a grammarPattern that matches the request structure.\n\n`;
 
-        prompt += `2. Map request phrases to parameters:\n`;
-        prompt += `   - Identify which part of the request corresponds to each parameter\n`;
-        prompt += `   - Determine if any conversion is needed (e.g., "third" -> 3)\n`;
-        prompt += `   - Mark whether each should be a wildcard or fixed text\n\n`;
+        prompt += `PATTERN RULES:\n`;
+        prompt += `1. Fixed text: action words and structure (play, by, to, from, etc.)\n`;
+        prompt += `2. Wildcards: variable content only\n`;
+        prompt += `   Format: $(varName:TypeName)\n`;
+        prompt += `   - For parameters WITH entity type: use that exact entity type name\n`;
+        prompt += `   - For parameters WITHOUT entity type: use "string"\n`;
+        prompt += `   - For array parameters: use SINGULAR variable name\n`;
+        prompt += `3. Keep the pattern simple and direct\n`;
+        prompt += `4. Adjacent wildcards:\n`;
+        prompt += `   - Parameters marked "(validated)" are checked against real data (e.g., Spotify API)\n`;
+        prompt += `   - Adjacent wildcards are OK if AT LEAST ONE is validated (parse validated first, then remainder)\n`;
+        prompt += `   - Adjacent wildcards with NO validated parameters need a separator or structure\n\n`;
 
-        prompt += `3. Identify fixed vs optional phrases:\n`;
-        prompt += `   - Interrogative words MUST be fixed (never optional)\n`;
-        prompt += `   - Core action words and structural words should be fixed\n`;
-        prompt += `   - Politeness phrases (please, would you, could you) should be OPTIONAL\n`;
-        prompt += `   - Articles can be optional if both forms are natural ("the weather" vs "weather")\n`;
-        prompt += `   - Only actual values should be wildcards\n\n`;
-
-        prompt += `4. Generate the grammar pattern:\n`;
-        prompt += `   - Use $(paramName:type) for wildcards\n`;
-        prompt += `   - Use (phrase)? for optional parts\n`;
-        prompt += `   - Include fixed phrases exactly as they appear\n`;
-        prompt += `   - Use the correct type from the parameter spec\n`;
-        prompt += `   - Examples:\n`;
-        prompt += `     * "(please)? play $(track:string)" - matches "play X" or "please play X"\n`;
-        prompt += `     * "(would you)? (please)? show" - matches "show", "please show", "would you show", "would you please show"\n\n`;
-
-        prompt += `Conversion types available:\n`;
-        prompt += `- "none": Direct string match\n`;
-        prompt += `- "string-to-number": Convert text like "50" to number 50\n`;
-        prompt += `- "parse-ordinal": Convert "third" to 3, "fifth" to 5, etc.\n`;
-        prompt += `- "string-to-boolean": Convert "on"/"off", "yes"/"no" to boolean\n`;
-        prompt += `- "custom": Other conversions (describe what's needed)\n`;
+        prompt += `CRITICAL - Entity Type Usage:\n`;
+        prompt += `Look at the parameter info above.\n`;
+        prompt += `- If it says "→ USE: $(varName:EntityType)" where EntityType is NOT "string", use that EXACT entity type\n`;
+        prompt += `- If it says "→ USE: $(varName:string)", the parameter is validated but has no entity type\n`;
+        prompt += `- If it says "(validated)", the parameter is checked against real data\n`;
+        prompt += `Example:\n`;
+        prompt += `  Parameter: deviceName "kitchen" → USE: $(deviceName:MusicDevice)\n`;
+        prompt += `  Correct pattern: $(deviceName:MusicDevice)\n`;
+        prompt += `  Wrong: $(deviceName:string) or $(device:MusicDevice)\n\n`;
 
         return prompt;
     }
 
     private parseAnalysis(text: string): GrammarAnalysis {
-        // Extract JSON from response - find the largest valid JSON object
+        // Remove any leading non-JSON content (comments, markdown, etc.)
+        // Look for the first '{' character which starts the JSON object
+        const jsonStart = text.indexOf("{");
+        if (jsonStart === -1) {
+            throw new Error(
+                `No JSON object found in Claude response. Response starts with: "${text.substring(0, 100)}..."`,
+            );
+        }
+
+        // If there's content before the JSON, log a warning but continue
+        if (jsonStart > 0) {
+            const preamble = text.substring(0, jsonStart).trim();
+            if (preamble.length > 0) {
+                console.warn(
+                    `[Grammar Generation] Claude included text before JSON: "${preamble.substring(0, 100)}..."`,
+                );
+            }
+        }
+
+        // Extract JSON from response - find matching braces
         let jsonText = "";
         let braceCount = 0;
-        let startIndex = -1;
+        let startIndex = jsonStart;
 
-        for (let i = 0; i < text.length; i++) {
+        for (let i = jsonStart; i < text.length; i++) {
             if (text[i] === "{") {
-                if (braceCount === 0) {
-                    startIndex = i;
-                }
                 braceCount++;
             } else if (text[i] === "}") {
                 braceCount--;
-                if (braceCount === 0 && startIndex !== -1) {
+                if (braceCount === 0) {
                     jsonText = text.substring(startIndex, i + 1);
                     break;
                 }
@@ -312,18 +364,31 @@ export class ClaudeGrammarGenerator {
         }
 
         if (!jsonText) {
-            throw new Error("No JSON found in Claude response");
+            throw new Error(
+                `Found opening brace but no matching closing brace in Claude response. Text from brace: "${text.substring(jsonStart, jsonStart + 100)}..."`,
+            );
         }
 
-        const analysis = JSON.parse(jsonText);
+        let analysis;
+        try {
+            analysis = JSON.parse(jsonText);
+        } catch (error) {
+            throw new Error(
+                `Failed to parse JSON from Claude response: ${error instanceof Error ? error.message : String(error)}\nJSON text preview: ${jsonText.substring(0, 300)}...\nFull response preview: ${text.substring(0, 300)}...`,
+            );
+        }
 
         // Validate required fields
         if (analysis.shouldGenerateGrammar === undefined) {
-            throw new Error("Missing shouldGenerateGrammar field");
+            throw new Error(
+                `Missing shouldGenerateGrammar field. Received fields: ${Object.keys(analysis).join(", ")}\nParsed object: ${JSON.stringify(analysis).substring(0, 500)}...`,
+            );
         }
 
         if (!analysis.requestAnalysis || !analysis.reasoning) {
-            throw new Error("Missing required fields in analysis");
+            throw new Error(
+                `Missing required fields in analysis. Received fields: ${Object.keys(analysis).join(", ")}`,
+            );
         }
 
         // For rejected cases, we still need basic structure but not full analysis
@@ -331,7 +396,108 @@ export class ClaudeGrammarGenerator {
             throw new Error("Rejected cases must include rejectionReason");
         }
 
+        // Clean up any unwanted text that Claude might have inserted into string fields
+        this.sanitizeAnalysisStrings(analysis);
+
         return analysis;
+    }
+
+    /**
+     * Remove copyright notices, comments, and other unwanted text from analysis string fields
+     * Claude sometimes inserts these into the JSON, making the grammar patterns invalid
+     */
+    private sanitizeAnalysisStrings(analysis: GrammarAnalysis): void {
+        const commentPatterns = [
+            /\/\/\s*Copyright[^\n]*/gi, // // Copyright...
+            /\/\*\s*Copyright[\s\S]*?\*\//gi, // /* Copyright... */
+            /^\/\/[^\n]*/gm, // Any line starting with //
+        ];
+
+        const cleanString = (str: string | undefined): string | undefined => {
+            if (!str) return str;
+
+            let cleaned = str;
+            let hadComments = false;
+
+            for (const pattern of commentPatterns) {
+                const before = cleaned;
+                cleaned = cleaned.replace(pattern, "").trim();
+                if (cleaned !== before) {
+                    hadComments = true;
+                }
+            }
+
+            if (hadComments) {
+                console.warn(
+                    `[Grammar Generation] Removed comment/copyright text from Claude response. Original: "${str.substring(0, 100)}..."`,
+                );
+            }
+
+            return cleaned;
+        };
+
+        // Clean critical string fields in RuleRHS structure
+        if (analysis.grammarPattern) {
+            if (analysis.grammarPattern.matchPattern) {
+                const cleaned = cleanString(
+                    analysis.grammarPattern.matchPattern,
+                );
+                if (cleaned !== undefined) {
+                    analysis.grammarPattern.matchPattern = cleaned;
+                }
+            }
+            // Clean actionParameters array
+            if (analysis.grammarPattern.actionParameters) {
+                for (const param of analysis.grammarPattern.actionParameters) {
+                    if (param.parameterValue) {
+                        const cleaned = cleanString(param.parameterValue);
+                        if (cleaned !== undefined) {
+                            param.parameterValue = cleaned;
+                        }
+                    }
+                }
+            }
+        }
+        if (analysis.rejectionReason) {
+            const cleaned = cleanString(analysis.rejectionReason);
+            if (cleaned !== undefined) {
+                analysis.rejectionReason = cleaned;
+            }
+        }
+        if (analysis.reasoning) {
+            const cleaned = cleanString(analysis.reasoning);
+            if (cleaned !== undefined) {
+                analysis.reasoning = cleaned;
+            }
+        }
+
+        // Clean parameter mapping strings
+        if (analysis.parameterMappings) {
+            for (const mapping of analysis.parameterMappings) {
+                if (mapping.sourceText) {
+                    const cleaned = cleanString(mapping.sourceText);
+                    if (cleaned !== undefined) {
+                        mapping.sourceText = cleaned;
+                    }
+                }
+                if (mapping.conversion?.description) {
+                    const cleaned = cleanString(mapping.conversion.description);
+                    if (cleaned !== undefined) {
+                        mapping.conversion.description = cleaned;
+                    }
+                }
+            }
+        }
+
+        // Clean fixed phrases
+        if (analysis.fixedPhrases) {
+            analysis.fixedPhrases = analysis.fixedPhrases
+                .map((phrase) => cleanString(phrase))
+                .filter(
+                    (phrase): phrase is string =>
+                        phrase !== undefined && phrase.length > 0,
+                );
+        }
     }
 
     /**
@@ -344,40 +510,68 @@ export class ClaudeGrammarGenerator {
     formatAsGrammarRule(
         testCase: GrammarTestCase,
         analysis: GrammarAnalysis,
+        schemaInfo: SchemaInfo,
     ): string {
         if (!analysis.shouldGenerateGrammar) {
             return `# REJECTED: ${analysis.rejectionReason}`;
         }
 
         const actionName = testCase.action.actionName;
+        const actionInfo = schemaInfo.actions.get(actionName);
+
+        // Build a map of wildcard variable names to their correct types (entity types, paramSpecs, or string)
+        const wildcardTypes = new Map<string, string>();
+        if (actionInfo) {
+            for (const mapping of analysis.parameterMappings) {
+                if (mapping.isWildcard) {
+                    const paramInfo = actionInfo.parameters.get(
+                        mapping.parameterName,
+                    );
+                    if (paramInfo) {
+                        // For array parameters, use singular variable name
+                        const varName = Array.isArray(mapping.targetValue)
+                            ? this.getSingularVariableName(
+                                  mapping.parameterName,
+                              )
+                            : mapping.parameterName;
+
+                        // Use getWildcardType to get correct type (entity type, paramSpec, or string)
+                        const wildcardType = getWildcardType(paramInfo);
+                        wildcardTypes.set(varName, wildcardType);
+                    }
+                }
+            }
+        }
+
+        // Replace types in the matchPattern
+        let matchPattern = analysis.grammarPattern.matchPattern;
+        for (const [varName, wildcardType] of wildcardTypes) {
+            // Replace $(varName:string) with $(varName:CorrectType)
+            const stringPattern = new RegExp(`\\$\\(${varName}:string\\)`, "g");
+            matchPattern = matchPattern.replace(
+                stringPattern,
+                `$(${varName}:${wildcardType})`,
+            );
+        }
+
+        // Include <Start> rule that references the action rule
+        let grammar = `@ <Start> = <${actionName}>\n`;
+
         // Use exact action name as rule name for easy targeting
-        let grammar = `@ <${actionName}> = `;
-        grammar += analysis.grammarPattern;
+        grammar += `@ <${actionName}> = `;
+        grammar += matchPattern;
         grammar += ` -> {\n`;
         grammar += `    actionName: "${actionName}"`;
 
-        if (Object.keys(testCase.action.parameters).length > 0) {
+        // Use actionParameters from the RuleRHS structure
+        if (analysis.grammarPattern.actionParameters.length > 0) {
             grammar += `,\n    parameters: {\n`;
 
             const paramLines: string[] = [];
-            for (const mapping of analysis.parameterMappings) {
-                if (mapping.isWildcard) {
-                    if (Array.isArray(mapping.targetValue)) {
-                        paramLines.push(
-                            `        ${mapping.parameterName}: [$(${mapping.parameterName})]`,
-                        );
-                    } else {
-                        paramLines.push(
-                            `        ${mapping.parameterName}: $(${mapping.parameterName})`,
-                        );
-                    }
-                } else {
-                    // Fixed value
-                    const value = JSON.stringify(mapping.targetValue);
-                    paramLines.push(
-                        `        ${mapping.parameterName}: ${value}`,
-                    );
-                }
+            for (const param of analysis.grammarPattern.actionParameters) {
+                paramLines.push(
+                    `        ${param.parameterName}: ${param.parameterValue}`,
+                );
             }
 
             grammar += paramLines.join(",\n");
@@ -387,5 +581,16 @@ export class ClaudeGrammarGenerator {
         grammar += `\n}`;
 
         return grammar;
+    }
+
+    /**
+     * Get singular form of a variable name (e.g., "artists" -> "artist")
+     * Simple heuristic: remove trailing 's' if it exists
+     */
+    private getSingularVariableName(paramName: string): string {
+        if (paramName.endsWith("s") && paramName.length > 1) {
+            return paramName.slice(0, -1);
+        }
+        return paramName;
     }
 }

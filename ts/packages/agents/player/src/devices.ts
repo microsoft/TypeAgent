@@ -34,11 +34,35 @@ async function getDeviceInfo(
 
     if (name === undefined) {
         const hostName = getHostName().toLowerCase();
-        // If no name is provided, return the first device that has an id.
-        return devices.find(
-            (d) => d.name.toLowerCase() === hostName && d.id !== null,
+
+        // Try exact match first
+        let device = devices.find(
+            (d) =>
+                d.name.toLowerCase() === hostName &&
+                d.id !== null &&
+                !d.is_restricted,
         ) as DeviceInfo | undefined;
+
+        // If no exact match, try case-insensitive contains match
+        if (!device) {
+            device = devices.find(
+                (d) =>
+                    d.name.toLowerCase().includes(hostName) &&
+                    d.id !== null &&
+                    !d.is_restricted,
+            ) as DeviceInfo | undefined;
+        }
+
+        // If still no match, return first non-restricted device with an ID
+        if (!device) {
+            device = devices.find((d) => d.id !== null && !d.is_restricted) as
+                | DeviceInfo
+                | undefined;
+        }
+
+        return device;
     }
+
     return devices.find((d) => d.name === name && d.id !== null) as
         | DeviceInfo
         | undefined;
@@ -96,7 +120,24 @@ export async function ensureSelectedDeviceInfo(clientContext: IClientContext) {
         const description = clientContext.selectedDeviceName
             ? `selected device '${clientContext.selectedDeviceName}'`
             : `default selected device '${getDefaultDeviceName(clientContext) ?? getHostName()}'`;
-        throw new Error(`Unable to find ${description}.`);
+
+        // Get list of available devices for the error message
+        const availableDevices = (await getUserDevices(clientContext.service))
+            .devices;
+        const deviceList = availableDevices
+            .filter((d) => d.id !== null)
+            .map(
+                (d) =>
+                    `'${d.name}' (${d.type})${d.is_restricted ? " [restricted]" : ""}`,
+            )
+            .join(", ");
+
+        const errorMsg =
+            deviceList.length > 0
+                ? `Unable to find ${description}. Available devices: ${deviceList}`
+                : `Unable to find ${description}. No devices found. Please ensure Spotify is running on a device.`;
+
+        throw new Error(errorMsg);
     }
     return device;
 }
@@ -130,15 +171,45 @@ export async function ensureSelectedDeviceId(
         getPlaybackState(clientContext.service),
     ]);
 
-    if (
-        state !== undefined &&
-        state.device.id !== selected.id &&
-        state.is_playing === true
-    ) {
+    // If there's an active device playing, check if we should use it instead
+    if (state !== undefined && state.is_playing === true) {
+        if (state.device.id !== selected.id) {
+            throw new Error(
+                `Music is currently playing on device '${state.device.name}', not the selected device '${selected.name}'`,
+            );
+        }
+    }
+
+    // Verify the selected device is in the available devices list
+    // This helps catch devices that have gone offline or become unavailable
+    const availableDevices = (await getUserDevices(clientContext.service))
+        .devices;
+    const isAvailable = availableDevices.some(
+        (d) => d.id === selected.id && d.id !== null && !d.is_restricted,
+    );
+
+    if (!isAvailable) {
+        // Device not in available list or is restricted
+        // Check if there's currently an active device we can use
+        if (
+            state &&
+            state.device &&
+            state.device.id &&
+            !state.device.is_restricted
+        ) {
+            console.warn(
+                `Selected device '${selected.name}' not available. Using currently active device '${state.device.name}' instead.`,
+            );
+            return state.device.id;
+        }
+
         throw new Error(
-            `Music is currently playing on device '${state.device.name}', not the selected device '${selected.name}'`,
+            `Selected device '${selected.name}' is not available. ` +
+                `It may be offline or restricted. Use 'list devices' to see available devices, ` +
+                `or 'select device <name>' to choose a different device.`,
         );
     }
+
     return selected.id;
 }
 

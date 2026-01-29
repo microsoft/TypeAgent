@@ -3,7 +3,9 @@
   "description": "Agent integration with MS Graph's calendar",
   "schema": {
     "description": "Calendar agent that keeps track of important dates and events. Use it to schedule appointments, set reminders, and organize activities.",
-    "schemaFile": "./calendarActionsSchemaV2.ts",
-    "schemaType": "CalendarAction"
+    "schemaFile": "../dist/calendarSchema.pas.json",
+    "grammarFile": "../dist/calendarSchema.ag.json",
+    "originalSchemaFile": "calendarActionsSchemaV3.ts",
+    "schemaType": "CalendarActionV3"
   }
 }

@@ -27,13 +27,13 @@ describe("NFA with Real Grammars", () => {
             // Load player grammar
             const playerGrammarPath = path.resolve(
                 __dirname,
-                "../../../agents/player/src/agent/playerGrammar.agr",
+                "../../../agents/player/src/agent/playerSchema.agr",
             );
             const content = fs.readFileSync(playerGrammarPath, "utf-8");
 
             const errors: string[] = [];
             const grammar = loadGrammarRules(
-                "playerGrammar.agr",
+                "playerSchema.agr",
                 content,
                 errors,
             );
@@ -90,10 +90,10 @@ describe("NFA with Real Grammars", () => {
         it("should handle ordinals in player grammar", () => {
             const playerGrammarPath = path.resolve(
                 __dirname,
-                "../../../agents/player/src/agent/playerGrammar.agr",
+                "../../../agents/player/src/agent/playerSchema.agr",
             );
             const content = fs.readFileSync(playerGrammarPath, "utf-8");
-            const grammar = loadGrammarRules("playerGrammar.agr", content);
+            const grammar = loadGrammarRules("playerSchema.agr", content);
             const nfa = compileGrammarToNFA(grammar, "player-ordinals");
 
             // Test: "play the first track"
@@ -113,10 +113,10 @@ describe("NFA with Real Grammars", () => {
         it("should handle select device commands", () => {
             const playerGrammarPath = path.resolve(
                 __dirname,
-                "../../../agents/player/src/agent/playerGrammar.agr",
+                "../../../agents/player/src/agent/playerSchema.agr",
             );
             const content = fs.readFileSync(playerGrammarPath, "utf-8");
-            const grammar = loadGrammarRules("playerGrammar.agr", content);
+            const grammar = loadGrammarRules("playerSchema.agr", content);
             const nfa = compileGrammarToNFA(grammar, "player-devices");
 
             // Test: "select kitchen"
@@ -241,11 +241,11 @@ describe("NFA with Real Grammars", () => {
             // Player grammar
             const playerPath = path.resolve(
                 __dirname,
-                "../../../agents/player/src/agent/playerGrammar.agr",
+                "../../../agents/player/src/agent/playerSchema.agr",
             );
             const playerContent = fs.readFileSync(playerPath, "utf-8");
             const playerGrammar = loadGrammarRules(
-                "playerGrammar.agr",
+                "playerSchema.agr",
                 playerContent,
             );
             const playerNFA = compileGrammarToNFA(playerGrammar, "player");
@@ -303,10 +303,10 @@ describe("NFA with Real Grammars", () => {
         it("should print a simple subset of player grammar", () => {
             const playerPath = path.resolve(
                 __dirname,
-                "../../../agents/player/src/agent/playerGrammar.agr",
+                "../../../agents/player/src/agent/playerSchema.agr",
             );
             const content = fs.readFileSync(playerPath, "utf-8");
-            const grammar = loadGrammarRules("playerGrammar.agr", content);
+            const grammar = loadGrammarRules("playerSchema.agr", content);
             const nfa = compileGrammarToNFA(grammar, "player-simple");
 
             // Print first 20 states for visualization

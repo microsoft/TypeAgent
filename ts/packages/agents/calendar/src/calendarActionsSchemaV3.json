@@ -1,0 +1,11 @@
+{
+  "paramSpec": {
+    "scheduleEvent": {
+      "date": "checked_wildcard",
+      "time": "checked_wildcard"
+    },
+    "findEvents": {
+      "date": "checked_wildcard"
+    }
+  }
+}

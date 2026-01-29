@@ -66,6 +66,7 @@ export class GrammarStoreImpl implements GrammarStore {
         if (namespaceKeys?.length === 0) {
             return [];
         }
+
         const matches: MatchResult[] = [];
         const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
         for (const [name, grammar] of this.grammars) {

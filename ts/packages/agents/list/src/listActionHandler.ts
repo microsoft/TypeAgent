@@ -352,6 +352,10 @@ async function handleListAction(
                 displayText,
             );
             result.entities = getEntities(listName);
+            result.resultEntity = {
+                name: listName,
+                type: ["list"],
+            };
             break;
         }
         case "getList": {

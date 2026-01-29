@@ -30,8 +30,8 @@ export type ScheduleEventAction = {
         // When the event occurs (required) - deterministically recognizable
         date: CalendarDate;
         // What time the event starts (optional, defaults to all-day if not specified)
-        // Can be either a single time or a time range
-        time?: CalendarTime | CalendarTimeRange;
+        // Can be a single time (2pm, 14:00) or a time range (2pm to 3pm, 9am-10am)
+        time?: string;
         // Where the event takes place (optional) - plain string, not an entity type
         location?: string;
         // Who else should attend (optional, single participant) - plain string, not an entity type

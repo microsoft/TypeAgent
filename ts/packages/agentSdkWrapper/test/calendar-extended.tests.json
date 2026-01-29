@@ -1,0 +1,74 @@
+[
+  {
+    "request": "Can you find all meetings with Sarah on March 15th, 2024?",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me events for tomorrow that have anything to do with the product launch",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Find calendar entries for Dec 3rd",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Schedule a team standup meeting for tomorrow at 9:30 AM in Conference Room B with Sarah, Mike, and Alex",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "scheduleEvent",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you set up my dentist appointment on March 15th from 2-3 PM at Downtown Dental Clinic?",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "scheduleEvent",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Add quarterly review meeting April 3rd 10am location TBD with Jennifer",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "scheduleEvent",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "What's on my calendar today?",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findTodaysEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me today's events",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findTodaysEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you tell me what I have scheduled for today?",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findTodaysEvents",
+      "parameters": {}
+    }
+  }
+]
