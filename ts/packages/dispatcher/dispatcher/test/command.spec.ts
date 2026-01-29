@@ -4,8 +4,8 @@
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { AppAgentProvider } from "../src/agentProvider/agentProvider.js";
 import {
+    type CommandHandlerContext,
     closeCommandHandlerContext,
-    CommandHandlerContext,
     initializeCommandHandlerContext,
 } from "../src/context/commandHandlerContext.js";
 import { getCommandInterface } from "@typeagent/agent-sdk/helpers/command";

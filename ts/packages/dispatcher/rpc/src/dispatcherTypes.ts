@@ -15,7 +15,7 @@ import type {
 export type DispatcherInvokeFunctions = {
     processCommand(
         command: string,
-        requestId?: string,
+        clientRequestId?: unknown,
         attachments?: string[],
     ): Promise<CommandResult | undefined>;
 

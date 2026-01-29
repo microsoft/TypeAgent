@@ -17,21 +17,21 @@ const defaultExtensionStorage: ExtensionStorageData = {
     extractionMode: "content",
 };
 
-function getExtensionStoragePath(instanceDir: string) {
+function getExtensionStoragePath(instanceDir: string | undefined) {
     return path.join(getShellDataDir(instanceDir), "extensionStorage.json");
 }
 
 export class ExtensionStorageManager {
     private readonly storage: ExtensionStorageData;
 
-    constructor(private readonly instanceDir: string) {
+    constructor(private readonly instanceDir: string | undefined) {
+        this.storage = { ...defaultExtensionStorage };
+
         const storagePath = getExtensionStoragePath(instanceDir);
         debugShell(
             `Loading extension storage from '${storagePath}'`,
             performance.now(),
         );
-
-        this.storage = { ...defaultExtensionStorage };
 
         if (existsSync(storagePath)) {
             try {

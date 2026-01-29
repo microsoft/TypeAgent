@@ -12,6 +12,7 @@ public static class ConversationAnswer
         this IConversation conversation,
         string question,
         AnswerContext context,
+        AnswerContextOptions? contextOptions = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -19,18 +20,17 @@ public static class ConversationAnswer
 
         IAnswerGenerator generator = conversation.Settings.AnswerGenerator;
 
+        int budget = contextOptions?.MaxCharsInBudget ?? generator.Settings.MaxCharsInBudget;
+
         string contextContent = context.ToPromptString();
         //bool chunking = contextOptions?.Chunking ?? true;
         bool chunking = false; // TODO: chunking not implemented yet
-        if (
-            contextContent.Length <= generator.Settings.MaxCharsInBudget ||
-            !chunking
-        )
+        if (!chunking)
         {
-            // Context is small enough
+            // Truncate the context if necessary
             return await generator.GenerateAsync(
                 question,
-                contextContent,
+                contextContent.Trim(budget),
                 cancellationToken
             ).ConfigureAwait(false);
         }
@@ -57,6 +57,7 @@ public static class ConversationAnswer
         return await conversation.AnswerQuestionAsync(
             question,
             context,
+            contextOptions,
             cancellationToken
         ).ConfigureAwait(false);
     }

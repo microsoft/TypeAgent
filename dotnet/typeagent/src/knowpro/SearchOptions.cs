@@ -23,6 +23,9 @@ public class SearchOptions
 
     public int? MaxKnowledgeMatches { get; set; }
 
+    /// <summary>
+    /// The maximum # of message matches to return in any given search query.
+    /// </summary>
     public int? MaxMessageMatches { get; set; }
 
     public bool? ExactMatch { get; set; }

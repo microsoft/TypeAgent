@@ -8,6 +8,8 @@ import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
     ensureCommandResult,
+    getRequestId,
+    requestIdToString,
 } from "../context/commandHandlerContext.js";
 
 import {
@@ -289,7 +291,7 @@ export async function processCommandNoLock(
                     content: `ERROR: ${e.message}`,
                     kind: "error",
                 },
-                context.requestId,
+                getRequestId(context),
                 DispatcherName,
                 undefined,
             ),
@@ -309,12 +311,12 @@ function beginProcessCommand(
     requestId: RequestId,
     context: CommandHandlerContext,
 ) {
-    context.requestId = requestId;
+    context.currentRequestId = requestId;
     context.commandResult = undefined;
-    if (requestId) {
-        context.commandProfiler =
-            context.metricsManager?.beginCommand(requestId);
-    }
+
+    context.commandProfiler = context.metricsManager?.beginCommand(
+        requestIdToString(requestId),
+    );
 }
 
 function endProcessCommand(
@@ -342,16 +344,16 @@ function endProcessCommand(
     context.commandProfiler?.stop();
     context.commandProfiler = undefined;
 
-    const metrics = requestId
-        ? context.metricsManager?.endCommand(requestId)
-        : undefined;
+    const metrics = context.metricsManager?.endCommand(
+        requestIdToString(requestId),
+    );
 
     if (metrics) {
         ensureCommandResult(context).metrics = metrics;
     }
     const result = context.commandResult;
     context.commandResult = undefined;
-    context.requestId = undefined;
+    context.currentRequestId = undefined;
 
     return result;
 }
@@ -359,7 +361,7 @@ function endProcessCommand(
 export async function processCommand(
     originalInput: string,
     context: CommandHandlerContext,
-    requestId?: RequestId,
+    requestId: RequestId,
     attachments?: string[],
 ): Promise<CommandResult | undefined> {
     // Process one command at at time.

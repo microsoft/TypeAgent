@@ -56,6 +56,7 @@ async function run(): Promise<void> {
         const dispatcher = await connectDispatcher(
             clientIO,
             `ws://localhost:${port}`,
+            { filter: true },
         );
         try {
             console.log(`Sending request: ${request}`);
