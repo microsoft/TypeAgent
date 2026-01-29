@@ -389,19 +389,9 @@ export function createAgentRpcServer(
             notify: (
                 event: AppAgentEvent,
                 message: string | DisplayContent,
-                eventSetId?: string,
+                notificationId?: string,
             ): void => {
-                // Use eventSetId if provided, otherwise use contextId for compatibility
-                const finalRequestId = eventSetId
-                    ? `agent-eventset-${eventSetId}`
-                    : `agent-context-${contextId}`;
-
-                rpc.send("notify", {
-                    contextId,
-                    event,
-                    message,
-                    requestId: finalRequestId,
-                });
+                rpc.send("notify", contextId, event, message, notificationId);
             },
             popupQuestion: async (
                 message: string,

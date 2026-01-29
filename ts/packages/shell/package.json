@@ -57,6 +57,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "agent-dispatcher": "workspace:*",

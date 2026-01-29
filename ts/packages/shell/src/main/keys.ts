@@ -14,13 +14,13 @@ import { debugShell, debugShellError } from "./debug.js";
 import { dialog } from "electron";
 import { getShellDataDir } from "./shellSettings.js";
 
-export function getKeysPersistencePath(dir: string) {
+export function getKeysPersistencePath(dir: string | undefined) {
     return path.join(getShellDataDir(dir), "keys");
 }
 
 type ParsedKeys = dotenv.DotenvParseOutput;
 
-async function createPersistence(dir: string) {
+async function createPersistence(dir: string | undefined) {
     const cachePath = getKeysPersistencePath(dir);
     return PersistenceCreator.createPersistence({
         cachePath,
@@ -31,7 +31,7 @@ async function createPersistence(dir: string) {
     });
 }
 
-async function loadKeysFromPersistence(dir: string) {
+async function loadKeysFromPersistence(dir: string | undefined) {
     debugShell("Loading keys persistence from directory", dir);
     try {
         const persistence = await createPersistence(dir);
@@ -46,7 +46,7 @@ async function loadKeysFromPersistence(dir: string) {
     return null;
 }
 
-async function saveKeysToPersistence(dir: string, keys: string) {
+async function saveKeysToPersistence(dir: string | undefined, keys: string) {
     debugShell("Saving keys persistence to directory", dir);
     const persistence = await createPersistence(dir);
     await persistence.save(keys);
@@ -71,7 +71,7 @@ function parsedKeysEqual(a: ParsedKeys, b: ParsedKeys) {
 }
 
 async function getParsedKeys(
-    dir: string,
+    dir: string | undefined,
     reset: boolean,
     envFile?: string,
 ): Promise<ParsedKeys | null> {
@@ -138,7 +138,7 @@ export async function loadKeysFromEnvFile(envFile: string) {
 }
 
 export async function loadKeys(
-    dir: string,
+    dir: string | undefined,
     reset: boolean = false,
     envFile?: string,
 ) {

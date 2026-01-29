@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Microsoft.TypeChat;
 using TypeAgent.KnowPro.Answer;
 using TypeAgent.KnowPro.Lang;
 using TypeAgent.KnowPro.Query;
@@ -11,6 +12,7 @@ public class ConversationSettings
 {
     ISearchQueryTranslator _queryTranslator;
     IAnswerGenerator _answerGenerator;
+    IChatModel _languageModel;
 
     /// <summary>
     /// By default, uses configured OpenAI language and embedding models
@@ -48,18 +50,42 @@ public class ConversationSettings
             new TextEmbeddingIndexSettings(embeddingModel, 0.7)
         );
 
-        SemanticRefIndexSettings = new SemanticRefIndexSettings(
-            new KnowledgeExtractor.KnowledgeExtractor(languageModel)
-        );
-
         QueryCompilerSettings = new QueryCompilerSettings();
 
-        QueryTranslator = queryTranslator ?? new SearchQueryTranslator(languageModel);
+        if (queryTranslator is not null)
+        {
+            QueryTranslator = queryTranslator;
+        }
 
-        AnswerGenerator = answerGenerator ?? new AnswerGenerator(languageModel);
+        if (answerGenerator is not null)
+        {
+            AnswerGenerator = answerGenerator;
+        }
     }
 
-    public IChatModel LanguageModel { get; }
+    public IChatModel LanguageModel
+    {
+        get => _languageModel;
+        set
+        {
+            ArgumentVerify.ThrowIfNull(value, nameof(LanguageModel));
+
+            if (_languageModel == value)
+            {
+                return;
+            }
+
+            _languageModel = value;
+
+            SemanticRefIndexSettings = new SemanticRefIndexSettings(
+                new KnowledgeExtractor.KnowledgeExtractor(_languageModel)
+            );
+
+            QueryTranslator = new SearchQueryTranslator(_languageModel);
+            // TODO: migrate settings from current answer generator
+            AnswerGenerator = new AnswerGenerator(_languageModel);
+        }
+    }
 
     public ITextEmbeddingModel EmbeddingModel { get; }
 

@@ -1076,7 +1076,7 @@ Provide feedback for each answer to help improve future responses.  If the answe
 
         KnowProWriter.WriteLine(ConsoleColor.White, $"Found {files.Length} text transcripts.");
 
-        for(int i = 0; i < files.Length; i++)
+        for (int i = 0; i < files.Length; i++)
         {
             await CreateQuestionsForPodcastAsync(files[i], i + 1, files.Length);
         }

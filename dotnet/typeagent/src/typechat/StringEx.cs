@@ -28,7 +28,7 @@ internal static class StringEx
         }
     }
 
-    internal static StringBuilder AppendLineNotEmpty(this StringBuilder sb, string line)
+    internal static StringBuilder AppendLineNotEmpty(this StringBuilder sb, string? line)
     {
         if (!string.IsNullOrEmpty(line))
         {

@@ -4,6 +4,8 @@
 import {
     CommandHandlerContext,
     getCommandResult,
+    requestIdToString,
+    getRequestId,
 } from "./commandHandlerContext.js";
 import { DisplayContent, MessageContent } from "@typeagent/agent-sdk";
 import {
@@ -65,10 +67,9 @@ export function makeClientIOMessage(
         source,
         sourceIcon,
         actionIndex,
-        metrics:
-            requestId !== undefined
-                ? context.metricsManager?.getMetrics(requestId)
-                : undefined,
+        metrics: context.metricsManager?.getMetrics(
+            requestIdToString(requestId),
+        ),
     };
 }
 
@@ -79,7 +80,11 @@ export async function askYesNoWithContext(
 ) {
     return context?.batchMode
         ? defaultValue
-        : context.clientIO.askYesNo(message, context.requestId, defaultValue);
+        : context.clientIO.askYesNo(
+              getRequestId(context),
+              message,
+              defaultValue,
+          );
 }
 
 export const nullClientIO: ClientIO = {
@@ -91,8 +96,8 @@ export const nullClientIO: ClientIO = {
     appendDiagnosticData: () => {},
     setDynamicDisplay: () => {},
     askYesNo: async (
-        message: string,
         requestId: RequestId,
+        message: string,
         defaultValue: boolean = false,
     ) => defaultValue,
     proposeAction: async () => undefined,
@@ -100,9 +105,9 @@ export const nullClientIO: ClientIO = {
         throw new Error("popupQuestion not implemented");
     },
     notify: () => {},
-    openLocalView: () => {},
-    closeLocalView: () => {},
-    takeAction: (action: string) => {
+    openLocalView: async () => {},
+    closeLocalView: async () => {},
+    takeAction: (requestId: RequestId, action: string) => {
         throw new Error(`Action ${action} not supported`);
     },
 };

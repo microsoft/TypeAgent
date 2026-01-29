@@ -6,7 +6,6 @@ import {
     ActionContext,
     SessionContext,
     StorageListOptions,
-    AppAgentEvent,
     DisplayContent,
     DisplayAppendMode,
     CommandDescriptors,
@@ -381,21 +380,8 @@ export async function createAgentRpcClient(
     };
 
     const agentContextCallHandlers: AgentContextCallFunctions = {
-        notify: (param: {
-            contextId: number;
-            event: AppAgentEvent;
-            message: string;
-            requestId?: string;
-        }) => {
-            // Extract eventSetId from requestId if it follows the pattern
-            let eventSetId: string | undefined;
-            if (param.requestId?.startsWith("agent-eventset-")) {
-                eventSetId = param.requestId.replace("agent-eventset-", "");
-            }
-
-            contextMap
-                .get(param.contextId)
-                .notify(param.event, param.message, eventSetId);
+        notify: (contextId: number, ...args) => {
+            contextMap.get(contextId).notify(...args);
         },
         setDisplay: (param: {
             actionContextId: number;

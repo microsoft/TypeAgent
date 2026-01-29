@@ -133,7 +133,10 @@ export class MessageGroup {
         return this.statusMessage;
     }
 
-    public addStatusMessage(msg: IAgentMessage, temporary: boolean) {
+    public addStatusMessage(
+        msg: Omit<IAgentMessage, "requestId">,
+        temporary: boolean,
+    ) {
         let message = msg.message;
         const statusMessage = this.ensureStatusMessage(msg.source);
         statusMessage.setMessage(
@@ -175,7 +178,10 @@ export class MessageGroup {
         }
     }
 
-    public ensureAgentMessage(msg: IAgentMessage, notification = false) {
+    public ensureAgentMessage(
+        msg: Omit<IAgentMessage, "requestId">,
+        notification = false,
+    ) {
         const statusMessage = this.ensureStatusMessage(msg.source);
 
         const index = msg.actionIndex;

@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import {
+    type CommandHandlerContext,
+    getRequestId,
+} from "../../commandHandlerContext.js";
 import fs from "node:fs";
 import { randomInt } from "crypto";
 import { processCommandNoLock } from "../../../command/command.js";
@@ -51,17 +54,18 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
         const randomRequest = this.list[randomInt(0, this.list.length)];
 
         const systemContext = context.sessionContext.agentContext;
+        const requestId = getRequestId(systemContext);
         systemContext.clientIO.notify(
+            requestId,
             "randomCommandSelected",
-            systemContext.requestId,
             {
                 message: randomRequest,
             },
             DispatcherName,
         );
         systemContext.clientIO.notify(
+            requestId,
             AppAgentEvent.Info,
-            systemContext.requestId,
             randomRequest,
             DispatcherName,
         );
@@ -123,8 +127,8 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
 
             const systemContext = context.sessionContext.agentContext;
             systemContext.clientIO.notify(
+                getRequestId(systemContext),
                 "randomCommandSelected",
-                systemContext.requestId,
                 {
                     message: message,
                 },

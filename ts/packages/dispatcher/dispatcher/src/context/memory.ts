@@ -100,11 +100,7 @@ export function addRequestToMemory(
     request: string,
     cachedAttachments?: CachedImageWithDetails[],
 ): void {
-    context.chatHistory.addUserEntry(
-        request,
-        context.requestId,
-        cachedAttachments,
-    );
+    context.chatHistory.addUserEntry(request, cachedAttachments);
 
     if (context.conversationManager) {
         context.conversationManager.queueAddMessage({
@@ -132,7 +128,6 @@ export function addResultToMemory(
 ) {
     context.chatHistory.addAssistantEntry(
         message,
-        context.requestId,
         schemaName,
         entities,
         additionalInstructions,

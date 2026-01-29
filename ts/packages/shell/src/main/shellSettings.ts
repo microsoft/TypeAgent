@@ -20,6 +20,7 @@ import {
 export type { ShellUserSettings };
 
 import { debugShell } from "./debug.js";
+import { app } from "electron";
 
 export type BrowserTabState = {
     id: string;
@@ -72,11 +73,11 @@ const defaultSettings: ShellSettings = {
     user: defaultUserSettings,
 };
 
-export function getShellDataDir(instanceDir: string) {
-    return path.join(instanceDir, "shell");
+export function getShellDataDir(instanceDir: string | undefined) {
+    return path.join(instanceDir ?? app.getPath("userData"), "shell");
 }
 
-export function ensureShellDataDir(instanceDir: string) {
+export function ensureShellDataDir(instanceDir: string | undefined) {
     const shellDataDir = getShellDataDir(instanceDir);
     if (!existsSync(shellDataDir)) {
         debugShell(`Creating shell data directory '${shellDataDir}'`);
@@ -85,23 +86,24 @@ export function ensureShellDataDir(instanceDir: string) {
     return shellDataDir;
 }
 
-function getSettingsPath(instanceDir: string) {
+function getSettingsPath(instanceDir: string | undefined) {
     return path.join(getShellDataDir(instanceDir), "shellSettings.json");
 }
 
 export class ShellSettingManager {
     private readonly settings: ShellSettings;
     private readonly savedSettings: DeepPartialUndefined<ShellSettings>;
-    constructor(private readonly instanceDir: string) {
+    constructor(private readonly instanceDir: string | undefined) {
+        const settings = cloneConfig(defaultSettings);
+        this.settings = settings;
+        this.savedSettings = {};
+
         const settingsPath = getSettingsPath(instanceDir);
         debugShell(
             `Loading shell settings from '${settingsPath}'`,
             performance.now(),
         );
 
-        const settings = cloneConfig(defaultSettings);
-        this.settings = settings;
-        this.savedSettings = {};
         if (existsSync(settingsPath)) {
             try {
                 const existingSettings = JSON.parse(

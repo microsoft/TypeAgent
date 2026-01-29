@@ -7,7 +7,6 @@ import {
     extractRelevantExifTags,
 } from "typechat-utils";
 import { PromptSection } from "typechat";
-import { RequestId } from "@typeagent/dispatcher-types";
 import { normalizeParamString, PromptEntity } from "agent-cache";
 import { SchemaCreator as sc, validateType } from "@typeagent/action-schema";
 import { getAppAgentName } from "../internal.js";
@@ -15,14 +14,12 @@ import { getAppAgentName } from "../internal.js";
 type UserEntry = {
     role: "user";
     text: string;
-    id?: RequestId;
     attachments?: CachedImageWithDetails[] | undefined;
 };
 
 type AssistantEntry = {
     role: "assistant";
     text: string;
-    id?: RequestId;
     sourceSchemaName: string;
     entities?: Entity[] | undefined;
     additionalInstructions?: string[] | undefined;
@@ -90,14 +87,9 @@ export interface ChatHistory {
     // entries: ChatHistoryEntry[];
     enable(value: boolean): void;
     getTopKEntities(k: number): PromptEntity[];
-    addUserEntry(
-        text: string,
-        id: string | undefined,
-        attachments?: CachedImageWithDetails[],
-    ): void;
+    addUserEntry(text: string, attachments?: CachedImageWithDetails[]): void;
     addAssistantEntry(
         text: string,
-        id: string | undefined,
         sourceSchemaName: string,
         entities?: Entity[],
         additionalInstructions?: string[],
@@ -229,21 +221,18 @@ export function createChatHistory(init: boolean): ChatHistory {
         },
         addUserEntry(
             text: string,
-            id: string | undefined,
             attachments?: CachedImageWithDetails[],
         ): void {
             if (enabled) {
                 entries.push({
                     role: "user",
                     text,
-                    id,
                     attachments,
                 });
             }
         },
         addAssistantEntry(
             text: string,
-            id: string | undefined,
             sourceSchemaName: string,
             entities?: Entity[],
             additionalInstructions?: string[],
@@ -253,7 +242,6 @@ export function createChatHistory(init: boolean): ChatHistory {
                 entries.push({
                     role: "assistant",
                     text,
-                    id,
                     sourceSchemaName,
                     entities: structuredClone(entities), // make a copy so that it doesn't get modified by others later.
                     additionalInstructions,

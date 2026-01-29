@@ -1,4 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { AgentServerInvokeFunctions, ChannelName } from "./protocol.js";
+export {
+    DispatcherConnectOptions,
+    AgentServerInvokeFunctions,
+    ChannelName,
+} from "./protocol.js";

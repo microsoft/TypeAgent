@@ -9,7 +9,10 @@ import type { WebSocketMessageV2 } from "websocket-utils";
 import path from "path";
 import { getShellWindow, getShellWindowForIpcEvent } from "./instance.js";
 
-export function initializeExternalStorageIpcHandlers(instanceDir: string) {
+// If instanceDir is undefined, the external storage is "in memory" and will not persist across restarts
+export function initializeExternalStorageIpcHandlers(
+    instanceDir: string | undefined,
+) {
     const extensionStorage = new ExtensionStorageManager(instanceDir);
     // Extension storage IPC handlers
     ipcMain.handle("extension-storage-get", async (_, keys: string[]) => {

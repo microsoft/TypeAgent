@@ -10,6 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
+import { RequestId } from "@typeagent/dispatcher-types";
 
 export type ActionContextWithClose = {
     actionContext: ActionContext<unknown>;
@@ -20,7 +21,7 @@ export type ActionContextWithClose = {
 export function getActionContext(
     appAgentName: string,
     systemContext: CommandHandlerContext,
-    requestId: string,
+    requestId: RequestId,
     actionIndex?: number,
     action?: TypeAgentAction | string[],
 ): ActionContextWithClose {
@@ -28,8 +29,8 @@ export function getActionContext(
     const sessionContext = context.agents.getSessionContext(appAgentName);
 
     context.clientIO.setDisplayInfo(
-        appAgentName,
         requestId,
+        appAgentName,
         actionIndex,
         action,
     );
@@ -61,7 +62,7 @@ export function getActionContext(
             );
         },
         takeAction(action: string, data: unknown): void {
-            context.clientIO.takeAction(action, data);
+            context.clientIO.takeAction(requestId, action, data);
         },
         appendDiagnosticData(data): void {
             context.clientIO.appendDiagnosticData(requestId, data);

@@ -5,7 +5,10 @@ import {
     CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import {
+    type CommandHandlerContext,
+    getRequestId,
+} from "../../commandHandlerContext.js";
 import { NotifyCommands } from "../../interactiveIO.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
@@ -18,8 +21,8 @@ class NotifyInfoCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
+            getRequestId(systemContext),
             "showNotifications",
-            systemContext.requestId,
             NotifyCommands.ShowSummary,
             DispatcherName,
         );
@@ -34,8 +37,8 @@ class NotifyClearCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
+            getRequestId(systemContext),
             "showNotifications",
-            systemContext.requestId,
             NotifyCommands.Clear,
             DispatcherName,
         );
@@ -50,8 +53,8 @@ class NotifyShowUnreadCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
+            getRequestId(systemContext),
             "showNotifications",
-            systemContext.requestId,
             NotifyCommands.ShowUnread,
             DispatcherName,
         );
@@ -67,8 +70,8 @@ class NotifyShowAllCommandHandler implements CommandHandlerNoParams {
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.notify(
+            getRequestId(systemContext),
             "showNotifications",
-            systemContext.requestId,
             NotifyCommands.ShowAll,
             DispatcherName,
         );

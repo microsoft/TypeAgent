@@ -13,10 +13,10 @@ import {
 } from "agent-cache";
 
 import {
-    CommandHandlerContext,
+    type CommandHandlerContext,
     getCommandResult,
+    getRequestId,
 } from "../../commandHandlerContext.js";
-
 import { CachedImageWithDetails } from "typechat-utils";
 import { Logger } from "telemetry";
 import { executeActions } from "../../../execute/actionHandlers.js";
@@ -49,6 +49,7 @@ import {
     interpretRequest,
     InterpretResult,
 } from "../../../translation/interpretRequest.js";
+
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
@@ -223,14 +224,14 @@ async function requestExplain(
     translationResult: InterpretResult,
 ) {
     // Make sure the current requestId is captured
-    const requestId = context.requestId;
+    const requestId = getRequestId(context);
 
     const { fromCache, fromUser, requestAction } = translationResult;
 
     const notifyExplained = (error?: string) => {
         context.clientIO.notify(
-            "explained",
             requestId,
+            "explained",
             {
                 time: new Date().toLocaleTimeString(),
                 fromCache,

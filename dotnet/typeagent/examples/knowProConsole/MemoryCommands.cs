@@ -25,7 +25,8 @@ public class MemoryCommands : ICommandModule
             AliasesDef(),
             SearchDef(),
             SearchRagDef(),
-            AnswerRagDef()
+            AnswerRagDef(),
+            AnswerDef()
         ];
     }
 
@@ -222,4 +223,71 @@ public class MemoryCommands : ICommandModule
         }
         KnowProWriter.WriteLine();
     }
+
+    private Command AnswerDef()
+    {
+        Command cmd = new("kpAnswer")
+        {
+            Args.Arg<string>("query"),
+            Options.Arg<bool>("debug", false)
+        };
+        cmd.TreatUnmatchedTokensAsErrors = false;
+        cmd.SetAction(this.AnswerAsync);
+        return cmd;
+    }
+
+    private async Task AnswerAsync(ParseResult args)
+    {
+        IConversation conversation = EnsureConversation();
+
+        NamedArgs namedArgs = new NamedArgs(args);
+        string? query = namedArgs.Get<string>("query");
+        if (string.IsNullOrEmpty(query))
+        {
+            return;
+        }
+        if (namedArgs.Get<bool>("debug"))
+        {
+            LangSearchDebugContext? debugContext = new LangSearchDebugContext();
+            var searchResults = await conversation.SearchAsync(query, null, null, debugContext);
+            KnowProWriter.WriteLine(ConsoleColor.DarkGray, debugContext.ToJson());
+            foreach (var searchResult in searchResults)
+            {
+                AnswerContext context = await AnswerContext.FromSearchResultAsync(conversation, searchResult, new AnswerContextOptions() { MessagesTopK = 25, EntitiesTopK = 25 });
+                if (namedArgs.Get<bool>("debug"))
+                {
+                    KnowProWriter.WriteLine(ConsoleColor.Cyan, context.ToJson());
+                }
+
+                var answer = await conversation.AnswerQuestionAsync(query, context);
+                KnowProWriter.WriteJson(answer);
+            }
+        }
+        else
+        {
+            AnswerResponse answer = await conversation.AnswerQuestionAsync(
+                query,
+                null,
+                null,
+                new AnswerContextOptions()
+                {
+                    MessagesTopK = 25,
+                    EntitiesTopK = 25
+                },
+                null
+            ).ConfigureAwait(false);
+
+            KnowProWriter.WriteLine();
+            if (answer.Type == AnswerType.Answered)
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Green, answer.Answer);
+            }
+            else
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Yellow, answer.WhyNoAnswer);
+            }
+            KnowProWriter.WriteLine();
+        }
+    }
+
 }

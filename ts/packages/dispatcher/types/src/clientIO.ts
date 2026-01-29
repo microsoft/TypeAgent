@@ -26,7 +26,7 @@ export type TemplateEditConfig = {
 
 export interface IAgentMessage {
     message: DisplayContent;
-    requestId?: string | undefined;
+    requestId: RequestId;
     source: string;
     sourceIcon?: string | undefined;
     actionIndex?: number | undefined;
@@ -42,13 +42,13 @@ export type NotifyExplainedData = {
 
 // Client provided IO
 export interface ClientIO {
-    clear(): void;
-    exit(): void;
+    clear(requestId: RequestId): void;
+    exit(requestId: RequestId): void;
 
     // Display
     setDisplayInfo(
-        source: string,
         requestId: RequestId,
+        source: string,
         actionIndex?: number,
         action?: TypeAgentAction | string[],
     ): void;
@@ -56,8 +56,8 @@ export interface ClientIO {
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
     appendDiagnosticData(requestId: RequestId, data: any): void;
     setDynamicDisplay(
-        source: string,
         requestId: RequestId,
+        source: string,
         actionIndex: number,
         displayId: string,
         nextRefreshMs: number,
@@ -65,13 +65,13 @@ export interface ClientIO {
 
     // Input
     askYesNo(
-        message: string,
         requestId: RequestId,
+        message: string,
         defaultValue?: boolean,
     ): Promise<boolean>;
     proposeAction(
-        actionTemplates: TemplateEditConfig,
         requestId: RequestId,
+        actionTemplates: TemplateEditConfig,
         source: string,
     ): Promise<unknown>;
 
@@ -85,21 +85,21 @@ export interface ClientIO {
 
     // Notification (TODO: turn these in to dispatcher events)
     notify(
+        notificationId: string | RequestId | undefined,
         event: string,
-        requestId: RequestId,
         data: any,
         source: string,
     ): void;
     notify(
-        event: "explained",
         requestId: RequestId,
+        event: "explained",
         data: NotifyExplainedData,
         source: string,
     ): void;
 
-    openLocalView(port: number): void;
-    closeLocalView(port: number): void;
+    openLocalView(requestId: RequestId, port: number): Promise<void>;
+    closeLocalView(requestId: RequestId, port: number): Promise<void>;
 
     // Host specific (TODO: Formalize the API)
-    takeAction(action: string, data: unknown): void;
+    takeAction(requestId: RequestId, action: string, data: unknown): void;
 }

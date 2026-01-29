@@ -41,15 +41,11 @@ public class EnvVars
     public static int GetInt(string key, string? keySuffix = null, int? defaultValue = null)
     {
         var numString = Get(key, keySuffix, defaultValue?.ToString());
-        if (string.IsNullOrEmpty(numString) && defaultValue is not null)
-        {
-            return defaultValue.Value;
-        }
-        if (int.TryParse(numString, out int value) && value > 0)
-        {
-            return value;
-        }
-        throw new AIClientException(AIClientException.ErrorCode.InvalidApiSetting, $"Invalid ApiSetting: {ToVarName(key, keySuffix)}");
+        return string.IsNullOrEmpty(numString) && defaultValue is not null
+            ? defaultValue.Value
+            : int.TryParse(numString, out int value) && value > 0
+            ? value
+            : throw new AIClientException(AIClientException.ErrorCode.InvalidApiSetting, $"Invalid ApiSetting: {ToVarName(key, keySuffix)}");
     }
 
     public static bool HasKey(string key)

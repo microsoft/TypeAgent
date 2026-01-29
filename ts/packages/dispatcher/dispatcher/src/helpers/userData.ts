@@ -20,7 +20,7 @@ function ensureUserDataDir() {
 }
 
 interface GlobalUserConfig {
-    clientId: string;
+    traceId: string;
     instances?: {
         [key: string]: string;
     };
@@ -39,12 +39,17 @@ function readGlobalUserConfig(
         if (data === undefined) {
             return undefined;
         }
-        if (data.clientId !== undefined) {
+        if (data.traceId !== undefined) {
             return data;
         }
-        if (locked && data.userid !== undefined) {
-            data.clientId = data.userid;
-            delete data.userid;
+        if (locked) {
+            if (data.clientId !== undefined) {
+                data.traceId = data.clientId;
+                delete data.clientId;
+            } else if (data.userid !== undefined) {
+                data.traceId = data.userid;
+                delete data.userid;
+            }
             saveGlobalUserConfig(data);
             return data;
         }
@@ -61,7 +66,7 @@ function saveGlobalUserConfig(userConfig: GlobalUserConfig) {
 function ensureGlobalUserConfig(): GlobalUserConfig {
     const existingUserConfig = readGlobalUserConfig(true);
     if (existingUserConfig === undefined) {
-        const userConfig = { clientId: randomUUID() };
+        const userConfig = { traceId: randomUUID() };
         saveGlobalUserConfig(userConfig);
         return userConfig;
     }
@@ -139,18 +144,18 @@ export function getInstanceDir() {
     return instanceDir;
 }
 
-let clientId: string | undefined;
-export function getClientId(): string {
-    if (clientId !== undefined) {
-        return clientId;
+let traceId: string | undefined;
+export function getTraceId(): string {
+    if (traceId !== undefined) {
+        return traceId;
     }
     const currentGlobalUserConfig = readGlobalUserConfig();
     if (currentGlobalUserConfig !== undefined) {
-        clientId = currentGlobalUserConfig.clientId;
-        return clientId;
+        traceId = currentGlobalUserConfig.traceId;
+        return traceId;
     }
     return lockUserData(() => {
-        clientId = ensureGlobalUserConfig().clientId;
-        return clientId;
+        traceId = ensureGlobalUserConfig().traceId;
+        return traceId;
     });
 }

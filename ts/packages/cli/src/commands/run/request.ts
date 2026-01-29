@@ -7,7 +7,7 @@ import {
     getCacheFactory,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getIndexingServiceRegistry,
@@ -78,7 +78,7 @@ export default class RequestCommand extends Command {
             persistDir: instanceDir,
             storageProvider: getFsStorageProvider(),
             dblogging: true,
-            clientId: getClientId(),
+            traceId: getTraceId(),
         });
         await dispatcher.processCommand(
             `@dispatcher request ${args.request}`,

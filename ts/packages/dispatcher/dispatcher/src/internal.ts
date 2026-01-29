@@ -1,6 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Internal exports for agent server
+export { createDispatcherFromContext } from "./dispatcher.js";
+export {
+    closeCommandHandlerContext,
+    initializeCommandHandlerContext,
+} from "./context/commandHandlerContext.js";
+
 // Internal exports for CLI/testing/debugging purposes
 
 export { getCacheFactory } from "./utils/cacheFactory.js";
