@@ -7,7 +7,7 @@
     {
       "request": "add dentist appointment 3-4pm next Thursday",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -30,7 +30,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": [
               "add"
             ]
@@ -111,13 +111,13 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "add"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create"
                 ]
@@ -129,7 +129,7 @@
                 ]
               },
               {
-                "propertyValue": "calendar.insertEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "insert"
                 ]
@@ -289,7 +289,7 @@
     {
       "request": "add half hour dentist appointment starting at 4pm next Thursday",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -309,7 +309,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": [
               "add half hour dentist appointment starting at 4pm next Thursday"
             ]
@@ -398,13 +398,13 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "add"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create"
                 ]
@@ -416,7 +416,7 @@
                 ]
               },
               {
-                "propertyValue": "calendar.insertEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "insert"
                 ]
@@ -549,7 +549,7 @@
     {
       "request": "add Isobel to the Wednesday ping pong game at 4pm",
       "action": {
-        "fullActionName": "calendar.addParticipants",
+        "fullActionName": "calendar.addParticipant",
         "parameters": {
           "eventReference": {
             "timeRange": {
@@ -570,7 +570,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addParticipants",
+            "value": "calendar.addParticipant",
             "substrings": []
           },
           {
@@ -667,7 +667,7 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addParticipants",
+            "propertyValue": "calendar.addParticipant",
             "propertySubPhrases": [
               "add"
             ],
@@ -679,13 +679,13 @@
                 ]
               },
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create"
                 ]
               },
               {
-                "propertyValue": "calendar.updateEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "update"
                 ]
@@ -818,7 +818,7 @@
     {
       "request": "add piali to the AI Systems meeting this week",
       "action": {
-        "fullActionName": "calendar.addParticipants",
+        "fullActionName": "calendar.addParticipant",
         "parameters": {
           "eventReference": {
             "description": "AI Systems meeting",
@@ -833,7 +833,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addParticipants",
+            "value": "calendar.addParticipant",
             "substrings": [
               "add piali to the AI Systems meeting this week"
             ]
@@ -883,25 +883,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addParticipants",
+            "propertyValue": "calendar.addParticipant",
             "propertySubPhrases": [
               "add piali"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.inviteParticipants",
+                "propertyValue": "calendar.addParticipant",
                 "propertySubPhrases": [
                   "invite piali"
                 ]
               },
               {
-                "propertyValue": "calendar.includeParticipants",
+                "propertyValue": "calendar.addParticipant",
                 "propertySubPhrases": [
                   "include piali"
                 ]
               },
               {
-                "propertyValue": "calendar.addAttendees",
+                "propertyValue": "calendar.addParticipant",
                 "propertySubPhrases": [
                   "add attendees"
                 ]
@@ -980,7 +980,7 @@
     {
       "request": "can you record lunch with Luis at 12pm on Friday",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -1003,7 +1003,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": [
               "can you record lunch with Luis at 12pm on Friday"
             ]
@@ -1094,7 +1094,7 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "record"
             ],
@@ -1106,13 +1106,13 @@
                 ]
               },
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create"
                 ]
               },
               {
-                "propertyValue": "calendar.logEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "log"
                 ]
@@ -1272,7 +1272,7 @@
     {
       "request": "Please add Jennifer to the scrum next Thursday",
       "action": {
-        "fullActionName": "calendar.addParticipants",
+        "fullActionName": "calendar.addParticipant",
         "parameters": {
           "eventReference": {
             "description": "scrum",
@@ -1292,7 +1292,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addParticipants",
+            "value": "calendar.addParticipant",
             "substrings": [
               "add"
             ]
@@ -1367,25 +1367,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addParticipants",
+            "propertyValue": "calendar.addParticipant",
             "propertySubPhrases": [
               "add"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create"
                 ]
               },
               {
-                "propertyValue": "calendar.updateEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "update"
                 ]
               },
               {
-                "propertyValue": "calendar.deleteEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "delete"
                 ]
@@ -1491,7 +1491,7 @@
     {
       "request": "record bridge game Monday at 10 for one hour",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -1509,7 +1509,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": []
           },
           {
@@ -1581,7 +1581,7 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "record"
             ],
@@ -1593,13 +1593,13 @@
                 ]
               },
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create"
                 ]
               },
               {
-                "propertyValue": "calendar.logEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "log"
                 ]
@@ -1819,19 +1819,19 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Schedule a meeting"
                 ]
               },
               {
-                "propertyValue": "calendar.cancelMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Cancel a meeting"
                 ]
               },
               {
-                "propertyValue": "calendar.updateMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Update a meeting"
                 ]
