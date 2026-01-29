@@ -109,25 +109,23 @@ const instanceDir =
               ? path.join(app.getPath("userData"), "data")
               : getInstanceDir()));
 
-if (instanceDir) {
-    debugShell("Instance Dir", instanceDir);
-    if (parsedArgs.clean) {
-        // Delete all files in the instance dir.
-        if (fs.existsSync(instanceDir)) {
-            await fs.promises.rm(instanceDir, { recursive: true });
-            debugShell("Cleaned data dir", instanceDir);
-        }
-    } else if (parsedArgs.reset) {
-        // Delete shell setting files.
-        const shellDataDir = getShellDataDir(instanceDir);
-        if (fs.existsSync(shellDataDir)) {
-            await fs.promises.rm(shellDataDir, { recursive: true });
-            debugShell("Cleaned shell data dir", shellDataDir);
-        }
+debugShell("Instance Dir", instanceDir);
+if (instanceDir && parsedArgs.clean) {
+    // Delete all files in the instance dir.
+    if (fs.existsSync(instanceDir)) {
+        await fs.promises.rm(instanceDir, { recursive: true });
+        debugShell("Cleaned data dir", instanceDir);
     }
-
-    ensureShellDataDir(instanceDir);
+} else if (parsedArgs.reset) {
+    // Delete shell setting files.
+    const shellDataDir = getShellDataDir(instanceDir);
+    if (fs.existsSync(shellDataDir)) {
+        await fs.promises.rm(shellDataDir, { recursive: true });
+        debugShell("Cleaned shell data dir", shellDataDir);
+    }
 }
+
+ensureShellDataDir(instanceDir);
 
 if (parsedArgs.update) {
     if (!fs.existsSync(parsedArgs.update)) {
@@ -142,10 +140,8 @@ const time = performance.now();
 debugShellInit("Starting...");
 
 async function initializeKeys(appPath: string) {
-    if (parsedArgs.connect !== undefined) {
-        // No keys needed for connect mode.
-        return;
-    }
+    // TODO: connected mode only needs the speech key.
+    // Implement better way to provide and manage keys.
     const envFile = parsedArgs.env
         ? path.resolve(appPath, parsedArgs.env)
         : undefined;
@@ -155,9 +151,6 @@ async function initializeKeys(appPath: string) {
         }
         await loadKeysFromEnvFile(envFile);
     } else {
-        if (instanceDir === undefined) {
-            throw new Error("Unable to load keys. Instance dir is undefined");
-        }
         await loadKeys(
             instanceDir,
             parsedArgs.reset || parsedArgs.clean,
