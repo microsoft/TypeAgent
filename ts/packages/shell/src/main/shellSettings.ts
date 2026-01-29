@@ -20,6 +20,7 @@ import {
 export type { ShellUserSettings };
 
 import { debugShell } from "./debug.js";
+import { app } from "electron";
 
 export type BrowserTabState = {
     id: string;
@@ -72,11 +73,11 @@ const defaultSettings: ShellSettings = {
     user: defaultUserSettings,
 };
 
-export function getShellDataDir(instanceDir: string) {
-    return path.join(instanceDir, "shell");
+export function getShellDataDir(instanceDir: string | undefined) {
+    return path.join(instanceDir ?? app.getPath("userData"), "shell");
 }
 
-export function ensureShellDataDir(instanceDir: string) {
+export function ensureShellDataDir(instanceDir: string | undefined) {
     const shellDataDir = getShellDataDir(instanceDir);
     if (!existsSync(shellDataDir)) {
         debugShell(`Creating shell data directory '${shellDataDir}'`);
@@ -85,7 +86,7 @@ export function ensureShellDataDir(instanceDir: string) {
     return shellDataDir;
 }
 
-function getSettingsPath(instanceDir: string) {
+function getSettingsPath(instanceDir: string | undefined) {
     return path.join(getShellDataDir(instanceDir), "shellSettings.json");
 }
 
@@ -97,29 +98,27 @@ export class ShellSettingManager {
         this.settings = settings;
         this.savedSettings = {};
 
-        if (instanceDir) {
-            const settingsPath = getSettingsPath(instanceDir);
-            debugShell(
-                `Loading shell settings from '${settingsPath}'`,
-                performance.now(),
-            );
+        const settingsPath = getSettingsPath(instanceDir);
+        debugShell(
+            `Loading shell settings from '${settingsPath}'`,
+            performance.now(),
+        );
 
-            if (existsSync(settingsPath)) {
-                try {
-                    const existingSettings = JSON.parse(
-                        readFileSync(settingsPath, "utf-8"),
-                    );
-                    this.savedSettings = existingSettings;
-                    mergeConfig(settings, existingSettings);
-                } catch (e) {
-                    debugShell(`Error loading shell settings: ${e}`);
-                }
+        if (existsSync(settingsPath)) {
+            try {
+                const existingSettings = JSON.parse(
+                    readFileSync(settingsPath, "utf-8"),
+                );
+                this.savedSettings = existingSettings;
+                mergeConfig(settings, existingSettings);
+            } catch (e) {
+                debugShell(`Error loading shell settings: ${e}`);
             }
-
-            debugShell(
-                `Shell loaded settings: ${JSON.stringify(this.savedSettings, undefined, 2)}`,
-            );
         }
+
+        debugShell(
+            `Shell loaded settings: ${JSON.stringify(this.savedSettings, undefined, 2)}`,
+        );
         debugShell(
             `Shell settings: ${JSON.stringify(this.settings, undefined, 2)}`,
         );
@@ -208,9 +207,6 @@ export class ShellSettingManager {
     }
 
     public save(windowState: ShellWindowState) {
-        if (this.instanceDir === undefined) {
-            return;
-        }
         const settingsPath = getSettingsPath(this.instanceDir);
         debugShell(`Saving settings to '${settingsPath}'.`);
 
