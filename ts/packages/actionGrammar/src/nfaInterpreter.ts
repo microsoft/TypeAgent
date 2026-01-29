@@ -224,8 +224,12 @@ function tryTransition(
             }
 
             // Determine if this is a checked or unchecked wildcard
-            const isUnchecked =
-                !trans.typeName || trans.typeName === "string";
+            // A wildcard is checked if:
+            // 1. The transition has checked=true (from checked_wildcard paramSpec or entity type)
+            // 2. Legacy: typeName is not "string" (entity type like MusicDevice, Ordinal)
+            const isChecked =
+                trans.checked === true ||
+                (trans.typeName && trans.typeName !== "string");
 
             return {
                 stateId: trans.to,
@@ -233,12 +237,12 @@ function tryTransition(
                 captures: newCaptures,
                 path: [...currentState.path, trans.to],
                 fixedStringPartCount: currentState.fixedStringPartCount,
-                checkedWildcardCount: isUnchecked
-                    ? currentState.checkedWildcardCount
-                    : currentState.checkedWildcardCount + 1,
-                uncheckedWildcardCount: isUnchecked
-                    ? currentState.uncheckedWildcardCount + 1
-                    : currentState.uncheckedWildcardCount,
+                checkedWildcardCount: isChecked
+                    ? currentState.checkedWildcardCount + 1
+                    : currentState.checkedWildcardCount,
+                uncheckedWildcardCount: isChecked
+                    ? currentState.uncheckedWildcardCount
+                    : currentState.uncheckedWildcardCount + 1,
             };
 
         case "epsilon":

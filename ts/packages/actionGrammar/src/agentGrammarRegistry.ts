@@ -46,9 +46,13 @@ export class AgentGrammar {
      * They are merged as alternatives to enable cache hits on similar requests.
      *
      * @param agrText Grammar rules in .agr format (from grammarGenerator)
+     * @param checkedVariables Optional set of variable names with validation (checked_wildcard paramSpec)
      * @returns Success status and any errors
      */
-    addGeneratedRules(agrText: string): {
+    addGeneratedRules(
+        agrText: string,
+        checkedVariables?: Set<string>,
+    ): {
         success: boolean;
         errors: string[];
         unresolvedEntities?: string[];
@@ -69,6 +73,11 @@ export class AgentGrammar {
                     `Failed to parse generated rules: ${errors.join(", ")}`,
                 ],
             };
+        }
+
+        // Add checked variables if provided
+        if (checkedVariables && checkedVariables.size > 0) {
+            newGrammar.checkedVariables = checkedVariables;
         }
 
         // Validate entity references
@@ -93,6 +102,19 @@ export class AgentGrammar {
                 existingEntities.add(entity);
             }
             mergedGrammar.entities = Array.from(existingEntities);
+        }
+
+        // Merge checked variables
+        if (newGrammar.checkedVariables || this.grammar.checkedVariables) {
+            const existingChecked = new Set(
+                this.grammar.checkedVariables || [],
+            );
+            if (newGrammar.checkedVariables) {
+                for (const varName of newGrammar.checkedVariables) {
+                    existingChecked.add(varName);
+                }
+            }
+            mergedGrammar.checkedVariables = existingChecked;
         }
 
         // Recompile NFA

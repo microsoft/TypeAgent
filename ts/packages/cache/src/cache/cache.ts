@@ -408,6 +408,7 @@ export class AgentCache {
                                 const addResult =
                                     agentGrammar.addGeneratedRules(
                                         genResult.generatedRule,
+                                        genResult.checkedVariables,
                                     );
                                 if (addResult.success) {
                                     // Sync to the grammar store used for matching

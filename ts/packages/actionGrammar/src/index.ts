@@ -42,6 +42,7 @@ export {
     type NFAMatchResult,
 } from "./nfaInterpreter.js";
 export { compileGrammarToNFA } from "./nfaCompiler.js";
+export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
 // Agent Grammar Registry
 export type { AgentMatchResult } from "./agentGrammarRegistry.js";
