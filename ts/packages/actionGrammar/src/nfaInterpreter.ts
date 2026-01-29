@@ -37,6 +37,15 @@ interface NFAExecutionState {
 /**
  * Run an NFA against a sequence of tokens
  * Uses epsilon-closure and parallel state tracking
+ *
+ * When multiple grammar rules match, this function:
+ * 1. Follows all legal transitions in parallel (multiple execution threads)
+ * 2. Collects ALL threads that reach accepting states when input is exhausted
+ * 3. Sorts accepting threads by priority (fixed strings > checked wildcards > unchecked)
+ * 4. Returns the highest-priority match
+ *
+ * Note: For future DFA construction where accepting states may be merged,
+ * use NFAState.priorityHint to track the best achievable priority for merged states.
  */
 export function matchNFA(
     nfa: NFA,
@@ -109,10 +118,11 @@ export function matchNFA(
         }
     }
 
-    // Check if any current state is accepting
+    // Collect ALL accepting threads (multiple rules may match)
+    const acceptingThreads: NFAMatchResult[] = [];
     for (const state of currentStates) {
         if (nfa.acceptingStates.includes(state.stateId)) {
-            return {
+            acceptingThreads.push({
                 matched: true,
                 captures: state.captures,
                 fixedStringPartCount: state.fixedStringPartCount,
@@ -120,8 +130,14 @@ export function matchNFA(
                 uncheckedWildcardCount: state.uncheckedWildcardCount,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: tokens.length,
-            };
+            });
         }
+    }
+
+    // If any threads reached accepting states, return the best one by priority
+    if (acceptingThreads.length > 0) {
+        const sorted = sortNFAMatches(acceptingThreads);
+        return sorted[0]; // Best match by priority rules
     }
 
     // Processed all tokens but not in accepting state

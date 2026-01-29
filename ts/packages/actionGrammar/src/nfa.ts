@@ -35,6 +35,18 @@ export interface NFATransition {
 }
 
 /**
+ * Priority hint for an accepting state
+ * Used when multiple grammar rules share an accepting state (e.g., in DFA construction)
+ * Tracks the best-case priority achievable through this state
+ */
+export interface AcceptStatePriorityHint {
+    // Best achievable counts for any path leading to this state
+    minFixedStringPartCount: number; // Highest fixed string count from any rule
+    maxCheckedWildcardCount: number; // Most checked wildcards from any rule
+    minUncheckedWildcardCount: number; // Fewest unchecked wildcards from any rule
+}
+
+/**
  * An NFA state with outgoing transitions
  */
 export interface NFAState {
@@ -43,6 +55,10 @@ export interface NFAState {
 
     // If true, this is an accepting/final state
     accepting: boolean;
+
+    // Optional: Priority hint for accepting states (used in DFA minimization/merging)
+    // When multiple rules merge into one accepting state, this tracks the best possible priority
+    priorityHint?: AcceptStatePriorityHint | undefined;
 
     // Optional: capture variable value when reaching this state
     capture?:

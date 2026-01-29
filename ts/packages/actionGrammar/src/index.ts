@@ -35,7 +35,12 @@ export {
 } from "./dynamicGrammarLoader.js";
 
 // NFA system
-export type { NFA, NFAState, NFATransition } from "./nfa.js";
+export type {
+    NFA,
+    NFAState,
+    NFATransition,
+    AcceptStatePriorityHint,
+} from "./nfa.js";
 export {
     matchNFA,
     sortNFAMatches,
