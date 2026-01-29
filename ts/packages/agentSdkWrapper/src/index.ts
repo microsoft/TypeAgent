@@ -21,8 +21,3 @@ export {
     type SchemaGrammarConfig,
     type SchemaGrammarResult,
 } from "./schemaToGrammarGenerator.js";
-
-export {
-    ClaudeGrammarGenerator,
-    type GrammarAnalysis,
-} from "./grammarGenerator.js";

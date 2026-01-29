@@ -23,6 +23,8 @@ export class AgentGrammar {
     private grammar: Grammar;
     private nfa: NFA;
     private ruleCount: number;
+    private readonly baseGrammar: Grammar; // Store original grammar for reset
+    private readonly baseNFA: NFA; // Store original NFA for reset
 
     constructor(
         public readonly agentId: string,
@@ -32,6 +34,9 @@ export class AgentGrammar {
         this.grammar = grammar;
         this.nfa = nfa;
         this.ruleCount = grammar.rules.length;
+        // Store deep copy of base grammar for reset capability
+        this.baseGrammar = JSON.parse(JSON.stringify(grammar));
+        this.baseNFA = nfa; // NFA is immutable, safe to share reference
     }
 
     /**
@@ -96,9 +101,21 @@ export class AgentGrammar {
                 mergedGrammar,
                 `${this.agentId}-cache`,
             );
+            const previousRuleCount = this.ruleCount;
             this.grammar = mergedGrammar;
             this.nfa = newNFA;
             this.ruleCount = mergedGrammar.rules.length;
+
+            // Log the newly added grammar rules for debugging/testing
+            const newRulesCount = this.ruleCount - previousRuleCount;
+            if (newRulesCount > 0) {
+                console.log(
+                    `\n[Grammar Cache] Added ${newRulesCount} new rule(s) to agent '${this.agentId}':`,
+                );
+                console.log(`--- New Grammar Rules ---`);
+                console.log(agrText);
+                console.log(`--- Total rules: ${this.ruleCount} ---\n`);
+            }
 
             return { success: true, errors: [] };
         } catch (error) {
@@ -109,6 +126,20 @@ export class AgentGrammar {
                 ],
             };
         }
+    }
+
+    /**
+     * Reset this agent's grammar to its original base state, removing all dynamically added rules
+     *
+     * This is used when creating a new construction store to start fresh.
+     */
+    resetToBase(): void {
+        console.log(
+            `\n[Grammar Cache] Resetting agent '${this.agentId}' to base grammar (removing ${this.ruleCount - this.baseGrammar.rules.length} dynamic rules)`,
+        );
+        this.grammar = JSON.parse(JSON.stringify(this.baseGrammar));
+        this.nfa = this.baseNFA;
+        this.ruleCount = this.baseGrammar.rules.length;
     }
 
     /**
@@ -395,6 +426,21 @@ export class AgentGrammarRegistry {
      */
     clear(): void {
         this.agents.clear();
+    }
+
+    /**
+     * Reset all agents to their base grammars, removing dynamically added rules
+     *
+     * This is useful when clearing the cache to start fresh while keeping
+     * the original static grammar rules intact.
+     */
+    resetAllToBase(): void {
+        console.log(
+            `\n[Grammar Cache] Resetting ${this.agents.size} agent(s) to base grammar`,
+        );
+        for (const agent of this.agents.values()) {
+            agent.resetToBase();
+        }
     }
 
     /**

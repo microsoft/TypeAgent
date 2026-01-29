@@ -93,6 +93,7 @@ interface CliOptions {
     enableCache: boolean;
     tools: string[];
     help: boolean;
+    nfaCache: boolean;
 }
 
 /**
@@ -105,6 +106,7 @@ function parseArgs(): CliOptions {
     let enableCache = true;
     let tools: string[] = [];
     let help = false;
+    let nfaCache = false;
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -135,10 +137,13 @@ function parseArgs(): CliOptions {
             case "-t":
                 tools = args[++i]?.split(",") || [];
                 break;
+            case "--nfa-cache":
+                nfaCache = true;
+                break;
         }
     }
 
-    return { model, debug, enableCache, tools, help };
+    return { model, debug, enableCache, tools, help, nfaCache };
 }
 
 /**
@@ -155,6 +160,8 @@ Options:
                          - or provide a full model ID
   -d, --debug           Enable debug logging with cache timing information
   --no-cache            Disable cache checking
+  --nfa-cache           Enable NFA grammar cache mode in agent server
+                        (requires agent server to be running)
   -t, --tools <list>    Comma-separated list of tools to enable (e.g., bash,read,write)
                         Default: all tools enabled
   -h, --help            Show this help message
@@ -164,6 +171,7 @@ Examples:
   agent-sdk-wrapper -m opus            # Use Claude Opus
   agent-sdk-wrapper --debug            # Enable debug logging
   agent-sdk-wrapper --no-cache         # Disable cache checking
+  agent-sdk-wrapper --nfa-cache        # Enable NFA grammar cache mode
   agent-sdk-wrapper -t bash,read       # Enable only bash and read tools
 
 Description:
@@ -264,6 +272,65 @@ async function main() {
         debugLogger.log(`Command executor path: ${commandExecutorPath}`);
     }
 
+    // Setup MCP server environment for NFA cache mode if requested
+    let nfaConfigFilePath: string | undefined;
+
+    if (options.nfaCache) {
+        // Create temporary config file for NFA cache mode
+        const os = await import("os");
+        const fs = await import("fs");
+        const tmpDir = os.tmpdir();
+        const configDir = path.join(tmpDir, "typeagent-sdk-wrapper-config");
+
+        // Ensure directory exists
+        if (!fs.existsSync(configDir)) {
+            fs.mkdirSync(configDir, { recursive: true });
+        }
+
+        nfaConfigFilePath = path.join(configDir, "agentServerConfig.json");
+
+        const nfaConfig = {
+            version: "1.0",
+            cache: {
+                enabled: true,
+                grammarSystem: "nfa",
+                matchWildcard: true,
+                matchEntityWildcard: true,
+                autoSave: true,
+            },
+            agents: [
+                { name: "player", enabled: true },
+                { name: "list", enabled: true },
+                { name: "calendar", enabled: true },
+            ],
+        };
+
+        fs.writeFileSync(nfaConfigFilePath, JSON.stringify(nfaConfig, null, 2));
+
+        if (debugLogger) {
+            debugLogger.log(`Created NFA config at: ${nfaConfigFilePath}`);
+        }
+
+        console.log(
+            `[AgentSDK] NFA cache mode enabled - config: ${nfaConfigFilePath}`,
+        );
+    }
+
+    // Build MCP server config
+    const mcpServerConfig: any = {
+        command: "node",
+        args: [commandExecutorPath],
+    };
+
+    // If NFA cache is enabled, merge the config path into the environment
+    // IMPORTANT: Must merge with process.env to preserve all environment variables
+    if (options.nfaCache && nfaConfigFilePath) {
+        mcpServerConfig.env = {
+            ...process.env,
+            AGENT_SERVER_CONFIG: nfaConfigFilePath,
+        };
+    }
+
     const client = new ClaudeSDKClient({
         systemPrompt: {
             type: "preset",
@@ -286,10 +353,7 @@ async function main() {
         maxTurns: 20,
         maxThinkingTokens: 10000,
         mcpServers: {
-            "command-executor": {
-                command: "node",
-                args: [commandExecutorPath],
-            },
+            "command-executor": mcpServerConfig,
         },
         hooks: {
             UserPromptSubmit: [

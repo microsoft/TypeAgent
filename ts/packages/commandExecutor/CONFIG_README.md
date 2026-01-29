@@ -42,7 +42,7 @@ The first configuration file found is used. If no configuration file is found, d
     {
       "name": "player",
       "enabled": true,
-      "grammarFile": "../agents/player/src/agent/playerGrammar.agr"
+      "grammarFile": "../agents/player/src/agent/playerSchema.agr"
     },
     {
       "name": "calendar",
@@ -161,7 +161,7 @@ To use the new NFA-based grammar system:
     {
       "name": "player",
       "enabled": true,
-      "grammarFile": "../agents/player/src/agent/playerGrammar.agr"
+      "grammarFile": "../agents/player/src/agent/playerSchema.agr"
     }
   ]
 }

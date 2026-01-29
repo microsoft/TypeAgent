@@ -17,7 +17,9 @@
     "./agent/handlers": "./dist/listActionHandler.js"
   },
   "scripts": {
-    "build": "npm run tsc",
+    "agc": "agc -i ./src/listSchema.agr -o ./dist/listSchema.ag.json",
+    "asc": "asc -i ./src/listSchema.ts -o ./dist/listSchema.pas.json -t ListAction -a ListActivity",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -27,6 +29,9 @@
     "@typeagent/agent-sdk": "workspace:*"
   },
   "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

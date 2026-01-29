@@ -17,7 +17,7 @@
     "./agent/handlers": "./dist/agent/playerHandlers.js"
   },
   "scripts": {
-    "agc": "agc -i ./src/agent/playerGrammar.agr -o ./dist/agent/playerGrammar.ag.json",
+    "agc": "agc -i ./src/agent/playerSchema.agr -o ./dist/agent/playerSchema.ag.json",
     "asc": "asc -i ./src/agent/playerSchema.ts -o ./dist/agent/playerSchema.pas.json -t PlayerActions -e PlayerEntities",
     "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
@@ -51,10 +51,10 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/agent/playerGrammar.agr"
+            "src/agent/playerSchema.agr"
           ],
           "outputGlobs": [
-            "dist/agent/playerGrammar.ag.json"
+            "dist/agent/playerSchema.ag.json"
           ]
         }
       },
