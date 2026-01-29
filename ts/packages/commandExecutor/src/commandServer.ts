@@ -576,24 +576,34 @@ export class CommandServer {
      */
     private async applyConfigurationSettings(): Promise<void> {
         if (!this.dispatcher) {
+            this.logger.log("⚠️  No dispatcher connection - skipping config application");
             return;
         }
 
         try {
             // Apply cache.grammarSystem setting if it differs from default
+            this.logger.log(
+                `📋 Config check: cache.grammarSystem = "${this.config.cache.grammarSystem}" (default: "completionBased")`,
+            );
+
             if (this.config.cache.grammarSystem !== "completionBased") {
                 this.logger.log(
-                    `Applying configuration: cache.grammarSystem = ${this.config.cache.grammarSystem}`,
+                    `🔧 Applying configuration: cache.grammarSystem = ${this.config.cache.grammarSystem}`,
                 );
-                await this.dispatcher.processCommand(
-                    `@config cache.grammarSystem ${this.config.cache.grammarSystem}`,
-                );
-            }
 
-            this.logger.log("Configuration settings applied successfully");
+                const configCommand = `@config cache grammarSystem ${this.config.cache.grammarSystem}`;
+                this.logger.log(`📤 Sending command to dispatcher: "${configCommand}"`);
+
+                const result = await this.dispatcher.processCommand(configCommand);
+
+                this.logger.log(`📥 Dispatcher response: ${JSON.stringify(result)}`);
+                this.logger.log("✅ Configuration settings applied successfully");
+            } else {
+                this.logger.log("ℹ️  Using default grammar system (completionBased), no config command needed");
+            }
         } catch (error) {
             this.logger.error(
-                "Failed to apply some configuration settings",
+                "❌ Failed to apply configuration settings",
                 error,
             );
             // Don't throw - continue even if config application fails

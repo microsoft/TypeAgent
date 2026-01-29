@@ -208,13 +208,13 @@ export function createSampleConfig(filePath: string): void {
                 name: "player",
                 enabled: true,
                 grammarFile:
-                    "./packages/agents/player/src/agent/playerGrammar.agr",
+                    "./packages/agents/player/src/agent/playerSchema.agr",
             },
             {
                 name: "calendar",
                 enabled: true,
                 grammarFile:
-                    "./packages/agents/calendar/dist/calendarSchema.agr",
+                    "./packages/agents/calendar/src/calendarSchema.agr",
             },
         ],
         dispatcher: {

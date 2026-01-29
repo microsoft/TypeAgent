@@ -3,7 +3,9 @@
   "description": "Agent to create and manage lists",
   "schema": {
     "description": "List agent with actions to create lists, show list items, add and remove list items",
-    "schemaFile": "./listSchema.ts",
+    "schemaFile": "../dist/listSchema.pas.json",
+    "grammarFile": "../dist/listSchema.ag.json",
+    "originalSchemaFile": "listSchema.ts",
     "schemaType": {
       "action": "ListAction",
       "activity": "ListActivity"

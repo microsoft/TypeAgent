@@ -111,7 +111,7 @@ export async function populateCache(
         }
 
         // Format as grammar rule
-        const grammarRule = generator.formatAsGrammarRule(testCase, analysis);
+        const grammarRule = generator.formatAsGrammarRule(testCase, analysis, schemaInfo);
 
         return {
             success: true,

@@ -197,6 +197,7 @@ async function main() {
             const grammarRule = generator.formatAsGrammarRule(
                 testCase,
                 analysis,
+                schemaInfo,
             );
             console.log(grammarRule);
             console.log(`${"=".repeat(80)}`);

@@ -81,6 +81,11 @@ import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
 import { initializeMemory } from "./memory.js";
 import { StorageProvider } from "../storageProvider/storageProvider.js";
+import {
+    AgentGrammarRegistry,
+    GrammarStore as PersistedGrammarStore,
+} from "action-grammar";
+import fs from "node:fs";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -136,6 +141,8 @@ export type CommandHandlerContext = {
     pendingToggleTransientAgents: [string, boolean][];
     translatorCache: Map<string, TypeAgentTranslator>;
     agentCache: AgentCache;
+    agentGrammarRegistry: AgentGrammarRegistry; // NFA-based grammar system for cache matching
+    grammarGenerationInitialized: boolean; // Track if NFA grammar generation has been set up
     currentScriptDir: string;
     logger?: Logger | undefined;
     requestId?: RequestId;
@@ -335,11 +342,15 @@ async function addAppAgentProviders(
             }
         }
 
+        const useNFAGrammar = context.session.getConfig().cache.grammarSystem === "nfa";
+
         const inlineAppProvider = createBuiltinAppAgentProvider(context);
         await context.agents.addProvider(
             inlineAppProvider,
             context.agentCache.grammarStore,
             embeddingCache,
+            context.agentGrammarRegistry,
+            useNFAGrammar,
         );
 
         if (appAgentProviders) {
@@ -348,6 +359,8 @@ async function addAppAgentProviders(
                     provider,
                     context.agentCache.grammarStore,
                     embeddingCache,
+                    context.agentGrammarRegistry,
+                    useNFAGrammar,
                 );
             }
         }
@@ -385,8 +398,16 @@ export async function installAppProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
 ) {
+    const useNFAGrammar = context.session.getConfig().cache.grammarSystem === "nfa";
+
     // Don't use embedding cache for a new agent.
-    await context.agents.addProvider(provider, context.agentCache.grammarStore);
+    await context.agents.addProvider(
+        provider,
+        context.agentCache.grammarStore,
+        undefined,
+        context.agentGrammarRegistry,
+        useNFAGrammar,
+    );
 
     await setAppAgentStates(context);
 
@@ -490,6 +511,8 @@ export async function initializeCommandHandlerContext(
                 constructionProvider,
                 logger,
             ),
+            agentGrammarRegistry: new AgentGrammarRegistry(), // NFA-based grammar system
+            grammarGenerationInitialized: false, // Track if NFA grammar generation has been set up
             lastActionSchemaName: DispatcherName,
             translatorCache: new Map<string, TypeAgentTranslator>(),
             currentScriptDir: process.cwd(),
@@ -517,6 +540,10 @@ export async function initializeCommandHandlerContext(
 
         await initializeMemory(context, sessionDirPath);
         await addAppAgentProviders(context, options?.appAgentProviders);
+
+        // Initialize grammar generation if using NFA system
+        await setupGrammarGeneration(context);
+
 
         const appAgentStateSettings = getAppAgentStateSettings(
             options?.agents,
@@ -558,6 +585,110 @@ async function setAppAgentStates(context: CommandHandlerContext) {
     if (rollback) {
         context.session.updateConfig(rollback);
     }
+}
+
+async function setupGrammarGeneration(context: CommandHandlerContext) {
+    const config = context.session.getConfig();
+    const useNFAGrammar = config.cache.grammarSystem === "nfa";
+
+    if (!useNFAGrammar || !config.cache.grammar) {
+        return;
+    }
+
+    // Initialize persisted grammar store
+    const grammarStorePath = context.session.getGrammarStoreFilePath();
+    if (!grammarStorePath) {
+        debug("No session dir path, skipping grammar store initialization");
+        return;
+    }
+
+    const grammarStore = new PersistedGrammarStore();
+
+    // Load or create grammar store
+    if (fs.existsSync(grammarStorePath)) {
+        try {
+            await grammarStore.load(grammarStorePath);
+            debug(`Loaded grammar store from ${grammarStorePath}`);
+
+            // Merge persisted dynamic rules into agent grammars
+            const allRules = grammarStore.getAllRules();
+            const schemaRules = new Map<string, string[]>();
+
+            // Group rules by schema
+            for (const rule of allRules) {
+                if (!schemaRules.has(rule.schemaName)) {
+                    schemaRules.set(rule.schemaName, []);
+                }
+                schemaRules.get(rule.schemaName)!.push(rule.grammarText);
+            }
+
+            // Merge rules into each agent's grammar
+            for (const [schemaName, rules] of schemaRules) {
+                const agentGrammar =
+                    context.agentGrammarRegistry.getAgent(schemaName);
+                if (!agentGrammar) {
+                    debug(
+                        `Schema ${schemaName} has persisted rules but no registered agent`,
+                    );
+                    continue;
+                }
+
+                // Combine all rules for this schema
+                const combinedRules = rules.join("\n\n");
+
+                // Add to agent grammar (merges with static grammar)
+                const result = agentGrammar.addGeneratedRules(combinedRules);
+                if (result.success) {
+                    debug(
+                        `Merged ${rules.length} dynamic rules into ${schemaName}`,
+                    );
+                    // Sync to grammar store used for matching
+                    context.agentCache.syncAgentGrammar(schemaName);
+                } else {
+                    debugError(
+                        `Failed to merge dynamic rules for ${schemaName}: ${result.errors.join(", ")}`,
+                    );
+                }
+            }
+        } catch (error) {
+            debug(`Failed to load grammar store: ${error}`);
+            await grammarStore.newStore(grammarStorePath);
+        }
+    } else {
+        await grammarStore.newStore(grammarStorePath);
+        debug(`Created new grammar store at ${grammarStorePath}`);
+    }
+
+    // Enable auto-save
+    await grammarStore.setAutoSave(config.cache.autoSave);
+
+    // Import getPackageFilePath for resolving schema paths
+    const { getPackageFilePath } = await import(
+        "../utils/getPackageFilePath.js"
+    );
+
+    // Configure agent cache with grammar generation support
+    context.agentCache.configureGrammarGeneration(
+        context.agentGrammarRegistry,
+        grammarStore,
+        true,
+        (schemaName: string) => {
+            // Get schema file path from action config
+            const actionConfig = context.agents.tryGetActionConfig(schemaName);
+            if (!actionConfig || !actionConfig.schemaFilePath) {
+                throw new Error(
+                    `Schema file path not found for schema: ${schemaName}`,
+                );
+            }
+            // Resolve to absolute path
+            return getPackageFilePath(actionConfig.schemaFilePath);
+        },
+    );
+
+    // Mark as initialized to prevent re-initialization
+    context.grammarGenerationInitialized = true;
+
+    debug("Grammar generation configured for NFA system");
 }
 
 async function updateAppAgentStates(
@@ -658,6 +789,7 @@ export async function changeContextConfig(
 ) {
     const systemContext = context.sessionContext.agentContext;
     const session = systemContext.session;
+
     const changed = session.updateSettings(options);
     if (changed === undefined) {
         return undefined;
@@ -710,6 +842,14 @@ export async function changeContextConfig(
     // Propagate the options to the cache
     if (changed.cache !== undefined) {
         agentCache.constructionStore.setConfig(changed.cache);
+
+        // If grammar system changed to NFA and not already initialized, set up grammar generation
+        if (
+            changed.cache.grammarSystem === "nfa" &&
+            !systemContext.grammarGenerationInitialized
+        ) {
+            await setupGrammarGeneration(systemContext);
+        }
     }
 
     // cache and auto save are handled separately
@@ -720,6 +860,7 @@ export async function changeContextConfig(
             session,
             agentCache,
             systemContext.constructionProvider,
+            systemContext.agentGrammarRegistry,
         );
     } else {
         const autoSave = changed.cache?.autoSave;

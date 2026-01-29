@@ -1,0 +1,74 @@
+[
+  {
+    "request": "Can you find all the meetings I have with Sarah on March 15th, 2024?",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me events for tomorrow that have anything to do with the quarterly review",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Find my dentist appointment next Friday",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you schedule a team standup meeting for tomorrow at 9:30 AM in the main conference room? Please invite Sarah, Mike, and Jessica.",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "scheduleEvent",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Set up dinner with mom on March 15th from 6-8 PM at Olive Garden on Main Street",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "scheduleEvent",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Book project review meeting next Friday 2 PM, include the whole dev team",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "scheduleEvent",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "What's on my calendar today?",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findTodaysEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me today's events",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findTodaysEvents",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you find what I have scheduled for today?",
+    "schemaName": "calendarSchema",
+    "action": {
+      "actionName": "findTodaysEvents",
+      "parameters": {}
+    }
+  }
+]

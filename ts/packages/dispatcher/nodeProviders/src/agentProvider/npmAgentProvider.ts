@@ -160,9 +160,14 @@ export function createNpmAppAgentProvider(
             if (config === undefined) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
-            const newManifests = await loadManifest(config, requirePath);
-            manifests.set(appAgentName, newManifests);
-            return newManifests;
+            try {
+                const newManifests = await loadManifest(config, requirePath);
+                manifests.set(appAgentName, newManifests);
+                return newManifests;
+            } catch (error) {
+                console.error(`[AGENT LOAD] Failed to load manifest for ${appAgentName}:`, error);
+                throw error;
+            }
         },
         async loadAppAgent(appAgentName: string) {
             const existing = moduleAgents.get(appAgentName);

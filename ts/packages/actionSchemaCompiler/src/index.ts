@@ -46,6 +46,11 @@ export default class Compile extends Command {
             required: false,
             char: "e",
         }),
+        activityType: Flags.string({
+            description: "Activity type name for the activity types",
+            required: false,
+            char: "a",
+        }),
     };
 
     async run(): Promise<void> {
@@ -53,12 +58,16 @@ export default class Compile extends Command {
 
         const name = path.basename(flags.input);
 
-        const type = flags.entityType
-            ? {
-                  action: flags.actionType,
-                  entity: flags.entityType,
-              }
-            : flags.actionType;
+        const type =
+            flags.entityType || flags.activityType
+                ? {
+                      action: flags.actionType,
+                      ...(flags.entityType && { entity: flags.entityType }),
+                      ...(flags.activityType && {
+                          activity: flags.activityType,
+                      }),
+                  }
+                : flags.actionType;
         const actionSchemaFile = parseActionSchemaSource(
             fs.readFileSync(flags.input, "utf-8"),
             name,

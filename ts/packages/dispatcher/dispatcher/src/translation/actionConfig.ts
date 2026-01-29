@@ -34,6 +34,9 @@ export type ActionConfig = {
     transient: boolean;
     schemaName: string;
     delegatable: boolean;
+
+    // Original schema file path string (for grammar generation)
+    schemaFilePath: string | undefined;
 } & RuntimeSchemaManifest;
 
 function loadSchemaFile(schemaFile: string): SchemaContent {
@@ -54,7 +57,8 @@ function loadGrammarFile(grammarFile: string): GrammarContent {
     if (!isActionGrammar) {
         throw new Error(`Unsupported grammar file extension: ${grammarFile}`);
     }
-    return { format: "ag", content: fs.readFileSync(fullPath, "utf-8") };
+    const content = fs.readFileSync(fullPath, "utf-8");
+    return { format: "ag", content };
 }
 
 export function getSchemaContent(actionConfig: ActionConfig): SchemaContent {
@@ -125,6 +129,10 @@ function collectActionConfigs(
             ...manifest.schema,
             schemaFile,
             grammarFile,
+            schemaFilePath:
+                typeof originalSchemaFile === "string"
+                    ? originalSchemaFile
+                    : undefined,
             transient,
             schemaDefaultEnabled,
             actionDefaultEnabled,
