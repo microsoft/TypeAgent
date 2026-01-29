@@ -701,12 +701,17 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
             }
 
             // Fallback: try to derive .pas.json path from .ts schemaFilePath
-            if (actionConfig.schemaFilePath && actionConfig.schemaFilePath.endsWith('.ts')) {
+            if (
+                actionConfig.schemaFilePath &&
+                actionConfig.schemaFilePath.endsWith(".ts")
+            ) {
                 // Try common pattern: ./src/schema.ts -> ../dist/schema.pas.json
                 const derivedPath = actionConfig.schemaFilePath
-                    .replace(/^\.\/src\//, '../dist/')
-                    .replace(/\.ts$/, '.pas.json');
-                debug(`Attempting fallback .pas.json path for ${schemaName}: ${derivedPath}`);
+                    .replace(/^\.\/src\//, "../dist/")
+                    .replace(/\.ts$/, ".pas.json");
+                debug(
+                    `Attempting fallback .pas.json path for ${schemaName}: ${derivedPath}`,
+                );
                 try {
                     return getPackageFilePath(derivedPath);
                 } catch {
@@ -716,7 +721,7 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
 
             throw new Error(
                 `Compiled schema file path (.pas.json) not found for schema: ${schemaName}. ` +
-                `Please add 'compiledSchemaFile' field to the manifest pointing to the .pas.json file.`
+                    `Please add 'compiledSchemaFile' field to the manifest pointing to the .pas.json file.`,
             );
         },
     );
