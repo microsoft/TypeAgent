@@ -36,7 +36,11 @@ export {
 
 // NFA system
 export type { NFA, NFAState, NFATransition } from "./nfa.js";
-export { matchNFA, type NFAMatchResult } from "./nfaInterpreter.js";
+export {
+    matchNFA,
+    sortNFAMatches,
+    type NFAMatchResult,
+} from "./nfaInterpreter.js";
 export { compileGrammarToNFA } from "./nfaCompiler.js";
 
 // Agent Grammar Registry

@@ -239,6 +239,10 @@ export interface AgentMatchResult {
     matched: boolean;
     agentId?: string; // Which agent matched
     captures: Map<string, string | number>;
+    // Priority counts for sorting matches
+    fixedStringPartCount?: number;
+    checkedWildcardCount?: number;
+    uncheckedWildcardCount?: number;
     // Debugging info
     attemptedAgents?: string[];
     tokensConsumed?: number | undefined;
@@ -390,6 +394,9 @@ export class AgentGrammarRegistry {
                     matched: true,
                     agentId: id,
                     captures: result.captures,
+                    fixedStringPartCount: result.fixedStringPartCount,
+                    checkedWildcardCount: result.checkedWildcardCount,
+                    uncheckedWildcardCount: result.uncheckedWildcardCount,
                     attemptedAgents,
                     tokensConsumed: result.tokensConsumed,
                 };

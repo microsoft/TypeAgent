@@ -14,6 +14,10 @@ import { globalEntityRegistry } from "./entityRegistry.js";
 export interface NFAMatchResult {
     matched: boolean;
     captures: Map<string, string | number>;
+    // Priority counts for sorting matches
+    fixedStringPartCount: number; // # of token transitions taken
+    checkedWildcardCount: number; // # of wildcard transitions with type constraints
+    uncheckedWildcardCount: number; // # of wildcard transitions without type constraints
     // Debugging info
     visitedStates?: number[] | undefined;
     tokensConsumed?: number | undefined;
@@ -24,6 +28,10 @@ interface NFAExecutionState {
     tokenIndex: number;
     captures: Map<string, string | number>;
     path: number[]; // For debugging
+    // Priority counts for this execution path
+    fixedStringPartCount: number;
+    checkedWildcardCount: number;
+    uncheckedWildcardCount: number;
 }
 
 /**
@@ -42,6 +50,9 @@ export function matchNFA(
             tokenIndex: 0,
             captures: new Map(),
             path: [nfa.startState],
+            fixedStringPartCount: 0,
+            checkedWildcardCount: 0,
+            uncheckedWildcardCount: 0,
         },
     ]);
 
@@ -79,6 +90,9 @@ export function matchNFA(
             return {
                 matched: false,
                 captures: new Map(),
+                fixedStringPartCount: 0,
+                checkedWildcardCount: 0,
+                uncheckedWildcardCount: 0,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: tokenIndex,
             };
@@ -101,6 +115,9 @@ export function matchNFA(
             return {
                 matched: true,
                 captures: state.captures,
+                fixedStringPartCount: state.fixedStringPartCount,
+                checkedWildcardCount: state.checkedWildcardCount,
+                uncheckedWildcardCount: state.uncheckedWildcardCount,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: tokens.length,
             };
@@ -111,6 +128,9 @@ export function matchNFA(
     return {
         matched: false,
         captures: new Map(),
+        fixedStringPartCount: 0,
+        checkedWildcardCount: 0,
+        uncheckedWildcardCount: 0,
         visitedStates: debug ? Array.from(allVisitedStates) : undefined,
         tokensConsumed: tokens.length,
     };
@@ -136,6 +156,9 @@ function tryTransition(
                     tokenIndex: tokenIndex + 1,
                     captures: new Map(currentState.captures),
                     path: [...currentState.path, trans.to],
+                    fixedStringPartCount: currentState.fixedStringPartCount + 1,
+                    checkedWildcardCount: currentState.checkedWildcardCount,
+                    uncheckedWildcardCount: currentState.uncheckedWildcardCount,
                 };
             }
             return undefined;
@@ -200,11 +223,22 @@ function tryTransition(
                 }
             }
 
+            // Determine if this is a checked or unchecked wildcard
+            const isUnchecked =
+                !trans.typeName || trans.typeName === "string";
+
             return {
                 stateId: trans.to,
                 tokenIndex: tokenIndex + 1,
                 captures: newCaptures,
                 path: [...currentState.path, trans.to],
+                fixedStringPartCount: currentState.fixedStringPartCount,
+                checkedWildcardCount: isUnchecked
+                    ? currentState.checkedWildcardCount
+                    : currentState.checkedWildcardCount + 1,
+                uncheckedWildcardCount: isUnchecked
+                    ? currentState.uncheckedWildcardCount + 1
+                    : currentState.uncheckedWildcardCount,
             };
 
         case "epsilon":
@@ -248,6 +282,9 @@ function epsilonClosure(
                     tokenIndex: state.tokenIndex,
                     captures: new Map(state.captures),
                     path: [...state.path, trans.to],
+                    fixedStringPartCount: state.fixedStringPartCount,
+                    checkedWildcardCount: state.checkedWildcardCount,
+                    uncheckedWildcardCount: state.uncheckedWildcardCount,
                 });
             }
         }
@@ -324,4 +361,41 @@ export function printMatchResult(
     }
 
     return lines.join("\n");
+}
+
+/**
+ * Sort NFA match results by priority
+ *
+ * Priority rules (highest to lowest):
+ * 1. Rules without unchecked wildcards always beat rules with them
+ * 2. More fixed string parts > fewer fixed string parts
+ * 3. More checked wildcards > fewer checked wildcards
+ * 4. Fewer unchecked wildcards > more unchecked wildcards
+ */
+export function sortNFAMatches<T extends NFAMatchResult>(matches: T[]): T[] {
+    return matches.sort((a, b) => {
+        // Rule 1: Prefer matches without unchecked wildcards
+        if (a.uncheckedWildcardCount === 0) {
+            if (b.uncheckedWildcardCount !== 0) {
+                return -1; // a wins (no unchecked wildcards)
+            }
+        } else {
+            if (b.uncheckedWildcardCount === 0) {
+                return 1; // b wins (no unchecked wildcards)
+            }
+        }
+
+        // Rule 2: Prefer more fixed string parts
+        if (a.fixedStringPartCount !== b.fixedStringPartCount) {
+            return b.fixedStringPartCount - a.fixedStringPartCount;
+        }
+
+        // Rule 3: Prefer more checked wildcards
+        if (a.checkedWildcardCount !== b.checkedWildcardCount) {
+            return b.checkedWildcardCount - a.checkedWildcardCount;
+        }
+
+        // Rule 4: Prefer fewer unchecked wildcards
+        return a.uncheckedWildcardCount - b.uncheckedWildcardCount;
+    });
 }
