@@ -687,15 +687,15 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
         grammarStore,
         true,
         (schemaName: string) => {
-            // Get schema file path from action config
+            // Get compiled schema file path (.pas.json) from action config for grammar generation
             const actionConfig = context.agents.tryGetActionConfig(schemaName);
-            if (!actionConfig || !actionConfig.schemaFilePath) {
+            if (!actionConfig || !actionConfig.compiledSchemaFilePath) {
                 throw new Error(
-                    `Schema file path not found for schema: ${schemaName}`,
+                    `Compiled schema file path (.pas.json) not found for schema: ${schemaName}`,
                 );
             }
             // Resolve to absolute path
-            return getPackageFilePath(actionConfig.schemaFilePath);
+            return getPackageFilePath(actionConfig.compiledSchemaFilePath);
         },
     );
 

@@ -35,8 +35,10 @@ export type ActionConfig = {
     schemaName: string;
     delegatable: boolean;
 
-    // Original schema file path string (for grammar generation)
+    // Original schema file path string (TypeScript source for prompts/TypeChat)
     schemaFilePath: string | undefined;
+    // Compiled schema file path string (.pas.json for grammar generation metadata)
+    compiledSchemaFilePath: string | undefined;
 } & RuntimeSchemaManifest;
 
 function loadSchemaFile(schemaFile: string): SchemaContent {
@@ -133,6 +135,7 @@ function collectActionConfigs(
                 typeof originalSchemaFile === "string"
                     ? originalSchemaFile
                     : undefined,
+            compiledSchemaFilePath: manifest.schema.compiledSchemaFile,
             transient,
             schemaDefaultEnabled,
             actionDefaultEnabled,
