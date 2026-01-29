@@ -1,6 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * INTEGRATION TESTS - Require API Keys
+ *
+ * These tests make actual API calls to Claude and require valid API keys to run.
+ * They are excluded from the default test suite and CI runs.
+ *
+ * To run these tests locally:
+ * 1. Set up your API keys in .env file
+ * 2. Run: npm run test:integration
+ *
+ * These tests are not run by `npm test` or in CI.
+ */
+
 import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
