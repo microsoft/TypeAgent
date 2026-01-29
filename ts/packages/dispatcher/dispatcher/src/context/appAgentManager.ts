@@ -265,28 +265,19 @@ export class AppAgentManager implements ActionConfigProvider {
         useNFAGrammar?: boolean,
     ) {
         const semanticMapP: Promise<void>[] = [];
-        const agentNames = provider.getAppAgentNames();
-        for (const name of agentNames) {
-            try {
-                const manifest = await provider.getAppAgentManifest(name);
-                this.addAgentManifest(
-                    name,
-                    manifest,
-                    semanticMapP,
+        for (const name of provider.getAppAgentNames()) {
+            const manifest = await provider.getAppAgentManifest(name);
+            this.addAgentManifest(
+                name,
+                manifest,
+                semanticMapP,
 
-                    actionGrammarStore,
-                    provider,
-                    actionEmbeddingCache,
-                    agentGrammarRegistry,
-                    useNFAGrammar,
-                );
-            } catch (error) {
-                console.error(
-                    `[AGENT PROVIDER] Failed to load agent ${name}:`,
-                    error,
-                );
-                // Continue loading other agents even if one fails
-            }
+                actionGrammarStore,
+                provider,
+                actionEmbeddingCache,
+                agentGrammarRegistry,
+                useNFAGrammar,
+            );
         }
         debug("Waiting for action embeddings");
         await Promise.all(semanticMapP);
@@ -368,10 +359,6 @@ export class AppAgentManager implements ActionConfigProvider {
                     }
                 }
             } catch (e: any) {
-                console.error(
-                    `[SCHEMA] Error loading schema file for ${schemaName}:`,
-                    e,
-                );
                 schemaErrors.set(schemaName, e);
             }
         }
