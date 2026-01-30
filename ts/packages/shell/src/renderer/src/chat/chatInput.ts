@@ -197,7 +197,7 @@ export class ChatInput {
         this.toggleContinuous = (waitForWakeWord: boolean) => {
             this.continuous = !this.continuous;
             this.waitForWakeWord = waitForWakeWord;
-            this.alwaysOnMic = this.waitForWakeWord ? iconMicrophoneWakeWord() : iconMicrophoneContinuousListening();
+            this.alwaysOnMic.outerHTML = this.waitForWakeWord ? iconMicrophoneWakeWord().outerHTML : iconMicrophoneContinuousListening().outerHTML;
             this.listening = this.continuous;
             this.micButton.disabled = false;
 
