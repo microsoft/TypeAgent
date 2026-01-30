@@ -51,6 +51,7 @@ export class ChatInput {
     private token: SpeechToken | undefined = undefined;
     private uselocalWhisper: boolean = false;
     private waitForWakeWord: boolean = false;
+    private awakeAndListening: boolean = false;
 
     constructor(
         handlers: ExpandableTextareaHandlers,
@@ -280,26 +281,26 @@ export class ChatInput {
 
             // if we are waiting for a wake word, look for it and ignore anything before it
             // also remove the wakeword from the text.
-            if (this.waitForWakeWord) {
-                const wakeWord = "type agent";
+            // TODO: maybe add a silence timeout after wake word detection
+            if (this.waitForWakeWord && !this.awakeAndListening) {
+                const wakeWord = "hey type agent";
                 const lowerText = text.toLowerCase();
                 const wakeWordIndex = lowerText.indexOf(wakeWord);
                 if (wakeWordIndex === -1) {
                     return;
                 } else {
+                    // we are now actively listening until we get an actionable event
+                    this.awakeAndListening = true;
+                    
                     // remove everything before and including the wake word
                     text = text.substring(wakeWordIndex + wakeWord.length).trim();
                 }                
             }             
 
-            // TODO: prefilter before sending
             getClientAPI()
                 .continuousSpeechProcessing(text)
-                .then((response) => {
+                .then((response: string | undefined) => {
                     if (response) {
-
-                       
-
                         this.textarea.setTextContent(
                             this.textarea
                                 .getTextContent()
@@ -311,6 +312,10 @@ export class ChatInput {
                     }
                 });
         }
+    }
+
+    public resetLiseningState() {
+        this.awakeAndListening = false;
     }
 
     private onRecognized(text: string) {

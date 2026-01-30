@@ -359,7 +359,11 @@ function registerClient(
                         expression.type === "question" ||
                         expression.type === "command"
                     ) {
-                        chatView.addUserMessage(JSON.stringify(expression));
+                        // reset the awakeAndListening flag after processing the response
+                        chatView.chatInput?.resetLiseningState();                        
+
+                        // post the message to the chat view
+                        chatView.addUserMessage(JSON.stringify(expression.text));
                     }
                 }
             }
