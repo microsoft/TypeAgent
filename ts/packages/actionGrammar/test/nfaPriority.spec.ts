@@ -23,16 +23,31 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playWildcard" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playWildcard" },
+                        },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playMusic" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playMusic" },
+                        },
+                    },
                 },
             ],
         };
@@ -54,17 +69,37 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playShort" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playShort" },
+                        },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["track"] },
-                        { type: "wildcard", variable: "name", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "name",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playLong" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playLong" },
+                        },
+                    },
                 },
             ],
         };
@@ -85,18 +120,43 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "number", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "number",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playOne" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playOne" },
+                        },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "number", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "number",
+                            optional: false,
+                        },
                         { type: "string", value: ["by"] },
-                        { type: "wildcard", variable: "artist", typeName: "number", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "artist",
+                            typeName: "number",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playTwo" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playTwo" },
+                        },
+                    },
                 },
             ],
         };
@@ -118,18 +178,43 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                         { type: "string", value: ["by"] },
-                        { type: "wildcard", variable: "artist", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "artist",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playTwo" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playTwo" },
+                        },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "playOne" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "playOne" },
+                        },
+                    },
                 },
             ],
         };
@@ -151,11 +236,31 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "x", typeName: "string", optional: false },
-                        { type: "wildcard", variable: "y", typeName: "string", optional: false },
-                        { type: "wildcard", variable: "z", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "x",
+                            typeName: "string",
+                            optional: false,
+                        },
+                        {
+                            type: "wildcard",
+                            variable: "y",
+                            typeName: "string",
+                            optional: false,
+                        },
+                        {
+                            type: "wildcard",
+                            variable: "z",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "manyWildcards" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "manyWildcards" },
+                        },
+                    },
                 },
                 {
                     parts: [
@@ -163,7 +268,12 @@ describe("NFA Priority System", () => {
                         { type: "string", value: ["music"] },
                         { type: "string", value: ["now"] },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "allFixed" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "allFixed" },
+                        },
+                    },
                 },
             ],
         };
@@ -185,16 +295,36 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "song", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "song",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "unchecked" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "unchecked" },
+                        },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "checked" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "checked" },
+                        },
+                    },
                 },
             ],
             checkedVariables: new Set(["track"]), // Mark track as checked
@@ -217,16 +347,36 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "unchecked" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "unchecked" },
+                        },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "n", typeName: "number", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "n",
+                            typeName: "number",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { action: { type: "literal", value: "checked" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            action: { type: "literal", value: "checked" },
+                        },
+                    },
                 },
             ],
         };
@@ -248,26 +398,57 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "a", typeName: "string", optional: false },
-                        { type: "wildcard", variable: "b", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "a",
+                            typeName: "string",
+                            optional: false,
+                        },
+                        {
+                            type: "wildcard",
+                            variable: "b",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { priority: { type: "literal", value: "lowest" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            priority: { type: "literal", value: "lowest" },
+                        },
+                    },
                 },
                 // Mid priority: 1 fixed + 1 unchecked wildcard
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { priority: { type: "literal", value: "mid" } } },
+                    value: {
+                        type: "object",
+                        value: { priority: { type: "literal", value: "mid" } },
+                    },
                 },
                 // High priority: 1 fixed + 1 checked wildcard
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "n", typeName: "number", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "n",
+                            typeName: "number",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { priority: { type: "literal", value: "high" } } },
+                    value: {
+                        type: "object",
+                        value: { priority: { type: "literal", value: "high" } },
+                    },
                 },
                 // Highest priority: 2 fixed strings
                 {
@@ -275,7 +456,12 @@ describe("NFA Priority System", () => {
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
-                    value: { type: "object", value: { priority: { type: "literal", value: "highest" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            priority: { type: "literal", value: "highest" },
+                        },
+                    },
                 },
             ],
         };
@@ -297,16 +483,32 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { rule: { type: "literal", value: "A" } } },
+                    value: {
+                        type: "object",
+                        value: { rule: { type: "literal", value: "A" } },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "song", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "song",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { rule: { type: "literal", value: "B" } } },
+                    value: {
+                        type: "object",
+                        value: { rule: { type: "literal", value: "B" } },
+                    },
                 },
             ],
         };
@@ -334,20 +536,28 @@ describe("NFA Priority System", () => {
                             optional: true,
                             rules: [
                                 {
-                                    parts: [{ type: "string", value: ["please"] }],
+                                    parts: [
+                                        { type: "string", value: ["please"] },
+                                    ],
                                 },
                             ],
                         },
                         { type: "string", value: ["music"] },
                     ],
-                    value: { type: "object", value: { rule: { type: "literal", value: "optional" } } },
+                    value: {
+                        type: "object",
+                        value: { rule: { type: "literal", value: "optional" } },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
-                    value: { type: "object", value: { rule: { type: "literal", value: "fixed" } } },
+                    value: {
+                        type: "object",
+                        value: { rule: { type: "literal", value: "fixed" } },
+                    },
                 },
             ],
         };
@@ -373,20 +583,50 @@ describe("NFA Priority System", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "a", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "a",
+                            typeName: "string",
+                            optional: false,
+                        },
                         { type: "string", value: ["by"] },
-                        { type: "wildcard", variable: "b", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "b",
+                            typeName: "string",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { rule: { type: "literal", value: "allUnchecked" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            rule: { type: "literal", value: "allUnchecked" },
+                        },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                            optional: false,
+                        },
                         { type: "string", value: ["by"] },
-                        { type: "wildcard", variable: "artist", typeName: "number", optional: false },
+                        {
+                            type: "wildcard",
+                            variable: "artist",
+                            typeName: "number",
+                            optional: false,
+                        },
                     ],
-                    value: { type: "object", value: { rule: { type: "literal", value: "mixedChecked" } } },
+                    value: {
+                        type: "object",
+                        value: {
+                            rule: { type: "literal", value: "mixedChecked" },
+                        },
+                    },
                 },
             ],
         };
