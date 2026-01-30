@@ -14,6 +14,10 @@ import { globalEntityRegistry } from "./entityRegistry.js";
 export interface NFAMatchResult {
     matched: boolean;
     captures: Map<string, string | number>;
+    // Priority counts for sorting matches
+    fixedStringPartCount: number; // # of token transitions taken
+    checkedWildcardCount: number; // # of wildcard transitions with type constraints
+    uncheckedWildcardCount: number; // # of wildcard transitions without type constraints
     // Debugging info
     visitedStates?: number[] | undefined;
     tokensConsumed?: number | undefined;
@@ -24,11 +28,24 @@ interface NFAExecutionState {
     tokenIndex: number;
     captures: Map<string, string | number>;
     path: number[]; // For debugging
+    // Priority counts for this execution path
+    fixedStringPartCount: number;
+    checkedWildcardCount: number;
+    uncheckedWildcardCount: number;
 }
 
 /**
  * Run an NFA against a sequence of tokens
  * Uses epsilon-closure and parallel state tracking
+ *
+ * When multiple grammar rules match, this function:
+ * 1. Follows all legal transitions in parallel (multiple execution threads)
+ * 2. Collects ALL threads that reach accepting states when input is exhausted
+ * 3. Sorts accepting threads by priority (fixed strings > checked wildcards > unchecked)
+ * 4. Returns the highest-priority match
+ *
+ * Note: For future DFA construction where accepting states may be merged,
+ * use NFAState.priorityHint to track the best achievable priority for merged states.
  */
 export function matchNFA(
     nfa: NFA,
@@ -42,6 +59,9 @@ export function matchNFA(
             tokenIndex: 0,
             captures: new Map(),
             path: [nfa.startState],
+            fixedStringPartCount: 0,
+            checkedWildcardCount: 0,
+            uncheckedWildcardCount: 0,
         },
     ]);
 
@@ -79,6 +99,9 @@ export function matchNFA(
             return {
                 matched: false,
                 captures: new Map(),
+                fixedStringPartCount: 0,
+                checkedWildcardCount: 0,
+                uncheckedWildcardCount: 0,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: tokenIndex,
             };
@@ -95,22 +118,35 @@ export function matchNFA(
         }
     }
 
-    // Check if any current state is accepting
+    // Collect ALL accepting threads (multiple rules may match)
+    const acceptingThreads: NFAMatchResult[] = [];
     for (const state of currentStates) {
         if (nfa.acceptingStates.includes(state.stateId)) {
-            return {
+            acceptingThreads.push({
                 matched: true,
                 captures: state.captures,
+                fixedStringPartCount: state.fixedStringPartCount,
+                checkedWildcardCount: state.checkedWildcardCount,
+                uncheckedWildcardCount: state.uncheckedWildcardCount,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: tokens.length,
-            };
+            });
         }
+    }
+
+    // If any threads reached accepting states, return the best one by priority
+    if (acceptingThreads.length > 0) {
+        const sorted = sortNFAMatches(acceptingThreads);
+        return sorted[0]; // Best match by priority rules
     }
 
     // Processed all tokens but not in accepting state
     return {
         matched: false,
         captures: new Map(),
+        fixedStringPartCount: 0,
+        checkedWildcardCount: 0,
+        uncheckedWildcardCount: 0,
         visitedStates: debug ? Array.from(allVisitedStates) : undefined,
         tokensConsumed: tokens.length,
     };
@@ -136,6 +172,9 @@ function tryTransition(
                     tokenIndex: tokenIndex + 1,
                     captures: new Map(currentState.captures),
                     path: [...currentState.path, trans.to],
+                    fixedStringPartCount: currentState.fixedStringPartCount + 1,
+                    checkedWildcardCount: currentState.checkedWildcardCount,
+                    uncheckedWildcardCount: currentState.uncheckedWildcardCount,
                 };
             }
             return undefined;
@@ -200,11 +239,26 @@ function tryTransition(
                 }
             }
 
+            // Determine if this is a checked or unchecked wildcard
+            // A wildcard is checked if:
+            // 1. The transition has checked=true (from checked_wildcard paramSpec or entity type)
+            // 2. Legacy: typeName is not "string" (entity type like MusicDevice, Ordinal)
+            const isChecked =
+                trans.checked === true ||
+                (trans.typeName && trans.typeName !== "string");
+
             return {
                 stateId: trans.to,
                 tokenIndex: tokenIndex + 1,
                 captures: newCaptures,
                 path: [...currentState.path, trans.to],
+                fixedStringPartCount: currentState.fixedStringPartCount,
+                checkedWildcardCount: isChecked
+                    ? currentState.checkedWildcardCount + 1
+                    : currentState.checkedWildcardCount,
+                uncheckedWildcardCount: isChecked
+                    ? currentState.uncheckedWildcardCount
+                    : currentState.uncheckedWildcardCount + 1,
             };
 
         case "epsilon":
@@ -219,22 +273,30 @@ function tryTransition(
 /**
  * Compute epsilon closure of a set of states
  * Returns all states reachable via epsilon transitions
+ *
+ * IMPORTANT: Multiple execution threads can reach the same NFA state with different
+ * priority counts. We must preserve ALL threads, not deduplicate by state ID alone.
  */
 function epsilonClosure(
     nfa: NFA,
     states: NFAExecutionState[],
 ): NFAExecutionState[] {
     const result: NFAExecutionState[] = [];
-    const visited = new Set<number>();
+    // Track visited states by (stateId, fixedCount, checkedCount, uncheckedCount) tuple
+    // to allow multiple threads at the same NFA state with different priority counts
+    const visited = new Set<string>();
     const queue = [...states];
 
     while (queue.length > 0) {
         const state = queue.shift()!;
 
-        if (visited.has(state.stateId)) {
+        // Create unique key for this execution thread
+        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}`;
+
+        if (visited.has(key)) {
             continue;
         }
-        visited.add(state.stateId);
+        visited.add(key);
         result.push(state);
 
         const nfaState = nfa.states[state.stateId];
@@ -248,6 +310,9 @@ function epsilonClosure(
                     tokenIndex: state.tokenIndex,
                     captures: new Map(state.captures),
                     path: [...state.path, trans.to],
+                    fixedStringPartCount: state.fixedStringPartCount,
+                    checkedWildcardCount: state.checkedWildcardCount,
+                    uncheckedWildcardCount: state.uncheckedWildcardCount,
                 });
             }
         }
@@ -324,4 +389,41 @@ export function printMatchResult(
     }
 
     return lines.join("\n");
+}
+
+/**
+ * Sort NFA match results by priority
+ *
+ * Priority rules (highest to lowest):
+ * 1. Rules without unchecked wildcards always beat rules with them
+ * 2. More fixed string parts > fewer fixed string parts
+ * 3. More checked wildcards > fewer checked wildcards
+ * 4. Fewer unchecked wildcards > more unchecked wildcards
+ */
+export function sortNFAMatches<T extends NFAMatchResult>(matches: T[]): T[] {
+    return matches.sort((a, b) => {
+        // Rule 1: Prefer matches without unchecked wildcards
+        if (a.uncheckedWildcardCount === 0) {
+            if (b.uncheckedWildcardCount !== 0) {
+                return -1; // a wins (no unchecked wildcards)
+            }
+        } else {
+            if (b.uncheckedWildcardCount === 0) {
+                return 1; // b wins (no unchecked wildcards)
+            }
+        }
+
+        // Rule 2: Prefer more fixed string parts
+        if (a.fixedStringPartCount !== b.fixedStringPartCount) {
+            return b.fixedStringPartCount - a.fixedStringPartCount;
+        }
+
+        // Rule 3: Prefer more checked wildcards
+        if (a.checkedWildcardCount !== b.checkedWildcardCount) {
+            return b.checkedWildcardCount - a.checkedWildcardCount;
+        }
+
+        // Rule 4: Prefer fewer unchecked wildcards
+        return a.uncheckedWildcardCount - b.uncheckedWildcardCount;
+    });
 }

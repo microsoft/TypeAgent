@@ -20,6 +20,7 @@ import {
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/sessionContext.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import registerDebug from "debug";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
@@ -39,6 +40,7 @@ import {
     grammarFromJson,
     AgentGrammarRegistry,
     compileGrammarToNFA,
+    enrichGrammarWithCheckedVariables,
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
@@ -332,6 +334,27 @@ export class AppAgentManager implements ActionConfigProvider {
                             // Also add to NFA grammar registry if using NFA system
                             if (useNFAGrammar && agentGrammarRegistry) {
                                 try {
+                                    // Enrich grammar with checked variables from .pas.json if available
+                                    if (config.compiledSchemaFilePath) {
+                                        try {
+                                            const pasJsonPath =
+                                                getPackageFilePath(
+                                                    config.compiledSchemaFilePath,
+                                                );
+                                            enrichGrammarWithCheckedVariables(
+                                                g,
+                                                pasJsonPath,
+                                            );
+                                            debug(
+                                                `Enriched grammar with checked variables for schema: ${schemaName}`,
+                                            );
+                                        } catch (enrichError) {
+                                            debug(
+                                                `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
+                                            );
+                                        }
+                                    }
+
                                     const nfa = compileGrammarToNFA(
                                         g,
                                         schemaName,

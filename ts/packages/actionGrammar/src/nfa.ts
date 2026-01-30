@@ -28,9 +28,22 @@ export interface NFATransition {
     // For wildcard transitions: metadata about the variable
     variable?: string | undefined;
     typeName?: string | undefined;
+    checked?: boolean | undefined; // true if wildcard has validation (entity type or checked_wildcard paramSpec)
 
     // Target state
     to: number;
+}
+
+/**
+ * Priority hint for an accepting state
+ * Used when multiple grammar rules share an accepting state (e.g., in DFA construction)
+ * Tracks the best-case priority achievable through this state
+ */
+export interface AcceptStatePriorityHint {
+    // Best achievable counts for any path leading to this state
+    minFixedStringPartCount: number; // Highest fixed string count from any rule
+    maxCheckedWildcardCount: number; // Most checked wildcards from any rule
+    minUncheckedWildcardCount: number; // Fewest unchecked wildcards from any rule
 }
 
 /**
@@ -42,6 +55,10 @@ export interface NFAState {
 
     // If true, this is an accepting/final state
     accepting: boolean;
+
+    // Optional: Priority hint for accepting states (used in DFA minimization/merging)
+    // When multiple rules merge into one accepting state, this tracks the best possible priority
+    priorityHint?: AcceptStatePriorityHint | undefined;
 
     // Optional: capture variable value when reaching this state
     capture?:
@@ -88,12 +105,20 @@ export class NFABuilder {
         tokens?: string[],
         variable?: string,
         typeName?: string,
+        checked?: boolean,
     ): void {
         const state = this.states[from];
         if (!state) {
             throw new Error(`State ${from} does not exist`);
         }
-        state.transitions.push({ type, to, tokens, variable, typeName });
+        state.transitions.push({
+            type,
+            to,
+            tokens,
+            variable,
+            typeName,
+            checked,
+        });
     }
 
     addTokenTransition(from: number, to: number, tokens: string[]): void {
@@ -109,8 +134,17 @@ export class NFABuilder {
         to: number,
         variable: string,
         typeName?: string,
+        checked?: boolean,
     ): void {
-        this.addTransition(from, to, "wildcard", undefined, variable, typeName);
+        this.addTransition(
+            from,
+            to,
+            "wildcard",
+            undefined,
+            variable,
+            typeName,
+            checked,
+        );
     }
 
     build(startState: number, name?: string): NFA {

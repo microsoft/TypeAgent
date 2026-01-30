@@ -35,9 +35,19 @@ export {
 } from "./dynamicGrammarLoader.js";
 
 // NFA system
-export type { NFA, NFAState, NFATransition } from "./nfa.js";
-export { matchNFA, type NFAMatchResult } from "./nfaInterpreter.js";
+export type {
+    NFA,
+    NFAState,
+    NFATransition,
+    AcceptStatePriorityHint,
+} from "./nfa.js";
+export {
+    matchNFA,
+    sortNFAMatches,
+    type NFAMatchResult,
+} from "./nfaInterpreter.js";
 export { compileGrammarToNFA } from "./nfaCompiler.js";
+export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
 // Agent Grammar Registry
 export type { AgentMatchResult } from "./agentGrammarRegistry.js";

@@ -46,6 +46,7 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             rule,
             ruleEntry,
             acceptState,
+            grammar.checkedVariables,
         );
 
         // If rule didn't connect to accept state, add epsilon transition
@@ -66,6 +67,7 @@ function compileRuleFromState(
     rule: GrammarRule,
     startState: number,
     finalState: number,
+    checkedVariables?: Set<string>,
 ): number {
     let currentState = startState;
 
@@ -75,7 +77,13 @@ function compileRuleFromState(
         const isLast = i === rule.parts.length - 1;
         const nextState = isLast ? finalState : builder.createState(false);
 
-        currentState = compilePart(builder, part, currentState, nextState);
+        currentState = compilePart(
+            builder,
+            part,
+            currentState,
+            nextState,
+            checkedVariables,
+        );
     }
 
     return currentState;
@@ -90,19 +98,32 @@ function compilePart(
     part: GrammarPart,
     fromState: number,
     toState: number,
+    checkedVariables?: Set<string>,
 ): number {
     switch (part.type) {
         case "string":
             return compileStringPart(builder, part, fromState, toState);
 
         case "wildcard":
-            return compileWildcardPart(builder, part, fromState, toState);
+            return compileWildcardPart(
+                builder,
+                part,
+                fromState,
+                toState,
+                checkedVariables,
+            );
 
         case "number":
             return compileNumberPart(builder, part, fromState, toState);
 
         case "rules":
-            return compileRulesPart(builder, part, fromState, toState);
+            return compileRulesPart(
+                builder,
+                part,
+                fromState,
+                toState,
+                checkedVariables,
+            );
 
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
@@ -145,7 +166,16 @@ function compileWildcardPart(
     part: VarStringPart,
     fromState: number,
     toState: number,
+    checkedVariables?: Set<string>,
 ): number {
+    // Determine if this wildcard is checked
+    // A wildcard is checked if:
+    // 1. It has a non-string typeName (entity type like MusicDevice, Ordinal, etc.)
+    // 2. It's in the checkedVariables set (has checked_wildcard paramSpec)
+    const hasEntityType = part.typeName && part.typeName !== "string";
+    const hasCheckedParamSpec = checkedVariables?.has(part.variable) ?? false;
+    const isChecked = hasEntityType || hasCheckedParamSpec;
+
     if (part.optional) {
         // Optional: can skip via epsilon or match via wildcard
         builder.addEpsilonTransition(fromState, toState);
@@ -154,6 +184,7 @@ function compileWildcardPart(
             toState,
             part.variable,
             part.typeName,
+            isChecked,
         );
         return toState;
     }
@@ -164,6 +195,7 @@ function compileWildcardPart(
         toState,
         part.variable,
         part.typeName,
+        isChecked,
     );
     return toState;
 }
@@ -202,6 +234,7 @@ function compileRulesPart(
     part: RulesPart,
     fromState: number,
     toState: number,
+    checkedVariables?: Set<string>,
 ): number {
     if (part.rules.length === 0) {
         // Empty rules - epsilon transition
@@ -220,7 +253,13 @@ function compileRulesPart(
     for (const rule of part.rules) {
         const ruleEntry = builder.createState(false);
         builder.addEpsilonTransition(nestedEntry, ruleEntry);
-        compileRuleFromState(builder, rule, ruleEntry, nestedExit);
+        compileRuleFromState(
+            builder,
+            rule,
+            ruleEntry,
+            nestedExit,
+            checkedVariables,
+        );
     }
 
     // Connect exit
