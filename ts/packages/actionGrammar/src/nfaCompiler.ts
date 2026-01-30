@@ -37,8 +37,13 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     const acceptState = builder.createState(true);
 
     // Compile each rule as an alternative path from start to accept
-    for (const rule of grammar.rules) {
+    for (let ruleIndex = 0; ruleIndex < grammar.rules.length; ruleIndex++) {
+        const rule = grammar.rules[ruleIndex];
         const ruleEntry = builder.createState(false);
+
+        // Mark the rule entry state with the rule index
+        builder.getState(ruleEntry).ruleIndex = ruleIndex;
+
         builder.addEpsilonTransition(startState, ruleEntry);
 
         const ruleEnd = compileRuleFromState(

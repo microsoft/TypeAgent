@@ -49,6 +49,32 @@ export {
 export { compileGrammarToNFA } from "./nfaCompiler.js";
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
+// DFA system
+export type {
+    DFA,
+    DFAState,
+    DFAExecutionContext,
+    DFATransition,
+    DFAWildcardTransition,
+} from "./dfa.js";
+export { DFABuilder } from "./dfa.js";
+export { compileNFAToDFA } from "./dfaCompiler.js";
+export {
+    matchDFA,
+    getDFACompletions,
+    printDFA,
+    type DFAMatchResult,
+    type DFACompletionResult,
+    type DFACompletionGroup,
+    type WildcardCompletionInfo,
+} from "./dfaMatcher.js";
+export {
+    DFACompilationManager,
+    globalDFACompilationManager,
+    type DFACompilationInfo,
+    type DFACompilationStatus,
+} from "./dfaCompilationManager.js";
+
 // Agent Grammar Registry
 export type { AgentMatchResult } from "./agentGrammarRegistry.js";
 export {
