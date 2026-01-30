@@ -273,22 +273,30 @@ function tryTransition(
 /**
  * Compute epsilon closure of a set of states
  * Returns all states reachable via epsilon transitions
+ *
+ * IMPORTANT: Multiple execution threads can reach the same NFA state with different
+ * priority counts. We must preserve ALL threads, not deduplicate by state ID alone.
  */
 function epsilonClosure(
     nfa: NFA,
     states: NFAExecutionState[],
 ): NFAExecutionState[] {
     const result: NFAExecutionState[] = [];
-    const visited = new Set<number>();
+    // Track visited states by (stateId, fixedCount, checkedCount, uncheckedCount) tuple
+    // to allow multiple threads at the same NFA state with different priority counts
+    const visited = new Set<string>();
     const queue = [...states];
 
     while (queue.length > 0) {
         const state = queue.shift()!;
 
-        if (visited.has(state.stateId)) {
+        // Create unique key for this execution thread
+        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}`;
+
+        if (visited.has(key)) {
             continue;
         }
-        visited.add(state.stateId);
+        visited.add(key);
         result.push(state);
 
         const nfaState = nfa.states[state.stateId];

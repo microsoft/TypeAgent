@@ -12,6 +12,13 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import { WeatherAction } from "./weatherSchema.js";
+import {
+    geocodeLocation,
+    getCurrentWeather,
+    getForecastWeather,
+    getWeatherDescription,
+    getWindDirection,
+} from "./weatherService.js";
 
 // Weather agent context (can be expanded for caching, preferences, etc.)
 export type WeatherActionContext = {};
@@ -63,22 +70,38 @@ async function handleGetCurrentConditions(
 ) {
     const { location, units = "fahrenheit" } = action.parameters;
 
-    // Mock weather data
-    const temp = units === "celsius" ? "22" : "72";
+    // Geocode the location
+    const coords = await geocodeLocation(location);
+    if (!coords) {
+        return createActionResultFromError(
+            `Could not find location: ${location}`,
+        );
+    }
+
+    // Get current weather
+    const weather = await getCurrentWeather(coords, units);
+    if (!weather) {
+        return createActionResultFromError(
+            `Failed to fetch weather data for ${location}`,
+        );
+    }
+
     const tempUnit = units === "celsius" ? "°C" : "°F";
+    const conditions = getWeatherDescription(weather.weatherCode);
+    const windDir = getWindDirection(weather.windDirection);
 
     const displayText =
-        `Current conditions in ${location}:\n` +
-        `Temperature: ${temp}${tempUnit}\n` +
-        `Conditions: Partly Cloudy\n` +
-        `Humidity: 65%\n` +
-        `Wind: 8 mph NW`;
+        `Current conditions in ${coords.name}:\n` +
+        `Temperature: ${Math.round(weather.temperature)}${tempUnit} (feels like ${Math.round(weather.apparentTemperature)}${tempUnit})\n` +
+        `Conditions: ${conditions}\n` +
+        `Humidity: ${weather.humidity}%\n` +
+        `Wind: ${Math.round(weather.windSpeed)} mph ${windDir}`;
 
-    const historyText = `Got current weather for ${location}`;
+    const historyText = `Got current weather for ${coords.name}`;
 
     const entities = [
         {
-            name: location,
+            name: coords.name,
             type: ["location"],
         },
     ];
@@ -102,34 +125,44 @@ async function handleGetForecast(
         return createActionResultFromError("Days must be between 1 and 7");
     }
 
-    // Mock forecast data
-    const tempUnit = units === "celsius" ? "°C" : "°F";
-    const forecasts = [];
-
-    for (let i = 1; i <= days; i++) {
-        const highF = 75 - i * 2;
-        const lowF = 55 - i * 2;
-        const highC = Math.round(((highF - 32) * 5) / 9);
-        const lowC = Math.round(((lowF - 32) * 5) / 9);
-
-        const high = units === "celsius" ? highC : highF;
-        const low = units === "celsius" ? lowC : lowF;
-
-        const conditions =
-            i === 1 ? "Sunny" : i === 2 ? "Partly Cloudy" : "Chance of Rain";
-        forecasts.push(
-            `Day ${i}: ${conditions}, High: ${high}${tempUnit}, Low: ${low}${tempUnit}`,
+    // Geocode the location
+    const coords = await geocodeLocation(location);
+    if (!coords) {
+        return createActionResultFromError(
+            `Could not find location: ${location}`,
         );
     }
 
-    const displayText =
-        `${days}-day forecast for ${location}:\n` + forecasts.join("\n");
+    // Get forecast weather
+    const forecastData = await getForecastWeather(coords, days, units);
+    if (!forecastData) {
+        return createActionResultFromError(
+            `Failed to fetch forecast data for ${location}`,
+        );
+    }
 
-    const historyText = `Got ${days}-day forecast for ${location}`;
+    const tempUnit = units === "celsius" ? "°C" : "°F";
+    const forecasts = forecastData.map((day, index) => {
+        const conditions = getWeatherDescription(day.weatherCode);
+        const precipitation =
+            day.precipitationProbability > 0
+                ? `, ${day.precipitationProbability}% chance of precipitation`
+                : "";
+        return (
+            `Day ${index + 1} (${day.date}): ${conditions}, ` +
+            `High: ${Math.round(day.maxTemp)}${tempUnit}, ` +
+            `Low: ${Math.round(day.minTemp)}${tempUnit}${precipitation}`
+        );
+    });
+
+    const displayText =
+        `${days}-day forecast for ${coords.name}:\n` + forecasts.join("\n");
+
+    const historyText = `Got ${days}-day forecast for ${coords.name}`;
 
     const entities = [
         {
-            name: location,
+            name: coords.name,
             type: ["location"],
         },
     ];
