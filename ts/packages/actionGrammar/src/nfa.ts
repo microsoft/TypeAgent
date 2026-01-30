@@ -67,6 +67,10 @@ export interface NFAState {
               typeName?: string | undefined;
           }
         | undefined;
+
+    // Optional: Rule index for epsilon transitions from start (which rule this path belongs to)
+    // This allows tracking which grammar rule produced a match
+    ruleIndex?: number | undefined;
 }
 
 /**
