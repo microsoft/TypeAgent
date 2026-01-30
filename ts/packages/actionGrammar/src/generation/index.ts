@@ -22,6 +22,24 @@ export {
 } from "./schemaToGrammarGenerator.js";
 
 export {
+    ScenarioBasedGrammarGenerator,
+    ScenarioGrammarConfig,
+    ScenarioGrammarResult,
+} from "./scenarioBasedGenerator.js";
+
+export {
+    ScenarioTemplate,
+    PrefixSuffixPatterns,
+    musicPlayerScenarios,
+    calendarScenarios,
+    listScenarios,
+    englishPrefixSuffixPatterns,
+    frenchPrefixSuffixPatterns,
+    getScenariosForAgent,
+    getPrefixSuffixPatterns,
+} from "./scenarioTemplates.js";
+
+export {
     loadSchemaInfo,
     SchemaInfo,
     ActionInfo,
