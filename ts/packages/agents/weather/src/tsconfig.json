@@ -5,7 +5,6 @@
     "rootDir": ".",
     "outDir": "../dist"
   },
-  "references": [{ "path": "../../../agentSdk" }],
   "include": ["./**/*"],
   "ts-node": {
     "esm": true
