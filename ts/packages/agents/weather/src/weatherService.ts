@@ -71,7 +71,8 @@ export async function getCurrentWeather(
     temperatureUnit: "celsius" | "fahrenheit" = "fahrenheit",
 ): Promise<CurrentWeather | null> {
     try {
-        const tempUnit = temperatureUnit === "celsius" ? "celsius" : "fahrenheit";
+        const tempUnit =
+            temperatureUnit === "celsius" ? "celsius" : "fahrenheit";
         const url =
             `https://api.open-meteo.com/v1/forecast?` +
             `latitude=${coords.latitude}&longitude=${coords.longitude}` +
@@ -110,7 +111,8 @@ export async function getForecastWeather(
     temperatureUnit: "celsius" | "fahrenheit" = "fahrenheit",
 ): Promise<DailyForecast[] | null> {
     try {
-        const tempUnit = temperatureUnit === "celsius" ? "celsius" : "fahrenheit";
+        const tempUnit =
+            temperatureUnit === "celsius" ? "celsius" : "fahrenheit";
         const url =
             `https://api.open-meteo.com/v1/forecast?` +
             `latitude=${coords.latitude}&longitude=${coords.longitude}` +

@@ -19,13 +19,7 @@ async function testGeocodingAndWeather() {
     console.log("=== Testing Weather Agent ===\n");
 
     // Test locations
-    const testLocations = [
-        "Seattle",
-        "London",
-        "Tokyo",
-        "New York",
-        "Sydney",
-    ];
+    const testLocations = ["Seattle", "London", "Tokyo", "New York", "Sydney"];
 
     for (const location of testLocations) {
         console.log(`\n--- Testing: ${location} ---`);
@@ -50,7 +44,9 @@ async function testGeocodingAndWeather() {
         }
         const conditions = getWeatherDescription(currentWeather.weatherCode);
         const windDir = getWindDirection(currentWeather.windDirection);
-        console.log(`   ✓ Temperature: ${Math.round(currentWeather.temperature)}°F`);
+        console.log(
+            `   ✓ Temperature: ${Math.round(currentWeather.temperature)}°F`,
+        );
         console.log(
             `   ✓ Feels like: ${Math.round(currentWeather.apparentTemperature)}°F`,
         );
@@ -103,9 +99,7 @@ async function testCelsiusUnits() {
     }
 
     console.log(`✓ Temperature: ${Math.round(weather.temperature)}°C`);
-    console.log(
-        `✓ Feels like: ${Math.round(weather.apparentTemperature)}°C`,
-    );
+    console.log(`✓ Feels like: ${Math.round(weather.apparentTemperature)}°C`);
 
     const forecast = await getForecastWeather(coords, 5, "celsius");
     if (!forecast) {
@@ -161,9 +155,7 @@ async function testEdgeCases() {
         if (forecast && forecast.length === 1) {
             console.log("✓ Successfully fetched 1-day forecast");
         } else {
-            console.log(
-                `⚠ Expected 1 day, got ${forecast?.length || 0} days`,
-            );
+            console.log(`⚠ Expected 1 day, got ${forecast?.length || 0} days`);
         }
     }
 }

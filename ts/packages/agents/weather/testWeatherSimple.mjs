@@ -24,17 +24,18 @@ async function geocodeLocation(location) {
         return {
             latitude: result.latitude,
             longitude: result.longitude,
-            name: result.name + (result.country ? `, ${result.country}` : ''),
+            name: result.name + (result.country ? `, ${result.country}` : ""),
         };
     } catch (error) {
-        console.error('Geocoding error:', error);
+        console.error("Geocoding error:", error);
         return null;
     }
 }
 
-async function getCurrentWeather(coords, temperatureUnit = 'fahrenheit') {
+async function getCurrentWeather(coords, temperatureUnit = "fahrenheit") {
     try {
-        const tempUnit = temperatureUnit === 'celsius' ? 'celsius' : 'fahrenheit';
+        const tempUnit =
+            temperatureUnit === "celsius" ? "celsius" : "fahrenheit";
         const url =
             `https://api.open-meteo.com/v1/forecast?` +
             `latitude=${coords.latitude}&longitude=${coords.longitude}` +
@@ -59,14 +60,19 @@ async function getCurrentWeather(coords, temperatureUnit = 'fahrenheit') {
             windDirection: current.wind_direction_10m,
         };
     } catch (error) {
-        console.error('Current weather error:', error);
+        console.error("Current weather error:", error);
         return null;
     }
 }
 
-async function getForecastWeather(coords, days = 7, temperatureUnit = 'fahrenheit') {
+async function getForecastWeather(
+    coords,
+    days = 7,
+    temperatureUnit = "fahrenheit",
+) {
     try {
-        const tempUnit = temperatureUnit === 'celsius' ? 'celsius' : 'fahrenheit';
+        const tempUnit =
+            temperatureUnit === "celsius" ? "celsius" : "fahrenheit";
         const url =
             `https://api.open-meteo.com/v1/forecast?` +
             `latitude=${coords.latitude}&longitude=${coords.longitude}` +
@@ -89,89 +95,98 @@ async function getForecastWeather(coords, days = 7, temperatureUnit = 'fahrenhei
                 maxTemp: daily.temperature_2m_max[i],
                 minTemp: daily.temperature_2m_min[i],
                 weatherCode: daily.weather_code[i],
-                precipitationProbability: daily.precipitation_probability_max[i] || 0,
+                precipitationProbability:
+                    daily.precipitation_probability_max[i] || 0,
             });
         }
 
         return forecasts;
     } catch (error) {
-        console.error('Forecast weather error:', error);
+        console.error("Forecast weather error:", error);
         return null;
     }
 }
 
 function getWeatherDescription(code) {
     const weatherCodes = {
-        0: 'Clear sky',
-        1: 'Mainly clear',
-        2: 'Partly cloudy',
-        3: 'Overcast',
-        45: 'Foggy',
-        48: 'Depositing rime fog',
-        51: 'Light drizzle',
-        53: 'Moderate drizzle',
-        55: 'Dense drizzle',
-        61: 'Slight rain',
-        63: 'Moderate rain',
-        65: 'Heavy rain',
-        71: 'Slight snow fall',
-        73: 'Moderate snow fall',
-        75: 'Heavy snow fall',
-        80: 'Slight rain showers',
-        81: 'Moderate rain showers',
-        82: 'Violent rain showers',
-        85: 'Slight snow showers',
-        86: 'Heavy snow showers',
-        95: 'Thunderstorm',
-        96: 'Thunderstorm with slight hail',
-        99: 'Thunderstorm with heavy hail',
+        0: "Clear sky",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Foggy",
+        48: "Depositing rime fog",
+        51: "Light drizzle",
+        53: "Moderate drizzle",
+        55: "Dense drizzle",
+        61: "Slight rain",
+        63: "Moderate rain",
+        65: "Heavy rain",
+        71: "Slight snow fall",
+        73: "Moderate snow fall",
+        75: "Heavy snow fall",
+        80: "Slight rain showers",
+        81: "Moderate rain showers",
+        82: "Violent rain showers",
+        85: "Slight snow showers",
+        86: "Heavy snow showers",
+        95: "Thunderstorm",
+        96: "Thunderstorm with slight hail",
+        99: "Thunderstorm with heavy hail",
     };
 
-    return weatherCodes[code] || 'Unknown';
+    return weatherCodes[code] || "Unknown";
 }
 
 function getWindDirection(degrees) {
-    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     const index = Math.round(degrees / 45) % 8;
     return directions[index];
 }
 
 // Run tests
 async function runTests() {
-    console.log('=== Testing Weather API Integration ===\n');
+    console.log("=== Testing Weather API Integration ===\n");
 
-    const testLocations = ['Seattle', 'London', 'Tokyo'];
+    const testLocations = ["Seattle", "London", "Tokyo"];
 
     for (const location of testLocations) {
         console.log(`\n--- Testing: ${location} ---`);
 
         // Test geocoding
-        console.log('1. Geocoding...');
+        console.log("1. Geocoding...");
         const coords = await geocodeLocation(location);
         if (!coords) {
             console.error(`   ❌ Failed to geocode ${location}`);
             continue;
         }
-        console.log(`   ✓ Found: ${coords.name} (${coords.latitude}, ${coords.longitude})`);
+        console.log(
+            `   ✓ Found: ${coords.name} (${coords.latitude}, ${coords.longitude})`,
+        );
 
         // Test current weather
-        console.log('2. Fetching current weather...');
-        const currentWeather = await getCurrentWeather(coords, 'fahrenheit');
+        console.log("2. Fetching current weather...");
+        const currentWeather = await getCurrentWeather(coords, "fahrenheit");
         if (!currentWeather) {
             console.error(`   ❌ Failed to fetch current weather`);
             continue;
         }
         const conditions = getWeatherDescription(currentWeather.weatherCode);
         const windDir = getWindDirection(currentWeather.windDirection);
-        console.log(`   ✓ Temperature: ${Math.round(currentWeather.temperature)}°F`);
-        console.log(`   ✓ Feels like: ${Math.round(currentWeather.apparentTemperature)}°F`);
+        console.log(
+            `   ✓ Temperature: ${Math.round(currentWeather.temperature)}°F`,
+        );
+        console.log(
+            `   ✓ Feels like: ${Math.round(currentWeather.apparentTemperature)}°F`,
+        );
         console.log(`   ✓ Conditions: ${conditions}`);
         console.log(`   ✓ Humidity: ${currentWeather.humidity}%`);
-        console.log(`   ✓ Wind: ${Math.round(currentWeather.windSpeed)} mph ${windDir}`);
+        console.log(
+            `   ✓ Wind: ${Math.round(currentWeather.windSpeed)} mph ${windDir}`,
+        );
 
         // Test forecast (3 days)
-        console.log('3. Fetching 3-day forecast...');
-        const forecast = await getForecastWeather(coords, 3, 'fahrenheit');
+        console.log("3. Fetching 3-day forecast...");
+        const forecast = await getForecastWeather(coords, 3, "fahrenheit");
         if (!forecast) {
             console.error(`   ❌ Failed to fetch forecast`);
             continue;
@@ -179,21 +194,24 @@ async function runTests() {
         console.log(`   ✓ Got ${forecast.length} days of forecast:`);
         forecast.forEach((day, index) => {
             const dayConditions = getWeatherDescription(day.weatherCode);
-            const precip = day.precipitationProbability > 0
-                ? `, ${day.precipitationProbability}% precip`
-                : '';
-            console.log(`      Day ${index + 1} (${day.date}): ${dayConditions}, ` +
-                       `High: ${Math.round(day.maxTemp)}°F, Low: ${Math.round(day.minTemp)}°F${precip}`);
+            const precip =
+                day.precipitationProbability > 0
+                    ? `, ${day.precipitationProbability}% precip`
+                    : "";
+            console.log(
+                `      Day ${index + 1} (${day.date}): ${dayConditions}, ` +
+                    `High: ${Math.round(day.maxTemp)}°F, Low: ${Math.round(day.minTemp)}°F${precip}`,
+            );
         });
     }
 
-    console.log('\n\n=== Testing Invalid Location ===');
-    const invalidCoords = await geocodeLocation('XYZ123NotAPlace');
+    console.log("\n\n=== Testing Invalid Location ===");
+    const invalidCoords = await geocodeLocation("XYZ123NotAPlace");
     if (!invalidCoords) {
-        console.log('✓ Correctly returned null for invalid location');
+        console.log("✓ Correctly returned null for invalid location");
     }
 
-    console.log('\n=== All Tests Complete ===\n');
+    console.log("\n=== All Tests Complete ===\n");
 }
 
 runTests().catch(console.error);
