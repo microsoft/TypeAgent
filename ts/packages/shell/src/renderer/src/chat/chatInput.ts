@@ -13,6 +13,7 @@ import {
     iconAttach,
     iconSend,
     iconMicrophoneContinuousListening,
+    iconMicrophoneWakeWord
 } from "../icon";
 import { getClientAPI } from "../main";
 import {
@@ -196,6 +197,7 @@ export class ChatInput {
         this.toggleContinuous = (waitForWakeWord: boolean) => {
             this.continuous = !this.continuous;
             this.waitForWakeWord = waitForWakeWord;
+            this.alwaysOnMic = this.waitForWakeWord ? iconMicrophoneWakeWord() : iconMicrophoneContinuousListening();
             this.listening = this.continuous;
             this.micButton.disabled = false;
 
