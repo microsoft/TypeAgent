@@ -22,8 +22,8 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "tsc": "tsc -b",
-    "test:api": "node testWeatherSimple.mjs"
+    "test:api": "node testWeatherSimple.mjs",
+    "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*"
