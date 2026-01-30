@@ -330,8 +330,8 @@ function registerClient(
 
             chatView.chatInput?.recognizeOnce(token, useLocalWhisper);
         },
-        toggleAlwaysListen(): void {
-            chatView.chatInput?.toggleContinuous();
+        toggleAlwaysListen(waitforWakeWord: boolean): void {
+            chatView.chatInput?.toggleContinuous(waitforWakeWord);
         },
         focusInput(): void {
             chatView.chatInput?.focus();

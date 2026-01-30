@@ -40,7 +40,7 @@ export class ChatInput {
         token: SpeechToken | undefined,
         useLocalWhisper: boolean,
     ) => void;
-    public readonly toggleContinuous: () => void;
+    public readonly toggleContinuous: (waitForWakeWord: boolean) => void;
     private continousRecognizer: ContinousSpeechRecognizer | undefined =
         undefined;
     private micIcon: HTMLElement;
@@ -49,6 +49,7 @@ export class ChatInput {
     private alwaysOnMic: HTMLElement;
     private token: SpeechToken | undefined = undefined;
     private uselocalWhisper: boolean = false;
+    private waitForWakeWord: boolean = false;
 
     constructor(
         handlers: ExpandableTextareaHandlers,
@@ -192,8 +193,9 @@ export class ChatInput {
                 useLocalWhisper,
             );
         };
-        this.toggleContinuous = () => {
+        this.toggleContinuous = (waitForWakeWord: boolean) => {
             this.continuous = !this.continuous;
+            this.waitForWakeWord = waitForWakeWord;
             this.listening = this.continuous;
             this.micButton.disabled = false;
 
@@ -221,12 +223,12 @@ export class ChatInput {
         };
         this.micButton.addEventListener("click", async (event) => {
             if (event.altKey || event.metaKey) {
-                this.toggleContinuous();
+                this.toggleContinuous(this.waitForWakeWord);
             } else {
                 if (!this.listening && !this.continuous) {
                     this.startReco();
                 } else if (this.continuous) {
-                    this.toggleContinuous();
+                    this.toggleContinuous(this.waitForWakeWord);
                 }
 
                 this.micReady();
@@ -273,11 +275,29 @@ export class ChatInput {
         );
 
         if (this.continuous) {
+
+            // if we are waiting for a wake word, look for it and ignore anything before it
+            // also remove the wakeword from the text.
+            if (this.waitForWakeWord) {
+                const wakeWord = "type agent";
+                const lowerText = text.toLowerCase();
+                const wakeWordIndex = lowerText.indexOf(wakeWord);
+                if (wakeWordIndex === -1) {
+                    return;
+                } else {
+                    // remove everything before and including the wake word
+                    text = text.substring(wakeWordIndex + wakeWord.length).trim();
+                }                
+            }             
+
             // TODO: prefilter before sending
             getClientAPI()
                 .continuousSpeechProcessing(text)
                 .then((response) => {
                     if (response) {
+
+                       
+
                         this.textarea.setTextContent(
                             this.textarea
                                 .getTextContent()
@@ -294,6 +314,7 @@ export class ChatInput {
     private onRecognized(text: string) {
         // only update the text if the user didn't cancel speech recognition
         if (this.listening || this.continuous) {
+
             this.textarea.setTextContent(text);
             this.textarea.send();
         }

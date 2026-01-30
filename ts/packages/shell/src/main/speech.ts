@@ -66,6 +66,17 @@ export async function triggerRecognitionOnce() {
     chatView.webContents.send("listen-event", speechToken, useLocalWhisper);
 }
 
+export async function toggleWakeWordRecognition() {
+    const shellWindow = getShellWindow();
+    if (shellWindow === undefined) {
+        return;
+    }
+    const chatView = shellWindow.chatView;
+    const speechToken = await getSpeechToken(false);
+    const useLocalWhisper = isLocalWhisperEnabled();
+    chatView.webContents.send("wake-listen", speechToken, useLocalWhisper);
+}
+
 export async function toggleContinuousRecognition() {
     const shellWindow = getShellWindow();
     if (shellWindow === undefined) {
@@ -156,4 +167,17 @@ export function initializeSpeech() {
     } else {
         debugShellError("Global shortcut registration failed");
     }
+
+    const ret3 = globalShortcut.register(
+        "Ctrl+Shift+M",
+        toggleWakeWordRecognition,
+    );
+    if (ret3) {
+        // Double check whether a shortcut is registered.
+        debugShell(
+            `Global shortcut Ctrl+Shift+M: ${globalShortcut.isRegistered("Ctrl+Shift+M")}`,
+        );
+    } else {
+        debugShellError("Global shortcut registration failed");
+    }    
 }

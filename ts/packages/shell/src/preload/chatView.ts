@@ -38,8 +38,11 @@ function registerClient(client: Client) {
         client.listen(token, useLocalWhisper);
     });
     ipcRenderer.on("listen-always", (_event) => {
-        client.toggleAlwaysListen();
+        client.toggleAlwaysListen(false);
     });
+    ipcRenderer.on("wake-listen", (_event) => {
+        client.toggleAlwaysListen(true);
+    });    
     ipcRenderer.on("setting-summary-changed", (_, updatedAgents) => {
         client.updateRegisterAgents(updatedAgents);
     });
@@ -95,7 +98,9 @@ function registerClient(client: Client) {
     ipcRenderer.on(
         "continuous-speech-processed",
         (_event, userExpressions: UserExpression[]) => {
-            client.continuousSpeechProcessed(userExpressions);
+            if (userExpressions !== undefined) {
+                client.continuousSpeechProcessed(userExpressions);
+            }
         },
     );
 }
