@@ -15,11 +15,11 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         channel,
     );
     return {
-        clear(): void {
-            return rpc.send("clear");
+        clear(...args): void {
+            return rpc.send("clear", ...args);
         },
-        exit(): void {
-            return rpc.send("exit");
+        exit(...args): void {
+            return rpc.send("exit", ...args);
         },
         setDisplayInfo(...args): void {
             return rpc.send("setDisplayInfo", ...args);

@@ -43,7 +43,6 @@ public class OpenAIModelApiSettings : ModelApiSettings
                 settings = EmbeddingSettingsFromEnv(endpointName);
                 break;
         }
-        ;
 
         return settings is not null
             ? settings

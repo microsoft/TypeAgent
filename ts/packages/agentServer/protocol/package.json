@@ -26,14 +26,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-rpc": "workspace:*",
-    "@typeagent/dispatcher-rpc": "workspace:*",
-    "debug": "^4.4.0",
-    "isomorphic-ws": "^5.0.0"
+    "@typeagent/dispatcher-rpc": "workspace:*"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.12",
-    "@types/ws": "^8.5.10",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

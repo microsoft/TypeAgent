@@ -44,6 +44,7 @@
     "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "pnpm -C packages/shell run shell:test",
     "start:agent-server": "pnpm -C packages/agentServer/server run start",
+    "start:mcp": "pnpm -C packages/commandExecutor run start",
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:keys": "npx tsx tools/scripts/testServiceKeys.ts",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
@@ -74,7 +75,7 @@
       "exifreader",
       "keytar",
       "koffi",
-      "protobufjs",
+      "node-pty",
       "puppeteer",
       "sharp"
     ],

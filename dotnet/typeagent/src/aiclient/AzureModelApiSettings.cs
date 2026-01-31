@@ -3,6 +3,7 @@
 
 
 using System.Diagnostics.CodeAnalysis;
+using System.Net;
 
 namespace TypeAgent.AIClient;
 
@@ -59,14 +60,16 @@ public class AzureModelApiSettings : ModelApiSettings
 
     public static AzureModelApiSettings ChatSettingsFromEnv(string? endpointName = null)
     {
+        string endPoint = EnvVars.Get(
+            EnvVars.AZURE_OPENAI_ENDPOINT,
+            endpointName,
+            null,
+            endpointName is not null
+        );
+
         var settings = new AzureModelApiSettings(
             ModelType.Chat,
-            EnvVars.Get(
-                EnvVars.AZURE_OPENAI_ENDPOINT,
-                endpointName,
-                null,
-                endpointName is not null
-            ),
+            endPoint,
             EnvVars.Get(
                 EnvVars.AZURE_OPENAI_API_KEY,
                 endpointName,
@@ -75,7 +78,18 @@ public class AzureModelApiSettings : ModelApiSettings
         ).Configure();
         settings.TimeoutMs = EnvVars.GetInt(EnvVars.AZURE_OPENAI_MAX_TIMEOUT, endpointName, DefaultTimeoutMs);
         settings.Retry.MaxRetries = EnvVars.GetInt(EnvVars.AZURE_OPENAI_MAX_RETRYATTEMPTS, endpointName, settings.Retry.MaxRetries);
-        return settings;
+
+        // Extract deployment name from endpoint URL if possible and a name wasn't provided
+        if (!string.IsNullOrEmpty(endpointName))
+        {
+            settings.ModelName = endpointName;
+        }
+        else
+        {
+            settings.ModelName = "DEFAULT";
+        }
+
+            return settings;
     }
 
     public static AzureModelApiSettings EmbeddingSettingsFromEnv(string? endpointName = null)

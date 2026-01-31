@@ -7,6 +7,7 @@ import {
     DeepPartialUndefinedAndNull,
 } from "@typeagent/common-utils";
 import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
+import { getSessionGrammarStorePath } from "action-grammar";
 import registerDebug from "debug";
 import fs from "node:fs";
 import path from "node:path";
@@ -475,6 +476,12 @@ export class Session {
         return filePath ?? this.newCacheDataFilePath();
     }
 
+    public getGrammarStoreFilePath(): string | undefined {
+        return this.sessionDirPath
+            ? getSessionGrammarStorePath(this.sessionDirPath)
+            : undefined;
+    }
+
     public async clear() {
         if (this.sessionDirPath) {
             await fs.promises.rm(this.sessionDirPath, {
@@ -569,11 +576,25 @@ export async function setupAgentCache(
     session: Session,
     agentCache: AgentCache,
     provider?: ConstructionProvider,
+    agentGrammarRegistry?: any, // Optional registry to reset when using NFA
 ) {
     const config = session.getConfig();
     agentCache.model = config.explainer.model;
     agentCache.constructionStore.clear();
+
     if (config.cache.enabled) {
+        // If using NFA grammar system, reset dynamic grammar rules when enabling cache
+        // This prevents double reset when @const new does disable→enable sequence
+        if (config.cache.grammarSystem === "nfa" && agentGrammarRegistry) {
+            agentGrammarRegistry.resetAllToBase();
+
+            // Clear persisted grammar store file
+            const grammarStorePath = session.getGrammarStoreFilePath();
+            if (grammarStorePath && fs.existsSync(grammarStorePath)) {
+                await fs.promises.unlink(grammarStorePath);
+                debugSession(`Cleared grammar store at ${grammarStorePath}`);
+            }
+        }
         const cacheData = session.getConstructionDataFilePath();
         if (cacheData !== undefined) {
             // Load if there is an existing path.

@@ -38,6 +38,17 @@ import { loadSchemaInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 
 /**
+ * Convert plural parameter names to singular for grammar variable names
+ * e.g., "artists" -> "artist"
+ */
+function getSingularVariableName(paramName: string): string {
+    if (paramName.endsWith("s") && paramName.length > 1) {
+        return paramName.slice(0, -1);
+    }
+    return paramName;
+}
+
+/**
  * Cache population API for agentServer integration
  */
 
@@ -66,6 +77,8 @@ export interface CachePopulationResult {
     success: boolean;
     // The generated grammar rule text (if successful)
     generatedRule?: string;
+    // Checked variable names (parameters with checked_wildcard paramSpec)
+    checkedVariables?: Set<string>;
     // Reason for rejection (if not successful)
     rejectionReason?: string;
     // The grammar analysis performed
@@ -111,14 +124,39 @@ export async function populateCache(
         }
 
         // Format as grammar rule
-        const grammarRule = generator.formatAsGrammarRule(testCase, analysis);
+        const grammarRule = generator.formatAsGrammarRule(
+            testCase,
+            analysis,
+            schemaInfo,
+        );
 
-        return {
+        // Extract checked variables from the action parameters
+        const checkedVariables = new Set<string>();
+        const actionInfo = schemaInfo.actions.get(testCase.action.actionName);
+        if (actionInfo) {
+            for (const [paramName, paramInfo] of actionInfo.parameters) {
+                if (paramInfo.paramSpec === "checked_wildcard") {
+                    // Handle array parameters (convert plural to singular)
+                    const varName = Array.isArray(
+                        testCase.action.parameters[paramName],
+                    )
+                        ? getSingularVariableName(paramName)
+                        : paramName;
+                    checkedVariables.add(varName);
+                }
+            }
+        }
+
+        const result: CachePopulationResult = {
             success: true,
             generatedRule: grammarRule,
             analysis,
             warnings: [],
         };
+        if (checkedVariables.size > 0) {
+            result.checkedVariables = checkedVariables;
+        }
+        return result;
     } catch (error) {
         return {
             success: false,

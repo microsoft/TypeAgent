@@ -7,7 +7,7 @@ import {
     getCacheFactory,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -23,6 +23,7 @@ import {
 } from "agent-dispatcher/helpers/console";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
+import { createInterface } from "readline/promises";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -75,6 +76,12 @@ export default class Interactive extends Command {
             inspector.open(undefined, undefined, true);
         }
 
+        const rl = createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            terminal: true,
+        });
+
         await withConsoleClientIO(async (clientIO) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const dispatcher = await createDispatcher("cli interactive", {
@@ -93,7 +100,7 @@ export default class Interactive extends Command {
                 dblogging: true,
                 indexingServiceRegistry:
                     await getIndexingServiceRegistry(persistDir),
-                clientId: getClientId(),
+                traceId: getTraceId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });
 
@@ -119,7 +126,7 @@ export default class Interactive extends Command {
             } finally {
                 await dispatcher.close();
             }
-        });
+        }, rl);
 
         // Some background network (like mongo) might keep the process live, exit explicitly.
         process.exit(0);

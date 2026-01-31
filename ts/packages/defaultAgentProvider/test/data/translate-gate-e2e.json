@@ -182,7 +182,7 @@
       "comment": "Datetime translation not stable",
       "history": [
         {
-          "text": "Action calendar.addEvent failed: Invalid input: Day name could not be parsed.",
+          "text": "Action calendar.scheduleEvent failed: Invalid input: Day name could not be parsed.",
           "source": "calendar"
         }
       ]

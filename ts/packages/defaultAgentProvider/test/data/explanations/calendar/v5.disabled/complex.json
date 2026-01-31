@@ -7,7 +7,7 @@
     {
       "request": "Add meeting with team today at 2",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -31,7 +31,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": [
               "Add meeting with team today at 2"
             ]
@@ -114,25 +114,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "Add"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Schedule"
                 ]
               },
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Create"
                 ]
               },
               {
-                "propertyValue": "calendar.bookAppointment",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Book"
                 ]
@@ -371,21 +371,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.checkAvailability",
+                "propertyValue": "calendar.findEvents",
                 "propertySubPhrases": [
                   "am I free",
                   "this month"
                 ]
               },
               {
-                "propertyValue": "calendar.scheduleMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "schedule a meeting",
                   "this month"
                 ]
               },
               {
-                "propertyValue": "calendar.listEvents",
+                "propertyValue": "calendar.findEvents",
                 "propertySubPhrases": [
                   "list my events",
                   "this month"
@@ -438,7 +438,7 @@
     {
       "request": "I need to add a meeting with my boss on Monday at 10am.",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -461,7 +461,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": [
               "I need to add a meeting"
             ]
@@ -542,25 +542,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "I need to add a meeting"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "I need to schedule a meeting"
                 ]
               },
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "I need to create an event"
                 ]
               },
               {
-                "propertyValue": "calendar.bookAppointment",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "I need to book an appointment"
                 ]
@@ -720,7 +720,7 @@
     {
       "request": "I need to get my tires changed from 12:00 to 2:00 pm on Friday March 15, 2024",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -747,7 +747,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": []
           },
           {
@@ -1128,7 +1128,7 @@
     {
       "request": "I need to go to the dry cleaner this afternoon. Leave an hour for that starting at 3:30",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -1151,7 +1151,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": []
           },
           {
@@ -1380,7 +1380,7 @@
     {
       "request": "I said I'd meet with Jenny this afternoon at 2pm",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -1405,7 +1405,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": []
           },
           {
@@ -1560,7 +1560,7 @@
     {
       "request": "make sure to schedule an appointment with Sally, May, and Boris tomorrow at 3pm.",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -1586,7 +1586,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": []
           },
           {
@@ -1712,25 +1712,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "schedule"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create"
                 ]
               },
               {
-                "propertyValue": "calendar.setEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "set"
                 ]
               },
               {
-                "propertyValue": "calendar.bookEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "book"
                 ]
@@ -1971,7 +1971,7 @@
     {
       "request": "Now just add  Jesse and Abby to the appointment with Sally",
       "action": {
-        "fullActionName": "calendar.addParticipants",
+        "fullActionName": "calendar.addParticipant",
         "parameters": {
           "eventReference": {
             "lookup": true
@@ -1986,7 +1986,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addParticipants",
+            "value": "calendar.addParticipant",
             "substrings": [
               "add",
               "appointment"
@@ -2075,28 +2075,28 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addParticipants",
+            "propertyValue": "calendar.addParticipant",
             "propertySubPhrases": [
               "add",
               "to the appointment with Sally"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.addAttendees",
+                "propertyValue": "calendar.addParticipant",
                 "propertySubPhrases": [
                   "add",
                   "to the meeting with Sally"
                 ]
               },
               {
-                "propertyValue": "calendar.inviteParticipants",
+                "propertyValue": "calendar.addParticipant",
                 "propertySubPhrases": [
                   "invite",
                   "to the appointment with Sally"
                 ]
               },
               {
-                "propertyValue": "calendar.includeParticipants",
+                "propertyValue": "calendar.addParticipant",
                 "propertySubPhrases": [
                   "include",
                   "to the appointment with Sally"
@@ -2178,7 +2178,7 @@
             "properties": [
               {
                 "name": "fullActionName",
-                "value": "calendar.addParticipants",
+                "value": "calendar.addParticipant",
                 "substrings": [
                   "add",
                   "appointment"
@@ -2275,7 +2275,7 @@
     {
       "request": "Set up an event for friday named Jeffs pizza party at 6pm",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -2298,7 +2298,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": []
           },
           {
@@ -2377,25 +2377,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "Set up an event"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Schedule a meeting"
                 ]
               },
               {
-                "propertyValue": "calendar.createAppointment",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Create an appointment"
                 ]
               },
               {
-                "propertyValue": "calendar.bookEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "Book an event"
                 ]
@@ -2555,7 +2555,7 @@
     {
       "request": "Will you please add an appointment with Jerri Skinner at 9 am?  I need it to last 2 hours",
       "action": {
-        "fullActionName": "calendar.addEvent",
+        "fullActionName": "calendar.scheduleEvent",
         "parameters": {
           "event": {
             "timeRange": {
@@ -2576,7 +2576,7 @@
         "properties": [
           {
             "name": "fullActionName",
-            "value": "calendar.addEvent",
+            "value": "calendar.scheduleEvent",
             "substrings": [
               "Will you please add an appointment"
             ]
@@ -2669,25 +2669,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "calendar.addEvent",
+            "propertyValue": "calendar.scheduleEvent",
             "propertySubPhrases": [
               "add an appointment"
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleMeeting",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "schedule a meeting"
                 ]
               },
               {
-                "propertyValue": "calendar.createEvent",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "create an event"
                 ]
               },
               {
-                "propertyValue": "calendar.bookAppointment",
+                "propertyValue": "calendar.scheduleEvent",
                 "propertySubPhrases": [
                   "book an appointment"
                 ]

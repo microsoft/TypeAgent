@@ -20,6 +20,7 @@ import {
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/sessionContext.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import registerDebug from "debug";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
@@ -34,7 +35,13 @@ import {
     appAgentStateKeys,
 } from "./appAgentStateConfig.js";
 import { GrammarStore } from "agent-cache";
-import { Grammar, grammarFromJson } from "action-grammar";
+import {
+    Grammar,
+    grammarFromJson,
+    AgentGrammarRegistry,
+    compileGrammarToNFA,
+    enrichGrammarWithCheckedVariables,
+} from "action-grammar";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
@@ -256,6 +263,8 @@ export class AppAgentManager implements ActionConfigProvider {
         provider: AppAgentProvider,
         actionGrammarStore: GrammarStore | undefined,
         actionEmbeddingCache?: EmbeddingCache,
+        agentGrammarRegistry?: AgentGrammarRegistry,
+        useNFAGrammar?: boolean,
     ) {
         const semanticMapP: Promise<void>[] = [];
         for (const name of provider.getAppAgentNames()) {
@@ -268,6 +277,8 @@ export class AppAgentManager implements ActionConfigProvider {
                 actionGrammarStore,
                 provider,
                 actionEmbeddingCache,
+                agentGrammarRegistry,
+                useNFAGrammar,
             );
         }
         debug("Waiting for action embeddings");
@@ -282,6 +293,8 @@ export class AppAgentManager implements ActionConfigProvider {
         actionGrammarStore: GrammarStore | undefined,
         provider?: AppAgentProvider,
         actionEmbeddingCache?: EmbeddingCache,
+        agentGrammarRegistry?: AgentGrammarRegistry,
+        useNFAGrammar?: boolean,
     ) {
         if (this.isAppAgentName(appAgentName)) {
             throw new Error(`Conflicting app agents name '${appAgentName}'`);
@@ -317,6 +330,49 @@ export class AppAgentManager implements ActionConfigProvider {
                         if (g) {
                             debug(`Adding grammar for schema: ${schemaName}`);
                             actionGrammarStore.addGrammar(schemaName, g);
+
+                            // Also add to NFA grammar registry if using NFA system
+                            if (useNFAGrammar && agentGrammarRegistry) {
+                                try {
+                                    // Enrich grammar with checked variables from .pas.json if available
+                                    if (config.compiledSchemaFilePath) {
+                                        try {
+                                            const pasJsonPath =
+                                                getPackageFilePath(
+                                                    config.compiledSchemaFilePath,
+                                                );
+                                            enrichGrammarWithCheckedVariables(
+                                                g,
+                                                pasJsonPath,
+                                            );
+                                            debug(
+                                                `Enriched grammar with checked variables for schema: ${schemaName}`,
+                                            );
+                                        } catch (enrichError) {
+                                            debug(
+                                                `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
+                                            );
+                                        }
+                                    }
+
+                                    const nfa = compileGrammarToNFA(
+                                        g,
+                                        schemaName,
+                                    );
+                                    agentGrammarRegistry.registerAgent(
+                                        schemaName,
+                                        g,
+                                        nfa,
+                                    );
+                                    debug(
+                                        `Added NFA grammar for schema: ${schemaName}`,
+                                    );
+                                } catch (nfaError) {
+                                    debugError(
+                                        `Failed to compile NFA for schema: ${schemaName}\n${nfaError}`,
+                                    );
+                                }
+                            }
                         }
                     } catch (e) {
                         // REVIEW: Ignore errors for now.

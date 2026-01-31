@@ -47,7 +47,8 @@ public class KnowProConsole : ConsoleApp
             new MemoryCommands(_context),
             new PodcastCommands(_context),
             new TestCommands(_context),
-            new BenchmarkCommands(_context)
+            new BenchmarkCommands(_context),
+            new ModelCommands(_context)
         );
         SortCommands();
     }

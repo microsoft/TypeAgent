@@ -102,13 +102,15 @@ if (process.platform === "win32") {
 }
 
 const instanceDir =
-    parsedArgs.data ??
-    (app.isPackaged
-        ? path.join(app.getPath("userData"), "data")
-        : getInstanceDir());
+    parsedArgs.connect !== undefined
+        ? undefined
+        : (parsedArgs.data ??
+          (app.isPackaged
+              ? path.join(app.getPath("userData"), "data")
+              : getInstanceDir()));
 
 debugShell("Instance Dir", instanceDir);
-if (parsedArgs.clean) {
+if (instanceDir && parsedArgs.clean) {
     // Delete all files in the instance dir.
     if (fs.existsSync(instanceDir)) {
         await fs.promises.rm(instanceDir, { recursive: true });
@@ -137,13 +139,9 @@ if (parsedArgs.update) {
 const time = performance.now();
 debugShellInit("Starting...");
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-async function initialize() {
-    debugShellInit("Ready", performance.now() - time);
-
-    const appPath = app.getAppPath();
+async function initializeKeys(appPath: string) {
+    // TODO: connected mode only needs the speech key.
+    // Implement better way to provide and manage keys.
     const envFile = parsedArgs.env
         ? path.resolve(appPath, parsedArgs.env)
         : undefined;
@@ -159,7 +157,16 @@ async function initialize() {
             envFile,
         );
     }
+}
 
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+async function initialize() {
+    debugShellInit("Ready", performance.now() - time);
+
+    const appPath = app.getAppPath();
+    await initializeKeys(appPath);
     protocol.handle("typeagent-browser", (request) => {
         const url = new URL(request.url);
         const pathname = url.pathname;
@@ -190,24 +197,33 @@ async function initialize() {
 
     const shellSettings = new ShellSettingManager(instanceDir);
     const settings = shellSettings.user;
-    const dataDir = getShellDataDir(instanceDir);
-    const chatHistory: string = path.join(dataDir, "chat_history.html");
+
+    const chatHistory = instanceDir
+        ? path.join(getShellDataDir(instanceDir), "chat_history.html")
+        : undefined;
     ipcMain.handle("get-chat-history", async (event) => {
+        if (chatHistory === undefined || !settings.chatHistory)
+            return undefined;
+
         // Make sure the event is from the chat view of the current shell window
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
-        if (!shellWindow) return;
-        if (settings.chatHistory) {
-            // Load chat history if enabled
-            if (existsSync(chatHistory)) {
-                return readFileSync(chatHistory, "utf-8");
-            }
+        if (!shellWindow) return undefined;
+
+        // Load chat history if enabled
+        if (existsSync(chatHistory)) {
+            return readFileSync(chatHistory, "utf-8");
         }
+
         return undefined;
     });
 
     // Store the chat history whenever the DOM changes
     // this let's us rehydrate the chat when reopening the shell
     ipcMain.on("save-chat-history", async (event, html) => {
+        if (chatHistory === undefined || !settings.chatHistory) {
+            return;
+        }
+
         // Make sure the event is from the chat view of the current shell window
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
         if (!shellWindow) return;
@@ -350,6 +366,8 @@ async function initialize() {
                 shellSettings,
                 mockGreetings,
                 parsedArgs.inputOnly,
+                performance.now(),
+                parsedArgs.connect,
             );
     });
 
@@ -360,6 +378,7 @@ async function initialize() {
         mockGreetings,
         parsedArgs.inputOnly,
         time,
+        parsedArgs.connect,
     );
 
     shellWindow.waitForReady().then(() => {
@@ -383,10 +402,12 @@ export async function reloadInstance() {
         await closeInstance();
         const shellSettings = new ShellSettingManager(instanceDir);
         await initializeInstance(
-            instanceDir,
+            parsedArgs.connect ? undefined : instanceDir,
             shellSettings,
             mockGreetings,
             parsedArgs.inputOnly,
+            performance.now(),
+            parsedArgs.connect,
         );
     } finally {
         reloadingInstance = false;

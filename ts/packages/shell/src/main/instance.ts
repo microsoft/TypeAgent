@@ -19,10 +19,15 @@ import {
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
-import { getClientId } from "agent-dispatcher/helpers/data";
+import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
-import { ClientIO, createDispatcher, Dispatcher } from "agent-dispatcher";
+import {
+    ClientIO,
+    createDispatcher,
+    Dispatcher,
+    RequestId,
+} from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import {
     hasPendingUpdate,
@@ -31,6 +36,7 @@ import {
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isProd } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
+import { connectDispatcher } from "@typeagent/agent-server-client";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -42,10 +48,11 @@ let cleanupP: Promise<void> | undefined;
 let quitting: boolean = false;
 
 async function initializeDispatcher(
-    instanceDir: string,
+    instanceDir: string | undefined,
     shellWindow: ShellWindow,
     updateSummary: (dispatcher: Dispatcher) => Promise<string>,
     startTime: number,
+    connect?: number,
 ): Promise<Dispatcher | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -85,15 +92,14 @@ async function initializeDispatcher(
                 );
                 return result.response;
             },
-            openLocalView: (port: number) => {
+            openLocalView: async (_: RequestId, port: number) => {
                 debugShell(`Opening local view on port ${port}`);
                 shellWindow.createBrowserTab(
                     new URL(`http://localhost:${port}/`),
                     { background: false },
                 );
-                return Promise.resolve();
             },
-            closeLocalView: (port: number) => {
+            closeLocalView: async (_: RequestId, port: number) => {
                 const targetUrl = `http://localhost:${port}/`;
                 debugShell(
                     `Closing local view on port ${port}, target url: ${targetUrl}`,
@@ -120,28 +126,46 @@ async function initializeDispatcher(
         const browserControl = createInlineBrowserControl(shellWindow);
 
         // Set up dispatcher
-        const newDispatcher = await createDispatcher("shell", {
-            appAgentProviders: [
-                createShellAgentProvider(shellWindow),
-                ...getDefaultAppAgentProviders(instanceDir),
-            ],
-            agentInitOptions: {
-                browser: browserControl.control,
-            },
-            agentInstaller: getDefaultAppAgentInstaller(instanceDir),
-            persistSession: true,
-            persistDir: instanceDir,
-            storageProvider: getFsStorageProvider(),
-            metrics: true,
-            dblogging: true,
-            clientId: getClientId(),
-            clientIO,
-            indexingServiceRegistry:
-                await getIndexingServiceRegistry(instanceDir),
-            constructionProvider: getDefaultConstructionProvider(),
-            allowSharedLocalView: ["browser"],
-            portBase: isProd ? 9001 : 9050,
-        });
+        let newDispatcher: Dispatcher;
+        if (connect !== undefined) {
+            // Connect to remote dispatcher instead of creating one
+            newDispatcher = await connectDispatcher(
+                clientIO,
+                `ws://localhost:${connect}`,
+            );
+            debugShellInit(
+                "Connected to remote dispatcher",
+                performance.now() - startTime,
+            );
+        } else {
+            if (!instanceDir) {
+                throw new Error(
+                    "instanceDir is required when not in connect mode",
+                );
+            }
+            newDispatcher = await createDispatcher("shell", {
+                appAgentProviders: [
+                    createShellAgentProvider(shellWindow),
+                    ...getDefaultAppAgentProviders(instanceDir),
+                ],
+                agentInitOptions: {
+                    browser: browserControl.control,
+                },
+                agentInstaller: getDefaultAppAgentInstaller(instanceDir),
+                persistSession: true,
+                persistDir: instanceDir,
+                storageProvider: getFsStorageProvider(),
+                metrics: true,
+                dblogging: true,
+                traceId: getTraceId(),
+                clientIO,
+                indexingServiceRegistry:
+                    await getIndexingServiceRegistry(instanceDir),
+                constructionProvider: getDefaultConstructionProvider(),
+                allowSharedLocalView: ["browser"],
+                portBase: isProd ? 9001 : 9050,
+            });
+        }
 
         async function processShellRequest(
             text: string,
@@ -222,11 +246,12 @@ async function initializeDispatcher(
 }
 
 export function initializeInstance(
-    instanceDir: string,
+    instanceDir: string | undefined,
     shellSettings: ShellSettingManager,
     mockGreetings: boolean,
     inputOnly: boolean = false,
     startTime: number = performance.now(),
+    connect?: number,
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
@@ -266,6 +291,7 @@ export function initializeInstance(
         shellWindow,
         updateTitle,
         startTime,
+        connect,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {

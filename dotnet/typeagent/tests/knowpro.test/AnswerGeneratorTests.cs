@@ -54,7 +54,7 @@ public class AnswerGeneratorTests : TestWithData
         foreach (string query in testQueries)
         {
             var space = query.IndexOf(' ');
-            var cmdLine = new string[] { "kpTestAnswer", query[..space], query[space..] };
+            var cmdLine = new string[] { "kpAnswer", query[..space], query[space..] };
 
             var parseResult = cmds.Parse(cmdLine);
             string? question = parseResult.GetValue<string>("--query");

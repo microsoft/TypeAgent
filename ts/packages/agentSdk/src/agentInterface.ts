@@ -62,6 +62,7 @@ export type SchemaManifest = {
     description: string;
     schemaType: string | SchemaTypeNames; // string if there are only action schemas
     schemaFile: string | SchemaContent;
+    compiledSchemaFile?: string; // path to .pas.json file for grammar generation metadata extraction
     grammarFile?: string | GrammarContent;
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
@@ -176,7 +177,7 @@ export interface SessionContext<T = unknown> {
     notify(
         event: AppAgentEvent,
         message: string | DisplayContent,
-        eventSetId?: string,
+        notificationId?: string,
     ): void;
 
     // choices default to ["Yes", "No"]

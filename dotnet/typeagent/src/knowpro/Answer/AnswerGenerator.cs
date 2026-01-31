@@ -31,7 +31,6 @@ public class AnswerGenerator : IAnswerGenerator
         ArgumentVerify.ThrowIfNullOrEmpty(question, nameof(question));
         ArgumentVerify.ThrowIfNullOrEmpty(context, nameof(context));
 
-        context = context.Trim(Settings.MaxCharsInBudget);
         if (string.IsNullOrEmpty(context))
         {
             throw new KnowProException(KnowProException.ErrorCode.EmptyContext);

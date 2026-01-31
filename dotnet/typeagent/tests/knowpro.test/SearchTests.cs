@@ -30,8 +30,6 @@ namespace TypeAgent.Tests.KnowPro;
 
 public class SearchTests : TestWithData
 {
-    private bool _disposedValue;
-
     /// <summary>
     /// Create temporary folder but and load .ENV file
     /// </summary>

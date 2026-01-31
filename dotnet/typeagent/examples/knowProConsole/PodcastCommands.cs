@@ -16,6 +16,15 @@ public class PodcastCommands : ICommandModule
     public PodcastCommands(KnowProConsoleContext context)
     {
         _kpContext = context;
+
+        _kpContext.ModelChanged += (sender, args) =>
+        {
+            if (_podcast is not null)
+            {
+                KnowProWriter.WriteLine(ConsoleColor.Yellow, $"Updating language model for '{_podcast.Name}' to new model ({_kpContext.ModelSuffix}).");
+                _podcast.Settings.ConversationSettings.LanguageModel = _kpContext.ChatModel;
+            }
+        };
     }
 
     public IList<Command> GetCommands()
@@ -25,29 +34,51 @@ public class PodcastCommands : ICommandModule
             PodcastImportIndexDef(),
             PodcastBuildIndexDef(),
             PocastBulkImportDef(),
-            PodcastUnloadDef()
+            PodcastUnloadDef(),
+            PodcastShowDef()
         ];
     }
 
-    private Command TestDef()
+    private Command PodcastShowDef()
     {
-        Command cmd = new("test")
+        Command cmd = new("kpPodcastShow", "Show info about the current podcast")
         {
-            Args.Arg<string>("name", "Name"),
         };
-        cmd.TreatUnmatchedTokensAsErrors = false;
-        cmd.SetAction(Test);
+        cmd.SetAction(ShowPodcastInfoAsync);
         return cmd;
     }
 
-    private void Test(ParseResult args)
+    private async void ShowPodcastInfoAsync(ParseResult args)
     {
-        foreach (var token in args.UnmatchedTokens)
+        if (string.IsNullOrEmpty(_podcast?.Name))
         {
-            Console.WriteLine(token);
+            KnowProWriter.WriteLine(ConsoleColor.Red, $"No podcast loaded.");
+        }
+        else
+        {
+            KnowProWriter.Write(ConsoleColor.White, $"Podcast Name: ");
+            KnowProWriter.WriteLine(ConsoleColor.Cyan, $"{_podcast.Name}");
+            KnowProWriter.Write(ConsoleColor.White, $"Messages: ");
+            KnowProWriter.WriteLine(ConsoleColor.Cyan, $"{await _podcast.Messages.GetCountAsync()}");
+            var timeRange = await _podcast.GetStartTimestampRangeAsync();
+            if (timeRange is not null)
+            {
+                KnowProWriter.Write(ConsoleColor.White, $"Time Range: ");
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, $"Started: {timeRange.Value.StartTimestamp} Ended: {timeRange.Value.EndTimestamp}");
+            }
+            var participants = await _podcast.GetParticipantsAsync();
+            if (participants is not null)
+            {
+                string p = string.Join(", ", participants);
+                if (p.Length > 50)
+                {
+                    p = string.Concat(p.AsSpan(0, 50), "...");
+                }
+                KnowProWriter.Write(ConsoleColor.White, $"Participants ({participants.Count}): ");
+                KnowProWriter.WriteLine(ConsoleColor.Cyan, p);
+            }
         }
     }
-
     private Command PodcastUnloadDef()
     {
         Command cmd = new("kpPodcastUnload", "Unload the current podcast")
@@ -270,7 +301,7 @@ public class PodcastCommands : ICommandModule
             KnowProWriter.WriteLine($"{count} properties imported");
 
             await podcast.UpdateMessageIndexAsync(false, cancellationToken);
-            await podcast.BuildSecondaryIndexesAsync(cancellationToken);            
+            await podcast.BuildSecondaryIndexesAsync(cancellationToken);
         }
         catch
         {
@@ -281,7 +312,7 @@ public class PodcastCommands : ICommandModule
 
     private Podcast CreatePodcast(string name, bool createNew)
     {
-        MemorySettings settings = new MemorySettings();
+        MemorySettings settings = new MemorySettings(_kpContext.ChatModel, _kpContext.EmbeddingModel);
         var provider = _kpContext.CreateStorageProvider<PodcastMessage, PodcastMessageMeta>(
             settings.ConversationSettings,
             name,
@@ -296,11 +327,8 @@ public class PodcastCommands : ICommandModule
     private void UnloadCurrent()
     {
         _kpContext.UnloadCurrent();
-        if (_podcast is not null)
-        {
-            _podcast.Dispose();
-            _podcast = null;
-        }
+        _podcast?.Dispose();
+        _podcast = null;
     }
 
     private void SetCurrent(Podcast? podcast)

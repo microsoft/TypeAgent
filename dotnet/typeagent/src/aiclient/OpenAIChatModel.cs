@@ -72,6 +72,14 @@ public class OpenAIChatModel : ModelApi, IChatModel
                 request.seed = translationSettings.Seed;
             }
         }
+
+        // TODO: need a better way to handle required settings
+        if (this.Settings.ModelName.Equals("GPT_5_2_CHAT", StringComparison.OrdinalIgnoreCase))
+        {
+            // GPT-5.2 CAN ONLY HAVE TEMPERATURE OF 1
+            request.temperature = 1;
+        }
+
         string? apiToken = Settings.ApiTokenProvider is not null
                     ? await Settings.ApiTokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false)
                     : null;

@@ -23,6 +23,8 @@ export class AgentGrammar {
     private grammar: Grammar;
     private nfa: NFA;
     private ruleCount: number;
+    private readonly baseGrammar: Grammar; // Store original grammar for reset
+    private readonly baseNFA: NFA; // Store original NFA for reset
 
     constructor(
         public readonly agentId: string,
@@ -32,6 +34,9 @@ export class AgentGrammar {
         this.grammar = grammar;
         this.nfa = nfa;
         this.ruleCount = grammar.rules.length;
+        // Store deep copy of base grammar for reset capability
+        this.baseGrammar = JSON.parse(JSON.stringify(grammar));
+        this.baseNFA = nfa; // NFA is immutable, safe to share reference
     }
 
     /**
@@ -41,9 +46,13 @@ export class AgentGrammar {
      * They are merged as alternatives to enable cache hits on similar requests.
      *
      * @param agrText Grammar rules in .agr format (from grammarGenerator)
+     * @param checkedVariables Optional set of variable names with validation (checked_wildcard paramSpec)
      * @returns Success status and any errors
      */
-    addGeneratedRules(agrText: string): {
+    addGeneratedRules(
+        agrText: string,
+        checkedVariables?: Set<string>,
+    ): {
         success: boolean;
         errors: string[];
         unresolvedEntities?: string[];
@@ -64,6 +73,11 @@ export class AgentGrammar {
                     `Failed to parse generated rules: ${errors.join(", ")}`,
                 ],
             };
+        }
+
+        // Add checked variables if provided
+        if (checkedVariables && checkedVariables.size > 0) {
+            newGrammar.checkedVariables = checkedVariables;
         }
 
         // Validate entity references
@@ -90,15 +104,40 @@ export class AgentGrammar {
             mergedGrammar.entities = Array.from(existingEntities);
         }
 
+        // Merge checked variables
+        if (newGrammar.checkedVariables || this.grammar.checkedVariables) {
+            const existingChecked = new Set(
+                this.grammar.checkedVariables || [],
+            );
+            if (newGrammar.checkedVariables) {
+                for (const varName of newGrammar.checkedVariables) {
+                    existingChecked.add(varName);
+                }
+            }
+            mergedGrammar.checkedVariables = existingChecked;
+        }
+
         // Recompile NFA
         try {
             const newNFA = compileGrammarToNFA(
                 mergedGrammar,
                 `${this.agentId}-cache`,
             );
+            const previousRuleCount = this.ruleCount;
             this.grammar = mergedGrammar;
             this.nfa = newNFA;
             this.ruleCount = mergedGrammar.rules.length;
+
+            // Log the newly added grammar rules for debugging/testing
+            const newRulesCount = this.ruleCount - previousRuleCount;
+            if (newRulesCount > 0) {
+                console.log(
+                    `\n[Grammar Cache] Added ${newRulesCount} new rule(s) to agent '${this.agentId}':`,
+                );
+                console.log(`--- New Grammar Rules ---`);
+                console.log(agrText);
+                console.log(`--- Total rules: ${this.ruleCount} ---\n`);
+            }
 
             return { success: true, errors: [] };
         } catch (error) {
@@ -109,6 +148,20 @@ export class AgentGrammar {
                 ],
             };
         }
+    }
+
+    /**
+     * Reset this agent's grammar to its original base state, removing all dynamically added rules
+     *
+     * This is used when creating a new construction store to start fresh.
+     */
+    resetToBase(): void {
+        console.log(
+            `\n[Grammar Cache] Resetting agent '${this.agentId}' to base grammar (removing ${this.ruleCount - this.baseGrammar.rules.length} dynamic rules)`,
+        );
+        this.grammar = JSON.parse(JSON.stringify(this.baseGrammar));
+        this.nfa = this.baseNFA;
+        this.ruleCount = this.baseGrammar.rules.length;
     }
 
     /**
@@ -208,6 +261,10 @@ export interface AgentMatchResult {
     matched: boolean;
     agentId?: string; // Which agent matched
     captures: Map<string, string | number>;
+    // Priority counts for sorting matches
+    fixedStringPartCount?: number;
+    checkedWildcardCount?: number;
+    uncheckedWildcardCount?: number;
     // Debugging info
     attemptedAgents?: string[];
     tokensConsumed?: number | undefined;
@@ -359,6 +416,9 @@ export class AgentGrammarRegistry {
                     matched: true,
                     agentId: id,
                     captures: result.captures,
+                    fixedStringPartCount: result.fixedStringPartCount,
+                    checkedWildcardCount: result.checkedWildcardCount,
+                    uncheckedWildcardCount: result.uncheckedWildcardCount,
                     attemptedAgents,
                     tokensConsumed: result.tokensConsumed,
                 };
@@ -395,6 +455,21 @@ export class AgentGrammarRegistry {
      */
     clear(): void {
         this.agents.clear();
+    }
+
+    /**
+     * Reset all agents to their base grammars, removing dynamically added rules
+     *
+     * This is useful when clearing the cache to start fresh while keeping
+     * the original static grammar rules intact.
+     */
+    resetAllToBase(): void {
+        console.log(
+            `\n[Grammar Cache] Resetting ${this.agents.size} agent(s) to base grammar`,
+        );
+        for (const agent of this.agents.values()) {
+            agent.resetToBase();
+        }
     }
 
     /**

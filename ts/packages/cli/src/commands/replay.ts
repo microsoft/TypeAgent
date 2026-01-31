@@ -14,7 +14,7 @@ import {
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
-import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import fs from "node:fs";
 import type {
     TranslateTestFile,
@@ -156,7 +156,7 @@ export default class ReplayCommand extends Command {
                 persistDir: instanceDir,
                 storageProvider: getFsStorageProvider(),
                 dblogging: true,
-                clientId: getClientId(),
+                traceId: getTraceId(),
                 indexingServiceRegistry:
                     await getIndexingServiceRegistry(instanceDir),
                 collectCommandResult: flags.generateTest !== undefined,

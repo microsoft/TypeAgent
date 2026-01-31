@@ -13,7 +13,24 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { executeSessionAction } from "./action/sessionActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
-import { CommandHandlerContext } from "../commandHandlerContext.js";
+import {
+    type CommandHandlerContext,
+    getRequestId,
+} from "../commandHandlerContext.js";
+
+import {
+    getSystemTemplateCompletion,
+    getSystemTemplateSchema,
+} from "../../translation/actionTemplate.js";
+
+import { executeNotificationAction } from "./action/notificationActionHandler.js";
+import { executeHistoryAction } from "./action/historyActionHandler.js";
+import { ConfigAction } from "./schema/configActionSchema.js";
+import { NotificationAction } from "./schema/notificationActionSchema.js";
+import { HistoryAction } from "./schema/historyActionSchema.js";
+import { SessionAction } from "./schema/sessionActionSchema.js";
+
+// handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
@@ -23,18 +40,8 @@ import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
 import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
-import {
-    getSystemTemplateCompletion,
-    getSystemTemplateSchema,
-} from "../../translation/actionTemplate.js";
 import { getTokenCommandHandlers } from "./handlers/tokenCommandHandler.js";
 import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
-import { executeNotificationAction } from "./action/notificationActionHandler.js";
-import { executeHistoryAction } from "./action/historyActionHandler.js";
-import { ConfigAction } from "./schema/configActionSchema.js";
-import { NotificationAction } from "./schema/notificationActionSchema.js";
-import { HistoryAction } from "./schema/historyActionSchema.js";
-import { SessionAction } from "./schema/sessionActionSchema.js";
 import {
     InstallCommandHandler,
     UninstallCommandHandler,
@@ -62,7 +69,8 @@ export const systemHandlers: CommandHandlerTable = {
         clear: {
             description: "Clear the console",
             async run(context: ActionContext<CommandHandlerContext>) {
-                context.sessionContext.agentContext.clientIO.clear();
+                const systemContext = context.sessionContext.agentContext;
+                systemContext.clientIO.clear(getRequestId(systemContext));
             },
         },
         run: new RunCommandScriptHandler(),
@@ -70,7 +78,7 @@ export const systemHandlers: CommandHandlerTable = {
             description: "Exit the program",
             async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
-                systemContext.clientIO.exit();
+                systemContext.clientIO.exit(getRequestId(systemContext));
             },
         },
         random: getRandomCommandHandlers(),
