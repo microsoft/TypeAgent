@@ -21,10 +21,17 @@ export class CalendarClient extends GraphClient {
     constructor() {
         super("@calendar login");
         // Try silent login - will succeed if there's a valid cached token
-        this.login().catch(() => {
-            // Silently ignore - user will need to run @calendar login
-            debug("No cached credentials, user needs to run @calendar login");
-        });
+        this.login()
+            .then((loggedIn) => {
+                if (!loggedIn) {
+                    // Silently ignore - user will need to run @calendar login
+                    debug("No cached credentials, user needs to run @calendar login");
+                }
+            })
+            .catch((error) => {
+                // Log unexpected errors during silent login
+                debugError(`Error during silent login: ${error}`);
+            });
         this.on("connected", (client: Client) => {
             this.startSyncThread(client);
         });
