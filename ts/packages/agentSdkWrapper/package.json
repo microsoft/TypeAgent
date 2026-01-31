@@ -24,12 +24,12 @@
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "cli": "node dist/cli.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node dist/cli.js",
-    "cli": "node dist/cli.js",
-    "webtask": "node dist/webtask/cli.js",
-    "tsc": "tsc -b"
+    "tsc": "tsc -b",
+    "webtask": "node dist/webtask/cli.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
