@@ -159,7 +159,8 @@ export class GraphClient extends EventEmitter {
                 const options: DeviceCodeCredentialOptions = {
                     clientId: this._settings.clientId,
                     tenantId: this._settings.tenantId,
-                    disableAutomaticAuthentication: true,
+                    // Only disable automatic auth for silent login attempts
+                    disableAutomaticAuthentication: cb === undefined,
 
                     tokenCachePersistenceOptions: {
                         enabled: true,
@@ -184,11 +185,22 @@ export class GraphClient extends EventEmitter {
 
                 const credential = new DeviceCodeCredential(options);
                 if (cb === undefined) {
-                    // getToken to make sure we can authenticate silently
-                    await credential.getToken(this.MSGRAPH_AUTH_URL);
-                    if (options.authenticationRecord !== undefined) {
-                        return this.createClient(credential);
+                    // Silent auth - only possible if we have a cached auth record
+                    if (options.authenticationRecord === undefined) {
+                        throw new Error(
+                            `No cached credentials. Run ${this.authCommand} to authenticate.`,
+                        );
                     }
+                    // getToken to make sure we can authenticate silently
+                    try {
+                        await credential.getToken(this.MSGRAPH_AUTH_URL);
+                    } catch (e: any) {
+                        // Token cache may be expired - need interactive auth
+                        throw new Error(
+                            `Cached credentials expired. Run ${this.authCommand} to re-authenticate.`,
+                        );
+                    }
+                    return this.createClient(credential);
                 }
 
                 // This will ask for user interaction
