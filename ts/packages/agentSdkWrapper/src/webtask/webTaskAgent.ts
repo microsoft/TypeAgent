@@ -1,0 +1,588 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import {
+    query,
+    type Options,
+} from "@anthropic-ai/claude-agent-sdk";
+import { WebTask, TaskExecutionResult } from "./types.js";
+import { TraceCollector } from "./tracing/traceCollector.js";
+import { TraceCollectorOptions } from "./tracing/types.js";
+import { PlanGenerator } from "./planning/planGenerator.js";
+import { PlanExecutor } from "./planning/planExecutor.js";
+import { PlanSerializer } from "./planning/planSerializer.js";
+
+/**
+ * Task execution options
+ */
+export interface TaskExecutionOptions {
+    collectTraces?: boolean | undefined;
+    traceDir?: string | undefined;
+    captureScreenshots?: boolean | undefined;
+    captureHTML?: boolean | undefined;
+    usePlanning?: boolean | undefined; // Enable explicit planning and learning
+    planDetailLevel?: "minimal" | "standard" | "detailed" | undefined;
+}
+
+/**
+ * WebTask Agent that executes browser automation tasks using subagents
+ */
+export class WebTaskAgent {
+    private options: Options;
+    private isFirstQuery: boolean = true;
+    private runId: string;
+
+    constructor(options: Options, runId?: string | undefined) {
+        this.options = options;
+        this.runId = runId || this.generateRunId();
+    }
+
+    /**
+     * Generate a unique run ID
+     */
+    private generateRunId(): string {
+        const date = new Date().toISOString().split("T")[0];
+        const timestamp = Date.now().toString().slice(-6);
+        return `${date}_run-${timestamp}`;
+    }
+
+    /**
+     * Execute a single WebTask using a subagent (with optional planning)
+     */
+    async executeTask(
+        task: WebTask,
+        execOptions?: TaskExecutionOptions | undefined,
+    ): Promise<TaskExecutionResult> {
+        const startTime = Date.now();
+
+        console.log(`\n[Task ${task.id}] ${task.description}`);
+        console.log(`[URL] ${task.startingUrl}`);
+        console.log(`[Category] ${task.category} | [Difficulty] ${task.difficulty}`);
+
+        // Route to plan-based execution if enabled
+        if (execOptions?.usePlanning) {
+            console.log(`[Planning] Explicit planning enabled`);
+            return await this.executeTaskWithPlanning(task, execOptions);
+        }
+
+        // Initialize trace collector if enabled
+        let tracer: TraceCollector | null = null;
+        if (execOptions?.collectTraces) {
+            const modelName = typeof this.options.model === "string"
+                ? this.options.model
+                : "claude-sonnet-4-5-20250929";
+
+            const traceOptions: TraceCollectorOptions = {
+                task,
+                runId: this.runId,
+                traceDir: execOptions.traceDir,
+                captureScreenshots: execOptions.captureScreenshots ?? false, // Phase 2
+                captureHTML: execOptions.captureHTML ?? true,
+                model: modelName,
+            };
+
+            tracer = new TraceCollector(traceOptions);
+            await tracer.initialize();
+            console.log(`[Trace] Collecting traces to: ${tracer.getTraceDir()}`);
+        }
+
+        try {
+            // Build subagent prompt
+            const prompt = this.buildSubagentPrompt(task);
+
+            // Launch subagent via Task tool
+            console.log(`[Subagent] Launching browser automation subagent...`);
+
+            const queryOptions: Options = {
+                ...this.options,
+                continue: !this.isFirstQuery,
+            };
+
+            if (this.isFirstQuery) {
+                this.isFirstQuery = false;
+            }
+
+            // Execute query and collect all messages
+            const queryInstance = query({
+                prompt: prompt,
+                options: queryOptions,
+            });
+
+            let finalResponse = "";
+            let steps: string[] = [];
+
+            // Track pending tool calls for trace collection
+            const pendingToolCalls = new Map<string, { name: string; input: any }>();
+
+            for await (const message of queryInstance) {
+                if (message.type === "result") {
+                    if (message.subtype === "success") {
+                        finalResponse = message.result || "";
+                    }
+                    break;
+                } else if (message.type === "assistant") {
+                    // Track assistant responses
+                    const msg = message.message;
+
+                    // TRACE: Record agent thinking
+                    if (tracer) {
+                        tracer.recordThinking(msg);
+                    }
+
+                    if (msg.content) {
+                        for (const block of msg.content) {
+                            if (block.type === "text") {
+                                finalResponse += block.text;
+                            } else if (block.type === "tool_use") {
+                                steps.push(
+                                    `${block.name}(${JSON.stringify(block.input).substring(0, 100)}...)`,
+                                );
+
+                                // Track tool call for later result matching
+                                pendingToolCalls.set(block.id, {
+                                    name: block.name,
+                                    input: block.input,
+                                });
+
+                                // TRACE: Record tool call
+                                if (tracer) {
+                                    tracer.recordToolCall(block.id, block.name, block.input);
+                                }
+                            }
+                        }
+                    }
+                } else if (message.type === "user") {
+                    // Tool results come back as user messages with tool_result content blocks
+                    const msg = (message as any).message;
+                    if (tracer && msg && msg.content) {
+                        for (const block of msg.content) {
+                            if (block.type === "tool_result") {
+                                const toolUseId = block.tool_use_id;
+                                let content = "";
+                                const isError = block.is_error || false;
+
+                                // Extract content from tool_result
+                                if (Array.isArray(block.content)) {
+                                    for (const contentBlock of block.content) {
+                                        if (contentBlock.type === "text") {
+                                            content += contentBlock.text;
+                                        }
+                                    }
+                                } else if (typeof block.content === "string") {
+                                    content = block.content;
+                                }
+
+                                // Record and process (copies files to trace dir)
+                                await tracer.recordToolResult(toolUseId, content, isError);
+                            }
+                        }
+                    }
+                }
+            }
+
+            console.log(`[Subagent] Execution complete`);
+
+            // Try to parse structured result
+            const result = this.parseSubagentResult(finalResponse);
+
+            const duration = Date.now() - startTime;
+
+            // TRACE: Mark complete and save
+            if (tracer) {
+                tracer.markComplete(result.success, result.error);
+                await tracer.saveTrace();
+            }
+
+            const executionResult: TaskExecutionResult = {
+                taskId: task.id,
+                success: result.success,
+                data: result.data,
+                duration: duration,
+                steps: steps,
+            };
+
+            if (result.error) {
+                executionResult.error = result.error;
+            }
+
+            return executionResult;
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            console.error(
+                `[Error] ${error instanceof Error ? error.message : String(error)}`,
+            );
+
+            // TRACE: Mark failed and save
+            if (tracer) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                tracer.markComplete(false, errorMsg);
+                await tracer.saveTrace();
+            }
+
+            return {
+                taskId: task.id,
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                duration: duration,
+            };
+        }
+    }
+
+    /**
+     * Execute task with explicit planning and learning
+     */
+    private async executeTaskWithPlanning(
+        task: WebTask,
+        execOptions: TaskExecutionOptions
+    ): Promise<TaskExecutionResult> {
+        const startTime = Date.now();
+        const traceDir = execOptions.traceDir || "./traces";
+
+        // Initialize trace collector
+        let tracer: TraceCollector | null = null;
+        if (execOptions.collectTraces) {
+            const modelName = typeof this.options.model === "string"
+                ? this.options.model
+                : "claude-sonnet-4-5-20250929";
+
+            const traceOptions: TraceCollectorOptions = {
+                task,
+                runId: this.runId,
+                traceDir: execOptions.traceDir,
+                captureScreenshots: execOptions.captureScreenshots ?? false,
+                captureHTML: execOptions.captureHTML ?? true,
+                model: modelName,
+            };
+
+            tracer = new TraceCollector(traceOptions);
+            await tracer.initialize();
+            console.log(`[Trace] Collecting traces to: ${tracer.getTraceDir()}`);
+        }
+
+        try {
+            // STEP 1: GENERATE INITIAL PLAN
+            console.log(`[Planning] Generating execution plan...`);
+            const planner = new PlanGenerator(this.options);
+            const originalPlan = await planner.generatePlan(task, {
+                detailLevel: execOptions.planDetailLevel || "standard",
+                includeControlFlow: true,
+            });
+
+            console.log(`[Planning] Generated plan with ${originalPlan.steps.length} steps`);
+
+            // Save original plan
+            const serializer = new PlanSerializer();
+            const originalPlanPath = await serializer.saveOriginalPlan(originalPlan, traceDir);
+            await serializer.savePlanSummary(originalPlan, traceDir);
+
+            // Set plan in tracer
+            if (tracer) {
+                tracer.setPlan(originalPlan);
+                tracer.setPlanPaths(originalPlanPath);
+            }
+
+            // STEP 2: EXECUTE PLAN
+            console.log(`[Execution] Executing plan...`);
+            const executor = new PlanExecutor();
+            const planResult = await executor.executePlan(
+                originalPlan,
+                this.options,
+                tracer || undefined
+            );
+
+            console.log(`[Execution] Plan execution ${planResult.success ? "succeeded" : "failed"}`);
+            console.log(`[Execution] Executed ${planResult.executedSteps}/${planResult.totalSteps} steps`);
+            if (planResult.corrections.length > 0) {
+                console.log(`[Execution] ${planResult.corrections.length} corrections made during execution`);
+            }
+
+            // STEP 3: GENERATE REVISED PLAN (learning)
+            if (tracer) {
+                console.log(`[Learning] Generating revised plan based on execution...`);
+                const trace = tracer.getTrace();
+
+                const revisedPlan = await planner.revisePlan(originalPlan, trace, {
+                    preserveStructure: false,
+                    onlyCorrections: false,
+                });
+
+                console.log(`[Learning] Generated revised plan (v${revisedPlan.version})`);
+
+                // Save revised plan and comparison
+                const revisedPlanPath = await serializer.saveRevisedPlan(revisedPlan, traceDir);
+                await serializer.savePlanSummary(revisedPlan, traceDir);
+                await serializer.savePlanComparison(originalPlan, revisedPlan, traceDir);
+
+                // Update tracer with revised plan path
+                tracer.setPlanPaths(originalPlanPath, revisedPlanPath);
+
+                console.log(`[Learning] Saved revised plan and comparison`);
+            }
+
+            // Mark trace complete and save
+            if (tracer) {
+                tracer.markComplete(planResult.success, planResult.error);
+                await tracer.saveTrace();
+            }
+
+            const duration = Date.now() - startTime;
+
+            return {
+                taskId: task.id,
+                success: planResult.success,
+                data: planResult.data,
+                duration: duration,
+            };
+
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            console.error(`[Error] Plan-based execution failed:`, error);
+
+            if (tracer) {
+                tracer.markComplete(false, error instanceof Error ? error.message : String(error));
+                await tracer.saveTrace();
+            }
+
+            return {
+                taskId: task.id,
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                duration: duration,
+            };
+        }
+    }
+
+    /**
+     * Build the subagent prompt for a WebTask
+     */
+    private buildSubagentPrompt(task: WebTask): string {
+        return `Execute this browser automation task using a subagent:
+
+Task: "${task.description}"
+Starting URL: ${task.startingUrl}
+Category: ${task.category}
+Difficulty: ${task.difficulty}
+
+Use the Task tool to launch a general-purpose subagent with this prompt:
+
+"""
+You are a browser automation expert. Execute this task:
+"${task.description}"
+
+Starting URL: ${task.startingUrl}
+
+# Available Browser Actions
+
+You have access to browser action tools (via mcp__command-executor__). The available actions are defined by the following TypeScript schema:
+
+\`\`\`typescript
+// Open a web page
+export type OpenWebPage = {
+    actionName: "browser__openWebPage";
+    parameters: {
+        site: string; // URL to open
+        tab?: "new" | "current" | "existing"; // Optional: where to open (default: current)
+    };
+};
+
+// Get the HTML content of the current page
+// Returns HTML as text that you can read and analyze
+export type GetHTML = {
+    actionName: "browser__getHTML";
+    parameters?: {
+        fullHTML?: boolean; // Include complete HTML (default: false)
+        extractText?: boolean; // Extract text only (default: false)
+    };
+};
+
+// Click on an element using a CSS selector
+export type ClickOnElement = {
+    actionName: "browser__clickOnElement";
+    parameters: {
+        cssSelector: string; // CSS selector for the element to click
+    };
+};
+
+// Type text into an input element
+export type EnterTextInElement = {
+    actionName: "browser__enterTextInElement";
+    parameters: {
+        cssSelector: string; // CSS selector for the input element
+        value: string; // Text to enter
+        submitForm?: boolean; // Submit the form after entering text (default: false)
+    };
+};
+
+// Wait for the page to finish loading
+export type AwaitPageLoad = {
+    actionName: "browser__awaitPageLoad";
+};
+
+// Scroll down on the current page
+export type ScrollDown = {
+    actionName: "browser__scrollDown";
+};
+
+// Scroll up on the current page
+export type ScrollUp = {
+    actionName: "browser__scrollUp";
+};
+
+// Union of all available browser actions
+export type BrowserAction =
+    | OpenWebPage
+    | GetHTML
+    | ClickOnElement
+    | EnterTextInElement
+    | AwaitPageLoad
+    | ScrollDown
+    | ScrollUp;
+\`\`\`
+
+# Instructions
+
+1. **Prefer using the browser action tools defined above**
+   - Call with the exact actionName (e.g., "browser__openWebPage", "browser__getHTML")
+   - Provide required parameters as shown in the schema
+   - Natural language commands via execute_command are acceptable as a fallback
+
+2. **Always retrieve and analyze HTML before extracting data**
+   - Call browser__getHTML() to retrieve the page HTML
+   - Use Read/Grep tools to analyze the HTML structure
+   - Extract data by parsing the HTML content
+
+3. **Example workflow for searching:**
+   a) browser__openWebPage({ site: "https://example.com" })
+   b) browser__awaitPageLoad()
+   c) browser__getHTML() → Returns HTML content
+   d) Analyze the HTML to find search input selector (e.g., "input[name='q']")
+   e) browser__clickOnElement({ cssSelector: "input[name='q']" })
+   f) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
+   g) browser__awaitPageLoad()
+   h) browser__getHTML() → Returns search results HTML
+   i) Use Grep/Read to analyze HTML and extract product information
+
+${this.getCategorySpecificGuidance(task.category)}
+
+Return format:
+{
+  "success": true,
+  "data": <extracted or confirmed data>,
+  "steps": ["step 1", "step 2", ...]
+}
+
+If something fails, return:
+{
+  "success": false,
+  "error": "description of what went wrong",
+  "steps": ["step 1", "step 2 (failed)", ...]
+}
+"""
+
+Launch the subagent and return its result.`;
+    }
+
+    /**
+     * Get category-specific guidance
+     */
+    private getCategorySpecificGuidance(category: string): string {
+        switch (category) {
+            case "READ":
+                return `
+This is a READ task - extract information from the page.
+Expected result: Structured data (array of objects, list of items, etc.)
+Example: [{"title": "...", "price": "..."}]`;
+
+            case "CREATE":
+                return `
+This is a CREATE task - add new content (post, comment, item, etc.)
+Expected result: Confirmation that item was created
+Example: {"success": true, "created": "blog post", "id": "123"}`;
+
+            case "DELETE":
+                return `
+This is a DELETE task - remove existing content
+Expected result: Confirmation that item was deleted
+Example: {"success": true, "deleted": "item #5"}`;
+
+            case "UPDATE":
+                return `
+This is an UPDATE task - modify existing content
+Expected result: Confirmation that item was updated
+Example: {"success": true, "updated": "profile settings"}`;
+
+            default:
+                return "";
+        }
+    }
+
+    /**
+     * Parse subagent result from text response
+     */
+    private parseSubagentResult(response: string): {
+        success: boolean;
+        data?: any;
+        error?: string;
+    } {
+        // Try to extract JSON from response
+        const jsonMatch = response.match(/\{[\s\S]*"success"[\s\S]*\}/);
+
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                return parsed;
+            } catch (e) {
+                // Failed to parse JSON
+            }
+        }
+
+        // If no JSON found, check if response indicates success
+        if (response.toLowerCase().includes("success")) {
+            return {
+                success: true,
+                data: { raw: response },
+            };
+        }
+
+        // Default to failure
+        return {
+            success: false,
+            error: "Could not parse subagent result",
+            data: { raw: response },
+        };
+    }
+
+    /**
+     * Execute multiple tasks sequentially
+     */
+    async executeTasks(
+        tasks: WebTask[],
+        execOptions?: TaskExecutionOptions | undefined,
+    ): Promise<TaskExecutionResult[]> {
+        const results: TaskExecutionResult[] = [];
+
+        console.log(`\n=== Executing ${tasks.length} WebBench Tasks ===`);
+
+        if (execOptions?.collectTraces) {
+            console.log(`[Trace] Run ID: ${this.runId}`);
+            console.log(
+                `[Trace] Traces will be saved to: ${execOptions.traceDir || "./traces"}/${this.runId}`,
+            );
+        }
+
+        for (let i = 0; i < tasks.length; i++) {
+            console.log(`\n--- Task ${i + 1}/${tasks.length} ---`);
+            const result = await this.executeTask(tasks[i], execOptions);
+            results.push(result);
+
+            // Print result summary
+            if (result.success) {
+                console.log(`✓ SUCCESS (${result.duration}ms)`);
+            } else {
+                console.log(`✗ FAILED (${result.duration}ms): ${result.error}`);
+            }
+        }
+
+        return results;
+    }
+}

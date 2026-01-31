@@ -18,7 +18,8 @@
   "types": "./dist/index.d.ts",
   "bin": {
     "agent-sdk-wrapper": "./dist/cli.js",
-    "generate-grammar": "./dist/generate-grammar-cli.js"
+    "generate-grammar": "./dist/generate-grammar-cli.js",
+    "webtask": "./dist/webtask/cli.js"
   },
   "scripts": {
     "build": "npm run tsc",
@@ -26,6 +27,8 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node dist/cli.js",
+    "cli": "node dist/cli.js",
+    "webtask": "node dist/webtask/cli.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
