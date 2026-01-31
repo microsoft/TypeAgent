@@ -475,24 +475,14 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
 // Instantiate function required by the agent loader
 export function instantiate(): AppAgent {
+    const handler = new CalendarActionHandlerV3();
     return {
-        initializeAgentContext: async () => ({
-            calendarClient: undefined,
-        }),
-        updateAgentContext: async (
-            enable: boolean,
-            context: SessionContext<CalendarActionContext>,
-        ) => {
-            if (enable) {
-                context.agentContext.calendarClient = await createCalendarGraphClient();
-            } else {
-                context.agentContext.calendarClient = undefined;
-            }
-        },
-        executeAction: async (action: AppAction, context: ActionContext<CalendarActionContext>) => {
-            const handler = new CalendarActionHandlerV3();
-            return handler.executeAction(action, context);
-        },
+        initializeAgentContext: (...args) =>
+            handler.initializeAgentContext(...args),
+        updateAgentContext: (enable: boolean, context: SessionContext<CalendarActionContext>) =>
+            handler.updateAgentContext(enable, context),
+        executeAction: (action: AppAction, context: ActionContext<CalendarActionContext>) =>
+            handler.executeAction(action, context),
         ...getCommandInterface(handlers),
     };
 }
