@@ -45,7 +45,8 @@
     "mic": "^2.1.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "node-fetch": "^3.3.2",
-    "openai": "^4.73.0"
+    "openai": "^4.73.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^18.19.3",
