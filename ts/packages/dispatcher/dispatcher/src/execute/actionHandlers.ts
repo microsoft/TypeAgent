@@ -96,7 +96,8 @@ function getStreamingActionContext(
     return actionContext;
 }
 
-async function executeAction(
+// REVIEW: don't export this
+export async function executeAction(
     executableAction: ExecutableAction,
     context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
@@ -296,18 +297,6 @@ export async function executeActions(
         const executableAction = pending.executableAction;
 
         const action = executableAction.action;
-
-        // Skip delegated actions - they were already handled in translation phase
-        if (
-            action.schemaName === "system" &&
-            action.actionName === "delegated"
-        ) {
-            debugActions(
-                "[Dispatcher:Execute] Skipping delegated action - delegation signal already sent",
-            );
-            actionIndex++;
-            continue;
-        }
 
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(

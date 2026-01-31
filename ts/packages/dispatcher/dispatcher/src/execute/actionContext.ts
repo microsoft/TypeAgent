@@ -100,7 +100,7 @@ export function getActionContext(
         closeActionContext: () => {
             closeContextObject(actionIO);
             closeContextObject(actionContext);
-            // This will cause undefined except if context is access for the rare case
+            // This will cause undefined exception if context is access for the rare case
             // the implementation function are saved.
             (context as any) = undefined;
         },

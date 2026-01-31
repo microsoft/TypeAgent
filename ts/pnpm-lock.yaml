@@ -3110,12 +3110,15 @@ importers:
 
   packages/dispatcher/dispatcher:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.1.13)
       '@azure/ai-agents':
         specifier: ^1.0.0-beta.3
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@4.1.13)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -3193,13 +3196,16 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
       typechat-utils:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
       website-memory:
         specifier: workspace:*
         version: link:../../memory/website
+      zod:
+        specifier: ^4.1.13
+        version: 4.1.13
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -14377,6 +14383,39 @@ snapshots:
       - ws
       - zod
 
+  '@azure/ai-projects@1.0.0-beta.8(ws@8.18.2)(zod@4.1.13)':
+    dependencies:
+      '@azure-rest/ai-inference': 1.0.0-beta.6
+      '@azure-rest/core-client': 2.4.0
+      '@azure/abort-controller': 2.1.2
+      '@azure/ai-agents': 1.0.0-beta.3
+      '@azure/core-auth': 1.9.0
+      '@azure/core-lro': 3.2.0
+      '@azure/core-paging': 1.6.2
+      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-sse': 2.2.0
+      '@azure/core-tracing': 1.2.0
+      '@azure/core-util': 1.11.0
+      '@azure/logger': 1.2.0
+      '@azure/opentelemetry-instrumentation-azure-sdk': 1.0.0-beta.8
+      '@azure/storage-blob': 12.27.0
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/api-logs': 0.200.0
+      '@opentelemetry/exporter-logs-otlp-grpc': 0.200.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-grpc': 0.200.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-logs': 0.200.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-node': 1.30.1(@opentelemetry/api@1.9.0)
+      '@traceloop/instrumentation-langchain': 0.13.0(@opentelemetry/api@1.9.0)
+      '@traceloop/instrumentation-openai': 0.13.0(@opentelemetry/api@1.9.0)
+      openai: 4.103.0(ws@8.18.2)(zod@4.1.13)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - ws
+      - zod
+
   '@azure/arm-authorization@9.0.0':
     dependencies:
       '@azure/core-auth': 1.9.0
@@ -23430,6 +23469,21 @@ snapshots:
     optionalDependencies:
       ws: 8.18.2
       zod: 3.24.4
+    transitivePeerDependencies:
+      - encoding
+
+  openai@4.103.0(ws@8.18.2)(zod@4.1.13):
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    optionalDependencies:
+      ws: 8.18.2
+      zod: 4.1.13
     transitivePeerDependencies:
       - encoding
 
