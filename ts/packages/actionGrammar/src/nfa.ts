@@ -71,6 +71,10 @@ export interface NFAState {
     // Optional: Rule index for epsilon transitions from start (which rule this path belongs to)
     // This allows tracking which grammar rule produced a match
     ruleIndex?: number | undefined;
+
+    // Optional: Action value for this rule (used for nested rules that have their own action values)
+    // This allows returning the correct action even when nested rules don't have top-level rule indices
+    actionValue?: any | undefined;
 }
 
 /**
@@ -83,6 +87,10 @@ export interface NFA {
 
     // Metadata
     name?: string | undefined;
+
+    // Action values for each rule - array indexed by ruleIndex
+    // undefined means "return matched text" (no explicit -> value)
+    actionValues: Array<any | undefined>;
 }
 
 /**
@@ -91,6 +99,7 @@ export interface NFA {
 export class NFABuilder {
     private states: NFAState[] = [];
     private nextStateId = 0;
+    private actionValues: Array<any | undefined> = [];
 
     createState(accepting: boolean = false): number {
         const id = this.nextStateId++;
@@ -161,7 +170,16 @@ export class NFABuilder {
             startState,
             acceptingStates,
             name,
+            actionValues: this.actionValues,
         };
+    }
+
+    /**
+     * Set the action value for a rule at the given index
+     * undefined means "return matched text"
+     */
+    setActionValue(ruleIndex: number, actionValue: any | undefined): void {
+        this.actionValues[ruleIndex] = actionValue;
     }
 
     getStateCount(): number {

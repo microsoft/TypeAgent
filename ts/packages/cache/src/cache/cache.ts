@@ -159,6 +159,8 @@ export class AgentCache {
         this._agentGrammarRegistry = agentGrammarRegistry;
         this._persistedGrammarStore = persistedGrammarStore;
         this._useNFAGrammar = useNFA;
+        // Enable NFA matching in the grammar store
+        this._grammarStore.setUseNFA(useNFA);
         console.log(
             `[AgentCache] Grammar system configured: ${useNFA ? "NFA" : "completion-based"}`,
         );

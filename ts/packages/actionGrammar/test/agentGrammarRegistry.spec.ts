@@ -27,6 +27,12 @@ describe("Agent Grammar Registry", () => {
                                 typeName: "string",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: {
+                                track: { type: "variable", name: "track" },
+                            },
+                        },
                     },
                 ],
             };
@@ -337,6 +343,12 @@ describe("Agent Grammar Registry", () => {
                                 typeName: "string",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: {
+                                track: { type: "variable", name: "track" },
+                            },
+                        },
                     },
                 ],
             };
@@ -354,6 +366,12 @@ describe("Agent Grammar Registry", () => {
                                 typeName: "string",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: {
+                                event: { type: "variable", name: "event" },
+                            },
+                        },
                     },
                 ],
             };

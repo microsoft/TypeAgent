@@ -135,15 +135,18 @@ describe("DFA Compilation", () => {
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
+                    value: { type: "literal", value: "play-music" },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["song"] },
                     ],
+                    value: { type: "literal", value: "play-song" },
                 },
                 {
                     parts: [{ type: "string", value: ["pause"] }],
+                    value: { type: "literal", value: "pause" },
                 },
             ],
         };
@@ -263,6 +266,7 @@ describe("DFA Compilation", () => {
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
+                    value: { type: "literal", value: "play-music" },
                 },
             ],
         };
@@ -398,6 +402,10 @@ describe("DFA Compilation", () => {
                             optional: false,
                         },
                     ],
+                    value: {
+                        type: "object",
+                        value: { track: { type: "variable", name: "track" } },
+                    },
                 },
                 {
                     parts: [
@@ -409,12 +417,17 @@ describe("DFA Compilation", () => {
                             optional: false,
                         },
                     ],
+                    value: {
+                        type: "object",
+                        value: { id: { type: "variable", name: "id" } },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
+                    value: { type: "literal", value: "play-music" },
                 },
             ],
         };

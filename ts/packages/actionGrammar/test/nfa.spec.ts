@@ -118,6 +118,7 @@ describe("NFA Infrastructure", () => {
                                 value: ["world"],
                             },
                         ],
+                        value: { type: "literal", value: "hello-world" },
                     },
                 ],
             };
@@ -147,6 +148,10 @@ describe("NFA Infrastructure", () => {
                                 typeName: "string",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: { name: { type: "variable", name: "name" } },
+                        },
                     },
                 ],
             };
@@ -174,6 +179,10 @@ describe("NFA Infrastructure", () => {
                                 optional: true,
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: { name: { type: "variable", name: "name" } },
+                        },
                     },
                 ],
             };

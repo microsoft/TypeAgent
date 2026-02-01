@@ -23,6 +23,7 @@ export {
 
 export {
     ScenarioBasedGrammarGenerator,
+    ScenarioGeneratorOptions,
     ScenarioGrammarConfig,
     ScenarioGrammarResult,
 } from "./scenarioBasedGenerator.js";

@@ -18,6 +18,9 @@ export interface NFAMatchResult {
     fixedStringPartCount: number; // # of token transitions taken
     checkedWildcardCount: number; // # of wildcard transitions with type constraints
     uncheckedWildcardCount: number; // # of wildcard transitions without type constraints
+    // Rule identification
+    ruleIndex?: number | undefined; // Index of the matched grammar rule
+    actionValue?: any | undefined; // Action value from matched rule (for nested rules)
     // Debugging info
     visitedStates?: number[] | undefined;
     tokensConsumed?: number | undefined;
@@ -32,6 +35,9 @@ interface NFAExecutionState {
     fixedStringPartCount: number;
     checkedWildcardCount: number;
     uncheckedWildcardCount: number;
+    // Rule tracking
+    ruleIndex?: number | undefined; // Which grammar rule this execution thread belongs to
+    actionValue?: any | undefined; // Action value from the matched rule (for nested rules)
 }
 
 /**
@@ -62,6 +68,8 @@ export function matchNFA(
             fixedStringPartCount: 0,
             checkedWildcardCount: 0,
             uncheckedWildcardCount: 0,
+            ruleIndex: undefined,
+            actionValue: undefined,
         },
     ]);
 
@@ -128,6 +136,8 @@ export function matchNFA(
                 fixedStringPartCount: state.fixedStringPartCount,
                 checkedWildcardCount: state.checkedWildcardCount,
                 uncheckedWildcardCount: state.uncheckedWildcardCount,
+                ruleIndex: state.ruleIndex,
+                actionValue: state.actionValue,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: tokens.length,
             });
@@ -175,6 +185,8 @@ function tryTransition(
                     fixedStringPartCount: currentState.fixedStringPartCount + 1,
                     checkedWildcardCount: currentState.checkedWildcardCount,
                     uncheckedWildcardCount: currentState.uncheckedWildcardCount,
+                    ruleIndex: currentState.ruleIndex,
+                    actionValue: currentState.actionValue,
                 };
             }
             return undefined;
@@ -259,6 +271,8 @@ function tryTransition(
                 uncheckedWildcardCount: isChecked
                     ? currentState.uncheckedWildcardCount
                     : currentState.uncheckedWildcardCount + 1,
+                ruleIndex: currentState.ruleIndex,
+                actionValue: currentState.actionValue,
             };
 
         case "epsilon":
@@ -297,22 +311,43 @@ function epsilonClosure(
             continue;
         }
         visited.add(key);
-        result.push(state);
 
         const nfaState = nfa.states[state.stateId];
         if (!nfaState) continue;
+
+        // Capture rule index from state marker if present
+        const currentRuleIndex =
+            nfaState.ruleIndex !== undefined
+                ? nfaState.ruleIndex
+                : state.ruleIndex;
+
+        // Capture action value from state marker if present (prefer more recent values)
+        const currentActionValue =
+            nfaState.actionValue !== undefined
+                ? nfaState.actionValue
+                : state.actionValue;
+
+        // Update the state with current values before adding to result
+        const updatedState: NFAExecutionState = {
+            ...state,
+            ruleIndex: currentRuleIndex,
+            actionValue: currentActionValue,
+        };
+        result.push(updatedState);
 
         // Follow epsilon transitions
         for (const trans of nfaState.transitions) {
             if (trans.type === "epsilon") {
                 queue.push({
                     stateId: trans.to,
-                    tokenIndex: state.tokenIndex,
-                    captures: new Map(state.captures),
-                    path: [...state.path, trans.to],
-                    fixedStringPartCount: state.fixedStringPartCount,
-                    checkedWildcardCount: state.checkedWildcardCount,
-                    uncheckedWildcardCount: state.uncheckedWildcardCount,
+                    tokenIndex: updatedState.tokenIndex,
+                    captures: new Map(updatedState.captures),
+                    path: [...updatedState.path, trans.to],
+                    fixedStringPartCount: updatedState.fixedStringPartCount,
+                    checkedWildcardCount: updatedState.checkedWildcardCount,
+                    uncheckedWildcardCount: updatedState.uncheckedWildcardCount,
+                    ruleIndex: currentRuleIndex,
+                    actionValue: currentActionValue,
                 });
             }
         }

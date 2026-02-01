@@ -6,7 +6,6 @@ import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
 import {
     ScenarioTemplate,
     getPrefixSuffixPatterns,
-    PrefixSuffixPatterns,
 } from "./scenarioTemplates.js";
 import { loadGrammarRules } from "../grammarLoader.js";
 
@@ -20,14 +19,20 @@ export interface ScenarioGrammarConfig {
     patternsPerScenario?: number;
     /** Ratio of French patterns to English (e.g., 0.1 for 10% French) */
     frenchRatio?: number;
-    /** Model to use for generation */
-    model?: string;
     /** Include prefix/suffix patterns in output */
     includePrefixSuffixPatterns?: boolean;
-    /** Maximum retries for grammar validation/fixing */
-    maxRetries?: number;
     /** Existing grammar to extend (optional) */
     existingGrammar?: string;
+}
+
+/**
+ * Constructor configuration for ScenarioBasedGrammarGenerator
+ */
+export interface ScenarioGeneratorOptions {
+    /** Model to use for generation */
+    model?: string;
+    /** Maximum retries for grammar validation/fixing */
+    maxRetries?: number;
 }
 
 /**
@@ -119,7 +124,7 @@ export class ScenarioBasedGrammarGenerator {
     private model: string;
     private maxRetries: number;
 
-    constructor(config: ScenarioGrammarConfig = {}) {
+    constructor(config: ScenarioGeneratorOptions = {}) {
         this.model = config.model || "claude-sonnet-4-20250514";
         this.maxRetries = config.maxRetries || 3;
     }
@@ -384,6 +389,226 @@ export class ScenarioBasedGrammarGenerator {
     }
 
     /**
+     * Extract verb phrase and structure from a pattern
+     * Returns { verbPhrase, structure } where structure has wildcards replaced with placeholders
+     */
+    private extractPatternStructure(pattern: string): {
+        verbPhrase: string;
+        structure: string;
+    } {
+        // Find the first wildcard
+        const wildcardMatch = pattern.match(/\$\([^)]+\)/);
+        if (!wildcardMatch) {
+            // No wildcards - the whole thing is the verb phrase
+            return { verbPhrase: pattern.trim(), structure: pattern };
+        }
+
+        const firstWildcardIndex = wildcardMatch.index!;
+        const verbPhrase = pattern.substring(0, firstWildcardIndex).trim();
+
+        // Get structure: everything from first wildcard onwards with wildcards replaced by PARAM
+        const paramsPart = pattern.substring(firstWildcardIndex);
+        const structure = paramsPart.replace(/\$\([^)]+\)/g, "PARAM");
+
+        return { verbPhrase, structure };
+    }
+
+    /**
+     * Group patterns by their parameter structure and extract verb phrases
+     */
+    private factorizeVerbPhrases(
+        actionName: string,
+        patterns: Set<string>,
+    ): Map<
+        string,
+        { verbPhrases: string[]; examplePattern: string }
+    > {
+        // Map from structure -> { verb phrases, example pattern }
+        const structureToVerbs = new Map<
+            string,
+            { verbs: Set<string>; examplePattern: string }
+        >();
+
+        for (const pattern of patterns) {
+            const { verbPhrase, structure } = this.extractPatternStructure(pattern);
+
+            if (!structureToVerbs.has(structure)) {
+                structureToVerbs.set(structure, {
+                    verbs: new Set(),
+                    examplePattern: pattern,
+                });
+            }
+            structureToVerbs.get(structure)!.verbs.add(verbPhrase);
+        }
+
+        // Convert to final format
+        const result = new Map<
+            string,
+            { verbPhrases: string[]; examplePattern: string }
+        >();
+        for (const [structure, data] of structureToVerbs) {
+            result.set(structure, {
+                verbPhrases: Array.from(data.verbs).sort(),
+                examplePattern: data.examplePattern,
+            });
+        }
+
+        return result;
+    }
+
+    /**
+     * Analyze all patterns across actions to identify common verb categories
+     * that can be shared across multiple actions
+     */
+    private identifyCommonVerbCategories(
+        allPatterns: Map<string, Set<string>>,
+    ): Map<string, { verbs: Set<string>; actions: Set<string> }> {
+        // Build verb → actions map
+        const verbToActions = new Map<string, Set<string>>();
+
+        for (const [actionName, patterns] of allPatterns) {
+            for (const pattern of patterns) {
+                const { verbPhrase } = this.extractPatternStructure(pattern);
+                // Normalize verb phrase (lowercase, trim)
+                const normalizedVerb = verbPhrase.toLowerCase().trim();
+
+                if (!verbToActions.has(normalizedVerb)) {
+                    verbToActions.set(normalizedVerb, new Set());
+                }
+                verbToActions.get(normalizedVerb)!.add(actionName);
+            }
+        }
+
+        // Group verbs into semantic categories
+        // Only keep verbs used by 2+ actions
+        const categories = new Map<
+            string,
+            { verbs: Set<string>; actions: Set<string> }
+        >();
+
+        for (const [verb, actions] of verbToActions) {
+            if (actions.size >= 2) {
+                // Group similar verbs into semantic categories
+                const category = this.getVerbCategory(verb);
+                if (category) {
+                    if (!categories.has(category)) {
+                        categories.set(category, {
+                            verbs: new Set(),
+                            actions: new Set(),
+                        });
+                    }
+                    categories.get(category)!.verbs.add(verb);
+                    actions.forEach((a) =>
+                        categories.get(category)!.actions.add(a),
+                    );
+                }
+            }
+        }
+
+        return categories;
+    }
+
+    /**
+     * Map a verb to its semantic category for sharing across actions
+     * Returns null if the verb shouldn't be shared
+     */
+    private getVerbCategory(verb: string): string | null {
+        const lower = verb.toLowerCase().trim();
+
+        // Add/Create category
+        if (
+            [
+                "add",
+                "create",
+                "make",
+                "setup",
+                "set up",
+                "insert",
+                "schedule",
+                "plan",
+            ].some((v) => lower.includes(v))
+        ) {
+            return "CommonVerbs_Add_EN";
+        }
+
+        // Show/Display category
+        if (
+            [
+                "show",
+                "display",
+                "list",
+                "get",
+                "find",
+                "search",
+                "look for",
+                "check",
+            ].some((v) => lower.includes(v))
+        ) {
+            return "CommonVerbs_Show_EN";
+        }
+
+        // Remove/Delete category
+        if (
+            [
+                "remove",
+                "delete",
+                "clear",
+                "erase",
+                "take away",
+                "cancel",
+            ].some((v) => lower.includes(v))
+        ) {
+            return "CommonVerbs_Delete_EN";
+        }
+
+        // Update/Change category
+        if (
+            [
+                "update",
+                "change",
+                "modify",
+                "edit",
+                "revise",
+                "adjust",
+            ].some((v) => lower.includes(v))
+        ) {
+            return "CommonVerbs_Update_EN";
+        }
+
+        // Not a common verb category
+        return null;
+    }
+
+    /**
+     * Generate shared verb category rules that can be used across multiple actions
+     */
+    private generateSharedVerbCategoryRules(
+        categories: Map<string, { verbs: Set<string>; actions: Set<string> }>,
+    ): string {
+        if (categories.size === 0) {
+            return "";
+        }
+
+        let output = `// Shared verb categories (used by multiple actions)\n`;
+
+        for (const [categoryName, info] of categories) {
+            const verbsList = Array.from(info.verbs).sort();
+            if (verbsList.length > 0) {
+                output += `@ <${categoryName}> =\n`;
+                verbsList.forEach((verb, index) => {
+                    const separator = index < verbsList.length - 1 ? " |" : "";
+                    // Escape single quotes in verb phrases
+                    const escapedVerb = verb.replace(/'/g, "\\'");
+                    output += `    '${escapedVerb}'${separator}\n`;
+                });
+                output += `\n`;
+            }
+        }
+
+        return output;
+    }
+
+    /**
      * Build complete .agr grammar file from generated patterns
      */
     private buildGrammarFile(
@@ -411,37 +636,154 @@ export class ScenarioBasedGrammarGenerator {
             output += `\n`;
         }
 
-        // Generate action rules
+        // Identify and generate shared verb categories
+        const sharedVerbCategories = this.identifyCommonVerbCategories(allPatterns);
+        if (sharedVerbCategories.size > 0) {
+            output += this.generateSharedVerbCategoryRules(sharedVerbCategories);
+            output += `\n`;
+        }
+
+        // Generate action rules with verb phrase factorization
         for (const [actionName, patterns] of allPatterns) {
             const actionInfo = schemaInfo.actions.get(actionName);
             if (!actionInfo) continue;
 
             output += `// ${actionName} - ${patterns.size} patterns\n`;
+
+            // Factorize verb phrases
+            const structureToVerbs = this.factorizeVerbPhrases(actionName, patterns);
+
+            // If we have multiple verb phrases for any structure, create verb phrase rules
+            let structureIndex = 0;
+            const structureRules = new Map<string, string>();
+
+            for (const [structure, data] of structureToVerbs) {
+                if (data.verbPhrases.length > 1) {
+                    // Check if these verbs belong to a shared category
+                    const firstVerb = data.verbPhrases[0].toLowerCase().trim();
+                    const sharedCategory = this.getVerbCategory(firstVerb);
+
+                    // If this is a shared category used by this action, reference it
+                    if (
+                        sharedCategory &&
+                        sharedVerbCategories.has(sharedCategory)
+                    ) {
+                        const categoryInfo = sharedVerbCategories.get(sharedCategory)!;
+                        // Check if most of the verbs in this structure are in the shared category
+                        const sharedVerbs = data.verbPhrases.filter((v) =>
+                            categoryInfo.verbs.has(v.toLowerCase().trim()),
+                        );
+                        if (sharedVerbs.length >= data.verbPhrases.length * 0.7) {
+                            // 70% threshold
+                            // Use the shared category instead of creating action-specific rule
+                            structureRules.set(structure, sharedCategory);
+                            continue; // Skip creating action-specific rule
+                        }
+                    }
+
+                    // Create action-specific verb phrase rule (not shared)
+                    const ruleName = `${actionName}_Verb${structureIndex}`;
+                    structureRules.set(structure, ruleName);
+
+                    output += `@ <${ruleName}> =\n`;
+                    data.verbPhrases.forEach((verb, index) => {
+                        const escapedVerb = this.escapePatternHyphens(verb);
+                        const separator =
+                            index < data.verbPhrases.length - 1 ? " |" : "";
+                        // Use quotes for multi-word phrases or phrases with special chars
+                        const needsQuotes =
+                            verb.includes(" ") || verb !== escapedVerb;
+                        if (needsQuotes) {
+                            output += `    '${escapedVerb}'${separator}\n`;
+                        } else {
+                            output += `    ${escapedVerb}${separator}\n`;
+                        }
+                    });
+                    output += `\n`;
+
+                    structureIndex++;
+                }
+            }
+
+            // Now generate the action rule
             output += `@ <${actionName}> =\n`;
 
-            const patternArray = Array.from(patterns);
-            patternArray.forEach((pattern, index) => {
-                // Build the complete rule with action object
+            const structureArray = Array.from(structureToVerbs.entries());
+            structureArray.forEach(([structure, data], index) => {
+                let pattern: string;
+
+                if (structureRules.has(structure)) {
+                    // Use the verb phrase rule
+                    const verbRuleName = structureRules.get(structure)!;
+                    // Extract the parameter part from the example pattern
+                    const { verbPhrase } = this.extractPatternStructure(
+                        data.examplePattern,
+                    );
+                    const paramsPart = data.examplePattern
+                        .substring(verbPhrase.length)
+                        .trim();
+                    pattern = `<${verbRuleName}> ${paramsPart}`;
+                } else {
+                    // Single verb phrase - use the example pattern directly
+                    pattern = data.examplePattern;
+                }
+
+                const escapedPattern = this.escapePatternHyphens(pattern);
                 const ruleWithAction = this.buildRuleWithAction(
-                    pattern,
+                    escapedPattern,
                     actionInfo,
                     schemaInfo,
                 );
 
-                const separator = index < patternArray.length - 1 ? " |" : "";
+                const separator = index < structureArray.length - 1 ? " |" : "";
                 output += `    ${ruleWithAction}${separator}\n`;
             });
 
             output += `\n`;
         }
 
-        // Add <Start> rule
-        output += `@ <Start> =\n`;
+        // Add <ActionStart> rule (all action alternatives)
+        output += `@ <ActionStart> =\n`;
         const actionNames = Array.from(allPatterns.keys());
         actionNames.forEach((name, index) => {
             const separator = index < actionNames.length - 1 ? " |" : "";
             output += `    <${name}>${separator}\n`;
         });
+        output += `\n`;
+
+        // Add combined prefix rules for each language
+        output += `// Combined prefix categories\n`;
+        output += `@ <Prefix_EN> =\n`;
+        output += `    <PolitePrefix_EN> |\n`;
+        output += `    <DesirePrefix_EN> |\n`;
+        output += `    <ActionInitiator_EN> |\n`;
+        output += `    <Greeting_EN>\n`;
+        output += `\n`;
+
+        output += `@ <Prefix_FR> =\n`;
+        output += `    <PolitePrefix_FR> |\n`;
+        output += `    <DesirePrefix_FR> |\n`;
+        output += `    <ActionInitiator_FR> |\n`;
+        output += `    <Greeting_FR>\n`;
+        output += `\n`;
+
+        // Add combined suffix rules for each language
+        output += `// Combined suffix categories\n`;
+        output += `@ <Suffix_EN> =\n`;
+        output += `    <PoliteSuffix_EN> |\n`;
+        output += `    <Acknowledgement_EN>\n`;
+        output += `\n`;
+
+        output += `@ <Suffix_FR> =\n`;
+        output += `    <PoliteSuffix_FR> |\n`;
+        output += `    <Acknowledgement_FR>\n`;
+        output += `\n`;
+
+        // Add <Start> rule with optional prefix and suffix
+        output += `// Main Start rule with optional prefixes and suffixes\n`;
+        output += `@ <Start> =\n`;
+        output += `    (<Prefix_EN>)? <ActionStart> (<Suffix_EN>)? |\n`;
+        output += `    (<Prefix_FR>)? <ActionStart> (<Suffix_FR>)?\n`;
 
         return output;
     }
@@ -509,6 +851,24 @@ export class ScenarioBasedGrammarGenerator {
     }
 
     /**
+     * Escape special characters in quoted string literals
+     * Special chars: @, |, (, ), <, >, $, -, {, }, [, ], '
+     */
+    private escapeSpecialChars(text: string): string {
+        return text.replace(/[@|()\[\]<>$\-{}']/g, "\\$&");
+    }
+
+    /**
+     * Escape hyphens in unquoted grammar patterns
+     * Only escapes standalone hyphens, not those in -> arrows or grammar syntax
+     */
+    private escapePatternHyphens(pattern: string): string {
+        // Escape hyphens that aren't part of -> arrow
+        // Look for hyphen not followed by >
+        return pattern.replace(/-(?!>)/g, "\\-");
+    }
+
+    /**
      * Generate a single prefix/suffix rule
      */
     private generatePrefixSuffixRule(
@@ -518,7 +878,8 @@ export class ScenarioBasedGrammarGenerator {
         let output = `@ <${ruleName}> =\n`;
         patterns.forEach((pattern, index) => {
             const separator = index < patterns.length - 1 ? " |" : "";
-            output += `    '${pattern}'${separator}\n`;
+            const escaped = this.escapeSpecialChars(pattern);
+            output += `    '${escaped}'${separator}\n`;
         });
         return output;
     }

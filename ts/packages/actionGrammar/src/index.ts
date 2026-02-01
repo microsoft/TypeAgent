@@ -49,6 +49,13 @@ export {
 export { compileGrammarToNFA } from "./nfaCompiler.js";
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
+// NFA-based grammar matching
+export {
+    matchGrammarWithNFA,
+    tokenizeRequest,
+    type NFAGrammarMatchResult,
+} from "./nfaMatcher.js";
+
 // DFA system
 export type {
     DFA,
