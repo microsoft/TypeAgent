@@ -357,7 +357,7 @@ function registerClient(
                     //     expression.type === "question" ||
                     //     expression.type === "command"
                     // ) {
-                        chatView.addUserMessage(JSON.stringify(expression.text));
+                    chatView.addUserMessage(JSON.stringify(expression.text));
                     //}
                 }
             }

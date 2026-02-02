@@ -13,7 +13,7 @@ import {
     iconAttach,
     iconSend,
     iconMicrophoneContinuousListening,
-    iconMicrophoneWakeWord
+    iconMicrophoneWakeWord,
 } from "../icon";
 import { getClientAPI } from "../main";
 import {
@@ -292,12 +292,12 @@ export class ChatInput {
         this.lastSpeechArrived = Date.now();
 
         console.log("Running Recognizing step");
- 
+
         // if (this.continuous && this.waitForWakeWord) {
         //     text = this.textarea.getTextContent() + " " + text;
         // }
 
-       // Update the hypothesis line in the phrase/result view (only have one)
+        // Update the hypothesis line in the phrase/result view (only have one)
         this.textarea.setTextContent(
             this.textarea
                 .getTextContent()
@@ -311,7 +311,6 @@ export class ChatInput {
         }
 
         if (this.continuous) {
-
             // if we are waiting for a wake word, look for it and ignore anything before it
             // also remove the wakeword from the text.
             if (this.waitForWakeWord) {
@@ -323,13 +322,15 @@ export class ChatInput {
                 } else {
                     // we are now actively listening until we get an actionable event
                     this.awakeAndListening = true;
-                    
+
                     // remove everything before and including the wake word
-                    text = text.substring(wakeWordIndex + wakeWord.length).trim();
+                    text = text
+                        .substring(wakeWordIndex + wakeWord.length)
+                        .trim();
 
                     // indicate to the user that we are now actively processing
                     this.inputContainer.classList.add("listening");
-                }                
+                }
             }
 
             this.speechRefCount++;
@@ -345,39 +346,40 @@ export class ChatInput {
      * @param text The speech text to process
      */
     private processSpeech(text: string) {
-        setTimeout(() =>
-            {
-                this.speechRefCount--;
+        setTimeout(() => {
+            this.speechRefCount--;
 
-                // if the ref count is zero, reset the text area to remove any stale recognizing text
-                if (this.speechRefCount === 0 && Date.now() - this.lastSpeechArrived > this.speechIntervalTimeout) {
-                    // process what the user said
-                    getClientAPI()
-                        .continuousSpeechProcessing(text)
-                        .then((response) => {
-                            if (response) {
-                                this.textarea.setTextContent(
-                                    this.textarea
-                                        .getTextContent()
-                                        .replace(
-                                            /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
-                                            "$1$2",
-                                        ) + `${response}\r\n`,
-                                );
-                            }
+            // if the ref count is zero, reset the text area to remove any stale recognizing text
+            if (
+                this.speechRefCount === 0 &&
+                Date.now() - this.lastSpeechArrived > this.speechIntervalTimeout
+            ) {
+                // process what the user said
+                getClientAPI()
+                    .continuousSpeechProcessing(text)
+                    .then((response) => {
+                        if (response) {
+                            this.textarea.setTextContent(
+                                this.textarea
+                                    .getTextContent()
+                                    .replace(
+                                        /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
+                                        "$1$2",
+                                    ) + `${response}\r\n`,
+                            );
+                        }
 
-                            if (this.waitForWakeWord) {
-                                // indicate to the user that we are no longer actively processing
-                                this.inputContainer.classList.remove("listening");                                
-                            }
-
-                        });                    
-                } else if (this.speechRefCount > 0) {
-                    this.processSpeech(text);
-                } else if (this.speechRefCount < 0) {
-                    this.speechRefCount = 0;
-                }
-            }, this.speechIntervalTimeout);
+                        if (this.waitForWakeWord) {
+                            // indicate to the user that we are no longer actively processing
+                            this.inputContainer.classList.remove("listening");
+                        }
+                    });
+            } else if (this.speechRefCount > 0) {
+                this.processSpeech(text);
+            } else if (this.speechRefCount < 0) {
+                this.speechRefCount = 0;
+            }
+        }, this.speechIntervalTimeout);
     }
 
     public resetLiseningState() {
@@ -387,7 +389,6 @@ export class ChatInput {
     private onRecognized(text: string) {
         // only update the text if the user didn't cancel speech recognition
         if (this.listening || !this.continuous) {
-
             this.textarea.setTextContent(text);
             this.textarea.send();
         }

@@ -42,7 +42,7 @@ function registerClient(client: Client) {
     });
     ipcRenderer.on("wake-listen", (_event) => {
         client.toggleAlwaysListen(true);
-    });    
+    });
     ipcRenderer.on("setting-summary-changed", (_, updatedAgents) => {
         client.updateRegisterAgents(updatedAgents);
     });

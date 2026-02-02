@@ -178,5 +178,5 @@ export function initializeSpeech() {
         );
     } else {
         debugShellError("Global shortcut registration failed");
-    }    
+    }
 }
