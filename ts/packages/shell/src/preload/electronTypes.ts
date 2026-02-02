@@ -88,7 +88,7 @@ export interface Client {
     updateSettings(settings: ShellUserSettings): void;
     fileSelected(fileName: string, fileContent: string): void;
     listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void;
-    toggleAlwaysListen(): void;
+    toggleAlwaysListen(waitforWakeWord: boolean): void;
     focusInput(): void;
     titleUpdated(title: string): void;
 
@@ -102,6 +102,7 @@ export interface ElectronWindowFields {
 
 export type ElectronWindow = typeof globalThis & ElectronWindowFields;
 
+// NOTE: This type is duplicated in speechProcessingSchema.ts and must be kept in sync.
 export type UserExpression = {
     type: "statement" | "question" | "command" | "other";
     other_explanation?: string;

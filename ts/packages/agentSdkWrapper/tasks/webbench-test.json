@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "benchmark": "webbench",
+    "version": "1.0",
+    "created": "2026-01-30",
+    "totalTasks": 2,
+    "description": "Test tasks for planning system validation"
+  },
+  "tasks": [
+    {
+      "id": "wb-001",
+      "description": "Search for 'LED light bulbs' on acehardware.com and provide titles and sale prices of the first 5 products",
+      "startingUrl": "https://www.acehardware.com",
+      "category": "READ",
+      "difficulty": "easy",
+      "metadata": {
+        "benchmark": "webbench",
+        "domain": "acehardware.com",
+        "requiresAuth": false,
+        "estimatedSteps": 3,
+        "tags": ["search", "product-listing", "price-extraction"]
+      }
+    },
+    {
+      "id": "wb-002",
+      "description": "Navigate to wikipedia.org, search for 'Artificial Intelligence', and extract the first paragraph of the article",
+      "startingUrl": "https://www.wikipedia.org",
+      "category": "READ",
+      "difficulty": "easy",
+      "metadata": {
+        "benchmark": "webbench",
+        "domain": "wikipedia.org",
+        "requiresAuth": false,
+        "estimatedSteps": 3,
+        "tags": ["search", "content-extraction", "article-reading"]
+      }
+    }
+  ]
+}

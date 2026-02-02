@@ -1666,7 +1666,40 @@ async function executeBrowserAction(
                         },
                     });
                 }
-
+                case "enterTextInElement": {
+                    const control = getActionBrowserControl(context);
+                    await control.enterTextIn(
+                        action.parameters.cssSelector,
+                        action.parameters.value,
+                    );
+                    return;
+                }
+                case "setDropdownValue": {
+                    const control = getActionBrowserControl(context);
+                    await control.setDropdown(
+                        action.parameters.cssSelector,
+                        action.parameters.optionLabel,
+                    );
+                    return;
+                }
+                case "clickOnElement": {
+                    const control = getActionBrowserControl(context);
+                    await control.clickOn(action.parameters.cssSelector);
+                    return;
+                }
+                case "awaitPageLoad": {
+                    const control = getActionBrowserControl(context);
+                    await control.awaitPageLoad();
+                    return;
+                }
+                case "getHTML": {
+                    const control = getActionBrowserControl(context);
+                    const fragments = await control.getHtmlFragments(
+                        false,
+                        "knowledgeExtraction",
+                    );
+                    return createActionResult(JSON.stringify(fragments));
+                }
                 default:
                     // Should never happen.
                     throw new Error(
