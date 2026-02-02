@@ -30,6 +30,18 @@ export interface NFATransition {
     typeName?: string | undefined;
     checked?: boolean | undefined; // true if wildcard has validation (entity type or checked_wildcard paramSpec)
 
+    // Slot assignment for the new environment system
+    // When set, the captured value is written to this slot index
+    slotIndex?: number | undefined;
+    // If true, append to existing value (for multi-word wildcards)
+    appendToSlot?: boolean | undefined;
+
+    // For epsilon transitions exiting nested rules:
+    // When true, evaluate the current rule's actionValue and write to parent slot
+    writeToParent?: boolean | undefined;
+    // The actionValue to evaluate when writing to parent
+    valueToWrite?: any | undefined;
+
     // Target state
     to: number;
 }
@@ -75,6 +87,18 @@ export interface NFAState {
     // Optional: Action value for this rule (used for nested rules that have their own action values)
     // This allows returning the correct action even when nested rules don't have top-level rule indices
     actionValue?: any | undefined;
+
+    // NEW: Environment-based slot system
+    // Number of slots needed for this rule's environment
+    slotCount?: number | undefined;
+
+    // Slot map for this rule (variable name -> slot index)
+    // Set on rule entry states
+    slotMap?: Map<string, number> | undefined;
+
+    // For nested rule references: which slot in the parent environment to write the result to
+    // Set on states that enter a nested rule
+    parentSlotIndex?: number | undefined;
 }
 
 /**
@@ -119,6 +143,8 @@ export class NFABuilder {
         variable?: string,
         typeName?: string,
         checked?: boolean,
+        slotIndex?: number,
+        appendToSlot?: boolean,
     ): void {
         const state = this.states[from];
         if (!state) {
@@ -131,6 +157,8 @@ export class NFABuilder {
             variable,
             typeName,
             checked,
+            slotIndex,
+            appendToSlot,
         });
     }
 
@@ -142,12 +170,35 @@ export class NFABuilder {
         this.addTransition(from, to, "epsilon");
     }
 
+    /**
+     * Add an epsilon transition that writes the current rule's result to the parent slot
+     * Used when exiting a nested rule reference
+     */
+    addEpsilonWithWriteToParent(
+        from: number,
+        to: number,
+        valueToWrite: any,
+    ): void {
+        const state = this.states[from];
+        if (!state) {
+            throw new Error(`State ${from} does not exist`);
+        }
+        state.transitions.push({
+            type: "epsilon",
+            to,
+            writeToParent: true,
+            valueToWrite,
+        });
+    }
+
     addWildcardTransition(
         from: number,
         to: number,
         variable: string,
         typeName?: string,
         checked?: boolean,
+        slotIndex?: number,
+        appendToSlot?: boolean,
     ): void {
         this.addTransition(
             from,
@@ -157,6 +208,8 @@ export class NFABuilder {
             variable,
             typeName,
             checked,
+            slotIndex,
+            appendToSlot,
         );
     }
 
@@ -192,6 +245,27 @@ export class NFABuilder {
             throw new Error(`State ${id} does not exist`);
         }
         return state;
+    }
+
+    /**
+     * Set slot information on a state (for rule entry states)
+     */
+    setStateSlotInfo(
+        stateId: number,
+        slotCount: number,
+        slotMap: Map<string, number>,
+    ): void {
+        const state = this.getState(stateId);
+        state.slotCount = slotCount;
+        state.slotMap = slotMap;
+    }
+
+    /**
+     * Set parent slot index on a state (for nested rule entry)
+     */
+    setStateParentSlotIndex(stateId: number, parentSlotIndex: number): void {
+        const state = this.getState(stateId);
+        state.parentSlotIndex = parentSlotIndex;
     }
 }
 

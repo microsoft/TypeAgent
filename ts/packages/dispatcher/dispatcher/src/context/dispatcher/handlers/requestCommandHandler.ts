@@ -200,12 +200,16 @@ function getExplainerOptions(
     const { list, value, translate } =
         context.session.getConfig().explainer.filter.reference;
 
+    // In NFA mode, skip old construction system validation
+    const isNFAMode = context.agentCache.isUsingNFAGrammar();
+
     return {
         namespaceSuffix: getActivityNamespaceSuffix(
             context,
             requestAction.history?.activityContext,
         ),
-        checkExplainable: translate
+        // In NFA mode, skip contextless translation check (not needed for grammar rules)
+        checkExplainable: translate && !isNFAMode
             ? (requestAction: RequestAction) =>
                   canTranslateWithoutContext(
                       requestAction,
@@ -213,7 +217,7 @@ function getExplainerOptions(
                       context.logger,
                   )
             : undefined,
-        valueInRequest: value,
+        valueInRequest: isNFAMode ? false : value,
         noReferences: list,
     };
 }
@@ -286,7 +290,12 @@ async function requestExplain(
         const processRequestActionResult = await processRequestActionP;
         notifyExplainedResult(processRequestActionResult);
 
-        printProcessRequestActionResult(processRequestActionResult);
+        // In NFA mode, skip printing explanation details - grammar generation logs show what happened
+        if (!context.agentCache.isUsingNFAGrammar()) {
+            printProcessRequestActionResult(processRequestActionResult);
+        } else {
+            console.log(chalk.grey(`[Explanation complete - using NFA grammar generation]`));
+        }
     }
 }
 

@@ -3,11 +3,28 @@
 
 // Generated grammar for calendarSchema
 // This file contains common patterns for user requests
+// Types: wildcard = 1+ words, word = exactly 1 word
 
 // scheduleEvent
-@ <ScheduleEvent> = schedule a $(description:string) for $(date:string) at $(time:string) in $(location:string) with $(participant:string)
-  | (can you)? set up $(description:string) on $(date:string) at $(time:string)
-  | book $(description:string) with $(participant:string) at $(location:string) $(date:string) at $(time:string) -> {
+@ <ScheduleEvent> = schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) with $(participant:wildcard) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description: $(description),
+        date: $(date),
+        time: $(time),
+        location: $(location),
+        participant: $(participant)
+    }
+}
+  | (can you)? set up $(description:wildcard) on $(date:wildcard) at $(time:word) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description: $(description),
+        date: $(date),
+        time: $(time)
+    }
+}
+  | book $(description:wildcard) with $(participant:wildcard) at $(location:wildcard) $(date:wildcard) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
         description: $(description),
@@ -19,18 +36,31 @@
 }
 
 // findEvents
-@ <FindEvents> = find all events on $(date:string) that include $(participant:string)
-  | show me meetings about $(description:string) scheduled for $(date:string)
-  | what events do I have with $(participant:string) on $(date:string) about (the)? $(description:string) -> {
+@ <FindEvents> = find all events on $(date:wildcard) that include $(participant:wildcard) -> {
     actionName: "findEvents",
     parameters: {
         date: $(date),
         participant: $(participant)
     }
 }
+  | show me meetings about $(description:wildcard) scheduled for $(date:wildcard) -> {
+    actionName: "findEvents",
+    parameters: {
+        description: $(description),
+        date: $(date)
+    }
+}
+  | what events do I have with $(participant:wildcard) on $(date:wildcard) about (the)? $(description:wildcard) -> {
+    actionName: "findEvents",
+    parameters: {
+        date: $(date),
+        participant: $(participant),
+        description: $(description)
+    }
+}
 
 // addParticipant
-@ <AddParticipant> = include $(participant:string) in $(description:string) -> {
+@ <AddParticipant> = include $(participant:wildcard) in $(description:wildcard) -> {
     actionName: "addParticipant",
     parameters: {
         description: $(description),
@@ -39,8 +69,18 @@
 }
 
 // findTodaysEvents
-@ <FindTodaysEvents> = what's on my calendar $(date:string)
-  | show me all my appointments and meetings for $(date:string)
+@ <FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
+    actionName: "findTodaysEvents",
+    parameters: {
+        date: $(date)
+    }
+}
+  | show me all my appointments and meetings for $(date:wildcard) -> {
+    actionName: "findTodaysEvents",
+    parameters: {
+        date: $(date)
+    }
+}
   | (can you)? (tell me)? what (do)? I have scheduled for today -> {
     actionName: "findTodaysEvents"
 }
@@ -53,15 +93,22 @@
   | <FindTodaysEvents>
   | <FindThisWeeksEvents>
 
-@ <FindThisWeeksEvents> = what's happening this week
-  | show me all my events for this week starting $(startDay:string)
+@ <FindThisWeeksEvents> = what's happening this week -> {
+    actionName: "findThisWeeksEvents"
+}
+  | show me all my events for this week starting $(startDay:word) -> {
+    actionName: "findThisWeeksEvents",
+    parameters: {
+        startDay: $(startDay)
+    }
+}
   | (can you)? find what I have scheduled this week -> {
     actionName: "findThisWeeksEvents"
 }
 
 // Common entity types and patterns
 
-@ <Cardinal> = 
+@ <Cardinal> =
   $(x:number)
 | one -> 1
 | two -> 2
@@ -74,7 +121,7 @@
 | nine -> 9
 | ten -> 10
 
-@ <Ordinal> = 
+@ <Ordinal> =
   first -> 1
 | second -> 2
 | third -> 3

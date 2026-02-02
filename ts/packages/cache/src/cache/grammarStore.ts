@@ -124,6 +124,11 @@ export class GrammarStoreImpl implements GrammarStore {
                 continue;
             }
 
+            // Debug logging for base grammar matching
+            const { schemaName } = splitSchemaNamespaceKey(name);
+            console.log(`[Grammar Match] Attempting to match "${request}" against ${schemaName} grammar (${this.useNFA ? "NFA" : "legacy"} mode)`);
+            console.log(`  NFA states: ${entry.nfa?.states.length || 0}, grammar rules: ${entry.grammar.rules.length}`);
+
             // Use NFA matcher if available, otherwise fall back to old matcher
             const grammarMatches =
                 this.useNFA && entry.nfa
@@ -131,11 +136,20 @@ export class GrammarStoreImpl implements GrammarStore {
                     : matchGrammar(entry.grammar, request);
 
             if (grammarMatches.length === 0) {
+                console.log(`  → No matches found in ${schemaName} grammar`);
                 continue;
             }
-            const { schemaName } = splitSchemaNamespaceKey(name);
+
+            // Log cache hit
+            console.log(
+                `[Cache HIT] "${request}" matched in ${schemaName} grammar (${this.useNFA ? "NFA" : "legacy"} mode) - ${grammarMatches.length} match(es)`,
+            );
+
             for (const m of grammarMatches) {
                 const action: any = m.match;
+                console.log(
+                    `  → Action: ${schemaName}.${action.actionName}, params: ${JSON.stringify(action.parameters)}`,
+                );
                 matches.push({
                     type: "grammar",
                     match: new RequestAction(request, [
@@ -153,6 +167,11 @@ export class GrammarStoreImpl implements GrammarStore {
                 });
             }
         }
+
+        if (matches.length === 0) {
+            console.log(`[Cache MISS] "${request}" - no grammar matches found`);
+        }
+
         return sortMatches(matches);
     }
 

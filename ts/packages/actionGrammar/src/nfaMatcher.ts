@@ -4,7 +4,6 @@
 import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
 import { matchNFA } from "./nfaInterpreter.js";
-import { ValueNode } from "./grammarRuleParser.js";
 
 /**
  * NFA-based Grammar Matcher
@@ -38,18 +37,20 @@ export function tokenizeRequest(request: string): string[] {
 /**
  * Match a request string against a grammar using NFA
  *
- * @param grammar The grammar structure (for rule values)
+ * @param _grammar The grammar structure (unused, kept for API compatibility)
  * @param nfa The compiled NFA
  * @param request The request string to match
  * @returns Array of grammar match results, sorted by priority
  */
 export function matchGrammarWithNFA(
-    grammar: Grammar,
+    _grammar: Grammar,
     nfa: NFA,
     request: string,
 ): NFAGrammarMatchResult[] {
     // Tokenize the request
     const tokens = tokenizeRequest(request);
+
+    console.log(`    [NFA Matcher] Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`);
 
     if (tokens.length === 0) {
         return [];
@@ -58,32 +59,22 @@ export function matchGrammarWithNFA(
     // Match against NFA
     const nfaResult = matchNFA(nfa, tokens);
 
+    console.log(`    [NFA Matcher] Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`);
+    if (nfaResult.matched) {
+        console.log(`      Action value: ${JSON.stringify(nfaResult.actionValue)}`);
+    }
+
     if (!nfaResult.matched) {
         return [];
     }
 
-    // Build the action object from the match result
-    // The actionValue has been propagated through epsilon transitions during matching
-    // For single-term rules without explicit values, this will be the nested term's value
-    const actionValue = nfaResult.actionValue;
-    let actionObject: unknown;
+    // The action object is already evaluated in the NFA interpreter using the slot-based
+    // environment system. nfaResult.actionValue contains the final computed action object.
+    const actionObject = nfaResult.actionValue ?? request;
 
-    if (actionValue === undefined) {
-        // No action value was found during matching
-        // This should only happen if the grammar has an error
-        // (e.g., a multi-term rule without a value expression that wasn't caught during compilation)
-        // Return the matched request text as a fallback
-        actionObject = request;
-    } else {
-        // Build action object from the rule's value expression
-        actionObject = buildValueFromNode(actionValue, nfaResult.captures);
-    }
-
-    // Calculate wildcard character count (approximate)
-    const wildcardCharCount = calculateWildcardCharCount(
-        nfaResult.captures,
-        tokens,
-    );
+    // Wildcard character count is approximated from unchecked wildcard count
+    // (each unchecked wildcard captures some characters)
+    const wildcardCharCount = nfaResult.uncheckedWildcardCount;
 
     // Determine entity wildcard property names
     const entityWildcardPropertyNames: string[] = [];
@@ -100,59 +91,4 @@ export function matchGrammarWithNFA(
             entityWildcardPropertyNames,
         },
     ];
-}
-
-/**
- * Build a value from a ValueNode, substituting variables with captured values
- */
-function buildValueFromNode(
-    node: ValueNode,
-    captures: Map<string, string | number>,
-): unknown {
-    switch (node.type) {
-        case "object":
-            const obj: Record<string, unknown> = {};
-            for (const [key, propNode] of Object.entries(node.value)) {
-                obj[key] = buildValueFromNode(propNode, captures);
-            }
-            return obj;
-
-        case "array":
-            return node.value.map((elem) =>
-                buildValueFromNode(elem, captures),
-            );
-
-        case "variable":
-            // Look up captured value
-            if (node.name && captures.has(node.name)) {
-                return captures.get(node.name);
-            }
-            // Variable not captured - return undefined or the variable name
-            return undefined;
-
-        case "literal":
-            // Literal can be string, number, boolean, or null
-            return node.value;
-
-        default:
-            return undefined;
-    }
-}
-
-/**
- * Calculate approximate wildcard character count from captures
- */
-function calculateWildcardCharCount(
-    captures: Map<string, string | number>,
-    tokens: string[],
-): number {
-    let charCount = 0;
-    for (const value of captures.values()) {
-        if (typeof value === "string") {
-            charCount += value.length;
-        } else if (typeof value === "number") {
-            charCount += value.toString().length;
-        }
-    }
-    return charCount;
 }

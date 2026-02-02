@@ -49,6 +49,31 @@ export {
 export { compileGrammarToNFA } from "./nfaCompiler.js";
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
+// Environment-based slot system
+export type {
+    Environment,
+    SlotMap,
+    SlotAssignment,
+    SlotValue,
+    ValueExpression,
+    VariableRef,
+    LiteralValue,
+    ArrayExpression,
+    ObjectExpression,
+    ActionExpression,
+} from "./environment.js";
+export {
+    createEnvironment,
+    getSlotValue,
+    setSlotValue,
+    writeToParent,
+    evaluateExpression,
+    parseValueExpression,
+    compileValueExpression,
+    createSlotMap,
+    cloneEnvironment,
+} from "./environment.js";
+
 // NFA-based grammar matching
 export {
     matchGrammarWithNFA,

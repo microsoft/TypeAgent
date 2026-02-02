@@ -142,6 +142,9 @@ async function validatePlayerWildcardMatch(
     }
     switch (action.actionName) {
         case "playTrack":
+            console.log(
+                `  [Player Validation] Validating track: "${action.parameters.trackName}", artists: [${action.parameters.artists?.join(", ") || "none"}]`,
+            );
             return validateTrack(
                 action.parameters.trackName,
                 action.parameters.artists,
@@ -205,19 +208,28 @@ async function validateTrack(
         : [];
 
     if (resolvedArtists === undefined) {
+        console.log(`    [Track Validation] ❌ Failed to resolve artists: [${artists?.join(", ")}]`);
         return false;
     }
+
+    if (artists && artists.length > 0) {
+        console.log(
+            `    [Track Validation] ✓ Resolved ${artists.length} artist(s): ${resolvedArtists.map(a => a.name).join(", ")}`,
+        );
+    }
+
     const query: SpotifyQuery = {
         track: [trackName],
         artist: resolvedArtists.map((artist) => artist.name),
     };
     const queryString = toQueryString(query);
+    console.log(`    [Track Validation] Searching Spotify for: "${queryString}"`);
     const tracks = await searchTracks(queryString, context);
     if (tracks) {
         // For validation for wildcard match, only allow substring match.
         const lowerCaseTrackName = trackName.toLowerCase();
         const lowerCaseAlbumName = album?.toLowerCase();
-        return tracks
+        const found = tracks
             .getTracks()
             .some(
                 (track) =>
@@ -227,7 +239,14 @@ async function validateTrack(
                             .toLowerCase()
                             .includes(lowerCaseAlbumName)),
             );
+        if (found) {
+            console.log(`    [Track Validation] ✓ Track found in Spotify`);
+        } else {
+            console.log(`    [Track Validation] ❌ Track not found in Spotify results`);
+        }
+        return found;
     }
+    console.log(`    [Track Validation] ❌ Spotify search returned no results`);
     return false;
 }
 

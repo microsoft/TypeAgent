@@ -122,6 +122,36 @@ export async function populateCache(
         // Load schema information
         const schemaInfo = loadSchemaInfo(request.schemaPath);
 
+        // Validate that parameter values appear in the request (prevents caching LLM corrections)
+        // Skip validation for short values (< 6 chars) like years, IDs that LLM infers
+        const normalizedRequest = request.request.toLowerCase().replace(/[^\w\s]/g, ' ');
+        for (const [paramName, paramValue] of Object.entries(request.action.parameters)) {
+            if (typeof paramValue === 'string') {
+                // Skip short values that are likely inferred (year, ID, etc) not corrections
+                if (paramValue.length >= 6) {
+                    const normalizedValue = paramValue.toLowerCase().replace(/[^\w\s]/g, ' ');
+                    if (!normalizedRequest.includes(normalizedValue)) {
+                        return {
+                            success: false,
+                            rejectionReason: `Parameter '${paramName}' value "${paramValue}" not found in request (possible LLM correction - don't cache)`,
+                        };
+                    }
+                }
+            } else if (Array.isArray(paramValue)) {
+                for (const item of paramValue) {
+                    if (typeof item === 'string' && item.length >= 6) {
+                        const normalizedItem = item.toLowerCase().replace(/[^\w\s]/g, ' ');
+                        if (!normalizedRequest.includes(normalizedItem)) {
+                            return {
+                                success: false,
+                                rejectionReason: `Parameter '${paramName}' array item "${item}" not found in request (possible LLM correction - don't cache)`,
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
         // Create test case from request
         const testCase: GrammarTestCase = {
             request: request.request,

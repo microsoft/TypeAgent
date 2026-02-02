@@ -41,7 +41,7 @@ describe("Dynamic Grammar Loader", () => {
                 "Bohemian Rhapsody",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.captures.get("track")).toBe("Bohemian Rhapsody");
+            expect(matchResult.actionValue?.parameters?.track).toBe("Bohemian Rhapsody");
         });
 
         it("should load a rule with multiple parameters", () => {
@@ -68,8 +68,8 @@ describe("Dynamic Grammar Loader", () => {
                 "Taylor Swift",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.captures.get("track")).toBe("Shake It Off");
-            expect(matchResult.captures.get("artist")).toBe("Taylor Swift");
+            expect(matchResult.actionValue?.parameters?.track).toBe("Shake It Off");
+            expect(matchResult.actionValue?.parameters?.artist).toBe("Taylor Swift");
         });
 
         it("should load a rule with optional parts", () => {
@@ -95,12 +95,12 @@ describe("Dynamic Grammar Loader", () => {
                 "Yesterday",
             ]);
             expect(result1.matched).toBe(true);
-            expect(result1.captures.get("track")).toBe("Yesterday");
+            expect(result1.actionValue?.parameters?.track).toBe("Yesterday");
 
             // Test without "please"
             const result2 = matchNFA(result.nfa!, ["play", "Yesterday"]);
             expect(result2.matched).toBe(true);
-            expect(result2.captures.get("track")).toBe("Yesterday");
+            expect(result2.actionValue?.parameters?.track).toBe("Yesterday");
         });
 
         it("should load a rule with symbol types", () => {
@@ -126,7 +126,7 @@ describe("Dynamic Grammar Loader", () => {
                 "track",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.captures.get("n")).toBe(3);
+            expect(matchResult.actionValue?.parameters?.n).toBe(3);
         });
 
         it("should reject rule with unresolved symbol", () => {
@@ -398,8 +398,8 @@ describe("Dynamic Grammar Loader", () => {
                 "Taylor Swift",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.captures.get("trackName")).toBe("Shake It Off");
-            expect(matchResult.captures.get("artist")).toBe("Taylor Swift");
+            expect(matchResult.actionValue?.parameters?.trackName).toBe("Shake It Off");
+            expect(matchResult.actionValue?.parameters?.artist).toBe("Taylor Swift");
         });
 
         it("should load rules with CalendarDate symbol", () => {

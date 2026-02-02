@@ -82,19 +82,21 @@ REQUIREMENTS:
    - If formal: polite prefixes and complete sentences
 3. Incorporate domain vocabulary where natural
 4. Maintain all required parameters as wildcards: $(paramName:typeName)
+   - Use "wildcard" type for multi-word captures (names, descriptions, phrases)
+   - Use "word" type for single-word captures (day names, single tokens)
 5. Vary sentence structure (imperative, question, statement)
 6. DO NOT include polite prefixes/suffixes as part of the pattern if they can be separated
-   - GOOD: "play $(trackName:string)" (can add polite prefix separately)
-   - AVOID: "can you play $(trackName:string)" (polite prefix should be optional)
+   - GOOD: "play $(trackName:wildcard)" (can add polite prefix separately)
+   - AVOID: "can you play $(trackName:wildcard)" (polite prefix should be optional)
 7. For {language}:
    {languageInstructions}
 
 CRITICAL - WILDCARD ADJACENCY RULE:
 8. NEVER create patterns with adjacent unchecked wildcards (wildcards with no fixed text between them)
    - Parameters marked "(validated)" are checked wildcards
-   - REJECT: "add $(item:string) $(listName:string)" - two unchecked wildcards adjacent
-   - ACCEPT: "add $(item:string) to $(listName:string)" - "to" separates them
-   - ACCEPT: "play $(trackName:string) $(artist:string)" if BOTH are validated
+   - REJECT: "add $(item:wildcard) $(listName:wildcard)" - two unchecked wildcards adjacent
+   - ACCEPT: "add $(item:wildcard) to $(listName:wildcard)" - "to" separates them
+   - ACCEPT: "play $(trackName:wildcard) $(artist:wildcard)" if BOTH are validated
    - If you cannot separate wildcards with fixed text AND they're not both validated, SKIP that pattern
 
 OUTPUT FORMAT:

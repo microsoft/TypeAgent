@@ -9,7 +9,7 @@ import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
  * Structured grammar rule right-hand side
  */
 export interface RuleRHS {
-    // The grammar pattern like "play $(track:string) by $(artist:string)"
+    // The grammar pattern like "play $(track:wildcard) by $(artist:wildcard)"
     matchPattern: string;
     // Parameters that map to the action
     actionParameters: Array<{
@@ -99,9 +99,10 @@ WILDCARD RULES:
 WILDCARD TYPES:
 - Entity types (capitalized): $(varName:MusicDevice), $(varName:CalendarDate)
 - ParamSpec types (lowercase): $(varName:number), $(varName:ordinal), $(varName:percentage)
-- Validated strings: $(varName:string) - when marked "(validated)"
+- Validated wildcards: $(varName:wildcard) - when marked "(validated)" and no entity type
 - CRITICAL: ParamSpec types MUST be lowercase: "number" not "Number", "ordinal" not "Ordinal"
 - CRITICAL: Only use entity types that are explicitly listed in the schema
+- CRITICAL: Use "wildcard" (not "string") for multi-word captures without entity types
 
 REJECT when:
 1. Adjacent UNVALIDATED wildcards with NO FIXED TEXT between them
@@ -118,7 +119,7 @@ ACCEPT in all other cases.
 OUTPUT FORMAT (TypeScript interface):
 
 interface RuleRHS {
-    matchPattern: string;  // The grammar pattern like "play $(track:string) by $(artist:string)"
+    matchPattern: string;  // The grammar pattern like "play $(track:wildcard) by $(artist:wildcard)"
     actionParameters: Array<{
         parameterName: string;
         parameterValue: string; // e.g., "$(track)" or fixed value like "kitchen"
@@ -188,7 +189,7 @@ Output:
     { "parameterName": "artists", "sourceText": "queen", "targetValue": ["queen"], "isWildcard": true }
   ],
   "fixedPhrases": ["play", "by"],
-  "grammarPattern": { "matchPattern": "play $(trackName:string) by $(artist:string)", "actionParameters": [ { "parameterName": "trackName", "parameterValue": "$(trackName)" }, { "parameterName": "artists", "parameterValue": "[$(artist)]" } ] },
+  "grammarPattern": { "matchPattern": "play $(trackName:wildcard) by $(artist:wildcard)", "actionParameters": [ { "parameterName": "trackName", "parameterValue": "$(trackName)" }, { "parameterName": "artists", "parameterValue": "[$(artist)]" } ] },
   "reasoning": "Fixed structure 'play...by'. Both parameters are validated so adjacent wildcards are OK. Use singular 'artist' for array parameter 'artists'."
 }`;
 
@@ -305,7 +306,7 @@ export class ClaudeGrammarGenerator {
         prompt += `2. Wildcards: variable content only\n`;
         prompt += `   Format: $(varName:TypeName)\n`;
         prompt += `   - For parameters WITH entity type: use that exact entity type name\n`;
-        prompt += `   - For parameters WITHOUT entity type: use "string"\n`;
+        prompt += `   - For parameters WITHOUT entity type: use "wildcard"\n`;
         prompt += `   - For array parameters: use SINGULAR variable name\n`;
         prompt += `3. Keep the pattern simple and direct\n`;
         prompt += `4. Adjacent wildcards:\n`;
@@ -315,13 +316,13 @@ export class ClaudeGrammarGenerator {
 
         prompt += `CRITICAL - Entity Type Usage:\n`;
         prompt += `Look at the parameter info above.\n`;
-        prompt += `- If it says "→ USE: $(varName:EntityType)" where EntityType is NOT "string", use that EXACT entity type\n`;
-        prompt += `- If it says "→ USE: $(varName:string)", the parameter is validated but has no entity type\n`;
+        prompt += `- If it says "→ USE: $(varName:EntityType)" where EntityType is NOT "wildcard", use that EXACT entity type\n`;
+        prompt += `- If it says "→ USE: $(varName:wildcard)", the parameter is validated but has no entity type\n`;
         prompt += `- If it says "(validated)", the parameter is checked against real data\n`;
         prompt += `Example:\n`;
         prompt += `  Parameter: deviceName "kitchen" → USE: $(deviceName:MusicDevice)\n`;
         prompt += `  Correct pattern: $(deviceName:MusicDevice)\n`;
-        prompt += `  Wrong: $(deviceName:string) or $(device:MusicDevice)\n\n`;
+        prompt += `  Wrong: $(deviceName:wildcard) or $(device:MusicDevice)\n\n`;
 
         return prompt;
     }
@@ -546,10 +547,16 @@ export class ClaudeGrammarGenerator {
         // Replace types in the matchPattern
         let matchPattern = analysis.grammarPattern.matchPattern;
         for (const [varName, wildcardType] of wildcardTypes) {
-            // Replace $(varName:string) with $(varName:CorrectType)
+            // Replace $(varName:string) or $(varName:wildcard) with $(varName:CorrectType)
+            // Note: "string" support is for backwards compatibility; Claude should now output "wildcard"
             const stringPattern = new RegExp(`\\$\\(${varName}:string\\)`, "g");
             matchPattern = matchPattern.replace(
                 stringPattern,
+                `$(${varName}:${wildcardType})`,
+            );
+            const wildcardPattern = new RegExp(`\\$\\(${varName}:wildcard\\)`, "g");
+            matchPattern = matchPattern.replace(
+                wildcardPattern,
                 `$(${varName}:${wildcardType})`,
             );
         }

@@ -7,6 +7,7 @@ import {
     DFABuilder,
     DFAExecutionContext,
     DFAWildcardTransition,
+    DFASlotOperation,
 } from "./dfa.js";
 
 /**
@@ -26,13 +27,13 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
     // Start with epsilon closure of NFA start state
     const initialContext: DFAExecutionContext = {
         nfaStateIds: new Set([nfa.startState]),
-        captures: new Map(),
         priority: {
             fixedStringPartCount: 0,
             checkedWildcardCount: 0,
             uncheckedWildcardCount: 0,
         },
         ruleIndex: undefined,
+        slotOps: [],
     };
 
     const initialContexts = epsilonClosure(nfa, [initialContext]);
@@ -57,25 +58,59 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
         const dfaState = builder.getState(dfaStateId);
         if (!dfaState) continue;
 
-        // Check if this is an accepting state
-        const hasAcceptingState = dfaState.contexts.some((ctx) =>
-            Array.from(ctx.nfaStateIds).some((id) =>
-                nfaAcceptingStates.has(id),
-            ),
-        );
+        // Check if this is an accepting state and get action value info
+        let acceptingNfaState: number | undefined;
+        let acceptingContext: DFAExecutionContext | undefined;
 
-        if (hasAcceptingState) {
+        for (const ctx of dfaState.contexts) {
+            for (const nfaStateId of ctx.nfaStateIds) {
+                if (nfaAcceptingStates.has(nfaStateId)) {
+                    acceptingNfaState = nfaStateId;
+                    acceptingContext = ctx;
+                    break;
+                }
+            }
+            if (acceptingNfaState !== undefined) break;
+        }
+
+        if (acceptingNfaState !== undefined) {
             acceptingStates.add(dfaStateId);
             builder.markAccepting(dfaStateId, nfaAcceptingStates);
+
+            // Get action value from the NFA state or from the NFA's actionValues array
+            const nfaState = nfa.states[acceptingNfaState];
+            let actionValue = nfaState?.actionValue;
+
+            // If no direct actionValue, try getting from rule index
+            if (actionValue === undefined && acceptingContext?.ruleIndex !== undefined) {
+                actionValue = nfa.actionValues?.[acceptingContext.ruleIndex];
+            }
+
+            // Get slot info from the accepting NFA state
+            const slotCount = nfaState?.slotCount;
+            const debugSlotMap = nfaState?.slotMap || acceptingContext?.debugSlotMap;
+
+            builder.setAcceptingStateInfo(
+                dfaStateId,
+                actionValue,
+                slotCount,
+                debugSlotMap,
+            );
         }
 
         // Compute transitions from this DFA state
         const transitions = computeTransitions(nfa, dfaState.contexts);
 
-        // Add token transitions
-        for (const [token, targetContexts] of transitions.tokenTransitions) {
-            const targetStateId = builder.createState(targetContexts);
-            builder.addTransition(dfaStateId, token, targetStateId);
+        // Add token transitions with slot operations
+        for (const [token, transInfo] of transitions.tokenTransitions) {
+            const targetStateId = builder.createState(transInfo.targetContexts);
+            builder.addTransition(
+                dfaStateId,
+                token,
+                targetStateId,
+                transInfo.preOps.length > 0 ? transInfo.preOps : undefined,
+                transInfo.postOps.length > 0 ? transInfo.postOps : undefined,
+            );
 
             if (!processed.has(targetStateId)) {
                 worklist.push(targetStateId);
@@ -84,13 +119,16 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
 
         // Add wildcard transition if present
         if (transitions.wildcardTransition) {
-            const { targetContexts, captureInfo } =
+            const { targetContexts, captureInfo, preOps, consumeOp, postOps } =
                 transitions.wildcardTransition;
             const targetStateId = builder.createState(targetContexts);
             builder.addWildcardTransition(
                 dfaStateId,
                 targetStateId,
                 captureInfo,
+                preOps.length > 0 ? preOps : undefined,
+                consumeOp,
+                postOps.length > 0 ? postOps : undefined,
             );
 
             if (!processed.has(targetStateId)) {
@@ -106,7 +144,11 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
  * Compute epsilon closure of a set of execution contexts
  *
  * Follows epsilon transitions to find all reachable NFA states
- * without consuming input
+ * without consuming input.
+ *
+ * Tracks slot operations encountered during closure:
+ * - pushEnv: When entering a state with slotCount (nested rule entry)
+ * - evalAndWriteToParent: When following an epsilon with writeToParent (nested rule exit)
  */
 function epsilonClosure(
     nfa: NFA,
@@ -120,8 +162,10 @@ function epsilonClosure(
     while (queue.length > 0) {
         const ctx = queue.shift()!;
 
-        // Create key for this context based on NFA states and priority
-        const key = `${Array.from(ctx.nfaStateIds).sort().join(",")}-${ctx.priority.fixedStringPartCount}-${ctx.priority.checkedWildcardCount}-${ctx.priority.uncheckedWildcardCount}`;
+        // Create key for this context based on NFA states, priority, and slot ops count
+        // Include slot ops length to distinguish contexts with different accumulated operations
+        const slotOpsKey = ctx.slotOps ? ctx.slotOps.length : 0;
+        const key = `${Array.from(ctx.nfaStateIds).sort().join(",")}-${ctx.priority.fixedStringPartCount}-${ctx.priority.checkedWildcardCount}-${ctx.priority.uncheckedWildcardCount}-${slotOpsKey}`;
 
         if (visited.has(key)) {
             continue;
@@ -140,17 +184,63 @@ function epsilonClosure(
                     ? ctx.ruleIndex
                     : nfaState.ruleIndex;
 
+            // Check if this state has slot info (rule entry point)
+            // and add pushEnv operation if we don't already have one for this state
+            let newSlotOps = ctx.slotOps ? [...ctx.slotOps] : [];
+            if (nfaState.slotCount !== undefined && nfaState.slotCount > 0) {
+                // Check if we've already pushed env for this rule
+                const alreadyPushed = newSlotOps.some(
+                    op => op.type === "pushEnv" && op.slotCount === nfaState.slotCount
+                );
+                if (!alreadyPushed) {
+                    const pushOp: DFASlotOperation = {
+                        type: "pushEnv",
+                        slotCount: nfaState.slotCount,
+                    };
+                    if (nfaState.parentSlotIndex !== undefined) {
+                        pushOp.parentSlotIndex = nfaState.parentSlotIndex;
+                    }
+                    newSlotOps.push(pushOp);
+                }
+            }
+
+            // Pick up debug slot map
+            let debugSlotMap = ctx.debugSlotMap;
+            if (nfaState.slotMap) {
+                debugSlotMap = new Map(nfaState.slotMap);
+            }
+
             for (const trans of nfaState.transitions) {
                 if (trans.type === "epsilon") {
                     // Get target state to check for rule index
                     const targetState = nfa.states[trans.to];
 
+                    // Clone slot ops for this path
+                    let pathSlotOps = [...newSlotOps];
+
+                    // Check for writeToParent on this epsilon transition (nested rule exit)
+                    if (trans.writeToParent && trans.valueToWrite !== undefined) {
+                        pathSlotOps.push({
+                            type: "evalAndWriteToParent",
+                            valueExpr: trans.valueToWrite,
+                        });
+                        // After writing to parent, pop the environment
+                        pathSlotOps.push({
+                            type: "popEnv",
+                        });
+                    }
+
                     // Create new context with epsilon transition target
                     const newContext: DFAExecutionContext = {
                         nfaStateIds: new Set([trans.to]),
-                        captures: new Map(ctx.captures),
                         priority: { ...ctx.priority },
+                        slotOps: pathSlotOps,
                     };
+
+                    // Propagate debug slot map
+                    if (debugSlotMap) {
+                        newContext.debugSlotMap = debugSlotMap;
+                    }
 
                     // Propagate or pick up rule index
                     if (ruleIndex !== undefined) {
@@ -172,34 +262,53 @@ function epsilonClosure(
  * Result of computing transitions from a DFA state
  */
 interface TransitionResult {
-    /** Token-specific transitions */
-    tokenTransitions: Map<string, DFAExecutionContext[]>;
+    /** Token-specific transitions with slot operations */
+    tokenTransitions: Map<string, {
+        targetContexts: DFAExecutionContext[];
+        preOps: DFASlotOperation[];
+        postOps: DFASlotOperation[];
+    }>;
 
     /** Wildcard transition (if any) */
     wildcardTransition?: {
         targetContexts: DFAExecutionContext[];
         captureInfo: DFAWildcardTransition["captureInfo"];
+        preOps: DFASlotOperation[];
+        consumeOp?: DFASlotOperation;
+        postOps: DFASlotOperation[];
     };
 }
 
 /**
  * Compute all transitions from a set of execution contexts
  *
- * Groups NFA transitions by token and computes target contexts
+ * Groups NFA transitions by token and computes target contexts.
+ * Tracks slot operations:
+ * - preOps: From context.slotOps (accumulated during epsilon closure before this point)
+ * - consumeOp: For wildcard transitions, the slot write operation
+ * - postOps: From epsilon closure after consuming the token
  */
 function computeTransitions(
     nfa: NFA,
     contexts: DFAExecutionContext[],
 ): TransitionResult {
-    const tokenTransitions = new Map<string, DFAExecutionContext[]>();
+    // Map token -> { contexts, preOps from source contexts }
+    const tokenTransitionsRaw = new Map<string, {
+        targetContexts: DFAExecutionContext[];
+        preOps: DFASlotOperation[];
+    }>();
+
     const wildcardContexts: Array<{
         context: DFAExecutionContext;
         transition: NFATransition;
+        preOps: DFASlotOperation[];
     }> = [];
 
     // Process each execution context
     for (let ctxIndex = 0; ctxIndex < contexts.length; ctxIndex++) {
         const ctx = contexts[ctxIndex];
+        // Collect preOps from this context's accumulated slot operations
+        const ctxPreOps = ctx.slotOps ? [...ctx.slotOps] : [];
 
         // Process each NFA state in this context
         for (const nfaStateId of ctx.nfaStateIds) {
@@ -211,19 +320,24 @@ function computeTransitions(
                 if (trans.type === "token" && trans.tokens) {
                     // Token transition - add to token map
                     for (const token of trans.tokens) {
-                        if (!tokenTransitions.has(token)) {
-                            tokenTransitions.set(token, []);
+                        if (!tokenTransitionsRaw.has(token)) {
+                            tokenTransitionsRaw.set(token, {
+                                targetContexts: [],
+                                preOps: [],
+                            });
                         }
+
+                        const entry = tokenTransitionsRaw.get(token)!;
 
                         // Create new context after consuming this token
                         const newContext: DFAExecutionContext = {
                             nfaStateIds: new Set([trans.to]),
-                            captures: new Map(ctx.captures),
                             priority: {
                                 ...ctx.priority,
                                 fixedStringPartCount:
                                     ctx.priority.fixedStringPartCount + 1,
                             },
+                            slotOps: [], // Reset slot ops for post-consume epsilon closure
                         };
 
                         // Propagate rule index
@@ -231,31 +345,81 @@ function computeTransitions(
                             newContext.ruleIndex = ctx.ruleIndex;
                         }
 
-                        tokenTransitions.get(token)!.push(newContext);
+                        // Propagate debug slot map
+                        if (ctx.debugSlotMap) {
+                            newContext.debugSlotMap = ctx.debugSlotMap;
+                        }
+
+                        entry.targetContexts.push(newContext);
+
+                        // Merge preOps (deduplicate if same ops already present)
+                        for (const op of ctxPreOps) {
+                            if (!entry.preOps.some(existing => slotOpsEqual(existing, op))) {
+                                entry.preOps.push(op);
+                            }
+                        }
                     }
                 } else if (trans.type === "wildcard") {
                     // Wildcard transition - collect for later processing
                     wildcardContexts.push({
                         context: ctx,
                         transition: trans,
+                        preOps: ctxPreOps,
                     });
                 }
             }
         }
     }
 
-    // Apply epsilon closure to all token transitions
-    for (const [token, targetContexts] of tokenTransitions) {
-        tokenTransitions.set(token, epsilonClosure(nfa, targetContexts));
+    // Apply epsilon closure to all token transitions and extract postOps
+    const tokenTransitions = new Map<string, {
+        targetContexts: DFAExecutionContext[];
+        preOps: DFASlotOperation[];
+        postOps: DFASlotOperation[];
+    }>();
+
+    for (const [token, entry] of tokenTransitionsRaw) {
+        const closedContexts = epsilonClosure(nfa, entry.targetContexts);
+
+        // Collect postOps from the epsilon closure results
+        const postOps: DFASlotOperation[] = [];
+        for (const ctx of closedContexts) {
+            if (ctx.slotOps) {
+                for (const op of ctx.slotOps) {
+                    if (!postOps.some(existing => slotOpsEqual(existing, op))) {
+                        postOps.push(op);
+                    }
+                }
+            }
+        }
+
+        tokenTransitions.set(token, {
+            targetContexts: closedContexts,
+            preOps: entry.preOps,
+            postOps,
+        });
     }
 
     // Process wildcard transitions
     let wildcardTransition: TransitionResult["wildcardTransition"];
     if (wildcardContexts.length > 0) {
         const targetContexts: DFAExecutionContext[] = [];
-        const captureInfo: DFAWildcardTransition["captureInfo"] = [];
+        // Track which wildcard transition created each context (before epsilon closure)
+        const contextSources: Array<{
+            variable: string;
+            typeName: string | undefined;
+            checked: boolean;
+            slotIndex: number | undefined;
+            appendToSlot: boolean | undefined;
+        }> = [];
 
-        for (const { context, transition } of wildcardContexts) {
+        // Collect all preOps from wildcard source contexts
+        const allPreOps: DFASlotOperation[] = [];
+
+        // Determine the consumeOp (slot write for the wildcard)
+        let consumeOp: DFASlotOperation | undefined;
+
+        for (const { context, transition, preOps } of wildcardContexts) {
             // Determine if this wildcard is checked
             const isChecked =
                 transition.checked === true ||
@@ -264,7 +428,6 @@ function computeTransitions(
             // Create new context after consuming wildcard
             const newContext: DFAExecutionContext = {
                 nfaStateIds: new Set([transition.to]),
-                captures: new Map(context.captures),
                 priority: {
                     fixedStringPartCount: context.priority.fixedStringPartCount,
                     checkedWildcardCount: isChecked
@@ -274,6 +437,7 @@ function computeTransitions(
                         ? context.priority.uncheckedWildcardCount
                         : context.priority.uncheckedWildcardCount + 1,
                 },
+                slotOps: [], // Reset for post-consume epsilon closure
             };
 
             // Propagate rule index
@@ -281,42 +445,114 @@ function computeTransitions(
                 newContext.ruleIndex = context.ruleIndex;
             }
 
-            // Update captures if variable is bound
-            if (transition.variable) {
-                const captureInfo: { variable: string; typeName?: string } = {
-                    variable: transition.variable,
-                };
-                if (transition.typeName !== undefined) {
-                    captureInfo.typeName = transition.typeName;
-                }
-                newContext.captures.set(transition.variable, captureInfo);
+            // Propagate debug slot map
+            if (context.debugSlotMap) {
+                newContext.debugSlotMap = context.debugSlotMap;
             }
 
             targetContexts.push(newContext);
 
-            // Track capture info for this wildcard
-            if (transition.variable) {
-                const wildcardCapture: {
-                    variable: string;
-                    typeName?: string;
-                    checked: boolean;
-                    contextIndices: number[];
-                } = {
-                    variable: transition.variable,
-                    checked: isChecked,
-                    contextIndices: [targetContexts.length - 1],
-                };
-                if (transition.typeName !== undefined) {
-                    wildcardCapture.typeName = transition.typeName;
+            // Track what variable this context should capture
+            contextSources.push({
+                variable: transition.variable || "",
+                typeName: transition.typeName,
+                checked: isChecked,
+                slotIndex: transition.slotIndex,
+                appendToSlot: transition.appendToSlot,
+            });
+
+            // Merge preOps
+            for (const op of preOps) {
+                if (!allPreOps.some(existing => slotOpsEqual(existing, op))) {
+                    allPreOps.push(op);
                 }
-                captureInfo.push(wildcardCapture);
+            }
+
+            // Build consumeOp from the wildcard transition
+            if (transition.slotIndex !== undefined && !consumeOp) {
+                consumeOp = {
+                    type: "writeSlot",
+                    slotIndex: transition.slotIndex,
+                    append: transition.appendToSlot,
+                    debugVariable: transition.variable,
+                };
             }
         }
 
-        wildcardTransition = {
-            targetContexts: epsilonClosure(nfa, targetContexts),
+        // Apply epsilon closure to get final target contexts
+        const finalTargetContexts = epsilonClosure(nfa, targetContexts);
+
+        // Collect postOps from epsilon closure results
+        const allPostOps: DFASlotOperation[] = [];
+        for (const ctx of finalTargetContexts) {
+            if (ctx.slotOps) {
+                for (const op of ctx.slotOps) {
+                    if (!allPostOps.some(existing => slotOpsEqual(existing, op))) {
+                        allPostOps.push(op);
+                    }
+                }
+            }
+        }
+
+        // Build captureInfo for completions/debugging
+        // Track by slotIndex now instead of matching captures map
+        const captureInfoMap = new Map<string, {
+            variable: string;
+            typeName?: string;
+            checked: boolean;
+            slotIndex?: number;
+            contextIndices: number[];
+        }>();
+
+        for (let finalIndex = 0; finalIndex < finalTargetContexts.length; finalIndex++) {
+            // Match by index since we maintain order through epsilon closure
+            const sourceIndex = finalIndex % contextSources.length;
+            const source = contextSources[sourceIndex];
+            if (!source.variable) continue;
+
+            // Create unique key for variable+typeName combination
+            const captureKey = `${source.variable}:${source.typeName || "string"}`;
+
+            if (!captureInfoMap.has(captureKey)) {
+                const info: {
+                    variable: string;
+                    typeName?: string;
+                    checked: boolean;
+                    slotIndex?: number;
+                    contextIndices: number[];
+                } = {
+                    variable: source.variable,
+                    checked: source.checked,
+                    contextIndices: [],
+                };
+                if (source.typeName !== undefined) {
+                    info.typeName = source.typeName;
+                }
+                if (source.slotIndex !== undefined) {
+                    info.slotIndex = source.slotIndex;
+                }
+                captureInfoMap.set(captureKey, info);
+            }
+            const info = captureInfoMap.get(captureKey)!;
+            // Only add this index if not already present
+            if (!info.contextIndices.includes(finalIndex)) {
+                info.contextIndices.push(finalIndex);
+            }
+        }
+
+        const captureInfo = Array.from(captureInfoMap.values());
+
+        // Build the wildcard transition object, only including consumeOp if defined
+        const wildcardTransitionData: TransitionResult["wildcardTransition"] = {
+            targetContexts: finalTargetContexts,
             captureInfo,
+            preOps: allPreOps,
+            postOps: allPostOps,
         };
+        if (consumeOp !== undefined) {
+            wildcardTransitionData!.consumeOp = consumeOp;
+        }
+        wildcardTransition = wildcardTransitionData;
     }
 
     const result: TransitionResult = {
@@ -326,4 +562,18 @@ function computeTransitions(
         result.wildcardTransition = wildcardTransition;
     }
     return result;
+}
+
+/**
+ * Check if two slot operations are equal (for deduplication)
+ */
+function slotOpsEqual(a: DFASlotOperation, b: DFASlotOperation): boolean {
+    if (a.type !== b.type) return false;
+    if (a.slotCount !== b.slotCount) return false;
+    if (a.parentSlotIndex !== b.parentSlotIndex) return false;
+    if (a.slotIndex !== b.slotIndex) return false;
+    if (a.append !== b.append) return false;
+    // For valueExpr, do a simple reference equality (deep equality would be expensive)
+    if (a.valueExpr !== b.valueExpr) return false;
+    return true;
 }

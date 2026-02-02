@@ -160,7 +160,8 @@ describe("NFA Infrastructure", () => {
             const result = matchNFA(nfa, ["hello", "Alice"]);
 
             expect(result.matched).toBe(true);
-            expect(result.captures.get("name")).toBe("Alice");
+            // actionValue is evaluated from the value expression: { name: $(name) }
+            expect(result.actionValue).toEqual({ name: "Alice" });
         });
 
         it("should compile a grammar with optional parts", () => {
@@ -192,9 +193,11 @@ describe("NFA Infrastructure", () => {
             const result2 = matchNFA(nfa, ["hello"]);
 
             expect(result1.matched).toBe(true);
-            expect(result1.captures.get("name")).toBe("Alice");
+            // actionValue is evaluated from the value expression: { name: $(name) }
+            expect(result1.actionValue).toEqual({ name: "Alice" });
             expect(result2.matched).toBe(true);
-            expect(result2.captures.has("name")).toBe(false);
+            // When optional wildcard is not matched, the slot is undefined
+            expect(result2.actionValue).toEqual({ name: undefined });
         });
     });
 
@@ -230,7 +233,7 @@ describe("NFA Infrastructure", () => {
             expect(result.matched).toBe(true);
         });
 
-        it("should capture wildcard values", () => {
+        it("should match wildcard values", () => {
             const builder = new NFABuilder();
             const s0 = builder.createState(false);
             const s1 = builder.createState(true);
@@ -240,8 +243,8 @@ describe("NFA Infrastructure", () => {
             const nfa = builder.build(s0);
             const result = matchNFA(nfa, ["anything"]);
 
+            // Raw NFA builder tests matching only (no environment setup)
             expect(result.matched).toBe(true);
-            expect(result.captures.get("value")).toBe("anything");
         });
 
         it("should handle number type constraints", () => {
@@ -254,6 +257,10 @@ describe("NFA Infrastructure", () => {
                                 variable: "count",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: { count: { type: "variable", name: "count" } },
+                        },
                     },
                 ],
             };
@@ -263,7 +270,7 @@ describe("NFA Infrastructure", () => {
             const result2 = matchNFA(nfa, ["not-a-number"]);
 
             expect(result1.matched).toBe(true);
-            expect(result1.captures.get("count")).toBe(42);
+            expect(result1.actionValue).toEqual({ count: 42 });
             expect(result2.matched).toBe(false);
         });
     });
