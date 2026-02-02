@@ -15,7 +15,7 @@ export class PlanSerializer {
      */
     async saveOriginalPlan(
         plan: ExecutionPlan,
-        outputDir: string
+        outputDir: string,
     ): Promise<string> {
         const planDir = path.join(outputDir, plan.taskId);
         await fs.mkdir(planDir, { recursive: true });
@@ -33,16 +33,21 @@ export class PlanSerializer {
      */
     async saveRevisedPlan(
         plan: ExecutionPlan,
-        outputDir: string
+        outputDir: string,
     ): Promise<string> {
         const planDir = path.join(outputDir, plan.taskId);
         await fs.mkdir(planDir, { recursive: true });
 
-        const filePath = path.join(planDir, `plan-revised-v${plan.version}.json`);
+        const filePath = path.join(
+            planDir,
+            `plan-revised-v${plan.version}.json`,
+        );
 
         await fs.writeFile(filePath, JSON.stringify(plan, null, 2), "utf-8");
 
-        console.log(`[PlanSerializer] Saved revised plan (v${plan.version}) to ${filePath}`);
+        console.log(
+            `[PlanSerializer] Saved revised plan (v${plan.version}) to ${filePath}`,
+        );
         return filePath;
     }
 
@@ -52,7 +57,7 @@ export class PlanSerializer {
     async savePlanComparison(
         originalPlan: ExecutionPlan,
         revisedPlan: ExecutionPlan,
-        outputDir: string
+        outputDir: string,
     ): Promise<string> {
         const planDir = path.join(outputDir, originalPlan.taskId);
         await fs.mkdir(planDir, { recursive: true });
@@ -77,13 +82,13 @@ export class PlanSerializer {
 
         const filePath = path.join(
             planDir,
-            `plan-comparison-v${originalPlan.version}-to-v${revisedPlan.version}.json`
+            `plan-comparison-v${originalPlan.version}-to-v${revisedPlan.version}.json`,
         );
 
         await fs.writeFile(
             filePath,
             JSON.stringify(comparison, null, 2),
-            "utf-8"
+            "utf-8",
         );
 
         console.log(`[PlanSerializer] Saved plan comparison to ${filePath}`);
@@ -98,7 +103,7 @@ export class PlanSerializer {
         const plan = JSON.parse(content) as ExecutionPlan;
 
         console.log(
-            `[PlanSerializer] Loaded plan ${plan.planId} (v${plan.version}) from ${filePath}`
+            `[PlanSerializer] Loaded plan ${plan.planId} (v${plan.version}) from ${filePath}`,
         );
 
         return plan;
@@ -109,7 +114,7 @@ export class PlanSerializer {
      */
     async loadLatestPlan(
         taskId: string,
-        outputDir: string
+        outputDir: string,
     ): Promise<ExecutionPlan | null> {
         const planDir = path.join(outputDir, taskId);
 
@@ -118,7 +123,7 @@ export class PlanSerializer {
 
             // Find all plan files
             const planFiles = files.filter(
-                (f) => f.startsWith("plan-") && f.endsWith(".json")
+                (f) => f.startsWith("plan-") && f.endsWith(".json"),
             );
 
             if (planFiles.length === 0) {
@@ -137,7 +142,7 @@ export class PlanSerializer {
         } catch (error) {
             console.warn(
                 `[PlanSerializer] No plans found for task ${taskId}:`,
-                error
+                error,
             );
             return null;
         }
@@ -148,7 +153,7 @@ export class PlanSerializer {
      */
     async savePlanSummary(
         plan: ExecutionPlan,
-        outputDir: string
+        outputDir: string,
     ): Promise<string> {
         const planDir = path.join(outputDir, plan.taskId);
         await fs.mkdir(planDir, { recursive: true });
@@ -175,7 +180,7 @@ export class PlanSerializer {
             totalSteps: plan.steps.length,
             totalActions: plan.steps.reduce(
                 (sum, step) => sum + step.actions.length,
-                0
+                0,
             ),
             variables: plan.variables.length,
             execution: plan.execution
@@ -188,7 +193,10 @@ export class PlanSerializer {
                 : null,
         };
 
-        const filePath = path.join(planDir, `plan-summary-v${plan.version}.json`);
+        const filePath = path.join(
+            planDir,
+            `plan-summary-v${plan.version}.json`,
+        );
 
         await fs.writeFile(filePath, JSON.stringify(summary, null, 2), "utf-8");
 
@@ -201,13 +209,16 @@ export class PlanSerializer {
      */
     private computePlanDifferences(
         original: ExecutionPlan,
-        revised: ExecutionPlan
+        revised: ExecutionPlan,
     ): any {
         return {
             stepsAdded: revised.steps.length - original.steps.length,
-            variablesAdded: revised.variables.length - original.variables.length,
+            variablesAdded:
+                revised.variables.length - original.variables.length,
             stepChanges: this.compareSteps(original.steps, revised.steps),
-            goalStateChanged: JSON.stringify(original.goalState) !== JSON.stringify(revised.goalState),
+            goalStateChanged:
+                JSON.stringify(original.goalState) !==
+                JSON.stringify(revised.goalState),
         };
     }
 
@@ -244,10 +255,16 @@ export class PlanSerializer {
                 if (original.actions.length !== revised.actions.length) {
                     stepChanges.push("actions");
                 }
-                if (JSON.stringify(original.predictedState) !== JSON.stringify(revised.predictedState)) {
+                if (
+                    JSON.stringify(original.predictedState) !==
+                    JSON.stringify(revised.predictedState)
+                ) {
                     stepChanges.push("predictedState");
                 }
-                if (JSON.stringify(original.preconditions) !== JSON.stringify(revised.preconditions)) {
+                if (
+                    JSON.stringify(original.preconditions) !==
+                    JSON.stringify(revised.preconditions)
+                ) {
                     stepChanges.push("preconditions");
                 }
 

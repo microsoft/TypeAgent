@@ -15,15 +15,15 @@ export interface WebTask {
 }
 
 export type TaskCategory =
-    | "READ"           // Extract information from page
-    | "CREATE"         // Create new entity (account, post, etc.)
-    | "UPDATE"         // Modify existing entity
-    | "DELETE"         // Remove entity
-    | "NAVIGATE"       // Navigation-only tasks
-    | "SEARCH"         // Search operations
-    | "FORM_FILL"      // Form interaction
+    | "READ" // Extract information from page
+    | "CREATE" // Create new entity (account, post, etc.)
+    | "UPDATE" // Modify existing entity
+    | "DELETE" // Remove entity
+    | "NAVIGATE" // Navigation-only tasks
+    | "SEARCH" // Search operations
+    | "FORM_FILL" // Form interaction
     | "FILE_MANIPULATION" // File upload/download
-    | "CUSTOM";        // Benchmark-specific category
+    | "CUSTOM"; // Benchmark-specific category
 
 export type TaskDifficulty = "easy" | "medium" | "hard";
 

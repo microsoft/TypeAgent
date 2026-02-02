@@ -1684,9 +1684,7 @@ async function executeBrowserAction(
                 }
                 case "clickOnElement": {
                     const control = getActionBrowserControl(context);
-                    await control.clickOn(
-                        action.parameters.cssSelector,
-                    );
+                    await control.clickOn(action.parameters.cssSelector);
                     return;
                 }
                 case "awaitPageLoad": {
@@ -1697,7 +1695,8 @@ async function executeBrowserAction(
                 case "getHTML": {
                     const control = getActionBrowserControl(context);
                     const fragments = await control.getHtmlFragments(
-                        false, "knowledgeExtraction"
+                        false,
+                        "knowledgeExtraction",
                     );
                     return createActionResult(JSON.stringify(fragments));
                 }

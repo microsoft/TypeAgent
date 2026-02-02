@@ -45,8 +45,7 @@ async function executeBrowserAction(
 
     // const nlStr = `--naturalLanguage 'browser action ${actionName}'`;
 
-    const actionCommand =
-        `@action browser ${actionName} ${paramStr}`.trim();
+    const actionCommand = `@action browser ${actionName} ${paramStr}`.trim();
 
     logger.log(`[BROWSER_ACTION] Executing: ${actionCommand}`);
 
@@ -60,7 +59,9 @@ async function executeBrowserAction(
             return toolResult(response);
         }
 
-        return toolResult(`✓ Browser action ${actionName} executed successfully`);
+        return toolResult(
+            `✓ Browser action ${actionName} executed successfully`,
+        );
     } catch (error) {
         const errorMsg = `Browser action ${actionName} failed: ${error instanceof Error ? error.message : String(error)}`;
         logger.error(errorMsg);
@@ -75,7 +76,9 @@ const browserActionTools: BrowserActionToolDefinition[] = [
         schema: {
             site: z
                 .string()
-                .describe("URL or site name to open (e.g., 'google.com', 'https://example.com')"),
+                .describe(
+                    "URL or site name to open (e.g., 'google.com', 'https://example.com')",
+                ),
         },
         handler: async (params, getDispatcher, responseCollector, logger) => {
             return executeBrowserAction(
@@ -109,7 +112,9 @@ const browserActionTools: BrowserActionToolDefinition[] = [
         schema: {
             cssSelector: z
                 .string()
-                .describe("CSS selector for the element to click (e.g., '#button-id', '.class-name', 'button[type=submit]')"),
+                .describe(
+                    "CSS selector for the element to click (e.g., '#button-id', '.class-name', 'button[type=submit]')",
+                ),
         },
         handler: async (params, getDispatcher, responseCollector, logger) => {
             return executeBrowserAction(
@@ -133,7 +138,9 @@ const browserActionTools: BrowserActionToolDefinition[] = [
             submitForm: z
                 .boolean()
                 .optional()
-                .describe("Submit the form after entering text (default: false)"),
+                .describe(
+                    "Submit the form after entering text (default: false)",
+                ),
         },
         handler: async (params, getDispatcher, responseCollector, logger) => {
             return executeBrowserAction(
@@ -219,7 +226,7 @@ const browserActionTools: BrowserActionToolDefinition[] = [
             );
         },
     },
-/*
+    /*
     {
         name: "browser__captureScreenshot",
         description: "Capture a screenshot of the current page",
@@ -278,7 +285,7 @@ const browserActionTools: BrowserActionToolDefinition[] = [
                 logger,
             );
         },
-    }
+    },
 ];
 
 export function registerBrowserActionTools(
@@ -299,7 +306,5 @@ export function registerBrowserActionTools(
         );
     }
 
-    logger.log(
-        `Registered ${browserActionTools.length} browser action tools`,
-    );
+    logger.log(`Registered ${browserActionTools.length} browser action tools`);
 }

@@ -243,8 +243,6 @@ export type SearchImageAction = {
     };
 };
 
-
-
 export type EnterTextInElement = {
     actionName: "enterTextInElement";
     parameters: {
@@ -257,7 +255,6 @@ export type EnterTextInElement = {
     };
 };
 
-
 export type SetDropdownValue = {
     actionName: "setDropdownValue";
     parameters: {
@@ -267,7 +264,6 @@ export type SetDropdownValue = {
         cssSelector: string;
     };
 };
-
 
 export type ClickOnElement = {
     actionName: "clickOnElement";

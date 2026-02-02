@@ -55,7 +55,11 @@ export class TraceCollector {
 
         // Set trace directory
         const baseDir = options.traceDir || "./traces";
-        this.traceDir = path.join(baseDir, options.runId, `task-${options.task.id}`);
+        this.traceDir = path.join(
+            baseDir,
+            options.runId,
+            `task-${options.task.id}`,
+        );
     }
 
     /**
@@ -169,7 +173,9 @@ export class TraceCollector {
     ): Promise<void> {
         const toolCall = this.pendingToolCalls.get(toolUseId);
         if (!toolCall) {
-            console.warn(`[TraceCollector] No pending tool call found for ${toolUseId}`);
+            console.warn(
+                `[TraceCollector] No pending tool call found for ${toolUseId}`,
+            );
             return;
         }
 
@@ -182,20 +188,35 @@ export class TraceCollector {
 
             // Handle screenshots
             if (toolName.includes("captureScreenshot") && !isError) {
-                processedContent = await this.processScreenshotResult(stepNumber, content);
+                processedContent = await this.processScreenshotResult(
+                    stepNumber,
+                    content,
+                );
             }
 
             // Handle HTML extraction - process JSON and extract clean HTML
-            if ((toolName.includes("getHTML") || toolName.includes("extractData")) &&
+            if (
+                (toolName.includes("getHTML") ||
+                    toolName.includes("extractData")) &&
                 this.options.captureHTML &&
-                !isError) {
-                const htmlResult = await this.processHTMLResult(stepNumber, content);
+                !isError
+            ) {
+                const htmlResult = await this.processHTMLResult(
+                    stepNumber,
+                    content,
+                );
                 if (htmlResult) {
                     // Update content to reference clean HTML file
                     processedContent = `HTML content retrieved successfully.\nClean HTML saved to: ${htmlResult.relativeCleanPath}\nUse Read tool to access the HTML content for analysis.`;
 
-                    const reduction = ((htmlResult.originalSize - htmlResult.processedSize) / htmlResult.originalSize * 100).toFixed(1);
-                    console.log(`[TraceCollector] HTML processed: ${htmlResult.originalSize} → ${htmlResult.processedSize} bytes (${reduction}% reduction)`);
+                    const reduction = (
+                        ((htmlResult.originalSize - htmlResult.processedSize) /
+                            htmlResult.originalSize) *
+                        100
+                    ).toFixed(1);
+                    console.log(
+                        `[TraceCollector] HTML processed: ${htmlResult.originalSize} → ${htmlResult.processedSize} bytes (${reduction}% reduction)`,
+                    );
                 }
             }
 
@@ -214,13 +235,16 @@ export class TraceCollector {
     /**
      * Process screenshot result - copy to trace directory
      */
-    private async processScreenshotResult(stepNumber: number, content: string): Promise<string> {
+    private async processScreenshotResult(
+        stepNumber: number,
+        content: string,
+    ): Promise<string> {
         // Look for file paths in the content (Windows or Unix style)
         // Updated patterns to exclude trailing punctuation
         const patterns = [
-            /([A-Z]:\\[^"\s\n]+?)(?:[.,:;!?](?:\s|$)|$)/g,  // Windows: C:\path\to\file (excludes trailing punctuation)
+            /([A-Z]:\\[^"\s\n]+?)(?:[.,:;!?](?:\s|$)|$)/g, // Windows: C:\path\to\file (excludes trailing punctuation)
             /([A-Z]:\\\\[^"\s\n]+?)(?:[.,:;!?](?:\s|$)|$)/g, // Windows escaped: C:\\path\\to\\file
-            /(\/[^"\s\n]+?\.txt)(?:[.,:;!?](?:\s|$)|$)/g,    // Unix: /path/to/file.txt
+            /(\/[^"\s\n]+?\.txt)(?:[.,:;!?](?:\s|$)|$)/g, // Unix: /path/to/file.txt
         ];
 
         let foundPath: string | null = null;
@@ -231,7 +255,10 @@ export class TraceCollector {
             for (const match of matches) {
                 const filePath = match[1];
                 // Check if it's a screenshot-related file
-                if (filePath.includes("screenshot") || filePath.includes("captureScreenshot")) {
+                if (
+                    filePath.includes("screenshot") ||
+                    filePath.includes("captureScreenshot")
+                ) {
                     foundPath = filePath;
                     break;
                 }
@@ -242,22 +269,28 @@ export class TraceCollector {
         if (foundPath) {
             try {
                 // Normalize path (handle escaped backslashes)
-                let normalizedPath = foundPath.replace(/\\\\/g, '\\');
+                let normalizedPath = foundPath.replace(/\\\\/g, "\\");
                 // Remove any trailing punctuation that might have been captured
-                normalizedPath = normalizedPath.replace(/[.,:;!?]+$/, '');
+                normalizedPath = normalizedPath.replace(/[.,:;!?]+$/, "");
 
                 // Check if file exists
                 try {
                     await fs.access(normalizedPath);
                 } catch {
-                    console.warn(`[TraceCollector] Screenshot file not found: ${normalizedPath}`);
+                    console.warn(
+                        `[TraceCollector] Screenshot file not found: ${normalizedPath}`,
+                    );
                     return content;
                 }
 
                 // Determine file extension
-                const ext = normalizedPath.endsWith('.txt') ? '.txt' : '.png';
+                const ext = normalizedPath.endsWith(".txt") ? ".txt" : ".png";
                 const filename = `step-${String(stepNumber).padStart(3, "0")}-screenshot${ext}`;
-                const destPath = path.join(this.traceDir, "screenshots", filename);
+                const destPath = path.join(
+                    this.traceDir,
+                    "screenshots",
+                    filename,
+                );
 
                 // Copy file
                 await fs.copyFile(normalizedPath, destPath);
@@ -277,12 +310,16 @@ export class TraceCollector {
                 // Return updated content with relative path
                 updatedContent = content.replace(
                     foundPath,
-                    `[Copied to: screenshots/${filename}]`
+                    `[Copied to: screenshots/${filename}]`,
                 );
 
-                console.log(`[TraceCollector] Copied screenshot to: screenshots/${filename}`);
+                console.log(
+                    `[TraceCollector] Copied screenshot to: screenshots/${filename}`,
+                );
             } catch (error) {
-                console.warn(`[TraceCollector] Failed to copy screenshot: ${error}`);
+                console.warn(
+                    `[TraceCollector] Failed to copy screenshot: ${error}`,
+                );
             }
         }
 
@@ -310,7 +347,11 @@ export class TraceCollector {
 
         // Save trace.json
         const tracePath = path.join(this.traceDir, "trace.json");
-        await fs.writeFile(tracePath, JSON.stringify(this.trace, null, 2), "utf8");
+        await fs.writeFile(
+            tracePath,
+            JSON.stringify(this.trace, null, 2),
+            "utf8",
+        );
 
         console.log(`[TraceCollector] Trace saved to: ${tracePath}`);
     }
@@ -320,7 +361,7 @@ export class TraceCollector {
      */
     private async processHTMLResult(
         stepNumber: number,
-        content: string
+        content: string,
     ): Promise<HTMLProcessingResult | null> {
         // Check if content contains file path to HTML result
         const filePath = extractHTMLFilePath(content);
@@ -333,7 +374,11 @@ export class TraceCollector {
         try {
             // Process the HTML file - deserialize JSON and extract clean HTML
             const htmlDir = path.join(this.traceDir, "html");
-            const result = await processHTMLToolResult(filePath, htmlDir, stepNumber);
+            const result = await processHTMLToolResult(
+                filePath,
+                htmlDir,
+                stepNumber,
+            );
 
             // Update step with HTML path
             const step = this.trace.steps[stepNumber - 1];
@@ -345,14 +390,19 @@ export class TraceCollector {
                     };
                 }
                 step.pageStateAfter.htmlPath = result.relativeCleanPath;
-                step.pageStateAfter.htmlSnippet = result.processedHTML[0]?.html.substring(0, 1000) || "";
+                step.pageStateAfter.htmlSnippet =
+                    result.processedHTML[0]?.html.substring(0, 1000) || "";
             }
 
-            console.log(`[TraceCollector] Saved clean HTML to: ${result.relativeCleanPath}`);
+            console.log(
+                `[TraceCollector] Saved clean HTML to: ${result.relativeCleanPath}`,
+            );
 
             return result;
         } catch (error) {
-            console.warn(`[TraceCollector] Failed to process HTML result: ${error}`);
+            console.warn(
+                `[TraceCollector] Failed to process HTML result: ${error}`,
+            );
             return null;
         }
     }
@@ -468,7 +518,9 @@ export class TraceCollector {
             planId: plan.planId,
             version: plan.version,
         };
-        console.log(`[TraceCollector] Tracking execution of plan ${plan.planId} v${plan.version}`);
+        console.log(
+            `[TraceCollector] Tracking execution of plan ${plan.planId} v${plan.version}`,
+        );
     }
 
     /**
@@ -478,7 +530,7 @@ export class TraceCollector {
         planStepId: string,
         predictedState: any,
         actualState: any,
-        stepExecution: any
+        stepExecution: any,
     ): void {
         // Find the corresponding trace step (current step number)
         const traceStepIndex = this.trace.steps.length - 1;
@@ -492,14 +544,19 @@ export class TraceCollector {
             traceStep.stateDiff = stepExecution.stateDiff;
 
             // Add correction if present
-            if (stepExecution.corrections && stepExecution.corrections.length > 0) {
+            if (
+                stepExecution.corrections &&
+                stepExecution.corrections.length > 0
+            ) {
                 traceStep.correction = stepExecution.corrections[0];
             }
 
             // Map plan step ID to trace step number
             this.planStepMap.set(planStepId, this.currentStepNumber);
 
-            console.log(`[TraceCollector] Recorded plan step ${planStepId} execution (trace step ${this.currentStepNumber})`);
+            console.log(
+                `[TraceCollector] Recorded plan step ${planStepId} execution (trace step ${this.currentStepNumber})`,
+            );
         }
     }
 

@@ -39,25 +39,25 @@ export class TaskLoader {
         let filtered = this.tasks;
 
         if (filter?.categories) {
-            filtered = filtered.filter(t =>
-                filter.categories!.includes(t.category)
+            filtered = filtered.filter((t) =>
+                filter.categories!.includes(t.category),
             );
         }
 
         if (filter?.difficulties) {
-            filtered = filtered.filter(t =>
-                filter.difficulties!.includes(t.difficulty)
+            filtered = filtered.filter((t) =>
+                filter.difficulties!.includes(t.difficulty),
             );
         }
 
         if (filter?.taskIds) {
             const idSet = new Set(filter.taskIds);
-            filtered = filtered.filter(t => idSet.has(t.id));
+            filtered = filtered.filter((t) => idSet.has(t.id));
         }
 
         if (filter?.benchmark) {
-            filtered = filtered.filter(t =>
-                t.metadata?.benchmark === filter.benchmark
+            filtered = filtered.filter(
+                (t) => t.metadata?.benchmark === filter.benchmark,
             );
         }
 
@@ -78,11 +78,11 @@ export class TaskLoader {
         for (const task of this.tasks) {
             byCategory.set(
                 task.category,
-                (byCategory.get(task.category) || 0) + 1
+                (byCategory.get(task.category) || 0) + 1,
             );
             byDifficulty.set(
                 task.difficulty,
-                (byDifficulty.get(task.difficulty) || 0) + 1
+                (byDifficulty.get(task.difficulty) || 0) + 1,
             );
         }
 

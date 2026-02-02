@@ -5,10 +5,7 @@
  * Plan Generator - Uses LLM to generate execution plans for WebTask tasks
  */
 
-import {
-    query,
-    type Options,
-} from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { WebTask } from "../types.js";
 import { TraceFile } from "../tracing/types.js";
 import {
@@ -29,7 +26,7 @@ export class PlanGenerator {
      */
     async generatePlan(
         task: WebTask,
-        options?: PlanGenerationOptions
+        options?: PlanGenerationOptions,
     ): Promise<ExecutionPlan> {
         const prompt = this.buildPlanGenerationPrompt(task, options);
 
@@ -75,13 +72,15 @@ export class PlanGenerator {
                 ...planJson,
             };
 
-            console.log(`[PlanGenerator] Generated plan with ${plan.steps.length} steps`);
+            console.log(
+                `[PlanGenerator] Generated plan with ${plan.steps.length} steps`,
+            );
 
             return plan;
         } catch (error) {
             console.error(`[PlanGenerator] Error generating plan:`, error);
             throw new Error(
-                `Failed to generate plan: ${error instanceof Error ? error.message : String(error)}`
+                `Failed to generate plan: ${error instanceof Error ? error.message : String(error)}`,
             );
         }
     }
@@ -92,16 +91,16 @@ export class PlanGenerator {
     async revisePlan(
         originalPlan: ExecutionPlan,
         executionTrace: TraceFile,
-        options?: PlanRevisionOptions
+        options?: PlanRevisionOptions,
     ): Promise<ExecutionPlan> {
         const prompt = this.buildPlanRevisionPrompt(
             originalPlan,
             executionTrace,
-            options
+            options,
         );
 
         console.log(
-            `[PlanGenerator] Generating revised plan for ${originalPlan.taskId}...`
+            `[PlanGenerator] Generating revised plan for ${originalPlan.taskId}...`,
         );
 
         try {
@@ -140,14 +139,14 @@ export class PlanGenerator {
             };
 
             console.log(
-                `[PlanGenerator] Generated revised plan with ${revisedPlan.steps.length} steps`
+                `[PlanGenerator] Generated revised plan with ${revisedPlan.steps.length} steps`,
             );
 
             return revisedPlan;
         } catch (error) {
             console.error(`[PlanGenerator] Error revising plan:`, error);
             throw new Error(
-                `Failed to revise plan: ${error instanceof Error ? error.message : String(error)}`
+                `Failed to revise plan: ${error instanceof Error ? error.message : String(error)}`,
             );
         }
     }
@@ -157,7 +156,7 @@ export class PlanGenerator {
      */
     private buildPlanGenerationPrompt(
         task: WebTask,
-        options?: PlanGenerationOptions
+        options?: PlanGenerationOptions,
     ): string {
         const detailLevel = options?.detailLevel || "standard";
         const includeControlFlow = options?.includeControlFlow !== false;
@@ -252,7 +251,9 @@ Generate ONLY valid JSON (no markdown, no explanations) following this schema:
           "extractionPath": "JSONPath for extraction",
           "computation": "expression to compute value"
         }
-      ]${includeControlFlow ? `,
+      ]${
+          includeControlFlow
+              ? `,
       "controlFlow": {
         "type": "conditional|loop|retry",
         "condition": {
@@ -261,7 +262,9 @@ Generate ONLY valid JSON (no markdown, no explanations) following this schema:
         },
         "thenSteps": [...],
         "elseSteps": [...]
-      }` : ""}
+      }`
+              : ""
+      }
     }
   ],
   "variables": [
@@ -287,23 +290,29 @@ Generate ONLY valid JSON (no markdown, no explanations) following this schema:
 
 # Guidelines
 
-${detailLevel === "detailed" ? `
+${
+    detailLevel === "detailed"
+        ? `
 1. Be very specific with CSS selectors
 2. Include detailed rationale for each action
 3. Predict all possible page states
 4. Include extensive preconditions
 5. Define all intermediate variables
-` : detailLevel === "minimal" ? `
+`
+        : detailLevel === "minimal"
+          ? `
 1. Focus on essential steps only
 2. Use simple, direct actions
 3. Minimal preconditions
 4. Only critical variables
-` : `
+`
+          : `
 1. Balance detail with clarity
 2. Include key preconditions
 3. Define important variables
 4. Use control flow where needed
-`}
+`
+}
 
 # Special Considerations for ${task.category} Tasks
 
@@ -320,7 +329,7 @@ Generate the plan now as valid JSON:`;
     private buildPlanRevisionPrompt(
         originalPlan: ExecutionPlan,
         executionTrace: TraceFile,
-        options?: PlanRevisionOptions
+        options?: PlanRevisionOptions,
     ): string {
         const preserveStructure = options?.preserveStructure !== false;
         const onlyCorrections = options?.onlyCorrections || false;
@@ -340,7 +349,9 @@ ${JSON.stringify(originalPlan, null, 2)}
 
 ## Execution Steps
 
-${executionTrace.steps.map((step, i) => `
+${executionTrace.steps
+    .map(
+        (step, i) => `
 ### Step ${i + 1}
 
 **Thinking**: ${step.thinking?.summary || "N/A"}
@@ -348,28 +359,38 @@ ${executionTrace.steps.map((step, i) => `
 **Result**: ${step.result?.success ? "Success" : "Failed"}
 ${step.result?.error ? `**Error**: ${step.result.error}` : ""}
 ${step.observation ? `**Observation**: ${step.observation.summary}` : ""}
-`).join("\n")}
+`,
+    )
+    .join("\n")}
 
 # Your Mission
 
 Generate a revised plan that:
-${onlyCorrections ? `
+${
+    onlyCorrections
+        ? `
 1. ONLY incorporates corrections/adaptations that were needed
 2. Keeps original structure for steps that worked
 3. Updates predicted states based on actual outcomes
-` : `
+`
+        : `
 1. Incorporates all learnings from execution
 2. Updates predicted states to match reality
 3. Adds missing steps that were discovered during execution
 4. Removes unnecessary steps
 5. Improves action sequences based on what worked
-`}
+`
+}
 
-${preserveStructure ? `
+${
+    preserveStructure
+        ? `
 **Preserve Structure**: Keep the same number of steps and overall flow, only update details within steps.
-` : `
+`
+        : `
 **Optimize Structure**: Feel free to reorganize, add, or remove steps as needed.
-`}
+`
+}
 
 # Output Format
 
@@ -457,7 +478,10 @@ Generate the revised plan now as valid JSON:`;
 `,
         };
 
-        return guidelines[category] || "Use general browser automation best practices.";
+        return (
+            guidelines[category] ||
+            "Use general browser automation best practices."
+        );
     }
 
     /**
@@ -486,7 +510,7 @@ Generate the revised plan now as valid JSON:`;
         } catch (error) {
             console.error("Failed to parse JSON:", jsonText);
             throw new Error(
-                `Invalid JSON in response: ${error instanceof Error ? error.message : String(error)}`
+                `Invalid JSON in response: ${error instanceof Error ? error.message : String(error)}`,
             );
         }
     }

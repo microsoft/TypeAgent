@@ -269,7 +269,12 @@ export interface VariableDifference {
 
 export interface Correction {
     stepId: string;
-    correctionType: "action-modified" | "action-added" | "action-removed" | "step-skipped" | "step-added";
+    correctionType:
+        | "action-modified"
+        | "action-added"
+        | "action-removed"
+        | "step-skipped"
+        | "step-added";
     originalAction?: PlannedAction;
     correctedAction?: PlannedAction;
     reason: string;

@@ -114,7 +114,11 @@ function parseArgs(): CliOptions {
                 break;
             case "--plan-detail":
                 const detailArg = args[++i]?.toLowerCase();
-                if (detailArg === "minimal" || detailArg === "standard" || detailArg === "detailed") {
+                if (
+                    detailArg === "minimal" ||
+                    detailArg === "standard" ||
+                    detailArg === "detailed"
+                ) {
                     planDetailLevel = detailArg;
                 } else {
                     planDetailLevel = "standard";
@@ -257,17 +261,23 @@ function printResults(results: TaskExecutionResult[]): void {
 
     console.log(`\n=== WebTask Execution Results ===`);
     console.log(`\nTotal Tasks: ${metrics.totalTasks}`);
-    console.log(`Success: ${metrics.successCount} (${(metrics.successRate * 100).toFixed(1)}%)`);
+    console.log(
+        `Success: ${metrics.successCount} (${(metrics.successRate * 100).toFixed(1)}%)`,
+    );
     console.log(`Failure: ${metrics.failureCount}`);
     console.log(`\nPerformance:`);
     console.log(`  Avg Duration: ${(metrics.avgDuration / 1000).toFixed(2)}s`);
-    console.log(`  Median Duration: ${(metrics.medianDuration / 1000).toFixed(2)}s`);
+    console.log(
+        `  Median Duration: ${(metrics.medianDuration / 1000).toFixed(2)}s`,
+    );
     console.log(`  P95 Duration: ${(metrics.p95Duration / 1000).toFixed(2)}s`);
 
     console.log(`\nIndividual Results:`);
     for (const result of results) {
         const status = result.success ? "✓" : "✗";
-        console.log(`  ${status} Task ${result.taskId}: ${(result.duration / 1000).toFixed(2)}s`);
+        console.log(
+            `  ${status} Task ${result.taskId}: ${(result.duration / 1000).toFixed(2)}s`,
+        );
         if (result.error) {
             console.log(`    Error: ${result.error}`);
         }
@@ -346,10 +356,7 @@ async function main() {
         },
         model: options.model,
         permissionMode: "acceptEdits",
-        allowedTools: [
-            "Task",
-            "mcp__command-executor__*",
-        ],
+        allowedTools: ["Task", "mcp__command-executor__*"],
         cwd: process.cwd(),
         settingSources: ["project"],
         maxTurns: 30,

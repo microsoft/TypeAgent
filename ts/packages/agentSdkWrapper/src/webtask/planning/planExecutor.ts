@@ -5,10 +5,7 @@
  * Plan Executor - Executes structured plans step-by-step with state tracking
  */
 
-import {
-    query,
-    type Options,
-} from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { TraceCollector } from "../tracing/traceCollector.js";
 import {
     ExecutionPlan,
@@ -39,9 +36,11 @@ export class PlanExecutor {
     async executePlan(
         plan: ExecutionPlan,
         options: Options,
-        tracer?: TraceCollector
+        tracer?: TraceCollector,
     ): Promise<PlanExecutionResult> {
-        console.log(`[PlanExecutor] Executing plan ${plan.planId} with ${plan.steps.length} steps`);
+        console.log(
+            `[PlanExecutor] Executing plan ${plan.planId} with ${plan.steps.length} steps`,
+        );
 
         const startTime = Date.now();
         const context: ExecutionContext = {
@@ -71,12 +70,19 @@ export class PlanExecutor {
         try {
             // Execute each step in sequence
             for (const step of plan.steps) {
-                console.log(`[PlanExecutor] Executing step ${step.stepNumber}: ${step.objective}`);
+                console.log(
+                    `[PlanExecutor] Executing step ${step.stepNumber}: ${step.objective}`,
+                );
 
                 // Check preconditions
-                const preconditionsMet = await this.checkPreconditions(step, context);
+                const preconditionsMet = await this.checkPreconditions(
+                    step,
+                    context,
+                );
                 if (!preconditionsMet) {
-                    console.warn(`[PlanExecutor] Preconditions not met for step ${step.stepId}, skipping`);
+                    console.warn(
+                        `[PlanExecutor] Preconditions not met for step ${step.stepId}, skipping`,
+                    );
                     continue;
                 }
 
@@ -87,13 +93,17 @@ export class PlanExecutor {
                 if (!stepResult.success) {
                     success = false;
                     error = stepResult.error;
-                    console.error(`[PlanExecutor] Step ${step.stepId} failed: ${stepResult.error}`);
+                    console.error(
+                        `[PlanExecutor] Step ${step.stepId} failed: ${stepResult.error}`,
+                    );
                     break;
                 }
 
                 // Store output variables
                 if (stepResult.outputVariables) {
-                    for (const [name, value] of Object.entries(stepResult.outputVariables)) {
+                    for (const [name, value] of Object.entries(
+                        stepResult.outputVariables,
+                    )) {
                         context.variables.set(name, value);
                     }
                 }
@@ -101,7 +111,6 @@ export class PlanExecutor {
 
             // Extract final result from variables
             finalData = this.extractFinalResult(plan, context);
-
         } catch (err) {
             success = false;
             error = err instanceof Error ? err.message : String(err);
@@ -121,7 +130,9 @@ export class PlanExecutor {
                 totalSteps: plan.steps.length,
                 successfulSteps: executedSteps,
                 failedSteps: plan.steps.length - executedSteps,
-                retriedSteps: context.corrections.filter(c => c.correctionType === "action-modified").length,
+                retriedSteps: context.corrections.filter(
+                    (c) => c.correctionType === "action-modified",
+                ).length,
             },
         };
 
@@ -140,7 +151,9 @@ export class PlanExecutor {
             result.error = error;
         }
 
-        console.log(`[PlanExecutor] Plan execution ${success ? "succeeded" : "failed"} (${executedSteps}/${plan.steps.length} steps)`);
+        console.log(
+            `[PlanExecutor] Plan execution ${success ? "succeeded" : "failed"} (${executedSteps}/${plan.steps.length} steps)`,
+        );
 
         return result;
     }
@@ -150,7 +163,7 @@ export class PlanExecutor {
      */
     private async executeStep(
         step: PlanStep,
-        context: ExecutionContext
+        context: ExecutionContext,
     ): Promise<{
         success: boolean;
         error?: string;
@@ -195,19 +208,32 @@ export class PlanExecutor {
             }
 
             // Extract output variables from response
-            const outputVariables = this.extractOutputVariables(step, stepResponse, toolResults);
+            const outputVariables = this.extractOutputVariables(
+                step,
+                stepResponse,
+                toolResults,
+            );
 
             // Get current page state (if we have browser tools)
             const actualState = await this.captureCurrentState(context);
 
             // Compare predicted vs actual state
-            const stateDiff = this.compareStates(step.predictedState, actualState);
+            const stateDiff = this.compareStates(
+                step.predictedState,
+                actualState,
+            );
 
             // Check if correction was needed
-            const correction = this.detectCorrection(step, toolResults, stateDiff);
+            const correction = this.detectCorrection(
+                step,
+                toolResults,
+                stateDiff,
+            );
             if (correction) {
                 context.corrections.push(correction);
-                console.log(`[PlanExecutor] Correction detected: ${correction.correctionType} - ${correction.reason}`);
+                console.log(
+                    `[PlanExecutor] Correction detected: ${correction.correctionType} - ${correction.reason}`,
+                );
             }
 
             // Record step execution in tracer
@@ -225,7 +251,12 @@ export class PlanExecutor {
                     stepExecution.corrections = [correction];
                 }
 
-                context.tracer.recordStepExecution(step.stepId, step.predictedState, actualState, stepExecution);
+                context.tracer.recordStepExecution(
+                    step.stepId,
+                    step.predictedState,
+                    actualState,
+                    stepExecution,
+                );
             }
 
             // Update context
@@ -235,7 +266,6 @@ export class PlanExecutor {
                 success: true,
                 outputVariables,
             };
-
         } catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
 
@@ -248,7 +278,12 @@ export class PlanExecutor {
                     status: "failure",
                 };
 
-                context.tracer.recordStepExecution(step.stepId, step.predictedState, undefined, stepExecution);
+                context.tracer.recordStepExecution(
+                    step.stepId,
+                    step.predictedState,
+                    undefined,
+                    stepExecution,
+                );
             }
 
             return {
@@ -263,7 +298,7 @@ export class PlanExecutor {
      */
     private buildStepPrompt(step: PlanStep, context: ExecutionContext): string {
         // Resolve variables in actions
-        const resolvedActions = step.actions.map(action => {
+        const resolvedActions = step.actions.map((action) => {
             const resolvedParams = { ...action.parameters };
 
             // Resolve parameter bindings
@@ -303,10 +338,14 @@ ${context.currentUrl ? `**Current URL**: ${context.currentUrl}` : ""}
 
 # Actions to Execute
 
-${resolvedActions.map((action, i) => `
+${resolvedActions
+    .map(
+        (action, i) => `
 ${i + 1}. **${action.tool}**(${JSON.stringify(action.parameters, null, 2)})
    ${action.rationale ? `Rationale: ${action.rationale}` : ""}
-`).join("\n")}
+`,
+    )
+    .join("\n")}
 
 # Expected Outcome
 
@@ -317,7 +356,7 @@ ${JSON.stringify(step.predictedState, null, 2)}
 
 Execute the actions above using the available MCP tools. After execution:
 1. Report what happened
-2. Extract any requested output variables: ${step.outputVariables.map(v => v.variableName).join(", ") || "None"}
+2. Extract any requested output variables: ${step.outputVariables.map((v) => v.variableName).join(", ") || "None"}
 
 Execute now:`;
     }
@@ -327,7 +366,7 @@ Execute now:`;
      */
     private async checkPreconditions(
         step: PlanStep,
-        context: ExecutionContext
+        context: ExecutionContext,
     ): Promise<boolean> {
         if (step.preconditions.length === 0) {
             return true;
@@ -338,9 +377,14 @@ Execute now:`;
                 continue;
             }
 
-            const met = await this.evaluateCondition(precondition.condition, context);
+            const met = await this.evaluateCondition(
+                precondition.condition,
+                context,
+            );
             if (!met) {
-                console.warn(`[PlanExecutor] Precondition not met: ${precondition.description}`);
+                console.warn(
+                    `[PlanExecutor] Precondition not met: ${precondition.description}`,
+                );
                 return false;
             }
         }
@@ -353,7 +397,7 @@ Execute now:`;
      */
     private async evaluateCondition(
         condition: any,
-        context: ExecutionContext
+        context: ExecutionContext,
     ): Promise<boolean> {
         // Simple implementation - can be enhanced
         switch (condition.type) {
@@ -382,7 +426,7 @@ Execute now:`;
      */
     private compareStates(
         predicted: PredictedPageState,
-        actual: any
+        actual: any,
     ): StateDifference {
         const diff: StateDifference = {
             urlMatch: this.urlMatches(predicted, actual?.url),
@@ -416,7 +460,10 @@ Execute now:`;
     /**
      * Check if URL matches prediction
      */
-    private urlMatches(predicted: PredictedPageState, actualUrl?: string): boolean {
+    private urlMatches(
+        predicted: PredictedPageState,
+        actualUrl?: string,
+    ): boolean {
         if (!actualUrl) {
             return false;
         }
@@ -468,7 +515,7 @@ Execute now:`;
     private extractOutputVariables(
         step: PlanStep,
         response: string,
-        toolResults: any[]
+        toolResults: any[],
     ): Record<string, any> {
         const outputs: Record<string, any> = {};
 
@@ -478,7 +525,8 @@ Execute now:`;
         for (const outputVar of step.outputVariables) {
             if (outputVar.source === "toolResult" && toolResults.length > 0) {
                 // Extract from last tool result
-                outputs[outputVar.variableName] = toolResults[toolResults.length - 1];
+                outputs[outputVar.variableName] =
+                    toolResults[toolResults.length - 1];
             }
         }
 
@@ -491,7 +539,7 @@ Execute now:`;
     private detectCorrection(
         step: PlanStep,
         toolResults: any[],
-        stateDiff: StateDifference
+        stateDiff: StateDifference,
     ): Correction | undefined {
         // Check if state differs significantly from prediction
         if (!stateDiff.urlMatch && step.predictedState.expectedUrl) {
@@ -519,7 +567,10 @@ Execute now:`;
     /**
      * Extract final result from variables
      */
-    private extractFinalResult(plan: ExecutionPlan, context: ExecutionContext): any {
+    private extractFinalResult(
+        plan: ExecutionPlan,
+        context: ExecutionContext,
+    ): any {
         // Extract all plan-level variables as result
         const result: any = {};
 

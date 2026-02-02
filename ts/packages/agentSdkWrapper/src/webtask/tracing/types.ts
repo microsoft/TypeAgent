@@ -15,12 +15,14 @@ export interface TraceFile {
     task: TaskInfo;
 
     // Execution Plan (if plan-based execution)
-    plan?: {
-        planId: string;
-        version: number;
-        originalPlanPath?: string | undefined;
-        revisedPlanPath?: string | undefined;
-    } | undefined;
+    plan?:
+        | {
+              planId: string;
+              version: number;
+              originalPlanPath?: string | undefined;
+              revisedPlanPath?: string | undefined;
+          }
+        | undefined;
 
     // Execution Metadata
     execution: ExecutionMetadata;
@@ -42,7 +44,16 @@ export interface TaskInfo {
     id: string;
     description: string;
     startingUrl: string;
-    category: "READ" | "CREATE" | "UPDATE" | "DELETE" | "FILE_MANIPULATION" | "NAVIGATE" | "SEARCH" | "FORM_FILL" | "CUSTOM";
+    category:
+        | "READ"
+        | "CREATE"
+        | "UPDATE"
+        | "DELETE"
+        | "FILE_MANIPULATION"
+        | "NAVIGATE"
+        | "SEARCH"
+        | "FORM_FILL"
+        | "CUSTOM";
     difficulty: "easy" | "medium" | "hard";
     expectedOutcome?: string | undefined;
 }
@@ -216,11 +227,13 @@ export interface StateComparison {
     contentMismatches?: string[] | undefined;
 
     variablesMatch: boolean;
-    variableDifferences?: Array<{
-        name: string;
-        predicted?: any;
-        actual?: any;
-    }> | undefined;
+    variableDifferences?:
+        | Array<{
+              name: string;
+              predicted?: any;
+              actual?: any;
+          }>
+        | undefined;
 
     overallMatchScore: number; // 0-1, how well predicted matched actual
 }
@@ -229,7 +242,12 @@ export interface StateComparison {
  * Step correction tracking
  */
 export interface StepCorrection {
-    correctionType: "action-modified" | "action-added" | "action-removed" | "step-skipped" | "retry-needed";
+    correctionType:
+        | "action-modified"
+        | "action-added"
+        | "action-removed"
+        | "step-skipped"
+        | "retry-needed";
     reason: string;
     originalAction?: AgentAction | undefined;
     correctedAction?: AgentAction | undefined;

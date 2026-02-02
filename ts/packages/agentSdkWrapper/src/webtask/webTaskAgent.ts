@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    query,
-    type Options,
-} from "@anthropic-ai/claude-agent-sdk";
+import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { WebTask, TaskExecutionResult } from "./types.js";
 import { TraceCollector } from "./tracing/traceCollector.js";
 import { TraceCollectorOptions } from "./tracing/types.js";
@@ -57,7 +54,9 @@ export class WebTaskAgent {
 
         console.log(`\n[Task ${task.id}] ${task.description}`);
         console.log(`[URL] ${task.startingUrl}`);
-        console.log(`[Category] ${task.category} | [Difficulty] ${task.difficulty}`);
+        console.log(
+            `[Category] ${task.category} | [Difficulty] ${task.difficulty}`,
+        );
 
         // Route to plan-based execution if enabled
         if (execOptions?.usePlanning) {
@@ -68,9 +67,10 @@ export class WebTaskAgent {
         // Initialize trace collector if enabled
         let tracer: TraceCollector | null = null;
         if (execOptions?.collectTraces) {
-            const modelName = typeof this.options.model === "string"
-                ? this.options.model
-                : "claude-sonnet-4-5-20250929";
+            const modelName =
+                typeof this.options.model === "string"
+                    ? this.options.model
+                    : "claude-sonnet-4-5-20250929";
 
             const traceOptions: TraceCollectorOptions = {
                 task,
@@ -83,7 +83,9 @@ export class WebTaskAgent {
 
             tracer = new TraceCollector(traceOptions);
             await tracer.initialize();
-            console.log(`[Trace] Collecting traces to: ${tracer.getTraceDir()}`);
+            console.log(
+                `[Trace] Collecting traces to: ${tracer.getTraceDir()}`,
+            );
         }
 
         try {
@@ -112,7 +114,10 @@ export class WebTaskAgent {
             let steps: string[] = [];
 
             // Track pending tool calls for trace collection
-            const pendingToolCalls = new Map<string, { name: string; input: any }>();
+            const pendingToolCalls = new Map<
+                string,
+                { name: string; input: any }
+            >();
 
             for await (const message of queryInstance) {
                 if (message.type === "result") {
@@ -146,7 +151,11 @@ export class WebTaskAgent {
 
                                 // TRACE: Record tool call
                                 if (tracer) {
-                                    tracer.recordToolCall(block.id, block.name, block.input);
+                                    tracer.recordToolCall(
+                                        block.id,
+                                        block.name,
+                                        block.input,
+                                    );
                                 }
                             }
                         }
@@ -173,7 +182,11 @@ export class WebTaskAgent {
                                 }
 
                                 // Record and process (copies files to trace dir)
-                                await tracer.recordToolResult(toolUseId, content, isError);
+                                await tracer.recordToolResult(
+                                    toolUseId,
+                                    content,
+                                    isError,
+                                );
                             }
                         }
                     }
@@ -214,7 +227,8 @@ export class WebTaskAgent {
 
             // TRACE: Mark failed and save
             if (tracer) {
-                const errorMsg = error instanceof Error ? error.message : String(error);
+                const errorMsg =
+                    error instanceof Error ? error.message : String(error);
                 tracer.markComplete(false, errorMsg);
                 await tracer.saveTrace();
             }
@@ -233,7 +247,7 @@ export class WebTaskAgent {
      */
     private async executeTaskWithPlanning(
         task: WebTask,
-        execOptions: TaskExecutionOptions
+        execOptions: TaskExecutionOptions,
     ): Promise<TaskExecutionResult> {
         const startTime = Date.now();
         const traceDir = execOptions.traceDir || "./traces";
@@ -241,9 +255,10 @@ export class WebTaskAgent {
         // Initialize trace collector
         let tracer: TraceCollector | null = null;
         if (execOptions.collectTraces) {
-            const modelName = typeof this.options.model === "string"
-                ? this.options.model
-                : "claude-sonnet-4-5-20250929";
+            const modelName =
+                typeof this.options.model === "string"
+                    ? this.options.model
+                    : "claude-sonnet-4-5-20250929";
 
             const traceOptions: TraceCollectorOptions = {
                 task,
@@ -256,7 +271,9 @@ export class WebTaskAgent {
 
             tracer = new TraceCollector(traceOptions);
             await tracer.initialize();
-            console.log(`[Trace] Collecting traces to: ${tracer.getTraceDir()}`);
+            console.log(
+                `[Trace] Collecting traces to: ${tracer.getTraceDir()}`,
+            );
         }
 
         try {
@@ -268,11 +285,16 @@ export class WebTaskAgent {
                 includeControlFlow: true,
             });
 
-            console.log(`[Planning] Generated plan with ${originalPlan.steps.length} steps`);
+            console.log(
+                `[Planning] Generated plan with ${originalPlan.steps.length} steps`,
+            );
 
             // Save original plan
             const serializer = new PlanSerializer();
-            const originalPlanPath = await serializer.saveOriginalPlan(originalPlan, traceDir);
+            const originalPlanPath = await serializer.saveOriginalPlan(
+                originalPlan,
+                traceDir,
+            );
             await serializer.savePlanSummary(originalPlan, traceDir);
 
             // Set plan in tracer
@@ -287,31 +309,52 @@ export class WebTaskAgent {
             const planResult = await executor.executePlan(
                 originalPlan,
                 this.options,
-                tracer || undefined
+                tracer || undefined,
             );
 
-            console.log(`[Execution] Plan execution ${planResult.success ? "succeeded" : "failed"}`);
-            console.log(`[Execution] Executed ${planResult.executedSteps}/${planResult.totalSteps} steps`);
+            console.log(
+                `[Execution] Plan execution ${planResult.success ? "succeeded" : "failed"}`,
+            );
+            console.log(
+                `[Execution] Executed ${planResult.executedSteps}/${planResult.totalSteps} steps`,
+            );
             if (planResult.corrections.length > 0) {
-                console.log(`[Execution] ${planResult.corrections.length} corrections made during execution`);
+                console.log(
+                    `[Execution] ${planResult.corrections.length} corrections made during execution`,
+                );
             }
 
             // STEP 3: GENERATE REVISED PLAN (learning)
             if (tracer) {
-                console.log(`[Learning] Generating revised plan based on execution...`);
+                console.log(
+                    `[Learning] Generating revised plan based on execution...`,
+                );
                 const trace = tracer.getTrace();
 
-                const revisedPlan = await planner.revisePlan(originalPlan, trace, {
-                    preserveStructure: false,
-                    onlyCorrections: false,
-                });
+                const revisedPlan = await planner.revisePlan(
+                    originalPlan,
+                    trace,
+                    {
+                        preserveStructure: false,
+                        onlyCorrections: false,
+                    },
+                );
 
-                console.log(`[Learning] Generated revised plan (v${revisedPlan.version})`);
+                console.log(
+                    `[Learning] Generated revised plan (v${revisedPlan.version})`,
+                );
 
                 // Save revised plan and comparison
-                const revisedPlanPath = await serializer.saveRevisedPlan(revisedPlan, traceDir);
+                const revisedPlanPath = await serializer.saveRevisedPlan(
+                    revisedPlan,
+                    traceDir,
+                );
                 await serializer.savePlanSummary(revisedPlan, traceDir);
-                await serializer.savePlanComparison(originalPlan, revisedPlan, traceDir);
+                await serializer.savePlanComparison(
+                    originalPlan,
+                    revisedPlan,
+                    traceDir,
+                );
 
                 // Update tracer with revised plan path
                 tracer.setPlanPaths(originalPlanPath, revisedPlanPath);
@@ -333,13 +376,15 @@ export class WebTaskAgent {
                 data: planResult.data,
                 duration: duration,
             };
-
         } catch (error) {
             const duration = Date.now() - startTime;
             console.error(`[Error] Plan-based execution failed:`, error);
 
             if (tracer) {
-                tracer.markComplete(false, error instanceof Error ? error.message : String(error));
+                tracer.markComplete(
+                    false,
+                    error instanceof Error ? error.message : String(error),
+                );
                 await tracer.saveTrace();
             }
 
