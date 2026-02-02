@@ -3,7 +3,7 @@
 
 import { ChatModelWithStreaming, openai } from "aiclient";
 import registerDebug from "debug";
-import { createTypeChat } from "typeagent";
+import { createTypeChat, loadSchema } from "typeagent";
 import {
     SpeechProcessingAction,
     UserExpression,
@@ -55,28 +55,7 @@ Only classify statements as questions or requests if they are complete statement
         try {
             const azoai = createTypeChat<SpeechProcessingAction>(
                 this.model!,
-                //loadSchema(["speechProcessingSchema.ts"], import.meta.url),
-                `
-// An action that processes speech input and returns processed text
-// Processed text has been annotated to indicate user intent.
-export type SpeechProcessingAction = {
-    actionName: "speechProcessingAction";
-    parameters: {
-        // The original, unmodified speech input
-        inputText: string;
-        // An XML string containing the processed text
-        processedText: UserExpression[];
-    }
-}
-
-export type UserExpression = {
-    type: "statement" | "question" | "command" | "other";
-    other_explanation?: string;
-    confidence: "low" | "medium" | "high";
-    complete_statement: boolean;
-    text: string;
-}            
-                `,
+                loadSchema(["speechProcessingSchema.ts"], import.meta.url),
                 "SpeechProcessingAction",
                 this.instructions,
                 [],
