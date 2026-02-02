@@ -126,7 +126,6 @@ export function initializeSpeech() {
                 return undefined;
             }
 
-            // TODO: Process the text and return the result
             console.log("Continuous speech processing: " + text);
 
             const shellWindow = getShellWindow();

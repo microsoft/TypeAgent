@@ -48,9 +48,14 @@ export class ChatInput {
     private listeningMic: HTMLElement;
     private disabledMic: HTMLElement;
     private alwaysOnMic: HTMLElement;
+    private wakeWordMic: HTMLElement;
     private token: SpeechToken | undefined = undefined;
     private uselocalWhisper: boolean = false;
     private waitForWakeWord: boolean = false;
+
+    private speechRefCount: number = 0;
+    private speechIntervalTimeout: number = 1200; // milliseconds
+    private lastSpeechArrived: number = 0;
 
     constructor(
         handlers: ExpandableTextareaHandlers,
@@ -156,6 +161,10 @@ export class ChatInput {
         this.alwaysOnMic.className = "chat-message-hidden";
         this.micButton.appendChild(this.alwaysOnMic);
 
+        this.wakeWordMic = iconMicrophoneWakeWord();
+        this.wakeWordMic.className = "chat-message-hidden";
+        this.micButton.appendChild(this.wakeWordMic);
+
         getClientAPI()
             .getLocalWhisperStatus()
             .then((useLocalWhisper) => {
@@ -178,6 +187,7 @@ export class ChatInput {
         ) => {
             if (this.listening) {
                 this.listening = false; // toggle listening so we just throw away speech reco results already in progress.
+                this.inputContainer.classList.add("listening");
                 return;
             }
             if (needSpeechToken(useLocalWhisper) && token === undefined) {
@@ -197,8 +207,15 @@ export class ChatInput {
         this.toggleContinuous = (waitForWakeWord: boolean) => {
             this.continuous = !this.continuous;
             this.waitForWakeWord = waitForWakeWord;
-            this.alwaysOnMic.outerHTML = this.waitForWakeWord ? iconMicrophoneWakeWord().outerHTML : iconMicrophoneContinuousListening().outerHTML;
             this.listening = this.continuous;
+
+            // indicate to the user that we are actively processing
+            // wakeword mode: only show listening if we have detected the wake word
+            if (this.listening && !waitForWakeWord) {
+                this.inputContainer.classList.add("listening");
+            } else {
+                this.inputContainer.classList.remove("listening");
+            }
             this.micButton.disabled = false;
 
             if (this.continuous) {
@@ -216,7 +233,12 @@ export class ChatInput {
                 this.micIcon.classList.add("chat-message-hidden");
                 this.listeningMic.classList.add("chat-message-hidden");
                 this.disabledMic.classList.add("chat-message-hidden");
-                this.alwaysOnMic.classList.remove("chat-message-hidden");
+
+                if (waitForWakeWord) {
+                    this.wakeWordMic.classList.remove("chat-message-hidden");
+                } else {
+                    this.alwaysOnMic.classList.remove("chat-message-hidden");
+                }
             } else {
                 this.continuous = false;
                 this.continousRecognizer?.stop();
@@ -267,8 +289,15 @@ export class ChatInput {
             return;
         }
 
+        this.lastSpeechArrived = Date.now();
+
         console.log("Running Recognizing step");
-        // Update the hypothesis line in the phrase/result view (only have one)
+ 
+        // if (this.continuous && this.waitForWakeWord) {
+        //     text = this.textarea.getTextContent() + " " + text;
+        // }
+
+       // Update the hypothesis line in the phrase/result view (only have one)
         this.textarea.setTextContent(
             this.textarea
                 .getTextContent()
@@ -276,12 +305,17 @@ export class ChatInput {
                 `${text} [...]\r\n`,
         );
 
+        // allow the user to send the text even if we are recognizing
+        if (text.length > 0) {
+            this.textarea.enable(true);
+        }
+
         if (this.continuous) {
 
             // if we are waiting for a wake word, look for it and ignore anything before it
             // also remove the wakeword from the text.
             if (this.waitForWakeWord) {
-                const wakeWord = "type agent";
+                const wakeWord = "hey type agent";
                 const lowerText = text.toLowerCase();
                 const wakeWordIndex = lowerText.indexOf(wakeWord);
                 if (wakeWordIndex === -1) {
@@ -289,33 +323,63 @@ export class ChatInput {
                 } else {
                     // remove everything before and including the wake word
                     text = text.substring(wakeWordIndex + wakeWord.length).trim();
+
+                    // indicate to the user that we are now actively processing
+                    this.inputContainer.classList.add("listening");
                 }                
-            }             
+            }
 
-            // TODO: prefilter before sending
-            getClientAPI()
-                .continuousSpeechProcessing(text)
-                .then((response) => {
-                    if (response) {
+            this.speechRefCount++;
 
-                       
-
-                        this.textarea.setTextContent(
-                            this.textarea
-                                .getTextContent()
-                                .replace(
-                                    /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
-                                    "$1$2",
-                                ) + `${response}\r\n`,
-                        );
-                    }
-                });
+            // process the speech
+            this.processSpeech(text);
         }
+    }
+
+    /**
+     * Processes the speech text by sending it to the continuous speech processing API
+     * and updating the input text area with the results.
+     * @param text The speech text to process
+     */
+    private processSpeech(text: string) {
+        setTimeout(() =>
+            {
+                this.speechRefCount--;
+
+                // if the ref count is zero, reset the text area to remove any stale recognizing text
+                if (this.speechRefCount === 0 && Date.now() - this.lastSpeechArrived > this.speechIntervalTimeout) {
+                    // process what the user said
+                    getClientAPI()
+                        .continuousSpeechProcessing(text)
+                        .then((response) => {
+                            if (response) {
+                                this.textarea.setTextContent(
+                                    this.textarea
+                                        .getTextContent()
+                                        .replace(
+                                            /(.*)(^|[\r\n]+).*\[\.\.\.\][\r\n]+/,
+                                            "$1$2",
+                                        ) + `${response}\r\n`,
+                                );
+                            }
+
+                            if (this.waitForWakeWord) {
+                                // indicate to the user that we are no longer actively processing
+                                this.inputContainer.classList.remove("listening");                                
+                            }
+
+                        });                    
+                } else if (this.speechRefCount > 0) {
+                    this.processSpeech(text);
+                } else if (this.speechRefCount < 0) {
+                    this.speechRefCount = 0;
+                }
+            }, this.speechIntervalTimeout);
     }
 
     private onRecognized(text: string) {
         // only update the text if the user didn't cancel speech recognition
-        if (this.listening || this.continuous) {
+        if (this.listening || !this.continuous) {
 
             this.textarea.setTextContent(text);
             this.textarea.send();
@@ -336,28 +400,34 @@ export class ChatInput {
     private micReady() {
         this.listening = false;
         this.micButton.disabled = false;
+        this.inputContainer.classList.remove("listening");
         this.micIcon.classList.remove("chat-message-hidden");
         this.listeningMic.classList.add("chat-message-hidden");
         this.disabledMic.classList.add("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
+        this.wakeWordMic.classList.add("chat-message-hidden");
     }
 
     private micListening() {
         this.listening = true;
+        this.inputContainer.classList.add("listening");
         this.micButton.disabled = false;
         this.micIcon.classList.add("chat-message-hidden");
         this.listeningMic.classList.remove("chat-message-hidden");
         this.disabledMic.classList.add("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
+        this.wakeWordMic.classList.add("chat-message-hidden");
     }
 
     private micNotReady() {
         this.listening = false;
+        this.inputContainer.classList.remove("listening");
         this.micButton.disabled = true;
         this.micIcon.classList.add("chat-message-hidden");
         this.listeningMic.classList.add("chat-message-hidden");
         this.disabledMic.classList.remove("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
+        this.wakeWordMic.classList.add("chat-message-hidden");
     }
 
     /**
