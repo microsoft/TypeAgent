@@ -320,9 +320,6 @@ export class ChatInput {
                 if (wakeWordIndex === -1) {
                     return;
                 } else {
-                    // we are now actively listening until we get an actionable event
-                    this.awakeAndListening = true;
-
                     // remove everything before and including the wake word
                     text = text
                         .substring(wakeWordIndex + wakeWord.length)
@@ -380,10 +377,6 @@ export class ChatInput {
                 this.speechRefCount = 0;
             }
         }, this.speechIntervalTimeout);
-    }
-
-    public resetLiseningState() {
-        this.awakeAndListening = false;
     }
 
     private onRecognized(text: string) {
