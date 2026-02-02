@@ -53,6 +53,12 @@ export interface Environment {
      * Stored here so it can be restored when popping from nested environments
      */
     slotMap?: Map<string, number> | undefined;
+
+    /**
+     * ActionValue expression for this rule
+     * Stored so it can be restored when popping from nested environments
+     */
+    actionValue?: any | undefined;
 }
 
 /**
@@ -109,6 +115,8 @@ export interface VariableRef {
     variableName?: string | undefined;
     /** Slot index (set during compilation, used at runtime) */
     slotIndex?: number | undefined;
+    /** Expected type (used for type conversion at evaluation time) */
+    typeName?: string | undefined;
 }
 
 /**
@@ -153,9 +161,11 @@ export function createEnvironment(
     parent?: Environment,
     parentSlotIndex?: number,
     slotMap?: Map<string, number>,
+    actionValue?: any,
 ): Environment {
     return {
         slots: new Array(slotCount).fill(undefined),
+        actionValue,
         parent,
         parentSlotIndex,
         slotMap,
@@ -250,10 +260,14 @@ export function evaluateExpression(
 /**
  * Compile a value expression by resolving variable names to slot indices
  * This should be called at NFA compile time, not at runtime
+ * @param expr The expression to compile
+ * @param slotMap Maps variable names to slot indices
+ * @param typeMap Optional map of variable names to their expected types (for type conversion)
  */
 export function compileValueExpression(
     expr: ValueExpression,
     slotMap: Map<string, number>,
+    typeMap?: Map<string, string>,
 ): ValueExpression {
     switch (expr.type) {
         case "variable": {
@@ -266,11 +280,17 @@ export function compileValueExpression(
                     `Cannot compile: unknown variable ${expr.variableName}`,
                 );
             }
-            return {
+            const result: VariableRef = {
                 type: "variable",
                 variableName: expr.variableName, // Keep for debugging
                 slotIndex,
             };
+            // Add type information if available
+            const typeName = typeMap?.get(expr.variableName);
+            if (typeName) {
+                result.typeName = typeName;
+            }
+            return result;
         }
 
         case "literal":
@@ -280,14 +300,14 @@ export function compileValueExpression(
             return {
                 type: "array",
                 elements: expr.elements.map((elem) =>
-                    compileValueExpression(elem, slotMap),
+                    compileValueExpression(elem, slotMap, typeMap),
                 ),
             };
 
         case "object": {
             const props = new Map<string, ValueExpression>();
             for (const [key, value] of expr.properties) {
-                props.set(key, compileValueExpression(value, slotMap));
+                props.set(key, compileValueExpression(value, slotMap, typeMap));
             }
             return {
                 type: "object",
@@ -298,7 +318,7 @@ export function compileValueExpression(
         case "action": {
             const params = new Map<string, ValueExpression>();
             for (const [key, value] of expr.parameters) {
-                params.set(key, compileValueExpression(value, slotMap));
+                params.set(key, compileValueExpression(value, slotMap, typeMap));
             }
             return {
                 type: "action",

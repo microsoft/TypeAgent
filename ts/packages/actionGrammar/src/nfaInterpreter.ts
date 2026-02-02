@@ -370,12 +370,13 @@ function epsilonClosure(
         if (nfaState.slotMap && nfaState.slotCount !== undefined) {
             // This is a rule entry state - create a new environment
             // The new environment has the previous one as parent (for nested rules)
-            // Also store the slotMap in the environment so it can be restored when popping
+            // Store slotMap and actionValue in the environment so they can be restored when popping
             currentEnvironment = createEnvironment(
                 nfaState.slotCount,
                 state.environment,
                 nfaState.parentSlotIndex,
                 nfaState.slotMap,
+                nfaState.actionValue, // Store actionValue for this rule
             );
             currentSlotMap = nfaState.slotMap;
         }
@@ -443,8 +444,16 @@ function epsilonClosure(
                     } catch (e) {
                         debugNFA(`  WriteToParent failed: ${e}`);
                     }
-                    // Pop back to parent environment (no need to restore slotMap - values are compiled)
+                    // Pop back to parent environment and restore slotMap/actionValue
                     newEnvironment = currentEnvironment.parent;
+                    // Restore slotMap from parent environment if available
+                    if (newEnvironment?.slotMap) {
+                        newSlotMap = newEnvironment.slotMap;
+                    }
+                    // Restore actionValue from parent environment if available
+                    if (newEnvironment?.actionValue !== undefined) {
+                        newActionValue = newEnvironment.actionValue;
+                    }
                 }
 
                 queue.push({

@@ -94,7 +94,15 @@ function evaluateActionValue(env: DFAEnvironment, valueExpr: any): any {
         if (valueExpr.type === "variable") {
             // Look up by slot index if available, otherwise by name in slotMap
             if (valueExpr.slotIndex !== undefined) {
-                return env.slots[valueExpr.slotIndex];
+                let value = env.slots[valueExpr.slotIndex];
+                // Convert to number if typeName indicates number type
+                if (valueExpr.typeName === "number" && typeof value === "string") {
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) {
+                        value = num;
+                    }
+                }
+                return value;
             }
             // Fallback: return undefined for unresolved variables
             return undefined;
@@ -102,14 +110,37 @@ function evaluateActionValue(env: DFAEnvironment, valueExpr: any): any {
 
         if (valueExpr.type === "object") {
             const result: Record<string, any> = {};
-            for (const [key, val] of Object.entries(valueExpr.value)) {
-                result[key] = evaluateActionValue(env, val);
+            // Handle both formats: environment.ts uses .properties (Map), grammar parser uses .value (object)
+            if (valueExpr.properties instanceof Map) {
+                for (const [key, val] of valueExpr.properties) {
+                    result[key] = evaluateActionValue(env, val);
+                }
+            } else if (valueExpr.value) {
+                for (const [key, val] of Object.entries(valueExpr.value)) {
+                    result[key] = evaluateActionValue(env, val);
+                }
             }
             return result;
         }
 
         if (valueExpr.type === "array") {
-            return (valueExpr.value as any[]).map((v) => evaluateActionValue(env, v));
+            // Handle both formats: environment.ts uses .elements, grammar parser uses .value
+            const arr = valueExpr.elements || valueExpr.value;
+            return (arr as any[]).map((v) => evaluateActionValue(env, v));
+        }
+
+        if (valueExpr.type === "action") {
+            const params: Record<string, any> = {};
+            // Handle both formats: environment.ts uses .parameters (Map), grammar parser uses .value
+            if (valueExpr.parameters instanceof Map) {
+                for (const [key, val] of valueExpr.parameters) {
+                    params[key] = evaluateActionValue(env, val);
+                }
+            }
+            return {
+                actionName: valueExpr.actionName,
+                parameters: params,
+            };
         }
     }
 

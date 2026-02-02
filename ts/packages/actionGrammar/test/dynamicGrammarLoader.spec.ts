@@ -425,8 +425,8 @@ describe("Dynamic Grammar Loader", () => {
                 "tomorrow",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.captures.get("event")).toBe("meeting");
-            expect(matchResult.captures.get("date")).toBeInstanceOf(Date);
+            expect(matchResult.actionValue?.parameters?.event).toBe("meeting");
+            expect(matchResult.actionValue?.parameters?.date).toBeInstanceOf(Date);
         });
     });
 });

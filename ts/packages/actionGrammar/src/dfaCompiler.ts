@@ -58,37 +58,62 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
         const dfaState = builder.getState(dfaStateId);
         if (!dfaState) continue;
 
-        // Check if this is an accepting state and get action value info
-        let acceptingNfaState: number | undefined;
-        let acceptingContext: DFAExecutionContext | undefined;
-
+        // Check if this is an accepting state
+        let isAccepting = false;
         for (const ctx of dfaState.contexts) {
             for (const nfaStateId of ctx.nfaStateIds) {
                 if (nfaAcceptingStates.has(nfaStateId)) {
-                    acceptingNfaState = nfaStateId;
-                    acceptingContext = ctx;
+                    isAccepting = true;
                     break;
                 }
             }
-            if (acceptingNfaState !== undefined) break;
+            if (isAccepting) break;
         }
 
-        if (acceptingNfaState !== undefined) {
+        if (isAccepting) {
             acceptingStates.add(dfaStateId);
             builder.markAccepting(dfaStateId, nfaAcceptingStates);
 
-            // Get action value from the NFA state or from the NFA's actionValues array
-            const nfaState = nfa.states[acceptingNfaState];
-            let actionValue = nfaState?.actionValue;
+            // Now get the action value from the BEST PRIORITY context
+            const markedState = builder.getState(dfaStateId);
+            const bestPriorityCtx = markedState?.bestPriority;
+            let bestContext: DFAExecutionContext | undefined;
+            let bestNfaAcceptState: number | undefined;
 
-            // If no direct actionValue, try getting from rule index
-            if (actionValue === undefined && acceptingContext?.ruleIndex !== undefined) {
-                actionValue = nfa.actionValues?.[acceptingContext.ruleIndex];
+            if (bestPriorityCtx !== undefined) {
+                bestContext = dfaState.contexts[bestPriorityCtx.contextIndex];
+                // Find the accepting NFA state in this context
+                if (bestContext) {
+                    for (const nfaStateId of bestContext.nfaStateIds) {
+                        if (nfaAcceptingStates.has(nfaStateId)) {
+                            bestNfaAcceptState = nfaStateId;
+                            break;
+                        }
+                    }
+                }
             }
 
-            // Get slot info from the accepting NFA state
-            const slotCount = nfaState?.slotCount;
-            const debugSlotMap = nfaState?.slotMap || acceptingContext?.debugSlotMap;
+            // Get action value from the best context's NFA state or its rule index
+            let actionValue: any = undefined;
+            let slotCount: number | undefined;
+            let debugSlotMap: Map<string, number> | undefined;
+
+            if (bestNfaAcceptState !== undefined) {
+                const nfaState = nfa.states[bestNfaAcceptState];
+                actionValue = nfaState?.actionValue;
+                slotCount = nfaState?.slotCount;
+                debugSlotMap = nfaState?.slotMap;
+            }
+
+            // If no direct actionValue, try getting from rule index
+            if (actionValue === undefined && bestContext?.ruleIndex !== undefined) {
+                actionValue = nfa.actionValues?.[bestContext.ruleIndex];
+            }
+
+            // Fallback to debugSlotMap from context if not on NFA state
+            if (!debugSlotMap && bestContext?.debugSlotMap) {
+                debugSlotMap = bestContext.debugSlotMap;
+            }
 
             builder.setAcceptingStateInfo(
                 dfaStateId,

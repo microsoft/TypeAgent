@@ -117,6 +117,50 @@ function createRuleSlotMap(rule: GrammarRule): Map<string, number> {
 }
 
 /**
+ * Create a type map for a rule's variables (variable name -> typeName)
+ * Used for type conversion during value expression evaluation
+ */
+function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
+    const typeMap = new Map<string, string>();
+
+    function collectFromPart(part: GrammarPart): void {
+        switch (part.type) {
+            case "wildcard":
+                // VarStringPart has variable and typeName
+                if (part.variable && part.typeName) {
+                    typeMap.set(part.variable, part.typeName);
+                }
+                break;
+            case "number":
+                // VarNumberPart has variable, typeName is implicitly "number"
+                if (part.variable) {
+                    typeMap.set(part.variable, "number");
+                }
+                break;
+            case "rules":
+                // RulesPart has nested rules
+                if (part.rules) {
+                    for (const nestedRule of part.rules) {
+                        for (const nestedPart of nestedRule.parts) {
+                            collectFromPart(nestedPart);
+                        }
+                    }
+                }
+                break;
+            case "string":
+                // StringPart has no variables
+                break;
+        }
+    }
+
+    for (const part of rule.parts) {
+        collectFromPart(part);
+    }
+
+    return typeMap;
+}
+
+/**
  * Compile a Grammar to an NFA
  *
  * This compiler converts token-based grammar rules into an NFA that can be:
@@ -180,11 +224,14 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             builder.setStateSlotInfo(ruleEntry, slotMap.size, slotMap);
         }
 
+        // Create type map for type conversion during evaluation
+        const typeMap = createRuleTypeMap(rule);
+
         // Compile and set the effective value expression on the state
         // Parse the raw value node, then compile with slot indices
         if (effectiveValue) {
             const parsedExpr = parseValueExpression(effectiveValue);
-            const compiledExpr = compileValueExpression(parsedExpr, slotMap);
+            const compiledExpr = compileValueExpression(parsedExpr, slotMap, typeMap);
             builder.getState(ruleEntry).actionValue = compiledExpr;
             // Also store in actionValues array for priority tracking
             builder.setActionValue(ruleIndex, compiledExpr);
@@ -782,9 +829,11 @@ function compileRulesPartWithSlots(
             if (ruleIndex !== -1) {
                 builder.getState(ruleEntry).ruleIndex = ruleIndex;
             }
+            // Create type map for type conversion during evaluation
+            const nestedTypeMap = createRuleTypeMap(rule);
             // Parse and compile the value expression with slot indices
             const parsedExpr = parseValueExpression(rule.value);
-            compiledValue = compileValueExpression(parsedExpr, nestedSlotMap);
+            compiledValue = compileValueExpression(parsedExpr, nestedSlotMap, nestedTypeMap);
             builder.getState(ruleEntry).actionValue = compiledValue;
         }
 
