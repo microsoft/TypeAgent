@@ -19,6 +19,7 @@ import * as path from "path";
 import * as os from "os";
 import { convert } from "html-to-text";
 import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
+import { registerBrowserActionTools } from "./browserActionTools.js";
 
 function executeCommandRequestSchema() {
     return {
@@ -733,6 +734,14 @@ export class CommandServer {
             },
             async (request: TypeagentActionRequest) =>
                 this.executeTypeagentAction(request),
+        );
+
+        // Register browser action tools
+        registerBrowserActionTools(
+            this.server,
+            () => this.dispatcher,
+            this.responseCollector,
+            this.logger,
         );
     }
 

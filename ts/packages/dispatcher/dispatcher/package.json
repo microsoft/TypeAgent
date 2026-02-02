@@ -38,6 +38,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@azure/ai-agents": "^1.0.0-beta.3",
     "@azure/ai-projects": "^1.0.0-beta.8",
     "@azure/identity": "^4.10.0",
@@ -67,7 +68,8 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
-    "website-memory": "workspace:*"
+    "website-memory": "workspace:*",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

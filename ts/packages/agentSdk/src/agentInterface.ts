@@ -67,7 +67,6 @@ export type SchemaManifest = {
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
-    delegatable?: boolean; // whether actions can be delegated to external service for protocol requests, default is false
 };
 
 export type ActionManifest = {
