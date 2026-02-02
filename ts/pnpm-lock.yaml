@@ -211,7 +211,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../../packages/utils/typechatUtils
@@ -248,7 +248,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       rimraf:
         specifier: ^6.0.1
@@ -303,7 +303,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -374,7 +374,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -417,7 +417,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       copyfiles:
         specifier: ^2.4.1
@@ -494,7 +494,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.11
@@ -580,7 +580,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -617,7 +617,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -651,7 +651,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../../packages/utils/typechatUtils
@@ -688,7 +688,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -777,7 +777,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       rimraf:
         specifier: ^6.0.1
@@ -793,7 +793,7 @@ importers:
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.25.76)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -829,7 +829,7 @@ importers:
         version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -1056,13 +1056,13 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.12
-        version: 0.2.12(zod@4.1.13)
+        version: 0.2.12(zod@3.25.76)
       '@anthropic-ai/sdk':
         specifier: ^0.35.0
         version: 0.35.0(encoding@0.1.13)
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
-        version: 1.25.2(hono@4.11.3)(zod@4.1.13)
+        version: 1.25.2(hono@4.11.3)(zod@3.25.76)
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -1095,7 +1095,10 @@ importers:
         version: 3.3.2
       openai:
         specifier: ^4.73.0
-        version: 4.103.0(encoding@0.1.13)(ws@8.18.2)
+        version: 4.103.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.76)
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^18.19.3
@@ -1425,7 +1428,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       website-memory:
         specifier: workspace:*
         version: link:../../memory/website
@@ -1586,7 +1589,7 @@ importers:
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.25.76)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -1607,7 +1610,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
@@ -1699,7 +1702,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
@@ -1803,7 +1806,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -1944,7 +1947,7 @@ importers:
         version: 1.40.0
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       unist-util-visit:
         specifier: ^4.1.2
         version: 4.1.2
@@ -2056,7 +2059,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       winreg:
         specifier: ^1.2.5
         version: 1.2.5
@@ -2161,7 +2164,7 @@ importers:
         version: 10.1.2
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
@@ -2219,7 +2222,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -2262,7 +2265,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -2408,7 +2411,7 @@ importers:
         version: link:../telemetry
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/async':
         specifier: ^3.2.24
@@ -2527,7 +2530,7 @@ importers:
         version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)
+        version: 1.0.0-beta.8(ws@8.18.2)(zod@3.25.76)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -2551,7 +2554,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/async':
         specifier: ^3.2.24
@@ -2612,7 +2615,7 @@ importers:
         version: link:../telemetry
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
@@ -2743,7 +2746,7 @@ importers:
         version: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
@@ -2844,7 +2847,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -3353,7 +3356,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/async':
         specifier: ^3.2.24
@@ -3411,7 +3414,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: 0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       copyfiles:
         specifier: ^2.4.1
@@ -3451,7 +3454,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
@@ -3589,7 +3592,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       webvtt-parser:
         specifier: 2.2.0
         version: 2.2.0
@@ -3665,7 +3668,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
@@ -3802,7 +3805,7 @@ importers:
         version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.11
@@ -3851,7 +3854,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       copyfiles:
         specifier: ^2.4.1
@@ -3933,7 +3936,7 @@ importers:
         version: link:../typeagent
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
@@ -4037,7 +4040,7 @@ importers:
         version: link:../aiclient
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -4099,7 +4102,7 @@ importers:
         version: 4.4.1
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -4213,7 +4216,7 @@ importers:
         version: 4.30.1
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -4640,10 +4643,6 @@ packages:
     resolution: {integrity: sha512-IQjj9RIzAKatmNca3D6bT0qJ+Pkox1WZGOg2esJF2YLHb45pQKOwGPIAV+w3rfgkj7zV3RMxpn/c6iftzSOZJQ==}
     engines: {node: '>=18.0.0'}
 
-  '@babel/code-frame@7.26.2':
-    resolution: {integrity: sha512-RJlIHRueQgwWitWgF8OdFYGZX328Ax5BCemNGlqHfplnRT9ESi8JkFlvaVYbS+UubVY6dpv87Fs2u5M29iNFVQ==}
-    engines: {node: '>=6.9.0'}
-
   '@babel/code-frame@7.27.1':
     resolution: {integrity: sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg==}
     engines: {node: '>=6.9.0'}
@@ -4686,10 +4685,6 @@ packages:
     resolution: {integrity: sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA==}
     engines: {node: '>=6.9.0'}
 
-  '@babel/helper-validator-identifier@7.25.9':
-    resolution: {integrity: sha512-Ed61U6XJc3CVRfkERJWDz4dJwKe7iLmmJsbOGu9wSloNSFttHV0I8g6UAgb7qnK5ly5bGLPd4oXZlxCdANBOWQ==}
-    engines: {node: '>=6.9.0'}
-
   '@babel/helper-validator-identifier@7.27.1':
     resolution: {integrity: sha512-D2hP9eA+Sqx1kBZgzxZh0y1trbuU+JoDkiEwqhQ36nodYqJwyEIhPSdMNd7lOm/4io72luTPWH20Yda0xOuUow==}
     engines: {node: '>=6.9.0'}
@@ -4701,11 +4696,6 @@ packages:
   '@babel/helpers@7.28.4':
     resolution: {integrity: sha512-HFN59MmQXGHVyYadKLVumYsA9dBFun/ldYxipEjzA4196jpLZd8UjEEBLkbEkvfYreDqJhZxYAWFPtrfhNpj4w==}
     engines: {node: '>=6.9.0'}
-
-  '@babel/parser@7.27.5':
-    resolution: {integrity: sha512-OsQd175SxWkGlzbny8J3K8TnnDD0N3lrIUtB92xwyRpzaenGZhxDvxN/JgU00U3CDZNj9tPuDJ5H0WS4Nt3vKg==}
-    engines: {node: '>=6.0.0'}
-    hasBin: true
 
   '@babel/parser@7.28.4':
     resolution: {integrity: sha512-yZbBqeM6TkpP9du/I2pUZnJsRMGGvOuIrhjzC1AwHwW+6he4mni6Bp/m8ijn0iOuZuPI2BfkCoSRunpyjnrQKg==}
@@ -4819,10 +4809,6 @@ packages:
 
   '@babel/traverse@7.28.4':
     resolution: {integrity: sha512-YEzuboP2qvQavAcjgQNVgsvHIDv6ZpwXvcvjmyySP2DIMuByS/6ioU5G9pYrWHM6T2YDfc7xga9iNzYOs12CFQ==}
-    engines: {node: '>=6.9.0'}
-
-  '@babel/types@7.27.6':
-    resolution: {integrity: sha512-ETyHEk2VHHvl9b9jZP5IHPavHYk57EhanlRRuae9XCpb/j5bDCbPPMOBfCWhnl/7EDJz0jEMCi/RhccCE8r1+Q==}
     engines: {node: '>=6.9.0'}
 
   '@babel/types@7.28.4':
@@ -5741,23 +5727,11 @@ packages:
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
 
-  '@jridgewell/gen-mapping@0.3.8':
-    resolution: {integrity: sha512-imAbBGkb+ebQyxKgzv5Hu2nmROxoDOXHh80evxdoXNOrvAnVx7zimzc1Oo5h9RlfV4vPXaE2iM5pOFbvOCClWA==}
-    engines: {node: '>=6.0.0'}
-
   '@jridgewell/remapping@2.3.5':
     resolution: {integrity: sha512-LI9u/+laYG4Ds1TDKSJW2YPrIlcVYOwi2fUC6xB43lueCjgxV4lffOCZCtYFiH6TNOX+tQKXx97T4IKHbhyHEQ==}
 
-  '@jridgewell/resolve-uri@3.1.1':
-    resolution: {integrity: sha512-dSYZh7HhCDtCKm4QakX0xFpsRDqjjtZf/kjI/v3T3Nwt5r8/qz/M19F9ySyOqU94SXBmeG9ttTul+YnR4LOxFA==}
-    engines: {node: '>=6.0.0'}
-
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
-    engines: {node: '>=6.0.0'}
-
-  '@jridgewell/set-array@1.2.1':
-    resolution: {integrity: sha512-R8gLRTZeyp03ymzP/6Lil/28tGeGEzhx1q2k703KGWRAI1VdvPIXdG70VJc2pAMw3NA6JKL5hhFu1sJX0Mnn/A==}
     engines: {node: '>=6.0.0'}
 
   '@jridgewell/source-map@0.3.5':
@@ -5768,9 +5742,6 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.0':
     resolution: {integrity: sha512-gv3ZRaISU3fjPAgNsriBRqGWQL6quFx04YMPW/zD8XMLsU32mhCCbfbO6KZFLjvYpCZ8zyDEgqsgf+PwPaM7GQ==}
-
-  '@jridgewell/trace-mapping@0.3.25':
-    resolution: {integrity: sha512-vNk6aEwybGtawWmy/PzwnGDOjCkLWSD2wqvjGGAgOAwCGWySYXfYoxt00IJkTF+8Lb57DwOb3Aa0o9CApepiYQ==}
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
@@ -7010,9 +6981,6 @@ packages:
   '@types/http-proxy@1.17.14':
     resolution: {integrity: sha512-SSrD0c1OQzlFX7pGu1eXxSEjemej64aaNPRhhVYUGqXh0BtldAAx37MG8btcumvpgKyZp1F5Gn3JkktdxiFv6w==}
 
-  '@types/istanbul-lib-coverage@2.0.5':
-    resolution: {integrity: sha512-zONci81DZYCZjiLe0r6equvZut0b+dBRPBN5kBDjsONnutYNtJMoWQ9uR2RkL1gLG9NMTzvf+29e5RFfPbeKhQ==}
-
   '@types/istanbul-lib-coverage@2.0.6':
     resolution: {integrity: sha512-2QF/t/auWm0lsy8XtKVPG19v3sSOQlJe/YHZgfjb/KBBHOGSV+J2q/S671rcq9uTBrLAXmZpqJiaQbMT+zNU1w==}
 
@@ -7539,10 +7507,6 @@ packages:
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
     engines: {node: '>=8'}
-
-  ansi-regex@6.0.1:
-    resolution: {integrity: sha512-n5M855fKb2SsfMIiFFoVrABHJC8QtHwVx+mHWP3QcEqBHYienj5dHSgjbxtC0WEZXYt4wcD6zrQElDPhFuZgfA==}
-    engines: {node: '>=12'}
 
   ansi-regex@6.2.2:
     resolution: {integrity: sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg==}
@@ -9015,10 +8979,6 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  escalade@3.1.1:
-    resolution: {integrity: sha512-k0er2gUkLf8O0zKJiAhmkTnJlTvINGv7ygDNPbeIsX/TJjGJZHuh9B2UxbsaEkmlEo9MfhrSzmhIlhRlI2GXnw==}
-    engines: {node: '>=6'}
-
   escalade@3.2.0:
     resolution: {integrity: sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==}
     engines: {node: '>=6'}
@@ -9219,14 +9179,6 @@ packages:
 
   fd-slicer@1.1.0:
     resolution: {integrity: sha512-cE1qsB/VwyQozZ+q1dGxR8LBYNZeofhEdUNGSMbQD3Gw2lAzX9Zb3uIU6Ebc/Fmyjo9AWWfnn0AUCHqtevs/8g==}
-
-  fdir@6.4.4:
-    resolution: {integrity: sha512-1NZP+GK4GfuAv3PqKvxQRDMjdSRZjnkq7KfhlNrCNNlZ0ygQFpebfrnfnq/W7fpUnAv9aGWmY1zKx7FYL3gwhg==}
-    peerDependencies:
-      picomatch: ^3 || ^4
-    peerDependenciesMeta:
-      picomatch:
-        optional: true
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -11660,10 +11612,6 @@ packages:
     resolution: {integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==}
     engines: {node: '>=8.6'}
 
-  picomatch@4.0.2:
-    resolution: {integrity: sha512-M7BAV6Rlcy5u+m6oPhAPFgJTzAioX/6B0DxyvDlo9l8+T3nLKbrczg2WLUyzd45L8RqfUMyGPzekbMvX2Ldkwg==}
-    engines: {node: '>=12'}
-
   picomatch@4.0.3:
     resolution: {integrity: sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q==}
     engines: {node: '>=12'}
@@ -13757,8 +13705,8 @@ packages:
   zod@3.23.8:
     resolution: {integrity: sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g==}
 
-  zod@3.24.4:
-    resolution: {integrity: sha512-OdqJE9UDRPwWsrHjLN2F8bPxvwJBK22EHLWtanu0LSYr5YqzsaaW3RMgmjwr8Rypg5k+meEJdSPXJZXE/yqOMg==}
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zod@4.1.13:
     resolution: {integrity: sha512-AvvthqfqrAhNH9dnfmrfKzX5upOdjUVJYFqNSlkmGf64gRaTzlPwz99IHYnVs28qYAybvAlBV+H7pn0saFY4Ig==}
@@ -13781,6 +13729,19 @@ snapshots:
       tinyexec: 1.0.1
 
   '@antfu/utils@8.1.1': {}
+
+  '@anthropic-ai/claude-agent-sdk@0.2.12(zod@3.25.76)':
+    dependencies:
+      zod: 3.25.76
+    optionalDependencies:
+      '@img/sharp-darwin-arm64': 0.33.5
+      '@img/sharp-darwin-x64': 0.33.5
+      '@img/sharp-linux-arm': 0.33.5
+      '@img/sharp-linux-arm64': 0.33.5
+      '@img/sharp-linux-x64': 0.33.5
+      '@img/sharp-linuxmusl-arm64': 0.33.5
+      '@img/sharp-linuxmusl-x64': 0.33.5
+      '@img/sharp-win32-x64': 0.33.5
 
   '@anthropic-ai/claude-agent-sdk@0.2.12(zod@4.1.13)':
     dependencies:
@@ -14350,7 +14311,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/ai-projects@1.0.0-beta.8(ws@8.18.2)(zod@3.24.4)':
+  '@azure/ai-projects@1.0.0-beta.8(ws@8.18.2)(zod@3.25.76)':
     dependencies:
       '@azure-rest/ai-inference': 1.0.0-beta.6
       '@azure-rest/core-client': 2.4.0
@@ -14375,7 +14336,7 @@ snapshots:
       '@opentelemetry/sdk-trace-node': 1.30.1(@opentelemetry/api@1.9.0)
       '@traceloop/instrumentation-langchain': 0.13.0(@opentelemetry/api@1.9.0)
       '@traceloop/instrumentation-openai': 0.13.0(@opentelemetry/api@1.9.0)
-      openai: 4.103.0(ws@8.18.2)(zod@3.24.4)
+      openai: 4.103.0(ws@8.18.2)(zod@3.25.76)
       tslib: 2.8.1
     transitivePeerDependencies:
       - encoding
@@ -14612,12 +14573,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/code-frame@7.26.2':
-    dependencies:
-      '@babel/helper-validator-identifier': 7.25.9
-      js-tokens: 4.0.0
-      picocolors: 1.1.1
-
   '@babel/code-frame@7.27.1':
     dependencies:
       '@babel/helper-validator-identifier': 7.27.1
@@ -14684,8 +14639,6 @@ snapshots:
 
   '@babel/helper-string-parser@7.27.1': {}
 
-  '@babel/helper-validator-identifier@7.25.9': {}
-
   '@babel/helper-validator-identifier@7.27.1': {}
 
   '@babel/helper-validator-option@7.27.1': {}
@@ -14694,10 +14647,6 @@ snapshots:
     dependencies:
       '@babel/template': 7.27.2
       '@babel/types': 7.28.4
-
-  '@babel/parser@7.27.5':
-    dependencies:
-      '@babel/types': 7.27.6
 
   '@babel/parser@7.28.4':
     dependencies:
@@ -14814,11 +14763,6 @@ snapshots:
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
-
-  '@babel/types@7.27.6':
-    dependencies:
-      '@babel/helper-string-parser': 7.27.1
-      '@babel/helper-validator-identifier': 7.27.1
 
   '@babel/types@7.28.4':
     dependencies:
@@ -15973,7 +15917,7 @@ snapshots:
   '@jest/types@29.6.3':
     dependencies:
       '@jest/schemas': 29.6.3
-      '@types/istanbul-lib-coverage': 2.0.5
+      '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.3
       '@types/node': 20.19.25
       '@types/yargs': 17.0.29
@@ -15984,39 +15928,24 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.0
       '@jridgewell/trace-mapping': 0.3.31
 
-  '@jridgewell/gen-mapping@0.3.8':
-    dependencies:
-      '@jridgewell/set-array': 1.2.1
-      '@jridgewell/sourcemap-codec': 1.5.0
-      '@jridgewell/trace-mapping': 0.3.25
-
   '@jridgewell/remapping@2.3.5':
     dependencies:
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
 
-  '@jridgewell/resolve-uri@3.1.1': {}
-
   '@jridgewell/resolve-uri@3.1.2': {}
-
-  '@jridgewell/set-array@1.2.1': {}
 
   '@jridgewell/source-map@0.3.5':
     dependencies:
-      '@jridgewell/gen-mapping': 0.3.8
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/gen-mapping': 0.3.13
+      '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/source-map@0.3.6':
     dependencies:
-      '@jridgewell/gen-mapping': 0.3.8
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/gen-mapping': 0.3.13
+      '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/sourcemap-codec@1.5.0': {}
-
-  '@jridgewell/trace-mapping@0.3.25':
-    dependencies:
-      '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.0
 
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
@@ -16025,7 +15954,7 @@ snapshots:
 
   '@jridgewell/trace-mapping@0.3.9':
     dependencies:
-      '@jridgewell/resolve-uri': 3.1.1
+      '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.0
 
   '@js-sdsl/ordered-map@4.4.2': {}
@@ -16499,6 +16428,28 @@ snapshots:
       nanoid: 5.1.5
       tslib: 2.8.1
     transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.25.2(hono@4.11.3)(zod@3.25.76)':
+    dependencies:
+      '@hono/node-server': 1.19.7(hono@4.11.3)
+      ajv: 8.17.1
+      ajv-formats: 3.0.1(ajv@8.17.1)
+      content-type: 1.0.5
+      cors: 2.8.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.6
+      express: 5.2.1
+      express-rate-limit: 7.5.1(express@5.2.1)
+      jose: 6.1.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
+    transitivePeerDependencies:
+      - hono
       - supports-color
 
   '@modelcontextprotocol/sdk@1.25.2(hono@4.11.3)(zod@4.1.13)':
@@ -17813,13 +17764,11 @@ snapshots:
     dependencies:
       '@types/node': 20.19.25
 
-  '@types/istanbul-lib-coverage@2.0.5': {}
-
   '@types/istanbul-lib-coverage@2.0.6': {}
 
   '@types/istanbul-lib-report@3.0.2':
     dependencies:
-      '@types/istanbul-lib-coverage': 2.0.5
+      '@types/istanbul-lib-coverage': 2.0.6
 
   '@types/istanbul-reports@3.0.3':
     dependencies:
@@ -18147,7 +18096,7 @@ snapshots:
 
   '@vue/compiler-core@3.5.16':
     dependencies:
-      '@babel/parser': 7.27.5
+      '@babel/parser': 7.28.4
       '@vue/shared': 3.5.16
       entities: 4.5.0
       estree-walker: 2.0.2
@@ -18160,7 +18109,7 @@ snapshots:
 
   '@vue/compiler-sfc@3.5.16':
     dependencies:
-      '@babel/parser': 7.27.5
+      '@babel/parser': 7.28.4
       '@vue/compiler-core': 3.5.16
       '@vue/compiler-dom': 3.5.16
       '@vue/compiler-ssr': 3.5.16
@@ -18425,8 +18374,6 @@ snapshots:
   ansi-html-community@0.0.8: {}
 
   ansi-regex@5.0.1: {}
-
-  ansi-regex@6.0.1: {}
 
   ansi-regex@6.2.2: {}
 
@@ -20269,8 +20216,6 @@ snapshots:
       '@esbuild/win32-ia32': 0.25.4
       '@esbuild/win32-x64': 0.25.4
 
-  escalade@3.1.1: {}
-
   escalade@3.2.0: {}
 
   escape-html@1.0.3: {}
@@ -20524,10 +20469,6 @@ snapshots:
   fd-slicer@1.1.0:
     dependencies:
       pend: 1.2.0
-
-  fdir@6.4.4(picomatch@4.0.2):
-    optionalDependencies:
-      picomatch: 4.0.2
 
   fdir@6.5.0(picomatch@4.0.3):
     optionalDependencies:
@@ -21925,7 +21866,7 @@ snapshots:
 
   jest-message-util@29.7.0:
     dependencies:
-      '@babel/code-frame': 7.26.2
+      '@babel/code-frame': 7.27.1
       '@jest/types': 29.6.3
       '@types/stack-utils': 2.0.2
       chalk: 4.1.2
@@ -23443,7 +23384,7 @@ snapshots:
       is-inside-container: 1.0.0
       is-wsl: 3.1.0
 
-  openai@4.103.0(encoding@0.1.13)(ws@8.18.2):
+  openai@4.103.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.76):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.12
@@ -23454,10 +23395,11 @@ snapshots:
       node-fetch: 2.7.0(encoding@0.1.13)
     optionalDependencies:
       ws: 8.18.2
+      zod: 3.25.76
     transitivePeerDependencies:
       - encoding
 
-  openai@4.103.0(ws@8.18.2)(zod@3.24.4):
+  openai@4.103.0(ws@8.18.2)(zod@3.25.76):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.12
@@ -23468,7 +23410,7 @@ snapshots:
       node-fetch: 2.7.0(encoding@0.1.13)
     optionalDependencies:
       ws: 8.18.2
-      zod: 3.24.4
+      zod: 3.25.76
     transitivePeerDependencies:
       - encoding
 
@@ -23518,7 +23460,7 @@ snapshots:
       log-symbols: 6.0.0
       stdin-discarder: 0.2.2
       string-width: 7.2.0
-      strip-ansi: 7.1.0
+      strip-ansi: 7.1.2
 
   orderedmap@2.1.1: {}
 
@@ -23611,7 +23553,7 @@ snapshots:
 
   parse-json@5.2.0:
     dependencies:
-      '@babel/code-frame': 7.26.2
+      '@babel/code-frame': 7.27.1
       error-ex: 1.3.2
       json-parse-even-better-errors: 2.3.1
       lines-and-columns: 1.2.4
@@ -23720,8 +23662,6 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@2.3.1: {}
-
-  picomatch@4.0.2: {}
 
   picomatch@4.0.3: {}
 
@@ -25040,7 +24980,7 @@ snapshots:
 
   strip-ansi@7.1.0:
     dependencies:
-      ansi-regex: 6.0.1
+      ansi-regex: 6.2.2
 
   strip-ansi@7.1.2:
     dependencies:
@@ -25177,7 +25117,7 @@ snapshots:
 
   terser-webpack-plugin@5.3.14(esbuild@0.25.11)(webpack@5.99.8(esbuild@0.25.11)):
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.2
       serialize-javascript: 6.0.2
@@ -25188,7 +25128,7 @@ snapshots:
 
   terser-webpack-plugin@5.3.14(webpack@5.99.8):
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.2
       serialize-javascript: 6.0.2
@@ -25255,8 +25195,8 @@ snapshots:
 
   tinyglobby@0.2.14:
     dependencies:
-      fdir: 6.4.4(picomatch@4.0.2)
-      picomatch: 4.0.2
+      fdir: 6.5.0(picomatch@4.0.3)
+      picomatch: 4.0.3
 
   tinyglobby@0.2.15:
     dependencies:
@@ -25493,10 +25433,10 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.2
 
-  typechat@0.1.1(typescript@5.4.5)(zod@3.24.4):
+  typechat@0.1.1(typescript@5.4.5)(zod@3.25.76):
     optionalDependencies:
       typescript: 5.4.5
-      zod: 3.24.4
+      zod: 3.25.76
 
   typechat@0.1.1(typescript@5.4.5)(zod@4.1.13):
     optionalDependencies:
@@ -25690,8 +25630,8 @@ snapshots:
 
   v8-to-istanbul@9.1.3:
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.25
-      '@types/istanbul-lib-coverage': 2.0.5
+      '@jridgewell/trace-mapping': 0.3.31
+      '@types/istanbul-lib-coverage': 2.0.6
       convert-source-map: 2.0.0
 
   validate-npm-package-license@3.0.4:
@@ -26201,7 +26141,7 @@ snapshots:
   yargs@16.2.0:
     dependencies:
       cliui: 7.0.4
-      escalade: 3.1.1
+      escalade: 3.2.0
       get-caller-file: 2.0.5
       require-directory: 2.1.1
       string-width: 4.2.3
@@ -26211,7 +26151,7 @@ snapshots:
   yargs@17.7.2:
     dependencies:
       cliui: 8.0.1
-      escalade: 3.1.1
+      escalade: 3.2.0
       get-caller-file: 2.0.5
       require-directory: 2.1.1
       string-width: 4.2.3
@@ -26257,14 +26197,17 @@ snapshots:
     dependencies:
       zod: 4.1.13
 
+  zod-to-json-schema@3.25.1(zod@3.25.76):
+    dependencies:
+      zod: 3.25.76
+
   zod-to-json-schema@3.25.1(zod@4.1.13):
     dependencies:
       zod: 4.1.13
 
   zod@3.23.8: {}
 
-  zod@3.24.4:
-    optional: true
+  zod@3.25.76: {}
 
   zod@4.1.13: {}
 

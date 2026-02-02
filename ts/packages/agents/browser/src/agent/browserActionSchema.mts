@@ -23,7 +23,12 @@ export type BrowserActions =
     | GetWebsiteStats
     | OpenSearchResult
     | ChangeSearchProvider
-    | SearchImageAction;
+    | SearchImageAction
+    | EnterTextInElement
+    | SetDropdownValue
+    | ClickOnElement
+    | AwaitPageLoad
+    | GetHTML;
 
 export type WebSearchResult = string;
 export type BrowserEntities = WebPageMoniker | WebSearchResult;
@@ -54,7 +59,7 @@ export type OpenWebPage = {
             | WebPageMoniker;
         // Enum indicating if the page to open in the new tab or the current tab.
         // Default value is "current"
-        tab: "new" | "current" | "existing";
+        tab?: "new" | "current" | "existing";
     };
 };
 
@@ -235,5 +240,49 @@ export type SearchImageAction = {
         searchTerm: string;
         // the number of images to show the user
         numImages: number;
+    };
+};
+
+export type EnterTextInElement = {
+    actionName: "enterTextInElement";
+    parameters: {
+        // the value to enter
+        value: string;
+        // the CSS selector for the element to enter text into
+        cssSelector: string;
+        // whether to submit the form after entering text
+        submitForm?: boolean;
+    };
+};
+
+export type SetDropdownValue = {
+    actionName: "setDropdownValue";
+    parameters: {
+        // the value to enter
+        optionLabel: string;
+        // the CSS selector for the element to enter text into
+        cssSelector: string;
+    };
+};
+
+export type ClickOnElement = {
+    actionName: "clickOnElement";
+    parameters: {
+        // the CSS selector for the element to click on
+        cssSelector: string;
+    };
+};
+
+export type AwaitPageLoad = {
+    actionName: "awaitPageLoad";
+};
+
+export type GetHTML = {
+    actionName: "getHTML";
+    parameters: {
+        fullHTML?: boolean;
+        downloadAsFile?: boolean;
+        extractText?: boolean;
+        useTimestampIds?: boolean;
     };
 };
