@@ -55,6 +55,7 @@ export type GrammarRule = {
 export type Grammar = {
     rules: GrammarRule[];
     entities?: string[] | undefined; // Entity types this grammar depends on (e.g. ["Ordinal", "CalendarDate"])
+    checkedVariables?: Set<string> | undefined; // Variable names with validation (checked_wildcard paramSpec)
 };
 
 /**

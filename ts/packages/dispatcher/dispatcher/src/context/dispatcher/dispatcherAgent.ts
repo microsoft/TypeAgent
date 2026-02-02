@@ -39,6 +39,8 @@ import { ClarifyEntityAction } from "../../execute/pendingActions.js";
 import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
+import { ReasoningAction } from "./schema/reasoningActionSchema.js";
+import { executeReasoningAction } from "../../reasoning/claude.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -58,6 +60,7 @@ async function executeDispatcherAction(
         | LookupActivity
         | ActivityActions
         | ClarifyEntityAction
+        | ReasoningAction
     >,
     context: ActionContext<CommandHandlerContext>,
 ) {
@@ -118,6 +121,11 @@ async function executeDispatcherAction(
                     result.activityContext = null; // clear the activity context.
 
                     return result;
+            }
+            break;
+        case "dispatcher.reasoning":
+            if (action.actionName === "reasoningAction") {
+                return executeReasoningAction(action, context);
             }
             break;
     }
@@ -294,6 +302,18 @@ export const dispatcherManifest: AppAgentManifest = {
                 injected: true,
                 cached: false,
             },
+        },
+        reasoning: {
+            schema: {
+                description:
+                    "Action that helps you reason through requests that require multiple steps.",
+                schemaFile:
+                    "./src/context/dispatcher/schema/reasoningActionSchema.ts",
+                schemaType: "ReasoningAction",
+                injected: true,
+                cached: false,
+            },
+            defaultEnabled: false,
         },
     },
 };
