@@ -473,6 +473,10 @@ export class AgentCache {
                                         grammarResult = {
                                             success: false,
                                             message: `Failed to add rule to agent registry: ${addResult.errors.join(", ")}`,
+                                            ...(genResult.generatedRule && {
+                                                generatedRule:
+                                                    genResult.generatedRule,
+                                            }),
                                         };
                                     }
                                 } else {
@@ -482,6 +486,10 @@ export class AgentCache {
                                     grammarResult = {
                                         success: false,
                                         message: `Agent grammar not found for ${schemaName}`,
+                                        ...(genResult.generatedRule && {
+                                            generatedRule:
+                                                genResult.generatedRule,
+                                        }),
                                     };
                                 }
                             } else {
@@ -491,6 +499,9 @@ export class AgentCache {
                                     message:
                                         genResult.rejectionReason ||
                                         "Grammar generation failed",
+                                    ...(genResult.generatedRule && {
+                                        generatedRule: genResult.generatedRule,
+                                    }),
                                 };
                             }
 
@@ -503,7 +514,10 @@ export class AgentCache {
                             });
 
                             // Log grammar generation result
-                            if (grammarResult?.success && grammarResult.generatedRule) {
+                            if (
+                                grammarResult?.success &&
+                                grammarResult.generatedRule
+                            ) {
                                 console.log(
                                     `Grammar: +RULE ${schemaName}.${actionName}\n${grammarResult.generatedRule}`,
                                 );
@@ -511,6 +525,11 @@ export class AgentCache {
                                 console.log(
                                     `Grammar: REJECTED ${schemaName}.${actionName} - ${grammarResult.message}`,
                                 );
+                                if (grammarResult.generatedRule) {
+                                    console.log(
+                                        `  Rule was:\n${grammarResult.generatedRule}`,
+                                    );
+                                }
                             }
                         } catch (genError) {
                             debug(`Error during generation: %O`, genError);
