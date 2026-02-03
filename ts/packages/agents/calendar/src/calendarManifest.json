@@ -4,8 +4,8 @@
   "schema": {
     "description": "Calendar agent that keeps track of important dates and events. Use it to schedule appointments, set reminders, and organize activities.",
     "schemaFile": "./calendarActionsSchemaV3.ts",
-    "compiledSchemaFile": "../dist/calendarSchema.pas.json",
-    "grammarFile": "../dist/calendarSchema.ag.json",
+    "compiledSchemaFile": "agents/calendar/dist/calendarSchema.pas.json",
+    "grammarFile": "agents/calendar/dist/calendarSchema.ag.json",
     "schemaType": "CalendarActionV3"
   }
 }

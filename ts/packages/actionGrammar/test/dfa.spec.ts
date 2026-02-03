@@ -135,15 +135,18 @@ describe("DFA Compilation", () => {
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
+                    value: { type: "literal", value: "play-music" },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["song"] },
                     ],
+                    value: { type: "literal", value: "play-song" },
                 },
                 {
                     parts: [{ type: "string", value: ["pause"] }],
+                    value: { type: "literal", value: "pause" },
                 },
             ],
         };
@@ -263,6 +266,7 @@ describe("DFA Compilation", () => {
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
+                    value: { type: "literal", value: "play-music" },
                 },
             ],
         };
@@ -299,6 +303,7 @@ describe("DFA Compilation", () => {
                         type: "object",
                         value: {
                             action: { type: "literal", value: "playTrack" },
+                            track: { type: "variable", name: "track" },
                         },
                     },
                 },
@@ -316,6 +321,7 @@ describe("DFA Compilation", () => {
                         type: "object",
                         value: {
                             action: { type: "literal", value: "playId" },
+                            id: { type: "variable", name: "id" },
                         },
                     },
                 },
@@ -331,10 +337,9 @@ describe("DFA Compilation", () => {
         // Should match the number rule (higher priority)
         expect(result.checkedWildcardCount).toBe(1);
         expect(result.uncheckedWildcardCount).toBe(0);
-        // Should capture as "id" (not "track")
-        expect(result.captures.has("id")).toBe(true);
-        expect(result.captures.has("track")).toBe(false);
-        expect(result.captures.get("id")).toBe(123);
+        // Should capture as "id" (not "track") - check via actionValue
+        expect(result.actionValue?.id).toBe(123);
+        expect(result.actionValue?.track).toBeUndefined();
     });
 
     test("DFA captures string values correctly", () => {
@@ -364,6 +369,8 @@ describe("DFA Compilation", () => {
                                 type: "literal",
                                 value: "playTrackByArtist",
                             },
+                            track: { type: "variable", name: "track" },
+                            artist: { type: "variable", name: "artist" },
                         },
                     },
                 },
@@ -381,8 +388,8 @@ describe("DFA Compilation", () => {
         ]);
 
         expect(result.matched).toBe(true);
-        expect(result.captures.get("track")).toBe("bohemian-rhapsody");
-        expect(result.captures.get("artist")).toBe("queen");
+        expect(result.actionValue?.track).toBe("bohemian-rhapsody");
+        expect(result.actionValue?.artist).toBe("queen");
     });
 
     test("DFA completions show wildcard categories", () => {
@@ -398,6 +405,10 @@ describe("DFA Compilation", () => {
                             optional: false,
                         },
                     ],
+                    value: {
+                        type: "object",
+                        value: { track: { type: "variable", name: "track" } },
+                    },
                 },
                 {
                     parts: [
@@ -409,12 +420,17 @@ describe("DFA Compilation", () => {
                             optional: false,
                         },
                     ],
+                    value: {
+                        type: "object",
+                        value: { id: { type: "variable", name: "id" } },
+                    },
                 },
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         { type: "string", value: ["music"] },
                     ],
+                    value: { type: "literal", value: "play-music" },
                 },
             ],
         };
@@ -457,6 +473,8 @@ describe("DFA Compilation", () => {
                         type: "object",
                         value: {
                             action: { type: "literal", value: "twoWildcards" },
+                            x: { type: "variable", name: "x" },
+                            y: { type: "variable", name: "y" },
                         },
                     },
                 },
@@ -475,6 +493,7 @@ describe("DFA Compilation", () => {
                         type: "object",
                         value: {
                             action: { type: "literal", value: "oneWildcard" },
+                            name: { type: "variable", name: "name" },
                         },
                     },
                 },
@@ -489,17 +508,16 @@ describe("DFA Compilation", () => {
         expect(result.matched).toBe(true);
         // Should match second rule (more fixed strings)
         expect(result.fixedStringPartCount).toBe(2);
-        // Should only have "name" capture, not "x" or "y"
-        expect(result.captures.has("name")).toBe(true);
-        expect(result.captures.get("name")).toBe("something");
-        expect(result.captures.has("x")).toBe(false);
-        expect(result.captures.has("y")).toBe(false);
+        // Should only have "name" in actionValue, not "x" or "y"
+        expect(result.actionValue?.name).toBe("something");
+        expect(result.actionValue?.x).toBeUndefined();
+        expect(result.actionValue?.y).toBeUndefined();
     });
 
     test("DFA handles overlapping variable names correctly", () => {
         // CRITICAL: Both rules use the SAME variable name "track"
-        // Rule A: "play $(track:string)" -> lower priority (unchecked)
-        // Rule B: "play $(track:number)" -> higher priority (checked)
+        // Rule A: "play $(track:string)" -> lower priority (unchecked wildcard)
+        // Rule B: "play $(track:number)" -> higher priority (checked wildcard)
         // This tests that we don't accidentally return the string capture when number wins
         const grammar: Grammar = {
             rules: [
@@ -517,6 +535,7 @@ describe("DFA Compilation", () => {
                         type: "object",
                         value: {
                             action: { type: "literal", value: "playTrack" },
+                            track: { type: "variable", name: "track" },
                         },
                     },
                 },
@@ -537,6 +556,7 @@ describe("DFA Compilation", () => {
                                 type: "literal",
                                 value: "playTrackNumber",
                             },
+                            track: { type: "variable", name: "track" },
                         },
                     },
                 },
@@ -553,9 +573,8 @@ describe("DFA Compilation", () => {
         expect(result.checkedWildcardCount).toBe(1);
         expect(result.uncheckedWildcardCount).toBe(0);
         // CRITICAL: Should capture as number (123), NOT string ("123")
-        expect(result.captures.has("track")).toBe(true);
-        expect(result.captures.get("track")).toBe(123);
-        expect(typeof result.captures.get("track")).toBe("number");
+        expect(result.actionValue?.track).toBe(123);
+        expect(typeof result.actionValue?.track).toBe("number");
     });
 
     test("DFA tracks rule index correctly", () => {

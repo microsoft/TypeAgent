@@ -37,6 +37,9 @@ async function validateWildcardMatch(
             action,
             sessionContext,
         );
+        console.log(
+            `[Wildcard Validation] ${schemaName}.${action.actionName} - Result: ${validate === false ? "REJECTED" : "ACCEPTED"}`,
+        );
         if (validate === false) {
             return false;
         }
@@ -99,9 +102,15 @@ async function getValidatedMatch(
             debugConstValidation(
                 `Wildcard match accepted: ${match.match.actions}`,
             );
+            console.log(
+                `[Cache Validation Success] Wildcard match validated and accepted`,
+            );
             return match;
         }
         debugConstValidation(`Wildcard match rejected: ${match.match.actions}`);
+        console.log(
+            `[Cache Validation Rejected] Wildcard validation failed for match. Trying next match...`,
+        );
     }
     return undefined;
 }
@@ -204,6 +213,11 @@ export async function matchRequest(
 
     const match = await getValidatedMatch(matches, systemContext);
     if (match === undefined) {
+        if (matches.length > 0) {
+            console.log(
+                `[Cache Validation Failed] "${request}" - ${matches.length} match(es) found but validation rejected all. Falling back to LLM translation.`,
+            );
+        }
         return undefined;
     }
 

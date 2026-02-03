@@ -5,8 +5,12 @@
           | <Resume>
           | <PlayCommand>
           | <SelectDevice>
-@ <Pause> = pause ((the)? music)?   ->  { actionName: "pause" }
-@ <Resume> = resume ((the)? music)?   ->  { actionName: "resume" }
+@ <Pause> = pause   ->  { actionName: "pause" }
+          | pause music   ->  { actionName: "pause" }
+          | pause the music   ->  { actionName: "pause" }
+@ <Resume> = resume   ->  { actionName: "resume" }
+           | resume music   ->  { actionName: "resume" }
+           | resume the music   ->  { actionName: "resume" }
 @ <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>
 @ <PlayTrackNumberCommand> =
     play (the)? $(n:<Ordinal>) (<Item>)? -> {
@@ -97,8 +101,10 @@
 |   twenty\-ninth -> 29
 |   thirtieth -> 30
 
-@ <TrackPhrase> = ((the)? <TrackTerm>)? $(trackName:<TrackName>)
-                | $(trackName:<TrackName>) <TrackTerm>
+@ <TrackPhrase> = $(trackName:<TrackName>)  -> $(trackName)
+                | the <TrackTerm> $(trackName:<TrackName>)  -> $(trackName)
+                | <TrackTerm> $(trackName:<TrackName>)  -> $(trackName)
+                | $(trackName:<TrackName>) <TrackTerm>  -> $(trackName)
 @ <PlaySpecificTrack> = play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)] } }
                       | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), albumName: $(albumName) } }
                       | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: $(trackName), artists: [$(artist)], albumName: $(albumName) } }                      
@@ -112,10 +118,10 @@
                  | play on $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | play on (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
 
-// TODO: wire up entity names
-@ <TrackName> = $(x:string)
-@ <ArtistName> = $(x:string)  
-@ <AlbumName> = $(x:string)
+// Entity types: wildcard = 1+ words, word = exactly 1 word
+@ <TrackName> = $(x:wildcard)
+@ <ArtistName> = $(x:wildcard)
+@ <AlbumName> = $(x:wildcard)
 @ <DeviceName> = $(x:MusicDevice)
 
 

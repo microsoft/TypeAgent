@@ -159,6 +159,8 @@ export class AgentCache {
         this._agentGrammarRegistry = agentGrammarRegistry;
         this._persistedGrammarStore = persistedGrammarStore;
         this._useNFAGrammar = useNFA;
+        // Enable NFA matching in the grammar store
+        this._grammarStore.setUseNFA(useNFA);
         console.log(
             `[AgentCache] Grammar system configured: ${useNFA ? "NFA" : "completion-based"}`,
         );
@@ -173,16 +175,23 @@ export class AgentCache {
      */
     public syncAgentGrammar(schemaName: string): void {
         if (!this._agentGrammarRegistry) {
+            console.log(`[syncAgentGrammar] No registry for ${schemaName}`);
             return;
         }
 
         const agentGrammar = this._agentGrammarRegistry.getAgent(schemaName);
         if (!agentGrammar) {
+            console.log(
+                `[syncAgentGrammar] No agent grammar found for ${schemaName}`,
+            );
             return;
         }
 
         // Get the merged grammar (static + dynamic) from the registry
         const mergedGrammar = agentGrammar.getGrammar();
+        console.log(
+            `[syncAgentGrammar] Syncing ${schemaName}: ${mergedGrammar.rules.length} rule(s)`,
+        );
 
         // Update the grammar store used for matching
         this._grammarStore.addGrammar(schemaName, mergedGrammar);
@@ -224,6 +233,11 @@ export class AgentCache {
     ): Promise<ProcessRequestActionResult> {
         try {
             const executableActions = requestAction.actions;
+
+            console.log(
+                `[Process Request] "${requestAction.request}" for actions: ${executableActions.map((a) => `${a.action.schemaName}.${a.action.actionName}`).join(", ")}`,
+            );
+
             if (cache) {
                 for (const action of executableActions) {
                     const cacheAction = doCacheAction(
@@ -244,12 +258,19 @@ export class AgentCache {
                 options?.namespaceSuffix,
             );
 
+            console.log(
+                `[Process Request] Checking cache for existing matches...`,
+            );
             // Make sure that we don't already have match (but rejected because of options)
             const matchResult = this.match(requestAction.request, {
                 rejectReferences: false,
                 history: requestAction.history,
                 namespaceKeys,
             });
+
+            console.log(
+                `[Process Request] Cache check found ${matchResult.length} match(es)`,
+            );
 
             const actions = executableActions.map((e) => e.action);
             for (const match of matchResult) {
@@ -265,11 +286,13 @@ export class AgentCache {
                 }
             }
 
-            const constructionCreationConfig = cache
-                ? {
-                      schemaInfoProvider: this.schemaInfoProvider,
-                  }
-                : undefined;
+            // In NFA mode, skip construction creation in explainer
+            const constructionCreationConfig =
+                cache && !this._useNFAGrammar
+                    ? {
+                          schemaInfoProvider: this.schemaInfoProvider,
+                      }
+                    : undefined;
             const explanationResult = await this.explainWorkQueue.queueTask(
                 requestAction,
                 cache,
@@ -288,7 +311,14 @@ export class AgentCache {
             });
 
             const store = this._constructionStore;
-            const generateConstruction = cache && store.isEnabled();
+            // In NFA mode, skip construction generation - use grammar rules instead
+            const generateConstruction =
+                cache && store.isEnabled() && !this._useNFAGrammar;
+            if (this._useNFAGrammar && cache) {
+                console.log(
+                    `[Construction Generation] Skipped in NFA mode - using grammar rules instead`,
+                );
+            }
             let constructionResult:
                 | { added: boolean; message: string }
                 | undefined;
@@ -348,6 +378,9 @@ export class AgentCache {
                     console.log(
                         `[Grammar Generation] Starting for ${schemaName}.${actionName}`,
                     );
+                    console.log(
+                        `[Grammar Generation] _getSchemaFilePath is ${this._getSchemaFilePath ? "configured" : "NOT configured"}`,
+                    );
 
                     // Check if we have the required components
                     if (!this._getSchemaFilePath) {
@@ -359,108 +392,154 @@ export class AgentCache {
                             message: "Schema file path getter not configured",
                         };
                     } else {
-                        // Get schema file path
-                        const schemaPath = this._getSchemaFilePath(schemaName);
-                        console.log(
-                            `[Grammar Generation] Schema path: ${schemaPath}`,
-                        );
-
-                        // Import populateCache dynamically to avoid circular dependencies
-                        const { populateCache } = await import(
-                            "action-grammar/generation"
-                        );
-
-                        console.log(
-                            `[Grammar Generation] Calling populateCache for request: "${requestAction.request}"`,
-                        );
-                        // Generate grammar rule
-                        const genResult = await populateCache({
-                            request: requestAction.request,
-                            schemaName,
-                            action: {
-                                actionName,
-                                parameters,
-                            },
-                            schemaPath,
-                        });
-
-                        console.log(
-                            `[Grammar Generation] populateCache result: success=${genResult.success}, reason=${genResult.rejectionReason || "none"}`,
-                        );
-
-                        if (genResult.success && genResult.generatedRule) {
-                            // Add rule to persisted grammar store
+                        try {
+                            // Get schema file path
                             console.log(
-                                `[Grammar Generation] Adding rule to persisted store...`,
+                                `[Grammar Generation] Calling getSchemaFilePath("${schemaName}")...`,
                             );
-                            await this._persistedGrammarStore.addRule({
+                            const schemaPath =
+                                this._getSchemaFilePath(schemaName);
+                            console.log(
+                                `[Grammar Generation] Schema path: ${schemaPath}`,
+                            );
+
+                            // Import populateCache dynamically to avoid circular dependencies
+                            console.log(
+                                `[Grammar Generation] Importing populateCache...`,
+                            );
+                            const { populateCache } = await import(
+                                "action-grammar/generation"
+                            );
+                            console.log(
+                                `[Grammar Generation] populateCache imported successfully`,
+                            );
+
+                            console.log(
+                                `[Grammar Generation] Calling populateCache for request: "${requestAction.request}"`,
+                            );
+                            // Generate grammar rule
+                            const genResult = await populateCache({
+                                request: requestAction.request,
                                 schemaName,
-                                grammarText: genResult.generatedRule,
+                                action: {
+                                    actionName,
+                                    parameters,
+                                },
+                                schemaPath,
                             });
 
-                            // Add rule to agent grammar registry (in-memory)
-                            const agentGrammar =
-                                this._agentGrammarRegistry.getAgent(schemaName);
-                            if (agentGrammar) {
-                                console.log(
-                                    `[Grammar Generation] Adding rule to agent grammar registry...`,
-                                );
-                                const addResult =
-                                    agentGrammar.addGeneratedRules(
-                                        genResult.generatedRule,
-                                        genResult.checkedVariables,
-                                    );
-                                if (addResult.success) {
-                                    // Sync to the grammar store used for matching
-                                    this.syncAgentGrammar(schemaName);
+                            console.log(
+                                `[Grammar Generation] populateCache result: success=${genResult.success}, reason=${genResult.rejectionReason || "none"}`,
+                            );
 
-                                    console.log(
-                                        `[Grammar Generation] ✅ Successfully added rule for ${schemaName}.${actionName}`,
+                            if (genResult.success && genResult.generatedRule) {
+                                // Log the generated rule
+                                console.log(
+                                    `[Grammar Generation] ✨ NEW RULE GENERATED ✨`,
+                                );
+                                console.log(
+                                    `[Grammar Generation] For: ${schemaName}.${actionName}`,
+                                );
+                                console.log(
+                                    `[Grammar Generation] Request: "${requestAction.request}"`,
+                                );
+                                console.log(
+                                    `[Grammar Generation] Generated rule text:\n${genResult.generatedRule}`,
+                                );
+
+                                // Add rule to persisted grammar store
+                                console.log(
+                                    `[Grammar Generation] Adding rule to persisted store...`,
+                                );
+                                await this._persistedGrammarStore.addRule({
+                                    schemaName,
+                                    grammarText: genResult.generatedRule,
+                                });
+
+                                // Add rule to agent grammar registry (in-memory)
+                                const agentGrammar =
+                                    this._agentGrammarRegistry.getAgent(
+                                        schemaName,
                                     );
-                                    grammarResult = {
-                                        success: true,
-                                        message: `Grammar rule added for ${schemaName}.${actionName}`,
-                                        generatedRule: genResult.generatedRule,
-                                    };
+                                if (agentGrammar) {
+                                    console.log(
+                                        `[Grammar Generation] Adding rule to agent grammar registry...`,
+                                    );
+                                    const addResult =
+                                        agentGrammar.addGeneratedRules(
+                                            genResult.generatedRule,
+                                            genResult.checkedVariables,
+                                        );
+                                    if (addResult.success) {
+                                        // Sync to the grammar store used for matching
+                                        this.syncAgentGrammar(schemaName);
+
+                                        console.log(
+                                            `[Grammar Generation] ✅ Successfully added rule for ${schemaName}.${actionName}`,
+                                        );
+                                        grammarResult = {
+                                            success: true,
+                                            message: `Grammar rule added for ${schemaName}.${actionName}`,
+                                            generatedRule:
+                                                genResult.generatedRule,
+                                        };
+                                    } else {
+                                        console.log(
+                                            `[Grammar Generation] ❌ Failed to add to registry: ${addResult.errors.join(", ")}`,
+                                        );
+                                        grammarResult = {
+                                            success: false,
+                                            message: `Failed to add rule to agent registry: ${addResult.errors.join(", ")}`,
+                                        };
+                                    }
                                 } else {
                                     console.log(
-                                        `[Grammar Generation] ❌ Failed to add to registry: ${addResult.errors.join(", ")}`,
+                                        `[Grammar Generation] ❌ Agent grammar not found for ${schemaName}`,
                                     );
                                     grammarResult = {
                                         success: false,
-                                        message: `Failed to add rule to agent registry: ${addResult.errors.join(", ")}`,
+                                        message: `Agent grammar not found for ${schemaName}`,
                                     };
                                 }
                             } else {
                                 console.log(
-                                    `[Grammar Generation] ❌ Agent grammar not found for ${schemaName}`,
+                                    `[Grammar Generation] ❌ Grammar generation rejected or failed`,
                                 );
                                 grammarResult = {
                                     success: false,
-                                    message: `Agent grammar not found for ${schemaName}`,
+                                    message:
+                                        genResult.rejectionReason ||
+                                        "Grammar generation failed",
                                 };
                             }
-                        } else {
-                            console.log(
-                                `[Grammar Generation] ❌ Grammar generation rejected or failed`,
+
+                            this.logger?.logEvent("grammarGeneration", {
+                                request: requestAction.request,
+                                schemaName,
+                                actionName,
+                                success: grammarResult?.success,
+                                message: grammarResult?.message,
+                            });
+                        } catch (genError) {
+                            console.error(
+                                `[Grammar Generation] ❌ Error during generation:`,
+                                genError,
                             );
                             grammarResult = {
                                 success: false,
-                                message:
-                                    genResult.rejectionReason ||
-                                    "Grammar generation failed",
+                                message: `Generation error: ${genError instanceof Error ? genError.message : String(genError)}`,
                             };
                         }
-
-                        this.logger?.logEvent("grammarGeneration", {
-                            request: requestAction.request,
-                            schemaName,
-                            actionName,
-                            success: grammarResult.success,
-                            message: grammarResult.message,
-                        });
                     }
                 } catch (error: any) {
+                    console.error(
+                        `[Grammar Generation] ❌ Outer catch - unexpected error:`,
+                        error,
+                    );
+                    console.error(
+                        `[Grammar Generation] Error stack:`,
+                        error.stack,
+                    );
                     grammarResult = {
                         success: false,
                         message: `Grammar generation error: ${error.message}`,
@@ -510,6 +589,10 @@ export class AgentCache {
             this._grammarStore.isEnabled() ||
             this._constructionStore.isEnabled()
         );
+    }
+
+    public isUsingNFAGrammar(): boolean {
+        return this._useNFAGrammar;
     }
 
     public match(request: string, options?: MatchOptions): MatchResult[] {
