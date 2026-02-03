@@ -60,6 +60,13 @@ export function printProcessRequestActionResult(
             : chalk.yellow;
         log(color(result.constructionResult.message));
     }
+    if (result.grammarResult) {
+        const color = result.grammarResult.success ? chalk.green : chalk.yellow;
+        log(color(`[Grammar] ${result.grammarResult.message}`));
+        if (result.grammarResult.generatedRule) {
+            log(chalk.cyan(`  Rule: ${result.grammarResult.generatedRule}`));
+        }
+    }
 }
 
 export function printImportConstructionResult(

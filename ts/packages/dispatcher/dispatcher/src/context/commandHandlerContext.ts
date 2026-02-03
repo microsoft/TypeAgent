@@ -444,7 +444,7 @@ export async function initializeCommandHandlerContext(
 ): Promise<CommandHandlerContext> {
     const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
-        options?.explanationAsynchronousMode ?? false; // Changed to false to see grammar generation logs
+        options?.explanationAsynchronousMode ?? true; // default to async mode for faster command responses
 
     const persistSession = options?.persistSession ?? false;
     const persistDir = options?.persistDir;
@@ -729,15 +729,13 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     // Sync all registered agent grammars to the grammar store
     // This ensures agents without dynamic rules also get their base grammar in the store
     // IMPORTANT: Must happen AFTER configureGrammarGeneration so the cache knows about the registry
-    console.log("[NFA Setup] Syncing all agent grammars to grammar store...");
+    debug("Syncing all agent grammars to grammar store...");
     const registeredAgents = context.agentGrammarRegistry.getAllAgentIds();
-    console.log(
-        `[NFA Setup] Registered agents: ${registeredAgents.join(", ")}`,
-    );
+    debug(`Registered agents: ${registeredAgents.join(", ")}`);
     for (const schemaName of registeredAgents) {
-        console.log(`[NFA Setup] Syncing grammar for ${schemaName}...`);
+        debug(`Syncing grammar for ${schemaName}...`);
         context.agentCache.syncAgentGrammar(schemaName);
-        console.log(`[NFA Setup] ✅ Synced grammar for ${schemaName}`);
+        debug(`Synced grammar for ${schemaName}`);
     }
 
     // Mark as initialized to prevent re-initialization

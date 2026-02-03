@@ -253,6 +253,16 @@ async function requestExplain(
             ? undefined
             : explanationResult?.message;
         notifyExplained(error);
+
+        // Show grammar result if a new rule was added
+        if (result.grammarResult?.success && result.grammarResult.generatedRule) {
+            console.log(
+                chalk.green(`[Grammar] ${result.grammarResult.message}`),
+            );
+            console.log(
+                chalk.cyan(`  Rule: ${result.grammarResult.generatedRule}`),
+            );
+        }
     };
 
     const cannotUseCacheReason = getCannotUseCacheReason(
@@ -291,16 +301,8 @@ async function requestExplain(
         const processRequestActionResult = await processRequestActionP;
         notifyExplainedResult(processRequestActionResult);
 
-        // In NFA mode, skip printing explanation details - grammar generation logs show what happened
-        if (!context.agentCache.isUsingNFAGrammar()) {
-            printProcessRequestActionResult(processRequestActionResult);
-        } else {
-            console.log(
-                chalk.grey(
-                    `[Explanation complete - using NFA grammar generation]`,
-                ),
-            );
-        }
+        // Print result details (includes grammar result if using NFA)
+        printProcessRequestActionResult(processRequestActionResult);
     }
 }
 

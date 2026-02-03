@@ -2741,6 +2741,15 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
+      html-to-text:
+        specifier: ^9.0.5
+        version: 9.0.5
+      interactive-app:
+        specifier: workspace:*
+        version: link:../interactiveApp
+      open:
+        specifier: ^10.1.0
+        version: 10.1.2
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
@@ -2754,6 +2763,9 @@ importers:
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14

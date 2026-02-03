@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import registerDebug from "debug";
 import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
 import { matchNFA, NFAMatchResult } from "./nfaInterpreter.js";
@@ -8,6 +9,8 @@ import { compileGrammarToNFA } from "./nfaCompiler.js";
 import { loadGrammarRules } from "./grammarLoader.js";
 import { mergeGrammarRules } from "./grammarMerger.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
+
+const debug = registerDebug("typeagent:actionGrammar:registry");
 
 /**
  * Agent Grammar Registry
@@ -131,12 +134,12 @@ export class AgentGrammar {
             // Log the newly added grammar rules for debugging/testing
             const newRulesCount = this.ruleCount - previousRuleCount;
             if (newRulesCount > 0) {
-                console.log(
-                    `\n[Grammar Cache] Added ${newRulesCount} new rule(s) to agent '${this.agentId}':`,
+                debug(
+                    `Added ${newRulesCount} new rule(s) to agent '%s': %s (total: %d)`,
+                    this.agentId,
+                    agrText,
+                    this.ruleCount,
                 );
-                console.log(`--- New Grammar Rules ---`);
-                console.log(agrText);
-                console.log(`--- Total rules: ${this.ruleCount} ---\n`);
             }
 
             return { success: true, errors: [] };
@@ -156,8 +159,10 @@ export class AgentGrammar {
      * This is used when creating a new construction store to start fresh.
      */
     resetToBase(): void {
-        console.log(
-            `\n[Grammar Cache] Resetting agent '${this.agentId}' to base grammar (removing ${this.ruleCount - this.baseGrammar.rules.length} dynamic rules)`,
+        debug(
+            `Resetting agent '%s' to base grammar (removing %d dynamic rules)`,
+            this.agentId,
+            this.ruleCount - this.baseGrammar.rules.length,
         );
         this.grammar = JSON.parse(JSON.stringify(this.baseGrammar));
         this.nfa = this.baseNFA;
@@ -472,9 +477,7 @@ export class AgentGrammarRegistry {
      * the original static grammar rules intact.
      */
     resetAllToBase(): void {
-        console.log(
-            `\n[Grammar Cache] Resetting ${this.agents.size} agent(s) to base grammar`,
-        );
+        debug(`Resetting %d agent(s) to base grammar`, this.agents.size);
         for (const agent of this.agents.values()) {
             agent.resetToBase();
         }
