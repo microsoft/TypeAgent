@@ -217,21 +217,6 @@ function createGrammarRule(
         }
     }
 
-    // Validate value propagation principle:
-    // Multi-part productions MUST have explicit value expressions (whether parts are optional or not)
-    // Only single-part productions can omit value (inheriting from that part)
-    if (parts.length > 1 && !value) {
-        const definitionName = context.currentDefinition;
-        context.errors.push({
-            message:
-                `Multi-part production requires explicit value expression (using ->). ` +
-                `This rule has ${parts.length} parts but no value mapping. ` +
-                `Either add a value expression or restructure to a single-part production.`,
-            definition: definitionName,
-            pos: undefined, // Position not available at rule level, only at definition level
-        });
-    }
-
     return {
         grammarRule: {
             parts,
