@@ -676,59 +676,6 @@ function convertHtmlToText(html: string): string {
                     selector: "style",
                     format: "skip",
                 },
-                // Ordered lists with proper numbering
-                {
-                    selector: "ol",
-                    format: "orderedList",
-                    options: {
-                        itemPrefix: " ",
-                    },
-                },
-                // Unordered lists
-                {
-                    selector: "ul",
-                    format: "unorderedList",
-                    options: {
-                        itemPrefix: "  • ",
-                    },
-                },
-                // List items
-                {
-                    selector: "li",
-                    format: "listItem",
-                    options: {
-                        leadingLineBreaks: 1,
-                        trailingLineBreaks: 1,
-                    },
-                },
-                // Track titles - make them stand out
-                {
-                    selector: ".track-title",
-                    format: "inline",
-                },
-                // Artist info - format as inline
-                {
-                    selector: ".track-artist",
-                    format: "inline",
-                },
-                // Track info container - format as block
-                {
-                    selector: ".track-info",
-                    format: "block",
-                    options: { leadingLineBreaks: 0, trailingLineBreaks: 0 },
-                },
-                // Track list container
-                {
-                    selector: ".track-list",
-                    format: "block",
-                    options: { leadingLineBreaks: 1, trailingLineBreaks: 1 },
-                },
-                // Album cover container - skip (images)
-                {
-                    selector: ".track-album-cover-container",
-                    format: "block",
-                    options: { leadingLineBreaks: 0, trailingLineBreaks: 0 },
-                },
                 // General div and p formatting
                 {
                     selector: "div",
@@ -749,11 +696,6 @@ function convertHtmlToText(html: string): string {
                         hideLinkHrefIfSameAsText: true,
                         ignoreHref: true,
                     },
-                },
-                // Tables
-                {
-                    selector: "table",
-                    format: "dataTable",
                 },
                 // Spans - inline
                 {
