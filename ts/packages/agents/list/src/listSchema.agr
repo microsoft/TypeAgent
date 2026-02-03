@@ -79,19 +79,26 @@
 }
 
 // getList - show what's on the list
+// Note: Each rule must have at least one required word to avoid matching everything before "list"
 @ <GetList> = what's on (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "getList",
     parameters: {
         listName: $(listName)
     }
 }
-  | (what's)? (show)? (me)? (the)? (my)? $(listName:wildcard) list -> {
+  | what (is)? on (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "getList",
     parameters: {
         listName: $(listName)
     }
 }
-  | what (is)? on (the)? (my)? $(listName:wildcard) (list)? -> {
+  | what's (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "getList",
+    parameters: {
+        listName: $(listName)
+    }
+}
+  | show (me)? (the)? (my)? $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName: $(listName)
@@ -104,6 +111,18 @@
     }
 }
   | what (do)? I have on (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "getList",
+    parameters: {
+        listName: $(listName)
+    }
+}
+  | the $(listName:wildcard) list -> {
+    actionName: "getList",
+    parameters: {
+        listName: $(listName)
+    }
+}
+  | my $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName: $(listName)
