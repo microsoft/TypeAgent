@@ -84,6 +84,7 @@ import { StorageProvider } from "../storageProvider/storageProvider.js";
 import {
     AgentGrammarRegistry,
     GrammarStore as PersistedGrammarStore,
+    registerBuiltInEntities,
 } from "action-grammar";
 import fs from "node:fs";
 
@@ -612,6 +613,9 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     if (!useNFAGrammar || !config.cache.grammar) {
         return;
     }
+
+    // Register built-in entity types (Ordinal, Cardinal, CalendarDate, etc.)
+    registerBuiltInEntities();
 
     // Initialize persisted grammar store
     const grammarStorePath = context.session.getGrammarStoreFilePath();
