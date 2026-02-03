@@ -55,7 +55,8 @@ export function compileGrammar(
             ruleDefMap.set(def.name, {
                 rules: [...def.rules],
                 pos: def.pos,
-                hasValue: false,
+                // Set this to true to allow recursion to assume that it has value.
+                hasValue: true,
             });
         } else {
             existing.rules.push(...def.rules);
