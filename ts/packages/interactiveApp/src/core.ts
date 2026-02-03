@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { spawn } from "child_process";
-import { InteractiveIo } from "./InteractiveIo";
+import { InteractiveIo } from "./InteractiveIo.js";
 import fs from "fs";
 
 /**
