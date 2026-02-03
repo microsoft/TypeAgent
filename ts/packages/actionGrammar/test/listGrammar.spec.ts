@@ -27,7 +27,9 @@ describe("List Grammar Smoke Tests", () => {
         const content = fs.readFileSync(listGrammarPath, "utf-8");
         const loadedGrammar = loadGrammarRules(listGrammarPath, content);
         if (!loadedGrammar) {
-            throw new Error(`Failed to compile grammar from ${listGrammarPath}`);
+            throw new Error(
+                `Failed to compile grammar from ${listGrammarPath}`,
+            );
         }
         grammar = loadedGrammar;
         nfa = compileGrammarToNFA(grammar);
