@@ -4013,6 +4013,9 @@ importers:
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
+      mongodb:
+        specifier: ^6.15.0
+        version: 6.16.0(socks@2.8.7)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12

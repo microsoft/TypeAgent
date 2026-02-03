@@ -4,7 +4,7 @@
 import {
     LoggerSink,
     MultiSinkLogger,
-    createCosmosDBLoggerSink,
+    createDatabaseLoggerSink,
     createDebugLoggerSink,
 } from "telemetry";
 
@@ -38,7 +38,7 @@ export class PromptLogger {
         let dbLoggerSink: LoggerSink | undefined;
 
         try {
-            dbLoggerSink = createCosmosDBLoggerSink(
+            dbLoggerSink = createDatabaseLoggerSink(
                 "telemetrydb",
                 "promptLogs",
             );

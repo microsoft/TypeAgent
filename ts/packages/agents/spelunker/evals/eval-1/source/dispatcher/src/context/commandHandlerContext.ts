@@ -9,7 +9,7 @@ import {
     LoggerSink,
     MultiSinkLogger,
     createDebugLoggerSink,
-    createCosmosDBLoggerSink,
+    createDatabaseLoggerSink,
     Profiler,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
@@ -189,7 +189,7 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
-        dbLoggerSink = createCosmosDBLoggerSink(
+        dbLoggerSink = createDatabaseLoggerSink(
             "telemetrydb",
             "dispatcherlogs",
             isDbEnabled,

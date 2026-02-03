@@ -89,6 +89,7 @@ class CosmosDBLoggerSink implements LoggerSink {
             const client = new CosmosClient(options);
             const database = client.database(this.databaseName);
 
+            // with RBAC and AAD, we assume DB and Container already exist
             // // Create database if it doesn't exist
             // await client.databases.createIfNotExists({ id: this.databaseName });
 

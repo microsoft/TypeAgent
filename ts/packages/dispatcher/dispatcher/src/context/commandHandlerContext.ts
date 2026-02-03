@@ -12,7 +12,7 @@ import {
     LoggerSink,
     MultiSinkLogger,
     createDebugLoggerSink,
-    createCosmosDBLoggerSink,
+    createDatabaseLoggerSink,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -291,7 +291,7 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
-        dbLoggerSink = createCosmosDBLoggerSink(
+        dbLoggerSink = createDatabaseLoggerSink(
             "telemetrydb",
             "dispatcherlogs",
             isDbEnabled,
