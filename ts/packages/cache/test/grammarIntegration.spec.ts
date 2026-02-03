@@ -1073,7 +1073,9 @@ describe("Grammar Integration", () => {
             const partialMatches1 = cache.match("turn on", { namespaceKeys });
             expect(partialMatches1.length).toBe(0);
 
-            const partialMatches2 = cache.match("the lights", { namespaceKeys });
+            const partialMatches2 = cache.match("the lights", {
+                namespaceKeys,
+            });
             expect(partialMatches2.length).toBe(0);
         });
 
@@ -1125,10 +1127,7 @@ describe("Grammar Integration", () => {
             );
             cache.syncAgentGrammar("player");
 
-            const namespaceKeys = cache.getNamespaceKeys(
-                ["player"],
-                undefined,
-            );
+            const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
             // Complex pattern with 2 parameters
             const complexMatches = cache.match("play Mozart on speakers", {
@@ -1315,10 +1314,7 @@ describe("Grammar Integration", () => {
             );
             cache.syncAgentGrammar("player");
 
-            const namespaceKeys = cache.getNamespaceKeys(
-                ["player"],
-                undefined,
-            );
+            const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
             // Two-token command
             const multiMatches = cache.match("stop playing", { namespaceKeys });
@@ -1336,9 +1332,9 @@ describe("Grammar Integration", () => {
 
             // Should NOT match partial multi-token as single token
             // "stop" should match "stopShort", not "stop playing"
-            expect(singleMatches[0].match.actions[0].action.actionName).not.toBe(
-                "stop",
-            );
+            expect(
+                singleMatches[0].match.actions[0].action.actionName,
+            ).not.toBe("stop");
         });
     });
 });

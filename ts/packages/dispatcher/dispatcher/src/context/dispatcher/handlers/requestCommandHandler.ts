@@ -209,14 +209,15 @@ function getExplainerOptions(
             requestAction.history?.activityContext,
         ),
         // In NFA mode, skip contextless translation check (not needed for grammar rules)
-        checkExplainable: translate && !isNFAMode
-            ? (requestAction: RequestAction) =>
-                  canTranslateWithoutContext(
-                      requestAction,
-                      usedTranslators,
-                      context.logger,
-                  )
-            : undefined,
+        checkExplainable:
+            translate && !isNFAMode
+                ? (requestAction: RequestAction) =>
+                      canTranslateWithoutContext(
+                          requestAction,
+                          usedTranslators,
+                          context.logger,
+                      )
+                : undefined,
         valueInRequest: isNFAMode ? false : value,
         noReferences: list,
     };
@@ -294,7 +295,11 @@ async function requestExplain(
         if (!context.agentCache.isUsingNFAGrammar()) {
             printProcessRequestActionResult(processRequestActionResult);
         } else {
-            console.log(chalk.grey(`[Explanation complete - using NFA grammar generation]`));
+            console.log(
+                chalk.grey(
+                    `[Explanation complete - using NFA grammar generation]`,
+                ),
+            );
         }
     }
 }

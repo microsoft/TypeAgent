@@ -47,7 +47,11 @@ describe("Base Grammar Pattern Tests", () => {
             expect(result1.length).toBeGreaterThan(0);
             expect(result1[0].match).toMatchObject({ actionName: "pause" });
 
-            const result2 = matchGrammarWithNFA(grammar, nfa, "pause the music");
+            const result2 = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "pause the music",
+            );
             expect(result2.length).toBeGreaterThan(0);
             expect(result2[0].match).toMatchObject({ actionName: "pause" });
         });
@@ -57,7 +61,11 @@ describe("Base Grammar Pattern Tests", () => {
             expect(result1.length).toBeGreaterThan(0);
             expect(result1[0].match).toMatchObject({ actionName: "resume" });
 
-            const result2 = matchGrammarWithNFA(grammar, nfa, "resume the music");
+            const result2 = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "resume the music",
+            );
             expect(result2.length).toBeGreaterThan(0);
             expect(result2[0].match).toMatchObject({ actionName: "resume" });
         });

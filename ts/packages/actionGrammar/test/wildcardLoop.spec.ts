@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it } from "node:test";
-import assert from "node:assert";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA } from "../src/nfaInterpreter.js";
 import { Grammar } from "../src/grammarTypes.js";
@@ -16,7 +14,11 @@ describe("Wildcard Loop Behavior", () => {
                 {
                     parts: [
                         { type: "string", value: ["show"] },
-                        { type: "wildcard", variable: "location", typeName: "string" },
+                        {
+                            type: "wildcard",
+                            variable: "location",
+                            typeName: "string",
+                        },
                         { type: "string", value: ["weather"] },
                     ],
                     value: {
@@ -33,16 +35,8 @@ describe("Wildcard Loop Behavior", () => {
         const tokens = ["show", "peoria", "weather"];
         const result = matchNFA(nfa, tokens);
 
-        console.log("\n=== Test: Single-token wildcard ===");
-        console.log(`Pattern: show $(location:string) weather`);
-        console.log(`Input: ${tokens.join(" ")}`);
-        console.log(`Matched: ${result.matched}`);
-        if (result.matched) {
-            console.log(`Captures:`, JSON.stringify(result.actionValue));
-        }
-
-        assert.strictEqual(result.matched, true, "Should match");
-        assert.strictEqual(result.actionValue?.location, "peoria");
+        expect(result.matched).toBe(true);
+        expect(result.actionValue?.location).toBe("peoria");
     });
 
     it("should match multi-token wildcard", () => {
@@ -53,7 +47,11 @@ describe("Wildcard Loop Behavior", () => {
                 {
                     parts: [
                         { type: "string", value: ["show"] },
-                        { type: "wildcard", variable: "location", typeName: "string" },
+                        {
+                            type: "wildcard",
+                            variable: "location",
+                            typeName: "string",
+                        },
                         { type: "string", value: ["weather"] },
                     ],
                     value: {
@@ -70,16 +68,8 @@ describe("Wildcard Loop Behavior", () => {
         const tokens = ["show", "des", "moines", "weather"];
         const result = matchNFA(nfa, tokens);
 
-        console.log("\n=== Test: Multi-token wildcard ===");
-        console.log(`Pattern: show $(location:string) weather`);
-        console.log(`Input: ${tokens.join(" ")}`);
-        console.log(`Matched: ${result.matched}`);
-        if (result.matched) {
-            console.log(`Captures:`, JSON.stringify(result.actionValue));
-        }
-
-        assert.strictEqual(result.matched, true, "Should match");
-        assert.strictEqual(result.actionValue?.location, "des moines");
+        expect(result.matched).toBe(true);
+        expect(result.actionValue?.location).toBe("des moines");
     });
 
     it("should match two wildcards with multi-token values", () => {
@@ -90,9 +80,17 @@ describe("Wildcard Loop Behavior", () => {
                 {
                     parts: [
                         { type: "string", value: ["play"] },
-                        { type: "wildcard", variable: "track", typeName: "string" },
+                        {
+                            type: "wildcard",
+                            variable: "track",
+                            typeName: "string",
+                        },
                         { type: "string", value: ["by"] },
-                        { type: "wildcard", variable: "artist", typeName: "string" },
+                        {
+                            type: "wildcard",
+                            variable: "artist",
+                            typeName: "string",
+                        },
                     ],
                     value: {
                         type: "object",
@@ -109,17 +107,9 @@ describe("Wildcard Loop Behavior", () => {
         const tokens = ["play", "kodachrome", "by", "paul", "simon"];
         const result = matchNFA(nfa, tokens);
 
-        console.log("\n=== Test: Two wildcards ===");
-        console.log(`Pattern: play $(track:string) by $(artist:string)`);
-        console.log(`Input: ${tokens.join(" ")}`);
-        console.log(`Matched: ${result.matched}`);
-        if (result.matched) {
-            console.log(`Captures:`, JSON.stringify(result.actionValue));
-        }
-
-        assert.strictEqual(result.matched, true, "Should match");
-        assert.strictEqual(result.actionValue?.track, "kodachrome");
-        assert.strictEqual(result.actionValue?.artist, "paul simon");
+        expect(result.matched).toBe(true);
+        expect(result.actionValue?.track).toBe("kodachrome");
+        expect(result.actionValue?.artist).toBe("paul simon");
     });
 
     it("should match wildcard at end consuming all remaining tokens", () => {
@@ -130,7 +120,11 @@ describe("Wildcard Loop Behavior", () => {
                 {
                     parts: [
                         { type: "string", value: ["show"] },
-                        { type: "wildcard", variable: "location", typeName: "string" },
+                        {
+                            type: "wildcard",
+                            variable: "location",
+                            typeName: "string",
+                        },
                     ],
                     value: {
                         type: "object",
@@ -146,15 +140,7 @@ describe("Wildcard Loop Behavior", () => {
         const tokens = ["show", "des", "moines", "iowa"];
         const result = matchNFA(nfa, tokens);
 
-        console.log("\n=== Test: Wildcard at end ===");
-        console.log(`Pattern: show $(location:string)`);
-        console.log(`Input: ${tokens.join(" ")}`);
-        console.log(`Matched: ${result.matched}`);
-        if (result.matched) {
-            console.log(`Captures:`, JSON.stringify(result.actionValue));
-        }
-
-        assert.strictEqual(result.matched, true, "Should match");
-        assert.strictEqual(result.actionValue?.location, "des moines iowa");
+        expect(result.matched).toBe(true);
+        expect(result.actionValue?.location).toBe("des moines iowa");
     });
 });

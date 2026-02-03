@@ -106,7 +106,10 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
             }
 
             // If no direct actionValue, try getting from rule index
-            if (actionValue === undefined && bestContext?.ruleIndex !== undefined) {
+            if (
+                actionValue === undefined &&
+                bestContext?.ruleIndex !== undefined
+            ) {
                 actionValue = nfa.actionValues?.[bestContext.ruleIndex];
             }
 
@@ -215,7 +218,9 @@ function epsilonClosure(
             if (nfaState.slotCount !== undefined && nfaState.slotCount > 0) {
                 // Check if we've already pushed env for this rule
                 const alreadyPushed = newSlotOps.some(
-                    op => op.type === "pushEnv" && op.slotCount === nfaState.slotCount
+                    (op) =>
+                        op.type === "pushEnv" &&
+                        op.slotCount === nfaState.slotCount,
                 );
                 if (!alreadyPushed) {
                     const pushOp: DFASlotOperation = {
@@ -244,7 +249,10 @@ function epsilonClosure(
                     let pathSlotOps = [...newSlotOps];
 
                     // Check for writeToParent on this epsilon transition (nested rule exit)
-                    if (trans.writeToParent && trans.valueToWrite !== undefined) {
+                    if (
+                        trans.writeToParent &&
+                        trans.valueToWrite !== undefined
+                    ) {
                         pathSlotOps.push({
                             type: "evalAndWriteToParent",
                             valueExpr: trans.valueToWrite,
@@ -288,11 +296,14 @@ function epsilonClosure(
  */
 interface TransitionResult {
     /** Token-specific transitions with slot operations */
-    tokenTransitions: Map<string, {
-        targetContexts: DFAExecutionContext[];
-        preOps: DFASlotOperation[];
-        postOps: DFASlotOperation[];
-    }>;
+    tokenTransitions: Map<
+        string,
+        {
+            targetContexts: DFAExecutionContext[];
+            preOps: DFASlotOperation[];
+            postOps: DFASlotOperation[];
+        }
+    >;
 
     /** Wildcard transition (if any) */
     wildcardTransition?: {
@@ -318,10 +329,13 @@ function computeTransitions(
     contexts: DFAExecutionContext[],
 ): TransitionResult {
     // Map token -> { contexts, preOps from source contexts }
-    const tokenTransitionsRaw = new Map<string, {
-        targetContexts: DFAExecutionContext[];
-        preOps: DFASlotOperation[];
-    }>();
+    const tokenTransitionsRaw = new Map<
+        string,
+        {
+            targetContexts: DFAExecutionContext[];
+            preOps: DFASlotOperation[];
+        }
+    >();
 
     const wildcardContexts: Array<{
         context: DFAExecutionContext;
@@ -379,7 +393,11 @@ function computeTransitions(
 
                         // Merge preOps (deduplicate if same ops already present)
                         for (const op of ctxPreOps) {
-                            if (!entry.preOps.some(existing => slotOpsEqual(existing, op))) {
+                            if (
+                                !entry.preOps.some((existing) =>
+                                    slotOpsEqual(existing, op),
+                                )
+                            ) {
                                 entry.preOps.push(op);
                             }
                         }
@@ -397,11 +415,14 @@ function computeTransitions(
     }
 
     // Apply epsilon closure to all token transitions and extract postOps
-    const tokenTransitions = new Map<string, {
-        targetContexts: DFAExecutionContext[];
-        preOps: DFASlotOperation[];
-        postOps: DFASlotOperation[];
-    }>();
+    const tokenTransitions = new Map<
+        string,
+        {
+            targetContexts: DFAExecutionContext[];
+            preOps: DFASlotOperation[];
+            postOps: DFASlotOperation[];
+        }
+    >();
 
     for (const [token, entry] of tokenTransitionsRaw) {
         const closedContexts = epsilonClosure(nfa, entry.targetContexts);
@@ -411,7 +432,9 @@ function computeTransitions(
         for (const ctx of closedContexts) {
             if (ctx.slotOps) {
                 for (const op of ctx.slotOps) {
-                    if (!postOps.some(existing => slotOpsEqual(existing, op))) {
+                    if (
+                        !postOps.some((existing) => slotOpsEqual(existing, op))
+                    ) {
                         postOps.push(op);
                     }
                 }
@@ -488,7 +511,7 @@ function computeTransitions(
 
             // Merge preOps
             for (const op of preOps) {
-                if (!allPreOps.some(existing => slotOpsEqual(existing, op))) {
+                if (!allPreOps.some((existing) => slotOpsEqual(existing, op))) {
                     allPreOps.push(op);
                 }
             }
@@ -512,7 +535,11 @@ function computeTransitions(
         for (const ctx of finalTargetContexts) {
             if (ctx.slotOps) {
                 for (const op of ctx.slotOps) {
-                    if (!allPostOps.some(existing => slotOpsEqual(existing, op))) {
+                    if (
+                        !allPostOps.some((existing) =>
+                            slotOpsEqual(existing, op),
+                        )
+                    ) {
                         allPostOps.push(op);
                     }
                 }
@@ -521,15 +548,22 @@ function computeTransitions(
 
         // Build captureInfo for completions/debugging
         // Track by slotIndex now instead of matching captures map
-        const captureInfoMap = new Map<string, {
-            variable: string;
-            typeName?: string;
-            checked: boolean;
-            slotIndex?: number;
-            contextIndices: number[];
-        }>();
+        const captureInfoMap = new Map<
+            string,
+            {
+                variable: string;
+                typeName?: string;
+                checked: boolean;
+                slotIndex?: number;
+                contextIndices: number[];
+            }
+        >();
 
-        for (let finalIndex = 0; finalIndex < finalTargetContexts.length; finalIndex++) {
+        for (
+            let finalIndex = 0;
+            finalIndex < finalTargetContexts.length;
+            finalIndex++
+        ) {
             // Match by index since we maintain order through epsilon closure
             const sourceIndex = finalIndex % contextSources.length;
             const source = contextSources[sourceIndex];

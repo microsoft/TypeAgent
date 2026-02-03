@@ -190,8 +190,12 @@ describe("NFA with Real Grammars", () => {
                 ]),
             );
             expect(result1.matched).toBe(true);
-            expect(result1.actionValue?.parameters?.trackName).toBe("Shake It Off");
-            expect(result1.actionValue?.parameters?.artist).toBe("Taylor Swift");
+            expect(result1.actionValue?.parameters?.trackName).toBe(
+                "Shake It Off",
+            );
+            expect(result1.actionValue?.parameters?.artists?.[0]).toBe(
+                "Taylor Swift",
+            );
 
             // Test: "play Big Red Sun by Lucinda Williams"
             const result2 = matchNFA(nfa, [
@@ -216,8 +220,12 @@ describe("NFA with Real Grammars", () => {
                 ]),
             );
             expect(result2.matched).toBe(true);
-            expect(result2.actionValue?.parameters?.trackName).toBe("big red sun");
-            expect(result2.actionValue?.parameters?.artist).toBe("lucinda williams");
+            expect(result2.actionValue?.parameters?.trackName).toBe(
+                "big red sun",
+            );
+            expect(result2.actionValue?.parameters?.artists?.[0]).toBe(
+                "lucinda williams",
+            );
 
             // Test: single word track and artist
             const result3 = matchNFA(nfa, ["play", "Hello", "by", "Adele"]);
@@ -227,7 +235,7 @@ describe("NFA with Real Grammars", () => {
             );
             expect(result3.matched).toBe(true);
             expect(result3.actionValue?.parameters?.trackName).toBe("Hello");
-            expect(result3.actionValue?.parameters?.artist).toBe("Adele");
+            expect(result3.actionValue?.parameters?.artists?.[0]).toBe("Adele");
         });
 
         it("should match 'play track from album' patterns", () => {
@@ -262,7 +270,9 @@ describe("NFA with Real Grammars", () => {
                 ]),
             );
             expect(result1.matched).toBe(true);
-            expect(result1.actionValue?.parameters?.trackName).toBe("Shake It Off");
+            expect(result1.actionValue?.parameters?.trackName).toBe(
+                "Shake It Off",
+            );
             expect(result1.actionValue?.parameters?.albumName).toBe("1989");
 
             // Test: with "the" article
@@ -298,7 +308,9 @@ describe("NFA with Real Grammars", () => {
                 ]),
             );
             expect(result2.matched).toBe(true);
-            expect(result2.actionValue?.parameters?.trackName).toBe("Bohemian Rhapsody");
+            expect(result2.actionValue?.parameters?.trackName).toBe(
+                "Bohemian Rhapsody",
+            );
             expect(result2.actionValue?.parameters?.albumName).toBe(
                 "A Night at the Opera",
             );
@@ -347,8 +359,12 @@ describe("NFA with Real Grammars", () => {
                 ]),
             );
             expect(result1.matched).toBe(true);
-            expect(result1.actionValue?.parameters?.trackName).toBe("Shake It Off");
-            expect(result1.actionValue?.parameters?.artist).toBe("Taylor Swift");
+            expect(result1.actionValue?.parameters?.trackName).toBe(
+                "Shake It Off",
+            );
+            expect(result1.actionValue?.parameters?.artists?.[0]).toBe(
+                "Taylor Swift",
+            );
             expect(result1.actionValue?.parameters?.albumName).toBe("1989");
 
             // Test: with "the" article
@@ -380,8 +396,12 @@ describe("NFA with Real Grammars", () => {
                 ]),
             );
             expect(result2.matched).toBe(true);
-            expect(result2.actionValue?.parameters?.trackName).toBe("Yesterday");
-            expect(result2.actionValue?.parameters?.artist).toBe("The Beatles");
+            expect(result2.actionValue?.parameters?.trackName).toBe(
+                "Yesterday",
+            );
+            expect(result2.actionValue?.parameters?.artists?.[0]).toBe(
+                "The Beatles",
+            );
             expect(result2.actionValue?.parameters?.albumName).toBe("Help");
         });
     });

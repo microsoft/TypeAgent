@@ -339,7 +339,9 @@ export class AppAgentManager implements ActionConfigProvider {
                     // If no grammar file exists but we're using NFA system, create an empty grammar
                     // This allows dynamic grammar generation to work for agents without pre-existing grammars
                     if (!g && useNFAGrammar && agentGrammarRegistry) {
-                        debug(`No grammar file found for ${schemaName}, creating empty grammar for dynamic generation`);
+                        debug(
+                            `No grammar file found for ${schemaName}, creating empty grammar for dynamic generation`,
+                        );
                         g = { rules: [] };
                     }
 
@@ -347,7 +349,9 @@ export class AppAgentManager implements ActionConfigProvider {
                         // In NFA mode, only add to agentGrammarRegistry (not actionGrammarStore)
                         // The merged grammar will be synced to the store later via syncAgentGrammar
                         if (useNFAGrammar && agentGrammarRegistry) {
-                            debug(`Adding grammar to NFA registry for schema: ${schemaName}`);
+                            debug(
+                                `Adding grammar to NFA registry for schema: ${schemaName}`,
+                            );
                         } else {
                             // In non-NFA mode, add directly to grammar store
                             debug(`Adding grammar for schema: ${schemaName}`);
@@ -360,10 +364,9 @@ export class AppAgentManager implements ActionConfigProvider {
                                 // Enrich grammar with checked variables from .pas.json if available
                                 if (config.compiledSchemaFilePath) {
                                     try {
-                                        const pasJsonPath =
-                                            getPackageFilePath(
-                                                config.compiledSchemaFilePath,
-                                            );
+                                        const pasJsonPath = getPackageFilePath(
+                                            config.compiledSchemaFilePath,
+                                        );
                                         enrichGrammarWithCheckedVariables(
                                             g,
                                             pasJsonPath,
@@ -378,10 +381,7 @@ export class AppAgentManager implements ActionConfigProvider {
                                     }
                                 }
 
-                                const nfa = compileGrammarToNFA(
-                                    g,
-                                    schemaName,
-                                );
+                                const nfa = compileGrammarToNFA(g, schemaName);
                                 agentGrammarRegistry.registerAgent(
                                     schemaName,
                                     g,

@@ -189,7 +189,11 @@ export function setSlotValue(
     value: SlotValue,
     append: boolean = false,
 ): void {
-    if (append && typeof env.slots[slotIndex] === "string" && typeof value === "string") {
+    if (
+        append &&
+        typeof env.slots[slotIndex] === "string" &&
+        typeof value === "string"
+    ) {
         env.slots[slotIndex] = env.slots[slotIndex] + " " + value;
     } else {
         env.slots[slotIndex] = value;
@@ -318,7 +322,10 @@ export function compileValueExpression(
         case "action": {
             const params = new Map<string, ValueExpression>();
             for (const [key, value] of expr.parameters) {
-                params.set(key, compileValueExpression(value, slotMap, typeMap));
+                params.set(
+                    key,
+                    compileValueExpression(value, slotMap, typeMap),
+                );
             }
             return {
                 type: "action",
@@ -489,5 +496,7 @@ export function cloneEnvironment(env: Environment): Environment {
         slots: [...env.slots],
         parent: env.parent,
         parentSlotIndex: env.parentSlotIndex,
+        slotMap: env.slotMap, // Preserve for debugging and restoration
+        actionValue: env.actionValue, // Preserve for evaluation at accept
     };
 }

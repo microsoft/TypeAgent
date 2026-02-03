@@ -30,7 +30,11 @@
  * - evalAndWriteToParent: Exit nested rule, evaluate actionValue and write to parent slot
  * - popEnv: Pop environment from stack (after write to parent)
  */
-export type DFASlotOpType = "pushEnv" | "writeSlot" | "evalAndWriteToParent" | "popEnv";
+export type DFASlotOpType =
+    | "pushEnv"
+    | "writeSlot"
+    | "evalAndWriteToParent"
+    | "popEnv";
 
 /**
  * A slot operation to be executed during a DFA transition

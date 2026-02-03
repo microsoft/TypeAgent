@@ -50,7 +50,9 @@ export function matchGrammarWithNFA(
     // Tokenize the request
     const tokens = tokenizeRequest(request);
 
-    console.log(`    [NFA Matcher] Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`);
+    console.log(
+        `    [NFA Matcher] Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`,
+    );
 
     if (tokens.length === 0) {
         return [];
@@ -59,9 +61,13 @@ export function matchGrammarWithNFA(
     // Match against NFA
     const nfaResult = matchNFA(nfa, tokens);
 
-    console.log(`    [NFA Matcher] Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`);
+    console.log(
+        `    [NFA Matcher] Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`,
+    );
     if (nfaResult.matched) {
-        console.log(`      Action value: ${JSON.stringify(nfaResult.actionValue)}`);
+        console.log(
+            `      Action value: ${JSON.stringify(nfaResult.actionValue)}`,
+        );
     }
 
     if (!nfaResult.matched) {

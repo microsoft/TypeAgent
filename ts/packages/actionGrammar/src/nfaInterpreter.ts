@@ -74,7 +74,9 @@ export function matchNFA(
     tokens: string[],
     debug: boolean = false,
 ): NFAMatchResult {
-    debugNFA(`Matching tokens: [${tokens.join(", ")}] against NFA: ${nfa.name || "(unnamed)"}`);
+    debugNFA(
+        `Matching tokens: [${tokens.join(", ")}] against NFA: ${nfa.name || "(unnamed)"}`,
+    );
 
     // Start with epsilon closure of start state
     const initialStates = epsilonClosure(nfa, [
@@ -90,14 +92,18 @@ export function matchNFA(
         },
     ]);
 
-    debugNFA(`Initial states after epsilon closure: ${initialStates.length} state(s)`);
+    debugNFA(
+        `Initial states after epsilon closure: ${initialStates.length} state(s)`,
+    );
     let currentStates = initialStates;
     const allVisitedStates = new Set<number>([nfa.startState]);
 
     // Process each token
     for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
         const token = tokens[tokenIndex];
-        debugNFA(`Token ${tokenIndex}: "${token}", currentStates: ${currentStates.length}`);
+        debugNFA(
+            `Token ${tokenIndex}: "${token}", currentStates: ${currentStates.length}`,
+        );
         const nextStates: NFAExecutionState[] = [];
 
         // Try each current state
@@ -105,7 +111,9 @@ export function matchNFA(
             const nfaState = nfa.states[state.stateId];
             if (!nfaState) continue;
 
-            debugNFA(`  State ${state.stateId}, env slots: ${state.environment ? JSON.stringify(state.environment.slots) : "none"}, transitions: ${nfaState.transitions.length}`);
+            debugNFA(
+                `  State ${state.stateId}, env slots: ${state.environment ? JSON.stringify(state.environment.slots) : "none"}, transitions: ${nfaState.transitions.length}`,
+            );
 
             // Try each transition
             for (const trans of nfaState.transitions) {
@@ -117,7 +125,9 @@ export function matchNFA(
                     tokenIndex,
                 );
                 if (result) {
-                    debugNFA(`    Transition ${trans.type} → state ${result.stateId} succeeded`);
+                    debugNFA(
+                        `    Transition ${trans.type} → state ${result.stateId} succeeded`,
+                    );
                     nextStates.push(result);
                     allVisitedStates.add(result.stateId);
                 }
@@ -152,19 +162,29 @@ export function matchNFA(
     }
 
     // Collect ALL accepting threads (multiple rules may match)
-    debugNFA(`After all tokens, currentStates: ${currentStates.length}, accepting states: [${nfa.acceptingStates.join(", ")}]`);
+    debugNFA(
+        `After all tokens, currentStates: ${currentStates.length}, accepting states: [${nfa.acceptingStates.join(", ")}]`,
+    );
     const acceptingThreads: NFAMatchResult[] = [];
     for (const state of currentStates) {
-        debugNFA(`  Checking state ${state.stateId}, is accepting: ${nfa.acceptingStates.includes(state.stateId)}`);
+        debugNFA(
+            `  Checking state ${state.stateId}, is accepting: ${nfa.acceptingStates.includes(state.stateId)}`,
+        );
         if (nfa.acceptingStates.includes(state.stateId)) {
             // Evaluate the actionValue using the environment's slot values
             let evaluatedActionValue = state.actionValue;
-            debugNFA(`  Accept state details: hasActionValue=${!!state.actionValue}, hasEnv=${!!state.environment}, hasSlotMap=${!!state.slotMap}`);
+            debugNFA(
+                `  Accept state details: hasActionValue=${!!state.actionValue}, hasEnv=${!!state.environment}, hasSlotMap=${!!state.slotMap}`,
+            );
             if (state.environment) {
-                debugNFA(`    Environment slots: ${JSON.stringify(state.environment.slots)}`);
+                debugNFA(
+                    `    Environment slots: ${JSON.stringify(state.environment.slots)}`,
+                );
             }
             if (state.slotMap) {
-                debugNFA(`    SlotMap (debug): ${JSON.stringify([...state.slotMap.entries()])}`);
+                debugNFA(
+                    `    SlotMap (debug): ${JSON.stringify([...state.slotMap.entries()])}`,
+                );
             }
             // actionValue is a compiled ValueExpression with slot indices
             // Evaluate it using the environment's slot values
@@ -174,7 +194,9 @@ export function matchNFA(
                         state.actionValue,
                         state.environment,
                     );
-                    debugNFA(`  Evaluated actionValue: ${JSON.stringify(evaluatedActionValue)}`);
+                    debugNFA(
+                        `  Evaluated actionValue: ${JSON.stringify(evaluatedActionValue)}`,
+                    );
                 } catch (e) {
                     debugNFA(`  Failed to evaluate actionValue: ${e}`);
                 }
@@ -199,7 +221,9 @@ export function matchNFA(
     // If any threads reached accepting states, return the best one by priority
     if (acceptingThreads.length > 0) {
         const sorted = sortNFAMatches(acceptingThreads);
-        debugNFA(`SUCCESS: Best match has ${sorted[0].fixedStringPartCount} fixed, ${sorted[0].checkedWildcardCount} checked, ${sorted[0].uncheckedWildcardCount} unchecked`);
+        debugNFA(
+            `SUCCESS: Best match has ${sorted[0].fixedStringPartCount} fixed, ${sorted[0].checkedWildcardCount} checked, ${sorted[0].uncheckedWildcardCount} unchecked`,
+        );
         return sorted[0]; // Best match by priority rules
     }
 
@@ -261,12 +285,16 @@ function tryTransition(
                     slotValue = num;
                 } else {
                     // Entity type - check validator
-                    const validator = globalEntityRegistry.getValidator(trans.typeName);
+                    const validator = globalEntityRegistry.getValidator(
+                        trans.typeName,
+                    );
                     if (validator && !validator.validate(token)) {
                         return undefined; // Validation failed
                     }
                     // Try converter if available
-                    const converter = globalEntityRegistry.getConverter(trans.typeName);
+                    const converter = globalEntityRegistry.getConverter(
+                        trans.typeName,
+                    );
                     if (converter) {
                         const converted = converter.convert(token);
                         if (converted === undefined) {
@@ -293,7 +321,9 @@ function tryTransition(
             // Determine if this is a checked or unchecked wildcard
             const isChecked =
                 trans.checked === true ||
-                (trans.typeName && trans.typeName !== "string" && trans.typeName !== "wildcard");
+                (trans.typeName &&
+                    trans.typeName !== "string" &&
+                    trans.typeName !== "wildcard");
 
             return {
                 stateId: trans.to,
@@ -323,6 +353,19 @@ function tryTransition(
 }
 
 /**
+ * Get the depth of an environment (number of levels including the current one)
+ * Used to distinguish paths with different nesting levels
+ */
+function getEnvironmentDepth(env: Environment | undefined): number {
+    let depth = 0;
+    while (env) {
+        depth++;
+        env = env.parent;
+    }
+    return depth;
+}
+
+/**
  * Compute epsilon closure of a set of states
  * Returns all states reachable via epsilon transitions
  *
@@ -338,8 +381,8 @@ function epsilonClosure(
     states: NFAExecutionState[],
 ): NFAExecutionState[] {
     const result: NFAExecutionState[] = [];
-    // Track visited states by (stateId, fixedCount, checkedCount, uncheckedCount) tuple
-    // to allow multiple threads at the same NFA state with different priority counts
+    // Track visited states by (stateId, fixedCount, checkedCount, uncheckedCount, envDepth) tuple
+    // to allow multiple threads at the same NFA state with different priority counts or env depths
     const visited = new Set<string>();
     const queue = [...states];
 
@@ -347,7 +390,9 @@ function epsilonClosure(
         const state = queue.shift()!;
 
         // Create unique key for this execution thread
-        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}`;
+        // Include environment depth so paths with different nesting levels don't collide
+        const envDepth = getEnvironmentDepth(state.environment);
+        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}-${envDepth}`;
 
         if (visited.has(key)) {
             continue;
@@ -432,20 +477,27 @@ function epsilonClosure(
                             trans.valueToWrite,
                             currentEnvironment,
                         );
-                        // Write to parent's slot
-                        setSlotValue(
+                        // IMPORTANT: Clone the parent environment before writing to avoid
+                        // mutation affecting other execution paths that share the same parent
+                        const clonedParent = cloneEnvironment(
                             currentEnvironment.parent,
+                        );
+                        // Write to the cloned parent's slot
+                        setSlotValue(
+                            clonedParent,
                             currentEnvironment.parentSlotIndex,
                             evaluatedValue,
                         );
                         debugNFA(
                             `  WriteToParent: evaluated -> ${JSON.stringify(evaluatedValue)?.substring(0, 50)}, wrote to slot ${currentEnvironment.parentSlotIndex}`,
                         );
+                        // Pop back to the cloned parent environment
+                        newEnvironment = clonedParent;
                     } catch (e) {
                         debugNFA(`  WriteToParent failed: ${e}`);
+                        // On error, still pop to parent (unmodified)
+                        newEnvironment = currentEnvironment.parent;
                     }
-                    // Pop back to parent environment and restore slotMap/actionValue
-                    newEnvironment = currentEnvironment.parent;
                     // Restore slotMap from parent environment if available
                     if (newEnvironment?.slotMap) {
                         newSlotMap = newEnvironment.slotMap;

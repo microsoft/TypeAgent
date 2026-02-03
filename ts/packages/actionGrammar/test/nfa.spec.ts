@@ -259,7 +259,9 @@ describe("NFA Infrastructure", () => {
                         ],
                         value: {
                             type: "object",
-                            value: { count: { type: "variable", name: "count" } },
+                            value: {
+                                count: { type: "variable", name: "count" },
+                            },
                         },
                     },
                 ],

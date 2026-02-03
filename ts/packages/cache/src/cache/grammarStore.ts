@@ -47,8 +47,12 @@ export class GrammarStoreImpl implements GrammarStore {
             for (const [key, entry] of this.grammars) {
                 if (!entry.nfa) {
                     try {
-                        const schemaName = splitSchemaNamespaceKey(key).schemaName;
-                        entry.nfa = compileGrammarToNFA(entry.grammar, schemaName);
+                        const schemaName =
+                            splitSchemaNamespaceKey(key).schemaName;
+                        entry.nfa = compileGrammarToNFA(
+                            entry.grammar,
+                            schemaName,
+                        );
                     } catch (error) {
                         console.error(
                             `Failed to compile grammar to NFA for ${key}:`,
@@ -126,8 +130,12 @@ export class GrammarStoreImpl implements GrammarStore {
 
             // Debug logging for base grammar matching
             const { schemaName } = splitSchemaNamespaceKey(name);
-            console.log(`[Grammar Match] Attempting to match "${request}" against ${schemaName} grammar (${this.useNFA ? "NFA" : "legacy"} mode)`);
-            console.log(`  NFA states: ${entry.nfa?.states.length || 0}, grammar rules: ${entry.grammar.rules.length}`);
+            console.log(
+                `[Grammar Match] Attempting to match "${request}" against ${schemaName} grammar (${this.useNFA ? "NFA" : "legacy"} mode)`,
+            );
+            console.log(
+                `  NFA states: ${entry.nfa?.states.length || 0}, grammar rules: ${entry.grammar.rules.length}`,
+            );
 
             // Use NFA matcher if available, otherwise fall back to old matcher
             const grammarMatches =

@@ -69,7 +69,11 @@ function setSlotValue(
     value: string | number,
     append: boolean = false,
 ): void {
-    if (append && typeof env.slots[slotIndex] === "string" && typeof value === "string") {
+    if (
+        append &&
+        typeof env.slots[slotIndex] === "string" &&
+        typeof value === "string"
+    ) {
         env.slots[slotIndex] = env.slots[slotIndex] + " " + value;
     } else {
         env.slots[slotIndex] = value;
@@ -96,7 +100,10 @@ function evaluateActionValue(env: DFAEnvironment, valueExpr: any): any {
             if (valueExpr.slotIndex !== undefined) {
                 let value = env.slots[valueExpr.slotIndex];
                 // Convert to number if typeName indicates number type
-                if (valueExpr.typeName === "number" && typeof value === "string") {
+                if (
+                    valueExpr.typeName === "number" &&
+                    typeof value === "string"
+                ) {
                     const num = parseFloat(value);
                     if (!isNaN(num)) {
                         value = num;
@@ -177,13 +184,21 @@ function applySlotOps(
 
             case "writeSlot": {
                 if (op.slotIndex !== undefined && consumedValue !== undefined) {
-                    setSlotValue(currentEnv, op.slotIndex, consumedValue, op.append);
+                    setSlotValue(
+                        currentEnv,
+                        op.slotIndex,
+                        consumedValue,
+                        op.append,
+                    );
                 }
                 break;
             }
 
             case "evalAndWriteToParent": {
-                if (currentEnv.parent && currentEnv.parentSlotIndex !== undefined) {
+                if (
+                    currentEnv.parent &&
+                    currentEnv.parentSlotIndex !== undefined
+                ) {
                     const value = evaluateActionValue(currentEnv, op.valueExpr);
                     currentEnv.parent.slots[currentEnv.parentSlotIndex] = value;
                 }
@@ -335,7 +350,8 @@ export function matchDFA(
         actionValue = evaluateActionValue(currentEnv, finalState.actionValue);
     }
 
-    const bestContext = finalState.contexts[finalState.bestPriority.contextIndex];
+    const bestContext =
+        finalState.contexts[finalState.bestPriority.contextIndex];
 
     const result: DFAMatchResult = {
         matched: true,

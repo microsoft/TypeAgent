@@ -731,7 +731,9 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     // IMPORTANT: Must happen AFTER configureGrammarGeneration so the cache knows about the registry
     console.log("[NFA Setup] Syncing all agent grammars to grammar store...");
     const registeredAgents = context.agentGrammarRegistry.getAllAgentIds();
-    console.log(`[NFA Setup] Registered agents: ${registeredAgents.join(", ")}`);
+    console.log(
+        `[NFA Setup] Registered agents: ${registeredAgents.join(", ")}`,
+    );
     for (const schemaName of registeredAgents) {
         console.log(`[NFA Setup] Syncing grammar for ${schemaName}...`);
         context.agentCache.syncAgentGrammar(schemaName);

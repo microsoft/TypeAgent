@@ -97,7 +97,10 @@ describe("Agent Grammar Registry", () => {
 
             // Try to add rule with unresolved entity
             const invalidRule = `@ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) on $(date:UnknownEntity)`;
+@ <schedule> = schedule $(event:string) on $(date:UnknownEntity) -> {
+    actionName: "schedule",
+    parameters: { event: $(event), date: $(date) }
+}`;
 
             const result = agentGrammar.addGeneratedRules(invalidRule);
             expect(result.success).toBe(false);
@@ -124,7 +127,10 @@ describe("Agent Grammar Registry", () => {
             // Add rule with new entity declaration
             const ruleWithEntity = `entity CalendarDate;
 @ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) on $(date:CalendarDate)`;
+@ <schedule> = schedule $(event:string) on $(date:CalendarDate) -> {
+    actionName: "schedule",
+    parameters: { event: $(event), date: $(date) }
+}`;
 
             const result = agentGrammar.addGeneratedRules(ruleWithEntity);
             expect(result.success).toBe(true);
@@ -172,7 +178,7 @@ describe("Agent Grammar Registry", () => {
 
             // Add first rule - simpler format like in cache hit workflow test
             const firstRule = `@ <Start> = <play>
-@ <play> = play $(track:string)`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: $(track) } }`;
 
             const firstResult = agentGrammar.addGeneratedRules(firstRule);
             expect(firstResult.success).toBe(true);
@@ -260,7 +266,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should register agents from text", () => {
             const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string)`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: $(track) } }`;
 
             const result = registry.registerAgentFromText("player", agrText);
 
@@ -311,7 +317,7 @@ describe("Agent Grammar Registry", () => {
             registry.registerAgent("player", baseGrammar);
 
             const generatedRule = `@ <Start> = <play>
-@ <play> = play $(track:string)`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: $(track) } }`;
 
             const result = registry.addGeneratedRules("player", generatedRule);
             expect(result.success).toBe(true);

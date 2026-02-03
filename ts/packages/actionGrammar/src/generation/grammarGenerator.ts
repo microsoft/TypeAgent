@@ -554,7 +554,10 @@ export class ClaudeGrammarGenerator {
                 stringPattern,
                 `$(${varName}:${wildcardType})`,
             );
-            const wildcardPattern = new RegExp(`\\$\\(${varName}:wildcard\\)`, "g");
+            const wildcardPattern = new RegExp(
+                `\\$\\(${varName}:wildcard\\)`,
+                "g",
+            );
             matchPattern = matchPattern.replace(
                 wildcardPattern,
                 `$(${varName}:${wildcardType})`,

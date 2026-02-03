@@ -124,12 +124,18 @@ export async function populateCache(
 
         // Validate that parameter values appear in the request (prevents caching LLM corrections)
         // Skip validation for short values (< 6 chars) like years, IDs that LLM infers
-        const normalizedRequest = request.request.toLowerCase().replace(/[^\w\s]/g, ' ');
-        for (const [paramName, paramValue] of Object.entries(request.action.parameters)) {
-            if (typeof paramValue === 'string') {
+        const normalizedRequest = request.request
+            .toLowerCase()
+            .replace(/[^\w\s]/g, " ");
+        for (const [paramName, paramValue] of Object.entries(
+            request.action.parameters,
+        )) {
+            if (typeof paramValue === "string") {
                 // Skip short values that are likely inferred (year, ID, etc) not corrections
                 if (paramValue.length >= 6) {
-                    const normalizedValue = paramValue.toLowerCase().replace(/[^\w\s]/g, ' ');
+                    const normalizedValue = paramValue
+                        .toLowerCase()
+                        .replace(/[^\w\s]/g, " ");
                     if (!normalizedRequest.includes(normalizedValue)) {
                         return {
                             success: false,
@@ -139,8 +145,10 @@ export async function populateCache(
                 }
             } else if (Array.isArray(paramValue)) {
                 for (const item of paramValue) {
-                    if (typeof item === 'string' && item.length >= 6) {
-                        const normalizedItem = item.toLowerCase().replace(/[^\w\s]/g, ' ');
+                    if (typeof item === "string" && item.length >= 6) {
+                        const normalizedItem = item
+                            .toLowerCase()
+                            .replace(/[^\w\s]/g, " ");
                         if (!normalizedRequest.includes(normalizedItem)) {
                             return {
                                 success: false,

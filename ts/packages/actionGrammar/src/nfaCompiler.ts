@@ -58,6 +58,29 @@ function isPassthroughRule(rule: GrammarRule): boolean {
 }
 
 /**
+ * Check if a rule is a single-variable rule (e.g., @ <ArtistName> = $(x:wildcard))
+ * Such rules should implicitly produce their variable's value: -> $(x)
+ */
+function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
+    // A single-variable rule has:
+    // 1. No explicit value expression
+    // 2. Single part that is a wildcard or number with a variable
+    if (rule.value) {
+        return false; // Has explicit value
+    }
+    if (rule.parts.length !== 1) {
+        return false; // Multiple parts
+    }
+    const part = rule.parts[0];
+    if (part.type === "wildcard" || part.type === "number") {
+        if (part.variable) {
+            return { variable: part.variable };
+        }
+    }
+    return false;
+}
+
+/**
  * Collect all variable names from a rule's parts
  * Returns them in order of appearance
  *
@@ -213,6 +236,15 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             effectiveOverrideVariable = "_result";
         }
 
+        // Also check for single-variable rules like @ <ArtistName> = $(x:wildcard)
+        // These should implicitly produce their variable's value: -> $(x)
+        if (!effectiveValue) {
+            const singleVar = isSingleVariableRule(rule);
+            if (singleVar) {
+                effectiveValue = { type: "variable", name: singleVar.variable };
+            }
+        }
+
         const ruleEntry = builder.createState(false);
 
         // Mark the rule entry state with the rule index
@@ -231,7 +263,11 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
         // Parse the raw value node, then compile with slot indices
         if (effectiveValue) {
             const parsedExpr = parseValueExpression(effectiveValue);
-            const compiledExpr = compileValueExpression(parsedExpr, slotMap, typeMap);
+            const compiledExpr = compileValueExpression(
+                parsedExpr,
+                slotMap,
+                typeMap,
+            );
             builder.getState(ruleEntry).actionValue = compiledExpr;
             // Also store in actionValues array for priority tracking
             builder.setActionValue(ruleIndex, compiledExpr);
@@ -597,8 +633,12 @@ function compileWildcardPartWithSlots(
     const slotIndex = context.slotMap.get(variableName);
 
     // Determine if this wildcard is checked
-    const hasEntityType = part.typeName && part.typeName !== "string" && part.typeName !== "wildcard";
-    const hasCheckedParamSpec = context.checkedVariables?.has(variableName) ?? false;
+    const hasEntityType =
+        part.typeName &&
+        part.typeName !== "string" &&
+        part.typeName !== "wildcard";
+    const hasCheckedParamSpec =
+        context.checkedVariables?.has(variableName) ?? false;
     const isChecked = hasEntityType || hasCheckedParamSpec;
 
     if (part.optional) {
@@ -819,12 +859,35 @@ function compileRulesPartWithSlots(
         // Even if the nested rule has no variables, we need to create an environment
         // with parent reference so writeToParent can work
         if (nestedSlotMap.size > 0 || parentSlotIndex !== undefined) {
-            builder.setStateSlotInfo(ruleEntry, nestedSlotMap.size, nestedSlotMap);
+            builder.setStateSlotInfo(
+                ruleEntry,
+                nestedSlotMap.size,
+                nestedSlotMap,
+            );
         }
 
         // Compile and store the action value on the entry state
+        // Check for passthrough rule normalization (same as top-level rules)
+        let effectiveValue = rule.value;
+        let nestedOverrideVariable: string | undefined;
+
+        if (!effectiveValue && isPassthroughRule(rule)) {
+            // Passthrough rule: @ <S> = <C>  becomes  @ <S> = $(_result:<C>) -> $(_result)
+            effectiveValue = { type: "variable", name: "_result" };
+            nestedOverrideVariable = "_result";
+        }
+
+        // Also check for single-variable rules like @ <ArtistName> = $(x:wildcard)
+        // These should implicitly produce their variable's value: -> $(x)
+        if (!effectiveValue) {
+            const singleVar = isSingleVariableRule(rule);
+            if (singleVar) {
+                effectiveValue = { type: "variable", name: singleVar.variable };
+            }
+        }
+
         let compiledValue: ValueExpression | undefined;
-        if (rule.value) {
+        if (effectiveValue) {
             const ruleIndex = findRuleIndex(grammar, rule);
             if (ruleIndex !== -1) {
                 builder.getState(ruleEntry).ruleIndex = ruleIndex;
@@ -832,8 +895,12 @@ function compileRulesPartWithSlots(
             // Create type map for type conversion during evaluation
             const nestedTypeMap = createRuleTypeMap(rule);
             // Parse and compile the value expression with slot indices
-            const parsedExpr = parseValueExpression(rule.value);
-            compiledValue = compileValueExpression(parsedExpr, nestedSlotMap, nestedTypeMap);
+            const parsedExpr = parseValueExpression(effectiveValue);
+            compiledValue = compileValueExpression(
+                parsedExpr,
+                nestedSlotMap,
+                nestedTypeMap,
+            );
             builder.getState(ruleEntry).actionValue = compiledValue;
         }
 
@@ -849,8 +916,8 @@ function compileRulesPartWithSlots(
             slotMap: nestedSlotMap,
             nextSlotIndex: nestedSlotMap.size,
             checkedVariables: context.checkedVariables,
-            // No override - nested rules use their own variable names
-            overrideVariableName: undefined,
+            // Pass override for passthrough rules so nested rules know to capture to _result
+            overrideVariableName: nestedOverrideVariable,
             parentSlotIndex,
         };
 
@@ -867,7 +934,11 @@ function compileRulesPartWithSlots(
                 nestedContext,
             );
             // Add epsilon with writeToParent - pass the COMPILED value expression
-            builder.addEpsilonWithWriteToParent(ruleExit, nestedExit, compiledValue);
+            builder.addEpsilonWithWriteToParent(
+                ruleExit,
+                nestedExit,
+                compiledValue,
+            );
         } else {
             compileRuleFromStateWithSlots(
                 builder,

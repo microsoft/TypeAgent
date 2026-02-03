@@ -7,13 +7,17 @@ Comprehensive unit tests have been added in `baseGrammarPatterns.spec.ts` to ver
 ## Current Status
 
 ### Working in Runtime ✅
+
 The base grammar patterns are working correctly in the actual runtime system:
+
 - "play big red sun by lucinda williams" → MATCHED
 - Captures: `trackName="big red sun"`, `artist="lucinda williams"`
 - Action executed successfully
 
 ### Test Harness Issue ⚠️
+
 The unit tests are currently failing due to a variable capture issue in how nested rules work:
+
 - NFA matching succeeds ✅
 - Variable captures are incorrect (capturing to `x` instead of `trackName`, `artist`) ❌
 - This appears to be a difference between how the test harness calls the matching functions vs how the runtime grammarStore uses them
@@ -21,6 +25,7 @@ The unit tests are currently failing due to a variable capture issue in how nest
 ## Root Cause
 
 The player grammar defines nested rules:
+
 ```
 @ <TrackName> = $(x:string)
 @ <ArtistName> = $(x:string)
@@ -42,6 +47,7 @@ In the runtime system (grammarStore), this works correctly. In the test harness,
 ## Test Coverage
 
 The test file covers:
+
 - ✅ Player: pause/resume commands
 - ✅ Player: "play X by Y" patterns
 - ✅ Player: "play X from album Y" patterns

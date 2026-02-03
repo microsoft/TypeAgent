@@ -41,7 +41,9 @@ describe("Dynamic Grammar Loader", () => {
                 "Bohemian Rhapsody",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.actionValue?.parameters?.track).toBe("Bohemian Rhapsody");
+            expect(matchResult.actionValue?.parameters?.track).toBe(
+                "Bohemian Rhapsody",
+            );
         });
 
         it("should load a rule with multiple parameters", () => {
@@ -68,8 +70,12 @@ describe("Dynamic Grammar Loader", () => {
                 "Taylor Swift",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.actionValue?.parameters?.track).toBe("Shake It Off");
-            expect(matchResult.actionValue?.parameters?.artist).toBe("Taylor Swift");
+            expect(matchResult.actionValue?.parameters?.track).toBe(
+                "Shake It Off",
+            );
+            expect(matchResult.actionValue?.parameters?.artist).toBe(
+                "Taylor Swift",
+            );
         });
 
         it("should load a rule with optional parts", () => {
@@ -398,8 +404,12 @@ describe("Dynamic Grammar Loader", () => {
                 "Taylor Swift",
             ]);
             expect(matchResult.matched).toBe(true);
-            expect(matchResult.actionValue?.parameters?.trackName).toBe("Shake It Off");
-            expect(matchResult.actionValue?.parameters?.artist).toBe("Taylor Swift");
+            expect(matchResult.actionValue?.parameters?.trackName).toBe(
+                "Shake It Off",
+            );
+            expect(matchResult.actionValue?.parameters?.artist).toBe(
+                "Taylor Swift",
+            );
         });
 
         it("should load rules with CalendarDate symbol", () => {
@@ -426,7 +436,9 @@ describe("Dynamic Grammar Loader", () => {
             ]);
             expect(matchResult.matched).toBe(true);
             expect(matchResult.actionValue?.parameters?.event).toBe("meeting");
-            expect(matchResult.actionValue?.parameters?.date).toBeInstanceOf(Date);
+            expect(matchResult.actionValue?.parameters?.date).toBeInstanceOf(
+                Date,
+            );
         });
     });
 });

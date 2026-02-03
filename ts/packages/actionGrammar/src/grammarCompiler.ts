@@ -171,7 +171,8 @@ function createGrammarRule(context: CompileContext, rule: Rule): GrammarRule {
     if (parts.length > 1 && !value) {
         const definitionName = context.currentDefinition;
         context.errors.push({
-            message: `Multi-part production requires explicit value expression (using ->). ` +
+            message:
+                `Multi-part production requires explicit value expression (using ->). ` +
                 `This rule has ${parts.length} parts but no value mapping. ` +
                 `Either add a value expression or restructure to a single-part production.`,
             definition: definitionName,

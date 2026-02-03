@@ -421,10 +421,7 @@ export class ScenarioBasedGrammarGenerator {
     private factorizeVerbPhrases(
         actionName: string,
         patterns: Set<string>,
-    ): Map<
-        string,
-        { verbPhrases: string[]; examplePattern: string }
-    > {
+    ): Map<string, { verbPhrases: string[]; examplePattern: string }> {
         // Map from structure -> { verb phrases, example pattern }
         const structureToVerbs = new Map<
             string,
@@ -432,7 +429,8 @@ export class ScenarioBasedGrammarGenerator {
         >();
 
         for (const pattern of patterns) {
-            const { verbPhrase, structure } = this.extractPatternStructure(pattern);
+            const { verbPhrase, structure } =
+                this.extractPatternStructure(pattern);
 
             if (!structureToVerbs.has(structure)) {
                 structureToVerbs.set(structure, {
@@ -551,28 +549,18 @@ export class ScenarioBasedGrammarGenerator {
 
         // Remove/Delete category
         if (
-            [
-                "remove",
-                "delete",
-                "clear",
-                "erase",
-                "take away",
-                "cancel",
-            ].some((v) => lower.includes(v))
+            ["remove", "delete", "clear", "erase", "take away", "cancel"].some(
+                (v) => lower.includes(v),
+            )
         ) {
             return "CommonVerbs_Delete_EN";
         }
 
         // Update/Change category
         if (
-            [
-                "update",
-                "change",
-                "modify",
-                "edit",
-                "revise",
-                "adjust",
-            ].some((v) => lower.includes(v))
+            ["update", "change", "modify", "edit", "revise", "adjust"].some(
+                (v) => lower.includes(v),
+            )
         ) {
             return "CommonVerbs_Update_EN";
         }
@@ -639,9 +627,11 @@ export class ScenarioBasedGrammarGenerator {
         }
 
         // Identify and generate shared verb categories
-        const sharedVerbCategories = this.identifyCommonVerbCategories(allPatterns);
+        const sharedVerbCategories =
+            this.identifyCommonVerbCategories(allPatterns);
         if (sharedVerbCategories.size > 0) {
-            output += this.generateSharedVerbCategoryRules(sharedVerbCategories);
+            output +=
+                this.generateSharedVerbCategoryRules(sharedVerbCategories);
             output += `\n`;
         }
 
@@ -653,7 +643,10 @@ export class ScenarioBasedGrammarGenerator {
             output += `// ${actionName} - ${patterns.size} patterns\n`;
 
             // Factorize verb phrases
-            const structureToVerbs = this.factorizeVerbPhrases(actionName, patterns);
+            const structureToVerbs = this.factorizeVerbPhrases(
+                actionName,
+                patterns,
+            );
 
             // If we have multiple verb phrases for any structure, create verb phrase rules
             let structureIndex = 0;
@@ -670,12 +663,16 @@ export class ScenarioBasedGrammarGenerator {
                         sharedCategory &&
                         sharedVerbCategories.has(sharedCategory)
                     ) {
-                        const categoryInfo = sharedVerbCategories.get(sharedCategory)!;
+                        const categoryInfo =
+                            sharedVerbCategories.get(sharedCategory)!;
                         // Check if most of the verbs in this structure are in the shared category
                         const sharedVerbs = data.verbPhrases.filter((v) =>
                             categoryInfo.verbs.has(v.toLowerCase().trim()),
                         );
-                        if (sharedVerbs.length >= data.verbPhrases.length * 0.7) {
+                        if (
+                            sharedVerbs.length >=
+                            data.verbPhrases.length * 0.7
+                        ) {
                             // 70% threshold
                             // Use the shared category instead of creating action-specific rule
                             structureRules.set(structure, sharedCategory);
