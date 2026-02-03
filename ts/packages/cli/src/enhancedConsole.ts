@@ -86,7 +86,9 @@ function messageContentToText(message: MessageContent): string {
 /**
  * Start a processing spinner with the given message
  */
-export function startProcessingSpinner(message: string = "Processing..."): void {
+export function startProcessingSpinner(
+    message: string = "Processing...",
+): void {
     if (currentSpinner) {
         currentSpinner.stop();
     }
@@ -297,11 +299,12 @@ export function createEnhancedClientIO(
             process.stdout.write("\n");
             process.stdout.write(line + "\n");
 
-            const defaultHint = defaultValue === undefined
-                ? ""
-                : defaultValue
-                    ? " (default: yes)"
-                    : " (default: no)";
+            const defaultHint =
+                defaultValue === undefined
+                    ? ""
+                    : defaultValue
+                      ? " (default: yes)"
+                      : " (default: no)";
 
             const prompt = `${chalk.cyan("?")} ${message}${chalk.dim(defaultHint)} ${chalk.dim("(y/n)")} `;
 
@@ -367,10 +370,7 @@ export function createEnhancedClientIO(
 
             // Use completion menu for selection
             const menu = new CompletionMenu({ maxVisible: 8 });
-            menu.show(
-                { char: "", items, header: "Select an option" },
-                "",
-            );
+            menu.show({ char: "", items, header: "Select an option" }, "");
 
             // Since we can't do real keyboard input here, use readline
             // Show numbered options
@@ -403,7 +403,11 @@ export function createEnhancedClientIO(
             }
 
             const selectedIndex = parseInt(input, 10) - 1;
-            if (isNaN(selectedIndex) || selectedIndex < 0 || selectedIndex >= choices.length) {
+            if (
+                isNaN(selectedIndex) ||
+                selectedIndex < 0 ||
+                selectedIndex >= choices.length
+            ) {
                 return defaultId ?? 0;
             }
             return selectedIndex;
@@ -472,7 +476,9 @@ export function createEnhancedClientIO(
         },
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
-                import("open").then(({ default: open }) => open(data as string));
+                import("open").then(({ default: open }) =>
+                    open(data as string),
+                );
                 return;
             }
             throw new Error(`Action ${action} not supported`);
@@ -622,7 +628,7 @@ export async function withEnhancedConsoleClientIO(
         console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
         console.log(
             chalk.bold(" TypeAgent Interactive Mode ") +
-            chalk.dim("(Enhanced UI)"),
+                chalk.dim("(Enhanced UI)"),
         );
         console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
         console.log("");

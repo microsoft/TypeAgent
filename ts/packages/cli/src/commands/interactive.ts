@@ -67,7 +67,8 @@ export default class Interactive extends Command {
             allowNo: true,
         }),
         testUI: Flags.boolean({
-            description: "Enable enhanced terminal UI with spinners and visual prompts",
+            description:
+                "Enable enhanced terminal UI with spinners and visual prompts",
             default: false,
         }),
     };
