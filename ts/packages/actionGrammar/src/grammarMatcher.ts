@@ -409,7 +409,7 @@ function finalizeNestedRule(state: MatchState, partial: boolean = false) {
         state.valueIds = nested.valueIds;
         if (valueIds === undefined && rule.value === undefined) {
             if (nested.variable && !partial) {
-                // Should be detected by the parser
+                // Should be detected by the grammar compiler
                 throw new Error(
                     `Internal error: No value assign to variable '${nested.variable}'`,
                 );

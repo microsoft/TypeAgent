@@ -39,7 +39,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   <StringLiteral> = {{ Javascript string literal }}
  *   <NumberLiteral> = {{ Javascript number literal }}
- *   <Identifier> = <ID_Start> <ID_Continue>*
+ *   <Identifier> = <ID_Start><ID_Continue>*
  *   <ID_Start> = {{ Unicode ID_Start character }}
  *   <ID_Continue> = {{ Unicode ID_Continue character }}
  *

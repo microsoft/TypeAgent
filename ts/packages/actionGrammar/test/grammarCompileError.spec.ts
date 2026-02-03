@@ -30,6 +30,46 @@ describe("Grammar Compiler", () => {
                 "error: Missing rule definition for '<Undefined>'",
             );
         });
+
+        it("Variable reference to non-value rule", () => {
+            const grammarText = `
+            @<Start> = $(x:<Pause>)
+            @<Pause> = pause
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
+            );
+        });
+        it("Variable reference to non-value rule in nested rule", () => {
+            const grammarText = `
+            @<Start> = $(x:<Pause>)
+            @<Pause> = please <Wait>
+            @<Wait> = wait
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
+            );
+        });
+        it("Variable reference to non-value rules with multiple values", () => {
+            const grammarText = `
+            @<Start> = $(x:<Pause>)
+            @<Pause> = $(y:<Wait>) and $(z:<Stop>)
+            @<Wait> = please wait -> 1
+            @<Stop> = stop now -> 2
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
+            );
+        });
     });
     describe("Warning", () => {
         it("Unused", () => {
