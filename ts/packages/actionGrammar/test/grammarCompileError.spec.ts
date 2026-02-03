@@ -59,6 +59,7 @@ describe("Grammar Compiler", () => {
         it("Variable reference to non-value rules with multiple values", () => {
             const grammarText = `
             @<Start> = $(x:<Pause>)
+            // This rule has multiple variable references, so cannot produce a single (implicit) value
             @<Pause> = $(y:<Wait>) and $(z:<Stop>)
             @<Wait> = please wait -> 1
             @<Stop> = stop now -> 2
