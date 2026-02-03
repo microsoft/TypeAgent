@@ -79,7 +79,13 @@
 }
 
 // getList - show what's on the list
-@ <GetList> = (what's)? (show)? (me)? (my)? $(listName:wildcard) list -> {
+@ <GetList> = what's on (my)? $(listName:wildcard) (list)? -> {
+    actionName: "getList",
+    parameters: {
+        listName: $(listName)
+    }
+}
+  | (what's)? (show)? (me)? (my)? $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName: $(listName)
