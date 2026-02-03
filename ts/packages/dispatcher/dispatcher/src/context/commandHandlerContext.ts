@@ -587,14 +587,10 @@ async function setAppAgentStates(context: CommandHandlerContext) {
 
     // Only rollback if user explicitly change state.
     // Ignore the returned rollback state for initialization and keep the session setting as is.
+    // Use debug logging instead of notify for startup failures - don't bother user with unconfigured agents
 
     const rollback = processSetAppAgentStateResult(result, context, (message) =>
-        context.clientIO.notify(
-            undefined,
-            AppAgentEvent.Error,
-            message,
-            DispatcherName,
-        ),
+        debug(`Startup: ${message}`),
     );
 
     if (rollback) {

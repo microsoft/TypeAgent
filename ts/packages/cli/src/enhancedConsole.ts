@@ -25,6 +25,8 @@ import type {
     TemplateEditConfig,
 } from "agent-dispatcher";
 import chalk from "chalk";
+import fs from "fs";
+import path from "path";
 import {
     EnhancedSpinner,
     ANSI,
@@ -38,6 +40,28 @@ import { convert } from "html-to-text";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
+
+// Grammar log file path
+const grammarLogPath = path.join(
+    process.env.HOME || process.env.USERPROFILE || ".",
+    ".typeagent",
+    "grammar.log",
+);
+
+function logGrammarRule(message: string): void {
+    try {
+        // Ensure directory exists
+        const dir = path.dirname(grammarLogPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        // Append to log file with timestamp
+        const timestamp = new Date().toISOString();
+        fs.appendFileSync(grammarLogPath, `[${timestamp}] ${message}\n\n`);
+    } catch {
+        // Silently ignore logging errors
+    }
+}
 
 function displayPadEnd(content: string, length: number): string {
     return `${content}${" ".repeat(length - getDisplayWidth(content))}`;
@@ -181,6 +205,22 @@ export function createEnhancedClientIO(
             } else {
                 currentSpinner.writeAbove(displayText);
             }
+        } else if (rl) {
+            // Readline is active - write above the prompt
+            // Clear current line, write content, then let readline redraw prompt
+            readline.cursorTo(process.stdout, 0);
+            readline.clearLine(process.stdout, 0);
+            if (appendMode !== "inline") {
+                if (lastAppendMode === "inline") {
+                    process.stdout.write("\n");
+                }
+                process.stdout.write(displayText);
+                process.stdout.write("\n");
+            } else {
+                process.stdout.write(displayText);
+            }
+            // Redraw the prompt
+            rl.prompt(true);
         } else {
             if (appendMode !== "inline") {
                 if (lastAppendMode === "inline") {
@@ -457,6 +497,18 @@ export function createEnhancedClientIO(
 
                 case AppAgentEvent.Toast:
                     displayToastNotification(data, source, timestamp);
+                    break;
+
+                case "grammarRule":
+                    // Grammar rule notifications - log to file to avoid disrupting prompt
+                    // View with: cat ~/.typeagent/grammar.log
+                    if (data.success && data.rule) {
+                        logGrammarRule(`+RULE ${data.message}\n${data.rule}`);
+                    } else if (!data.success && data.rule) {
+                        logGrammarRule(
+                            `REJECTED ${data.message}\n${data.rule}`,
+                        );
+                    }
                     break;
 
                 default:

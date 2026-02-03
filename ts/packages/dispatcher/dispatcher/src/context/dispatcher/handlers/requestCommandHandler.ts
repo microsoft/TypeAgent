@@ -254,16 +254,18 @@ async function requestExplain(
             : explanationResult?.message;
         notifyExplained(error);
 
-        // Show grammar result if a new rule was added
-        if (
-            result.grammarResult?.success &&
-            result.grammarResult.generatedRule
-        ) {
-            console.log(
-                chalk.green(`[Grammar] ${result.grammarResult.message}`),
-            );
-            console.log(
-                chalk.cyan(`  Rule: ${result.grammarResult.generatedRule}`),
+        // Notify about grammar result (success or rejection)
+        if (result.grammarResult) {
+            context.clientIO.notify(
+                requestId,
+                "grammarRule",
+                {
+                    success: result.grammarResult.success,
+                    message: result.grammarResult.message,
+                    rule: result.grammarResult.generatedRule,
+                    time: new Date().toLocaleTimeString(),
+                },
+                DispatcherName,
             );
         }
     };
