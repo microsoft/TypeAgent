@@ -259,15 +259,16 @@ export class AgentGrammar {
  */
 export interface AgentMatchResult {
     matched: boolean;
-    agentId?: string; // Which agent matched
-    captures: Map<string, string | number>;
+    agentId?: string | undefined; // Which agent matched
+    actionValue?: any | undefined; // Evaluated action object from the matched rule
     // Priority counts for sorting matches
-    fixedStringPartCount?: number;
-    checkedWildcardCount?: number;
-    uncheckedWildcardCount?: number;
+    fixedStringPartCount?: number | undefined;
+    checkedWildcardCount?: number | undefined;
+    uncheckedWildcardCount?: number | undefined;
     // Debugging info
-    attemptedAgents?: string[];
+    attemptedAgents?: string[] | undefined;
     tokensConsumed?: number | undefined;
+    debugSlotMap?: Map<string, number> | undefined; // Variable name -> slot index (debug only)
 }
 
 /**
@@ -358,6 +359,13 @@ export class AgentGrammarRegistry {
     }
 
     /**
+     * Get all registered agent IDs
+     */
+    getAllAgentIds(): string[] {
+        return Array.from(this.agents.keys());
+    }
+
+    /**
      * Add dynamically generated rules to an agent's grammar
      *
      * This is the primary method for cache optimization. When grammarGenerator
@@ -415,12 +423,13 @@ export class AgentGrammarRegistry {
                 return {
                     matched: true,
                     agentId: id,
-                    captures: result.captures,
+                    actionValue: result.actionValue,
                     fixedStringPartCount: result.fixedStringPartCount,
                     checkedWildcardCount: result.checkedWildcardCount,
                     uncheckedWildcardCount: result.uncheckedWildcardCount,
                     attemptedAgents,
                     tokensConsumed: result.tokensConsumed,
+                    debugSlotMap: result.debugSlotMap,
                 };
             }
         }
@@ -428,7 +437,6 @@ export class AgentGrammarRegistry {
         // No match found
         return {
             matched: false,
-            captures: new Map(),
             attemptedAgents,
             tokensConsumed: 0,
         };

@@ -1007,4 +1007,334 @@ describe("Grammar Integration", () => {
             }
         });
     });
+
+    describe("Grammar Merging - Comprehensive Tests", () => {
+        it("should handle multi-token sequences correctly after merging", () => {
+            const grammar1Text = `
+@ <Start> = <longCommand>
+@ <longCommand> = turn on the lights -> {
+    actionName: "lightsOn",
+    parameters: {}
+}
+            `.trim();
+
+            const grammar2Text = `
+@ <Start> = <shortCommand>
+@ <shortCommand> = lights on -> {
+    actionName: "lightsOnShort",
+    parameters: {}
+}
+            `.trim();
+
+            const grammar1 = loadGrammarRules("test1", grammar1Text, []);
+
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
+            const agentGrammarRegistry = new AgentGrammarRegistry();
+
+            cache.grammarStore.addGrammar("test", grammar1!);
+            agentGrammarRegistry.registerAgent(
+                "test",
+                grammar1!,
+                compileGrammarToNFA(grammar1!, "test"),
+            );
+
+            const agent = agentGrammarRegistry.getAgent("test");
+            agent!.addGeneratedRules(grammar2Text);
+
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
+            cache.syncAgentGrammar("test");
+
+            const namespaceKeys = cache.getNamespaceKeys(["test"], undefined);
+
+            // Both multi-token sequences should match
+            const longMatches = cache.match("turn on the lights", {
+                namespaceKeys,
+            });
+            expect(longMatches.length).toBeGreaterThan(0);
+            expect(longMatches[0].match.actions[0].action.actionName).toBe(
+                "lightsOn",
+            );
+
+            const shortMatches = cache.match("lights on", { namespaceKeys });
+            expect(shortMatches.length).toBeGreaterThan(0);
+            expect(shortMatches[0].match.actions[0].action.actionName).toBe(
+                "lightsOnShort",
+            );
+
+            // Partial matches should not work
+            const partialMatches1 = cache.match("turn on", { namespaceKeys });
+            expect(partialMatches1.length).toBe(0);
+
+            const partialMatches2 = cache.match("the lights", {
+                namespaceKeys,
+            });
+            expect(partialMatches2.length).toBe(0);
+        });
+
+        it("should handle merging with parameters and wildcards", () => {
+            const staticGrammar = `
+@ <Start> = <play>
+@ <play> = play $(track:string) on $(device:string) -> {
+    actionName: "playOnDevice",
+    parameters: {
+        track: $(track),
+        device: $(device)
+    }
+}
+            `.trim();
+
+            const dynamicGrammar = `
+@ <Start> = <simplePlay>
+@ <simplePlay> = play $(track:string) -> {
+    actionName: "playSimple",
+    parameters: {
+        track: $(track)
+    }
+}
+            `.trim();
+
+            const grammar1 = loadGrammarRules("player", staticGrammar, []);
+
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
+            const agentGrammarRegistry = new AgentGrammarRegistry();
+
+            cache.grammarStore.addGrammar("player", grammar1!);
+            agentGrammarRegistry.registerAgent(
+                "player",
+                grammar1!,
+                compileGrammarToNFA(grammar1!, "player"),
+            );
+
+            const agent = agentGrammarRegistry.getAgent("player");
+            agent!.addGeneratedRules(dynamicGrammar);
+
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
+            cache.syncAgentGrammar("player");
+
+            const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
+
+            // Complex pattern with 2 parameters
+            const complexMatches = cache.match("play Mozart on speakers", {
+                namespaceKeys,
+            });
+            expect(complexMatches.length).toBeGreaterThan(0);
+            expect(complexMatches[0].match.actions[0].action.actionName).toBe(
+                "playOnDevice",
+            );
+            expect(
+                (complexMatches[0].match.actions[0].action.parameters as any)
+                    .track,
+            ).toBe("Mozart");
+            expect(
+                (complexMatches[0].match.actions[0].action.parameters as any)
+                    .device,
+            ).toBe("speakers");
+
+            // Simple pattern with 1 parameter
+            const simpleMatches = cache.match("play Beethoven", {
+                namespaceKeys,
+            });
+            expect(simpleMatches.length).toBeGreaterThan(0);
+            expect(simpleMatches[0].match.actions[0].action.actionName).toBe(
+                "playSimple",
+            );
+            expect(
+                (simpleMatches[0].match.actions[0].action.parameters as any)
+                    .track,
+            ).toBe("Beethoven");
+        });
+
+        it("should prioritize more specific patterns over general ones", () => {
+            const specificGrammar = `
+@ <Start> = <specific>
+@ <specific> = turn on kitchen lights -> {
+    actionName: "kitchenLightsOn",
+    parameters: {}
+}
+            `.trim();
+
+            const generalGrammar = `
+@ <Start> = <general>
+@ <general> = turn on $(item:string) -> {
+    actionName: "turnOn",
+    parameters: {
+        item: $(item)
+    }
+}
+            `.trim();
+
+            const grammar1 = loadGrammarRules("home", specificGrammar, []);
+
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
+            const agentGrammarRegistry = new AgentGrammarRegistry();
+
+            cache.grammarStore.addGrammar("home", grammar1!);
+            agentGrammarRegistry.registerAgent(
+                "home",
+                grammar1!,
+                compileGrammarToNFA(grammar1!, "home"),
+            );
+
+            const agent = agentGrammarRegistry.getAgent("home");
+            agent!.addGeneratedRules(generalGrammar);
+
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
+            cache.syncAgentGrammar("home");
+
+            const namespaceKeys = cache.getNamespaceKeys(["home"], undefined);
+
+            // Specific pattern should match first (higher priority due to fixed strings)
+            const matches = cache.match("turn on kitchen lights", {
+                namespaceKeys,
+            });
+            expect(matches.length).toBeGreaterThan(0);
+            // Should prefer specific over general (more fixed string parts = higher priority)
+            expect(matches[0].match.actions[0].action.actionName).toBe(
+                "kitchenLightsOn",
+            );
+        });
+
+        it("should handle multiple Start rules from different merges", () => {
+            const grammar1 = `
+@ <Start> = <cmd1>
+@ <cmd1> = command one -> { actionName: "one", parameters: {} }
+            `.trim();
+
+            const grammar2 = `
+@ <Start> = <cmd2>
+@ <cmd2> = command two -> { actionName: "two", parameters: {} }
+            `.trim();
+
+            const grammar3 = `
+@ <Start> = <cmd3>
+@ <cmd3> = command three -> { actionName: "three", parameters: {} }
+            `.trim();
+
+            const g1 = loadGrammarRules("test", grammar1, []);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
+            const agentGrammarRegistry = new AgentGrammarRegistry();
+
+            cache.grammarStore.addGrammar("test", g1!);
+            agentGrammarRegistry.registerAgent(
+                "test",
+                g1!,
+                compileGrammarToNFA(g1!, "test"),
+            );
+
+            const agent = agentGrammarRegistry.getAgent("test");
+            agent!.addGeneratedRules(grammar2);
+            agent!.addGeneratedRules(grammar3);
+
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
+            cache.syncAgentGrammar("test");
+
+            const namespaceKeys = cache.getNamespaceKeys(["test"], undefined);
+
+            // All three commands should be accessible
+            const matches1 = cache.match("command one", { namespaceKeys });
+            expect(matches1.length).toBeGreaterThan(0);
+            expect(matches1[0].match.actions[0].action.actionName).toBe("one");
+
+            const matches2 = cache.match("command two", { namespaceKeys });
+            expect(matches2.length).toBeGreaterThan(0);
+            expect(matches2[0].match.actions[0].action.actionName).toBe("two");
+
+            const matches3 = cache.match("command three", { namespaceKeys });
+            expect(matches3.length).toBeGreaterThan(0);
+            expect(matches3[0].match.actions[0].action.actionName).toBe(
+                "three",
+            );
+        });
+
+        it("should handle edge case of single token vs multi-token", () => {
+            const multiToken = `
+@ <Start> = <multi>
+@ <multi> = stop playing -> { actionName: "stop", parameters: {} }
+            `.trim();
+
+            const singleToken = `
+@ <Start> = <single>
+@ <single> = stop -> { actionName: "stopShort", parameters: {} }
+            `.trim();
+
+            const g1 = loadGrammarRules("player", multiToken, []);
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
+            const agentGrammarRegistry = new AgentGrammarRegistry();
+
+            cache.grammarStore.addGrammar("player", g1!);
+            agentGrammarRegistry.registerAgent(
+                "player",
+                g1!,
+                compileGrammarToNFA(g1!, "player"),
+            );
+
+            const agent = agentGrammarRegistry.getAgent("player");
+            agent!.addGeneratedRules(singleToken);
+
+            cache.configureGrammarGeneration(
+                agentGrammarRegistry,
+                undefined,
+                true,
+            );
+            cache.syncAgentGrammar("player");
+
+            const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
+
+            // Two-token command
+            const multiMatches = cache.match("stop playing", { namespaceKeys });
+            expect(multiMatches.length).toBeGreaterThan(0);
+            expect(multiMatches[0].match.actions[0].action.actionName).toBe(
+                "stop",
+            );
+
+            // Single-token command
+            const singleMatches = cache.match("stop", { namespaceKeys });
+            expect(singleMatches.length).toBeGreaterThan(0);
+            expect(singleMatches[0].match.actions[0].action.actionName).toBe(
+                "stopShort",
+            );
+
+            // Should NOT match partial multi-token as single token
+            // "stop" should match "stopShort", not "stop playing"
+            expect(
+                singleMatches[0].match.actions[0].action.actionName,
+            ).not.toBe("stop");
+        });
+    });
 });

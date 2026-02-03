@@ -255,7 +255,7 @@ describe("Grammar Matcher", () => {
         });
         it("nested rules - default value with str expr", () => {
             const g = `
-            @<Start> = A <Hello> world
+            @<Start> = A $(h:<Hello>) world -> $(h)
             @<Hello> = hello -> "first"
             @<Hello> = hello -> "second"
             `;
@@ -268,7 +268,7 @@ describe("Grammar Matcher", () => {
 
         it("wildcard ", () => {
             const g = `
-            @<Start> = hello $(x) world            
+            @<Start> = hello $(x) world -> $(x)
             `;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(
@@ -277,8 +277,8 @@ describe("Grammar Matcher", () => {
         });
         it("wildcard at end of nested rule", () => {
             const g = `
-            @<Start> = <Hello> world
-            @<Hello> = hello $(x)
+            @<Start> = $(h:<Hello>) world -> $(h)
+            @<Hello> = hello $(x) -> $(x)
             `;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(
@@ -288,7 +288,7 @@ describe("Grammar Matcher", () => {
 
         it("wildcard at before the nested rule", () => {
             const g = `
-            @<Start> = hello $(x) <World>
+            @<Start> = hello $(x) <World> -> $(x)
             @<World> = world
             `;
             const grammar = loadGrammarRules("test.grammar", g);

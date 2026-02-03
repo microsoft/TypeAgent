@@ -217,7 +217,8 @@ describe("GrammarStore", () => {
             });
 
             store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText:
+                    '@ <playTrack> = "play" $(track:string) -> { actionName: "playTrack", parameters: { track: $(track) } }',
                 schemaName: "player",
             });
 
