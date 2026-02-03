@@ -4,7 +4,7 @@
 import {
     LoggerSink,
     MultiSinkLogger,
-    createMongoDBLoggerSink,
+    createCosmosDBLoggerSink,
     createDebugLoggerSink,
 } from "telemetry";
 
@@ -38,7 +38,7 @@ export class PromptLogger {
         let dbLoggerSink: LoggerSink | undefined;
 
         try {
-            dbLoggerSink = createMongoDBLoggerSink("telemetrydb", "promptLogs");
+            dbLoggerSink = createCosmosDBLoggerSink("telemetrydb", "promptLogs");
         } catch (e) {
             debugPromptLogger(`DB logging disabled. ${e}`);
         }
