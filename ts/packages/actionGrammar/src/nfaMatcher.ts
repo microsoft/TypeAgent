@@ -27,6 +27,18 @@ export interface NFAGrammarMatchResult {
 }
 
 /**
+ * Strip trailing punctuation from a token (linear time)
+ */
+function stripTrailingPunctuation(token: string): string {
+    const punctuation = "?!.,;:";
+    let end = token.length;
+    while (end > 0 && punctuation.includes(token[end - 1])) {
+        end--;
+    }
+    return end === token.length ? token : token.slice(0, end);
+}
+
+/**
  * Tokenize a request string into an array of tokens
  * Simple whitespace-based tokenization for NFA matching
  * Strips trailing punctuation from tokens for better matching
@@ -35,7 +47,7 @@ export function tokenizeRequest(request: string): string[] {
     return request
         .trim()
         .split(/\s+/)
-        .map((token) => token.replace(/[?!.,;:]+$/, "")) // Strip trailing punctuation
+        .map(stripTrailingPunctuation)
         .filter((token) => token.length > 0);
 }
 
