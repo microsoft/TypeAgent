@@ -605,6 +605,10 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     const config = context.session.getConfig();
     const useNFAGrammar = config.cache.grammarSystem === "nfa";
 
+    debug(
+        `setupGrammarGeneration: grammarSystem=${config.cache.grammarSystem}, grammar=${config.cache.grammar}`,
+    );
+
     if (!useNFAGrammar || !config.cache.grammar) {
         return;
     }
@@ -729,18 +733,14 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     // Sync all registered agent grammars to the grammar store
     // This ensures agents without dynamic rules also get their base grammar in the store
     // IMPORTANT: Must happen AFTER configureGrammarGeneration so the cache knows about the registry
-    debug("Syncing all agent grammars to grammar store...");
     const registeredAgents = context.agentGrammarRegistry.getAllAgentIds();
-    debug(`Registered agents: ${registeredAgents.join(", ")}`);
+    debug(`Syncing ${registeredAgents.length} agent grammars to store`);
     for (const schemaName of registeredAgents) {
-        debug(`Syncing grammar for ${schemaName}...`);
         context.agentCache.syncAgentGrammar(schemaName);
-        debug(`Synced grammar for ${schemaName}`);
     }
 
     // Mark as initialized to prevent re-initialization
     context.grammarGenerationInitialized = true;
-
     debug("Grammar generation configured for NFA system");
 }
 

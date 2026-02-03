@@ -501,6 +501,17 @@ export class AgentCache {
                                 success: grammarResult?.success,
                                 message: grammarResult?.message,
                             });
+
+                            // Log grammar generation result
+                            if (grammarResult?.success && grammarResult.generatedRule) {
+                                console.log(
+                                    `Grammar: +RULE ${schemaName}.${actionName}\n${grammarResult.generatedRule}`,
+                                );
+                            } else if (grammarResult) {
+                                console.log(
+                                    `Grammar: REJECTED ${schemaName}.${actionName} - ${grammarResult.message}`,
+                                );
+                            }
                         } catch (genError) {
                             debug(`Error during generation: %O`, genError);
                             grammarResult = {

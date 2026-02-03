@@ -255,7 +255,10 @@ async function requestExplain(
         notifyExplained(error);
 
         // Show grammar result if a new rule was added
-        if (result.grammarResult?.success && result.grammarResult.generatedRule) {
+        if (
+            result.grammarResult?.success &&
+            result.grammarResult.generatedRule
+        ) {
             console.log(
                 chalk.green(`[Grammar] ${result.grammarResult.message}`),
             );
