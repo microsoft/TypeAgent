@@ -38,7 +38,10 @@ export class PromptLogger {
         let dbLoggerSink: LoggerSink | undefined;
 
         try {
-            dbLoggerSink = createCosmosDBLoggerSink("telemetrydb", "promptLogs");
+            dbLoggerSink = createCosmosDBLoggerSink(
+                "telemetrydb",
+                "promptLogs",
+            );
         } catch (e) {
             debugPromptLogger(`DB logging disabled. ${e}`);
         }

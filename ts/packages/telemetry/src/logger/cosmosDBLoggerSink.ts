@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import { LoggerSink, LogEvent } from "./logger.js";
-import { CosmosClient, Container, BulkOperationResult, CosmosClientOptions, PartitionKeyBuilder } from "@azure/cosmos";
+import {
+    CosmosClient,
+    Container,
+    BulkOperationResult,
+    CosmosClientOptions,
+    PartitionKeyBuilder,
+} from "@azure/cosmos";
 import registerDebug from "debug";
 import { DefaultAzureCredential } from "@azure/identity";
 import { randomUUID } from "crypto";
@@ -27,7 +33,11 @@ class CosmosDBLoggerSink implements LoggerSink {
     ) {}
 
     public logEvent(event: LogEvent) {
-        if (this.connectionString && !this.disabled && this.isEnabled?.() !== false) {
+        if (
+            this.connectionString &&
+            !this.disabled &&
+            this.isEnabled?.() !== false
+        ) {
             this.pendingEvents.push(event);
             if (this.timeout === undefined) {
                 this.timeout = setTimeout(() => this.upload(), UPLOAD_DELAY);
@@ -47,8 +57,8 @@ class CosmosDBLoggerSink implements LoggerSink {
                 if (
                     typeof e.message === "string" &&
                     (e.message.includes("Invalid key") ||
-                     e.message.includes("Unauthorized") ||
-                     e.message.includes("authorization"))
+                        e.message.includes("Unauthorized") ||
+                        e.message.includes("authorization"))
                 ) {
                     // Disable
                     if (this.onErrorDisable) {
@@ -106,9 +116,11 @@ class CosmosDBLoggerSink implements LoggerSink {
 
             try {
                 // Azure Cosmos DB requires each document to have an 'id' field
-                // We'll add it if not present and use bulk operations                
+                // We'll add it if not present and use bulk operations
                 const operations = events.map((event: any) => {
-                    const partitionKey = new PartitionKeyBuilder().addValue(event.id || randomUUID().toString()).build()
+                    const partitionKey = new PartitionKeyBuilder()
+                        .addValue(event.id || randomUUID().toString())
+                        .build();
                     return {
                         operationType: "Create" as const,
                         partitionKey: partitionKey,
@@ -119,8 +131,11 @@ class CosmosDBLoggerSink implements LoggerSink {
                     };
                 });
 
-                const result: BulkOperationResult[] = await container.items.executeBulkOperations(operations);
-                debugCosmos(`Status: ${result[0].response?.statusCode}. ${operations.length} events uploaded`);
+                const result: BulkOperationResult[] =
+                    await container.items.executeBulkOperations(operations);
+                debugCosmos(
+                    `Status: ${result[0].response?.statusCode}. ${operations.length} events uploaded`,
+                );
             } catch (e: any) {
                 if (this.pendingEvents.length !== 0) {
                     events.push(...this.pendingEvents);
