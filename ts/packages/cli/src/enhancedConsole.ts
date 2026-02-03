@@ -37,6 +37,8 @@ import {
 import { createInterface } from "readline/promises";
 import readline from "readline";
 import { convert } from "html-to-text";
+import { marked } from "marked";
+import { markedTerminal } from "marked-terminal";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -47,6 +49,45 @@ const grammarLogPath = path.join(
     ".typeagent",
     "grammar.log",
 );
+
+// Configure marked with terminal renderer for styled markdown output
+marked.use(
+    markedTerminal({
+        // Customize colors and styles for terminal output
+        code: chalk.yellow,
+        blockquote: chalk.gray.italic,
+        heading: chalk.bold.cyan,
+        firstHeading: chalk.bold.magenta,
+        strong: chalk.bold,
+        em: chalk.italic,
+        codespan: chalk.yellow,
+        del: chalk.dim.strikethrough,
+        link: chalk.blue.underline,
+        href: chalk.blue.underline,
+        listitem: chalk.reset,
+        table: chalk.reset,
+        tableHeader: chalk.bold,
+    }),
+);
+
+/**
+ * Convert markdown content to styled terminal output
+ */
+function convertMarkdownToTerminal(markdown: string): string {
+    try {
+        const result = marked.parse(markdown);
+        // marked.parse can return string or Promise<string>
+        // With markedTerminal it returns a string synchronously
+        if (typeof result === "string") {
+            return result.trim();
+        }
+        // Fallback if it somehow returns a promise
+        return markdown;
+    } catch (error) {
+        console.warn("Markdown conversion failed:", error);
+        return markdown;
+    }
+}
 
 function logGrammarRule(message: string): void {
     try {
@@ -169,11 +210,13 @@ export function createEnhancedClientIO(
     ) {
         let message: MessageContent;
         let colorFn = (s: string) => s;
+        let contentType: string = "text";
 
         if (typeof content === "string" || Array.isArray(content)) {
             message = content;
         } else {
             message = content.content;
+            contentType = content.type || "text";
             switch (content.kind) {
                 case "status":
                     colorFn = chalk.grey;
@@ -196,7 +239,22 @@ export function createEnhancedClientIO(
             }
         }
 
-        const displayText = colorFn(messageContentToText(message));
+        // Convert content based on type
+        let displayText: string;
+        const textContent =
+            typeof message === "string"
+                ? message
+                : messageContentToText(message);
+
+        if (contentType === "markdown") {
+            // Render markdown with terminal styling (already has colors from marked-terminal)
+            displayText = convertMarkdownToTerminal(textContent);
+        } else if (contentType === "html") {
+            // Convert HTML to formatted text
+            displayText = colorFn(convertHtmlToText(textContent));
+        } else {
+            displayText = colorFn(textContent);
+        }
 
         // If spinner is active, write above it
         if (currentSpinner?.isActive()) {
@@ -245,7 +303,10 @@ export function createEnhancedClientIO(
         const header = chalk.dim(`[${time}] ${source}:`);
 
         let content: string;
-        if (isHtmlContent(data)) {
+        if (isMarkdownContent(data)) {
+            const markdownContent = extractContentString(data);
+            content = convertMarkdownToTerminal(markdownContent);
+        } else if (isHtmlContent(data)) {
             const htmlContent = extractHtmlString(data);
             content = convertHtmlToText(htmlContent);
         } else {
@@ -540,6 +601,13 @@ export function createEnhancedClientIO(
 
 // Helper functions
 
+function isMarkdownContent(data: string | DisplayContent): boolean {
+    if (typeof data === "object" && data !== null && "type" in data) {
+        return data.type === "markdown";
+    }
+    return false;
+}
+
 function isHtmlContent(data: string | DisplayContent): boolean {
     if (typeof data === "object" && data !== null && "type" in data) {
         return data.type === "html";
@@ -554,6 +622,21 @@ function isHtmlContent(data: string | DisplayContent): boolean {
         }
     }
     return false;
+}
+
+function extractContentString(data: string | DisplayContent): string {
+    if (typeof data === "string") {
+        return data;
+    }
+    if (typeof data === "object" && data !== null && "content" in data) {
+        if (typeof data.content === "string") {
+            return data.content;
+        }
+        if (Array.isArray(data.content)) {
+            return data.content.join("\n");
+        }
+    }
+    return String(data);
 }
 
 function extractHtmlString(data: string | DisplayContent): string {
@@ -571,19 +654,93 @@ function extractHtmlString(data: string | DisplayContent): string {
 function convertHtmlToText(html: string): string {
     try {
         const result = convert(html, {
-            wordwrap: 80,
+            wordwrap: 100,
             preserveNewlines: false,
             selectors: [
+                // Skip images - we can't display them in terminal
+                {
+                    selector: "img",
+                    format: "skip",
+                },
+                // Skip CSS animations and loading indicators
+                {
+                    selector: ".loading",
+                    format: "skip",
+                },
+                {
+                    selector: ".wait-dot",
+                    format: "skip",
+                },
+                // Style tags should be stripped
+                {
+                    selector: "style",
+                    format: "skip",
+                },
+                // Ordered lists with proper numbering
+                {
+                    selector: "ol",
+                    format: "orderedList",
+                    options: {
+                        itemPrefix: " ",
+                    },
+                },
+                // Unordered lists
+                {
+                    selector: "ul",
+                    format: "unorderedList",
+                    options: {
+                        itemPrefix: "  • ",
+                    },
+                },
+                // List items
+                {
+                    selector: "li",
+                    format: "listItem",
+                    options: {
+                        leadingLineBreaks: 1,
+                        trailingLineBreaks: 1,
+                    },
+                },
+                // Track titles - make them stand out
+                {
+                    selector: ".track-title",
+                    format: "inline",
+                },
+                // Artist info - format as inline
+                {
+                    selector: ".track-artist",
+                    format: "inline",
+                },
+                // Track info container - format as block
+                {
+                    selector: ".track-info",
+                    format: "block",
+                    options: { leadingLineBreaks: 0, trailingLineBreaks: 0 },
+                },
+                // Track list container
+                {
+                    selector: ".track-list",
+                    format: "block",
+                    options: { leadingLineBreaks: 1, trailingLineBreaks: 1 },
+                },
+                // Album cover container - skip (images)
+                {
+                    selector: ".track-album-cover-container",
+                    format: "block",
+                    options: { leadingLineBreaks: 0, trailingLineBreaks: 0 },
+                },
+                // General div and p formatting
                 {
                     selector: "div",
                     format: "block",
-                    options: { leadingLineBreaks: 1, trailingLineBreaks: 1 },
+                    options: { leadingLineBreaks: 1, trailingLineBreaks: 0 },
                 },
                 {
                     selector: "p",
                     format: "block",
                     options: { leadingLineBreaks: 1, trailingLineBreaks: 1 },
                 },
+                // Links - show text only
                 {
                     selector: "a",
                     format: "inline",
@@ -593,10 +750,38 @@ function convertHtmlToText(html: string): string {
                         ignoreHref: true,
                     },
                 },
+                // Tables
+                {
+                    selector: "table",
+                    format: "dataTable",
+                },
+                // Spans - inline
+                {
+                    selector: "span",
+                    format: "inline",
+                },
             ],
         });
 
-        return result.replace(/\n{3,}/g, "\n\n").trim();
+        // Clean up excessive whitespace while preserving structure
+        let cleaned = result
+            .replace(/\n{3,}/g, "\n\n") // Max 2 consecutive newlines
+            .replace(/[ \t]+/g, " ") // Collapse horizontal whitespace
+            .replace(/^ +/gm, "") // Remove leading spaces on lines
+            .trim();
+
+        // Apply terminal colors for track formatting
+        // Track titles get highlighted
+        cleaned = cleaned.replace(
+            /^(\d+\.\s*)(.+?)(\s+Artists:)/gm,
+            (_, num, title, artists) =>
+                `${chalk.cyan(num)}${chalk.bold(title)}${chalk.dim(artists)}`,
+        );
+
+        // Album lines get dimmed
+        cleaned = cleaned.replace(/^(Album:.+)$/gm, chalk.dim("$1"));
+
+        return cleaned;
     } catch (error) {
         console.warn("HTML-to-text conversion failed:", error);
         return extractHtmlString(html)

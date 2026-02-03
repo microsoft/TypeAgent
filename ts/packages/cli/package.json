@@ -60,6 +60,8 @@
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
     "html-to-text": "^9.0.5",
+    "marked": "^15.0.0",
+    "marked-terminal": "^7.3.0",
     "interactive-app": "workspace:*",
     "open": "^10.1.0",
     "ts-node": "^10.9.1",
