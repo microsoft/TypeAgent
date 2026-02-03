@@ -238,15 +238,13 @@ export class AgentGrammar {
     /**
      * Extract all type names used in wildcard transitions from the NFA
      * These represent valid type references from the base grammar
-     * Returns lowercase versions for case-insensitive matching
      */
     private extractTypeNamesFromNFA(): Set<string> {
         const typeNames = new Set<string>();
         for (const state of this.nfa.states) {
             for (const transition of state.transitions) {
                 if (transition.type === "wildcard" && transition.typeName) {
-                    // Store lowercase for case-insensitive matching
-                    typeNames.add(transition.typeName.toLowerCase());
+                    typeNames.add(transition.typeName);
                 }
             }
         }
@@ -263,17 +261,12 @@ export class AgentGrammar {
             if (part.type === "wildcard" && part.typeName) {
                 // Type is valid if it's:
                 // 1. A built-in type (string, number, wildcard)
-                // 2. Registered in the global entity registry (check both cases)
-                // 3. A type name already used in the NFA (from base grammar rules) - case-insensitive
-                const typeNameLower = part.typeName.toLowerCase();
-                const typeNameCapitalized =
-                    part.typeName.charAt(0).toUpperCase() +
-                    part.typeName.slice(1).toLowerCase();
+                // 2. Registered in the global entity registry
+                // 3. A type name already used in the NFA (from base grammar rules)
                 if (
-                    !builtInTypes.has(typeNameLower) &&
+                    !builtInTypes.has(part.typeName) &&
                     !globalEntityRegistry.hasEntity(part.typeName) &&
-                    !globalEntityRegistry.hasEntity(typeNameCapitalized) &&
-                    !knownNFATypes.has(typeNameLower)
+                    !knownNFATypes.has(part.typeName)
                 ) {
                     unresolved.add(part.typeName);
                 }
