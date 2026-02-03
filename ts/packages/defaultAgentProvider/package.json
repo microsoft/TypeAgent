@@ -64,6 +64,7 @@
     "markdown-agent": "workspace:*",
     "montage-agent": "workspace:*",
     "music": "workspace:*",
+    "music-local": "workspace:*",
     "oracle-agent": "workspace:*",
     "photo-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",

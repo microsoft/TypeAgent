@@ -1,0 +1,42 @@
+{
+  "name": "music-local",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Local media player agent for TypeAgent",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/playerLocal"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/agent/localPlayerManifest.json",
+    "./agent/handlers": "./dist/agent/localPlayerHandlers.js"
+  },
+  "scripts": {
+    "agc": "agc -i ./src/agent/localPlayerSchema.agr -o ./dist/agent/localPlayerSchema.ag.json",
+    "asc": "asc -i ./src/agent/localPlayerSchema.ts -o ./dist/agent/localPlayerSchema.pas.json -t LocalPlayerActions -e LocalPlayerEntities",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
+    "chalk": "^5.4.1",
+    "debug": "^4.4.0",
+    "dotenv": "^16.3.1",
+    "play-sound": "^1.1.6"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/debug": "^4.1.12",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

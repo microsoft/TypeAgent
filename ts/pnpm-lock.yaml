@@ -2188,6 +2188,46 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/playerLocal:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../utils/commonUtils
+      chalk:
+        specifier: ^5.4.1
+        version: 5.6.2
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      play-sound:
+        specifier: ^1.1.6
+        version: 1.1.6
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/settings:
     dependencies:
       '@typeagent/agent-sdk':
@@ -3034,6 +3074,9 @@ importers:
       music:
         specifier: workspace:*
         version: link:../agents/player
+      music-local:
+        specifier: workspace:*
+        version: link:../agents/playerLocal
       oracle-agent:
         specifier: workspace:*
         version: link:../agents/oracle
@@ -9260,6 +9303,9 @@ packages:
     resolution: {integrity: sha512-Z+suHH+7LSE40WfUeZPIxSxypCWvrzdVc60xAjUShZeT5eMWM0/FQUduq3HjluyfAHWvC/aOBkT1pTZktyF/jg==}
     engines: {node: '>= 0.12'}
 
+  find-exec@1.0.3:
+    resolution: {integrity: sha512-gnG38zW90mS8hm5smNcrBnakPEt+cGJoiMkJwCU0IYnEb0H2NQk0NIljhNW+48oniCriFek/PH6QXbwsJo/qug==}
+
   find-replace@3.0.0:
     resolution: {integrity: sha512-6Tb2myMioCAgv5kfvP5/PkZZ/ntTpVK39fHY7WkWBgvbeE+VHd/tZuZ4mrC+bxh4cfOZeYKVPaJIZtZXV7GNCQ==}
     engines: {node: '>=4.0.0'}
@@ -11687,6 +11733,9 @@ packages:
 
   pkg-types@2.2.0:
     resolution: {integrity: sha512-2SM/GZGAEkPp3KWORxQZns4M+WSeXbC2HEvmOIJe3Cmiv6ieAJvdVhDldtHqM5J1Y7MrR1XhkBT/rMlhh9FdqQ==}
+
+  play-sound@1.1.6:
+    resolution: {integrity: sha512-09eO4QiXNFXJffJaOW5P6x6F5RLihpLUkXttvUZeWml0fU6x6Zp7AjG9zaeMpgH2ZNvq4GR1ytB22ddYcqJIZA==}
 
   playwright-core@1.57.0:
     resolution: {integrity: sha512-agTcKlMw/mjBWOnD6kFZttAAGHgi/Nw0CZ2o6JqWSbMlI219lAFLZZCyqByTsvVAJq5XA5H8cA6PrvBRpBWEuQ==}
@@ -20538,6 +20587,10 @@ snapshots:
     dependencies:
       user-home: 2.0.0
 
+  find-exec@1.0.3:
+    dependencies:
+      shell-quote: 1.8.1
+
   find-replace@3.0.0:
     dependencies:
       array-back: 3.1.0
@@ -23695,6 +23748,10 @@ snapshots:
       confbox: 0.2.2
       exsolve: 1.0.7
       pathe: 2.0.3
+
+  play-sound@1.1.6:
+    dependencies:
+      find-exec: 1.0.3
 
   playwright-core@1.57.0: {}
 
