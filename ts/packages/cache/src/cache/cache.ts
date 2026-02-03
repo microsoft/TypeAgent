@@ -164,7 +164,9 @@ export class AgentCache {
         this._useNFAGrammar = useNFA;
         // Enable NFA matching in the grammar store
         this._grammarStore.setUseNFA(useNFA);
-        debug(`Grammar system configured: ${useNFA ? "NFA" : "completion-based"}`);
+        debug(
+            `Grammar system configured: ${useNFA ? "NFA" : "completion-based"}`,
+        );
         if (getSchemaFilePath !== undefined) {
             this._getSchemaFilePath = getSchemaFilePath;
         }
@@ -374,7 +376,9 @@ export class AgentCache {
                     const actionName = execAction.action.actionName;
                     const parameters = execAction.action.parameters ?? {};
 
-                    debug(`Grammar gen starting for ${schemaName}.${actionName}`);
+                    debug(
+                        `Grammar gen starting for ${schemaName}.${actionName}`,
+                    );
                     debug(
                         `_getSchemaFilePath is ${this._getSchemaFilePath ? "configured" : "NOT configured"}`,
                     );
@@ -389,7 +393,9 @@ export class AgentCache {
                     } else {
                         try {
                             // Get schema file path
-                            debug(`Calling getSchemaFilePath("${schemaName}")...`);
+                            debug(
+                                `Calling getSchemaFilePath("${schemaName}")...`,
+                            );
                             const schemaPath =
                                 this._getSchemaFilePath(schemaName);
                             debug(`Schema path: ${schemaPath}`);
@@ -439,7 +445,9 @@ export class AgentCache {
                                         schemaName,
                                     );
                                 if (agentGrammar) {
-                                    debug(`Adding rule to agent grammar registry...`);
+                                    debug(
+                                        `Adding rule to agent grammar registry...`,
+                                    );
                                     const addResult =
                                         agentGrammar.addGeneratedRules(
                                             genResult.generatedRule,
@@ -468,7 +476,9 @@ export class AgentCache {
                                         };
                                     }
                                 } else {
-                                    debug(`Agent grammar not found for ${schemaName}`);
+                                    debug(
+                                        `Agent grammar not found for ${schemaName}`,
+                                    );
                                     grammarResult = {
                                         success: false,
                                         message: `Agent grammar not found for ${schemaName}`,

@@ -207,7 +207,11 @@ export class AgentGrammar {
 
     private validateEntityReferences(grammar: Grammar): string[] {
         const unresolved = new Set<string>();
-        const builtInTypes = new Set(["string", "number"]);
+        const builtInTypes = new Set(["string", "number", "wildcard"]);
+
+        // Extract known type names from the existing NFA's wildcard transitions
+        // These are valid type references since they're already used in the base grammar
+        const knownNFATypes = this.extractTypeNamesFromNFA();
 
         // Check declared entities
         if (grammar.entities) {
@@ -224,24 +228,45 @@ export class AgentGrammar {
                 rule.parts,
                 unresolved,
                 builtInTypes,
-                grammar,
+                knownNFATypes,
             );
         }
 
         return Array.from(unresolved);
     }
 
+    /**
+     * Extract all type names used in wildcard transitions from the NFA
+     * These represent valid type references from the base grammar
+     */
+    private extractTypeNamesFromNFA(): Set<string> {
+        const typeNames = new Set<string>();
+        for (const state of this.nfa.states) {
+            for (const transition of state.transitions) {
+                if (transition.type === "wildcard" && transition.typeName) {
+                    typeNames.add(transition.typeName);
+                }
+            }
+        }
+        return typeNames;
+    }
+
     private checkPartsForEntities(
         parts: any[],
         unresolved: Set<string>,
         builtInTypes: Set<string>,
-        grammar: Grammar,
+        knownNFATypes: Set<string>,
     ): void {
         for (const part of parts) {
             if (part.type === "wildcard" && part.typeName) {
+                // Type is valid if it's:
+                // 1. A built-in type (string, number, wildcard)
+                // 2. Registered in the global entity registry
+                // 3. A type name already used in the NFA (from base grammar rules)
                 if (
                     !builtInTypes.has(part.typeName) &&
-                    !globalEntityRegistry.hasEntity(part.typeName)
+                    !globalEntityRegistry.hasEntity(part.typeName) &&
+                    !knownNFATypes.has(part.typeName)
                 ) {
                     unresolved.add(part.typeName);
                 }
@@ -251,7 +276,7 @@ export class AgentGrammar {
                         nestedRule.parts,
                         unresolved,
                         builtInTypes,
-                        grammar,
+                        knownNFATypes,
                     );
                 }
             }
