@@ -3326,6 +3326,10 @@ importers:
         version: 5.4.5
 
   packages/interactiveApp:
+    dependencies:
+      string-width:
+        specifier: ^7.2.0
+        version: 7.2.0
     devDependencies:
       rimraf:
         specifier: ^6.0.1
