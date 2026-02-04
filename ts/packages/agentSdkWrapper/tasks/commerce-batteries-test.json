@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "benchmark": "commerce-batteries-test",
+    "version": "1.0",
+    "created": "2026-02-03",
+    "totalTasks": 1,
+    "description": "Test case to verify commerce tool detection and usage for shopping task"
+  },
+  "tasks": [
+    {
+      "id": "hd-batteries-001",
+      "description": "Buy AAA batteries from Home Depot",
+      "startingUrl": "https://www.homedepot.com",
+      "category": "CREATE",
+      "difficulty": "medium",
+      "metadata": {
+        "benchmark": "commerce-batteries-test",
+        "domain": "homedepot.com",
+        "requiresAuth": false,
+        "estimatedSteps": 2,
+        "tags": ["commerce", "shopping", "purchase", "batteries"],
+        "expectedTools": ["@config schema browser.commerce", "@config action browser.commerce", "buyProduct"],
+        "testObjective": "Verify planner detects commerce task and uses buyProduct tool instead of general browser automation"
+      }
+    }
+  ]
+}

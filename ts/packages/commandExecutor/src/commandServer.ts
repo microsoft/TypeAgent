@@ -434,6 +434,165 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
             },
         ],
     },
+    {
+        name: "browser",
+        description: "Browser automation agent for web navigation, interaction, and content extraction",
+        schemaSource: "export type BrowserActions = OpenWebPage | CloseWebPage | ClickOnElement | EnterTextInElement | GetHTML | ...",
+        actions: [
+            {
+                name: "openWebPage",
+                description: "Open a web page in the browser",
+                parameters: {
+                    site: {
+                        type: "string",
+                        description: "Website name, URL, or search terms",
+                    },
+                    tab: {
+                        type: "string",
+                        enum: ["new", "current", "existing"],
+                        description: "Tab to open in (optional, default: current)",
+                    },
+                },
+            },
+            {
+                name: "clickOnElement",
+                description: "Click on an element on the page",
+                parameters: {
+                    cssSelector: {
+                        type: "string",
+                        description: "CSS selector for the element to click",
+                    },
+                },
+            },
+            {
+                name: "enterTextInElement",
+                description: "Enter text into an input element",
+                parameters: {
+                    value: {
+                        type: "string",
+                        description: "Text to enter",
+                    },
+                    cssSelector: {
+                        type: "string",
+                        description: "CSS selector for the input element",
+                    },
+                    submitForm: {
+                        type: "boolean",
+                        description: "Submit form after entering text (optional)",
+                    },
+                },
+            },
+            {
+                name: "getHTML",
+                description: "Get HTML content from the current page",
+                parameters: {
+                    fullHTML: {
+                        type: "boolean",
+                        description: "Get full HTML (optional)",
+                    },
+                    extractText: {
+                        type: "boolean",
+                        description: "Extract only text content (optional)",
+                    },
+                },
+            },
+            {
+                name: "awaitPageLoad",
+                description: "Wait for page to finish loading",
+                parameters: {},
+            },
+            {
+                name: "scrollDown",
+                description: "Scroll down the page",
+                parameters: {},
+            },
+            {
+                name: "scrollUp",
+                description: "Scroll up the page",
+                parameters: {},
+            },
+            {
+                name: "goBack",
+                description: "Navigate back in browser history",
+                parameters: {},
+            },
+            {
+                name: "goForward",
+                description: "Navigate forward in browser history",
+                parameters: {},
+            },
+            {
+                name: "reloadPage",
+                description: "Reload the current page",
+                parameters: {},
+            },
+        ],
+    },
+    {
+        name: "browser.commerce",
+        description: "Commerce-specific browser actions for shopping, cart management, and reservations",
+        schemaSource: "export type ShoppingActions = ViewShoppingCart | FindNearbyStore | GetLocationInStore | BuyProduct | SearchForReservation | SelectReservation",
+        actions: [
+            {
+                name: "buyProduct",
+                description: "Complete shopping flow: search, select, and add product to cart",
+                parameters: {
+                    userRequest: {
+                        type: "string",
+                        description: "Product name or description to purchase",
+                    },
+                },
+            },
+            {
+                name: "getLocationInStore",
+                description: "Find physical location of product in store (aisle, shelf)",
+                parameters: {
+                    productName: {
+                        type: "string",
+                        description: "Name of the product to locate",
+                    },
+                },
+            },
+            {
+                name: "viewShoppingCart",
+                description: "View shopping cart contents",
+                parameters: {},
+            },
+            {
+                name: "findNearbyStore",
+                description: "Find nearest store location",
+                parameters: {},
+            },
+            {
+                name: "searchForReservation",
+                description: "Search for restaurant reservation slots",
+                parameters: {
+                    restaurantName: {
+                        type: "string",
+                        description: "Name of the restaurant",
+                    },
+                    time: {
+                        type: "string",
+                        description: "Desired time (AM/PM format)",
+                    },
+                    numberOfPeople: {
+                        type: "number",
+                        description: "Number of people (default: 1)",
+                    },
+                },
+            },
+            {
+                name: "selectReservation",
+                description: "Select and book a specific reservation time slot",
+                parameters: {
+                    time: {
+                        type: "string",
+                        description: "Time slot to book",
+                    },
+                },
+            },
+        ],
+    },
 ];
 
 /**
