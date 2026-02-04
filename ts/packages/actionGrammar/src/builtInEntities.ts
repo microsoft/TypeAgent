@@ -236,9 +236,18 @@ export const CalendarDate: EntityConverter<Date> = createConverter(
 /**
  * Register all built-in entities with the global registry
  * Call this before using grammars that reference these entities
+ *
+ * Registers both PascalCase (grammar convention) and lowercase (paramSpec convention)
+ * aliases since the schema's paramSpec uses lowercase but grammars use PascalCase
  */
 export function registerBuiltInEntities(): void {
+    // PascalCase (grammar convention)
     globalEntityRegistry.registerConverter("Ordinal", Ordinal);
     globalEntityRegistry.registerConverter("Cardinal", Cardinal);
     globalEntityRegistry.registerConverter("CalendarDate", CalendarDate);
+
+    // Lowercase aliases (paramSpec convention from .pas.json schemas)
+    globalEntityRegistry.registerConverter("ordinal", Ordinal);
+    globalEntityRegistry.registerConverter("cardinal", Cardinal);
+    globalEntityRegistry.registerConverter("calendarDate", CalendarDate);
 }

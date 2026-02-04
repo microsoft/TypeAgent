@@ -34,5 +34,5 @@ export function getStatusSummary(
                 : `${agent.emoji}:`;
         }
     }
-    return `${primary} [${Array.from(new Set(active)).join("")}]${state.details}`;
+    return `${primary}[${Array.from(new Set(active)).join("")} ]${state.details}`;
 }

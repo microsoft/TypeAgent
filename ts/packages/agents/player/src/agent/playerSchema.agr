@@ -3,6 +3,7 @@
 
 @ <Start> = <Pause>
           | <Resume>
+          | <Next>
           | <PlayCommand>
           | <SelectDevice>
 @ <Pause> = pause   ->  { actionName: "pause" }
@@ -11,6 +12,9 @@
 @ <Resume> = resume   ->  { actionName: "resume" }
            | resume music   ->  { actionName: "resume" }
            | resume the music   ->  { actionName: "resume" }
+@ <Next> = next   ->  { actionName: "nextTrack" }
+         | skip   ->  { actionName: "nextTrack" }
+         | skip <TrackTerm>   ->  { actionName: "nextTrack" }
 @ <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>
 @ <PlayTrackNumberCommand> =
     play (the)? $(n:<Ordinal>) (<Item>)? -> {

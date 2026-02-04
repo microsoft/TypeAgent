@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import registerDebug from "debug";
 import {
     Grammar,
     matchGrammar,
@@ -9,6 +10,8 @@ import {
     compileGrammarToNFA,
     matchGrammarWithNFA,
 } from "action-grammar";
+
+const debug = registerDebug("typeagent:cache:grammarStore");
 import {
     CompletionProperty,
     CompletionResult,
@@ -128,13 +131,9 @@ export class GrammarStoreImpl implements GrammarStore {
                 continue;
             }
 
-            // Debug logging for base grammar matching
             const { schemaName } = splitSchemaNamespaceKey(name);
-            console.log(
-                `[Grammar Match] Attempting to match "${request}" against ${schemaName} grammar (${this.useNFA ? "NFA" : "legacy"} mode)`,
-            );
-            console.log(
-                `  NFA states: ${entry.nfa?.states.length || 0}, grammar rules: ${entry.grammar.rules.length}`,
+            debug(
+                `Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
 
             // Use NFA matcher if available, otherwise fall back to old matcher
@@ -144,19 +143,20 @@ export class GrammarStoreImpl implements GrammarStore {
                     : matchGrammar(entry.grammar, request);
 
             if (grammarMatches.length === 0) {
-                console.log(`  → No matches found in ${schemaName} grammar`);
+                debug(`No matches in ${schemaName} grammar`);
                 continue;
             }
 
             // Log cache hit
-            console.log(
-                `[Cache HIT] "${request}" matched in ${schemaName} grammar (${this.useNFA ? "NFA" : "legacy"} mode) - ${grammarMatches.length} match(es)`,
+            debug(
+                `HIT: "${request}" matched in ${schemaName} - ${grammarMatches.length} match(es)`,
             );
 
             for (const m of grammarMatches) {
                 const action: any = m.match;
-                console.log(
-                    `  → Action: ${schemaName}.${action.actionName}, params: ${JSON.stringify(action.parameters)}`,
+                debug(
+                    `Action: ${schemaName}.${action.actionName}, params: %O`,
+                    action.parameters,
                 );
                 matches.push({
                     type: "grammar",
@@ -176,9 +176,9 @@ export class GrammarStoreImpl implements GrammarStore {
             }
         }
 
-        if (matches.length === 0) {
-            console.log(`[Cache MISS] "${request}" - no grammar matches found`);
-        }
+        debug(
+            matches.length === 0 ? `MISS: "${request}"` : `HIT: "${request}"`,
+        );
 
         return sortMatches(matches);
     }

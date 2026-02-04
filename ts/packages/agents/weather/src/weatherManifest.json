@@ -5,7 +5,7 @@
     "description": "Weather agent with actions to get current conditions, forecasts, and alerts",
     "schemaFile": "weatherSchema.ts",
     "compiledSchemaFile": "agents/weather/dist/weatherSchema.pas.json",
-    "grammarFile": "agents/weather/dist/weatherSchema.ag.json",
+    "grammarFile": "../dist/weatherSchema.ag.json",
     "schemaType": {
       "action": "WeatherAction"
     }
