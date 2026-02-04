@@ -23,7 +23,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 `,
     },
-    logLevel: "info",
+    logLevel: "warning",
     external: [
         "node:*",
         "readline/promises",

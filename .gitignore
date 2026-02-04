@@ -457,3 +457,4 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 traces/
 *.trace.json
 test-results-*.md
+ts/packages/agentSdkWrapper/plans/
