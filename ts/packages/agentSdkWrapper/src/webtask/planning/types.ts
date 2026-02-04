@@ -225,7 +225,7 @@ export interface StepExecution {
     endTime?: string;
     duration?: number;
     status: "pending" | "running" | "success" | "failure" | "skipped";
-    actualState?: PredictedPageState;
+    actualState?: any; // Can be any structure captured from browser
     stateDiff?: StateDifference;
     corrections?: Correction[];
     retryCount?: number;
@@ -273,6 +273,7 @@ export interface Correction {
         | "action-modified"
         | "action-added"
         | "action-removed"
+        | "action-ineffective"
         | "step-skipped"
         | "step-added";
     originalAction?: PlannedAction;

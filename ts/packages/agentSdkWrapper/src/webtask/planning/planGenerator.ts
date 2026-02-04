@@ -238,10 +238,21 @@ Generate ONLY valid JSON (no markdown, no explanations) following this schema:
         }
       ],
       "predictedState": {
-        "expectedUrl": "expected URL after step",
-        "expectedPageType": "type of page",
-        "expectedElements": [...],
-        "stateVariables": {...}
+        "expectedPageType": "type of page (e.g., 'search results', 'article page')",
+        "expectedElements": [
+          {
+            "role": "input|button|heading|link|form (NOT image or img)",
+            "description": "what element should be present",
+            "required": true|false
+          }
+        ],
+        "expectedContent": [
+          {
+            "location": "where to find content",
+            "containsKeywords": ["keyword1", "keyword2"]
+          }
+        ],
+        "stateVariables": {"varName": "expected value"}
       },
       "inputVariables": ["var1", "var2"],
       "outputVariables": [
@@ -295,9 +306,10 @@ ${
         ? `
 1. Be very specific with CSS selectors
 2. Include detailed rationale for each action
-3. Predict all possible page states
+3. Predict page states focusing on content and structure, NOT exact URLs
 4. Include extensive preconditions
 5. Define all intermediate variables
+6. Do NOT predict image elements (they are removed from HTML for efficiency)
 `
         : detailLevel === "minimal"
           ? `
@@ -305,12 +317,14 @@ ${
 2. Use simple, direct actions
 3. Minimal preconditions
 4. Only critical variables
+5. Ignore exact URLs and images in predictions
 `
           : `
 1. Balance detail with clarity
 2. Include key preconditions
 3. Define important variables
 4. Use control flow where needed
+5. Focus on page content/structure, not exact URLs or images
 `
 }
 

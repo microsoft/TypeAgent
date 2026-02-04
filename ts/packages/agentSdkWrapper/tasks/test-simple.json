@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "benchmark": "test",
+    "version": "1.0",
+    "created": "2026-02-02",
+    "totalTasks": 1,
+    "description": "Simple test task to verify browser connection"
+  },
+  "tasks": [
+    {
+      "id": "test-001",
+      "description": "Navigate to wikipedia.org homepage and report what you see",
+      "startingUrl": "https://www.wikipedia.org",
+      "category": "READ",
+      "difficulty": "easy",
+      "metadata": {
+        "benchmark": "test",
+        "domain": "wikipedia.org",
+        "requiresAuth": false,
+        "estimatedSteps": 1,
+        "tags": ["navigation", "simple-test"]
+      }
+    }
+  ]
+}
