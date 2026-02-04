@@ -75,7 +75,7 @@
       "exifreader",
       "keytar",
       "koffi",
-      "node-pty",
+      "protobufjs",
       "puppeteer",
       "sharp"
     ],
