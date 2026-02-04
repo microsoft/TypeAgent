@@ -84,7 +84,12 @@ export default class Prompt extends Command {
                 time = end - start;
             } else {
                 const start = performance.now();
-                const complete = await model.complete(request, undefined, undefined, PromptLogger.getInstance().logModelRequest);
+                const complete = await model.complete(
+                    request,
+                    undefined,
+                    undefined,
+                    PromptLogger.getInstance().logModelRequest,
+                );
                 const end = performance.now();
                 if (complete.success) {
                     responseText = complete.data;

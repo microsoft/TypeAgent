@@ -24,7 +24,12 @@ async function getModelCompletionResponse(
     prompt: string,
     jsonNode: any,
 ): Promise<string | undefined> {
-    const chatResponse = await chatModel.complete(prompt, undefined, undefined, PromptLogger.getInstance().logModelRequest);
+    const chatResponse = await chatModel.complete(
+        prompt,
+        undefined,
+        undefined,
+        PromptLogger.getInstance().logModelRequest,
+    );
     if (chatResponse.success) {
         const responseText = chatResponse.data;
         return responseText;

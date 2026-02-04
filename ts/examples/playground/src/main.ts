@@ -189,7 +189,12 @@ async function runPlayground(): Promise<void> {
             ),
             userMessage,
         ];
-        const chatResponse = await chatModel.complete(context, undefined, undefined, PromptLogger.getInstance().logModelRequest);
+        const chatResponse = await chatModel.complete(
+            context,
+            undefined,
+            undefined,
+            PromptLogger.getInstance().logModelRequest,
+        );
         if (chatResponse.success) {
             const responseText = chatResponse.data;
             io.writer.writeLine(responseText);

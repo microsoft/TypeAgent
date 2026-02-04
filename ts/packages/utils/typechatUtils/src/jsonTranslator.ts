@@ -141,11 +141,21 @@ export function enableJsonTranslatorStreaming<T extends object>(
     model.complete = async (prompt: string | PromptSection[]) => {
         const modelParams = getModelParams(prompt);
         if (modelParams === undefined) {
-            return originalComplete(prompt, undefined, undefined, PromptLogger.getInstance().logModelRequest);
+            return originalComplete(
+                prompt,
+                undefined,
+                undefined,
+                PromptLogger.getInstance().logModelRequest,
+            );
         }
         const { parser, usageCallback, actualPrompt } = modelParams;
         if (parser === undefined) {
-            return originalComplete(actualPrompt, usageCallback, undefined, PromptLogger.getInstance().logModelRequest);
+            return originalComplete(
+                actualPrompt,
+                usageCallback,
+                undefined,
+                PromptLogger.getInstance().logModelRequest,
+            );
         }
         const chunks = [];
         const result = await model.completeStream(actualPrompt, usageCallback);
@@ -275,7 +285,12 @@ export function createJsonTranslatorWithValidator<T extends object>(
         if (jsonSchema !== undefined) {
             debugJsonSchema(jsonSchema);
         }
-        return originalComplete(prompt, usageCallback, jsonSchema, PromptLogger.getInstance().logModelRequest);
+        return originalComplete(
+            prompt,
+            usageCallback,
+            jsonSchema,
+            PromptLogger.getInstance().logModelRequest,
+        );
     };
 
     if (ai.supportsStreaming(model)) {

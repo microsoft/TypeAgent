@@ -175,7 +175,12 @@ export class MarkdownAgent<T extends object> {
             let accumulatedContent = "";
 
             // Use the ChatModel's complete method with proper parameters
-            const response = await this.model.complete(streamingPrompt, undefined, undefined, PromptLogger.getInstance().logModelRequest);
+            const response = await this.model.complete(
+                streamingPrompt,
+                undefined,
+                undefined,
+                PromptLogger.getInstance().logModelRequest,
+            );
 
             // Extract content from response
             let content = "";
