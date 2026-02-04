@@ -126,7 +126,7 @@ describe("NFA with Real Grammars", () => {
             expect(result1.matched).toBe(true);
             // Note: The grammar captures to "x" not "deviceName" because
             // the <DeviceName> rule uses $(x:MusicDevice)
-            expect(result1.captures.get("x")).toBe("kitchen");
+            expect(result1.actionValue?.parameters?.deviceName).toBe("kitchen");
 
             // Test: "switch to bedroom"
             // TODO: This doesn't match - need to investigate grammar structure
@@ -156,6 +156,253 @@ describe("NFA with Real Grammars", () => {
                     "device",
                 ]),
             );
+        });
+
+        it("should match 'play track by artist' patterns", () => {
+            const playerGrammarPath = path.resolve(
+                __dirname,
+                "../../../agents/player/src/agent/playerSchema.agr",
+            );
+            const content = fs.readFileSync(playerGrammarPath, "utf-8");
+            const grammar = loadGrammarRules("playerSchema.agr", content);
+            const nfa = compileGrammarToNFA(grammar, "player-track-by-artist");
+
+            // Test: "play Shake It Off by Taylor Swift"
+            const result1 = matchNFA(nfa, [
+                "play",
+                "Shake",
+                "It",
+                "Off",
+                "by",
+                "Taylor",
+                "Swift",
+            ]);
+            console.log("\n--- Test: play Shake It Off by Taylor Swift ---");
+            console.log(
+                printMatchResult(result1, [
+                    "play",
+                    "Shake",
+                    "It",
+                    "Off",
+                    "by",
+                    "Taylor",
+                    "Swift",
+                ]),
+            );
+            expect(result1.matched).toBe(true);
+            expect(result1.actionValue?.parameters?.trackName).toBe(
+                "Shake It Off",
+            );
+            expect(result1.actionValue?.parameters?.artists?.[0]).toBe(
+                "Taylor Swift",
+            );
+
+            // Test: "play Big Red Sun by Lucinda Williams"
+            const result2 = matchNFA(nfa, [
+                "play",
+                "big",
+                "red",
+                "sun",
+                "by",
+                "lucinda",
+                "williams",
+            ]);
+            console.log("\n--- Test: play big red sun by lucinda williams ---");
+            console.log(
+                printMatchResult(result2, [
+                    "play",
+                    "big",
+                    "red",
+                    "sun",
+                    "by",
+                    "lucinda",
+                    "williams",
+                ]),
+            );
+            expect(result2.matched).toBe(true);
+            expect(result2.actionValue?.parameters?.trackName).toBe(
+                "big red sun",
+            );
+            expect(result2.actionValue?.parameters?.artists?.[0]).toBe(
+                "lucinda williams",
+            );
+
+            // Test: single word track and artist
+            const result3 = matchNFA(nfa, ["play", "Hello", "by", "Adele"]);
+            console.log("\n--- Test: play Hello by Adele ---");
+            console.log(
+                printMatchResult(result3, ["play", "Hello", "by", "Adele"]),
+            );
+            expect(result3.matched).toBe(true);
+            expect(result3.actionValue?.parameters?.trackName).toBe("Hello");
+            expect(result3.actionValue?.parameters?.artists?.[0]).toBe("Adele");
+        });
+
+        it("should match 'play track from album' patterns", () => {
+            const playerGrammarPath = path.resolve(
+                __dirname,
+                "../../../agents/player/src/agent/playerSchema.agr",
+            );
+            const content = fs.readFileSync(playerGrammarPath, "utf-8");
+            const grammar = loadGrammarRules("playerSchema.agr", content);
+            const nfa = compileGrammarToNFA(grammar, "player-track-from-album");
+
+            // Test: "play Shake It Off from album 1989"
+            const result1 = matchNFA(nfa, [
+                "play",
+                "Shake",
+                "It",
+                "Off",
+                "from",
+                "album",
+                "1989",
+            ]);
+            console.log("\n--- Test: play Shake It Off from album 1989 ---");
+            console.log(
+                printMatchResult(result1, [
+                    "play",
+                    "Shake",
+                    "It",
+                    "Off",
+                    "from",
+                    "album",
+                    "1989",
+                ]),
+            );
+            expect(result1.matched).toBe(true);
+            expect(result1.actionValue?.parameters?.trackName).toBe(
+                "Shake It Off",
+            );
+            expect(result1.actionValue?.parameters?.albumName).toBe("1989");
+
+            // Test: with "the" article
+            const result2 = matchNFA(nfa, [
+                "play",
+                "Bohemian",
+                "Rhapsody",
+                "from",
+                "the",
+                "album",
+                "A",
+                "Night",
+                "at",
+                "the",
+                "Opera",
+            ]);
+            console.log(
+                "\n--- Test: play Bohemian Rhapsody from the album A Night at the Opera ---",
+            );
+            console.log(
+                printMatchResult(result2, [
+                    "play",
+                    "Bohemian",
+                    "Rhapsody",
+                    "from",
+                    "the",
+                    "album",
+                    "A",
+                    "Night",
+                    "at",
+                    "the",
+                    "Opera",
+                ]),
+            );
+            expect(result2.matched).toBe(true);
+            expect(result2.actionValue?.parameters?.trackName).toBe(
+                "Bohemian Rhapsody",
+            );
+            expect(result2.actionValue?.parameters?.albumName).toBe(
+                "A Night at the Opera",
+            );
+        });
+
+        it("should match 'play track by artist from album' patterns", () => {
+            const playerGrammarPath = path.resolve(
+                __dirname,
+                "../../../agents/player/src/agent/playerSchema.agr",
+            );
+            const content = fs.readFileSync(playerGrammarPath, "utf-8");
+            const grammar = loadGrammarRules("playerSchema.agr", content);
+            const nfa = compileGrammarToNFA(
+                grammar,
+                "player-track-artist-album",
+            );
+
+            // Test: full pattern with all parameters
+            const result1 = matchNFA(nfa, [
+                "play",
+                "Shake",
+                "It",
+                "Off",
+                "by",
+                "Taylor",
+                "Swift",
+                "from",
+                "album",
+                "1989",
+            ]);
+            console.log(
+                "\n--- Test: play Shake It Off by Taylor Swift from album 1989 ---",
+            );
+            console.log(
+                printMatchResult(result1, [
+                    "play",
+                    "Shake",
+                    "It",
+                    "Off",
+                    "by",
+                    "Taylor",
+                    "Swift",
+                    "from",
+                    "album",
+                    "1989",
+                ]),
+            );
+            expect(result1.matched).toBe(true);
+            expect(result1.actionValue?.parameters?.trackName).toBe(
+                "Shake It Off",
+            );
+            expect(result1.actionValue?.parameters?.artists?.[0]).toBe(
+                "Taylor Swift",
+            );
+            expect(result1.actionValue?.parameters?.albumName).toBe("1989");
+
+            // Test: with "the" article
+            const result2 = matchNFA(nfa, [
+                "play",
+                "Yesterday",
+                "by",
+                "The",
+                "Beatles",
+                "from",
+                "the",
+                "album",
+                "Help",
+            ]);
+            console.log(
+                "\n--- Test: play Yesterday by The Beatles from the album Help ---",
+            );
+            console.log(
+                printMatchResult(result2, [
+                    "play",
+                    "Yesterday",
+                    "by",
+                    "The",
+                    "Beatles",
+                    "from",
+                    "the",
+                    "album",
+                    "Help",
+                ]),
+            );
+            expect(result2.matched).toBe(true);
+            expect(result2.actionValue?.parameters?.trackName).toBe(
+                "Yesterday",
+            );
+            expect(result2.actionValue?.parameters?.artists?.[0]).toBe(
+                "The Beatles",
+            );
+            expect(result2.actionValue?.parameters?.albumName).toBe("Help");
         });
     });
 

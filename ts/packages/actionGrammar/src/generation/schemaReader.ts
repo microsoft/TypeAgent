@@ -279,6 +279,12 @@ function getConvertersForSchema(
 /**
  * Get the wildcard type string for a parameter based on its validation info
  * This is used to generate the correct wildcard syntax in grammar rules
+ *
+ * Types:
+ * - wildcard: matches 1+ words (default for most parameters)
+ * - word: matches exactly 1 word
+ * - number: matches numeric values
+ * - EntityType: validated entity type (e.g., MusicDevice)
  */
 export function getWildcardType(info: ParameterValidationInfo): string {
     // If it's an entity type, use the entity type name (new system)
@@ -287,14 +293,14 @@ export function getWildcardType(info: ParameterValidationInfo): string {
     }
 
     // If it has a paramSpec that's not checked_wildcard, use it (old system)
-    // checked_wildcard just means "validate this string", so it maps to "string"
+    // checked_wildcard just means "validate this wildcard", so it maps to "wildcard"
     // but ordinal, number, percentage are specific types
     if (info.paramSpec && info.paramSpec !== "checked_wildcard") {
         return info.paramSpec;
     }
 
-    // Otherwise, default to string
-    return "string";
+    // Default to wildcard (matches 1+ words)
+    return "wildcard";
 }
 
 /**

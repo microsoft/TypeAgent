@@ -27,6 +27,12 @@ describe("Agent Grammar Registry", () => {
                                 typeName: "string",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: {
+                                track: { type: "variable", name: "track" },
+                            },
+                        },
                     },
                 ],
             };
@@ -36,7 +42,7 @@ describe("Agent Grammar Registry", () => {
 
             const result = agentGrammar.match(["play", "Bohemian Rhapsody"]);
             expect(result.matched).toBe(true);
-            expect(result.captures.get("track")).toBe("Bohemian Rhapsody");
+            expect(result.actionValue?.track).toBe("Bohemian Rhapsody");
         });
 
         it("should add generated rules dynamically", () => {
@@ -70,7 +76,7 @@ describe("Agent Grammar Registry", () => {
 
             const playResult = agentGrammar.match(["play", "Yesterday"]);
             expect(playResult.matched).toBe(true);
-            expect(playResult.captures.get("track")).toBe("Yesterday");
+            expect(playResult.actionValue?.parameters?.track).toBe("Yesterday");
         });
 
         it("should validate entity references in generated rules", () => {
@@ -91,7 +97,10 @@ describe("Agent Grammar Registry", () => {
 
             // Try to add rule with unresolved entity
             const invalidRule = `@ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) on $(date:UnknownEntity)`;
+@ <schedule> = schedule $(event:string) on $(date:UnknownEntity) -> {
+    actionName: "schedule",
+    parameters: { event: $(event), date: $(date) }
+}`;
 
             const result = agentGrammar.addGeneratedRules(invalidRule);
             expect(result.success).toBe(false);
@@ -118,7 +127,10 @@ describe("Agent Grammar Registry", () => {
             // Add rule with new entity declaration
             const ruleWithEntity = `entity CalendarDate;
 @ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) on $(date:CalendarDate)`;
+@ <schedule> = schedule $(event:string) on $(date:CalendarDate) -> {
+    actionName: "schedule",
+    parameters: { event: $(event), date: $(date) }
+}`;
 
             const result = agentGrammar.addGeneratedRules(ruleWithEntity);
             expect(result.success).toBe(true);
@@ -166,7 +178,7 @@ describe("Agent Grammar Registry", () => {
 
             // Add first rule - simpler format like in cache hit workflow test
             const firstRule = `@ <Start> = <play>
-@ <play> = play $(track:string)`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: $(track) } }`;
 
             const firstResult = agentGrammar.addGeneratedRules(firstRule);
             expect(firstResult.success).toBe(true);
@@ -181,7 +193,7 @@ describe("Agent Grammar Registry", () => {
             // Test matching with new rule
             const trackMatch = agentGrammar.match(["play", "Yesterday"]);
             expect(trackMatch.matched).toBe(true);
-            expect(trackMatch.captures.get("track")).toBe("Yesterday");
+            expect(trackMatch.actionValue?.parameters?.track).toBe("Yesterday");
 
             // Add second rule
             const secondRule = `@ <Start> = <resume>
@@ -254,7 +266,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should register agents from text", () => {
             const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string)`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: $(track) } }`;
 
             const result = registry.registerAgentFromText("player", agrText);
 
@@ -305,7 +317,7 @@ describe("Agent Grammar Registry", () => {
             registry.registerAgent("player", baseGrammar);
 
             const generatedRule = `@ <Start> = <play>
-@ <play> = play $(track:string)`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: $(track) } }`;
 
             const result = registry.addGeneratedRules("player", generatedRule);
             expect(result.success).toBe(true);
@@ -337,6 +349,12 @@ describe("Agent Grammar Registry", () => {
                                 typeName: "string",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: {
+                                track: { type: "variable", name: "track" },
+                            },
+                        },
                     },
                 ],
             };
@@ -354,6 +372,12 @@ describe("Agent Grammar Registry", () => {
                                 typeName: "string",
                             },
                         ],
+                        value: {
+                            type: "object",
+                            value: {
+                                event: { type: "variable", name: "event" },
+                            },
+                        },
                     },
                 ],
             };
@@ -366,9 +390,7 @@ describe("Agent Grammar Registry", () => {
             ]);
             expect(playerResult.matched).toBe(true);
             expect(playerResult.agentId).toBe("player");
-            expect(playerResult.captures.get("track")).toBe(
-                "Bohemian Rhapsody",
-            );
+            expect(playerResult.actionValue?.track).toBe("Bohemian Rhapsody");
 
             // Test calendar match
             const calendarResult = registry.matchAcrossAgents([
@@ -377,7 +399,7 @@ describe("Agent Grammar Registry", () => {
             ]);
             expect(calendarResult.matched).toBe(true);
             expect(calendarResult.agentId).toBe("calendar");
-            expect(calendarResult.captures.get("event")).toBe("meeting");
+            expect(calendarResult.actionValue?.event).toBe("meeting");
         });
 
         it("should match against specific agents", () => {
@@ -501,7 +523,7 @@ describe("Agent Grammar Registry", () => {
             const secondTry = registry.matchAcrossAgents(["play", "Yesterday"]);
             expect(secondTry.matched).toBe(true);
             expect(secondTry.agentId).toBe("player");
-            expect(secondTry.captures.get("track")).toBe("Yesterday");
+            expect(secondTry.actionValue?.parameters?.track).toBe("Yesterday");
         });
     });
 });

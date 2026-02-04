@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "fs";
-import { InteractiveIo, getInteractiveIO } from "./InteractiveIo";
+import { InteractiveIo, getInteractiveIO } from "./InteractiveIo.js";
 import { exit } from "process";
 import readline from "readline";
 import path from "path";
@@ -993,7 +993,7 @@ export function displayCommands(
     io.writer.writeRecord(
         handlers,
         true,
-        (v) => getDescription(v) ?? "",
+        (v: CommandHandler) => getDescription(v) ?? "",
         indent,
     );
 }
@@ -1053,7 +1053,7 @@ function displayArgs(
     io.writer.writeRecord(
         args,
         true,
-        (v) => {
+        (v: ArgDef) => {
             let text = v.description;
             if (v.defaultValue !== undefined) {
                 const defText = `(default): ${v.defaultValue}`;

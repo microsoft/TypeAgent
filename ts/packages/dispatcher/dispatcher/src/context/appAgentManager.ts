@@ -325,60 +325,77 @@ export class AppAgentManager implements ActionConfigProvider {
                 }
 
                 if (actionGrammarStore) {
+                    let g: Grammar | undefined = undefined;
+
                     try {
-                        const g = loadGrammar(config);
-                        if (g) {
-                            debug(`Adding grammar for schema: ${schemaName}`);
-                            actionGrammarStore.addGrammar(schemaName, g);
-
-                            // Also add to NFA grammar registry if using NFA system
-                            if (useNFAGrammar && agentGrammarRegistry) {
-                                try {
-                                    // Enrich grammar with checked variables from .pas.json if available
-                                    if (config.compiledSchemaFilePath) {
-                                        try {
-                                            const pasJsonPath =
-                                                getPackageFilePath(
-                                                    config.compiledSchemaFilePath,
-                                                );
-                                            enrichGrammarWithCheckedVariables(
-                                                g,
-                                                pasJsonPath,
-                                            );
-                                            debug(
-                                                `Enriched grammar with checked variables for schema: ${schemaName}`,
-                                            );
-                                        } catch (enrichError) {
-                                            debug(
-                                                `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
-                                            );
-                                        }
-                                    }
-
-                                    const nfa = compileGrammarToNFA(
-                                        g,
-                                        schemaName,
-                                    );
-                                    agentGrammarRegistry.registerAgent(
-                                        schemaName,
-                                        g,
-                                        nfa,
-                                    );
-                                    debug(
-                                        `Added NFA grammar for schema: ${schemaName}`,
-                                    );
-                                } catch (nfaError) {
-                                    debugError(
-                                        `Failed to compile NFA for schema: ${schemaName}\n${nfaError}`,
-                                    );
-                                }
-                            }
-                        }
+                        g = loadGrammar(config);
                     } catch (e) {
-                        // REVIEW: Ignore errors for now.
+                        // Grammar file doesn't exist or failed to load
                         debugError(
                             `Failed to load grammar for schema: ${schemaName}\n${e}`,
                         );
+                    }
+
+                    // If no grammar file exists but we're using NFA system, create an empty grammar
+                    // This allows dynamic grammar generation to work for agents without pre-existing grammars
+                    if (!g && useNFAGrammar && agentGrammarRegistry) {
+                        debug(
+                            `No grammar file found for ${schemaName}, creating empty grammar for dynamic generation`,
+                        );
+                        g = { rules: [] };
+                    }
+
+                    if (g) {
+                        // In NFA mode, only add to agentGrammarRegistry (not actionGrammarStore)
+                        // The merged grammar will be synced to the store later via syncAgentGrammar
+                        if (useNFAGrammar && agentGrammarRegistry) {
+                            debug(
+                                `Adding grammar to NFA registry for schema: ${schemaName}`,
+                            );
+                        } else {
+                            // In non-NFA mode, add directly to grammar store
+                            debug(`Adding grammar for schema: ${schemaName}`);
+                            actionGrammarStore.addGrammar(schemaName, g);
+                        }
+
+                        // Add to NFA grammar registry if using NFA system
+                        if (useNFAGrammar && agentGrammarRegistry) {
+                            try {
+                                // Enrich grammar with checked variables from .pas.json if available
+                                if (config.compiledSchemaFilePath) {
+                                    try {
+                                        const pasJsonPath = getPackageFilePath(
+                                            config.compiledSchemaFilePath,
+                                        );
+                                        enrichGrammarWithCheckedVariables(
+                                            g,
+                                            pasJsonPath,
+                                        );
+                                        debug(
+                                            `Enriched grammar with checked variables for schema: ${schemaName}`,
+                                        );
+                                    } catch (enrichError) {
+                                        debug(
+                                            `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
+                                        );
+                                    }
+                                }
+
+                                const nfa = compileGrammarToNFA(g, schemaName);
+                                agentGrammarRegistry.registerAgent(
+                                    schemaName,
+                                    g,
+                                    nfa,
+                                );
+                                debug(
+                                    `Added NFA grammar for schema: ${schemaName} (${g.rules.length} rules)`,
+                                );
+                            } catch (nfaError) {
+                                debugError(
+                                    `Failed to compile NFA for schema: ${schemaName}\n${nfaError}`,
+                                );
+                            }
+                        }
                     }
                 }
             } catch (e: any) {

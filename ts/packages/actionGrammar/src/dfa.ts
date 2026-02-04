@@ -6,13 +6,60 @@
  *
  * The DFA is compiled from an NFA using subset construction while preserving:
  * 1. Priority information for rule ranking
- * 2. Variable bindings for captures
+ * 2. Slot-based variable bindings for captures (environment slots, not captures map)
  * 3. Completion support for prefix matching
  *
  * Each DFA state represents a set of NFA configurations (NFA states + execution context).
  * Transitions are deterministic, but we track multiple execution contexts within each state
  * to maintain variable bindings and priorities from all possible NFA paths.
+ *
+ * Slot-Based Environment System:
+ * - Variables are compiled to slot indices at NFA compile time
+ * - Wildcard transitions write captured values to env.slots[slotIndex]
+ * - Accept states evaluate compiled value expressions using env.slots
+ * - Nested rules push/pop environments, with writeToParent for result passing
  */
+
+/**
+ * Slot operation types for DFA transitions
+ *
+ * A single DFA transition may span multiple NFA transitions (via epsilon closure),
+ * so it can perform multiple slot operations:
+ * - pushEnv: Enter a nested rule, push new environment onto stack
+ * - writeSlot: Write a captured value to a slot
+ * - evalAndWriteToParent: Exit nested rule, evaluate actionValue and write to parent slot
+ * - popEnv: Pop environment from stack (after write to parent)
+ */
+export type DFASlotOpType =
+    | "pushEnv"
+    | "writeSlot"
+    | "evalAndWriteToParent"
+    | "popEnv";
+
+/**
+ * A slot operation to be executed during a DFA transition
+ */
+export interface DFASlotOperation {
+    type: DFASlotOpType;
+
+    /** For pushEnv: number of slots to allocate */
+    slotCount?: number | undefined;
+
+    /** For pushEnv: slot in parent where result will be written */
+    parentSlotIndex?: number | undefined;
+
+    /** For writeSlot: which slot to write to */
+    slotIndex?: number | undefined;
+
+    /** For writeSlot: if true, append to existing value (multi-word wildcards) */
+    append?: boolean | undefined;
+
+    /** For evalAndWriteToParent: the compiled value expression to evaluate */
+    valueExpr?: any | undefined;
+
+    /** For debugging: variable name associated with this slot */
+    debugVariable?: string | undefined;
+}
 
 /**
  * An execution context tracks the NFA state set and runtime information
@@ -21,9 +68,6 @@
 export interface DFAExecutionContext {
     /** Set of NFA state IDs represented by this context */
     nfaStateIds: Set<number>;
-
-    /** Variable captures accumulated on this path */
-    captures: Map<string, { variable: string; typeName?: string }>;
 
     /** Priority counts for ranking this path */
     priority: {
@@ -34,10 +78,20 @@ export interface DFAExecutionContext {
 
     /** Rule index this context represents (from the original Grammar.rules array) */
     ruleIndex?: number | undefined;
+
+    /** Slot operations accumulated from epsilon closure leading to this context */
+    slotOps?: DFASlotOperation[] | undefined;
+
+    /** For debugging: map of variable names to slot indices */
+    debugSlotMap?: Map<string, number> | undefined;
 }
 
 /**
  * A DFA transition maps input tokens to destination states
+ *
+ * Slot operations are organized into:
+ * - preOps: Operations from epsilon closure BEFORE consuming the token
+ * - postOps: Operations from epsilon closure AFTER consuming the token
  */
 export interface DFATransition {
     /** Specific token that triggers this transition */
@@ -45,20 +99,42 @@ export interface DFATransition {
 
     /** Destination DFA state ID */
     to: number;
+
+    /** Slot operations to execute before consuming the token (from epsilon closure) */
+    preOps?: DFASlotOperation[] | undefined;
+
+    /** Slot operations to execute after consuming the token (from epsilon closure) */
+    postOps?: DFASlotOperation[] | undefined;
 }
 
 /**
  * Wildcard transition that matches any token not matched by specific transitions
+ *
+ * Slot operations are organized into:
+ * - preOps: Operations from epsilon closure BEFORE consuming the token
+ * - consumeOp: The slot write for the captured wildcard value
+ * - postOps: Operations from epsilon closure AFTER consuming the token
  */
 export interface DFAWildcardTransition {
     /** Destination DFA state ID */
     to: number;
 
-    /** Variables that could be captured by this wildcard, with their contexts */
+    /** Slot operations to execute before consuming the token (from epsilon closure) */
+    preOps?: DFASlotOperation[] | undefined;
+
+    /** The slot write operation for the captured wildcard value */
+    consumeOp?: DFASlotOperation | undefined;
+
+    /** Slot operations to execute after consuming the token (from epsilon closure) */
+    postOps?: DFASlotOperation[] | undefined;
+
+    /** Variables that could be captured by this wildcard, with their contexts (for completion/debugging) */
     captureInfo: Array<{
         variable: string;
         typeName?: string;
         checked: boolean;
+        /** Slot index where this variable is written */
+        slotIndex?: number | undefined;
         /** Which execution contexts this capture applies to */
         contextIndices: number[];
     }>;
@@ -94,6 +170,23 @@ export interface DFAState {
         /** Index of the context with this priority */
         contextIndex: number;
     };
+
+    /**
+     * If accepting, the compiled action value expression to evaluate
+     * This produces the final action object using env.slots
+     */
+    actionValue?: any | undefined;
+
+    /**
+     * Number of slots in the environment for this accepting state
+     * Used for environment initialization
+     */
+    slotCount?: number | undefined;
+
+    /**
+     * For debugging: map of variable names to slot indices
+     */
+    debugSlotMap?: Map<string, number> | undefined;
 }
 
 /**
@@ -175,13 +268,26 @@ export class DFABuilder {
     /**
      * Add a token transition from one state to another
      */
-    addTransition(from: number, token: string, to: number): void {
+    addTransition(
+        from: number,
+        token: string,
+        to: number,
+        preOps?: DFASlotOperation[],
+        postOps?: DFASlotOperation[],
+    ): void {
         const state = this.states[from];
         if (!state) {
             throw new Error(`State ${from} does not exist`);
         }
 
-        state.transitions.push({ token, to });
+        const transition: DFATransition = { token, to };
+        if (preOps && preOps.length > 0) {
+            transition.preOps = preOps;
+        }
+        if (postOps && postOps.length > 0) {
+            transition.postOps = postOps;
+        }
+        state.transitions.push(transition);
     }
 
     /**
@@ -191,13 +297,50 @@ export class DFABuilder {
         from: number,
         to: number,
         captureInfo: DFAWildcardTransition["captureInfo"],
+        preOps?: DFASlotOperation[],
+        consumeOp?: DFASlotOperation,
+        postOps?: DFASlotOperation[],
     ): void {
         const state = this.states[from];
         if (!state) {
             throw new Error(`State ${from} does not exist`);
         }
 
-        state.wildcardTransition = { to, captureInfo };
+        const wildcardTransition: DFAWildcardTransition = { to, captureInfo };
+        if (preOps && preOps.length > 0) {
+            wildcardTransition.preOps = preOps;
+        }
+        if (consumeOp) {
+            wildcardTransition.consumeOp = consumeOp;
+        }
+        if (postOps && postOps.length > 0) {
+            wildcardTransition.postOps = postOps;
+        }
+        state.wildcardTransition = wildcardTransition;
+    }
+
+    /**
+     * Set action value and slot info on an accepting state
+     */
+    setAcceptingStateInfo(
+        stateId: number,
+        actionValue: any | undefined,
+        slotCount?: number,
+        debugSlotMap?: Map<string, number>,
+    ): void {
+        const state = this.states[stateId];
+        if (!state) {
+            throw new Error(`State ${stateId} does not exist`);
+        }
+        if (actionValue !== undefined) {
+            state.actionValue = actionValue;
+        }
+        if (slotCount !== undefined) {
+            state.slotCount = slotCount;
+        }
+        if (debugSlotMap !== undefined) {
+            state.debugSlotMap = debugSlotMap;
+        }
     }
 
     /**

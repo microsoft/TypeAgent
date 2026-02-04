@@ -3,8 +3,9 @@
   "description": "Agent to get weather information including current conditions, forecasts, and alerts",
   "schema": {
     "description": "Weather agent with actions to get current conditions, forecasts, and alerts",
-    "schemaFile": "../dist/weatherSchema.pas.json",
-    "originalSchemaFile": "weatherSchema.ts",
+    "schemaFile": "weatherSchema.ts",
+    "compiledSchemaFile": "agents/weather/dist/weatherSchema.pas.json",
+    "grammarFile": "agents/weather/dist/weatherSchema.ag.json",
     "schemaType": {
       "action": "WeatherAction"
     }
