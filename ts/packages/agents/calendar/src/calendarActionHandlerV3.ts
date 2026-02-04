@@ -477,8 +477,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
 export function instantiate(): AppAgent {
     const handler = new CalendarActionHandlerV3();
     return {
-        initializeAgentContext: (...args) =>
-            handler.initializeAgentContext(...args),
+        initializeAgentContext: () =>
+            handler.initializeAgentContext(),
         updateAgentContext: (enable: boolean, context: SessionContext<CalendarActionContext>) =>
             handler.updateAgentContext(enable, context),
         executeAction: (action: AppAction, context: ActionContext<CalendarActionContext>) =>
