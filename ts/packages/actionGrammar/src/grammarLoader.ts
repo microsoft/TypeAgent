@@ -37,7 +37,11 @@ export function loadGrammarRules(
     warnings?: string[],
 ): Grammar | undefined {
     const parseResult = parseGrammarRules(fileName, content);
-    const result = compileGrammar(parseResult.definitions, start);
+    const result = compileGrammar(
+        parseResult.definitions,
+        start,
+        parseResult.imports,
+    );
 
     if (result.warnings.length > 0 && warnings !== undefined) {
         warnings.push(

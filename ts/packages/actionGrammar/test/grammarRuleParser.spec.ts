@@ -708,7 +708,9 @@ describe("Grammar Rule Parser", () => {
             const grammar = "<greeting> = hello";
             expect(() =>
                 testParamGrammarRules("test.grammar", grammar),
-            ).toThrow("Expected 'entity' declaration or '@' rule definition");
+            ).toThrow(
+                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
+            );
         });
 
         it("should throw error for malformed rule name", () => {
@@ -902,6 +904,68 @@ describe("Grammar Rule Parser", () => {
                 expect(value.type).toBe("object");
                 expect(value.value.intent).toBeDefined();
             });
+        });
+    });
+
+    describe("Import Statements", () => {
+        it("parse granular import statement", () => {
+            const grammar = '@import { Name1, Name2 } from "file.grammar"';
+            const result = parseGrammarRules("test.grammar", grammar, false);
+
+            expect(result.imports).toHaveLength(1);
+            expect(result.imports[0].names).toEqual(["Name1", "Name2"]);
+            expect(result.imports[0].source).toBe("file.grammar");
+        });
+
+        it("parse wildcard import statement", () => {
+            const grammar = '@import * from "file.grammar"';
+            const result = parseGrammarRules("test.grammar", grammar, false);
+
+            expect(result.imports).toHaveLength(1);
+            expect(result.imports[0].names).toBe("*");
+            expect(result.imports[0].source).toBe("file.grammar");
+        });
+
+        it("parse multiple import statements", () => {
+            const grammar = `
+                @import { Action1, Action2 } from "actions.grammar"
+                @import * from "types.ts"
+                @import { Helper } from "helpers.grammar"
+            `;
+            const result = parseGrammarRules("test.grammar", grammar, false);
+
+            expect(result.imports).toHaveLength(3);
+            expect(result.imports[0].names).toEqual(["Action1", "Action2"]);
+            expect(result.imports[0].source).toBe("actions.grammar");
+            expect(result.imports[1].names).toBe("*");
+            expect(result.imports[1].source).toBe("types.ts");
+            expect(result.imports[2].names).toEqual(["Helper"]);
+            expect(result.imports[2].source).toBe("helpers.grammar");
+        });
+
+        it("parse imports with grammar rules", () => {
+            const grammar = `
+                @import { BaseRule } from "base.grammar"
+
+                @<Start> = <BaseRule> world
+                @<BaseRule> = hello
+            `;
+            const result = parseGrammarRules("test.grammar", grammar, false);
+
+            expect(result.imports).toHaveLength(1);
+            expect(result.imports[0].names).toEqual(["BaseRule"]);
+            expect(result.definitions).toHaveLength(2);
+            expect(result.definitions[0].name).toBe("Start");
+            expect(result.definitions[1].name).toBe("BaseRule");
+        });
+
+        it("parse single name import", () => {
+            const grammar = '@import { SingleName } from "file.grammar"';
+            const result = parseGrammarRules("test.grammar", grammar, false);
+
+            expect(result.imports).toHaveLength(1);
+            expect(result.imports[0].names).toEqual(["SingleName"]);
+            expect(result.imports[0].source).toBe("file.grammar");
         });
     });
 });

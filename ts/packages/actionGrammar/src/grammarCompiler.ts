@@ -7,7 +7,7 @@ import {
     GrammarRule,
     StringPart,
 } from "./grammarTypes.js";
-import { Rule, RuleDefinition } from "./grammarRuleParser.js";
+import { Rule, RuleDefinition, ImportStatement } from "./grammarRuleParser.js";
 
 type DefinitionMap = Map<
     string,
@@ -33,6 +33,7 @@ export type GrammarCompileError = {
 
 type CompileContext = {
     ruleDefMap: DefinitionMap;
+    importedNames: Set<string>; // Names imported from other files
     currentDefinition?: string | undefined;
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
@@ -41,10 +42,30 @@ type CompileContext = {
 export function compileGrammar(
     definitions: RuleDefinition[],
     start: string,
+    imports?: ImportStatement[],
 ): GrammarCompileResult {
     const ruleDefMap: DefinitionMap = new Map();
+
+    // Build set of imported names
+    const importedNames = new Set<string>();
+    if (imports) {
+        for (const importStmt of imports) {
+            if (importStmt.names === "*") {
+                // For wildcard imports, we can't know all names at compile time
+                // They will be validated at runtime instead
+                // Mark with a special sentinel to indicate wildcard import
+                importedNames.add("*");
+            } else {
+                for (const name of importStmt.names) {
+                    importedNames.add(name);
+                }
+            }
+        }
+    }
+
     const context: CompileContext = {
         ruleDefMap,
+        importedNames,
         errors: [],
         warnings: [],
     };
@@ -93,11 +114,17 @@ function createNamedGrammarRules(
 ): GrammarRule[] {
     const record = context.ruleDefMap.get(name);
     if (record === undefined) {
-        context.errors.push({
-            message: `Missing rule definition for '<${name}>'`,
-            definition: context.currentDefinition,
-            pos,
-        });
+        // Check if this name is imported
+        const isImported =
+            context.importedNames.has(name) || context.importedNames.has("*");
+
+        if (!isImported) {
+            context.errors.push({
+                message: `Missing rule definition for '<${name}>'`,
+                definition: context.currentDefinition,
+                pos,
+            });
+        }
         context.ruleDefMap.set(name, emptyRecord);
         return emptyRecord.grammarRules;
     }
@@ -179,6 +206,8 @@ function createGrammarRule(
                         optional: expr.optional,
                     });
                 } else {
+                    // Note: Type names (including imported types from action schemas)
+                    // are not validated at compile time. They will be validated at runtime.
                     parts.push({
                         type: "wildcard",
                         variable: name,
