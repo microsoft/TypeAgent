@@ -21,7 +21,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "conversation-memory": "workspace:*",
     "dotenv": "^16.3.1",
     "examples-lib": "workspace:*",
