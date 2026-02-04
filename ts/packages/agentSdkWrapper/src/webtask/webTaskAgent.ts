@@ -8,6 +8,7 @@ import { TraceCollectorOptions } from "./tracing/types.js";
 import { PlanGenerator } from "./planning/planGenerator.js";
 import { PlanExecutor } from "./planning/planExecutor.js";
 import { PlanSerializer } from "./planning/planSerializer.js";
+import { ExecutionPlan } from "./planning/types.js";
 
 /**
  * Task execution options
@@ -243,6 +244,152 @@ export class WebTaskAgent {
     }
 
     /**
+     * Execute a single step with the subagent and capture state
+     * Used by PlanExecutor to execute individual plan steps
+     */
+    async executeStep(
+        stepPrompt: string,
+        tracer?: TraceCollector | undefined,
+    ): Promise<{
+        success: boolean;
+        response: string;
+        capturedUrl?: string;
+        toolCalls: Array<{ name: string; input: any; result: any }>;
+    }> {
+        const queryOptions: Options = {
+            ...this.options,
+            continue: !this.isFirstQuery,
+        };
+
+        if (this.isFirstQuery) {
+            this.isFirstQuery = false;
+        }
+
+        const queryInstance = query({
+            prompt: stepPrompt,
+            options: queryOptions,
+        });
+
+        let finalResponse = "";
+        let capturedUrl: string | undefined;
+        const toolCalls: Array<{ name: string; input: any; result: any }> = [];
+
+        // Track pending tool calls for result matching
+        const pendingToolCalls = new Map<
+            string,
+            { name: string; input: any }
+        >();
+
+        for await (const message of queryInstance) {
+            if (message.type === "result") {
+                if (message.subtype === "success") {
+                    finalResponse = message.result || "";
+                }
+                break;
+            } else if (message.type === "assistant") {
+                const msg = message.message;
+
+                // Record thinking in tracer
+                if (tracer) {
+                    tracer.recordThinking(msg);
+                }
+
+                if (msg.content) {
+                    for (const block of msg.content) {
+                        if (block.type === "text") {
+                            finalResponse += block.text;
+                        } else if (block.type === "tool_use") {
+                            // Track tool call
+                            pendingToolCalls.set(block.id, {
+                                name: block.name,
+                                input: block.input,
+                            });
+
+                            // Record in tracer
+                            if (tracer) {
+                                tracer.recordToolCall(
+                                    block.id,
+                                    block.name,
+                                    block.input,
+                                );
+                            }
+                        }
+                    }
+                }
+            } else if (message.type === "user") {
+                // Tool results
+                const msg = (message as any).message;
+                if (msg && msg.content) {
+                    for (const block of msg.content) {
+                        if (block.type === "tool_result") {
+                            const toolUseId = block.tool_use_id;
+                            let content = "";
+                            const isError = block.is_error || false;
+
+                            // Extract content
+                            if (Array.isArray(block.content)) {
+                                for (const contentBlock of block.content) {
+                                    if (contentBlock.type === "text") {
+                                        content += contentBlock.text;
+                                    }
+                                }
+                            } else if (typeof block.content === "string") {
+                                content = block.content;
+                            }
+
+                            // Record in tracer
+                            if (tracer) {
+                                await tracer.recordToolResult(
+                                    toolUseId,
+                                    content,
+                                    isError,
+                                );
+                            }
+
+                            // Extract URL from getCurrentUrl results
+                            const toolInfo = pendingToolCalls.get(toolUseId);
+                            if (toolInfo && toolInfo.name === "getCurrentUrl") {
+                                const urlMatch = content.match(
+                                    /Current URL:\s*(https?:\/\/[^\s\n]+)/i,
+                                );
+                                if (urlMatch) {
+                                    capturedUrl = urlMatch[1];
+                                }
+                            }
+
+                            // Store tool call result
+                            if (toolInfo) {
+                                toolCalls.push({
+                                    name: toolInfo.name,
+                                    input: toolInfo.input,
+                                    result: content,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        const result: {
+            success: boolean;
+            response: string;
+            capturedUrl?: string;
+            toolCalls: Array<{ name: string; input: any; result: any }>;
+        } = {
+            success: true,
+            response: finalResponse,
+            toolCalls,
+        };
+
+        if (capturedUrl !== undefined) {
+            result.capturedUrl = capturedUrl;
+        }
+
+        return result;
+    }
+
+    /**
      * Execute task with explicit planning and learning
      */
     private async executeTaskWithPlanning(
@@ -277,20 +424,34 @@ export class WebTaskAgent {
         }
 
         try {
-            // STEP 1: GENERATE INITIAL PLAN
-            console.log(`[Planning] Generating execution plan...`);
-            const planner = new PlanGenerator(this.options);
-            const originalPlan = await planner.generatePlan(task, {
-                detailLevel: execOptions.planDetailLevel || "standard",
-                includeControlFlow: true,
-            });
-
-            console.log(
-                `[Planning] Generated plan with ${originalPlan.steps.length} steps`,
-            );
-
-            // Save original plan
+            // STEP 1: LOAD OR GENERATE PLAN
             const serializer = new PlanSerializer();
+            let originalPlan: ExecutionPlan;
+            let usingCachedPlan = false;
+
+            // Check for existing plan
+            const existingPlan = await serializer.loadExistingPlan(task.id);
+
+            if (existingPlan) {
+                console.log(
+                    `[Planning] Using existing plan v${existingPlan.version} (${existingPlan.steps.length} steps)`,
+                );
+                originalPlan = existingPlan;
+                usingCachedPlan = true;
+            } else {
+                console.log(`[Planning] Generating new execution plan...`);
+                const planner = new PlanGenerator(this.options);
+                originalPlan = await planner.generatePlan(task, {
+                    detailLevel: execOptions.planDetailLevel || "standard",
+                    includeControlFlow: true,
+                });
+
+                console.log(
+                    `[Planning] Generated plan with ${originalPlan.steps.length} steps`,
+                );
+            }
+
+            // Save original plan to trace dir
             const originalPlanPath = await serializer.saveOriginalPlan(
                 originalPlan,
                 traceDir,
@@ -309,6 +470,7 @@ export class WebTaskAgent {
             const planResult = await executor.executePlan(
                 originalPlan,
                 this.options,
+                this, // Pass WebTaskAgent instance for step execution
                 tracer || undefined,
             );
 
@@ -324,42 +486,66 @@ export class WebTaskAgent {
                 );
             }
 
-            // STEP 3: GENERATE REVISED PLAN (learning)
+            // STEP 3: LEARN AND UPDATE PLAN (if needed)
             if (tracer) {
-                console.log(
-                    `[Learning] Generating revised plan based on execution...`,
-                );
-                const trace = tracer.getTrace();
+                // Evaluate if plan needs updating
+                const updateDecision =
+                    serializer.shouldUpdatePlan(originalPlan);
 
-                const revisedPlan = await planner.revisePlan(
-                    originalPlan,
-                    trace,
-                    {
-                        preserveStructure: false,
-                        onlyCorrections: false,
-                    },
-                );
+                if (updateDecision.shouldUpdate) {
+                    console.log(`[Learning] ${updateDecision.reason}`);
+                    console.log(
+                        `[Learning] Generating revised plan based on execution...`,
+                    );
 
-                console.log(
-                    `[Learning] Generated revised plan (v${revisedPlan.version})`,
-                );
+                    const planner = new PlanGenerator(this.options);
+                    const trace = tracer.getTrace();
 
-                // Save revised plan and comparison
-                const revisedPlanPath = await serializer.saveRevisedPlan(
-                    revisedPlan,
-                    traceDir,
-                );
-                await serializer.savePlanSummary(revisedPlan, traceDir);
-                await serializer.savePlanComparison(
-                    originalPlan,
-                    revisedPlan,
-                    traceDir,
-                );
+                    const revisedPlan = await planner.revisePlan(
+                        originalPlan,
+                        trace,
+                        {
+                            preserveStructure: false,
+                            onlyCorrections: false,
+                        },
+                    );
 
-                // Update tracer with revised plan path
-                tracer.setPlanPaths(originalPlanPath, revisedPlanPath);
+                    console.log(
+                        `[Learning] Generated revised plan (v${revisedPlan.version})`,
+                    );
 
-                console.log(`[Learning] Saved revised plan and comparison`);
+                    // Save revised plan to trace dir
+                    const revisedPlanPath = await serializer.saveRevisedPlan(
+                        revisedPlan,
+                        traceDir,
+                    );
+                    await serializer.savePlanSummary(revisedPlan, traceDir);
+                    await serializer.savePlanComparison(
+                        originalPlan,
+                        revisedPlan,
+                        traceDir,
+                    );
+
+                    // Update tracer with revised plan path
+                    tracer.setPlanPaths(originalPlanPath, revisedPlanPath);
+
+                    // Save revised plan to library for future use
+                    await serializer.savePlanToLibrary(revisedPlan);
+
+                    console.log(`[Learning] Saved revised plan and comparison`);
+                } else {
+                    console.log(
+                        `[Learning] Plan is good, no revision needed: ${updateDecision.reason}`,
+                    );
+
+                    // If we generated a new plan (not cached), save it to library
+                    if (!usingCachedPlan) {
+                        await serializer.savePlanToLibrary(originalPlan);
+                        console.log(
+                            `[Learning] Saved new plan to library for future use`,
+                        );
+                    }
+                }
             }
 
             // Mark trace complete and save
