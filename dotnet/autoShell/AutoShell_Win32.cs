@@ -226,7 +226,7 @@ namespace autoShell
             int SetFocus();
             int SwitchTo();
             int TryInvokeBack(IntPtr /* IAsyncCallback* */ callback);
-            int humbnailWindow(out IntPtr hwnd);
+            int GetThumbnailWindow(out IntPtr hwnd);
             int GetMonitor(out IntPtr /* IImmersiveMonitor */ immersiveMonitor);
             int GetVisibility(out int visibility);
             int SetCloak(APPLICATION_VIEW_CLOAK_TYPE cloakType, int unknown);
