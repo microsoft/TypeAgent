@@ -23,11 +23,11 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import { CalendarActionV3 } from "./calendarActionsSchemaV3.js";
+import { createCalendarGraphClient, CalendarClient } from "graph-utils";
 import {
-    createCalendarGraphClient,
-    CalendarClient,
-} from "graph-utils";
-import { getNWeeksDateRangeISO, generateQueryFromFuzzyDay } from "./calendarQueryHelper.js";
+    getNWeeksDateRangeISO,
+    generateQueryFromFuzzyDay,
+} from "./calendarQueryHelper.js";
 import {
     getDateRelativeToDayV2,
     parseFuzzyDateString,
@@ -138,7 +138,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
         context: SessionContext<CalendarActionContext>,
     ): Promise<void> {
         if (enable) {
-            context.agentContext.calendarClient = await createCalendarGraphClient();
+            context.agentContext.calendarClient =
+                await createCalendarGraphClient();
         } else {
             context.agentContext.calendarClient = undefined;
         }
@@ -149,7 +150,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
         context: ActionContext<CalendarActionContext>,
     ): Promise<ActionResult | undefined> {
         const calendarAction = action as CalendarActionV3;
-        const calendarClient = context.sessionContext.agentContext.calendarClient;
+        const calendarClient =
+            context.sessionContext.agentContext.calendarClient;
 
         console.log(
             chalk.cyan(
@@ -171,15 +173,33 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
         switch (calendarAction.actionName) {
             case "scheduleEvent":
-                return await this.handleScheduleEvent(calendarAction, context, calendarClient);
+                return await this.handleScheduleEvent(
+                    calendarAction,
+                    context,
+                    calendarClient,
+                );
             case "findEvents":
-                return await this.handleFindEvents(calendarAction, context, calendarClient);
+                return await this.handleFindEvents(
+                    calendarAction,
+                    context,
+                    calendarClient,
+                );
             case "addParticipant":
-                return await this.handleAddParticipant(calendarAction, context, calendarClient);
+                return await this.handleAddParticipant(
+                    calendarAction,
+                    context,
+                    calendarClient,
+                );
             case "findTodaysEvents":
-                return await this.handleFindTodaysEvents(context, calendarClient);
+                return await this.handleFindTodaysEvents(
+                    context,
+                    calendarClient,
+                );
             case "findThisWeeksEvents":
-                return await this.handleFindThisWeeksEvents(context, calendarClient);
+                return await this.handleFindThisWeeksEvents(
+                    context,
+                    calendarClient,
+                );
             default:
                 console.log(
                     chalk.red(
@@ -197,22 +217,24 @@ export class CalendarActionHandlerV3 implements AppAgent {
         context: ActionContext<CalendarActionContext>,
         client: CalendarClient,
     ): Promise<ActionResult | undefined> {
-        const { description, date, time, participant } =
-            action.parameters;
+        const { description, date, time, participant } = action.parameters;
 
         console.log(chalk.green(`\n✓ Scheduling event: ${description}`));
 
         try {
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            
+
             // Parse the natural language date
             let eventDate = this.parseNaturalDate(date);
             if (!eventDate) {
-                return createActionResultFromError(`Could not parse date: ${date}`);
+                return createActionResultFromError(
+                    `Could not parse date: ${date}`,
+                );
             }
 
             // Parse the time and set it on the date
-            let startHour = 9, startMinute = 0;
+            let startHour = 9,
+                startMinute = 0;
             if (time) {
                 // Try simple parsing like "2pm", "14:00"
                 const simpleTime = this.parseSimpleTime(time);
@@ -228,7 +250,11 @@ export class CalendarActionHandlerV3 implements AppAgent {
                         startMinute = m;
                     } catch {
                         // Fall back to default 9am
-                        console.log(chalk.yellow(`Could not parse time: ${time}, using 9am`));
+                        console.log(
+                            chalk.yellow(
+                                `Could not parse time: ${time}, using 9am`,
+                            ),
+                        );
                     }
                 }
             }
@@ -243,17 +269,20 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             // Create the event via Graph API using correct signature
             const eventId = await client.createCalendarEvent(
-                description,           // subject
-                "",                    // body
-                startDateTime,         // startDateTime
-                endDateTime,           // endDateTime
-                timeZone,              // timeZone
-                attendees,             // attendees
+                description, // subject
+                "", // body
+                startDateTime, // startDateTime
+                endDateTime, // endDateTime
+                timeZone, // timeZone
+                attendees, // attendees
             );
 
             if (eventId) {
                 const dateStr = eventDate.toLocaleDateString();
-                const timeStr = eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const timeStr = eventDate.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
                 return createActionResultFromHtmlDisplay(
                     `<p>✓ Event created: <strong>${description}</strong> on ${dateStr} at ${timeStr}</p>`,
                 );
@@ -262,14 +291,16 @@ export class CalendarActionHandlerV3 implements AppAgent {
             }
         } catch (error: any) {
             console.error(chalk.red(`Error creating event: ${error.message}`));
-            return createActionResultFromError(`Failed to create event: ${error.message}`);
+            return createActionResultFromError(
+                `Failed to create event: ${error.message}`,
+            );
         }
     }
 
     private parseNaturalDate(dateStr: string): Date | undefined {
         // Handle special keywords
         const lowerDate = dateStr.toLowerCase().trim();
-        
+
         if (lowerDate === "today") {
             return new Date();
         }
@@ -278,55 +309,59 @@ export class CalendarActionHandlerV3 implements AppAgent {
             d.setDate(d.getDate() + 1);
             return d;
         }
-        
+
         // Try parsing relative day ("next Monday", "this Friday")
         const relativeDate = getDateRelativeToDayV2(dateStr);
         if (relativeDate) {
             return relativeDate;
         }
-        
+
         // Try parsing fuzzy date string ("July 15", "2026-03-15")
         const fuzzyDate = parseFuzzyDateString(dateStr);
         if (fuzzyDate) {
             return fuzzyDate;
         }
-        
+
         // Try ISO format directly
         const isoDate = new Date(dateStr);
         if (!isNaN(isoDate.getTime())) {
             return isoDate;
         }
-        
+
         return undefined;
     }
 
-    private parseSimpleTime(timeStr: string): { hours: number; minutes: number } | undefined {
+    private parseSimpleTime(
+        timeStr: string,
+    ): { hours: number; minutes: number } | undefined {
         // Handle "2pm", "2:30pm", "14:00", "noon", "midnight"
         const lowerTime = timeStr.toLowerCase().trim();
-        
+
         if (lowerTime === "noon") {
             return { hours: 12, minutes: 0 };
         }
         if (lowerTime === "midnight") {
             return { hours: 0, minutes: 0 };
         }
-        
+
         // Match patterns like "2pm", "2:30pm", "14:00"
-        const amPmMatch = lowerTime.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+        const amPmMatch = lowerTime.match(
+            /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i,
+        );
         if (amPmMatch) {
             let hours = parseInt(amPmMatch[1], 10);
             const minutes = amPmMatch[2] ? parseInt(amPmMatch[2], 10) : 0;
             const period = amPmMatch[3]?.toLowerCase();
-            
+
             if (period === "pm" && hours < 12) {
                 hours += 12;
             } else if (period === "am" && hours === 12) {
                 hours = 0;
             }
-            
+
             return { hours, minutes };
         }
-        
+
         return undefined;
     }
 
@@ -344,7 +379,9 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             if (description) {
                 // Search by description using embeddings
-                events = await client.findEventsFromEmbeddings(description) as any[];
+                events = (await client.findEventsFromEmbeddings(
+                    description,
+                )) as any[];
             } else if (date) {
                 // Try to use generateQueryFromFuzzyDay for natural language dates
                 const query = generateQueryFromFuzzyDay(date);
@@ -359,9 +396,14 @@ export class CalendarActionHandlerV3 implements AppAgent {
                         const endDate = new Date(parsedDate);
                         endDate.setHours(23, 59, 59, 999);
                         const manualQuery = `startDateTime=${startDate.toISOString()}&endDateTime=${endDate.toISOString()}`;
-                        events = await client.findCalendarEventsByDateRange(manualQuery);
+                        events =
+                            await client.findCalendarEventsByDateRange(
+                                manualQuery,
+                            );
                     } else {
-                        return createActionResultFromError(`Could not parse date: ${date}`);
+                        return createActionResultFromError(
+                            `Could not parse date: ${date}`,
+                        );
                     }
                 }
             } else {
@@ -377,10 +419,14 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 );
             }
 
-            return createActionResultFromHtmlDisplay(formatEventsAsHtml(events));
+            return createActionResultFromHtmlDisplay(
+                formatEventsAsHtml(events),
+            );
         } catch (error: any) {
             console.error(chalk.red(`Error finding events: ${error.message}`));
-            return createActionResultFromError(`Failed to find events: ${error.message}`);
+            return createActionResultFromError(
+                `Failed to find events: ${error.message}`,
+            );
         }
     }
 
@@ -391,13 +437,21 @@ export class CalendarActionHandlerV3 implements AppAgent {
     ): Promise<ActionResult | undefined> {
         const { description, participant } = action.parameters;
 
-        console.log(chalk.green(`\n✓ Adding participant ${participant} to ${description}`));
+        console.log(
+            chalk.green(
+                `\n✓ Adding participant ${participant} to ${description}`,
+            ),
+        );
 
         try {
             // Find the event first - returns event objects despite type saying string[]
-            const events = await client.findEventsFromEmbeddings(description) as any[];
+            const events = (await client.findEventsFromEmbeddings(
+                description,
+            )) as any[];
             if (!events || events.length === 0) {
-                return createActionResultFromError(`Could not find event: ${description}`);
+                return createActionResultFromError(
+                    `Could not find event: ${description}`,
+                );
             }
 
             const event = events[0];
@@ -412,8 +466,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 `<p>✓ Added <strong>${participant}</strong> to <strong>${description}</strong></p>`,
             );
         } catch (error: any) {
-            console.error(chalk.red(`Error adding participant: ${error.message}`));
-            return createActionResultFromError(`Failed to add participant: ${error.message}`);
+            console.error(
+                chalk.red(`Error adding participant: ${error.message}`),
+            );
+            return createActionResultFromError(
+                `Failed to add participant: ${error.message}`,
+            );
         }
     }
 
@@ -425,8 +483,24 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
         try {
             const today = new Date();
-            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+            const startOfDay = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                0,
+                0,
+                0,
+                0,
+            );
+            const endOfDay = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                23,
+                59,
+                59,
+                999,
+            );
 
             const query = `startDateTime=${startOfDay.toISOString()}&endDateTime=${endOfDay.toISOString()}`;
             const events = await client.findCalendarEventsByDateRange(query);
@@ -441,8 +515,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 `<h3>Today's Schedule</h3>${formatEventsAsHtml(events)}`,
             );
         } catch (error: any) {
-            console.error(chalk.red(`Error finding today's events: ${error.message}`));
-            return createActionResultFromError(`Failed to find today's events: ${error.message}`);
+            console.error(
+                chalk.red(`Error finding today's events: ${error.message}`),
+            );
+            return createActionResultFromError(
+                `Failed to find today's events: ${error.message}`,
+            );
         }
     }
 
@@ -467,8 +545,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 `<h3>This Week's Schedule</h3>${formatEventsAsHtml(events)}`,
             );
         } catch (error: any) {
-            console.error(chalk.red(`Error finding this week's events: ${error.message}`));
-            return createActionResultFromError(`Failed to find this week's events: ${error.message}`);
+            console.error(
+                chalk.red(`Error finding this week's events: ${error.message}`),
+            );
+            return createActionResultFromError(
+                `Failed to find this week's events: ${error.message}`,
+            );
         }
     }
 }
@@ -477,12 +559,15 @@ export class CalendarActionHandlerV3 implements AppAgent {
 export function instantiate(): AppAgent {
     const handler = new CalendarActionHandlerV3();
     return {
-        initializeAgentContext: () =>
-            handler.initializeAgentContext(),
-        updateAgentContext: (enable: boolean, context: SessionContext<CalendarActionContext>) =>
-            handler.updateAgentContext(enable, context),
-        executeAction: (action: AppAction, context: ActionContext<CalendarActionContext>) =>
-            handler.executeAction(action, context),
+        initializeAgentContext: () => handler.initializeAgentContext(),
+        updateAgentContext: (
+            enable: boolean,
+            context: SessionContext<CalendarActionContext>,
+        ) => handler.updateAgentContext(enable, context),
+        executeAction: (
+            action: AppAction,
+            context: ActionContext<CalendarActionContext>,
+        ) => handler.executeAction(action, context),
         ...getCommandInterface(handlers),
     };
 }

@@ -25,7 +25,9 @@ export class CalendarClient extends GraphClient {
             .then((loggedIn) => {
                 if (!loggedIn) {
                     // Silently ignore - user will need to run @calendar login
-                    debug("No cached credentials, user needs to run @calendar login");
+                    debug(
+                        "No cached credentials, user needs to run @calendar login",
+                    );
                 }
             })
             .catch((error) => {
