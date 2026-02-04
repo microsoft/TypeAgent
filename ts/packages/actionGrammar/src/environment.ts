@@ -250,9 +250,15 @@ export function evaluateExpression(
             for (const [key, value] of expr.parameters) {
                 params[key] = evaluateExpression(value, env);
             }
+            // Only include parameters if there are any (actions like pause/resume have none)
+            if (Object.keys(params).length > 0) {
+                return {
+                    actionName: expr.actionName,
+                    parameters: params,
+                };
+            }
             return {
                 actionName: expr.actionName,
-                parameters: params,
             };
         }
 

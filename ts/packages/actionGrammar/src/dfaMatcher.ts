@@ -144,9 +144,15 @@ function evaluateActionValue(env: DFAEnvironment, valueExpr: any): any {
                     params[key] = evaluateActionValue(env, val);
                 }
             }
+            // Only include parameters if there are any (actions like pause/resume have none)
+            if (Object.keys(params).length > 0) {
+                return {
+                    actionName: valueExpr.actionName,
+                    parameters: params,
+                };
+            }
             return {
                 actionName: valueExpr.actionName,
-                parameters: params,
             };
         }
     }

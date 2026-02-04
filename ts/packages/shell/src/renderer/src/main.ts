@@ -186,6 +186,24 @@ function registerClient(
                 case "randomCommandSelected":
                     chatView.randomCommandSelected(requestId, data.message);
                     break;
+                case "grammarRule":
+                    // Display grammar rule generation result
+                    if (data.success && data.rule) {
+                        chatView.addNotificationMessage(
+                            `Grammar +RULE: ${data.message}\n${data.rule}`,
+                            source,
+                            requestId,
+                        );
+                    } else if (!data.success && data.rule) {
+                        // Rejected but show the rule for diagnostics
+                        chatView.addNotificationMessage(
+                            `Grammar REJECTED: ${data.message}\nRule: ${data.rule}`,
+                            source,
+                            requestId,
+                        );
+                    }
+                    // Don't show anything for rejected without rule
+                    break;
                 case "showNotifications":
                     switch (data) {
                         case NotifyCommands.Clear:

@@ -90,6 +90,14 @@ export type GrammarMatchResult = GrammarMatchStat & {
     match: unknown;
 };
 
+// Non-entity wildcard type names - these should NOT be treated as entity wildcards
+const nonEntityWildcardTypes = new Set([
+    "string",
+    "wildcard",
+    "word",
+    "number",
+]);
+
 function createMatchedValue(
     valueIdNode: ValueIdNode,
     values: MatchedValueNode | undefined,
@@ -100,10 +108,12 @@ function createMatchedValue(
 ): unknown {
     const { name, valueId, wildcardTypeName } = valueIdNode;
 
+    // Only add to entityWildcardPropertyNames if it's an actual entity type
+    // (not basic wildcard types like "string", "wildcard", "word", "number")
     if (
         valueId === partialValueId ||
         (wildcardTypeName !== undefined &&
-            wildcardTypeName !== "string" &&
+            !nonEntityWildcardTypes.has(wildcardTypeName) &&
             partialValueId === undefined)
     ) {
         wildcardPropertyNames.push(propertyName);

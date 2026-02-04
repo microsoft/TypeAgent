@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import registerDebug from "debug";
 import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
 import { matchNFA } from "./nfaInterpreter.js";
+
+const debug = registerDebug("typeagent:actionGrammar:nfaMatcher");
 
 /**
  * NFA-based Grammar Matcher
@@ -24,13 +27,27 @@ export interface NFAGrammarMatchResult {
 }
 
 /**
+ * Strip trailing punctuation from a token (linear time)
+ */
+function stripTrailingPunctuation(token: string): string {
+    const punctuation = "?!.,;:";
+    let end = token.length;
+    while (end > 0 && punctuation.includes(token[end - 1])) {
+        end--;
+    }
+    return end === token.length ? token : token.slice(0, end);
+}
+
+/**
  * Tokenize a request string into an array of tokens
  * Simple whitespace-based tokenization for NFA matching
+ * Strips trailing punctuation from tokens for better matching
  */
 export function tokenizeRequest(request: string): string[] {
     return request
         .trim()
         .split(/\s+/)
+        .map(stripTrailingPunctuation)
         .filter((token) => token.length > 0);
 }
 
@@ -50,9 +67,7 @@ export function matchGrammarWithNFA(
     // Tokenize the request
     const tokens = tokenizeRequest(request);
 
-    console.log(
-        `    [NFA Matcher] Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`,
-    );
+    debug(`Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`);
 
     if (tokens.length === 0) {
         return [];
@@ -61,13 +76,9 @@ export function matchGrammarWithNFA(
     // Match against NFA
     const nfaResult = matchNFA(nfa, tokens);
 
-    console.log(
-        `    [NFA Matcher] Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`,
-    );
+    debug(`Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`);
     if (nfaResult.matched) {
-        console.log(
-            `      Action value: ${JSON.stringify(nfaResult.actionValue)}`,
-        );
+        debug(`Action value: %O`, nfaResult.actionValue);
     }
 
     if (!nfaResult.matched) {

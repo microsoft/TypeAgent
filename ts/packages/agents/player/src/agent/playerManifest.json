@@ -5,7 +5,7 @@
     "description": "Music Player agent that lets you search for, play and control music.",
     "schemaFile": "./playerSchema.ts",
     "compiledSchemaFile": "agents/player/dist/agent/playerSchema.pas.json",
-    "grammarFile": "agents/player/dist/agent/playerSchema.ag.json",
+    "grammarFile": "../../dist/agent/playerSchema.ag.json",
     "schemaType": {
       "action": "PlayerActions",
       "entity": "PlayerEntities"
