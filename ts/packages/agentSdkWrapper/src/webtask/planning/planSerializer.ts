@@ -10,6 +10,64 @@ import * as path from "path";
 import { ExecutionPlan } from "./types.js";
 
 export class PlanSerializer {
+    private plansBaseDir: string;
+
+    constructor(plansBaseDir: string = "./plans") {
+        this.plansBaseDir = plansBaseDir;
+    }
+
+    /**
+     * Load existing plan for a task from the canonical plans directory
+     */
+    async loadExistingPlan(taskId: string): Promise<ExecutionPlan | null> {
+        const planFile = path.join(this.plansBaseDir, `${taskId}-latest.json`);
+
+        try {
+            const content = await fs.readFile(planFile, "utf-8");
+            const plan = JSON.parse(content) as ExecutionPlan;
+
+            console.log(
+                `[PlanSerializer] Found existing plan for ${taskId} (v${plan.version})`,
+            );
+            return plan;
+        } catch (error) {
+            console.log(
+                `[PlanSerializer] No existing plan found for ${taskId}`,
+            );
+            return null;
+        }
+    }
+
+    /**
+     * Save plan to canonical plans directory
+     */
+    async savePlanToLibrary(plan: ExecutionPlan): Promise<string> {
+        await fs.mkdir(this.plansBaseDir, { recursive: true });
+
+        // Save versioned plan
+        const versionedFile = path.join(
+            this.plansBaseDir,
+            `${plan.taskId}-v${plan.version}.json`,
+        );
+        await fs.writeFile(
+            versionedFile,
+            JSON.stringify(plan, null, 2),
+            "utf-8",
+        );
+
+        // Save as latest
+        const latestFile = path.join(
+            this.plansBaseDir,
+            `${plan.taskId}-latest.json`,
+        );
+        await fs.writeFile(latestFile, JSON.stringify(plan, null, 2), "utf-8");
+
+        console.log(
+            `[PlanSerializer] Saved plan v${plan.version} to library: ${latestFile}`,
+        );
+        return latestFile;
+    }
+
     /**
      * Save original plan (version 1) before execution
      */
@@ -279,6 +337,65 @@ export class PlanSerializer {
         }
 
         return changes;
+    }
+
+    /**
+     * Evaluate if plan needs updating based on execution results
+     */
+    shouldUpdatePlan(plan: ExecutionPlan): {
+        shouldUpdate: boolean;
+        reason: string;
+    } {
+        if (!plan.execution) {
+            return {
+                shouldUpdate: false,
+                reason: "No execution data available",
+            };
+        }
+
+        // Don't update if execution failed
+        if (plan.execution.status !== "success") {
+            return {
+                shouldUpdate: false,
+                reason: "Execution failed - not learning from failed runs",
+            };
+        }
+
+        // Count significant corrections
+        const significantCorrections =
+            plan.execution.corrections?.filter((c) => {
+                return c.correctionType === "action-added";
+            }) || [];
+
+        // Threshold: Only update if at least 2 steps needed corrections
+        if (significantCorrections.length < 2) {
+            return {
+                shouldUpdate: false,
+                reason: `Only ${significantCorrections.length} correction(s) - plan is accurate enough`,
+            };
+        }
+
+        // Count total additional actions needed
+        const totalAdditionalActions = significantCorrections.reduce(
+            (sum, c) => {
+                const match = c.reason.match(/(\d+) additional action/);
+                return sum + (match ? parseInt(match[1]) : 0);
+            },
+            0,
+        );
+
+        // Threshold: Only update if at least 3 additional actions were needed
+        if (totalAdditionalActions < 3) {
+            return {
+                shouldUpdate: false,
+                reason: `Only ${totalAdditionalActions} additional action(s) - plan is close enough`,
+            };
+        }
+
+        return {
+            shouldUpdate: true,
+            reason: `Plan needs improvement: ${significantCorrections.length} steps needed ${totalAdditionalActions} additional actions`,
+        };
     }
 
     /**
