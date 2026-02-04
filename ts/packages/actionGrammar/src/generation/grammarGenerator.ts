@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import registerDebug from "debug";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { GrammarTestCase } from "./testTypes.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
+
+const debug = registerDebug("typeagent:actionGrammar:grammarGenerator");
 
 /**
  * Structured grammar rule right-hand side
@@ -341,8 +344,8 @@ export class ClaudeGrammarGenerator {
         if (jsonStart > 0) {
             const preamble = text.substring(0, jsonStart).trim();
             if (preamble.length > 0) {
-                console.warn(
-                    `[Grammar Generation] Claude included text before JSON: "${preamble.substring(0, 100)}..."`,
+                debug(
+                    `Claude included text before JSON: "${preamble.substring(0, 100)}..."`,
                 );
             }
         }
@@ -429,8 +432,8 @@ export class ClaudeGrammarGenerator {
             }
 
             if (hadComments) {
-                console.warn(
-                    `[Grammar Generation] Removed comment/copyright text from Claude response. Original: "${str.substring(0, 100)}..."`,
+                debug(
+                    `Removed comment/copyright text from Claude response. Original: "${str.substring(0, 100)}..."`,
                 );
             }
 
