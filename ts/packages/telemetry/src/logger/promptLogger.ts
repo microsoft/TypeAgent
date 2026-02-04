@@ -10,7 +10,7 @@ import {
 
 import registerDebug from "debug";
 
-const debugPromptLogger = registerDebug("typeagent:promptLogger");
+const debugPromptLogger = registerDebug("typeagent:telemetry:promptLogger");
 
 /**
  *  Logger for LLM prompts.

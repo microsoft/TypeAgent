@@ -5,6 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { openai, getChatModelNames } from "aiclient";
 import fs from "node:fs";
 import chalk from "chalk";
+import { PromptLogger } from "telemetry";
 
 const modelNames = await getChatModelNames();
 export default class Prompt extends Command {
@@ -83,7 +84,7 @@ export default class Prompt extends Command {
                 time = end - start;
             } else {
                 const start = performance.now();
-                const complete = await model.complete(request);
+                const complete = await model.complete(request, undefined, undefined, PromptLogger.getInstance().logModelRequest);
                 const end = performance.now();
                 if (complete.success) {
                     responseText = complete.data;

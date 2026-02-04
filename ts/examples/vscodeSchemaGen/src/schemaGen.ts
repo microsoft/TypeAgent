@@ -5,6 +5,7 @@ import * as path from "path";
 import dotenv from "dotenv";
 import * as fs from "fs";
 import { finished } from "stream/promises";
+import { PromptLogger } from "telemetry";
 
 import {
     ChatModel,
@@ -23,7 +24,7 @@ async function getModelCompletionResponse(
     prompt: string,
     jsonNode: any,
 ): Promise<string | undefined> {
-    const chatResponse = await chatModel.complete(prompt);
+    const chatResponse = await chatModel.complete(prompt, undefined, undefined, PromptLogger.getInstance().logModelRequest);
     if (chatResponse.success) {
         const responseText = chatResponse.data;
         return responseText;
