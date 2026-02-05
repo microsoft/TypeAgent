@@ -84,7 +84,11 @@ export async function processHTMLToolResult(
 
     // Combine all frames' HTML (usually just one frame, but support multiple)
     const combinedHTML = processedHTML.map((p) => p.html).join("\n\n");
-    const processedSize = combinedHTML.length;
+
+    // Prettify HTML for better readability and token-based file reading
+    // Add line breaks after major tags to make offset/limit work better
+    const prettifiedHTML = prettifyHTML(combinedHTML);
+    const processedSize = prettifiedHTML.length;
 
     // Ensure output directory exists
     await fs.mkdir(outputDir, { recursive: true });
@@ -92,7 +96,7 @@ export async function processHTMLToolResult(
     // Save clean HTML
     const filename = `step-${String(stepNumber).padStart(3, "0")}-page.html`;
     const cleanFilePath = path.join(outputDir, filename);
-    await fs.writeFile(cleanFilePath, combinedHTML, "utf-8");
+    await fs.writeFile(cleanFilePath, prettifiedHTML, "utf-8");
 
     return {
         processedHTML,
@@ -124,4 +128,21 @@ export function extractHTMLFilePath(content: string): string | null {
     }
 
     return null;
+}
+
+/**
+ * Prettify HTML by adding line breaks after major tags
+ * This makes the HTML more readable and allows Read tool's offset/limit to work
+ * (they work on lines, so minified HTML on one line exceeds token limits)
+ */
+function prettifyHTML(html: string): string {
+    // Add line breaks after major closing tags
+    let prettified = html
+        // Block-level elements
+        .replace(/<\/(div|section|article|aside|nav|header|footer|main|form|table|ul|ol|li|tr|td|th|thead|tbody|tfoot|h[1-6]|p|blockquote|pre|figure|figcaption|address|hr)>/gi, "</$1>\n")
+        // Add breaks after opening tags for better structure
+        .replace(/<(head|body|html)>/gi, "<$1>\n")
+        .replace(/<\/(head|body|html)>/gi, "</$1>\n");
+
+    return prettified;
 }

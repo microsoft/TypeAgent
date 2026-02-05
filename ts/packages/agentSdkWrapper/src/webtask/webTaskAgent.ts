@@ -9,6 +9,7 @@ import { PlanGenerator } from "./planning/planGenerator.js";
 import { PlanExecutor } from "./planning/planExecutor.js";
 import { PlanSerializer } from "./planning/planSerializer.js";
 import { ExecutionPlan } from "./planning/types.js";
+import path from "path";
 
 /**
  * Task execution options
@@ -84,6 +85,11 @@ export class WebTaskAgent {
 
             tracer = new TraceCollector(traceOptions);
             await tracer.initialize();
+
+            // Set environment variable for MCP tools to access HTML directory
+            const htmlDir = path.join(tracer.getTraceDir(), "html");
+            process.env.TYPEAGENT_HTML_DIR = htmlDir;
+
             console.log(
                 `[Trace] Collecting traces to: ${tracer.getTraceDir()}`,
             );
@@ -418,6 +424,11 @@ export class WebTaskAgent {
 
             tracer = new TraceCollector(traceOptions);
             await tracer.initialize();
+
+            // Set environment variable for MCP tools to access HTML directory
+            const htmlDir = path.join(tracer.getTraceDir(), "html");
+            process.env.TYPEAGENT_HTML_DIR = htmlDir;
+
             console.log(
                 `[Trace] Collecting traces to: ${tracer.getTraceDir()}`,
             );

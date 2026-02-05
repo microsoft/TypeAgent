@@ -5,11 +5,126 @@ import { z } from "zod/v4";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
 
 function toolResult(result: string): CallToolResult {
     return {
         content: [{ type: "text", text: result }],
     };
+}
+
+interface HTMLFrame {
+    frameId: number;
+    content: string;
+    text?: string;
+}
+
+/**
+ * Prettify HTML by adding line breaks after major tags
+ */
+function prettifyHTML(html: string): string {
+    return html
+        .replace(/<\/(div|section|article|aside|nav|header|footer|main|form|table|ul|ol|li|tr|td|th|thead|tbody|tfoot|h[1-6]|p|blockquote|pre|figure|figcaption|address|hr)>/gi, "</$1>\n")
+        .replace(/<(head|body|html)>/gi, "<$1>\n")
+        .replace(/<\/(head|body|html)>/gi, "</$1>\n");
+}
+
+/**
+ * Extract title from HTML content
+ */
+function extractTitle(html: string): string {
+    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+    return titleMatch ? titleMatch[1] : "Untitled";
+}
+
+/**
+ * Estimate token count (rough approximation: 1 token ≈ 4 characters)
+ */
+function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4);
+}
+
+/**
+ * Post-process HTML result from browser
+ * - Deserializes nested JSON structure
+ * - Saves each frame as a separate prettified HTML file
+ * - Returns structured summary instead of raw escaped JSON
+ */
+async function postProcessHTML(rawResponse: string, logger: any): Promise<string> {
+    try {
+        // Parse the JSON array structure
+        const frames: HTMLFrame[] = JSON.parse(rawResponse);
+
+        if (!Array.isArray(frames) || frames.length === 0) {
+            return rawResponse; // Not HTML format, return as-is
+        }
+
+        // Get main frame (frameId 0) or first frame
+        const mainFrame = frames.find(f => f.frameId === 0) || frames[0];
+
+        // Use task's HTML directory if available (from TYPEAGENT_HTML_DIR env var),
+        // otherwise fall back to temp directory
+        let htmlDir: string;
+        if (process.env.TYPEAGENT_HTML_DIR) {
+            htmlDir = process.env.TYPEAGENT_HTML_DIR;
+            // Ensure directory exists
+            await fs.mkdir(htmlDir, { recursive: true });
+            logger.log(`[HTML_PROCESSOR] Using task HTML directory: ${htmlDir}`);
+        } else {
+            htmlDir = await fs.mkdtemp(path.join(os.tmpdir(), "typeagent-html-"));
+            logger.log(`[HTML_PROCESSOR] Using temp directory: ${htmlDir}`);
+        }
+
+        // Save each frame as a separate file
+        const savedFiles: string[] = [];
+        for (const frame of frames) {
+            const prettified = prettifyHTML(frame.content);
+            const filename = frame.frameId === 0 ? "main-frame.html" : `frame-${frame.frameId}.html`;
+            const filepath = path.join(htmlDir, filename);
+
+            await fs.writeFile(filepath, prettified, "utf-8");
+            savedFiles.push(filepath);
+
+            logger.log(`[HTML_PROCESSOR] Saved frame ${frame.frameId} to ${filepath} (${frame.content.length} bytes, ~${estimateTokens(frame.content)} tokens)`);
+        }
+
+        // Extract metadata from main frame
+        const title = extractTitle(mainFrame.content);
+        const tokenCount = estimateTokens(mainFrame.content);
+
+        // Return structured summary
+        const summary = {
+            title,
+            frameCount: frames.length,
+            mainFrameTokens: tokenCount,
+            mainFramePath: savedFiles[0],
+            allFramePaths: savedFiles,
+            // Include a truncated preview for quick analysis (first 8000 chars)
+            preview: mainFrame.content.substring(0, 8000),
+        };
+
+        return `HTML content retrieved successfully.
+
+**Page Title**: ${title}
+**Frame Count**: ${frames.length}
+**Main Frame**: ~${tokenCount} tokens
+
+**Saved HTML Files**:
+${savedFiles.map((f, i) => `  - Frame ${i}: ${f}`).join('\n')}
+
+**Quick Preview** (first 8000 characters):
+${summary.preview}
+
+**Full HTML**: Use Read tool to access the saved HTML files for detailed analysis.
+Each frame is saved as a separate prettified HTML file with line breaks for easy reading.`;
+
+    } catch (error) {
+        logger.error(`[HTML_PROCESSOR] Failed to process HTML: ${error}`);
+        // If processing fails, return original response
+        return rawResponse;
+    }
 }
 
 interface BrowserActionToolDefinition {
@@ -202,7 +317,7 @@ const browserActionTools: BrowserActionToolDefinition[] = [
 
     {
         name: "browser__getHTML",
-        description: "Get HTML content from the current page",
+        description: "Get HTML content from the current page. Returns structured summary with file paths to saved HTML frames.",
         schema: {
             fullHTML: z
                 .boolean()
@@ -214,7 +329,7 @@ const browserActionTools: BrowserActionToolDefinition[] = [
                 .describe("Extract only text content (default: false)"),
         },
         handler: async (params, getDispatcher, responseCollector, logger) => {
-            return executeBrowserAction(
+            const result = await executeBrowserAction(
                 "getHTML",
                 {
                     fullHTML: params.fullHTML,
@@ -224,6 +339,19 @@ const browserActionTools: BrowserActionToolDefinition[] = [
                 responseCollector,
                 logger,
             );
+
+            // Post-process HTML if we got a successful result
+            if (result.content && result.content[0]?.type === "text") {
+                const rawResponse = result.content[0].text;
+
+                // Only process if it looks like JSON array (starts with '[{')
+                if (rawResponse.trim().startsWith('[{')) {
+                    const processedResponse = await postProcessHTML(rawResponse, logger);
+                    return toolResult(processedResponse);
+                }
+            }
+
+            return result;
         },
     },
     /*
