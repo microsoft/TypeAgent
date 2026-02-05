@@ -217,8 +217,8 @@ function createGrammarRule(
                     });
                 } else {
                     // Validate type name references
-                    // Built-in types: string, wildcard
-                    // REVIEW: word built-in type?
+                    // All non-built-in types must be explicitly imported
+                    // Built-in types: string, wildcard, word, number
                     const isBuiltInType =
                         typeName === "string" ||
                         typeName === "wildcard" ||
@@ -228,7 +228,6 @@ function createGrammarRule(
                             context.importedTypeNames.has(typeName) ||
                             context.importedTypeNames.has("*");
 
-                        // If type imports exist, validate that the type is either built-in or imported
                         if (!isImportedType) {
                             context.errors.push({
                                 message: `Undefined type '${typeName}' in variable '${name}'`,
