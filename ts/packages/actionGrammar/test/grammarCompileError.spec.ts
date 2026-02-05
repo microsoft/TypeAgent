@@ -93,7 +93,7 @@ describe("Grammar Compiler", () => {
     describe("Imports", () => {
         it("Imported rule reference should not error", () => {
             const grammarText = `
-            @import { ExternalRule } from "external.grammar"
+            @import { ExternalRule } from "external.agr"
 
             @<Start> = <ExternalRule> world
         `;
@@ -104,7 +104,7 @@ describe("Grammar Compiler", () => {
 
         it("Wildcard import allows any rule reference", () => {
             const grammarText = `
-            @import * from "external.grammar"
+            @import * from "external.agr"
 
             @<Start> = <AnyExternalRule> and <AnotherExternal>
         `;
@@ -115,8 +115,8 @@ describe("Grammar Compiler", () => {
 
         it("Multiple imports work together", () => {
             const grammarText = `
-            @import { Rule1 } from "file1.grammar"
-            @import { Rule2 } from "file2.grammar"
+            @import { Rule1 } from "file1.agr"
+            @import { Rule2 } from "file2.agr"
 
             @<Start> = <Rule1> <Rule2>
         `;
@@ -127,7 +127,7 @@ describe("Grammar Compiler", () => {
 
         it("Imported rule in variable reference", () => {
             const grammarText = `
-            @import { ExternalRule } from "external.grammar"
+            @import { ExternalRule } from "external.agr"
 
             @<Start> = $(x:<ExternalRule>)
         `;
@@ -138,7 +138,7 @@ describe("Grammar Compiler", () => {
 
         it("Non-imported rule still errors", () => {
             const grammarText = `
-            @import { ExternalRule } from "external.grammar"
+            @import { ExternalRule } from "external.agr"
 
             @<Start> = <ExternalRule> <UndefinedRule>
         `;
@@ -152,7 +152,7 @@ describe("Grammar Compiler", () => {
 
         it("Local definition overrides import", () => {
             const grammarText = `
-            @import { LocalRule } from "external.grammar"
+            @import { LocalRule } from "external.agr"
 
             @<Start> = <LocalRule>
             @<LocalRule> = local definition

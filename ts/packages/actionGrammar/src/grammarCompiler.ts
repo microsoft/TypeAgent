@@ -53,10 +53,10 @@ export function compileGrammar(
     if (imports) {
         for (const importStmt of imports) {
             // Determine if this is a type import (.ts) or grammar import (.agr)
-            const isTypeImport = importStmt.source.endsWith(".ts");
-            const targetSet = isTypeImport
-                ? importedTypeNames
-                : importedRuleNames;
+            const isGrammarImport = importStmt.source.endsWith(".agr");
+            const targetSet = isGrammarImport
+                ? importedRuleNames
+                : importedTypeNames;
 
             if (importStmt.names === "*") {
                 // For wildcard imports, we can't know all names at compile time
