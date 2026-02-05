@@ -33,7 +33,8 @@ export type GrammarCompileError = {
 
 type CompileContext = {
     ruleDefMap: DefinitionMap;
-    importedNames: Set<string>; // Names imported from other files
+    importedRuleNames: Set<string>; // Rule names imported from .agr files
+    importedTypeNames: Set<string>; // Type names imported from .ts files
     currentDefinition?: string | undefined;
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
@@ -46,18 +47,25 @@ export function compileGrammar(
 ): GrammarCompileResult {
     const ruleDefMap: DefinitionMap = new Map();
 
-    // Build set of imported names
-    const importedNames = new Set<string>();
+    // Build separate sets of imported rule names and type names
+    const importedRuleNames = new Set<string>();
+    const importedTypeNames = new Set<string>();
     if (imports) {
         for (const importStmt of imports) {
+            // Determine if this is a type import (.ts) or grammar import (.agr)
+            const isTypeImport = importStmt.source.endsWith(".ts");
+            const targetSet = isTypeImport
+                ? importedTypeNames
+                : importedRuleNames;
+
             if (importStmt.names === "*") {
                 // For wildcard imports, we can't know all names at compile time
                 // They will be validated at runtime instead
                 // Mark with a special sentinel to indicate wildcard import
-                importedNames.add("*");
+                targetSet.add("*");
             } else {
                 for (const name of importStmt.names) {
-                    importedNames.add(name);
+                    targetSet.add(name);
                 }
             }
         }
@@ -65,7 +73,8 @@ export function compileGrammar(
 
     const context: CompileContext = {
         ruleDefMap,
-        importedNames,
+        importedRuleNames,
+        importedTypeNames,
         errors: [],
         warnings: [],
     };
@@ -114,9 +123,10 @@ function createNamedGrammarRules(
 ): GrammarRule[] {
     const record = context.ruleDefMap.get(name);
     if (record === undefined) {
-        // Check if this name is imported
+        // Check if this rule name is imported from a grammar file
         const isImported =
-            context.importedNames.has(name) || context.importedNames.has("*");
+            context.importedRuleNames.has(name) ||
+            context.importedRuleNames.has("*");
 
         if (!isImported) {
             context.errors.push({
@@ -206,8 +216,28 @@ function createGrammarRule(
                         optional: expr.optional,
                     });
                 } else {
-                    // Note: Type names (including imported types from action schemas)
-                    // are not validated at compile time. They will be validated at runtime.
+                    // Validate type name references
+                    // Built-in types: string, wildcard
+                    // REVIEW: word built-in type?
+                    const isBuiltInType =
+                        typeName === "string" ||
+                        typeName === "wildcard" ||
+                        typeName === "word";
+                    if (!isBuiltInType) {
+                        const isImportedType =
+                            context.importedTypeNames.has(typeName) ||
+                            context.importedTypeNames.has("*");
+
+                        // If type imports exist, validate that the type is either built-in or imported
+                        if (!isImportedType) {
+                            context.errors.push({
+                                message: `Undefined type '${typeName}' in variable '${name}'`,
+                                definition: context.currentDefinition,
+                                pos: ruleRefPos,
+                            });
+                        }
+                    }
+
                     parts.push({
                         type: "wildcard",
                         variable: name,

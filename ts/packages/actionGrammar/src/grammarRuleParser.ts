@@ -604,7 +604,6 @@ class GrammarRuleParser {
     }
 
     private parseRuleDefinition(): RuleDefinition {
-        this.consume("@", "start of rule");
         const pos = this.pos;
         const name = this.parseRuleName();
         this.consume("=", "after rule identifier");
@@ -690,7 +689,7 @@ class GrammarRuleParser {
     private parseImportStatement(): ImportStatement {
         // @import { Name1, Name2 } from "file"
         // @import * from "file"
-        this.skipWhitespace(7); // skip "@import"
+        this.skipWhitespace(6); // skip "import"
         const pos = this.pos;
 
         let names: string[] | "*";
@@ -760,17 +759,23 @@ class GrammarRuleParser {
         const definitions: RuleDefinition[] = [];
         this.skipWhitespace();
         while (!this.isAtEnd()) {
-            if (this.isAt("entity")) {
+            if (this.isAt("@")) {
+                this.skipWhitespace(1);
+                if (this.isAt("<")) {
+                    definitions.push(this.parseRuleDefinition());
+                    continue;
+                }
+                if (this.isAt("import")) {
+                    imports.push(this.parseImportStatement());
+                    continue;
+                }
+            } else if (this.isAt("entity")) {
                 entities.push(...this.parseEntityDeclaration());
-            } else if (this.isAt("@import")) {
-                imports.push(this.parseImportStatement());
-            } else if (this.isAt("@")) {
-                definitions.push(this.parseRuleDefinition());
-            } else {
-                this.throwUnexpectedCharError(
-                    "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
-                );
+                continue;
             }
+            this.throwUnexpectedCharError(
+                "Expected 'entity' declaration, '@ import' statement, or '@' rule definition",
+            );
         }
         return { entities, imports, definitions };
     }
