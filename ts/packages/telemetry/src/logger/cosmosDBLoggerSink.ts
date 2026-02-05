@@ -2,16 +2,8 @@
 // Licensed under the MIT License.
 
 import { LoggerSink, LogEvent } from "./logger.js";
-import {
-    CosmosClient,
-    Container,
-    BulkOperationResult,
-    CosmosClientOptions,
-    PartitionKeyBuilder,
-} from "@azure/cosmos";
 import registerDebug from "debug";
-import { DefaultAzureCredential } from "@azure/identity";
-import { randomUUID } from "crypto";
+//import { randomUUID } from "crypto";
 
 const debugCosmos = registerDebug("typeagent:logger:cosmosdb");
 
@@ -22,7 +14,7 @@ class CosmosDBLoggerSink implements LoggerSink {
     private pendingEvents: LogEvent[] = [];
     private timeout: NodeJS.Timeout | undefined;
     private disabled = false;
-    private container: Container | undefined;
+    //private container: Container | undefined;
 
     constructor(
         private readonly connectionString: string,
@@ -33,6 +25,7 @@ class CosmosDBLoggerSink implements LoggerSink {
     ) {}
 
     public logEvent(event: LogEvent) {
+        console.log("CosmosDBLoggerSink logEvent:", event, this.databaseName, this.containerName);
         if (
             this.connectionString &&
             !this.disabled &&
@@ -81,31 +74,31 @@ class CosmosDBLoggerSink implements LoggerSink {
         this.timeout = undefined;
     }
 
-    private async getContainer(): Promise<Container> {
-        if (!this.container) {
-            let options = {} as CosmosClientOptions;
-            options.endpoint = this.connectionString;
-            options.aadCredentials = new DefaultAzureCredential();
-            const client = new CosmosClient(options);
-            const database = client.database(this.databaseName);
+    // private async getContainer(): Promise<Container> {
+    //     if (!this.container) {
+    //         let options = {} as CosmosClientOptions;
+    //         options.endpoint = this.connectionString;
+    //         options.aadCredentials = new DefaultAzureCredential();
+    //         const client = new CosmosClient(options);
+    //         const database = client.database(this.databaseName);
 
-            // with RBAC and AAD, we assume DB and Container already exist
-            // // Create database if it doesn't exist
-            // await client.databases.createIfNotExists({ id: this.databaseName });
+    //         // with RBAC and AAD, we assume DB and Container already exist
+    //         // // Create database if it doesn't exist
+    //         // await client.databases.createIfNotExists({ id: this.databaseName });
 
-            // // Create container if it doesn't exist
-            // await database.containers.createIfNotExists({
-            //     id: this.containerName,
-            //     partitionKey: { paths: ["/id"] }
-            // });
+    //         // // Create container if it doesn't exist
+    //         // await database.containers.createIfNotExists({
+    //         //     id: this.containerName,
+    //         //     partitionKey: { paths: ["/id"] }
+    //         // });
 
-            this.container = database.container(this.containerName);
-        }
-        return this.container;
-    }
+    //         this.container = database.container(this.containerName);
+    //     }
+    //     return this.container;
+    // }
 
     private async drain() {
-        const container = await this.getContainer();
+        //const container = await this.getContainer();
 
         while (true) {
             const events = this.pendingEvents;
@@ -118,25 +111,25 @@ class CosmosDBLoggerSink implements LoggerSink {
             try {
                 // Azure Cosmos DB requires each document to have an 'id' field
                 // We'll add it if not present and use bulk operations
-                const operations = events.map((event: any) => {
-                    const partitionKey = new PartitionKeyBuilder()
-                        .addValue(event.id || randomUUID().toString())
-                        .build();
-                    return {
-                        operationType: "Create" as const,
-                        partitionKey: partitionKey,
-                        resourceBody: {
-                            ...event,
-                            id: partitionKey?.toString(),
-                        },
-                    };
-                });
+                // const operations = events.map((event: any) => {
+                //     const partitionKey = new PartitionKeyBuilder()
+                //         .addValue(event.id || randomUUID().toString())
+                //         .build();
+                //     return {
+                //         operationType: "Create" as const,
+                //         partitionKey: partitionKey,
+                //         resourceBody: {
+                //             ...event,
+                //             id: partitionKey?.toString(),
+                //         },
+                //     };
+                // });
 
-                const result: BulkOperationResult[] =
-                    await container.items.executeBulkOperations(operations);
-                debugCosmos(
-                    `Status: ${result[0].response?.statusCode}. ${operations.length} events uploaded`,
-                );
+                // const result: BulkOperationResult[] =
+                //     await container.items.executeBulkOperations(operations);
+                // debugCosmos(
+                //     `Status: ${result[0].response?.statusCode}. ${operations.length} events uploaded`,
+                // );
             } catch (e: any) {
                 if (this.pendingEvents.length !== 0) {
                     events.push(...this.pendingEvents);
