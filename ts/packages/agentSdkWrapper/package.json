@@ -34,7 +34,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@anthropic-ai/sdk": "^0.35.0",
-    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/action-schema": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
