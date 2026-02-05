@@ -17,14 +17,6 @@
     "./rules": "./dist/indexRules.js",
     "./generation": "./dist/generation/index.js"
   },
-  "bin": {
-    "generate-grammar": "./dist/generation/generate-grammar-cli.js",
-    "test-grammar": "./dist/generation/test-grammar-cli.js"
-  },
-  "files": [
-    "dist",
-    "!dist/test"
-  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
