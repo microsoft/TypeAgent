@@ -537,7 +537,7 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
                 name: "buyProduct",
                 description: "Complete shopping flow: search, select, and add product to cart",
                 parameters: {
-                    userRequest: {
+                    productName: {
                         type: "string",
                         description: "Product name or description to purchase",
                     },

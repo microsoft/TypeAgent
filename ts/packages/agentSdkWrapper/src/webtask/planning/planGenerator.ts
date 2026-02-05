@@ -641,7 +641,8 @@ Step 2: Activate commerce schema
   "actionId": "action2-1",
   "tool": "execute_command",
   "parameters": { "request": "@config schema browser.commerce" },
-  "rationale": "Activate commerce schema"
+  "hasUIChange": false,
+  "rationale": "Activate commerce schema - internal command, no page change"
 }
 
 Step 3: Activate commerce actions
@@ -649,7 +650,8 @@ Step 3: Activate commerce actions
   "actionId": "action2-2",
   "tool": "execute_command",
   "parameters": { "request": "@config action browser.commerce" },
-  "rationale": "Activate commerce actions"
+  "hasUIChange": false,
+  "rationale": "Activate commerce actions - internal command, no page change"
 }
 
 Step 4: Buy product using commerce tool
@@ -672,6 +674,11 @@ Step 4: Buy product using commerce tool
 - Parameters: Just the product/item name, NOT action verbs (e.g., "AAA batteries" NOT "buy AAA batteries")
 - naturalLanguage: User's original request for cache population (REQUIRED)
 - ALWAYS navigate to startingUrl FIRST before activating commerce tools
+
+**UI Change Annotation**:
+- Set "hasUIChange": false for @config commands (execute_command with @config) - these are internal TypeAgent commands that don't change the page
+- When hasUIChange is false, the executor will skip page validation after the action
+- Default is true (page validation will occur) if not specified
 
 **General browser tools still available**:
 - Use clickOnElement, enterTextInElement ONLY if commerce tools don't fit
