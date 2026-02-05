@@ -27,7 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
