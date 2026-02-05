@@ -24,7 +24,8 @@ export type DesktopActions =
     | PreviousDesktopAction
     | ToggleNotificationsAction
     | DebugAutoShellAction
-    | SetTextSizeAction;
+    | SetTextSizeAction
+    | SetScreenResolutionAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
@@ -206,6 +207,15 @@ export type SetTextSizeAction = {
     parameters: {
         // small changes are 5% increments, large changes are 25% increments
         size: number; // size in percentage (100% is default) (range is 100 - 225)
+    };
+};
+
+// Change screen resolution
+export type SetScreenResolutionAction = {
+    actionName: "setScreenResolution";
+    parameters: {
+        width: number; // width in pixels
+        height: number; // height in pixels
     };
 };
 

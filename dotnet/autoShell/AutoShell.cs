@@ -984,6 +984,12 @@ internal partial class AutoShell
                         SetTextSize(textSizePct);
                     }
                     break;
+                case "setScreenResolution":
+                    SetDisplayResolution(kvp.Value);
+                    break;
+                case "listResolutions":
+                    ListDisplayResolutions();
+                    break;
                 default:
                     Debug.WriteLine("Unknown command: " + key);
                     break;
@@ -1328,6 +1334,174 @@ internal partial class AutoShell
 
             // Use UI Automation to navigate and set the text size
             UIAutomation.SetTextSizeViaUIAutomation(percentage);
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+    }
+
+    /// <summary>
+    /// Lists all available display resolutions for the primary monitor.
+    /// </summary>
+    static void ListDisplayResolutions()
+    {
+        try
+        {
+            var resolutions = new List<object>();
+            DEVMODE devMode = new DEVMODE();
+            devMode.dmSize = (ushort)Marshal.SizeOf(typeof(DEVMODE));
+
+            int modeNum = 0;
+            while (EnumDisplaySettings(null, modeNum, ref devMode))
+            {
+                resolutions.Add(new
+                {
+                    Width = devMode.dmPelsWidth,
+                    Height = devMode.dmPelsHeight,
+                    BitsPerPixel = devMode.dmBitsPerPel,
+                    RefreshRate = devMode.dmDisplayFrequency
+                });
+                modeNum++;
+            }
+
+            // Remove duplicates and sort by resolution
+            var uniqueResolutions = resolutions
+                .GroupBy(r => new { ((dynamic)r).Width, ((dynamic)r).Height, ((dynamic)r).RefreshRate })
+                .Select(g => g.First())
+                .OrderByDescending(r => ((dynamic)r).Width)
+                .ThenByDescending(r => ((dynamic)r).Height)
+                .ThenByDescending(r => ((dynamic)r).RefreshRate)
+                .ToList();
+
+            Console.WriteLine(JsonConvert.SerializeObject(uniqueResolutions));
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+    }
+
+    /// <summary>
+    /// Sets the display resolution.
+    /// </summary>
+    /// <param name="value">JSON object with "width" and "height" properties, or a string like "1920x1080".</param>
+    static void SetDisplayResolution(JToken value)
+    {
+        try
+        {
+            uint width;
+            uint height;
+            uint? refreshRate = null;
+
+            // Parse the input - can be JSON object or string like "1920x1080"
+            if (value.Type == JTokenType.Object)
+            {
+                width = value.Value<uint>("width");
+                height = value.Value<uint>("height");
+                if (value["refreshRate"] != null)
+                {
+                    refreshRate = value.Value<uint>("refreshRate");
+                }
+            }
+            else
+            {
+                string resString = value.ToString();
+                string[] parts = resString.ToLowerInvariant().Split('x', '@');
+                if (parts.Length < 2)
+                {
+                    LogWarning("Invalid resolution format. Use 'WIDTHxHEIGHT' or 'WIDTHxHEIGHT@REFRESH' (e.g., '1920x1080' or '1920x1080@60')");
+                    return;
+                }
+
+                if (!uint.TryParse(parts[0].Trim(), out width) || !uint.TryParse(parts[1].Trim(), out height))
+                {
+                    LogWarning("Invalid resolution values. Width and height must be positive integers.");
+                    return;
+                }
+
+                if (parts.Length >= 3 && uint.TryParse(parts[2].Trim(), out uint parsedRefresh))
+                {
+                    refreshRate = parsedRefresh;
+                }
+            }
+
+            // Get the current display settings
+            DEVMODE currentMode = new DEVMODE();
+            currentMode.dmSize = (ushort)Marshal.SizeOf(typeof(DEVMODE));
+
+            if (!EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref currentMode))
+            {
+                LogWarning("Failed to get current display settings.");
+                return;
+            }
+
+            // Find a matching display mode
+            DEVMODE newMode = new DEVMODE();
+            newMode.dmSize = (ushort)Marshal.SizeOf(typeof(DEVMODE));
+
+            int modeNum = 0;
+            bool found = false;
+            DEVMODE bestMatch = new DEVMODE();
+
+            while (EnumDisplaySettings(null, modeNum, ref newMode))
+            {
+                if (newMode.dmPelsWidth == width && newMode.dmPelsHeight == height)
+                {
+                    if (refreshRate.HasValue)
+                    {
+                        if (newMode.dmDisplayFrequency == refreshRate.Value)
+                        {
+                            bestMatch = newMode;
+                            found = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        // Prefer higher refresh rate if not specified
+                        if (!found || newMode.dmDisplayFrequency > bestMatch.dmDisplayFrequency)
+                        {
+                            bestMatch = newMode;
+                            found = true;
+                        }
+                    }
+                }
+                modeNum++;
+            }
+
+            if (!found)
+            {
+                LogWarning($"Resolution {width}x{height}" + (refreshRate.HasValue ? $"@{refreshRate}Hz" : "") + " is not supported.");
+                return;
+            }
+
+            // Set the required fields
+            bestMatch.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
+
+            // TODO: better handle return value from change mode
+            // Test if the mode change will work
+            int testResult = ChangeDisplaySettings(ref bestMatch, CDS_TEST);
+            if (testResult != DISP_CHANGE_SUCCESSFUL && testResult != -2)
+            {
+                LogWarning($"Display mode test failed with code: {testResult}");
+                return;
+            }
+
+            // Apply the change
+            int result = ChangeDisplaySettings(ref bestMatch, CDS_UPDATEREGISTRY);
+            switch (result)
+            {
+                case DISP_CHANGE_SUCCESSFUL:
+                    Console.WriteLine($"Resolution changed to {bestMatch.dmPelsWidth}x{bestMatch.dmPelsHeight}@{bestMatch.dmDisplayFrequency}Hz");
+                    break;
+                case DISP_CHANGE_RESTART:
+                    Console.WriteLine($"Resolution will change to {bestMatch.dmPelsWidth}x{bestMatch.dmPelsHeight} after restart.");
+                    break;
+                default:
+                    LogWarning($"Failed to change resolution. Error code: {result}");
+                    break;
+            }
         }
         catch (Exception ex)
         {
