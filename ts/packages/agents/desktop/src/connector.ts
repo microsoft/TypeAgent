@@ -293,7 +293,7 @@ export async function runDesktopActions(
             actionData = {
                 width: action.parameters.width,
                 height: action.parameters.height,
-             } as unknown as string;
+            } as unknown as string;
             confirmationMessage = `Set screen resolution to ${action.parameters.width}x${action.parameters.height}`;
             break;
         }
