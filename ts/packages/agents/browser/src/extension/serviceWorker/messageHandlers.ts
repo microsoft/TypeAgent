@@ -11,6 +11,7 @@ import {
 } from "./websocket";
 import { BrowserContentDownloader } from "./contentDownloader.js";
 import type { KnowledgeExtractionProgress } from "../interfaces/knowledgeExtraction.types";
+import { screenshotCoordinator } from "./screenshotCoordinator";
 
 // Store active extraction callbacks
 const knowledgeExtractionCallbacks = new Map<
@@ -231,10 +232,7 @@ export async function handleMessage(
             return {};
         }
         case "takeScreenshot": {
-            const screenshotUrl = await chrome.tabs.captureVisibleTab({
-                format: "png",
-            });
-
+            const screenshotUrl = await screenshotCoordinator.captureScreenshot();
             return screenshotUrl;
         }
         case "captureHtmlFragments": {

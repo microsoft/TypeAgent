@@ -80,5 +80,37 @@ async function initializePDFInterceptor(): Promise<void> {
 // Initialize the content script when the DOM is fully loaded
 document.addEventListener("DOMContentLoaded", initialize);
 
+// Listen for test messages from the page (for debugging/testing)
+window.addEventListener("message", async (event) => {
+    // Only accept messages from the same window
+    if (event.source !== window) return;
+
+    const data = event.data;
+
+    // Handle screenshot test requests from the page
+    if (data && data.type === "test-screenshot-request") {
+        try {
+            const screenshot = await chrome.runtime.sendMessage({
+                type: "takeScreenshot"
+            });
+
+            // Send response back to the page
+            window.postMessage({
+                type: "test-screenshot-response",
+                requestId: data.requestId,
+                success: true,
+                screenshot: screenshot
+            }, "*");
+        } catch (error: any) {
+            window.postMessage({
+                type: "test-screenshot-response",
+                requestId: data.requestId,
+                success: false,
+                error: error.message
+            }, "*");
+        }
+    }
+});
+
 // Export any functions that need to be accessed from other modules
 export { initialize };
