@@ -30,8 +30,6 @@ import path from "path";
 import {
     EnhancedSpinner,
     ANSI,
-    CompletionMenu,
-    CompletionItem,
     getDisplayWidth,
 } from "interactive-app";
 import { createInterface } from "readline/promises";
@@ -457,30 +455,6 @@ export function createEnhancedClientIO(
             process.stdout.write(`${chalk.cyan("?")} ${message}\n`);
             process.stdout.write(line + "\n\n");
 
-            // Create completion items from choices
-            const items: CompletionItem[] = choices.map((choice, index) => {
-                const item: CompletionItem = {
-                    value: String(index),
-                    label: choice,
-                };
-                if (index === defaultId) {
-                    item.description = "(default)";
-                }
-                return item;
-            });
-
-            // Use completion menu for selection
-            const menu = new CompletionMenu({ maxVisible: 8 });
-            menu.show({ char: "", items, header: "Select an option" }, "");
-
-            // Since we can't do real keyboard input here, use readline
-            // Show numbered options
-            process.stdout.write(ANSI.moveUp(menu["linesDrawn"] || 0));
-            for (let i = 0; i < (menu["linesDrawn"] || 0); i++) {
-                process.stdout.write(ANSI.clearLine + "\n");
-            }
-            process.stdout.write(ANSI.moveUp(menu["linesDrawn"] || 0));
-
             // Display choices with numbers
             choices.forEach((choice, index) => {
                 const isDefault = index === defaultId;
@@ -746,6 +720,225 @@ function formatDisplayContent(content: string | DisplayContent): string {
     return String(content);
 }
 
+/**
+ * Interactive input with inline gray completion suggestions (like GitHub Copilot)
+ * Shows first completion grayed out after cursor, arrows cycle through, Tab accepts
+ */
+async function questionWithCompletion(
+    message: string,
+    getCompletions: (input: string) => Promise<any>,
+): Promise<string> {
+    return new Promise<string>((resolve) => {
+        let input = "";
+        let allCompletions: string[] = []; // All available completions
+        let filteredCompletions: string[] = []; // Filtered based on user typing
+        let completionIndex = 0;
+        let filterStartIndex = -1; // Where filtering begins
+        let completionPrefix = ""; // Fixed prefix before completions
+        let updatingCompletions = false;
+        const stdin = process.stdin;
+        const stdout = process.stdout;
+
+        // Enable raw mode for character-by-character input
+        const wasRaw = stdin.isRaw;
+        if (stdin.isTTY) {
+            stdin.setRawMode(true);
+        }
+        stdin.resume();
+        stdin.setEncoding("utf8");
+
+        // Filter completions based on what user typed after the trigger point
+        const filterCompletions = () => {
+            if (allCompletions.length === 0 || filterStartIndex < 0) {
+                filteredCompletions = [];
+                return;
+            }
+
+            // Get the filter text (what user typed after the space/trigger)
+            const filterText = input.substring(filterStartIndex).toLowerCase();
+
+            if (filterText === "") {
+                // No filter text, show all
+                filteredCompletions = allCompletions;
+            } else {
+                // Filter completions that start with the filter text
+                filteredCompletions = allCompletions.filter(comp =>
+                    comp.toLowerCase().startsWith(filterText)
+                );
+            }
+
+            // Reset index if out of bounds
+            if (completionIndex >= filteredCompletions.length) {
+                completionIndex = 0;
+            }
+        };
+
+        // Render the prompt and input with inline gray suggestion
+        const render = () => {
+            // Hide cursor during render to prevent flashing
+            stdout.write(ANSI.hideCursor);
+
+            // Clear line and redraw
+            stdout.write("\r" + ANSI.clearLine);
+            stdout.write(chalk.cyanBright(message) + input);
+
+            // Show inline completion if available
+            if (filteredCompletions.length > 0 && completionIndex < filteredCompletions.length) {
+                const completion = filteredCompletions[completionIndex];
+                // Build full completion from prefix + completion text
+                const fullCompletion = completionPrefix + (filterStartIndex > completionPrefix.length ? " " : "") + completion;
+                if (fullCompletion.length > input.length) {
+                    const suggestion = fullCompletion.slice(input.length);
+                    const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
+                    stdout.write(chalk.dim(suggestion + counter));
+                    // Move cursor back to end of input
+                    stdout.write("\x1b[" + (suggestion.length + counter.length) + "D");
+                }
+            }
+
+            // Show cursor at the correct position
+            stdout.write(ANSI.showCursor);
+        };
+
+        // Fetch completions for current input
+        const updateCompletions = async () => {
+            if (updatingCompletions) {
+                return; // Skip if already updating
+            }
+            updatingCompletions = true;
+            try {
+                const result = await getCompletions(input);
+                if (result) {
+                    allCompletions = result.allCompletions || [];
+                    filterStartIndex = result.filterStartIndex;
+                    completionPrefix = result.prefix;
+                    filterCompletions();
+                } else {
+                    allCompletions = [];
+                    filteredCompletions = [];
+                    filterStartIndex = -1;
+                    completionPrefix = "";
+                }
+                completionIndex = 0;
+            } catch (e) {
+                allCompletions = [];
+                filteredCompletions = [];
+                filterStartIndex = -1;
+                completionPrefix = "";
+                completionIndex = 0;
+            }
+            updatingCompletions = false;
+            render();
+        };
+
+        // Initial render
+        render();
+
+        // Handle keypresses
+        const onData = async (chunk: Buffer) => {
+            const data = chunk.toString();
+
+            // Handle multi-byte sequences
+            if (data.startsWith("\x1b[")) {
+                // Arrow keys
+                if (data === "\x1b[A") {
+                    // Arrow Up - cycle to previous completion
+                    if (filteredCompletions.length > 0) {
+                        completionIndex = (completionIndex - 1 + filteredCompletions.length) % filteredCompletions.length;
+                        render();
+                    }
+                    return;
+                } else if (data === "\x1b[B") {
+                    // Arrow Down - cycle to next completion
+                    if (filteredCompletions.length > 0) {
+                        completionIndex = (completionIndex + 1) % filteredCompletions.length;
+                        render();
+                    }
+                    return;
+                } else if (data === "\x1b[C" || data === "\x1b[D") {
+                    // Left/Right arrows - ignore for now
+                    return;
+                } else if (data === "\x1b") {
+                    // Esc - clear completions
+                    allCompletions = [];
+                    filteredCompletions = [];
+                    filterStartIndex = -1;
+                    render();
+                    return;
+                }
+            }
+
+            const code = data.charCodeAt(0);
+
+            if (code === 3) {
+                // Ctrl+C
+                cleanup();
+                process.exit(0);
+            } else if (code === 13) {
+                // Enter - accept completion (if any) AND submit
+                if (filteredCompletions.length > 0 && completionIndex < filteredCompletions.length) {
+                    const completion = filteredCompletions[completionIndex];
+                    input = completionPrefix + (filterStartIndex > completionPrefix.length ? " " : "") + completion;
+                }
+                // Windows Terminal ConPTY echoes in raw mode
+                // Move cursor up one line, clear it, and write clean output
+                stdout.write("\x1b[1A"); // Move cursor up 1 line
+                stdout.write("\r" + ANSI.clearLine); // Clear the line
+                stdout.write(chalk.cyanBright(message) + input + "\n");
+                cleanup();
+                resolve(input);
+            } else if (code === 9) {
+                // Tab - accept current completion and continue
+                if (filteredCompletions.length > 0 && completionIndex < filteredCompletions.length) {
+                    const completion = filteredCompletions[completionIndex];
+                    input = completionPrefix + (filterStartIndex > completionPrefix.length ? " " : "") + completion;
+                    allCompletions = [];
+                    filteredCompletions = [];
+                    filterStartIndex = -1;
+                    render();
+                }
+            } else if (code === 127 || code === 8) {
+                // Backspace
+                if (input.length > 0) {
+                    input = input.slice(0, -1);
+                    // If we backspace before the filter point, refetch completions
+                    if (filterStartIndex < 0 || input.length < filterStartIndex) {
+                        await updateCompletions();
+                    } else {
+                        // Just refilter
+                        filterCompletions();
+                        render();
+                    }
+                }
+            } else if (code >= 32 && code < 127) {
+                // Printable ASCII character
+                input += data;
+                // If typing a space, always fetch new completions (new context)
+                if (data === " ") {
+                    await updateCompletions();
+                } else if (filterStartIndex >= 0 && input.length > filterStartIndex) {
+                    // If we have completions and are within filter range, just refilter
+                    filterCompletions();
+                    render();
+                } else {
+                    // Fetch new completions
+                    await updateCompletions();
+                }
+            }
+        };
+
+        const cleanup = () => {
+            stdin.removeListener("data", onData);
+            if (stdin.isTTY) {
+                stdin.setRawMode(wasRaw || false);
+            }
+            stdin.pause();
+        };
+
+        stdin.on("data", onData);
+    });
+}
+
 async function question(
     message: string,
     rl?: readline.promises.Interface,
@@ -824,13 +1017,14 @@ export async function withEnhancedConsoleClientIO(
 }
 
 /**
- * Enhanced command processor with spinner support
+ * Enhanced command processor with spinner support and tab completion
  */
 export async function processCommandsEnhanced<T>(
     interactivePrompt: string | ((context: T) => string | Promise<string>),
     processCommand: (request: string, context: T) => Promise<any>,
     context: T,
     inputs?: string[],
+    getCompletions?: (line: string, context: T) => Promise<any>,
 ) {
     const fs = await import("node:fs");
     let history: string[] = [];
@@ -841,11 +1035,24 @@ export async function processCommandsEnhanced<T>(
         history = hh.commands;
     }
 
+    // Create completer function for tab completion
+    const completer = getCompletions
+        ? async (line: string): Promise<[string[], string]> => {
+              try {
+                  const completions = await getCompletions(line, context);
+                  return [completions, line];
+              } catch {
+                  return [[], line];
+              }
+          }
+        : undefined;
+
     const rl = createInterface({
         input: process.stdin,
         output: process.stdout,
         history,
         terminal: true,
+        completer,
     });
 
     const promptColor = chalk.cyanBright;
@@ -863,6 +1070,12 @@ export async function processCommandsEnhanced<T>(
         let request: string;
         if (inputs) {
             request = getNextInput(prompt, inputs, promptColor);
+        } else if (getCompletions) {
+            // Use inline completion system
+            request = await questionWithCompletion(
+                promptColor(prompt),
+                (line: string) => getCompletions(line, context),
+            );
         } else {
             request = await question(promptColor(prompt), rl);
         }
@@ -932,7 +1145,8 @@ function getNextInput(
 
 /**
  * Get styled console prompt
+ * Returns a clean prompt regardless of status text
  */
-export function getEnhancedConsolePrompt(text: string): string {
-    return `${text}> `;
+export function getEnhancedConsolePrompt(_text: string): string {
+    return "> ";
 }

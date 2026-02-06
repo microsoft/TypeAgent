@@ -36,6 +36,49 @@ const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const { schemaNames } = await getAllActionConfigProvider(
     defaultAppAgentProviders,
 );
+
+/**
+ * Get completions for the current input line using dispatcher's command completion API
+ */
+// Return completion data including where filtering starts
+type CompletionData = {
+    allCompletions: string[]; // All available completions (just the completion text)
+    filterStartIndex: number; // Where user typing should filter (after the space/trigger)
+    prefix: string; // Fixed prefix before completions
+};
+
+async function getCompletionsData(
+    line: string,
+    dispatcher: Dispatcher,
+): Promise<CompletionData | null> {
+    try {
+        const result = await dispatcher.getCommandCompletion(line);
+        if (!result || !result.completions || result.completions.length === 0) {
+            return null;
+        }
+
+        // Extract just the completion strings
+        const allCompletions: string[] = [];
+        for (const group of result.completions) {
+            for (const completion of group.completions) {
+                allCompletions.push(completion);
+            }
+        }
+
+        const prefix = line.substring(0, result.startIndex);
+        // Filter starts after prefix + space
+        const filterStartIndex = result.startIndex + (result.space ? 1 : 0);
+
+        return {
+            allCompletions,
+            filterStartIndex,
+            prefix,
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
 export default class Interactive extends Command {
     static description = "Interactive mode";
     static flags = {
@@ -146,6 +189,8 @@ export default class Interactive extends Command {
                     (command: string, dispatcher: Dispatcher) =>
                         dispatcher.processCommand(command),
                     dispatcher,
+                    undefined, // inputs
+                    flags.testUI ? (line: string) => getCompletionsData(line, dispatcher) : undefined,
                 );
             } finally {
                 await dispatcher.close();
