@@ -38,10 +38,10 @@ export class PromptLogger {
         let dbLoggerSink: LoggerSink | undefined;
 
         try {
-            dbLoggerSink = createDatabaseLoggerSink(
-                "telemetrydb",
-                "promptLogs",
-            );
+            dbLoggerSink = createDatabaseLoggerSink({
+                dbName: "telemetrydb",
+                collectionName: "promptLogs",
+            });
         } catch (e) {
             debugPromptLogger(`DB logging disabled. ${e}`);
         }

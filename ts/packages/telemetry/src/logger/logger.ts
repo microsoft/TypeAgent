@@ -52,3 +52,43 @@ export class MultiSinkLogger implements Logger {
         }
     }
 }
+
+/**
+ * Cosmos DB abstractions to avoid direct dependency on @azure/cosmos and @azure/identity
+ */
+
+export interface CosmosBulkOperationResponse {
+    statusCode?: number;
+}
+
+export interface CosmosBulkOperationResult {
+    response?: CosmosBulkOperationResponse;
+}
+
+export interface CosmosPartitionKey {
+    toString(): string;
+    length: number;
+}
+
+export interface CosmosBulkOperation {
+    operationType: "Create";
+    partitionKey: CosmosPartitionKey;
+    resourceBody: Record<string, unknown>;
+}
+
+export interface CosmosContainerClient {
+    executeBulkOperations(
+        operations: CosmosBulkOperation[],
+    ): Promise<CosmosBulkOperationResult[]>;
+}
+
+export type CosmosContainerClientFactory = (
+    endpoint: string,
+    databaseName: string,
+    containerName: string,
+) => Promise<CosmosContainerClient>;
+
+export interface CosmosPartitionKeyBuilder {
+    addValue(value: string): CosmosPartitionKeyBuilder;
+    build(): CosmosPartitionKey;
+}

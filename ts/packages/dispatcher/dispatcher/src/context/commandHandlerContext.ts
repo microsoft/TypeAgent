@@ -13,6 +13,8 @@ import {
     MultiSinkLogger,
     createDebugLoggerSink,
     createDatabaseLoggerSink,
+    CosmosContainerClientFactory,
+    CosmosPartitionKeyBuilderFactory,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -87,6 +89,9 @@ import {
     registerBuiltInEntities,
 } from "action-grammar";
 import fs from "node:fs";
+import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
+import { CosmosPartitionKeyBuilder } from "telemetry";
+import { DefaultAzureCredential } from "@azure/identity";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -292,11 +297,26 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
-        dbLoggerSink = createDatabaseLoggerSink(
-            "telemetrydb",
-            "dispatcherlogs",
-            isDbEnabled,
-            (e: string) => {
+
+        const cosmosConnectionString = process.env["COSMOSDB_CONNECTION_STRING"];
+        let cosmosContainerFactory: CosmosContainerClientFactory | undefined;
+        let partitionKeyBuilderFactory: CosmosPartitionKeyBuilderFactory | undefined;
+
+        if (cosmosConnectionString && cosmosConnectionString !== "") {
+            cosmosContainerFactory = async (endpoint, dbName, containerName) => {
+                const client = new CosmosClient({ endpoint, aadCredentials: new DefaultAzureCredential() });
+                const container = client.database(dbName).container(containerName);
+                return { executeBulkOperations: (ops) => container.items.executeBulkOperations(ops as any) };
+            };
+
+            partitionKeyBuilderFactory = () => new PartitionKeyBuilder() as unknown as CosmosPartitionKeyBuilder;
+        }
+
+        dbLoggerSink = createDatabaseLoggerSink({
+            dbName: "telemetrydb",
+            collectionName: "dispatcherlogs",
+            isEnabled: isDbEnabled,
+            onErrorDisable: (e: string) => {
                 clientIO.notify(
                     undefined,
                     AppAgentEvent.Warning,
@@ -304,7 +324,9 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
                     DispatcherName,
                 );
             },
-        );
+            cosmosContainerFactory: cosmosContainerFactory,
+            cosmosPartitionKeyBuilderFactory: partitionKeyBuilderFactory,
+        });
     } catch (e) {
         clientIO.notify(
             undefined,

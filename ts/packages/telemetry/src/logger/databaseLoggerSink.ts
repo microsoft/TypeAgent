@@ -1,49 +1,81 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { LoggerSink } from "./logger.js";
+import {
+    LoggerSink,
+    CosmosContainerClientFactory,
+} from "./logger.js";
 import { createMongoDBLoggerSink } from "./mongoLoggerSink.js";
-import { createCosmosDBLoggerSink } from "./cosmosDBLoggerSink.js";
+import {
+    createCosmosDBLoggerSink,
+    CosmosPartitionKeyBuilderFactory,
+} from "./cosmosDBLoggerSink.js";
 import registerDebug from "debug";
 
 const debugDatabase = registerDebug("typeagent:logger:database");
+
+export interface DatabaseLoggerSinkOptions {
+    dbName: string;
+    collectionName: string;
+    isEnabled?: () => boolean;
+    onErrorDisable?: (error: string) => void;
+    /**
+     * Factory to create a Cosmos container client. Required if using Cosmos DB.
+     */
+    cosmosContainerFactory?: CosmosContainerClientFactory | undefined;
+    /**
+     * Factory to create a Cosmos partition key builder. Required if using Cosmos DB.
+     */
+    cosmosPartitionKeyBuilderFactory?: CosmosPartitionKeyBuilderFactory | undefined;
+}
 
 /**
  * Creates a database logger sink that automatically selects between MongoDB and Cosmos DB
  * based on which environment variable is set.
  *
  * Priority order:
- * 1. COSMOSDB_CONNECTION_STRING - Uses Azure Cosmos DB
+ * 1. COSMOSDB_CONNECTION_STRING - Uses Azure Cosmos DB (requires cosmosContainerFactory and cosmosPartitionKeyBuilderFactory)
  * 2. MONGODB_CONNECTION_STRING - Uses MongoDB
  *
- * @param dbName - The name of the database
- * @param collectionName - The name of the collection/container
- * @param isEnabled - Optional function to check if logging is enabled
- * @param onErrorDisable - Optional callback when logging is disabled due to error
+ * @param options - Configuration options for the database logger sink
  * @returns A LoggerSink instance or undefined if no connection string is configured
  */
 export function createDatabaseLoggerSink(
-    dbName: string,
-    collectionName: string,
-    isEnabled?: () => boolean,
-    onErrorDisable?: (error: string) => void,
+    options: DatabaseLoggerSinkOptions,
 ): LoggerSink | undefined {
+    const {
+        dbName,
+        collectionName,
+        isEnabled,
+        onErrorDisable,
+        cosmosContainerFactory,
+        cosmosPartitionKeyBuilderFactory,
+    } = options;
+
     const cosmosConnectionString = process.env["COSMOSDB_CONNECTION_STRING"];
     const mongoConnectionString = process.env["MONGODB_CONNECTION_STRING"];
 
-    // Try Cosmos DB first
+    // Try Cosmos DB first (if factories are provided)
     if (cosmosConnectionString && cosmosConnectionString !== "") {
-        try {
-            debugDatabase("Using Azure Cosmos DB for database logging");
-            return createCosmosDBLoggerSink(
-                dbName,
-                collectionName,
-                isEnabled,
-                onErrorDisable,
+        if (cosmosContainerFactory && cosmosPartitionKeyBuilderFactory) {
+            try {
+                debugDatabase("Using Azure Cosmos DB for database logging");
+                return createCosmosDBLoggerSink(
+                    dbName,
+                    collectionName,
+                    cosmosContainerFactory,
+                    cosmosPartitionKeyBuilderFactory,
+                    isEnabled,
+                    onErrorDisable,
+                );
+            } catch (e) {
+                debugDatabase(`Failed to create Cosmos DB logger sink: ${e}`);
+                // Fall through to try MongoDB
+            }
+        } else {
+            debugDatabase(
+                "Cosmos DB connection string found but no factories provided, falling back to MongoDB",
             );
-        } catch (e) {
-            debugDatabase(`Failed to create Cosmos DB logger sink: ${e}`);
-            // Fall through to try MongoDB
         }
     }
 

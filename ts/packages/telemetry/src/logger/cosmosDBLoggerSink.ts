@@ -1,16 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { LoggerSink, LogEvent } from "./logger.js";
 import {
-    CosmosClient,
-    Container,
-    BulkOperationResult,
-    CosmosClientOptions,
-    PartitionKeyBuilder,
-} from "@azure/cosmos";
+    LoggerSink,
+    LogEvent,
+    CosmosContainerClient,
+    CosmosContainerClientFactory,
+    CosmosPartitionKeyBuilder,
+    CosmosBulkOperation,
+} from "./logger.js";
 import registerDebug from "debug";
-import { DefaultAzureCredential } from "@azure/identity";
 import { randomUUID } from "crypto";
 
 const debugCosmos = registerDebug("typeagent:logger:cosmosdb");
@@ -18,23 +17,27 @@ const debugCosmos = registerDebug("typeagent:logger:cosmosdb");
 const UPLOAD_DELAY = 1000;
 const MAX_RETRY = 3;
 
+export type CosmosPartitionKeyBuilderFactory = () => CosmosPartitionKeyBuilder;
+
 class CosmosDBLoggerSink implements LoggerSink {
     private pendingEvents: LogEvent[] = [];
     private timeout: NodeJS.Timeout | undefined;
     private disabled = false;
-    private container: Container | undefined;
+    private container: CosmosContainerClient | undefined;
 
     constructor(
-        private readonly connectionString: string,
+        private readonly endpoint: string,
         private readonly databaseName: string,
         private readonly containerName: string,
+        private readonly containerFactory: CosmosContainerClientFactory,
+        private readonly partitionKeyBuilderFactory: CosmosPartitionKeyBuilderFactory,
         private readonly isEnabled?: () => boolean,
         private readonly onErrorDisable?: (error: string) => void,
     ) {}
 
     public logEvent(event: LogEvent) {
         if (
-            this.connectionString &&
+            this.endpoint &&
             !this.disabled &&
             this.isEnabled?.() !== false
         ) {
@@ -81,25 +84,13 @@ class CosmosDBLoggerSink implements LoggerSink {
         this.timeout = undefined;
     }
 
-    private async getContainer(): Promise<Container> {
+    private async getContainer(): Promise<CosmosContainerClient> {
         if (!this.container) {
-            let options = {} as CosmosClientOptions;
-            options.endpoint = this.connectionString;
-            options.aadCredentials = new DefaultAzureCredential();
-            const client = new CosmosClient(options);
-            const database = client.database(this.databaseName);
-
-            // with RBAC and AAD, we assume DB and Container already exist
-            // // Create database if it doesn't exist
-            // await client.databases.createIfNotExists({ id: this.databaseName });
-
-            // // Create container if it doesn't exist
-            // await database.containers.createIfNotExists({
-            //     id: this.containerName,
-            //     partitionKey: { paths: ["/id"] }
-            // });
-
-            this.container = database.container(this.containerName);
+            this.container = await this.containerFactory(
+                this.endpoint,
+                this.databaseName,
+                this.containerName,
+            );
         }
         return this.container;
     }
@@ -118,22 +109,23 @@ class CosmosDBLoggerSink implements LoggerSink {
             try {
                 // Azure Cosmos DB requires each document to have an 'id' field
                 // We'll add it if not present and use bulk operations
-                const operations = events.map((event: any) => {
-                    const partitionKey = new PartitionKeyBuilder()
-                        .addValue(event.id || randomUUID().toString())
-                        .build();
-                    return {
-                        operationType: "Create" as const,
-                        partitionKey: partitionKey,
-                        resourceBody: {
-                            ...event,
-                            id: partitionKey?.toString(),
-                        },
-                    };
-                });
+                const operations: CosmosBulkOperation[] = events.map(
+                    (event: any) => {
+                        const partitionKey = this.partitionKeyBuilderFactory()
+                            .addValue(event.id || randomUUID().toString())
+                            .build();
+                        return {
+                            operationType: "Create" as const,
+                            partitionKey: partitionKey,
+                            resourceBody: {
+                                ...event,
+                                id: partitionKey.toString(),
+                            },
+                        };
+                    },
+                );
 
-                const result: BulkOperationResult[] =
-                    await container.items.executeBulkOperations(operations);
+                const result = await container.executeBulkOperations(operations);
                 debugCosmos(
                     `Status: ${result[0].response?.statusCode}. ${operations.length} events uploaded`,
                 );
@@ -151,19 +143,23 @@ class CosmosDBLoggerSink implements LoggerSink {
 export function createCosmosDBLoggerSink(
     databaseName: string,
     containerName: string,
+    containerFactory: CosmosContainerClientFactory,
+    partitionKeyBuilderFactory: CosmosPartitionKeyBuilderFactory,
     isEnabled?: () => boolean,
     onErrorDisable?: (error: string) => void,
-): LoggerSink | undefined {
-    const connectionString = process.env["COSMOSDB_CONNECTION_STRING"] ?? null;
-    if (connectionString === null || connectionString === "") {
+): LoggerSink {
+    const endpoint = process.env["COSMOSDB_CONNECTION_STRING"] ?? "";
+    if (endpoint === "") {
         throw new Error(
             "COSMOSDB_CONNECTION_STRING environment variable not set",
         );
     }
     return new CosmosDBLoggerSink(
-        connectionString,
+        endpoint,
         databaseName,
         containerName,
+        containerFactory,
+        partitionKeyBuilderFactory,
         isEnabled,
         onErrorDisable,
     );
