@@ -1044,8 +1044,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             n_seconds: durationInSeconds,
             height: height,
             width: width,
-            model: "sora",
-            inpaint_items: [],
+            model: "sora-2",
         };
 
         // file parameters
