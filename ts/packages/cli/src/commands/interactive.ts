@@ -190,7 +190,9 @@ export default class Interactive extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined, // inputs
-                    flags.testUI ? (line: string) => getCompletionsData(line, dispatcher) : undefined,
+                    flags.testUI
+                        ? (line: string) => getCompletionsData(line, dispatcher)
+                        : undefined,
                 );
             } finally {
                 await dispatcher.close();

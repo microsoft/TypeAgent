@@ -27,11 +27,7 @@ import type {
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
-import {
-    EnhancedSpinner,
-    ANSI,
-    getDisplayWidth,
-} from "interactive-app";
+import { EnhancedSpinner, ANSI, getDisplayWidth } from "interactive-app";
 import { createInterface } from "readline/promises";
 import readline from "readline";
 import { convert } from "html-to-text";
@@ -762,8 +758,8 @@ async function questionWithCompletion(
                 filteredCompletions = allCompletions;
             } else {
                 // Filter completions that start with the filter text
-                filteredCompletions = allCompletions.filter(comp =>
-                    comp.toLowerCase().startsWith(filterText)
+                filteredCompletions = allCompletions.filter((comp) =>
+                    comp.toLowerCase().startsWith(filterText),
                 );
             }
 
@@ -783,16 +779,24 @@ async function questionWithCompletion(
             stdout.write(chalk.cyanBright(message) + input);
 
             // Show inline completion if available
-            if (filteredCompletions.length > 0 && completionIndex < filteredCompletions.length) {
+            if (
+                filteredCompletions.length > 0 &&
+                completionIndex < filteredCompletions.length
+            ) {
                 const completion = filteredCompletions[completionIndex];
                 // Build full completion from prefix + completion text
-                const fullCompletion = completionPrefix + (filterStartIndex > completionPrefix.length ? " " : "") + completion;
+                const fullCompletion =
+                    completionPrefix +
+                    (filterStartIndex > completionPrefix.length ? " " : "") +
+                    completion;
                 if (fullCompletion.length > input.length) {
                     const suggestion = fullCompletion.slice(input.length);
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
                     stdout.write(chalk.dim(suggestion + counter));
                     // Move cursor back to end of input
-                    stdout.write("\x1b[" + (suggestion.length + counter.length) + "D");
+                    stdout.write(
+                        "\x1b[" + (suggestion.length + counter.length) + "D",
+                    );
                 }
             }
 
@@ -844,14 +848,17 @@ async function questionWithCompletion(
                 if (data === "\x1b[A") {
                     // Arrow Up - cycle to previous completion
                     if (filteredCompletions.length > 0) {
-                        completionIndex = (completionIndex - 1 + filteredCompletions.length) % filteredCompletions.length;
+                        completionIndex =
+                            (completionIndex - 1 + filteredCompletions.length) %
+                            filteredCompletions.length;
                         render();
                     }
                     return;
                 } else if (data === "\x1b[B") {
                     // Arrow Down - cycle to next completion
                     if (filteredCompletions.length > 0) {
-                        completionIndex = (completionIndex + 1) % filteredCompletions.length;
+                        completionIndex =
+                            (completionIndex + 1) % filteredCompletions.length;
                         render();
                     }
                     return;
@@ -876,9 +883,17 @@ async function questionWithCompletion(
                 process.exit(0);
             } else if (code === 13) {
                 // Enter - accept completion (if any) AND submit
-                if (filteredCompletions.length > 0 && completionIndex < filteredCompletions.length) {
+                if (
+                    filteredCompletions.length > 0 &&
+                    completionIndex < filteredCompletions.length
+                ) {
                     const completion = filteredCompletions[completionIndex];
-                    input = completionPrefix + (filterStartIndex > completionPrefix.length ? " " : "") + completion;
+                    input =
+                        completionPrefix +
+                        (filterStartIndex > completionPrefix.length
+                            ? " "
+                            : "") +
+                        completion;
                 }
                 // Windows Terminal ConPTY echoes in raw mode
                 // Move cursor up one line, clear it, and write clean output
@@ -889,9 +904,17 @@ async function questionWithCompletion(
                 resolve(input);
             } else if (code === 9) {
                 // Tab - accept current completion and continue
-                if (filteredCompletions.length > 0 && completionIndex < filteredCompletions.length) {
+                if (
+                    filteredCompletions.length > 0 &&
+                    completionIndex < filteredCompletions.length
+                ) {
                     const completion = filteredCompletions[completionIndex];
-                    input = completionPrefix + (filterStartIndex > completionPrefix.length ? " " : "") + completion;
+                    input =
+                        completionPrefix +
+                        (filterStartIndex > completionPrefix.length
+                            ? " "
+                            : "") +
+                        completion;
                     allCompletions = [];
                     filteredCompletions = [];
                     filterStartIndex = -1;
@@ -902,7 +925,10 @@ async function questionWithCompletion(
                 if (input.length > 0) {
                     input = input.slice(0, -1);
                     // If we backspace before the filter point, refetch completions
-                    if (filterStartIndex < 0 || input.length < filterStartIndex) {
+                    if (
+                        filterStartIndex < 0 ||
+                        input.length < filterStartIndex
+                    ) {
                         await updateCompletions();
                     } else {
                         // Just refilter
@@ -916,7 +942,10 @@ async function questionWithCompletion(
                 // If typing a space, always fetch new completions (new context)
                 if (data === " ") {
                     await updateCompletions();
-                } else if (filterStartIndex >= 0 && input.length > filterStartIndex) {
+                } else if (
+                    filterStartIndex >= 0 &&
+                    input.length > filterStartIndex
+                ) {
                     // If we have completions and are within filter range, just refilter
                     filterCompletions();
                     render();
