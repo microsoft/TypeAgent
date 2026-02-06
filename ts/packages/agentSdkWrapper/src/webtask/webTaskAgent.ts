@@ -682,29 +682,25 @@ export type BrowserAction =
     | ScrollUp;
 \`\`\`
 
-# ⭐ COMMERCE SEMANTIC QUERY ACTIONS (PREFER THESE)
+# ⭐ BROWSER SEMANTIC QUERY ACTIONS (PREFER THESE)
 
-For e-commerce sites, you have access to specialized commerce actions via typeagent_action.
-These use LLM to understand page content semantically and are MUCH BETTER than parsing raw HTML.
+You have access to semantic query actions that use LLM to understand page content.
+These are CORE BROWSER ACTIONS and are MUCH BETTER than parsing raw HTML.
 
-**CRITICAL: Activate commerce schema FIRST:**
-\`\`\`typescript
-// Step 1: Activate schema
-execute_command({ request: "@config schema browser.commerce" })
-// Step 2: Activate actions
-execute_command({ request: "@config action browser.commerce" })
-// Step 3: Now you can use commerce actions
-\`\`\`
-
-**Semantic Query Actions** (Use via typeagent_action with agent="browser.commerce"):
+**Semantic Query Actions** (available for ALL sites via typeagent_action):
 
 1. **queryPageContent** - Extract ANY information from page ⭐ USE THIS FIRST
    \`\`\`typescript
-   typeagent_action({
-     agent: "browser.commerce",
-     action: "queryPageContent",
-     parameters: { query: "what is the product price?" },
-     naturalLanguage: "get product price"
+   execute_command({
+     request: JSON.stringify({
+       tool: "typeagent_action",
+       parameters: {
+         agent: "browser",
+         action: "queryPageContent",
+         parameters: { query: "what is the product price?" },
+         naturalLanguage: "get product price"
+       }
+     })
    })
    // Returns: { answered: true, answerText: "$24.99", confidence: 0.9 }
    \`\`\`
@@ -716,25 +712,35 @@ execute_command({ request: "@config action browser.commerce" })
 
 2. **getElementByDescription** - Find elements without CSS selectors ⭐ USE BEFORE getHTML
    \`\`\`typescript
-   typeagent_action({
-     agent: "browser.commerce",
-     action: "getElementByDescription",
-     parameters: {
-       elementDescription: "Add to Cart button",
-       elementType: "button"
-     },
-     naturalLanguage: "find add to cart button"
+   execute_command({
+     request: JSON.stringify({
+       tool: "typeagent_action",
+       parameters: {
+         agent: "browser",
+         action: "getElementByDescription",
+         parameters: {
+           elementDescription: "Add to Cart button",
+           elementType: "button"
+         },
+         naturalLanguage: "find add to cart button"
+       }
+     })
    })
    // Returns: { found: true, elementCssSelector: "#add-to-cart", elementText: "Add to Cart" }
    \`\`\`
 
 3. **isPageStateMatched** - Verify page state ⭐ USE FOR VALIDATION
    \`\`\`typescript
-   typeagent_action({
-     agent: "browser.commerce",
-     action: "isPageStateMatched",
-     parameters: { expectedStateDescription: "shopping cart page is displayed" },
-     naturalLanguage: "verify cart page"
+   execute_command({
+     request: JSON.stringify({
+       tool: "typeagent_action",
+       parameters: {
+         agent: "browser",
+         action: "isPageStateMatched",
+         parameters: { expectedStateDescription: "shopping cart page is displayed" },
+         naturalLanguage: "verify cart page"
+       }
+     })
    })
    // Returns: { matched: true, confidence: 0.95, explanation: "..." }
    \`\`\`
@@ -763,17 +769,31 @@ execute_command({ request: "@config action browser.commerce" })
 4. **Example workflow with semantic queries:**
    a) browser__openWebPage({ site: "https://example.com" })
    b) browser__awaitPageLoad()
-   c) execute_command({ request: "@config schema browser.commerce" })
-   d) execute_command({ request: "@config action browser.commerce" })
-   e) typeagent_action({ agent: "browser.commerce", action: "getElementByDescription",
-                        parameters: { elementDescription: "search input", elementType: "input" },
-                        naturalLanguage: "find search box" })
+   c) execute_command({
+        request: JSON.stringify({
+          tool: "typeagent_action",
+          parameters: {
+            agent: "browser",
+            action: "getElementByDescription",
+            parameters: { elementDescription: "search input", elementType: "input" },
+            naturalLanguage: "find search box"
+          }
+        })
+      })
       → Returns { found: true, elementCssSelector: "input[name='q']" }
-   f) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
-   g) browser__awaitPageLoad()
-   h) typeagent_action({ agent: "browser.commerce", action: "queryPageContent",
-                        parameters: { query: "get titles and prices of first 5 products" },
-                        naturalLanguage: "extract product list" })
+   d) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
+   e) browser__awaitPageLoad()
+   f) execute_command({
+        request: JSON.stringify({
+          tool: "typeagent_action",
+          parameters: {
+            agent: "browser",
+            action: "queryPageContent",
+            parameters: { query: "get titles and prices of first 5 products" },
+            naturalLanguage: "extract product list"
+          }
+        })
+      })
       → Returns { answered: true, answerText: "[product data...]" }
 
 **Old workflow (ONLY if semantic queries fail):**

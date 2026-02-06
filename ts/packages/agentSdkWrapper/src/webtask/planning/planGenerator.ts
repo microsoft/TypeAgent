@@ -598,19 +598,11 @@ Generate the revised plan now as valid JSON:`;
 
 ⚠️ IMPORTANT: Commerce sites support specialized tools that are FASTER and MORE RELIABLE than general browser tools.
 
-**Schema Activation** (REQUIRED before using commerce tools):
-Commerce tools must be activated using execute_command with @config commands:
-1. First: execute_command with request "@config schema browser.commerce"
-2. Then: execute_command with request "@config action browser.commerce"
-3. Only after activation can you use typeagent_action to call commerce actions
-
-**Available Commerce Tools** (called via typeagent_action after activation):
-All commerce actions use typeagent_action with agent="browser.commerce", action=<actionName>, parameters={...}, naturalLanguage="user's original request"
-
-⭐ **SEMANTIC QUERY ACTIONS** (PREFER THESE - Use BEFORE requesting raw HTML):
-These actions use LLM to understand page content semantically. They are FASTER and MORE ACCURATE than parsing raw HTML.
+**Available Browser Semantic Query Actions** (use these for ALL browser automation):
+⭐ These are CORE BROWSER ACTIONS - use typeagent_action with agent="browser"
 
 - **queryPageContent** - Answer questions about page content ⭐ USE THIS FIRST
+  * Tool: typeagent_action with agent="browser", action="queryPageContent"
   * Use for: Extracting ANY information from the page (prices, stock, ratings, counts, text, etc.)
   * Parameters: { query: "how many batteries are in stock?" }
   * Natural language: "query page for battery stock"
@@ -618,31 +610,26 @@ These actions use LLM to understand page content semantically. They are FASTER a
   * Examples:
     - "What is the product price?" → { query: "product price" }
     - "How many items in cart?" → { query: "number of items in shopping cart" }
-    - "What's the product rating?" → { query: "product rating" }
-    - "Is the item in stock?" → { query: "is item in stock" }
-  * ⚠️ Only fall back to getHTML if this returns answered: false
+  * ⚠️ Only fall back to getHTML (browser tool) if this returns answered: false
 
 - **getElementByDescription** - Find element by natural language ⭐ USE THIS FIRST
-  * Use for: Locating elements when you don't have the CSS selector
+  * Tool: typeagent_action with agent="browser", action="getElementByDescription"
+  * Use for: Locating elements without CSS selectors
   * Parameters: { elementDescription: "Add to Cart button", elementType: "button" }
   * Natural language: "find add to cart button"
-  * Returns: { found: true, elementName: "Add to Cart button", elementCssSelector: "#add-to-cart", elementHtml: "...", elementText: "Add to Cart" }
-  * Examples:
-    - Find submit button → { elementDescription: "submit button", elementType: "button" }
-    - Find search input → { elementDescription: "search input", elementType: "input" }
-    - Find navigation link → { elementDescription: "home link", elementType: "link" }
-  * ⚠️ Only fall back to getHTML + manual parsing if this returns found: false
+  * Returns: { found: true, elementCssSelector: "#add-to-cart", ... }
+  * ⚠️ Only fall back to getHTML (browser tool) if this returns found: false
 
-- **isPageStateMatched** - Verify page state matches expectation ⭐ USE FOR VALIDATION
-  * Use for: Checking if page is in expected state after actions
+- **isPageStateMatched** - Verify page state ⭐ USE FOR VALIDATION
+  * Tool: typeagent_action with agent="browser", action="isPageStateMatched"
+  * Use for: Checking page state after actions
   * Parameters: { expectedStateDescription: "page shows shopping cart" }
   * Natural language: "verify shopping cart page"
-  * Returns: { matched: true/false, currentPageState: {...}, confidence: 0.95, explanation: "..." }
-  * Examples:
-    - Check if cart loaded → { expectedStateDescription: "shopping cart page is displayed" }
-    - Check if product added → { expectedStateDescription: "product successfully added to cart" }
-    - Check if search succeeded → { expectedStateDescription: "search results are displayed" }
-  * ⚠️ Use this instead of getHTML for state verification
+  * Returns: { matched: true/false, confidence: 0.95, explanation: "..." }
+  * ⚠️ Use this instead of getHTML (browser tool) for state verification
+
+**Commerce-Specific Actions**:
+Commerce actions use typeagent_action with agent="browser.commerce", action=<actionName>, parameters={...}, naturalLanguage="user's original request"
 
 **SHOPPING & CART ACTIONS**:
 
@@ -693,27 +680,9 @@ Step 1: Navigate to Home Depot
   "rationale": "Navigate to starting URL"
 }
 
-Step 2: Activate commerce schema
+Step 2: Buy product using commerce tool
 {
   "actionId": "action2-1",
-  "tool": "execute_command",
-  "parameters": { "request": "@config schema browser.commerce" },
-  "hasUIChange": false,
-  "rationale": "Activate commerce schema - internal command, no page change"
-}
-
-Step 3: Activate commerce actions
-{
-  "actionId": "action2-2",
-  "tool": "execute_command",
-  "parameters": { "request": "@config action browser.commerce" },
-  "hasUIChange": false,
-  "rationale": "Activate commerce actions - internal command, no page change"
-}
-
-Step 4: Buy product using commerce tool
-{
-  "actionId": "action3-1",
   "tool": "typeagent_action",
   "parameters": {
     "agent": "browser.commerce",
@@ -731,7 +700,7 @@ Step 1: Query for price
   "actionId": "query1",
   "tool": "typeagent_action",
   "parameters": {
-    "agent": "browser.commerce",
+    "agent": "browser",
     "action": "queryPageContent",
     "parameters": { "query": "what is the product price?" },
     "naturalLanguage": "get product price"
@@ -744,7 +713,7 @@ Step 2: Query for stock status
   "actionId": "query2",
   "tool": "typeagent_action",
   "parameters": {
-    "agent": "browser.commerce",
+    "agent": "browser",
     "action": "queryPageContent",
     "parameters": { "query": "how many items are in stock?" },
     "naturalLanguage": "check stock availability"
@@ -757,7 +726,7 @@ Step 3: Find element if needed (ONLY if query failed)
   "actionId": "find1",
   "tool": "typeagent_action",
   "parameters": {
-    "agent": "browser.commerce",
+    "agent": "browser",
     "action": "getElementByDescription",
     "parameters": {
       "elementDescription": "Add to Cart button",
@@ -769,17 +738,13 @@ Step 3: Find element if needed (ONLY if query failed)
 }
 
 **CRITICAL MCP Syntax Rules**:
-- Schema activation: Use execute_command with request "@config schema browser.commerce"
-- Action activation: Use execute_command with request "@config action browser.commerce"
+- Browser semantic query actions: Use typeagent_action with agent="browser", action name, parameters object, and naturalLanguage
+  * Examples: queryPageContent, getElementByDescription, isPageStateMatched
+  * naturalLanguage: User's original request for cache population (REQUIRED)
 - Commerce actions: Use typeagent_action with agent="browser.commerce", action name, parameters object, and naturalLanguage
-- Parameters: Just the product/item name, NOT action verbs (e.g., "AAA batteries" NOT "buy AAA batteries")
-- naturalLanguage: User's original request for cache population (REQUIRED)
-- ALWAYS navigate to startingUrl FIRST before activating commerce tools
-
-**UI Change Annotation**:
-- Set "hasUIChange": false for @config commands (execute_command with @config) - these are internal TypeAgent commands that don't change the page
-- When hasUIChange is false, the executor will skip page validation after the action
-- Default is true (page validation will occur) if not specified
+  * Parameters: Just the product/item name, NOT action verbs (e.g., "AAA batteries" NOT "buy AAA batteries")
+  * naturalLanguage: User's original request for cache population (REQUIRED)
+- ALWAYS navigate to startingUrl FIRST before using specialized tools
 
 **Decision Tree for Information Extraction**:
 1. ⭐ FIRST: Try queryPageContent for ANY information extraction
