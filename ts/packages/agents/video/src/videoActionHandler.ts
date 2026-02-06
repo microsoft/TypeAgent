@@ -127,7 +127,7 @@ function createVideoPlaceHolder(
         );
     }
 
-    const statusUrl = `${videoJob.endpoint.origin}/openai/v1/video/generations/jobs/${videoJob.id}?api-version=${videoJob.endpoint.searchParams.get("api-version")}`;
+    const statusUrl = `${videoJob.endpoint.origin}/openai/v1/videos/${videoJob.id}`;
     const hash: string = randomBytes(4).readUInt32LE(0).toString();
     const jScript: string = `
     <script>
