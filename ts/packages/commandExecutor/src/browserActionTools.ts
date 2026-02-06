@@ -26,7 +26,10 @@ interface HTMLFrame {
  */
 function prettifyHTML(html: string): string {
     return html
-        .replace(/<\/(div|section|article|aside|nav|header|footer|main|form|table|ul|ol|li|tr|td|th|thead|tbody|tfoot|h[1-6]|p|blockquote|pre|figure|figcaption|address|hr)>/gi, "</$1>\n")
+        .replace(
+            /<\/(div|section|article|aside|nav|header|footer|main|form|table|ul|ol|li|tr|td|th|thead|tbody|tfoot|h[1-6]|p|blockquote|pre|figure|figcaption|address|hr)>/gi,
+            "</$1>\n",
+        )
         .replace(/<(head|body|html)>/gi, "<$1>\n")
         .replace(/<\/(head|body|html)>/gi, "</$1>\n");
 }
@@ -52,7 +55,10 @@ function estimateTokens(text: string): number {
  * - Saves each frame as a separate prettified HTML file
  * - Returns structured summary instead of raw escaped JSON
  */
-async function postProcessHTML(rawResponse: string, logger: any): Promise<string> {
+async function postProcessHTML(
+    rawResponse: string,
+    logger: any,
+): Promise<string> {
     try {
         // Parse the JSON array structure
         const frames: HTMLFrame[] = JSON.parse(rawResponse);
@@ -62,7 +68,7 @@ async function postProcessHTML(rawResponse: string, logger: any): Promise<string
         }
 
         // Get main frame (frameId 0) or first frame
-        const mainFrame = frames.find(f => f.frameId === 0) || frames[0];
+        const mainFrame = frames.find((f) => f.frameId === 0) || frames[0];
 
         // Use task's HTML directory if available (from TYPEAGENT_HTML_DIR env var),
         // otherwise fall back to temp directory
@@ -71,9 +77,13 @@ async function postProcessHTML(rawResponse: string, logger: any): Promise<string
             htmlDir = process.env.TYPEAGENT_HTML_DIR;
             // Ensure directory exists
             await fs.mkdir(htmlDir, { recursive: true });
-            logger.log(`[HTML_PROCESSOR] Using task HTML directory: ${htmlDir}`);
+            logger.log(
+                `[HTML_PROCESSOR] Using task HTML directory: ${htmlDir}`,
+            );
         } else {
-            htmlDir = await fs.mkdtemp(path.join(os.tmpdir(), "typeagent-html-"));
+            htmlDir = await fs.mkdtemp(
+                path.join(os.tmpdir(), "typeagent-html-"),
+            );
             logger.log(`[HTML_PROCESSOR] Using temp directory: ${htmlDir}`);
         }
 
@@ -81,13 +91,18 @@ async function postProcessHTML(rawResponse: string, logger: any): Promise<string
         const savedFiles: string[] = [];
         for (const frame of frames) {
             const prettified = prettifyHTML(frame.content);
-            const filename = frame.frameId === 0 ? "main-frame.html" : `frame-${frame.frameId}.html`;
+            const filename =
+                frame.frameId === 0
+                    ? "main-frame.html"
+                    : `frame-${frame.frameId}.html`;
             const filepath = path.join(htmlDir, filename);
 
             await fs.writeFile(filepath, prettified, "utf-8");
             savedFiles.push(filepath);
 
-            logger.log(`[HTML_PROCESSOR] Saved frame ${frame.frameId} to ${filepath} (${frame.content.length} bytes, ~${estimateTokens(frame.content)} tokens)`);
+            logger.log(
+                `[HTML_PROCESSOR] Saved frame ${frame.frameId} to ${filepath} (${frame.content.length} bytes, ~${estimateTokens(frame.content)} tokens)`,
+            );
         }
 
         // Extract metadata from main frame
@@ -112,14 +127,13 @@ async function postProcessHTML(rawResponse: string, logger: any): Promise<string
 **Main Frame**: ~${tokenCount} tokens
 
 **Saved HTML Files**:
-${savedFiles.map((f, i) => `  - Frame ${i}: ${f}`).join('\n')}
+${savedFiles.map((f, i) => `  - Frame ${i}: ${f}`).join("\n")}
 
 **Quick Preview** (first 8000 characters):
 ${summary.preview}
 
 **Full HTML**: Use Read tool to access the saved HTML files for detailed analysis.
 Each frame is saved as a separate prettified HTML file with line breaks for easy reading.`;
-
     } catch (error) {
         logger.error(`[HTML_PROCESSOR] Failed to process HTML: ${error}`);
         // If processing fails, return original response
@@ -317,7 +331,8 @@ const browserActionTools: BrowserActionToolDefinition[] = [
 
     {
         name: "browser__getHTML",
-        description: "Get HTML content from the current page. Returns structured summary with file paths to saved HTML frames.",
+        description:
+            "Get HTML content from the current page. Returns structured summary with file paths to saved HTML frames.",
         schema: {
             fullHTML: z
                 .boolean()
@@ -345,8 +360,11 @@ const browserActionTools: BrowserActionToolDefinition[] = [
                 const rawResponse = result.content[0].text;
 
                 // Only process if it looks like JSON array (starts with '[{')
-                if (rawResponse.trim().startsWith('[{')) {
-                    const processedResponse = await postProcessHTML(rawResponse, logger);
+                if (rawResponse.trim().startsWith("[{")) {
+                    const processedResponse = await postProcessHTML(
+                        rawResponse,
+                        logger,
+                    );
                     return toolResult(processedResponse);
                 }
             }
@@ -354,7 +372,7 @@ const browserActionTools: BrowserActionToolDefinition[] = [
             return result;
         },
     },
-    
+
     {
         name: "browser__captureScreenshot",
         description: "Capture a screenshot of the current page",

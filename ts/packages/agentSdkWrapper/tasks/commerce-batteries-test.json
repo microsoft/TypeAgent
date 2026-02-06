@@ -19,7 +19,11 @@
         "requiresAuth": false,
         "estimatedSteps": 2,
         "tags": ["commerce", "shopping", "purchase", "batteries"],
-        "expectedTools": ["@config schema browser.commerce", "@config action browser.commerce", "buyProduct"],
+        "expectedTools": [
+          "@config schema browser.commerce",
+          "@config action browser.commerce",
+          "buyProduct"
+        ],
         "testObjective": "Verify planner detects commerce task and uses buyProduct tool instead of general browser automation"
       }
     }

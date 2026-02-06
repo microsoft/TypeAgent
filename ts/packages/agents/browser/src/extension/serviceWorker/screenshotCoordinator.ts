@@ -9,9 +9,9 @@ import { getActiveTab } from "./tabManager";
  */
 
 interface ScreenshotOptions {
-    format?: 'jpeg' | 'png';  // Default: 'png' to match current behavior
-    quality?: number;  // 0-1 for JPEG (only used when format is 'jpeg')
-    tabId?: number;    // Optional, uses active tab if not provided
+    format?: "jpeg" | "png"; // Default: 'png' to match current behavior
+    quality?: number; // 0-1 for JPEG (only used when format is 'jpeg')
+    tabId?: number; // Optional, uses active tab if not provided
 }
 
 interface StreamInfo {
@@ -47,7 +47,9 @@ class ScreenshotCoordinator {
     /**
      * Capture screenshot - drop-in replacement for chrome.tabs.captureVisibleTab
      */
-    public async captureScreenshot(options: ScreenshotOptions = {}): Promise<string> {
+    public async captureScreenshot(
+        options: ScreenshotOptions = {},
+    ): Promise<string> {
         // Feature flag: use old method if enabled
         if (USE_LOW_FREQUENCY_CAPTURE) {
             return await this.captureLowFrequency(options);
@@ -67,29 +69,31 @@ class ScreenshotCoordinator {
                 const now = Date.now();
                 const timeSinceLastCapture = now - this.lastCaptureTime;
                 if (timeSinceLastCapture < this.MIN_CAPTURE_INTERVAL) {
-                    await this.delay(this.MIN_CAPTURE_INTERVAL - timeSinceLastCapture);
+                    await this.delay(
+                        this.MIN_CAPTURE_INTERVAL - timeSinceLastCapture,
+                    );
                 }
                 this.lastCaptureTime = Date.now();
             }
 
             // Send capture request to offscreen document
             const response = await chrome.runtime.sendMessage({
-                type: 'CAPTURE_FRAME',
+                type: "CAPTURE_FRAME",
                 streamId: streamInfo.streamId,
                 tabId: tabId,
-                format: options.format || 'png',
-                quality: options.quality || 0.8
+                format: options.format || "png",
+                quality: options.quality || 0.8,
             });
 
             if (!response.success) {
-                throw new Error(response.error || 'Screenshot capture failed');
+                throw new Error(response.error || "Screenshot capture failed");
             }
 
             return response.dataUrl;
         } catch (error: any) {
-            console.error('High-frequency capture failed:', error);
+            console.error("High-frequency capture failed:", error);
             // Fallback to low-frequency capture on error
-            console.log('Falling back to low-frequency capture');
+            console.log("Falling back to low-frequency capture");
             return await this.captureLowFrequency(options);
         }
     }
@@ -97,24 +101,30 @@ class ScreenshotCoordinator {
     /**
      * Fallback to old chrome.tabs.captureVisibleTab method
      */
-    private async captureLowFrequency(options: ScreenshotOptions): Promise<string> {
-        const format = options.format || 'png';
+    private async captureLowFrequency(
+        options: ScreenshotOptions,
+    ): Promise<string> {
+        const format = options.format || "png";
         const quality = options.quality;
 
         if (options.tabId) {
             // Get the window ID for the tab
             const tab = await chrome.tabs.get(options.tabId);
             if (!tab.windowId) {
-                throw new Error('Tab has no window ID');
+                throw new Error("Tab has no window ID");
             }
             return await chrome.tabs.captureVisibleTab(tab.windowId, {
-                format: format as 'png' | 'jpeg',
-                ...(format === 'jpeg' && quality !== undefined ? { quality: Math.round(quality * 100) } : {})
+                format: format as "png" | "jpeg",
+                ...(format === "jpeg" && quality !== undefined
+                    ? { quality: Math.round(quality * 100) }
+                    : {}),
             });
         } else {
             return await chrome.tabs.captureVisibleTab({
-                format: format as 'png' | 'jpeg',
-                ...(format === 'jpeg' && quality !== undefined ? { quality: Math.round(quality * 100) } : {})
+                format: format as "png" | "jpeg",
+                ...(format === "jpeg" && quality !== undefined
+                    ? { quality: Math.round(quality * 100) }
+                    : {}),
             });
         }
     }
@@ -142,9 +152,10 @@ class ScreenshotCoordinator {
         // Try to create offscreen document
         try {
             await chrome.offscreen.createDocument({
-                url: 'offscreen/screenshotCapture.html',
-                reasons: ['USER_MEDIA' as any],
-                justification: 'Capturing tab video stream for high-frequency screenshots'
+                url: "offscreen/screenshotCapture.html",
+                reasons: ["USER_MEDIA" as any],
+                justification:
+                    "Capturing tab video stream for high-frequency screenshots",
             });
 
             // Wait for initialization
@@ -152,7 +163,7 @@ class ScreenshotCoordinator {
             this.offscreenDocumentReady = true;
         } catch (error: any) {
             // Document might already exist, that's ok
-            if (error.message?.includes('Only a single offscreen')) {
+            if (error.message?.includes("Only a single offscreen")) {
                 this.offscreenDocumentReady = true;
             } else {
                 throw error;
@@ -180,14 +191,14 @@ class ScreenshotCoordinator {
                     } else {
                         resolve(streamId);
                     }
-                }
+                },
             );
         });
 
         const streamInfo: StreamInfo = {
             streamId,
             tabId,
-            createdAt: Date.now()
+            createdAt: Date.now(),
         };
 
         this.activeStreams.set(tabId, streamInfo);
@@ -202,11 +213,11 @@ class ScreenshotCoordinator {
         if (streamInfo) {
             try {
                 await chrome.runtime.sendMessage({
-                    type: 'STOP_STREAM',
-                    streamId: streamInfo.streamId
+                    type: "STOP_STREAM",
+                    streamId: streamInfo.streamId,
                 });
             } catch (error) {
-                console.warn('Failed to stop stream:', error);
+                console.warn("Failed to stop stream:", error);
             }
             this.activeStreams.delete(tabId);
         }
@@ -244,7 +255,7 @@ class ScreenshotCoordinator {
     private async getActiveTabId(): Promise<number> {
         const tab = await getActiveTab();
         if (!tab || !tab.id) {
-            throw new Error('No active tab found');
+            throw new Error("No active tab found");
         }
         return tab.id;
     }
@@ -253,7 +264,7 @@ class ScreenshotCoordinator {
      * Utility delay function
      */
     private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     /**
@@ -266,7 +277,7 @@ class ScreenshotCoordinator {
 
         try {
             const response = await chrome.runtime.sendMessage({
-                type: 'GET_STREAM_STATUS'
+                type: "GET_STREAM_STATUS",
             });
             return response;
         } catch (error: any) {

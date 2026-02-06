@@ -486,35 +486,50 @@ Generate the revised plan now as valid JSON:`;
     private isCommerceTask(task: WebTask): boolean {
         // Check URL for common commerce domains
         const commerceDomains = [
-            'homedepot.com',
-            'target.com',
-            'walmart.com',
-            'amazon.com',
-            'bestbuy.com',
-            'lowes.com',
-            'acehardware.com',
-            'opentable.com',
-            'resy.com',
-            'shop',
-            'store',
-            'buy',
-            'cart'
+            "homedepot.com",
+            "target.com",
+            "walmart.com",
+            "amazon.com",
+            "bestbuy.com",
+            "lowes.com",
+            "acehardware.com",
+            "opentable.com",
+            "resy.com",
+            "shop",
+            "store",
+            "buy",
+            "cart",
         ];
 
-        const urlMatch = commerceDomains.some(domain =>
-            task.startingUrl.toLowerCase().includes(domain)
+        const urlMatch = commerceDomains.some((domain) =>
+            task.startingUrl.toLowerCase().includes(domain),
         );
 
         // Check description for commerce keywords
         const commerceKeywords = [
-            'buy', 'purchase', 'shopping', 'cart', 'checkout',
-            'product', 'store', 'inventory', 'stock', 'price',
-            'reservation', 'book', 'reserve', 'restaurant', 'table',
-            'add to cart', 'in store', 'location', 'aisle'
+            "buy",
+            "purchase",
+            "shopping",
+            "cart",
+            "checkout",
+            "product",
+            "store",
+            "inventory",
+            "stock",
+            "price",
+            "reservation",
+            "book",
+            "reserve",
+            "restaurant",
+            "table",
+            "add to cart",
+            "in store",
+            "location",
+            "aisle",
         ];
 
-        const descriptionMatch = commerceKeywords.some(keyword =>
-            task.description.toLowerCase().includes(keyword)
+        const descriptionMatch = commerceKeywords.some((keyword) =>
+            task.description.toLowerCase().includes(keyword),
         );
 
         return urlMatch || descriptionMatch;

@@ -436,8 +436,10 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
     },
     {
         name: "browser",
-        description: "Browser automation agent for web navigation, interaction, and content extraction",
-        schemaSource: "export type BrowserActions = OpenWebPage | CloseWebPage | ClickOnElement | EnterTextInElement | GetHTML | ...",
+        description:
+            "Browser automation agent for web navigation, interaction, and content extraction",
+        schemaSource:
+            "export type BrowserActions = OpenWebPage | CloseWebPage | ClickOnElement | EnterTextInElement | GetHTML | ...",
         actions: [
             {
                 name: "openWebPage",
@@ -450,7 +452,8 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
                     tab: {
                         type: "string",
                         enum: ["new", "current", "existing"],
-                        description: "Tab to open in (optional, default: current)",
+                        description:
+                            "Tab to open in (optional, default: current)",
                     },
                 },
             },
@@ -478,7 +481,8 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
                     },
                     submitForm: {
                         type: "boolean",
-                        description: "Submit form after entering text (optional)",
+                        description:
+                            "Submit form after entering text (optional)",
                     },
                 },
             },
@@ -530,12 +534,15 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
     },
     {
         name: "browser.commerce",
-        description: "Commerce-specific browser actions for shopping, cart management, and reservations",
-        schemaSource: "export type ShoppingActions = ViewShoppingCart | FindNearbyStore | GetLocationInStore | BuyProduct | SearchForReservation | SelectReservation",
+        description:
+            "Commerce-specific browser actions for shopping, cart management, and reservations",
+        schemaSource:
+            "export type ShoppingActions = ViewShoppingCart | FindNearbyStore | GetLocationInStore | BuyProduct | SearchForReservation | SelectReservation",
         actions: [
             {
                 name: "buyProduct",
-                description: "Complete shopping flow: search, select, and add product to cart",
+                description:
+                    "Complete shopping flow: search, select, and add product to cart",
                 parameters: {
                     productName: {
                         type: "string",
@@ -545,7 +552,8 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
             },
             {
                 name: "getLocationInStore",
-                description: "Find physical location of product in store (aisle, shelf)",
+                description:
+                    "Find physical location of product in store (aisle, shelf)",
                 parameters: {
                     productName: {
                         type: "string",
@@ -593,35 +601,42 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
             },
             {
                 name: "getElementByDescription",
-                description: "Find UI element on page using natural language description (PREFERRED over raw HTML parsing)",
+                description:
+                    "Find UI element on page using natural language description (PREFERRED over raw HTML parsing)",
                 parameters: {
                     elementDescription: {
                         type: "string",
-                        description: "Natural language description of element (e.g., 'Add to Cart button', 'search input')",
+                        description:
+                            "Natural language description of element (e.g., 'Add to Cart button', 'search input')",
                     },
                     elementType: {
                         type: "string",
-                        description: "Optional element type hint (button, input, link, etc.)",
+                        description:
+                            "Optional element type hint (button, input, link, etc.)",
                     },
                 },
             },
             {
                 name: "isPageStateMatched",
-                description: "Verify current page state matches expected condition (PREFERRED for state validation)",
+                description:
+                    "Verify current page state matches expected condition (PREFERRED for state validation)",
                 parameters: {
                     expectedStateDescription: {
                         type: "string",
-                        description: "Expected page state description (e.g., 'page shows shopping cart', 'product details loaded')",
+                        description:
+                            "Expected page state description (e.g., 'page shows shopping cart', 'product details loaded')",
                     },
                 },
             },
             {
                 name: "queryPageContent",
-                description: "Answer questions about visible page content (PREFERRED over raw HTML parsing)",
+                description:
+                    "Answer questions about visible page content (PREFERRED over raw HTML parsing)",
                 parameters: {
                     query: {
                         type: "string",
-                        description: "Question about page content (e.g., 'how many items in stock?', 'what is the price?')",
+                        description:
+                            "Question about page content (e.g., 'how many items in stock?', 'what is the price?')",
                     },
                 },
             },

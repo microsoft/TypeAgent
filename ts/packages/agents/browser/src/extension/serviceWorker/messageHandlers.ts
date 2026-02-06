@@ -232,7 +232,8 @@ export async function handleMessage(
             return {};
         }
         case "takeScreenshot": {
-            const screenshotUrl = await screenshotCoordinator.captureScreenshot();
+            const screenshotUrl =
+                await screenshotCoordinator.captureScreenshot();
             return screenshotUrl;
         }
         case "captureHtmlFragments": {

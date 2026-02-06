@@ -7,11 +7,11 @@
  */
 
 interface CaptureFrameRequest {
-    type: 'CAPTURE_FRAME';
+    type: "CAPTURE_FRAME";
     streamId: string;
     tabId: number;
-    quality?: number;  // JPEG quality 0-1, default 0.8 (only used when format is 'jpeg')
-    format?: 'jpeg' | 'png';  // Default png to match current behavior
+    quality?: number; // JPEG quality 0-1, default 0.8 (only used when format is 'jpeg')
+    format?: "jpeg" | "png"; // Default png to match current behavior
 }
 
 interface CaptureFrameResponse {
@@ -27,12 +27,12 @@ interface CaptureFrameResponse {
 }
 
 interface StopStreamRequest {
-    type: 'STOP_STREAM';
+    type: "STOP_STREAM";
     streamId: string;
 }
 
 interface GetStreamStatusRequest {
-    type: 'GET_STREAM_STATUS';
+    type: "GET_STREAM_STATUS";
 }
 
 interface StreamState {
@@ -63,63 +63,76 @@ class ScreenshotCaptureHandler {
     private cleanupTimers: Map<string, NodeJS.Timeout> = new Map();
 
     constructor() {
-        this.videoElement = document.getElementById('stream-video') as HTMLVideoElement;
-        this.canvas = document.getElementById('capture-canvas') as HTMLCanvasElement;
-        this.context = this.canvas.getContext('2d', {
+        this.videoElement = document.getElementById(
+            "stream-video",
+        ) as HTMLVideoElement;
+        this.canvas = document.getElementById(
+            "capture-canvas",
+        ) as HTMLCanvasElement;
+        this.context = this.canvas.getContext("2d", {
             willReadFrequently: true,
-            alpha: false
+            alpha: false,
         })!;
-        this.statusElement = document.getElementById('status')!;
+        this.statusElement = document.getElementById("status")!;
         this.metadataElements = {
-            activeStreams: document.getElementById('activeStreams')!,
-            totalCaptures: document.getElementById('totalCaptures')!,
-            lastCapture: document.getElementById('lastCapture')!
+            activeStreams: document.getElementById("activeStreams")!,
+            totalCaptures: document.getElementById("totalCaptures")!,
+            lastCapture: document.getElementById("lastCapture")!,
         };
 
         this.setupMessageHandler();
-        this.updateStatus('Ready');
+        this.updateStatus("Ready");
         this.updateMetadata();
     }
 
     private setupMessageHandler(): void {
         chrome.runtime.onMessage.addListener(
-            (message: CaptureFrameRequest | StopStreamRequest | GetStreamStatusRequest, sender, sendResponse) => {
-                if (message.type === 'CAPTURE_FRAME') {
+            (
+                message:
+                    | CaptureFrameRequest
+                    | StopStreamRequest
+                    | GetStreamStatusRequest,
+                sender,
+                sendResponse,
+            ) => {
+                if (message.type === "CAPTURE_FRAME") {
                     this.handleCaptureFrame(message as CaptureFrameRequest)
                         .then(sendResponse)
                         .catch((error) => {
-                            console.error('Frame capture failed:', error);
+                            console.error("Frame capture failed:", error);
                             sendResponse({
                                 success: false,
-                                error: error?.message || 'Frame capture failed'
+                                error: error?.message || "Frame capture failed",
                             });
                         });
                     return true; // Async response
-                } else if (message.type === 'STOP_STREAM') {
+                } else if (message.type === "STOP_STREAM") {
                     this.stopStream((message as StopStreamRequest).streamId);
                     sendResponse({ success: true });
                     return false;
-                } else if (message.type === 'GET_STREAM_STATUS') {
+                } else if (message.type === "GET_STREAM_STATUS") {
                     sendResponse({
                         success: true,
                         activeStreams: this.activeStreams.size,
                         totalCaptures: this.totalCaptures,
-                        streams: Array.from(this.activeStreams.entries()).map(([id, state]) => ({
-                            streamId: id,
-                            tabId: state.tabId,
-                            uptime: Date.now() - state.startTime,
-                            captureCount: state.captureCount
-                        }))
+                        streams: Array.from(this.activeStreams.entries()).map(
+                            ([id, state]) => ({
+                                streamId: id,
+                                tabId: state.tabId,
+                                uptime: Date.now() - state.startTime,
+                                captureCount: state.captureCount,
+                            }),
+                        ),
                     });
                     return false;
                 }
                 return false;
-            }
+            },
         );
     }
 
     private async handleCaptureFrame(
-        request: CaptureFrameRequest
+        request: CaptureFrameRequest,
     ): Promise<CaptureFrameResponse> {
         const startTime = Date.now();
 
@@ -128,7 +141,10 @@ class ScreenshotCaptureHandler {
             let streamState = this.activeStreams.get(request.streamId);
 
             if (!streamState) {
-                streamState = await this.initializeStream(request.streamId, request.tabId);
+                streamState = await this.initializeStream(
+                    request.streamId,
+                    request.tabId,
+                );
             }
 
             // Reset cleanup timer
@@ -137,8 +153,8 @@ class ScreenshotCaptureHandler {
             // Capture frame
             const dataUrl = await this.captureFrame(
                 streamState,
-                request.format || 'png',
-                request.quality || 0.8
+                request.format || "png",
+                request.quality || 0.8,
             );
 
             // Update state
@@ -148,7 +164,7 @@ class ScreenshotCaptureHandler {
 
             const captureTime = Date.now() - startTime;
             this.updateStatus(
-                `Captured frame ${streamState.captureCount} for tab ${request.tabId} in ${captureTime}ms`
+                `Captured frame ${streamState.captureCount} for tab ${request.tabId} in ${captureTime}ms`,
             );
             this.updateMetadata();
 
@@ -158,23 +174,25 @@ class ScreenshotCaptureHandler {
                 metadata: {
                     width: this.canvas.width,
                     height: this.canvas.height,
-                    format: request.format || 'png',
-                    captureTime
-                }
+                    format: request.format || "png",
+                    captureTime,
+                },
             };
         } catch (error: any) {
-            console.error('Capture frame error:', error);
-            this.updateStatus(`Error: ${error?.message || 'Unknown capture error'}`);
+            console.error("Capture frame error:", error);
+            this.updateStatus(
+                `Error: ${error?.message || "Unknown capture error"}`,
+            );
             return {
                 success: false,
-                error: error?.message || 'Unknown capture error'
+                error: error?.message || "Unknown capture error",
             };
         }
     }
 
     private async initializeStream(
         streamId: string,
-        tabId: number
+        tabId: number,
     ): Promise<StreamState> {
         this.updateStatus(`Initializing stream for tab ${tabId}...`);
 
@@ -184,10 +202,10 @@ class ScreenshotCaptureHandler {
                 audio: false,
                 video: {
                     mandatory: {
-                        chromeMediaSource: 'tab',
-                        chromeMediaSourceId: streamId
-                    }
-                } as any
+                        chromeMediaSource: "tab",
+                        chromeMediaSourceId: streamId,
+                    },
+                } as any,
             });
 
             // Attach to video element
@@ -196,31 +214,32 @@ class ScreenshotCaptureHandler {
             // Wait for video to be ready
             await new Promise<void>((resolve, reject) => {
                 const timeout = setTimeout(() => {
-                    reject(new Error('Video stream initialization timeout'));
+                    reject(new Error("Video stream initialization timeout"));
                 }, 10000);
 
                 this.videoElement.onloadedmetadata = () => {
                     clearTimeout(timeout);
-                    this.videoElement.play()
+                    this.videoElement
+                        .play()
                         .then(() => resolve())
                         .catch(reject);
                 };
 
                 this.videoElement.onerror = () => {
                     clearTimeout(timeout);
-                    reject(new Error('Video stream initialization failed'));
+                    reject(new Error("Video stream initialization failed"));
                 };
             });
 
             // Wait one more frame to ensure video is rendering
-            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise((resolve) => requestAnimationFrame(resolve));
 
             const streamState: StreamState = {
                 stream,
                 tabId,
                 startTime: Date.now(),
                 lastCapture: Date.now(),
-                captureCount: 0
+                captureCount: 0,
             };
 
             this.activeStreams.set(streamId, streamState);
@@ -237,17 +256,22 @@ class ScreenshotCaptureHandler {
 
     private async captureFrame(
         streamState: StreamState,
-        format: 'jpeg' | 'png',
-        quality: number
+        format: "jpeg" | "png",
+        quality: number,
     ): Promise<string> {
         // Ensure video has dimensions
-        if (this.videoElement.videoWidth === 0 || this.videoElement.videoHeight === 0) {
-            throw new Error('Video stream has no dimensions');
+        if (
+            this.videoElement.videoWidth === 0 ||
+            this.videoElement.videoHeight === 0
+        ) {
+            throw new Error("Video stream has no dimensions");
         }
 
         // Resize canvas to match video dimensions
-        if (this.canvas.width !== this.videoElement.videoWidth ||
-            this.canvas.height !== this.videoElement.videoHeight) {
+        if (
+            this.canvas.width !== this.videoElement.videoWidth ||
+            this.canvas.height !== this.videoElement.videoHeight
+        ) {
             this.canvas.width = this.videoElement.videoWidth;
             this.canvas.height = this.videoElement.videoHeight;
         }
@@ -255,13 +279,14 @@ class ScreenshotCaptureHandler {
         // Draw current video frame to canvas
         this.context.drawImage(
             this.videoElement,
-            0, 0,
+            0,
+            0,
             this.canvas.width,
-            this.canvas.height
+            this.canvas.height,
         );
 
         // Convert to data URL
-        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        const mimeType = format === "jpeg" ? "image/jpeg" : "image/png";
         return this.canvas.toDataURL(mimeType, quality);
     }
 
@@ -284,7 +309,7 @@ class ScreenshotCaptureHandler {
         const streamState = this.activeStreams.get(streamId);
         if (streamState) {
             // Stop all tracks
-            streamState.stream.getTracks().forEach(track => track.stop());
+            streamState.stream.getTracks().forEach((track) => track.stop());
 
             // Clear video element
             if (this.videoElement.srcObject === streamState.stream) {
@@ -303,7 +328,7 @@ class ScreenshotCaptureHandler {
 
             this.updateStatus(
                 `Stream stopped for tab ${streamState.tabId} ` +
-                `(${streamState.captureCount} captures)`
+                    `(${streamState.captureCount} captures)`,
             );
             this.updateMetadata();
         }
@@ -316,15 +341,18 @@ class ScreenshotCaptureHandler {
     }
 
     private updateMetadata(): void {
-        this.metadataElements.activeStreams.textContent = this.activeStreams.size.toString();
-        this.metadataElements.totalCaptures.textContent = this.totalCaptures.toString();
-        this.metadataElements.lastCapture.textContent = new Date().toLocaleTimeString();
+        this.metadataElements.activeStreams.textContent =
+            this.activeStreams.size.toString();
+        this.metadataElements.totalCaptures.textContent =
+            this.totalCaptures.toString();
+        this.metadataElements.lastCapture.textContent =
+            new Date().toLocaleTimeString();
     }
 }
 
 // Initialize when document loads
-if (typeof window !== 'undefined' && window.document) {
-    document.addEventListener('DOMContentLoaded', () => {
+if (typeof window !== "undefined" && window.document) {
+    document.addEventListener("DOMContentLoaded", () => {
         new ScreenshotCaptureHandler();
     });
 }

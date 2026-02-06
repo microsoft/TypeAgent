@@ -117,7 +117,7 @@ export async function handleCommerceAction(
 
             result = await handleFindAndAddToCart(
                 action.parameters.productName || action.parameters.userRequest,
-                actionContext
+                actionContext,
             );
 
             break;
@@ -245,14 +245,13 @@ async function handleAddToCart(action: any, ctx: CommerceActionHandlerContext) {
     }
 }
 
-async function handleFindAndAddToCart(productName: string, ctx: CommerceActionHandlerContext) {
+async function handleFindAndAddToCart(
+    productName: string,
+    ctx: CommerceActionHandlerContext,
+) {
     let message = "OK";
     await searchOnWebsite(ctx, productName);
-    await selectSearchResult(
-        ctx,
-        undefined,
-        productName,
-    );
+    await selectSearchResult(ctx, undefined, productName);
 
     const targetProduct = (await getComponentFromPage(
         ctx,
@@ -855,17 +854,13 @@ async function handleIsPageStateMatched(
     const matchResult = response.data as PageStateMatchResult;
 
     // Track page state as entity
-    ctx.entities.addEntity(
-        `pageState_${Date.now()}`,
-        ["pageState"],
-        {
-            source: "state_verification",
-            pageType: matchResult.currentPageState.pageType,
-            matched: matchResult.matched,
-            confidence: matchResult.matchDetails?.confidence,
-            expectedState: action.parameters.expectedStateDescription,
-        },
-    );
+    ctx.entities.addEntity(`pageState_${Date.now()}`, ["pageState"], {
+        source: "state_verification",
+        pageType: matchResult.currentPageState.pageType,
+        matched: matchResult.matched,
+        confidence: matchResult.matchDetails?.confidence,
+        expectedState: action.parameters.expectedStateDescription,
+    });
 
     const statusMsg = matchResult.matched
         ? `✓ Page state matched: ${matchResult.explanation}`

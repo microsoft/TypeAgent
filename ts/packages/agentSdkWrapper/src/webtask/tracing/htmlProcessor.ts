@@ -139,7 +139,10 @@ function prettifyHTML(html: string): string {
     // Add line breaks after major closing tags
     let prettified = html
         // Block-level elements
-        .replace(/<\/(div|section|article|aside|nav|header|footer|main|form|table|ul|ol|li|tr|td|th|thead|tbody|tfoot|h[1-6]|p|blockquote|pre|figure|figcaption|address|hr)>/gi, "</$1>\n")
+        .replace(
+            /<\/(div|section|article|aside|nav|header|footer|main|form|table|ul|ol|li|tr|td|th|thead|tbody|tfoot|h[1-6]|p|blockquote|pre|figure|figcaption|address|hr)>/gi,
+            "</$1>\n",
+        )
         // Add breaks after opening tags for better structure
         .replace(/<(head|body|html)>/gi, "<$1>\n")
         .replace(/<\/(head|body|html)>/gi, "</$1>\n");

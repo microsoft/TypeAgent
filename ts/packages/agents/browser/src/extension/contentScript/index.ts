@@ -91,23 +91,29 @@ window.addEventListener("message", async (event) => {
     if (data && data.type === "test-screenshot-request") {
         try {
             const screenshot = await chrome.runtime.sendMessage({
-                type: "takeScreenshot"
+                type: "takeScreenshot",
             });
 
             // Send response back to the page
-            window.postMessage({
-                type: "test-screenshot-response",
-                requestId: data.requestId,
-                success: true,
-                screenshot: screenshot
-            }, "*");
+            window.postMessage(
+                {
+                    type: "test-screenshot-response",
+                    requestId: data.requestId,
+                    success: true,
+                    screenshot: screenshot,
+                },
+                "*",
+            );
         } catch (error: any) {
-            window.postMessage({
-                type: "test-screenshot-response",
-                requestId: data.requestId,
-                success: false,
-                error: error.message
-            }, "*");
+            window.postMessage(
+                {
+                    type: "test-screenshot-response",
+                    requestId: data.requestId,
+                    success: false,
+                    error: error.message,
+                },
+                "*",
+            );
         }
     }
 });

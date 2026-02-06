@@ -345,7 +345,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         captureScreenshot: async () => {
             const targetTab = await ensureActiveTab();
             return screenshotCoordinator.captureScreenshot({
-                tabId: targetTab.id
+                tabId: targetTab.id,
             });
         },
         getPageTextContent: async (): Promise<string> => {
