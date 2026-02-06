@@ -1025,7 +1025,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
     async function generateVideo(
         prompt: string,
         numVariants: number = 1,
-        durationInSeconds: number = 5,
+        durationInSeconds: 4 | 8 | 12 = 4,
         width: number = 1280,
         height: number = 720,
         inpaintItems?: ImageInPaintItem[],
@@ -1040,12 +1040,12 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         const params: VideoGenerationJob = {
             ...defaultParams,
             prompt,
-            n_variants: numVariants,
-            n_seconds: durationInSeconds,
-            height: height,
-            width: width,
-            model: "sora",
-            inpaint_items: [],
+            //n_variants: numVariants,
+            seconds: durationInSeconds,
+            //height: height,
+            //width: width,
+            size: "1280x720",
+            model: "sora-2",
         };
 
         // file parameters
@@ -1063,7 +1063,7 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
                 delete item.mime_type;
 
                 // add the inpaint item to the form data
-                params.inpaint_items?.push(item);
+                params.input_reference?.push(item);
             });
         }
 
