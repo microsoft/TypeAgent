@@ -42,6 +42,11 @@ export interface NFATransition {
     // The actionValue to evaluate when writing to parent
     valueToWrite?: any | undefined;
 
+    // For epsilon transitions exiting nested rules without parent capture:
+    // When true, pop the current environment back to parent (without writing)
+    // Used when exiting rules like (<Item>)? where the parent doesn't capture the result
+    popEnvironment?: boolean | undefined;
+
     // Target state
     to: number;
 }
@@ -188,6 +193,22 @@ export class NFABuilder {
             to,
             writeToParent: true,
             valueToWrite,
+        });
+    }
+
+    /**
+     * Add an epsilon transition that pops the current environment to parent
+     * Used when exiting a nested rule that doesn't capture to parent (e.g., (<Item>)?)
+     */
+    addEpsilonWithPopEnvironment(from: number, to: number): void {
+        const state = this.states[from];
+        if (!state) {
+            throw new Error(`State ${from} does not exist`);
+        }
+        state.transitions.push({
+            type: "epsilon",
+            to,
+            popEnvironment: true,
         });
     }
 
