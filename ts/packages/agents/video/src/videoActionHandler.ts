@@ -56,7 +56,10 @@ async function handleVideoAction(
             const response = await videoModel.generateVideo(
                 createVideoAction.parameters.caption,
                 1,
-                parseInt(createVideoAction.parameters.duration ?? "4") as 4 | 8 | 12,
+                parseInt(createVideoAction.parameters.duration ?? "4") as
+                    | 4
+                    | 8
+                    | 12,
                 1280,
                 720,
                 await getInPaintItems(
