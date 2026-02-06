@@ -289,6 +289,14 @@ export async function runDesktopActions(
             confirmationMessage = `Set text size to ${action.parameters.size}%`;
             break;
         }
+        case "setScreenResolution": {
+            actionData = {
+                width: action.parameters.width,
+                height: action.parameters.height,
+            } as unknown as string;
+            confirmationMessage = `Set screen resolution to ${action.parameters.width}x${action.parameters.height}`;
+            break;
+        }
         default:
             throw new Error(`Unknown action: ${actionName}`);
     }
