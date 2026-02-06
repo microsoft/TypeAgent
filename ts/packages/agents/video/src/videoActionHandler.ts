@@ -148,7 +148,7 @@ function createVideoPlaceHolder(
             let i = 1;
             let status = "";
             let statusData = undefined;
-            while (status !== "succeeded" && status !== "failed") {
+            while (status !== "completed" && status !== "failed") {
                 await new Promise(resolve => setTimeout(resolve, 5000));
                 const statusResponse = await fetch("${statusUrl}", { headers: ${JSON.stringify(videoJob.headers)} });
 
@@ -164,40 +164,35 @@ function createVideoPlaceHolder(
                 statusData = await statusResponse.json();
                 console.log("Waiting..." + JSON.stringify(statusData, null, 2));
                 status = statusData.status;
-                container.previousElementSibling.children[1].innerHTML = "JobID - " + jobId + " Status: " + status + " " + (i++) * 5  + " seconds elapsed";
+                container.previousElementSibling.children[1].innerHTML = "JobID - " + jobId.substr(0, 12) + "... Progress: " + statusData.progress + " Status: " + status + " " + (i++) * 5  + "s elapsed";
             }
 
             // hide the generating graphic
             container.previousElementSibling.style.display = 'none';
 
-            if (status === "succeeded") {
-                const generations = statusData.generations ?? [];
-                if (generations.length > 0) {
-                    console.log("✅ Video generation succeeded.");
-                    const video_url = '${videoJob.endpoint.origin}/openai/v1/video/generations/' + generations[0].id + '/content/video?api-version=${videoJob.endpoint.searchParams.get("api-version")}';
-                    const videoResponse = await fetch(video_url, { headers: ${JSON.stringify(videoJob.headers)} });
-                    if (videoResponse.ok) {
-                        container.innerText = '';
-                        const videoBlob = await videoResponse.blob();
-                        const videoObjectURL = URL.createObjectURL(videoBlob);
+            if (status === "completed") {
+                console.log("✅ Video generation succeeded.");
+                const video_url = '${videoJob.endpoint.origin}/openai/v1/videos/${videoJob.id}/content?variant=video&authorization=' + encodeURIComponent("${videoJob.headers?.Authorization}");
+                const videoResponse = await fetch(video_url, { headers: ${JSON.stringify(videoJob.headers)} });
+                if (videoResponse.ok) {
+                    container.innerText = '';
+                    const videoBlob = await videoResponse.blob();
+                    const videoObjectURL = URL.createObjectURL(videoBlob);
 
-                        // Create and configure video element
-                        const videoElement = document.createElement("video");
-                        videoElement.className = "ai-video";
-                        videoElement.src = videoObjectURL;
-                        videoElement.controls = true;
-                        videoElement.width = 640;
-                        videoElement.height = 360;
-                        videoElement.autoplay = true;
+                    // Create and configure video element
+                    const videoElement = document.createElement("video");
+                    videoElement.className = "ai-video";
+                    videoElement.src = videoObjectURL;
+                    videoElement.controls = true;
+                    videoElement.width = 640;
+                    videoElement.height = 360;
+                    videoElement.autoplay = true;
 
-                        // Append to container
-                        container.appendChild(videoElement);
-                        console.log("🎥 Video added to the page.");                        
-                    } else {
-                        container.innerText = "❌ Failed to retrieve video content.";
-                    }
+                    // Append to container
+                    container.appendChild(videoElement);
+                    console.log("🎥 Video added to the page.");                        
                 } else {
-                    container.innerText = "⚠️ Status is succeeded, but no generations were returned.";
+                    container.innerText = "❌ Failed to retrieve video content.";
                 }
             } else {
                 container.innerHTML = "<div>❌ Video generation failed: " + statusData.failure_reason ?? "" + "</div>";
