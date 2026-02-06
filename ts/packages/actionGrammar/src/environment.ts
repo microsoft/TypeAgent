@@ -506,3 +506,32 @@ export function cloneEnvironment(env: Environment): Environment {
         actionValue: env.actionValue, // Preserve for evaluation at accept
     };
 }
+
+/**
+ * Deep clone an environment (clones entire parent chain and slot objects)
+ * Used in writeToParent to ensure different execution paths don't share
+ * any mutable state in the parent chain
+ */
+export function deepCloneEnvironment(env: Environment): Environment {
+    // Deep clone slot values that are objects
+    const clonedSlots = env.slots.map((slot) => {
+        if (slot && typeof slot === "object") {
+            // Deep clone objects to prevent shared mutations
+            return JSON.parse(JSON.stringify(slot));
+        }
+        return slot;
+    });
+
+    // Recursively clone parent if it exists
+    const clonedParent = env.parent
+        ? deepCloneEnvironment(env.parent)
+        : undefined;
+
+    return {
+        slots: clonedSlots,
+        parent: clonedParent,
+        parentSlotIndex: env.parentSlotIndex,
+        slotMap: env.slotMap, // Keep reference (immutable)
+        actionValue: env.actionValue, // Keep reference (immutable)
+    };
+}
