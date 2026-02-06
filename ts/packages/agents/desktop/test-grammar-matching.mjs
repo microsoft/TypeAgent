@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Quick test script to verify grammar matching for desktop agent
 import { loadGrammarRules } from "../../actionGrammar/dist/grammarLoader.js";
 import { compileGrammarToNFA } from "../../actionGrammar/dist/nfaCompiler.js";
