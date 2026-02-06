@@ -148,7 +148,7 @@ export interface VideoModel {
     generateVideo(
         prompt: string,
         numVariants: number,
-        durationInSeconds: number,
+        durationInSeconds: 4 | 8 | 12,
         width: number,
         height: number,
         inpaintItems?: ImageInPaintItem[],
@@ -165,11 +165,13 @@ export type VideoGenerationJob = {
     generations?: Array<any>;
     prompt: string;
     model: string;
-    n_variants: number;
-    n_seconds: number;
-    height: number;
-    width: number;
-    inpaint_items?: ImageInPaintItem[]; // TODO: add support for videos
+    n_variants?: number;
+    n_seconds?: number;
+    height?: number;
+    width?: number;
+    size?: "720x1280" | "1280x720" | "1024x1792" | "1792x1024";
+    seconds: 4 | 8 | 12;
+    input_reference?: ImageInPaintItem[]; // TODO: add support for videos
     failure_reason?: string;
     endpoint?: URL;
     headers?: Record<string, string>;
