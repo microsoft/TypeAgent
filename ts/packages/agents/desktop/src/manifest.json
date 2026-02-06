@@ -3,8 +3,10 @@
   "description": "Agent to control the desktop",
   "defaultEnabled": false,
   "schema": {
-    "description": "Desktop agent that allows you to manage the programs running on a computer, including performing actions such as opening a file, closing a window, tiling windows, launching a program, and maximizing windows.",
+    "description": "Desktop agent that allows you to manage the programs running on a computer, change Windows settings, control the desktop environment, and perform actions such as opening a file, closing a window, tiling windows, launching a program, maximizing windows, adjusting display settings, managing privacy settings, and controlling system features.",
     "schemaFile": "./actionsSchema.ts",
+    "compiledSchemaFile": "agents/desktop/dist/desktopSchema.pas.json",
+    "grammarFile": "../dist/desktopSchema.ag.json",
     "schemaType": "DesktopActions"
   }
 }

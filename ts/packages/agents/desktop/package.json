@@ -17,7 +17,9 @@
     "./agent/handlers": "./dist/actionHandler.js"
   },
   "scripts": {
-    "build": "npm run tsc",
+    "agc": "agc -i ./src/desktopSchema.agr -o ./dist/desktopSchema.ag.json",
+    "asc": "asc -i ./src/actionsSchema.ts -o ./dist/desktopSchema.pas.json -t DesktopActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -39,15 +41,48 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
     "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.17",
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/find-config": "1.0.4",
     "@types/ws": "^8.5.10",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/desktopSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/desktopSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/actionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/desktopSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

@@ -990,6 +990,181 @@ internal partial class AutoShell
                 case "listResolutions":
                     ListDisplayResolutions();
                     break;
+
+                // ===== Settings Actions (50 new handlers) =====
+
+                // Network Settings
+                case "BluetoothToggle":
+                    HandleBluetoothToggle(value);
+                    break;
+                case "enableWifi":
+                    HandleEnableWifi(value);
+                    break;
+                case "enableMeteredConnections":
+                    HandleEnableMeteredConnections(value);
+                    break;
+
+                // Display Settings
+                case "AdjustScreenBrightness":
+                    HandleAdjustScreenBrightness(value);
+                    break;
+                case "EnableBlueLightFilterSchedule":
+                    HandleEnableBlueLightFilterSchedule(value);
+                    break;
+                case "adjustColorTemperature":
+                    HandleAdjustColorTemperature(value);
+                    break;
+                case "DisplayScaling":
+                    HandleDisplayScaling(value);
+                    break;
+                case "AdjustScreenOrientation":
+                    HandleAdjustScreenOrientation(value);
+                    break;
+                case "DisplayResolutionAndAspectRatio":
+                    HandleDisplayResolutionAndAspectRatio(value);
+                    break;
+                case "RotationLock":
+                    HandleRotationLock(value);
+                    break;
+
+                // Personalization Settings
+                case "SystemThemeMode":
+                    HandleSystemThemeMode(value);
+                    break;
+                case "EnableTransparency":
+                    HandleEnableTransparency(value);
+                    break;
+                case "ApplyColorToTitleBar":
+                    HandleApplyColorToTitleBar(value);
+                    break;
+                case "HighContrastTheme":
+                    HandleHighContrastTheme(value);
+                    break;
+
+                // Taskbar Settings
+                case "AutoHideTaskbar":
+                    HandleAutoHideTaskbar(value);
+                    break;
+                case "TaskbarAlignment":
+                    HandleTaskbarAlignment(value);
+                    break;
+                case "TaskViewVisibility":
+                    HandleTaskViewVisibility(value);
+                    break;
+                case "ToggleWidgetsButtonVisibility":
+                    HandleToggleWidgetsButtonVisibility(value);
+                    break;
+                case "ShowBadgesOnTaskbar":
+                    HandleShowBadgesOnTaskbar(value);
+                    break;
+                case "DisplayTaskbarOnAllMonitors":
+                    HandleDisplayTaskbarOnAllMonitors(value);
+                    break;
+                case "DisplaySecondsInSystrayClock":
+                    HandleDisplaySecondsInSystrayClock(value);
+                    break;
+
+                // Mouse Settings
+                case "MouseCursorSpeed":
+                    HandleMouseCursorSpeed(value);
+                    break;
+                case "MouseWheelScrollLines":
+                    HandleMouseWheelScrollLines(value);
+                    break;
+                case "setPrimaryMouseButton":
+                    HandleSetPrimaryMouseButton(value);
+                    break;
+                case "EnhancePointerPrecision":
+                    HandleEnhancePointerPrecision(value);
+                    break;
+                case "AdjustMousePointerSize":
+                    HandleAdjustMousePointerSize(value);
+                    break;
+                case "mousePointerCustomization":
+                    HandleMousePointerCustomization(value);
+                    break;
+
+                // Touchpad Settings
+                case "EnableTouchPad":
+                    HandleEnableTouchPad(value);
+                    break;
+                case "TouchpadCursorSpeed":
+                    HandleTouchpadCursorSpeed(value);
+                    break;
+
+                // Privacy Settings
+                case "ManageMicrophoneAccess":
+                    HandleManageMicrophoneAccess(value);
+                    break;
+                case "ManageCameraAccess":
+                    HandleManageCameraAccess(value);
+                    break;
+                case "ManageLocationAccess":
+                    HandleManageLocationAccess(value);
+                    break;
+
+                // Power Settings
+                case "BatterySaverActivationLevel":
+                    HandleBatterySaverActivationLevel(value);
+                    break;
+                case "setPowerModePluggedIn":
+                    HandleSetPowerModePluggedIn(value);
+                    break;
+                case "SetPowerModeOnBattery":
+                    HandleSetPowerModeOnBattery(value);
+                    break;
+
+                // Gaming Settings
+                case "enableGameMode":
+                    HandleEnableGameMode(value);
+                    break;
+
+                // Accessibility Settings
+                case "EnableNarratorAction":
+                    HandleEnableNarratorAction(value);
+                    break;
+                case "EnableMagnifier":
+                    HandleEnableMagnifier(value);
+                    break;
+                case "enableStickyKeys":
+                    HandleEnableStickyKeysAction(value);
+                    break;
+                case "EnableFilterKeysAction":
+                    HandleEnableFilterKeysAction(value);
+                    break;
+                case "MonoAudioToggle":
+                    HandleMonoAudioToggle(value);
+                    break;
+
+                // File Explorer Settings
+                case "ShowFileExtensions":
+                    HandleShowFileExtensions(value);
+                    break;
+                case "ShowHiddenAndSystemFiles":
+                    HandleShowHiddenAndSystemFiles(value);
+                    break;
+
+                // Time & Region Settings
+                case "AutomaticTimeSettingAction":
+                    HandleAutomaticTimeSettingAction(value);
+                    break;
+                case "AutomaticDSTAdjustment":
+                    HandleAutomaticDSTAdjustment(value);
+                    break;
+
+                // Focus Assist Settings
+                case "EnableQuietHours":
+                    HandleEnableQuietHours(value);
+                    break;
+
+                // Multi-Monitor Settings
+                case "RememberWindowLocations":
+                    HandleRememberWindowLocationsAction(value);
+                    break;
+                case "MinimizeWindowsOnMonitorDisconnectAction":
+                    HandleMinimizeWindowsOnMonitorDisconnectAction(value);
+                    break;
+
                 default:
                     Debug.WriteLine("Unknown command: " + key);
                     break;
