@@ -17,6 +17,7 @@ import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
 import { getTabHTMLFragments, CompressionMode } from "./capture";
+import { screenshotCoordinator } from "./screenshotCoordinator";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "aiclient";
 
@@ -343,8 +344,8 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         },
         captureScreenshot: async () => {
             const targetTab = await ensureActiveTab();
-            return chrome.tabs.captureVisibleTab(targetTab.windowId, {
-                quality: 100,
+            return screenshotCoordinator.captureScreenshot({
+                tabId: targetTab.id,
             });
         },
         getPageTextContent: async (): Promise<string> => {

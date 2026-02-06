@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "benchmark": "commerce-test",
+    "version": "1.0",
+    "created": "2026-02-03",
+    "totalTasks": 4,
+    "description": "Test tasks for commerce tool integration in planning system"
+  },
+  "tasks": [
+    {
+      "id": "commerce-001",
+      "description": "Find the physical location (aisle and shelf) of LED light bulbs in the store",
+      "startingUrl": "https://www.homedepot.com",
+      "category": "READ",
+      "difficulty": "easy",
+      "metadata": {
+        "benchmark": "commerce-test",
+        "domain": "homedepot.com",
+        "requiresAuth": false,
+        "estimatedSteps": 3,
+        "tags": ["commerce", "store-location", "inventory"]
+      }
+    },
+    {
+      "id": "commerce-002",
+      "description": "Add a 60W LED light bulb to my shopping cart",
+      "startingUrl": "https://www.acehardware.com",
+      "category": "CREATE",
+      "difficulty": "medium",
+      "metadata": {
+        "benchmark": "commerce-test",
+        "domain": "acehardware.com",
+        "requiresAuth": false,
+        "estimatedSteps": 4,
+        "tags": ["commerce", "shopping-cart", "purchase"]
+      }
+    },
+    {
+      "id": "commerce-003",
+      "description": "Find the nearest store location",
+      "startingUrl": "https://www.target.com",
+      "category": "READ",
+      "difficulty": "easy",
+      "metadata": {
+        "benchmark": "commerce-test",
+        "domain": "target.com",
+        "requiresAuth": false,
+        "estimatedSteps": 2,
+        "tags": ["commerce", "store-locator"]
+      }
+    },
+    {
+      "id": "commerce-004",
+      "description": "Book a table for 4 people at Olive Garden for 7:00 PM tonight",
+      "startingUrl": "https://www.opentable.com",
+      "category": "CREATE",
+      "difficulty": "medium",
+      "metadata": {
+        "benchmark": "commerce-test",
+        "domain": "opentable.com",
+        "requiresAuth": false,
+        "estimatedSteps": 3,
+        "tags": ["commerce", "reservation", "restaurant"]
+      }
+    }
+  ]
+}

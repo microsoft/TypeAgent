@@ -102,11 +102,19 @@ export async function handleCommerceAction(
             result = await handleViewShoppingCart(action, actionContext);
             break;
         case "buyProduct":
+            /*
             result = await handleShoppingRequest(
                 action,
                 actionContext,
                 context,
             );
+            */
+
+            result = await handleFindAndAddToCart(
+                action.parameters.productName || action.parameters.userRequest,
+                actionContext,
+            );
+
             break;
         case "searchForReservation":
             result = await handleSearchForReservation(action, actionContext);
@@ -222,6 +230,27 @@ async function handleAddToCart(action: any, ctx: CommerceActionHandlerContext) {
         await ctx.browser.clickOn(targetProduct.addToCartButton.cssSelector);
     }
 }
+
+async function handleFindAndAddToCart(
+    productName: string,
+    ctx: CommerceActionHandlerContext,
+) {
+    let message = "OK";
+    await searchOnWebsite(ctx, productName);
+    await selectSearchResult(ctx, undefined, productName);
+
+    const targetProduct = (await getComponentFromPage(
+        ctx,
+        "ProductDetailsHeroTile",
+    )) as ProductDetailsHeroTile;
+
+    if (targetProduct.addToCartButton) {
+        await ctx.browser.clickOn(targetProduct.addToCartButton.cssSelector);
+    }
+
+    return { displayText: message, entities: ctx.entities.getEntities() };
+}
+
 async function handleFindInStore(
     action: any,
     ctx: CommerceActionHandlerContext,
@@ -373,7 +402,7 @@ async function runUserAction(
     return true;
 }
 
-async function handleShoppingRequest(
+export async function handleShoppingRequest(
     action: any,
     ctx: CommerceActionHandlerContext,
     actionContext: ActionContext<BrowserActionContext>,

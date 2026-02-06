@@ -65,7 +65,9 @@
     {
       "resources": [
         "offscreen/offscreen.html",
-        "offscreen/contentProcessor.js"
+        "offscreen/contentProcessor.js",
+        "offscreen/screenshotCapture.html",
+        "offscreen/screenshotCapture.js"
       ],
       "matches": ["<all_urls>"]
     }
@@ -84,7 +86,8 @@
     "contextMenus",
     "downloads",
     "sidePanel",
-    "offscreen"
+    "offscreen",
+    "tabCapture"
   ],
   "host_permissions": ["<all_urls>"],
   "icons": {

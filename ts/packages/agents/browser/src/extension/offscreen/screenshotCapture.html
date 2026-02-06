@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TypeAgent Screenshot Capture</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #1a1a1a;
+      }
+      #stream-video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #capture-canvas {
+        display: none;
+      }
+      .status {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: #00ff00;
+        font-family: monospace;
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 8px;
+        border-radius: 4px;
+      }
+      .metadata {
+        position: absolute;
+        top: 40px;
+        left: 10px;
+        color: #888;
+        font-family: monospace;
+        font-size: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 8px;
+        border-radius: 4px;
+        max-width: 300px;
+      }
+      .metadata div {
+        margin: 2px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="status" id="status">Screenshot Capture Ready</div>
+    <div class="metadata" id="metadata">
+      <div>Active Streams: <span id="activeStreams">0</span></div>
+      <div>Total Captures: <span id="totalCaptures">0</span></div>
+      <div>Last Capture: <span id="lastCapture">-</span></div>
+    </div>
+    <video id="stream-video" autoplay playsinline muted></video>
+    <canvas id="capture-canvas"></canvas>
+    <script src="screenshotCapture.js"></script>
+  </body>
+</html>

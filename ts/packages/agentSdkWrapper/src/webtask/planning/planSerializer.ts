@@ -245,7 +245,7 @@ export class PlanSerializer {
                 ? {
                       status: plan.execution.status,
                       duration: plan.execution.duration,
-                      corrections: plan.execution.corrections.length,
+                      corrections: plan.execution.corrections?.length || 0,
                       metrics: plan.execution.performanceMetrics,
                   }
                 : null,

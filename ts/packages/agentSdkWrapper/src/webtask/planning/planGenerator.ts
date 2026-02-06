@@ -291,6 +291,7 @@ Generate ONLY valid JSON (no markdown, no explanations) following this schema:
 
 # Available Tools
 
+## General Browser Tools
 - **navigateToUrl(url: string)** - Navigate to a URL
 - **clickOnElement(cssSelector: string)** - Click an element
 - **enterTextInElement(cssSelector: string, text: string)** - Type text in an input field
@@ -298,6 +299,50 @@ Generate ONLY valid JSON (no markdown, no explanations) following this schema:
 - **getHTML()** - Get page HTML for analysis
 - **findElement(description: string)** - Find element by natural language description
 - **scrollPage(direction: "up"|"down")** - Scroll the page
+
+${
+    this.isCommerceTask(task)
+        ? `
+## Commerce Tools (PREFERRED for shopping/reservation tasks)
+
+⚠️ **IMPORTANT**: These tools are automatically available for commerce tasks. Use them directly:
+- **getLocationInStore(productName: string, position?: number)** - Find product's physical location in store
+  * Parameters: { "productName": "LED light bulbs", "position": 1 }
+  * Returns: aisle number, shelf location, stock quantity, store name
+  * Use for: "where is X", "which aisle", "find location"
+  * IMPORTANT: Use product name only, e.g., "LED light bulbs" NOT "find LED light bulbs"
+
+- **findNearbyStore()** - Get nearest store location
+  * Parameters: {}
+  * Returns: store name, address, zip code
+  * Use for: "find store", "nearest location"
+
+- **viewShoppingCart()** - View shopping cart contents
+  * Parameters: {}
+  * Returns: products, prices, delivery info, total
+  * Use for: "what's in cart", "view cart"
+
+- **buyProduct(userRequest: string)** - Complete shopping flow (search + select + add to cart)
+  * Parameters: { "userRequest": "AAA batteries" } - JUST the product name, no action verbs
+  * Returns: completion status, purchase details
+  * Use for: "buy X", "purchase Y", "add to cart"
+  * IMPORTANT: Parameter should be product name only, e.g., "LED light bulbs" NOT "buy LED light bulbs"
+  * NOTE: This tool handles search, selection, and add-to-cart automatically
+
+- **searchForReservation(restaurantName: string, numberOfPeople: number, time: string)** - Find reservation slots
+  * Parameters: { "restaurantName": "Olive Garden", "numberOfPeople": 4, "time": "7:00 PM" }
+  * Returns: available time slots
+  * Use for: "book table", "find reservation"
+
+- **selectReservation(restaurantName: string, time: string)** - Confirm reservation
+  * Parameters: { "restaurantName": "Olive Garden", "time": "7:00 PM" }
+  * Returns: confirmation status
+  * Use for: selecting from searchForReservation results
+
+**Commerce tools are FASTER and MORE RELIABLE than general browser tools for e-commerce sites.**
+`
+        : ""
+}
 
 # Guidelines
 
@@ -328,9 +373,9 @@ ${
 `
 }
 
-# Special Considerations for ${task.category} Tasks
+# Special Considerations for ${this.isCommerceTask(task) ? "COMMERCE" : task.category} Tasks
 
-${this.getCategoryGuidelines(task.category)}
+${this.getCategoryGuidelines(this.isCommerceTask(task) ? "COMMERCE" : task.category)}
 
 # Generate Plan
 
@@ -435,15 +480,73 @@ Generate the revised plan now as valid JSON:`;
     /**
      * Get category-specific planning guidelines
      */
+    /**
+     * Detect if task is commerce-related (shopping, reservations)
+     */
+    private isCommerceTask(task: WebTask): boolean {
+        // Check URL for common commerce domains
+        const commerceDomains = [
+            "homedepot.com",
+            "target.com",
+            "walmart.com",
+            "amazon.com",
+            "bestbuy.com",
+            "lowes.com",
+            "acehardware.com",
+            "opentable.com",
+            "resy.com",
+            "shop",
+            "store",
+            "buy",
+            "cart",
+        ];
+
+        const urlMatch = commerceDomains.some((domain) =>
+            task.startingUrl.toLowerCase().includes(domain),
+        );
+
+        // Check description for commerce keywords
+        const commerceKeywords = [
+            "buy",
+            "purchase",
+            "shopping",
+            "cart",
+            "checkout",
+            "product",
+            "store",
+            "inventory",
+            "stock",
+            "price",
+            "reservation",
+            "book",
+            "reserve",
+            "restaurant",
+            "table",
+            "add to cart",
+            "in store",
+            "location",
+            "aisle",
+        ];
+
+        const descriptionMatch = commerceKeywords.some((keyword) =>
+            task.description.toLowerCase().includes(keyword),
+        );
+
+        return urlMatch || descriptionMatch;
+    }
+
     private getCategoryGuidelines(category: string): string {
         const guidelines: Record<string, string> = {
             READ: `
 **READ tasks** extract information from pages:
 - Step 1: Navigate and locate content
-- Step 2: Extract data (getHTML, parse results)
+- Step 2: Extract data ⭐ PREFER queryPageContent over getHTML
+  * Use queryPageContent for: prices, ratings, stock, counts, text, ANY data extraction
+  * Only use getHTML as last resort if queryPageContent fails
 - Step 3: Validate data completeness
 - Variables: Store extracted data (products, prices, etc.)
 - Keep steps minimal, focus on data extraction
+- ⚠️ ALWAYS try semantic queries (queryPageContent, getElementByDescription) BEFORE raw HTML
 `,
             CREATE: `
 **CREATE tasks** create new entities (accounts, posts, etc.):
@@ -489,6 +592,183 @@ Generate the revised plan now as valid JSON:`;
 - Step 4: Submit form
 - Variables: Form data, field selectors
 - Include retry for validation failures
+`,
+            COMMERCE: `
+**COMMERCE tasks** involve shopping, reservations, and e-commerce:
+
+⚠️ IMPORTANT: Commerce sites support specialized tools that are FASTER and MORE RELIABLE than general browser tools.
+
+**Available Browser Semantic Query Actions** (use these for ALL browser automation):
+⭐ These are CORE BROWSER ACTIONS - use typeagent_action with agent="browser"
+
+- **queryPageContent** - Answer questions about page content ⭐ USE THIS FIRST
+  * Tool: typeagent_action with agent="browser", action="queryPageContent"
+  * Use for: Extracting ANY information from the page (prices, stock, ratings, counts, text, etc.)
+  * Parameters: { query: "how many batteries are in stock?" }
+  * Natural language: "query page for battery stock"
+  * Returns: { answered: true/false, answerText: "150 batteries in stock", confidence: 0.9, evidence: [...] }
+  * Examples:
+    - "What is the product price?" → { query: "product price" }
+    - "How many items in cart?" → { query: "number of items in shopping cart" }
+  * ⚠️ Only fall back to getHTML (browser tool) if this returns answered: false
+
+- **getElementByDescription** - Find element by natural language ⭐ USE THIS FIRST
+  * Tool: typeagent_action with agent="browser", action="getElementByDescription"
+  * Use for: Locating elements without CSS selectors
+  * Parameters: { elementDescription: "Add to Cart button", elementType: "button" }
+  * Natural language: "find add to cart button"
+  * Returns: { found: true, elementCssSelector: "#add-to-cart", ... }
+  * ⚠️ Only fall back to getHTML (browser tool) if this returns found: false
+
+- **isPageStateMatched** - Verify page state ⭐ USE FOR VALIDATION
+  * Tool: typeagent_action with agent="browser", action="isPageStateMatched"
+  * Use for: Checking page state after actions
+  * Parameters: { expectedStateDescription: "page shows shopping cart" }
+  * Natural language: "verify shopping cart page"
+  * Returns: { matched: true/false, confidence: 0.95, explanation: "..." }
+  * ⚠️ Use this instead of getHTML (browser tool) for state verification
+
+**Commerce-Specific Actions**:
+Commerce actions use typeagent_action with agent="browser.commerce", action=<actionName>, parameters={...}, naturalLanguage="user's original request"
+
+**SHOPPING & CART ACTIONS**:
+
+- **buyProduct** - Complete shopping flow with automated planning
+  * Use for: "buy X", "purchase Y", "add to cart"
+  * Parameters: { userRequest: "AAA batteries" } - just product name, NOT "buy AAA batteries"
+  * Natural language: "buy AAA batteries" (user's original request)
+  * This tool handles search, selection, add-to-cart automatically
+  * Returns: completion status, entities collected during purchase
+
+- **getLocationInStore** - Find product's physical location in store (aisle, shelf)
+  * Use for: "where is X in store", "which aisle", "find location"
+  * Parameters: { productName: "LED light bulbs", position: 1 }
+  * Natural language: "where are LED light bulbs in store"
+  * Returns: aisle number, shelf location, stock quantity, store name
+
+- **findNearbyStore** - Get nearest store location
+  * Use for: "find store", "nearest location", "store hours"
+  * Parameters: {} (no parameters)
+  * Natural language: "find nearby store"
+  * Returns: store name, address, zip code
+
+- **viewShoppingCart** - View shopping cart contents
+  * Use for: "what's in cart", "cart total", "view cart"
+  * Parameters: {} (no parameters)
+  * Natural language: "view shopping cart"
+  * Returns: products in cart, prices, delivery info, total amount
+
+- **searchForReservation** - Find restaurant reservation slots
+  * Use for: "book table at", "reserve at", "find reservation"
+  * Parameters: { restaurantName: "Olive Garden", numberOfPeople: 4, time: "7:00 PM" }
+  * Natural language: "search for reservation at Olive Garden for 4 people at 7pm"
+  * Returns: available time slots with selectors
+
+- **selectReservation** - Book specific reservation
+  * Use for: confirming a time slot from searchForReservation results
+  * Parameters: { restaurantName: "Olive Garden", time: "7:00 PM" }
+  * Natural language: "select reservation at 7pm"
+  * Returns: confirmation status
+
+**Commerce Task Pattern Example** (Buy AAA Batteries from Home Depot):
+
+Step 1: Navigate to Home Depot
+{
+  "actionId": "action1-1",
+  "tool": "navigateToUrl",
+  "parameters": { "url": "https://www.homedepot.com" },
+  "rationale": "Navigate to starting URL"
+}
+
+Step 2: Buy product using commerce tool
+{
+  "actionId": "action2-1",
+  "tool": "typeagent_action",
+  "parameters": {
+    "agent": "browser.commerce",
+    "action": "buyProduct",
+    "parameters": { "userRequest": "AAA batteries" },
+    "naturalLanguage": "buy AAA batteries"
+  },
+  "rationale": "Purchase AAA batteries using specialized commerce tool"
+}
+
+**Semantic Query Example** (Extract product info from page):
+
+Step 1: Query for price
+{
+  "actionId": "query1",
+  "tool": "typeagent_action",
+  "parameters": {
+    "agent": "browser",
+    "action": "queryPageContent",
+    "parameters": { "query": "what is the product price?" },
+    "naturalLanguage": "get product price"
+  },
+  "rationale": "Extract price using semantic query - faster than parsing HTML"
+}
+
+Step 2: Query for stock status
+{
+  "actionId": "query2",
+  "tool": "typeagent_action",
+  "parameters": {
+    "agent": "browser",
+    "action": "queryPageContent",
+    "parameters": { "query": "how many items are in stock?" },
+    "naturalLanguage": "check stock availability"
+  },
+  "rationale": "Check stock with semantic query"
+}
+
+Step 3: Find element if needed (ONLY if query failed)
+{
+  "actionId": "find1",
+  "tool": "typeagent_action",
+  "parameters": {
+    "agent": "browser",
+    "action": "getElementByDescription",
+    "parameters": {
+      "elementDescription": "Add to Cart button",
+      "elementType": "button"
+    },
+    "naturalLanguage": "find add to cart button"
+  },
+  "rationale": "Locate button using semantic search - only if queryPageContent failed"
+}
+
+**CRITICAL MCP Syntax Rules**:
+- Browser semantic query actions: Use typeagent_action with agent="browser", action name, parameters object, and naturalLanguage
+  * Examples: queryPageContent, getElementByDescription, isPageStateMatched
+  * naturalLanguage: User's original request for cache population (REQUIRED)
+- Commerce actions: Use typeagent_action with agent="browser.commerce", action name, parameters object, and naturalLanguage
+  * Parameters: Just the product/item name, NOT action verbs (e.g., "AAA batteries" NOT "buy AAA batteries")
+  * naturalLanguage: User's original request for cache population (REQUIRED)
+- ALWAYS navigate to startingUrl FIRST before using specialized tools
+
+**Decision Tree for Information Extraction**:
+1. ⭐ FIRST: Try queryPageContent for ANY information extraction
+2. If queryPageContent returns answered: false, THEN try getElementByDescription
+3. If getElementByDescription returns found: false, THEN fall back to getHTML (browser tool)
+4. For state validation, use isPageStateMatched instead of getHTML
+
+**When to Use Raw HTML (browser.getHTML)**:
+- ONLY as a LAST RESORT after semantic queries fail
+- Raw HTML is SLOWER, HARDER TO PARSE, and MORE FRAGILE than semantic queries
+- Semantic queries handle:
+  * Dynamic content (JavaScript-rendered)
+  * Complex layouts (iframes, shadow DOM)
+  * Accessibility features (ARIA labels)
+  * Multiple page formats automatically
+- Raw HTML requires:
+  * Manual parsing with complex regex/selectors
+  * Handling minified HTML, escape sequences
+  * Different logic per website layout
+  * Token limits (files can be huge)
+
+**General browser tools still available**:
+- Use clickOnElement, enterTextInElement ONLY if commerce tools don't fit
+- Commerce tools are optimized for e-commerce sites (faster, more reliable)
 `,
         };
 
