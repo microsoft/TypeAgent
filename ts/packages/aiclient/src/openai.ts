@@ -29,7 +29,6 @@ import { readServerEventStream } from "./serverEvents.js";
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter.js";
-import { PromptLogger } from "./promptLogger.js";
 import {
     createOllamaChatModel,
     OllamaApiSettings,
@@ -485,6 +484,7 @@ function createAzureOpenAIChatModel(
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
+        logFn?: (msg: any) => void,
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
@@ -521,9 +521,9 @@ function createAzureOpenAIChatModel(
         }
 
         try {
-            if (settings.enableModelRequestLogging) {
+            if (settings.enableModelRequestLogging && logFn) {
                 // Log request
-                PromptLogger.getInstance().logModelRequest({
+                logFn({
                     prompt: messages as PromptSection[],
                     response: data.choices[0].message?.content ?? "",
                     tokenUsage: data.usage,
@@ -561,6 +561,7 @@ function createAzureOpenAIChatModel(
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
+        logFn?: (msg: any) => void,
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
@@ -612,9 +613,9 @@ function createAzureOpenAIChatModel(
                 for await (const evt of readServerEventStream(result.data)) {
                     if (evt.data === "[DONE]") {
                         try {
-                            if (settings.enableModelRequestLogging) {
+                            if (settings.enableModelRequestLogging && logFn) {
                                 // Log request.
-                                PromptLogger.getInstance().logModelRequest({
+                                logFn({
                                     prompt: messages as PromptSection[],
                                     response: fullResponseText,
                                     tokenUsageData: tokenUsage,

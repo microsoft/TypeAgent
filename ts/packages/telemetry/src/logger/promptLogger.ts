@@ -4,13 +4,13 @@
 import {
     LoggerSink,
     MultiSinkLogger,
-    createMongoDBLoggerSink,
+    createDatabaseLoggerSink,
     createDebugLoggerSink,
 } from "telemetry";
 
 import registerDebug from "debug";
 
-const debugPromptLogger = registerDebug("typeagent:promptLogger");
+const debugPromptLogger = registerDebug("typeagent:telemetry:promptLogger");
 
 /**
  *  Logger for LLM prompts.
@@ -38,7 +38,10 @@ export class PromptLogger {
         let dbLoggerSink: LoggerSink | undefined;
 
         try {
-            dbLoggerSink = createMongoDBLoggerSink("telemetrydb", "promptLogs");
+            dbLoggerSink = createDatabaseLoggerSink(
+                "telemetrydb",
+                "promptLogs",
+            );
         } catch (e) {
             debugPromptLogger(`DB logging disabled. ${e}`);
         }
