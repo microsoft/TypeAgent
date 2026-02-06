@@ -354,7 +354,7 @@ const browserActionTools: BrowserActionToolDefinition[] = [
             return result;
         },
     },
-    /*
+    
     {
         name: "browser__captureScreenshot",
         description: "Capture a screenshot of the current page",
@@ -369,7 +369,7 @@ const browserActionTools: BrowserActionToolDefinition[] = [
             );
         },
     },
-*/
+
     {
         name: "browser__scrollDown",
         description: "Scroll down on the current page",

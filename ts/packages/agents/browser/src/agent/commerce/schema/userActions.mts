@@ -46,10 +46,52 @@ export type SelectReservation = {
     };
 };
 
+/**
+ * Get an element from the page by natural language description
+ * Example: "Find the Home button", "Get the search input field"
+ */
+export type GetElementByDescription = {
+    actionName: "getElementByDescription";
+    parameters: {
+        // Natural language description of the element to find
+        elementDescription: string;
+
+        // Optional hint about element type (button, input, link, etc.)
+        elementType?: string;
+    };
+};
+
+/**
+ * Check if the current page state matches an expected condition
+ * Example: "Verify the page shows the shopping cart"
+ */
+export type IsPageStateMatched = {
+    actionName: "isPageStateMatched";
+    parameters: {
+        // Expected page state description
+        expectedStateDescription: string;
+    };
+};
+
+/**
+ * Query page content to answer a question
+ * Example: "How many batteries are in stock?", "What is the product price?"
+ */
+export type QueryPageContent = {
+    actionName: "queryPageContent";
+    parameters: {
+        // The question to answer
+        query: string;
+    };
+};
+
 export type ShoppingActions =
     | ViewShoppingCart
     | FindNearbyStore
     | GetLocationInStore
     | BuyProduct
     | SearchForReservation
-    | SelectReservation;
+    | SelectReservation
+    | GetElementByDescription
+    | IsPageStateMatched
+    | QueryPageContent;

@@ -591,6 +591,40 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
                     },
                 },
             },
+            {
+                name: "getElementByDescription",
+                description: "Find UI element on page using natural language description (PREFERRED over raw HTML parsing)",
+                parameters: {
+                    elementDescription: {
+                        type: "string",
+                        description: "Natural language description of element (e.g., 'Add to Cart button', 'search input')",
+                    },
+                    elementType: {
+                        type: "string",
+                        description: "Optional element type hint (button, input, link, etc.)",
+                    },
+                },
+            },
+            {
+                name: "isPageStateMatched",
+                description: "Verify current page state matches expected condition (PREFERRED for state validation)",
+                parameters: {
+                    expectedStateDescription: {
+                        type: "string",
+                        description: "Expected page state description (e.g., 'page shows shopping cart', 'product details loaded')",
+                    },
+                },
+            },
+            {
+                name: "queryPageContent",
+                description: "Answer questions about visible page content (PREFERRED over raw HTML parsing)",
+                parameters: {
+                    query: {
+                        type: "string",
+                        description: "Question about page content (e.g., 'how many items in stock?', 'what is the price?')",
+                    },
+                },
+            },
         ],
     },
 ];

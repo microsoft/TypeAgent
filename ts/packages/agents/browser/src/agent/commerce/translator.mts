@@ -15,6 +15,11 @@ import { openai as ai } from "aiclient";
 import { fileURLToPath } from "node:url";
 import { ShoppingActions } from "./schema/userActions.mjs";
 import { PurchaseResults } from "./schema/shoppingResults.mjs";
+import type {
+    ElementDescriptionResult,
+    PageStateMatchResult,
+    PageContentQueryResult,
+} from "./schema/queryResults.mjs";
 
 export type HtmlFragments = {
     frameId: string;
@@ -472,5 +477,280 @@ The following is the COMPLETE JSON response object with 2 spaces of indentation 
             },
         ]);
         return response;
+    }
+
+    /**
+     * Get element information by natural language description
+     * Uses HTML fragments and optional screenshot to locate element
+     */
+    async getElementByDescription(
+        elementDescription: string,
+        elementTypeHint?: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ): Promise<{
+        success: boolean;
+        data?: ElementDescriptionResult;
+        message?: string;
+    }> {
+        const resultsSchema = await getSchemaFileContents("queryResults.mts");
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "ElementDescriptionResult",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+# Task: Locate Element by Description
+
+You are tasked with finding a specific UI element on the webpage based on a natural language description.
+
+## Element to Find
+Description: "${elementDescription}"
+${elementTypeHint ? `Type Hint: ${elementTypeHint}` : ""}
+
+## Instructions
+1. Examine the HTML fragments and screenshot provided
+2. Identify the element that best matches the description
+3. Extract the following information:
+   - Element name (short descriptive label)
+   - Element HTML (complete outerHTML of the element)
+   - CSS selector (prefer ID-based, fallback to other unique selectors)
+   - Element type (button, input, link, div, etc.)
+   - Visible text content (if any)
+   - Key attributes (id, class, data-*, aria-*, etc.)
+
+4. If the element cannot be found:
+   - Set found: false
+   - Provide a clear reason in notFoundReason
+
+## CSS Selector Guidelines
+- Prefer selectors in this order:
+  1. ID-based: #element-id
+  2. Data attribute: [data-testid="value"]
+  3. Unique class: .unique-class-name
+  4. Combination: button.class-name[type="submit"]
+- Ensure selector is specific enough to uniquely identify the element
+- Test mentally: would this selector match only one element?
+
+Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the schema below:
+
+'''
+${bootstrapTranslator.validator.getSchemaText()}
+'''
+`,
+            },
+            ...suffixSection,
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response as {
+            success: boolean;
+            data?: ElementDescriptionResult;
+            message?: string;
+        };
+    }
+
+    /**
+     * Check if current page state matches expected description
+     * Returns both current state and match result
+     */
+    async checkPageStateMatch(
+        expectedStateDescription: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ): Promise<{
+        success: boolean;
+        data?: PageStateMatchResult;
+        message?: string;
+    }> {
+        const resultsSchema = await getSchemaFileContents("queryResults.mts");
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "PageStateMatchResult",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+# Task: Verify Page State
+
+You are tasked with determining if the current page state matches an expected condition.
+
+## Expected State
+"${expectedStateDescription}"
+
+## Instructions
+1. Analyze the current page using the HTML fragments and screenshot
+2. Determine the current page state:
+   - Page type (e.g., homePage, searchResults, productDetails, shoppingCart)
+   - Description of what's currently shown
+   - Key elements visible on the page
+   - Possible user actions
+
+3. Compare current state to expected state:
+   - Does the page type match?
+   - Are the expected elements present?
+   - Does the content align with expectations?
+   - Calculate confidence score (0.0 to 1.0)
+
+4. Set matched: true only if:
+   - Core aspects of expected state are present
+   - Confidence >= 0.7
+
+5. Provide clear explanation:
+   - If matched: "The page shows [current state] which matches the expected [expected state]"
+   - If not matched: "The page shows [current state] but expected [expected state]. Missing: [details]"
+
+6. List matched and unmatched aspects for debugging
+
+Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the schema below:
+
+'''
+${bootstrapTranslator.validator.getSchemaText()}
+'''
+`,
+            },
+            ...suffixSection,
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response as {
+            success: boolean;
+            data?: PageStateMatchResult;
+            message?: string;
+        };
+    }
+
+    /**
+     * Query page content to answer a user question
+     * Extracts information from visible page content
+     */
+    async queryPageContent(
+        query: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ): Promise<{
+        success: boolean;
+        data?: PageContentQueryResult;
+        message?: string;
+    }> {
+        const resultsSchema = await getSchemaFileContents("queryResults.mts");
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "PageContentQueryResult",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+# Task: Answer Question About Page Content
+
+You are tasked with answering a user's question using only information visible on the current webpage.
+
+## User Question
+"${query}"
+
+## Instructions
+1. Examine the HTML fragments and screenshot to locate relevant information
+2. Extract data that answers the question:
+   - Look for specific values, counts, prices, status information
+   - Consider both text content and element attributes
+   - Check for data in tables, lists, product cards, etc.
+
+3. If the answer can be found:
+   - Set answered: true
+   - Provide clear, concise answer text
+   - Include supporting evidence (relevant text snippets)
+   - Provide CSS selectors for elements containing the evidence
+   - Estimate confidence (0.0 to 1.0)
+
+4. If the answer cannot be found:
+   - Set answered: false
+   - Provide reason in unableToAnswerReason
+   - Suggest next steps if applicable (e.g., "Navigate to product details page")
+
+## Answer Guidelines
+- Be precise and factual
+- Use the exact values/text from the page
+- Include units for numbers (e.g., "$19.99", "5 items", "3.5 stars")
+- If multiple answers exist, enumerate them
+- Don't infer information not present on the page
+- Don't use external knowledge
+
+## Examples
+Question: "How many batteries are in stock?"
+- Found: "150 in stock" → Answer: "150 batteries are in stock"
+- Found: "Out of stock" → Answer: "The batteries are currently out of stock"
+- Not found → Unable to answer: "Stock information is not displayed on this page. Navigate to the product details page to see stock levels."
+
+Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the schema below:
+
+'''
+${bootstrapTranslator.validator.getSchemaText()}
+'''
+`,
+            },
+            ...suffixSection,
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response as {
+            success: boolean;
+            data?: PageContentQueryResult;
+            message?: string;
+        };
     }
 }

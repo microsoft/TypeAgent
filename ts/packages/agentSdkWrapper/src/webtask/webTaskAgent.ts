@@ -628,6 +628,7 @@ export type OpenWebPage = {
 };
 
 // Get the HTML content of the current page
+// ⚠️ USE AS LAST RESORT - Prefer semantic query actions (see below)
 // Returns HTML as text that you can read and analyze
 export type GetHTML = {
     actionName: "browser__getHTML";
@@ -681,28 +682,110 @@ export type BrowserAction =
     | ScrollUp;
 \`\`\`
 
+# ⭐ COMMERCE SEMANTIC QUERY ACTIONS (PREFER THESE)
+
+For e-commerce sites, you have access to specialized commerce actions via typeagent_action.
+These use LLM to understand page content semantically and are MUCH BETTER than parsing raw HTML.
+
+**CRITICAL: Activate commerce schema FIRST:**
+\`\`\`typescript
+// Step 1: Activate schema
+execute_command({ request: "@config schema browser.commerce" })
+// Step 2: Activate actions
+execute_command({ request: "@config action browser.commerce" })
+// Step 3: Now you can use commerce actions
+\`\`\`
+
+**Semantic Query Actions** (Use via typeagent_action with agent="browser.commerce"):
+
+1. **queryPageContent** - Extract ANY information from page ⭐ USE THIS FIRST
+   \`\`\`typescript
+   typeagent_action({
+     agent: "browser.commerce",
+     action: "queryPageContent",
+     parameters: { query: "what is the product price?" },
+     naturalLanguage: "get product price"
+   })
+   // Returns: { answered: true, answerText: "$24.99", confidence: 0.9 }
+   \`\`\`
+   Examples:
+   - "how many items in stock?" → stock count
+   - "what is the product rating?" → rating value
+   - "is the item available?" → availability status
+   - "what is the total price?" → price
+
+2. **getElementByDescription** - Find elements without CSS selectors ⭐ USE BEFORE getHTML
+   \`\`\`typescript
+   typeagent_action({
+     agent: "browser.commerce",
+     action: "getElementByDescription",
+     parameters: {
+       elementDescription: "Add to Cart button",
+       elementType: "button"
+     },
+     naturalLanguage: "find add to cart button"
+   })
+   // Returns: { found: true, elementCssSelector: "#add-to-cart", elementText: "Add to Cart" }
+   \`\`\`
+
+3. **isPageStateMatched** - Verify page state ⭐ USE FOR VALIDATION
+   \`\`\`typescript
+   typeagent_action({
+     agent: "browser.commerce",
+     action: "isPageStateMatched",
+     parameters: { expectedStateDescription: "shopping cart page is displayed" },
+     naturalLanguage: "verify cart page"
+   })
+   // Returns: { matched: true, confidence: 0.95, explanation: "..." }
+   \`\`\`
+
 # Instructions
 
-1. **Prefer using the browser action tools defined above**
-   - Call with the exact actionName (e.g., "browser__openWebPage", "browser__getHTML")
-   - Provide required parameters as shown in the schema
-   - Natural language commands via execute_command are acceptable as a fallback
+1. **⭐ PREFER SEMANTIC QUERIES OVER RAW HTML**
+   - For ANY data extraction → Use queryPageContent FIRST
+   - To find elements → Use getElementByDescription FIRST
+   - To verify page state → Use isPageStateMatched
+   - Only use browser__getHTML as LAST RESORT if semantic queries fail
+   - Raw HTML is slower, harder to parse, and more fragile
 
-2. **Always retrieve and analyze HTML before extracting data**
-   - Call browser__getHTML() to retrieve the page HTML
-   - Use Read/Grep tools to analyze the HTML structure
-   - Extract data by parsing the HTML content
+2. **When to use each approach:**
+   - Extracting data (prices, text, counts) → queryPageContent
+   - Finding element selectors → getElementByDescription
+   - Verifying state after actions → isPageStateMatched
+   - Complex multi-element interactions → getHTML (last resort)
 
-3. **Example workflow for searching:**
+3. **Decision tree:**
+   a) Try queryPageContent for data extraction
+   b) If that fails (answered: false), try getElementByDescription
+   c) If that fails (found: false), then use browser__getHTML
+   d) For state validation, always use isPageStateMatched
+
+4. **Example workflow with semantic queries:**
+   a) browser__openWebPage({ site: "https://example.com" })
+   b) browser__awaitPageLoad()
+   c) execute_command({ request: "@config schema browser.commerce" })
+   d) execute_command({ request: "@config action browser.commerce" })
+   e) typeagent_action({ agent: "browser.commerce", action: "getElementByDescription",
+                        parameters: { elementDescription: "search input", elementType: "input" },
+                        naturalLanguage: "find search box" })
+      → Returns { found: true, elementCssSelector: "input[name='q']" }
+   f) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
+   g) browser__awaitPageLoad()
+   h) typeagent_action({ agent: "browser.commerce", action: "queryPageContent",
+                        parameters: { query: "get titles and prices of first 5 products" },
+                        naturalLanguage: "extract product list" })
+      → Returns { answered: true, answerText: "[product data...]" }
+
+**Old workflow (ONLY if semantic queries fail):**
    a) browser__openWebPage({ site: "https://example.com" })
    b) browser__awaitPageLoad()
    c) browser__getHTML() → Returns HTML content
-   d) Analyze the HTML to find search input selector (e.g., "input[name='q']")
+   d) Use Grep/Read to manually parse HTML and find search input selector
    e) browser__clickOnElement({ cssSelector: "input[name='q']" })
    f) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
    g) browser__awaitPageLoad()
    h) browser__getHTML() → Returns search results HTML
-   i) Use Grep/Read to analyze HTML and extract product information
+   i) Use Grep/Read to manually parse HTML and extract product information
 
 ${this.getCategorySpecificGuidance(task.category)}
 
