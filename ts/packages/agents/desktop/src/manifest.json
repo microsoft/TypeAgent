@@ -14,6 +14,7 @@
       "schema": {
         "description": "Desktop agent for display and screen settings including night light, color temperature, scaling, orientation, and rotation lock.",
         "schemaFile": "./windows/displayActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/displaySchema.pas.json",
         "schemaType": "DesktopDisplayActions"
       }
     },
@@ -21,6 +22,7 @@
       "schema": {
         "description": "Desktop agent for personalization settings including transparency effects, title bar colors, and high contrast themes.",
         "schemaFile": "./windows/personalizationActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/personalizationSchema.pas.json",
         "schemaType": "DesktopPersonalizationActions"
       }
     },
@@ -28,6 +30,7 @@
       "schema": {
         "description": "Desktop agent for taskbar settings including auto-hide, alignment, task view, widgets, badges, and system clock options.",
         "schemaFile": "./windows/taskbarActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/taskbarSchema.pas.json",
         "schemaType": "DesktopTaskbarActions"
       }
     },
@@ -35,6 +38,7 @@
       "schema": {
         "description": "Desktop agent for mouse and touchpad settings including cursor speed, scroll lines, button configuration, pointer precision, and touchpad controls.",
         "schemaFile": "./windows/inputActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/inputSchema.pas.json",
         "schemaType": "DesktopInputActions"
       }
     },
@@ -42,6 +46,7 @@
       "schema": {
         "description": "Desktop agent for privacy settings to manage microphone, camera, and location access for applications.",
         "schemaFile": "./windows/privacyActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/privacySchema.pas.json",
         "schemaType": "DesktopPrivacyActions"
       }
     },
@@ -49,6 +54,7 @@
       "schema": {
         "description": "Desktop agent for power management settings including battery saver and power mode configuration.",
         "schemaFile": "./windows/powerActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/powerSchema.pas.json",
         "schemaType": "DesktopPowerActions"
       }
     },
@@ -56,6 +62,7 @@
       "schema": {
         "description": "Desktop agent for system settings including accessibility features, file explorer options, time settings, focus assist, multi-monitor configuration, and other system-level controls.",
         "schemaFile": "./windows/systemActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/systemSchema.pas.json",
         "schemaType": "DesktopSystemActions"
       }
     }
