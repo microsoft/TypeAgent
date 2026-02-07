@@ -1280,6 +1280,38 @@ const configExplainerCommandHandlers: CommandHandlerTable = {
     },
 };
 
+class ConfigExecutionReasoningCommandHandler implements CommandHandler {
+    public readonly description = "Set reasoning engine";
+    public readonly parameters = {
+        args: {
+            engine: {
+                description: "Reasoning engine to use (claude or none)",
+            },
+        },
+    };
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const engine = params.args.engine;
+        if (engine === "claude" || engine === "none") {
+            const agentToggle = {
+                "dispatcher.reasoning": engine === "claude",
+            } as const;
+            await changeContextConfig(
+                {
+                    translation: { multiple: { enabled: engine !== "claude" } },
+                    execution: { reasoning: engine },
+                    schemas: agentToggle,
+                    actions: agentToggle,
+                },
+                context,
+            );
+            displayResult(`Reasoning model is set to '${engine}'`, context);
+        }
+    }
+}
+
 class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
     public readonly description =
         "Enable or disable workflow plan reuse for reasoning actions";
@@ -1318,6 +1350,7 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
                 );
             },
         ),
+        reasoning: new ConfigExecutionReasoningCommandHandler(),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
     },
 };

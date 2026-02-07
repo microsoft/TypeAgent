@@ -137,6 +137,7 @@ export type DispatcherConfig = {
         memory: {
             legacy: boolean; // use legacy memory behavior
         };
+        reasoning: "claude" | "none";
     };
     explainer: {
         enabled: boolean;
@@ -224,6 +225,7 @@ const defaultSessionConfig: SessionConfig = {
         memory: {
             legacy: true, // use the new memory behavior
         },
+        reasoning: "none",
     },
     explainer: {
         enabled: true,
