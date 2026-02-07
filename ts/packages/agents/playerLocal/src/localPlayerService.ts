@@ -165,7 +165,9 @@ export class LocalPlayerService {
                 // Use Windows Media Player via PowerShell
                 this.playerProcess = spawn("powershell", [
                     "-Command",
-                    `Add-Type -AssemblyName presentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open('${track.path}'); $player.Volume = ${this.state.volume / 100}; $player.Play(); Start-Sleep -Seconds 3600`
+                    "& { Add-Type -AssemblyName presentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open($args[0]); $player.Volume = [double]$args[1]; $player.Play(); Start-Sleep -Seconds 3600 }",
+                    track.path,
+                    String(this.state.volume / 100)
                 ], { stdio: "ignore" });
             } else if (process.platform === "darwin") {
                 // macOS: use afplay
