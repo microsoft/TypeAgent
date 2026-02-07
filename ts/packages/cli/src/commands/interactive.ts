@@ -21,6 +21,11 @@ import {
     processCommands,
     withConsoleClientIO,
 } from "agent-dispatcher/helpers/console";
+import {
+    getEnhancedConsolePrompt,
+    processCommandsEnhanced,
+    withEnhancedConsoleClientIO,
+} from "../enhancedConsole.js";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import { createInterface } from "readline/promises";
@@ -61,6 +66,11 @@ export default class Interactive extends Command {
             default: true,
             allowNo: true,
         }),
+        testUI: Flags.boolean({
+            description:
+                "Enable enhanced terminal UI with spinners and visual prompts",
+            default: false,
+        }),
     };
     static args = {
         input: Args.file({
@@ -76,13 +86,27 @@ export default class Interactive extends Command {
             inspector.open(undefined, undefined, true);
         }
 
-        const rl = createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            terminal: true,
-        });
+        // Choose between standard and enhanced UI
+        const withClientIO = flags.testUI
+            ? withEnhancedConsoleClientIO
+            : withConsoleClientIO;
+        const processCommandsFn = flags.testUI
+            ? processCommandsEnhanced
+            : processCommands;
+        const getPromptFn = flags.testUI
+            ? getEnhancedConsolePrompt
+            : getConsolePrompt;
 
-        await withConsoleClientIO(async (clientIO) => {
+        // Only create readline for standard console - enhanced console creates its own
+        const rl = flags.testUI
+            ? undefined
+            : createInterface({
+                  input: process.stdin,
+                  output: process.stdout,
+                  terminal: true,
+              });
+
+        await withClientIO(async (clientIO) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: defaultAppAgentProviders,
@@ -112,9 +136,9 @@ export default class Interactive extends Command {
                     }
                 }
 
-                await processCommands(
+                await processCommandsFn(
                     async (dispatcher: Dispatcher) =>
-                        getConsolePrompt(
+                        getPromptFn(
                             getStatusSummary(await dispatcher.getStatus(), {
                                 showPrimaryName: false,
                             }),

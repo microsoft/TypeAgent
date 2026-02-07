@@ -90,6 +90,14 @@ export type GrammarMatchResult = GrammarMatchStat & {
     match: unknown;
 };
 
+// Non-entity wildcard type names - these should NOT be treated as entity wildcards
+const nonEntityWildcardTypes = new Set([
+    "string",
+    "wildcard",
+    "word",
+    "number",
+]);
+
 function createMatchedValue(
     valueIdNode: ValueIdNode,
     values: MatchedValueNode | undefined,
@@ -100,10 +108,12 @@ function createMatchedValue(
 ): unknown {
     const { name, valueId, wildcardTypeName } = valueIdNode;
 
+    // Only add to entityWildcardPropertyNames if it's an actual entity type
+    // (not basic wildcard types like "string", "wildcard", "word", "number")
     if (
         valueId === partialValueId ||
         (wildcardTypeName !== undefined &&
-            wildcardTypeName !== "string" &&
+            !nonEntityWildcardTypes.has(wildcardTypeName) &&
             partialValueId === undefined)
     ) {
         wildcardPropertyNames.push(propertyName);
@@ -409,7 +419,7 @@ function finalizeNestedRule(state: MatchState, partial: boolean = false) {
         state.valueIds = nested.valueIds;
         if (valueIds === undefined && rule.value === undefined) {
             if (nested.variable && !partial) {
-                // Should be detected by the parser
+                // Should be detected by the grammar compiler
                 throw new Error(
                     `Internal error: No value assign to variable '${nested.variable}'`,
                 );

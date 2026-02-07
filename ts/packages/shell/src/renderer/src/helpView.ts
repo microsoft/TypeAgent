@@ -22,6 +22,7 @@ export class HelpView {
                             <b>Alt</b> - Show menu</br>
                             <b>Alt+M</b> - Start speech recognition.<br/>
                             <b>Alt+Shift+M</b> - Toggle continuous speech recognition on off.<br/>
+                            <b>Ctrl+Shift+M</b> - Toggle wake word recognition on off.<br/>
                             <b>CmdOrCTRL+-</b> - Zoom in or out (alternatively use CmdOrCTRL and mouse wheel).</br>                            
                             
                         </div>`;

@@ -18,20 +18,23 @@
   "types": "./dist/index.d.ts",
   "bin": {
     "agent-sdk-wrapper": "./dist/cli.js",
-    "generate-grammar": "./dist/generate-grammar-cli.js"
+    "generate-grammar": "./dist/generate-grammar-cli.js",
+    "webtask": "./dist/webtask/cli.js"
   },
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "cli": "node dist/cli.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node dist/cli.js",
-    "tsc": "tsc -b"
+    "tsc": "tsc -b",
+    "webtask": "node dist/webtask/cli.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@anthropic-ai/sdk": "^0.35.0",
-    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/action-schema": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
@@ -42,7 +45,8 @@
     "mic": "^2.1.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
     "node-fetch": "^3.3.2",
-    "openai": "^4.73.0"
+    "openai": "^4.73.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^18.19.3",

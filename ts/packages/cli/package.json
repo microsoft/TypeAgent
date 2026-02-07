@@ -59,12 +59,18 @@
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
+    "html-to-text": "^9.0.5",
+    "interactive-app": "workspace:*",
+    "marked": "^15.0.0",
+    "marked-terminal": "^7.3.0",
+    "open": "^10.1.0",
     "ts-node": "^10.9.1",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
+    "@types/html-to-text": "^9.0.4",
     "@types/jest": "^29.5.7",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",

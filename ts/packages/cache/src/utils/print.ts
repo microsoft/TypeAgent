@@ -60,6 +60,7 @@ export function printProcessRequestActionResult(
             : chalk.yellow;
         log(color(result.constructionResult.message));
     }
+    // Grammar results are handled through the notify mechanism, not printed here
 }
 
 export function printImportConstructionResult(

@@ -226,7 +226,7 @@ namespace autoShell
             int SetFocus();
             int SwitchTo();
             int TryInvokeBack(IntPtr /* IAsyncCallback* */ callback);
-            int humbnailWindow(out IntPtr hwnd);
+            int GetThumbnailWindow(out IntPtr hwnd);
             int GetMonitor(out IntPtr /* IImmersiveMonitor */ immersiveMonitor);
             int GetVisibility(out int visibility);
             int SetCloak(APPLICATION_VIEW_CLOAK_TYPE cloakType, int unknown);
@@ -511,5 +511,81 @@ namespace autoShell
         }
 
         #endregion WiFi
+
+        #region Display Resolution
+
+        private const int ENUM_CURRENT_SETTINGS = -1;
+        private const int ENUM_REGISTRY_SETTINGS = -2;
+        private const int DISP_CHANGE_SUCCESSFUL = 0;
+        private const int DISP_CHANGE_RESTART = 1;
+        private const int DISP_CHANGE_FAILED = -1;
+        private const int DISP_CHANGE_BADMODE = -2;
+        private const int DISP_CHANGE_NOTUPDATED = -3;
+        private const int DISP_CHANGE_BADFLAGS = -4;
+        private const int DISP_CHANGE_BADPARAM = -5;
+        private const int DISP_CHANGE_BADDUALVIEW = -6;
+
+        private const int DM_PELSWIDTH = 0x80000;
+        private const int DM_PELSHEIGHT = 0x100000;
+        private const int DM_BITSPERPEL = 0x40000;
+        private const int DM_DISPLAYFREQUENCY = 0x400000;
+
+        private const int CDS_UPDATEREGISTRY = 0x01;
+        private const int CDS_TEST = 0x02;
+        private const int CDS_FULLSCREEN = 0x04;
+        private const int CDS_GLOBAL = 0x08;
+        private const int CDS_SET_PRIMARY = 0x10;
+        private const int CDS_RESET = 0x40000000;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        internal struct DEVMODE
+        {
+            private const int CCHDEVICENAME = 32;
+            private const int CCHFORMNAME = 32;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CCHDEVICENAME)]
+            public string dmDeviceName;
+            public ushort dmSpecVersion;
+            public ushort dmDriverVersion;
+            public ushort dmSize;
+            public ushort dmDriverExtra;
+            public uint dmFields;
+            public int dmPositionX;
+            public int dmPositionY;
+            public uint dmDisplayOrientation;
+            public uint dmDisplayFixedOutput;
+            public short dmColor;
+            public short dmDuplex;
+            public short dmYResolution;
+            public short dmTTOption;
+            public short dmCollate;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CCHFORMNAME)]
+            public string dmFormName;
+            public ushort dmLogPixels;
+            public uint dmBitsPerPel;
+            public uint dmPelsWidth;
+            public uint dmPelsHeight;
+            public uint dmDisplayFlags;
+            public uint dmDisplayFrequency;
+            public uint dmICMMethod;
+            public uint dmICMIntent;
+            public uint dmMediaType;
+            public uint dmDitherType;
+            public uint dmReserved1;
+            public uint dmReserved2;
+            public uint dmPanningWidth;
+            public uint dmPanningHeight;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+        internal static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
+
+        [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+        internal static extern int ChangeDisplaySettings(ref DEVMODE devMode, int flags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+        internal static extern int ChangeDisplaySettingsEx(string deviceName, ref DEVMODE devMode, IntPtr hwnd, int dwFlags, IntPtr lParam);
+
+        #endregion Display Resolution
     }
 }

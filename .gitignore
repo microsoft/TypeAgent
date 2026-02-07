@@ -452,3 +452,9 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 
 # agent files
 .claude/
+
+# WebBench execution artifacts
+traces/
+*.trace.json
+test-results-*.md
+ts/packages/agentSdkWrapper/plans/

@@ -84,6 +84,7 @@ import { StorageProvider } from "../storageProvider/storageProvider.js";
 import {
     AgentGrammarRegistry,
     GrammarStore as PersistedGrammarStore,
+    registerBuiltInEntities,
 } from "action-grammar";
 import fs from "node:fs";
 
@@ -444,7 +445,7 @@ export async function initializeCommandHandlerContext(
 ): Promise<CommandHandlerContext> {
     const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
-        options?.explanationAsynchronousMode ?? true;
+        options?.explanationAsynchronousMode ?? true; // default to async mode for faster command responses
 
     const persistSession = options?.persistSession ?? false;
     const persistDir = options?.persistDir;
@@ -586,14 +587,10 @@ async function setAppAgentStates(context: CommandHandlerContext) {
 
     // Only rollback if user explicitly change state.
     // Ignore the returned rollback state for initialization and keep the session setting as is.
+    // Use debug logging instead of notify for startup failures - don't bother user with unconfigured agents
 
     const rollback = processSetAppAgentStateResult(result, context, (message) =>
-        context.clientIO.notify(
-            undefined,
-            AppAgentEvent.Error,
-            message,
-            DispatcherName,
-        ),
+        debug(`Startup: ${message}`),
     );
 
     if (rollback) {
@@ -605,9 +602,16 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     const config = context.session.getConfig();
     const useNFAGrammar = config.cache.grammarSystem === "nfa";
 
+    debug(
+        `setupGrammarGeneration: grammarSystem=${config.cache.grammarSystem}, grammar=${config.cache.grammar}`,
+    );
+
     if (!useNFAGrammar || !config.cache.grammar) {
         return;
     }
+
+    // Register built-in entity types (Ordinal, Cardinal, CalendarDate, etc.)
+    registerBuiltInEntities();
 
     // Initialize persisted grammar store
     const grammarStorePath = context.session.getGrammarStoreFilePath();
@@ -726,9 +730,17 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
         },
     );
 
+    // Sync all registered agent grammars to the grammar store
+    // This ensures agents without dynamic rules also get their base grammar in the store
+    // IMPORTANT: Must happen AFTER configureGrammarGeneration so the cache knows about the registry
+    const registeredAgents = context.agentGrammarRegistry.getAllAgentIds();
+    debug(`Syncing ${registeredAgents.length} agent grammars to store`);
+    for (const schemaName of registeredAgents) {
+        context.agentCache.syncAgentGrammar(schemaName);
+    }
+
     // Mark as initialized to prevent re-initialization
     context.grammarGenerationInitialized = true;
-
     debug("Grammar generation configured for NFA system");
 }
 

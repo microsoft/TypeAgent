@@ -35,7 +35,7 @@ export async function getBoardSchema(
     const htmlFragments = await browser.getHtmlFragments();
     debug(`Found ${htmlFragments.length} HTML fragments on the page ${url}.`);
     debug(htmlFragments);
-    const agent = await createCrosswordPageTranslator("GPT_4_O_MINI");
+    const agent = await createCrosswordPageTranslator("GPT_5_MINI");
 
     let firstCandidateFragments = [];
     let candidateFragments = [];
@@ -191,7 +191,7 @@ export async function handleCrosswordActionWithoutCache(
 
     const browser = context.agentContext.browserConnector;
     const htmlFragments = await browser.getHtmlFragments();
-    const agent = await createCrosswordPageTranslator("GPT_4_O_MINI");
+    const agent = await createCrosswordPageTranslator("GPT_5_MINI");
 
     const direction = action.parameters.clueDirection;
     const number = action.parameters.clueNumber;

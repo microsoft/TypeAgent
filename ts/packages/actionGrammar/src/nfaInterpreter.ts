@@ -3,6 +3,17 @@
 
 import { NFA, NFATransition } from "./nfa.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
+import {
+    Environment,
+    createEnvironment,
+    setSlotValue,
+    evaluateExpression,
+    cloneEnvironment,
+    deepCloneEnvironment,
+} from "./environment.js";
+import registerDebug from "debug";
+
+const debugNFA = registerDebug("typeagent:nfa:match");
 
 /**
  * NFA Interpreter
@@ -13,25 +24,37 @@ import { globalEntityRegistry } from "./entityRegistry.js";
 
 export interface NFAMatchResult {
     matched: boolean;
-    captures: Map<string, string | number>;
     // Priority counts for sorting matches
     fixedStringPartCount: number; // # of token transitions taken
     checkedWildcardCount: number; // # of wildcard transitions with type constraints
     uncheckedWildcardCount: number; // # of wildcard transitions without type constraints
+    // Rule identification
+    ruleIndex?: number | undefined; // Index of the matched grammar rule
+    actionValue?: any | undefined; // Evaluated action value from matched rule
     // Debugging info
     visitedStates?: number[] | undefined;
     tokensConsumed?: number | undefined;
+    // Debug: slot map for variable name -> slot index (for debugging only)
+    debugSlotMap?: Map<string, number> | undefined;
 }
 
 interface NFAExecutionState {
     stateId: number;
     tokenIndex: number;
-    captures: Map<string, string | number>;
     path: number[]; // For debugging
     // Priority counts for this execution path
     fixedStringPartCount: number;
     checkedWildcardCount: number;
     uncheckedWildcardCount: number;
+    // Rule tracking
+    ruleIndex?: number | undefined; // Which grammar rule this execution thread belongs to
+    actionValue?: any | undefined; // Compiled action value expression (evaluated at accept)
+
+    // Environment-based slot system (variables compile to slot indices)
+    // Current environment for this execution thread
+    environment?: Environment | undefined;
+    // Slot map for debugging (variable name -> slot index, not used at runtime)
+    slotMap?: Map<string, number> | undefined;
 }
 
 /**
@@ -52,31 +75,46 @@ export function matchNFA(
     tokens: string[],
     debug: boolean = false,
 ): NFAMatchResult {
+    debugNFA(
+        `Matching tokens: [${tokens.join(", ")}] against NFA: ${nfa.name || "(unnamed)"}`,
+    );
+
     // Start with epsilon closure of start state
     const initialStates = epsilonClosure(nfa, [
         {
             stateId: nfa.startState,
             tokenIndex: 0,
-            captures: new Map(),
             path: [nfa.startState],
             fixedStringPartCount: 0,
             checkedWildcardCount: 0,
             uncheckedWildcardCount: 0,
+            ruleIndex: undefined,
+            actionValue: undefined,
         },
     ]);
 
+    debugNFA(
+        `Initial states after epsilon closure: ${initialStates.length} state(s)`,
+    );
     let currentStates = initialStates;
     const allVisitedStates = new Set<number>([nfa.startState]);
 
     // Process each token
     for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
         const token = tokens[tokenIndex];
+        debugNFA(
+            `Token ${tokenIndex}: "${token}", currentStates: ${currentStates.length}`,
+        );
         const nextStates: NFAExecutionState[] = [];
 
         // Try each current state
         for (const state of currentStates) {
             const nfaState = nfa.states[state.stateId];
             if (!nfaState) continue;
+
+            debugNFA(
+                `  State ${state.stateId}, env slots: ${state.environment ? JSON.stringify(state.environment.slots) : "none"}, transitions: ${nfaState.transitions.length}`,
+            );
 
             // Try each transition
             for (const trans of nfaState.transitions) {
@@ -88,17 +126,22 @@ export function matchNFA(
                     tokenIndex,
                 );
                 if (result) {
+                    debugNFA(
+                        `    Transition ${trans.type} → state ${result.stateId} succeeded`,
+                    );
                     nextStates.push(result);
                     allVisitedStates.add(result.stateId);
                 }
             }
         }
 
+        debugNFA(`  Next states before epsilon: ${nextStates.length}`);
+
         if (nextStates.length === 0) {
             // No valid transitions - match failed
+            debugNFA(`FAILED: No valid transitions for token "${token}"`);
             return {
                 matched: false,
-                captures: new Map(),
                 fixedStringPartCount: 0,
                 checkedWildcardCount: 0,
                 uncheckedWildcardCount: 0,
@@ -109,6 +152,7 @@ export function matchNFA(
 
         // Compute epsilon closure for next states
         currentStates = epsilonClosure(nfa, nextStates);
+        debugNFA(`  Current states after epsilon: ${currentStates.length}`);
 
         // Track visited states
         if (debug) {
@@ -119,31 +163,88 @@ export function matchNFA(
     }
 
     // Collect ALL accepting threads (multiple rules may match)
+    debugNFA(
+        `After all tokens, currentStates: ${currentStates.length}, accepting states: [${nfa.acceptingStates.join(", ")}]`,
+    );
+
+    // DEBUG: Count State 1 entries in currentStates
+    const state1Entries = currentStates.filter((s) => s.stateId === 1);
+    debugNFA(
+        `DEBUG: Found ${state1Entries.length} State 1 entries in currentStates`,
+    );
+    for (const s1 of state1Entries) {
+        debugNFA(
+            `DEBUG: State 1 entry - slots: ${JSON.stringify(s1.environment?.slots)}, hash: ${getSlotHash(s1.environment)}`,
+        );
+    }
+
     const acceptingThreads: NFAMatchResult[] = [];
     for (const state of currentStates) {
+        debugNFA(
+            `  Checking state ${state.stateId}, is accepting: ${nfa.acceptingStates.includes(state.stateId)}`,
+        );
         if (nfa.acceptingStates.includes(state.stateId)) {
+            // Evaluate the actionValue using the environment's slot values
+            let evaluatedActionValue = state.actionValue;
+            debugNFA(
+                `  Accept state details: hasActionValue=${!!state.actionValue}, hasEnv=${!!state.environment}, hasSlotMap=${!!state.slotMap}`,
+            );
+            if (state.environment) {
+                debugNFA(
+                    `    Environment slots: ${JSON.stringify(state.environment.slots)}`,
+                );
+            }
+            if (state.slotMap) {
+                debugNFA(
+                    `    SlotMap (debug): ${JSON.stringify([...state.slotMap.entries()])}`,
+                );
+            }
+            // actionValue is a compiled ValueExpression with slot indices
+            // Evaluate it using the environment's slot values
+            if (state.actionValue && state.environment) {
+                try {
+                    evaluatedActionValue = evaluateExpression(
+                        state.actionValue,
+                        state.environment,
+                    );
+                    debugNFA(
+                        `  Evaluated actionValue: ${JSON.stringify(evaluatedActionValue)}`,
+                    );
+                } catch (e) {
+                    debugNFA(`  Failed to evaluate actionValue: ${e}`);
+                }
+            }
+
             acceptingThreads.push({
                 matched: true,
-                captures: state.captures,
                 fixedStringPartCount: state.fixedStringPartCount,
                 checkedWildcardCount: state.checkedWildcardCount,
                 uncheckedWildcardCount: state.uncheckedWildcardCount,
+                ruleIndex: state.ruleIndex,
+                actionValue: evaluatedActionValue,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: tokens.length,
+                debugSlotMap: debug ? state.slotMap : undefined,
             });
         }
     }
 
+    debugNFA(`Accepting threads: ${acceptingThreads.length}`);
+
     // If any threads reached accepting states, return the best one by priority
     if (acceptingThreads.length > 0) {
         const sorted = sortNFAMatches(acceptingThreads);
+        debugNFA(
+            `SUCCESS: Best match has ${sorted[0].fixedStringPartCount} fixed, ${sorted[0].checkedWildcardCount} checked, ${sorted[0].uncheckedWildcardCount} unchecked`,
+        );
         return sorted[0]; // Best match by priority rules
     }
+
+    debugNFA(`FAILED: No accepting threads`);
 
     // Processed all tokens but not in accepting state
     return {
         matched: false,
-        captures: new Map(),
         fixedStringPartCount: 0,
         checkedWildcardCount: 0,
         uncheckedWildcardCount: 0,
@@ -170,87 +271,76 @@ function tryTransition(
                 return {
                     stateId: trans.to,
                     tokenIndex: tokenIndex + 1,
-                    captures: new Map(currentState.captures),
                     path: [...currentState.path, trans.to],
                     fixedStringPartCount: currentState.fixedStringPartCount + 1,
                     checkedWildcardCount: currentState.checkedWildcardCount,
                     uncheckedWildcardCount: currentState.uncheckedWildcardCount,
+                    ruleIndex: currentState.ruleIndex,
+                    actionValue: currentState.actionValue,
+                    environment: currentState.environment,
+                    slotMap: currentState.slotMap,
                 };
             }
             return undefined;
 
-        case "wildcard":
-            // Match any token and capture it
-            const newCaptures = new Map(currentState.captures);
+        case "wildcard": {
+            // Match token and write to slot (variables compile to slot indices)
+            let slotValue: string | number = token;
 
-            // Check if there's a type constraint
+            // Check type constraints and validate/convert token
             if (trans.typeName) {
-                // Special handling for built-in "number" type
                 if (trans.typeName === "number") {
+                    // Built-in number type
                     const num = parseFloat(token);
-                    if (!isNaN(num)) {
-                        if (trans.variable) {
-                            newCaptures.set(trans.variable, num);
-                        }
-                    } else {
-                        // Token is not a number
-                        return undefined;
+                    if (isNaN(num)) {
+                        return undefined; // Token is not a number
                     }
+                    slotValue = num;
                 } else {
-                    // Check if entity type is registered
+                    // Entity type - check validator
                     const validator = globalEntityRegistry.getValidator(
                         trans.typeName,
                     );
-                    if (validator) {
-                        // Use the entity's validator
-                        if (!validator.validate(token)) {
-                            return undefined;
-                        }
-                        // Try to convert if converter is available
-                        const converter = globalEntityRegistry.getConverter(
-                            trans.typeName,
-                        );
-                        if (converter && trans.variable) {
-                            const converted = converter.convert(token);
-                            if (converted !== undefined) {
-                                newCaptures.set(
-                                    trans.variable,
-                                    converted as string | number,
-                                );
-                            } else {
-                                // Conversion failed
-                                return undefined;
-                            }
-                        } else if (trans.variable) {
-                            // No converter, store as string
-                            newCaptures.set(trans.variable, token);
-                        }
-                    } else {
-                        // Unknown type - treat as string wildcard
-                        if (trans.variable) {
-                            newCaptures.set(trans.variable, token);
-                        }
+                    if (validator && !validator.validate(token)) {
+                        return undefined; // Validation failed
                     }
-                }
-            } else {
-                // No type constraint - match any token
-                if (trans.variable) {
-                    newCaptures.set(trans.variable, token);
+                    // Try converter if available
+                    const converter = globalEntityRegistry.getConverter(
+                        trans.typeName,
+                    );
+                    if (converter) {
+                        const converted = converter.convert(token);
+                        if (converted === undefined) {
+                            return undefined; // Conversion failed
+                        }
+                        slotValue = converted as string | number;
+                    }
+                    // If no converter, slotValue remains as token string
                 }
             }
 
+            // Write to slot (the append flag handles multi-token wildcards)
+            let newEnvironment = currentState.environment;
+            if (trans.slotIndex !== undefined && currentState.environment) {
+                newEnvironment = cloneEnvironment(currentState.environment);
+                setSlotValue(
+                    newEnvironment,
+                    trans.slotIndex,
+                    slotValue,
+                    trans.appendToSlot ?? false,
+                );
+            }
+
             // Determine if this is a checked or unchecked wildcard
-            // A wildcard is checked if:
-            // 1. The transition has checked=true (from checked_wildcard paramSpec or entity type)
-            // 2. Legacy: typeName is not "string" (entity type like MusicDevice, Ordinal)
             const isChecked =
                 trans.checked === true ||
-                (trans.typeName && trans.typeName !== "string");
+                (trans.typeName &&
+                    trans.typeName !== "string" &&
+                    trans.typeName !== "wildcard");
 
             return {
                 stateId: trans.to,
                 tokenIndex: tokenIndex + 1,
-                captures: newCaptures,
                 path: [...currentState.path, trans.to],
                 fixedStringPartCount: currentState.fixedStringPartCount,
                 checkedWildcardCount: isChecked
@@ -259,7 +349,12 @@ function tryTransition(
                 uncheckedWildcardCount: isChecked
                     ? currentState.uncheckedWildcardCount
                     : currentState.uncheckedWildcardCount + 1,
+                ruleIndex: currentState.ruleIndex,
+                actionValue: currentState.actionValue,
+                environment: newEnvironment,
+                slotMap: currentState.slotMap,
             };
+        }
 
         case "epsilon":
             // Epsilon transitions are handled separately
@@ -271,48 +366,301 @@ function tryTransition(
 }
 
 /**
+ * Get the depth of an environment (number of levels including the current one)
+ * Used to distinguish paths with different nesting levels
+ */
+function getEnvironmentDepth(env: Environment | undefined): number {
+    let depth = 0;
+    while (env) {
+        depth++;
+        env = env.parent;
+    }
+    return depth;
+}
+
+/**
+ * Generate a simple hash of the environment's slot values
+ * This is used to distinguish execution threads that have the same state ID and priorities
+ * but different slot values (i.e., different matching results)
+ */
+function getSlotHash(
+    env: Environment | undefined,
+    debug: boolean = false,
+): string {
+    if (!env || env.slots.length === 0) {
+        return "empty";
+    }
+
+    // Create a simple hash from slot values
+    // For performance, we only look at the first slot (which typically contains the result)
+    // and create a hash based on its type and basic content
+    const slot = env.slots[0];
+    if (slot === undefined) {
+        return "undef";
+    }
+    if (slot === null) {
+        return "null";
+    }
+    if (typeof slot === "string") {
+        // Use first 20 chars + length for string hash
+        return `s:${slot.length}:${slot.substring(0, 20)}`;
+    }
+    if (typeof slot === "number") {
+        return `n:${slot}`;
+    }
+    if (typeof slot === "object") {
+        // For objects, use a simple structural hash
+        // Check for action objects specifically
+        if ("actionName" in slot) {
+            const action = slot as { actionName: string; parameters?: object };
+            const params = action.parameters;
+            const paramKeys = params ? Object.keys(params) : [];
+            const paramCount = paramKeys.length;
+            const paramKeysStr = paramKeys.sort().join(",");
+
+            if (debug) {
+                debugNFA(
+                    `  getSlotHash DEBUG: params=${JSON.stringify(params)}, paramKeys=[${paramKeys.join(",")}], paramCount=${paramCount}`,
+                );
+            }
+
+            return `a:${action.actionName}:${paramCount}:${paramKeysStr}`;
+        }
+        // For other objects, use key count
+        return `o:${Object.keys(slot).length}`;
+    }
+    return "other";
+}
+
+/**
  * Compute epsilon closure of a set of states
  * Returns all states reachable via epsilon transitions
  *
  * IMPORTANT: Multiple execution threads can reach the same NFA state with different
  * priority counts. We must preserve ALL threads, not deduplicate by state ID alone.
+ *
+ * NEW: When entering a state with slotMap (a rule entry), create a new environment
+ * for that rule's variables. The environment tracks captures using slots instead of
+ * the old captures map approach.
  */
 function epsilonClosure(
     nfa: NFA,
     states: NFAExecutionState[],
 ): NFAExecutionState[] {
     const result: NFAExecutionState[] = [];
-    // Track visited states by (stateId, fixedCount, checkedCount, uncheckedCount) tuple
-    // to allow multiple threads at the same NFA state with different priority counts
+    // Track visited states by (stateId, fixedCount, checkedCount, uncheckedCount, envDepth) tuple
+    // to allow multiple threads at the same NFA state with different priority counts or env depths
     const visited = new Set<string>();
     const queue = [...states];
 
     while (queue.length > 0) {
         const state = queue.shift()!;
 
-        // Create unique key for this execution thread
-        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}`;
+        const nfaState = nfa.states[state.stateId];
+        if (!nfaState) continue;
+
+        // Capture rule index from state marker if present
+        const currentRuleIndex =
+            nfaState.ruleIndex !== undefined
+                ? nfaState.ruleIndex
+                : state.ruleIndex;
+
+        // NEW: Handle environment creation when entering a rule with slotMap
+        let currentEnvironment = state.environment;
+        let currentSlotMap = state.slotMap;
+
+        if (nfaState.slotMap && nfaState.slotCount !== undefined) {
+            // This is a rule entry state - create a new environment
+            // The new environment has the previous one as parent (for nested rules)
+            // Store slotMap and actionValue in the environment so they can be restored when popping
+            currentEnvironment = createEnvironment(
+                nfaState.slotCount,
+                state.environment,
+                nfaState.parentSlotIndex,
+                nfaState.slotMap,
+                nfaState.actionValue, // Store actionValue for this rule
+            );
+            currentSlotMap = nfaState.slotMap;
+        }
+
+        // Create unique key for this execution thread AFTER environment is determined
+        // Include environment depth so paths with different nesting levels don't collide
+        // Also include a hash of the first slot value to distinguish threads with different results
+        const envDepth = getEnvironmentDepth(currentEnvironment);
+
+        // DEBUG: Log before hash computation for State 1
+        if (state.stateId === 1) {
+            const slot0 = currentEnvironment?.slots?.[0];
+            debugNFA(
+                `DEBUG STATE 1 BEFORE HASH: slots[0]=${JSON.stringify(slot0)}, slot0 type=${typeof slot0}`,
+            );
+            // Check all levels of the environment
+            let env = currentEnvironment;
+            let level = 0;
+            while (env) {
+                debugNFA(
+                    `  Level ${level}: slots=${JSON.stringify(env.slots)}, hash=${getSlotHash({ ...env, parent: undefined })}`,
+                );
+                env = env.parent;
+                level++;
+            }
+        }
+
+        const slotHash = getSlotHash(currentEnvironment, state.stateId === 1);
+        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}-${envDepth}-${slotHash}`;
 
         if (visited.has(key)) {
             continue;
         }
         visited.add(key);
-        result.push(state);
 
-        const nfaState = nfa.states[state.stateId];
-        if (!nfaState) continue;
+        // IMPORTANT: For actionValue, we need to be careful about nested rules.
+        // If the state has an actionValue AND we're creating a new environment,
+        // we should use the state's actionValue (it's the outer rule's value).
+        // If we're not creating a new environment, we should keep the current actionValue
+        // (from the rule we're already in).
+        //
+        // The key insight: the actionValue should be determined by which rule's
+        // environment we're in, not by the most recently visited state.
+        let currentActionValue = state.actionValue;
+        if (nfaState.actionValue !== undefined && nfaState.slotMap) {
+            // This is a rule entry with an action value - use it
+            currentActionValue = nfaState.actionValue;
+        } else if (nfaState.actionValue !== undefined && !state.environment) {
+            // Legacy: top-level rule entry without environment (backwards compatibility)
+            currentActionValue = nfaState.actionValue;
+        }
+        // Otherwise keep the current actionValue (we're inside the same rule)
+
+        // Update the state with current values before adding to result
+        // IMPORTANT: Deep clone the environment to prevent later mutations
+        // from affecting this state's data
+        const frozenEnvironment = currentEnvironment
+            ? deepCloneEnvironment(currentEnvironment)
+            : undefined;
+        const updatedState: NFAExecutionState = {
+            ...state,
+            ruleIndex: currentRuleIndex,
+            actionValue: currentActionValue,
+            environment: frozenEnvironment,
+            slotMap: currentSlotMap,
+        };
+
+        // DEBUG: Track State 1 additions
+        if (state.stateId === 1) {
+            const existingState1Count = result.filter(
+                (s) => s.stateId === 1,
+            ).length;
+            // Check if currentEnvironment slots differ from frozenEnvironment
+            const currentSlot0 = currentEnvironment?.slots?.[0];
+            const frozenSlot0 = frozenEnvironment?.slots?.[0];
+            debugNFA(
+                `DEBUG STATE 1 ADDING: key=${key}, existing State 1 count=${existingState1Count}`,
+            );
+            debugNFA(
+                `  currentEnvironment.slots[0] = ${JSON.stringify(currentSlot0)}`,
+            );
+            debugNFA(
+                `  frozenEnvironment.slots[0] = ${JSON.stringify(frozenSlot0)}`,
+            );
+            if (
+                currentSlot0 &&
+                typeof currentSlot0 === "object" &&
+                "parameters" in currentSlot0
+            ) {
+                debugNFA(
+                    `  currentSlot0.parameters = ${JSON.stringify(currentSlot0.parameters)}`,
+                );
+            }
+        }
+
+        result.push(updatedState);
 
         // Follow epsilon transitions
         for (const trans of nfaState.transitions) {
             if (trans.type === "epsilon") {
+                // Check if this is a "write to parent" epsilon transition
+                // These are used when exiting a nested rule to write the result to the parent slot
+                let newEnvironment = currentEnvironment;
+                let newSlotMap = currentSlotMap;
+                let newActionValue = currentActionValue;
+
+                if (
+                    trans.writeToParent &&
+                    trans.valueToWrite &&
+                    currentEnvironment &&
+                    currentEnvironment.parent &&
+                    currentEnvironment.parentSlotIndex !== undefined
+                ) {
+                    // Evaluate the nested rule's compiled value expression
+                    // trans.valueToWrite is already a compiled ValueExpression with slot indices
+                    try {
+                        const evaluatedValue = evaluateExpression(
+                            trans.valueToWrite,
+                            currentEnvironment,
+                        );
+                        // IMPORTANT: Clone the parent environment before writing to avoid
+                        // mutation affecting other execution paths that share the same parent
+                        // DEEP CLONE: Also clone the parent's parent chain to prevent shared mutations
+                        const clonedParent = deepCloneEnvironment(
+                            currentEnvironment.parent,
+                        );
+                        // Write to the cloned parent's slot
+                        setSlotValue(
+                            clonedParent,
+                            currentEnvironment.parentSlotIndex,
+                            evaluatedValue,
+                        );
+                        debugNFA(
+                            `  WriteToParent: evaluated -> ${JSON.stringify(evaluatedValue)?.substring(0, 50)}, wrote to slot ${currentEnvironment.parentSlotIndex}`,
+                        );
+                        // Pop back to the cloned parent environment
+                        newEnvironment = clonedParent;
+                    } catch (e) {
+                        debugNFA(`  WriteToParent failed: ${e}`);
+                        // On error, still pop to parent (unmodified)
+                        newEnvironment = currentEnvironment.parent;
+                    }
+                    // Restore slotMap from parent environment if available
+                    if (newEnvironment?.slotMap) {
+                        newSlotMap = newEnvironment.slotMap;
+                    }
+                    // Restore actionValue from parent environment if available
+                    if (newEnvironment?.actionValue !== undefined) {
+                        newActionValue = newEnvironment.actionValue;
+                    }
+                } else if (
+                    trans.popEnvironment &&
+                    currentEnvironment &&
+                    currentEnvironment.parent
+                ) {
+                    // Pop environment without writing - used when exiting nested rules
+                    // that don't capture to parent (e.g., (<Item>)?)
+                    debugNFA(
+                        `  PopEnvironment: popping from depth ${getEnvironmentDepth(currentEnvironment)} to ${getEnvironmentDepth(currentEnvironment.parent)}`,
+                    );
+                    newEnvironment = currentEnvironment.parent;
+                    // Restore slotMap from parent environment if available
+                    if (newEnvironment?.slotMap) {
+                        newSlotMap = newEnvironment.slotMap;
+                    }
+                    // Restore actionValue from parent environment if available
+                    if (newEnvironment?.actionValue !== undefined) {
+                        newActionValue = newEnvironment.actionValue;
+                    }
+                }
+
                 queue.push({
                     stateId: trans.to,
-                    tokenIndex: state.tokenIndex,
-                    captures: new Map(state.captures),
-                    path: [...state.path, trans.to],
-                    fixedStringPartCount: state.fixedStringPartCount,
-                    checkedWildcardCount: state.checkedWildcardCount,
-                    uncheckedWildcardCount: state.uncheckedWildcardCount,
+                    tokenIndex: updatedState.tokenIndex,
+                    path: [...updatedState.path, trans.to],
+                    fixedStringPartCount: updatedState.fixedStringPartCount,
+                    checkedWildcardCount: updatedState.checkedWildcardCount,
+                    uncheckedWildcardCount: updatedState.uncheckedWildcardCount,
+                    ruleIndex: currentRuleIndex,
+                    actionValue: newActionValue,
+                    environment: newEnvironment,
+                    slotMap: newSlotMap,
                 });
             }
         }
@@ -377,10 +725,14 @@ export function printMatchResult(
     lines.push(`Match result: ${result.matched ? "SUCCESS" : "FAILED"}`);
     lines.push(`Tokens consumed: ${result.tokensConsumed}/${tokens.length}`);
 
-    if (result.captures.size > 0) {
-        lines.push(`Captures:`);
-        for (const [key, value] of result.captures) {
-            lines.push(`  ${key} = ${JSON.stringify(value)}`);
+    if (result.actionValue !== undefined) {
+        lines.push(`Action value: ${JSON.stringify(result.actionValue)}`);
+    }
+
+    if (result.debugSlotMap && result.debugSlotMap.size > 0) {
+        lines.push(`Slot map (debug):`);
+        for (const [varName, slotIdx] of result.debugSlotMap) {
+            lines.push(`  ${varName} -> slot ${slotIdx}`);
         }
     }
 

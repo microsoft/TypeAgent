@@ -186,6 +186,24 @@ function registerClient(
                 case "randomCommandSelected":
                     chatView.randomCommandSelected(requestId, data.message);
                     break;
+                case "grammarRule":
+                    // Display grammar rule generation result
+                    if (data.success && data.rule) {
+                        chatView.addNotificationMessage(
+                            `Grammar +RULE: ${data.message}\n${data.rule}`,
+                            source,
+                            requestId,
+                        );
+                    } else if (!data.success && data.rule) {
+                        // Rejected but show the rule for diagnostics
+                        chatView.addNotificationMessage(
+                            `Grammar REJECTED: ${data.message}\nRule: ${data.rule}`,
+                            source,
+                            requestId,
+                        );
+                    }
+                    // Don't show anything for rejected without rule
+                    break;
                 case "showNotifications":
                     switch (data) {
                         case NotifyCommands.Clear:
@@ -330,8 +348,8 @@ function registerClient(
 
             chatView.chatInput?.recognizeOnce(token, useLocalWhisper);
         },
-        toggleAlwaysListen(): void {
-            chatView.chatInput?.toggleContinuous();
+        toggleAlwaysListen(waitforWakeWord: boolean): void {
+            chatView.chatInput?.toggleContinuous(waitforWakeWord);
         },
         focusInput(): void {
             chatView.chatInput?.focus();
@@ -347,20 +365,18 @@ function registerClient(
             chatView.setTitle(title);
         },
         continuousSpeechProcessed(expressions: UserExpression[]): void {
-            // TODO: process messages and only add questions/requests.
-
             console.log(
                 `Continuous speech processed: ${JSON.stringify(expressions)}`,
             );
 
             for (const expression of expressions) {
                 if (expression.complete_statement) {
-                    if (
-                        expression.type === "question" ||
-                        expression.type === "command"
-                    ) {
-                        chatView.addUserMessage(JSON.stringify(expression));
-                    }
+                    // if (
+                    //     expression.type === "question" ||
+                    //     expression.type === "command"
+                    // ) {
+                    chatView.addUserMessage(JSON.stringify(expression.text));
+                    //}
                 }
             }
         },

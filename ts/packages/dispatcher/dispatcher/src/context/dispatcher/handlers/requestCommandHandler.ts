@@ -200,20 +200,25 @@ function getExplainerOptions(
     const { list, value, translate } =
         context.session.getConfig().explainer.filter.reference;
 
+    // In NFA mode, skip old construction system validation
+    const isNFAMode = context.agentCache.isUsingNFAGrammar();
+
     return {
         namespaceSuffix: getActivityNamespaceSuffix(
             context,
             requestAction.history?.activityContext,
         ),
-        checkExplainable: translate
-            ? (requestAction: RequestAction) =>
-                  canTranslateWithoutContext(
-                      requestAction,
-                      usedTranslators,
-                      context.logger,
-                  )
-            : undefined,
-        valueInRequest: value,
+        // In NFA mode, skip contextless translation check (not needed for grammar rules)
+        checkExplainable:
+            translate && !isNFAMode
+                ? (requestAction: RequestAction) =>
+                      canTranslateWithoutContext(
+                          requestAction,
+                          usedTranslators,
+                          context.logger,
+                      )
+                : undefined,
+        valueInRequest: isNFAMode ? false : value,
         noReferences: list,
     };
 }
@@ -248,6 +253,21 @@ async function requestExplain(
             ? undefined
             : explanationResult?.message;
         notifyExplained(error);
+
+        // Notify about grammar result (success or rejection)
+        if (result.grammarResult) {
+            context.clientIO.notify(
+                requestId,
+                "grammarRule",
+                {
+                    success: result.grammarResult.success,
+                    message: result.grammarResult.message,
+                    rule: result.grammarResult.generatedRule,
+                    time: new Date().toLocaleTimeString(),
+                },
+                DispatcherName,
+            );
+        }
     };
 
     const cannotUseCacheReason = getCannotUseCacheReason(
@@ -286,6 +306,7 @@ async function requestExplain(
         const processRequestActionResult = await processRequestActionP;
         notifyExplainedResult(processRequestActionResult);
 
+        // Print result details (includes grammar result if using NFA)
         printProcessRequestActionResult(processRequestActionResult);
     }
 }

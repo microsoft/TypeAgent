@@ -17,6 +17,7 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - **Notification Center**: Toggle the Windows notification center
 - **Airplane Mode Control**: Enable or disable Windows airplane mode
 - **Wi-Fi Management**: Connect to Wi-Fi networks by SSID
+- **Display Resolution**: List available resolutions and change display settings
 
 ## Requirements
 
@@ -56,6 +57,8 @@ Run the application and send JSON commands via stdin:
 | `restoreVolume` | (none) | Restores previously saved volume level |
 | `setAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
 | `setTextSize` | `100-225` | Sets system text scaling percentage |
+| `setScreenResolution` | `"WIDTHxHEIGHT"` or `{"width": W, "height": H}` | Sets the display resolution |
+| `listResolutions` | (none) | Outputs available display resolutions as JSON |
 | `setWallpaper` | File path | Sets the desktop wallpaper |
 | `switchDesktop` | Index or name | Switches to a virtual desktop by index or name |
 | `switchTo` | Application name | Brings application window to foreground |
@@ -123,6 +126,26 @@ Connect to a Wi-Fi network:
 Set system text size to 125%:
 ```json
 {"setTextSize": 125}
+```
+
+List available display resolutions:
+```json
+{"listResolutions": true}
+```
+
+Set display resolution to 1920x1080:
+```json
+{"setScreenResolution": "1920x1080"}
+```
+
+Set display resolution with specific refresh rate:
+```json
+{"setScreenResolution": "1920x1080@144"}
+```
+
+Set display resolution using JSON object:
+```json
+{"setScreenResolution": {"width": 2560, "height": 1440, "refreshRate": 60}}
 ```
 
 ### Supported Application Friendly Names

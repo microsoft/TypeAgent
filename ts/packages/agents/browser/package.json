@@ -74,7 +74,7 @@
     "graphology-layout-noverlap": "^0.4.1",
     "html-to-text": "^9.0.5",
     "jsdom": "^26.1.0",
-    "jsonpath": "^1.1.1",
+    "jsonpath": "^1.2.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "markdown-it": "^14.1.0",
