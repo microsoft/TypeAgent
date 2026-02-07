@@ -36,11 +36,7 @@ class CosmosDBLoggerSink implements LoggerSink {
     ) {}
 
     public logEvent(event: LogEvent) {
-        if (
-            this.endpoint &&
-            !this.disabled &&
-            this.isEnabled?.() !== false
-        ) {
+        if (this.endpoint && !this.disabled && this.isEnabled?.() !== false) {
             this.pendingEvents.push(event);
             if (this.timeout === undefined) {
                 this.timeout = setTimeout(() => this.upload(), UPLOAD_DELAY);
@@ -125,7 +121,8 @@ class CosmosDBLoggerSink implements LoggerSink {
                     },
                 );
 
-                const result = await container.executeBulkOperations(operations);
+                const result =
+                    await container.executeBulkOperations(operations);
                 debugCosmos(
                     `Status: ${result[0].response?.statusCode}. ${operations.length} events uploaded`,
                 );

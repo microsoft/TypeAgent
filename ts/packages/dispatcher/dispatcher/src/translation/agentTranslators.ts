@@ -346,7 +346,10 @@ export function loadAgentJsonTranslator<
     );
     // Collect schema name mapping.
     const schemaNameMap = collectSchemaName(actionConfigs, provider);
-    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model, promptLogger });
+    return createTypeAgentTranslator<T>(validator, schemaNameMap, {
+        model,
+        promptLogger,
+    });
 }
 
 function createTypeAgentTranslator<
@@ -453,7 +456,10 @@ export function createTypeAgentTranslatorForSelectedActions<
         definitions,
         actionConfig,
     );
-    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model, promptLogger });
+    return createTypeAgentTranslator<T>(validator, schemaNameMap, {
+        model,
+        promptLogger,
+    });
 }
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema

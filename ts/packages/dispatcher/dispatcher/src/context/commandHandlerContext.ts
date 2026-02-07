@@ -309,9 +309,7 @@ function getCosmosFactories(): PromptLoggerOptions {
                 endpoint,
                 aadCredentials: new DefaultAzureCredential(),
             });
-            const container = client
-                .database(dbName)
-                .container(containerName);
+            const container = client.database(dbName).container(containerName);
             return {
                 executeBulkOperations: (ops) =>
                     container.items.executeBulkOperations(ops as any),
@@ -327,7 +325,8 @@ function getCosmosFactories(): PromptLoggerOptions {
         result.cosmosContainerFactory = cosmosContainerFactory;
     }
     if (cosmosPartitionKeyBuilderFactory !== undefined) {
-        result.cosmosPartitionKeyBuilderFactory = cosmosPartitionKeyBuilderFactory;
+        result.cosmosPartitionKeyBuilderFactory =
+            cosmosPartitionKeyBuilderFactory;
     }
     return result;
 }
@@ -337,7 +336,6 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
-
         const { cosmosContainerFactory, cosmosPartitionKeyBuilderFactory } =
             getCosmosFactories();
 

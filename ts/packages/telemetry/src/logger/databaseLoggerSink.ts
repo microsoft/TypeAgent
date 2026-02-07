@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    LoggerSink,
-    CosmosContainerClientFactory,
-} from "./logger.js";
+import { LoggerSink, CosmosContainerClientFactory } from "./logger.js";
 import { createMongoDBLoggerSink } from "./mongoLoggerSink.js";
 import {
     createCosmosDBLoggerSink,
@@ -26,7 +23,9 @@ export interface DatabaseLoggerSinkOptions {
     /**
      * Factory to create a Cosmos partition key builder. Required if using Cosmos DB.
      */
-    cosmosPartitionKeyBuilderFactory?: CosmosPartitionKeyBuilderFactory | undefined;
+    cosmosPartitionKeyBuilderFactory?:
+        | CosmosPartitionKeyBuilderFactory
+        | undefined;
 }
 
 /**
