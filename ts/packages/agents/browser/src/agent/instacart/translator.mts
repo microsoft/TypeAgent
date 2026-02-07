@@ -8,7 +8,13 @@ import { InstacartActions } from "./schema/userActions.mjs";
 import { ECommerceSiteAgent } from "../commerce/translator.mjs";
 
 export async function createInstacartPageTranslator(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_5_MINI" | "GPT_5_2",
+    model:
+        | "GPT_35_TURBO"
+        | "GPT_4"
+        | "GPT_v"
+        | "GPT_4_O"
+        | "GPT_5_MINI"
+        | "GPT_5_2",
 ) {
     const packageRoot = path.join("..", "..", "..");
     const actionSchema = await fs.promises.readFile(
