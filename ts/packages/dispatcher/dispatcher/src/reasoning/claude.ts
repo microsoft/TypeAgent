@@ -178,6 +178,12 @@ export async function executeReasoningAction(
     action: TypeAgentAction<ReasoningAction>,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<any> {
+    const systemContext = context.sessionContext.agentContext;
+    if (systemContext.session.getConfig().execution.reasoning !== "claude") {
+        throw new Error(
+            `Reasoning model is not set to 'claude' for this session.`,
+        );
+    }
     const originalRequest = action.parameters.originalRequest;
 
     // Display initial message
@@ -198,10 +204,13 @@ export async function executeReasoningAction(
                 if (content.type === "text") {
                     // Update display with current thinking content
                     // REVIEW: assume markdown?
-                    context.actionIO.appendDisplay({
-                        type: "markdown",
-                        content: content.text,
-                    });
+                    context.actionIO.appendDisplay(
+                        {
+                            type: "markdown",
+                            content: content.text,
+                        },
+                        "block",
+                    );
                 } else if (content.type === "tool_use") {
                     const toolName = content.name;
                     if (
