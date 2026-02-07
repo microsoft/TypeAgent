@@ -237,10 +237,14 @@ export class LocalPlayerService {
 
     public resume(): boolean {
         if (this.state.isPaused && this.state.currentTrack) {
-            if (process.platform === "win32" && this.playerProcess) {
+            if (!this.playerProcess) {
+                // No active player process; restart playback
+                this.playTrack(this.state.currentTrack);
+            } else if (process.platform !== "win32") {
+                // On non-Windows platforms, attempt to continue the existing process
                 this.playerProcess.kill("SIGCONT");
-            } else if (this.state.currentTrack) {
-                // Restart playback (not ideal, but works)
+            } else {
+                // On Windows, SIGCONT isn't supported; restart playback instead
                 this.playTrack(this.state.currentTrack);
             }
             this.state.isPaused = false;
