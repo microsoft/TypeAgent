@@ -1,0 +1,360 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Desktop Agent Grammar - Settings Actions
+// Defines natural language patterns for 47 Windows settings actions
+
+@ <Start> = <ExistingDesktopActions>
+          | <NetworkSettings>
+          | <DisplaySettings>
+          | <PersonalizationSettings>
+          | <TaskbarSettings>
+          | <MouseSettings>
+          | <TouchpadSettings>
+          | <PrivacySettings>
+          | <PowerSettings>
+          | <GamingSettings>
+          | <AccessibilitySettings>
+          | <FileExplorerSettings>
+          | <TimeRegionSettings>
+          | <FocusAssistSettings>
+          | <MultiMonitorSettings>
+
+// ===== Existing Desktop Actions (placeholder - actual grammar would be expanded) =====
+@ <ExistingDesktopActions> = <LaunchProgram>
+                            | <SetVolume>
+                            | <SetThemeMode>
+
+@ <LaunchProgram> = launch $(program:wildcard) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+                  | open $(program:wildcard) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+
+@ <SetVolume> = set volume to $(level:number) -> { actionName: "volume", parameters: { targetVolume: $(level) } }
+
+@ <SetThemeMode> = set theme to dark -> { actionName: "setThemeMode", parameters: { mode: "dark" } }
+                 | set theme to light -> { actionName: "setThemeMode", parameters: { mode: "light" } }
+                 | toggle (theme)? mode -> { actionName: "setThemeMode", parameters: { mode: "toggle" } }
+
+// ===== Network Settings =====
+@ <NetworkSettings> = <BluetoothToggle>
+                    | <EnableWifi>
+                    | <EnableMeteredConnections>
+
+@ <BluetoothToggle> =
+    turn on bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: true } }
+  | turn off bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: false } }
+  | enable bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: true } }
+  | disable bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: false } }
+  | toggle bluetooth -> { actionName: "BluetoothToggle", parameters: {} }
+
+@ <EnableWifi> =
+    turn on wifi -> { actionName: "enableWifi", parameters: { enable: true } }
+  | turn off wifi -> { actionName: "enableWifi", parameters: { enable: false } }
+  | enable wifi -> { actionName: "enableWifi", parameters: { enable: true } }
+  | disable wifi -> { actionName: "enableWifi", parameters: { enable: false } }
+  | turn on wi\-fi -> { actionName: "enableWifi", parameters: { enable: true } }
+  | turn off wi\-fi -> { actionName: "enableWifi", parameters: { enable: false } }
+
+@ <EnableMeteredConnections> =
+    enable metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: true } }
+  | disable metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: false } }
+  | turn on metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: true } }
+  | turn off metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: false } }
+
+// ===== Display Settings =====
+@ <DisplaySettings> = <AdjustScreenBrightness>
+                    | <EnableBlueLightFilter>
+                    | <AdjustColorTemperature>
+                    | <DisplayScaling>
+                    | <AdjustScreenOrientation>
+                    | <RotationLock>
+
+@ <AdjustScreenBrightness> =
+    increase (screen)? brightness -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "increase" } }
+  | decrease (screen)? brightness -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
+  | make (the)? screen brighter -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "increase" } }
+  | make (the)? screen dimmer -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
+  | dim (the)? screen -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
+  | brighten (the)? screen -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "increase" } }
+
+@ <EnableBlueLightFilter> =
+    enable night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "sunset to sunrise", nightLightScheduleDisabled: false } }
+  | disable night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "", nightLightScheduleDisabled: true } }
+  | turn on night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "sunset to sunrise", nightLightScheduleDisabled: false } }
+  | turn off night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "", nightLightScheduleDisabled: true } }
+  | enable blue light filter -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "sunset to sunrise", nightLightScheduleDisabled: false } }
+
+@ <AdjustColorTemperature> =
+    adjust color temperature -> { actionName: "adjustColorTemperature", parameters: {} }
+  | reduce blue light -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "reduce" } }
+  | increase blue light -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "increase" } }
+
+@ <DisplayScaling> =
+    set (display)? scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: $(size) } }
+  | set text scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: $(size) } }
+
+@ <AdjustScreenOrientation> =
+    set (screen)? orientation to landscape -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "landscape" } }
+  | set (screen)? orientation to portrait -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "portrait" } }
+  | rotate screen to landscape -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "landscape" } }
+  | rotate screen to portrait -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "portrait" } }
+
+@ <RotationLock> =
+    lock (screen)? rotation -> { actionName: "RotationLock", parameters: { enable: true } }
+  | unlock (screen)? rotation -> { actionName: "RotationLock", parameters: { enable: false } }
+  | enable rotation lock -> { actionName: "RotationLock", parameters: { enable: true } }
+  | disable rotation lock -> { actionName: "RotationLock", parameters: { enable: false } }
+
+// ===== Personalization Settings =====
+@ <PersonalizationSettings> = <EnableTransparency>
+                             | <ApplyColorToTitleBar>
+                             | <HighContrastTheme>
+
+@ <EnableTransparency> =
+    enable transparency -> { actionName: "EnableTransparency", parameters: { enable: true } }
+  | disable transparency -> { actionName: "EnableTransparency", parameters: { enable: false } }
+  | turn on transparency (effects)? -> { actionName: "EnableTransparency", parameters: { enable: true } }
+  | turn off transparency (effects)? -> { actionName: "EnableTransparency", parameters: { enable: false } }
+
+@ <ApplyColorToTitleBar> =
+    apply color to title bar -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: true } }
+  | show accent color on title bars -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: true } }
+  | enable title bar color -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: true } }
+  | disable title bar color -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: false } }
+
+@ <HighContrastTheme> =
+    enable high contrast -> { actionName: "HighContrastTheme", parameters: {} }
+  | turn on high contrast -> { actionName: "HighContrastTheme", parameters: {} }
+  | open high contrast (settings)? -> { actionName: "HighContrastTheme", parameters: {} }
+
+// ===== Taskbar Settings =====
+@ <TaskbarSettings> = <AutoHideTaskbar>
+                    | <TaskbarAlignment>
+                    | <TaskViewVisibility>
+                    | <ToggleWidgetsButton>
+                    | <ShowBadgesOnTaskbar>
+                    | <DisplayTaskbarOnAllMonitors>
+                    | <DisplaySecondsInClock>
+
+@ <AutoHideTaskbar> =
+    auto hide (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: true, alwaysShow: false } }
+  | automatically hide (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: true, alwaysShow: false } }
+  | always show (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: false, alwaysShow: true } }
+  | hide (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: true, alwaysShow: false } }
+
+@ <TaskbarAlignment> =
+    center (the)? taskbar -> { actionName: "TaskbarAlignment", parameters: { alignment: "center" } }
+  | align taskbar (to)? center -> { actionName: "TaskbarAlignment", parameters: { alignment: "center" } }
+  | left align (the)? taskbar -> { actionName: "TaskbarAlignment", parameters: { alignment: "left" } }
+  | align taskbar (to)? left -> { actionName: "TaskbarAlignment", parameters: { alignment: "left" } }
+
+@ <TaskViewVisibility> =
+    show task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: true } }
+  | hide task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: false } }
+  | enable task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: true } }
+  | disable task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: false } }
+
+@ <ToggleWidgetsButton> =
+    show widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "show" } }
+  | hide widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "hide" } }
+  | enable widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "show" } }
+  | disable widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "hide" } }
+
+@ <ShowBadgesOnTaskbar> =
+    show taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: true } }
+  | hide taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: false } }
+  | enable taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: true } }
+  | disable taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: false } }
+
+@ <DisplayTaskbarOnAllMonitors> =
+    show taskbar on all monitors -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: true } }
+  | show taskbar on all displays -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: true } }
+  | hide taskbar from other monitors -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: false } }
+
+@ <DisplaySecondsInClock> =
+    show seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: true } }
+  | hide seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
+  | display seconds in (system)? clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: true } }
+
+// ===== Mouse Settings =====
+@ <MouseSettings> = <MouseCursorSpeed>
+                  | <MouseWheelScrollLines>
+                  | <SetPrimaryMouseButton>
+                  | <EnhancePointerPrecision>
+                  | <AdjustMousePointerSize>
+
+@ <MouseCursorSpeed> =
+    set mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: $(level) } }
+  | adjust mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: $(level) } }
+  | change mouse sensitivity to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: $(level) } }
+
+@ <MouseWheelScrollLines> =
+    set scroll (wheel)? lines to $(lines:number) -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: $(lines) } }
+  | scroll $(lines:number) lines (per notch)? -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: $(lines) } }
+
+@ <SetPrimaryMouseButton> =
+    set primary mouse button to left -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "left" } }
+  | set primary mouse button to right -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
+  | swap mouse buttons -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
+
+@ <EnhancePointerPrecision> =
+    enable enhanced pointer precision -> { actionName: "EnhancePointerPrecision", parameters: { enable: true } }
+  | disable enhanced pointer precision -> { actionName: "EnhancePointerPrecision", parameters: { enable: false } }
+  | enable mouse acceleration -> { actionName: "EnhancePointerPrecision", parameters: { enable: true } }
+  | disable mouse acceleration -> { actionName: "EnhancePointerPrecision", parameters: { enable: false } }
+
+@ <AdjustMousePointerSize> =
+    increase pointer size -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "increase" } }
+  | decrease pointer size -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } }
+  | make pointer bigger -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "increase" } }
+  | make pointer smaller -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } }
+
+// ===== Touchpad Settings =====
+@ <TouchpadSettings> = <EnableTouchPad>
+                     | <TouchpadCursorSpeed>
+
+@ <EnableTouchPad> =
+    enable touchpad -> { actionName: "EnableTouchPad", parameters: { enable: true } }
+  | disable touchpad -> { actionName: "EnableTouchPad", parameters: { enable: false } }
+  | turn on touchpad -> { actionName: "EnableTouchPad", parameters: { enable: true } }
+  | turn off touchpad -> { actionName: "EnableTouchPad", parameters: { enable: false } }
+
+@ <TouchpadCursorSpeed> =
+    set touchpad speed to $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed: $(speed) } }
+  | adjust touchpad sensitivity -> { actionName: "TouchpadCursorSpeed", parameters: {} }
+
+// ===== Privacy Settings =====
+@ <PrivacySettings> = <ManageMicrophoneAccess>
+                    | <ManageCameraAccess>
+                    | <ManageLocationAccess>
+
+@ <ManageMicrophoneAccess> =
+    allow microphone access -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "allow" } }
+  | deny microphone access -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "deny" } }
+  | enable microphone (access)? -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "allow" } }
+  | disable microphone (access)? -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "deny" } }
+
+@ <ManageCameraAccess> =
+    allow camera access -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "allow" } }
+  | deny camera access -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "deny" } }
+  | enable camera (access)? -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "allow" } }
+  | disable camera (access)? -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "deny" } }
+
+@ <ManageLocationAccess> =
+    allow location access -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "allow" } }
+  | deny location access -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "deny" } }
+  | enable location (services)? -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "allow" } }
+  | disable location (services)? -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "deny" } }
+
+// ===== Power Settings =====
+@ <PowerSettings> = <BatterySaverActivationLevel>
+                  | <SetPowerMode>
+
+@ <BatterySaverActivationLevel> =
+    set battery saver to $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+  | battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+  | activate battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+
+@ <SetPowerMode> =
+    set power mode to best performance -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
+  | set power mode to balanced -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "balanced" } }
+  | set power mode to best power efficiency -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPowerEfficiency" } }
+  | enable best performance mode -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
+
+// ===== Gaming Settings =====
+@ <GamingSettings> = <EnableGameMode>
+
+@ <EnableGameMode> =
+    enable game mode -> { actionName: "enableGameMode", parameters: {} }
+  | open game mode (settings)? -> { actionName: "enableGameMode", parameters: {} }
+  | turn on game mode -> { actionName: "enableGameMode", parameters: {} }
+
+// ===== Accessibility Settings =====
+@ <AccessibilitySettings> = <EnableNarrator>
+                          | <EnableMagnifier>
+                          | <EnableStickyKeys>
+                          | <EnableFilterKeys>
+                          | <MonoAudioToggle>
+
+@ <EnableNarrator> =
+    enable narrator -> { actionName: "EnableNarratorAction", parameters: { enable: true } }
+  | disable narrator -> { actionName: "EnableNarratorAction", parameters: { enable: false } }
+  | start narrator -> { actionName: "EnableNarratorAction", parameters: { enable: true } }
+  | stop narrator -> { actionName: "EnableNarratorAction", parameters: { enable: false } }
+  | turn on narrator -> { actionName: "EnableNarratorAction", parameters: { enable: true } }
+  | turn off narrator -> { actionName: "EnableNarratorAction", parameters: { enable: false } }
+
+@ <EnableMagnifier> =
+    enable magnifier -> { actionName: "EnableMagnifier", parameters: { enable: true } }
+  | disable magnifier -> { actionName: "EnableMagnifier", parameters: { enable: false } }
+  | start magnifier -> { actionName: "EnableMagnifier", parameters: { enable: true } }
+  | stop magnifier -> { actionName: "EnableMagnifier", parameters: { enable: false } }
+  | turn on magnifier -> { actionName: "EnableMagnifier", parameters: { enable: true } }
+  | turn off magnifier -> { actionName: "EnableMagnifier", parameters: { enable: false } }
+
+@ <EnableStickyKeys> =
+    enable sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: true } }
+  | disable sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: false } }
+  | turn on sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: true } }
+  | turn off sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: false } }
+
+@ <EnableFilterKeys> =
+    enable filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: true } }
+  | disable filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: false } }
+  | turn on filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: true } }
+  | turn off filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: false } }
+
+@ <MonoAudioToggle> =
+    enable mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: true } }
+  | disable mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: false } }
+  | turn on mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: true } }
+  | turn off mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: false } }
+
+// ===== File Explorer Settings =====
+@ <FileExplorerSettings> = <ShowFileExtensions>
+                         | <ShowHiddenFiles>
+
+@ <ShowFileExtensions> =
+    show file extensions -> { actionName: "ShowFileExtensions", parameters: { enable: true } }
+  | hide file extensions -> { actionName: "ShowFileExtensions", parameters: { enable: false } }
+  | display file extensions -> { actionName: "ShowFileExtensions", parameters: { enable: true } }
+
+@ <ShowHiddenFiles> =
+    show hidden files -> { actionName: "ShowHiddenAndSystemFiles", parameters: { enable: true } }
+  | hide hidden files -> { actionName: "ShowHiddenAndSystemFiles", parameters: { enable: false } }
+  | show system files -> { actionName: "ShowHiddenAndSystemFiles", parameters: { enable: true } }
+
+// ===== Time & Region Settings =====
+@ <TimeRegionSettings> = <AutomaticTimeSetting>
+                       | <AutomaticDSTAdjustment>
+
+@ <AutomaticTimeSetting> =
+    enable automatic time sync -> { actionName: "AutomaticTimeSettingAction", parameters: { enableAutoTimeSync: true } }
+  | disable automatic time sync -> { actionName: "AutomaticTimeSettingAction", parameters: { enableAutoTimeSync: false } }
+  | automatically set time -> { actionName: "AutomaticTimeSettingAction", parameters: { enableAutoTimeSync: true } }
+
+@ <AutomaticDSTAdjustment> =
+    enable automatic dst (adjustment)? -> { actionName: "AutomaticDSTAdjustment", parameters: { enable: true } }
+  | disable automatic dst (adjustment)? -> { actionName: "AutomaticDSTAdjustment", parameters: { enable: false } }
+  | automatically adjust for dst -> { actionName: "AutomaticDSTAdjustment", parameters: { enable: true } }
+
+// ===== Focus Assist Settings =====
+@ <FocusAssistSettings> = <EnableQuietHours>
+
+@ <EnableQuietHours> =
+    enable quiet hours -> { actionName: "EnableQuietHours", parameters: {} }
+  | enable focus assist -> { actionName: "EnableQuietHours", parameters: {} }
+  | turn on quiet hours -> { actionName: "EnableQuietHours", parameters: {} }
+  | open focus assist (settings)? -> { actionName: "EnableQuietHours", parameters: {} }
+
+// ===== Multi-Monitor Settings =====
+@ <MultiMonitorSettings> = <RememberWindowLocations>
+                         | <MinimizeWindowsOnDisconnect>
+
+@ <RememberWindowLocations> =
+    remember window locations -> { actionName: "RememberWindowLocations", parameters: { enable: true } }
+  | forget window locations -> { actionName: "RememberWindowLocations", parameters: { enable: false } }
+  | remember window positions -> { actionName: "RememberWindowLocations", parameters: { enable: true } }
+
+@ <MinimizeWindowsOnDisconnect> =
+    minimize windows on disconnect -> { actionName: "MinimizeWindowsOnMonitorDisconnectAction", parameters: { enable: true } }
+  | minimize windows when monitor disconnects -> { actionName: "MinimizeWindowsOnMonitorDisconnectAction", parameters: { enable: true } }
