@@ -18,7 +18,7 @@ No external API keys required! The agent uses the system's built-in audio capabi
 
 - **Windows**: Uses PowerShell with Windows Media Player
 - **macOS**: Uses `afplay`
-- **Linux**: Uses `mpv` (install with `sudo apt install mpv`)
+- **Linux**: Uses `mpv` (must be installed separately; for example: Debian/Ubuntu: `sudo apt install mpv`, Fedora: `sudo dnf install mpv`, Arch: `sudo pacman -S mpv`)
 
 ## Configuration
 
