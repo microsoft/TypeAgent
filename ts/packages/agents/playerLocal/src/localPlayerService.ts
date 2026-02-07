@@ -270,7 +270,17 @@ export class LocalPlayerService {
         let nextIndex = this.state.currentIndex + 1;
         
         if (this.state.shuffle) {
-            nextIndex = Math.floor(Math.random() * this.state.queue.length);
+            const queueLength = this.state.queue.length;
+            if (queueLength > 1) {
+                let randomIndex: number;
+                do {
+                    randomIndex = Math.floor(Math.random() * queueLength);
+                } while (randomIndex === this.state.currentIndex);
+                nextIndex = randomIndex;
+            } else {
+                // Only one track in the queue; keep index at 0
+                nextIndex = 0;
+            }
         }
 
         if (nextIndex >= this.state.queue.length) {
