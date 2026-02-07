@@ -79,7 +79,7 @@ export async function handleCommerceAction(
     const browser: BrowserConnector =
         context.sessionContext.agentContext.browserConnector;
 
-    const agent = await createCommercePageTranslator("GPT_4_O_MINI");
+    const agent = await createCommercePageTranslator("GPT_5_MINI");
 
     // Create entity collector and action context
     const entityCollector = new EntityCollector();

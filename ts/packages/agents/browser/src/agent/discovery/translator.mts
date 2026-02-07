@@ -132,7 +132,13 @@ async function getSchemaFileContents(fileName: string): Promise<string> {
 }
 
 export async function createDiscoveryPageTranslator(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
+    model:
+        | "GPT_35_TURBO"
+        | "GPT_4"
+        | "GPT_v"
+        | "GPT_4_O"
+        | "GPT_5_MINI"
+        | "GPT_5_2",
 ) {
     const userActionsPoolSchema = await getSchemaFileContents(
         "userActionsPool.mts",

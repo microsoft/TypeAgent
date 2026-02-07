@@ -1312,6 +1312,32 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
+    public readonly description =
+        "Enable or disable workflow plan reuse for reasoning actions";
+    public readonly parameters = {
+        args: {
+            mode: {
+                description:
+                    "Plan reuse mode: 'enabled' to cache and reuse workflow plans, 'disabled' for standard reasoning",
+                type: "string" as const,
+                enum: ["enabled", "disabled"],
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const mode = params.args.mode as "enabled" | "disabled";
+
+        await changeContextConfig({ execution: { planReuse: mode } }, context);
+
+        return displayResult(`Plan reuse ${mode}`, context);
+    }
+}
+
 const configExecutionCommandHandlers: CommandHandlerTable = {
     description: "Execution configuration",
     commands: {
@@ -1325,6 +1351,7 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
             },
         ),
         reasoning: new ConfigExecutionReasoningCommandHandler(),
+        planReuse: new ConfigExecutionPlanReuseCommandHandler(),
     },
 };
 
