@@ -23,11 +23,6 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import { CalendarActionV3 } from "./calendarActionsSchemaV3.js";
-import {
-    createCalendarGraphClient,
-    CalendarClient,
-} from "graph-utils";
-import { getNWeeksDateRangeISO, generateQueryFromFuzzyDay } from "./calendarQueryHelper.js";
 import { createCalendarGraphClient, CalendarClient } from "graph-utils";
 import {
     getNWeeksDateRangeISO,
@@ -314,9 +309,6 @@ export class CalendarActionHandlerV3 implements AppAgent {
             d.setDate(d.getDate() + 1);
             return d;
         }
-        
-        return undefined;
-    }
 
         // Try parsing relative day ("next Monday", "this Friday")
         const relativeDate = getDateRelativeToDayV2(dateStr);

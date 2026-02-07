@@ -14,7 +14,10 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import { LocalPlayerActions } from "./localPlayerSchema.js";
-import { getLocalPlayerService, LocalPlayerService } from "../localPlayerService.js";
+import {
+    getLocalPlayerService,
+    LocalPlayerService,
+} from "../localPlayerService.js";
 import { getLocalPlayerCommandInterface } from "./localPlayerCommands.js";
 import registerDebug from "debug";
 
@@ -49,7 +52,8 @@ async function updateLocalPlayerContext(
         }
         try {
             context.agentContext.playerService = getLocalPlayerService();
-            const musicFolder = context.agentContext.playerService.getMusicFolder();
+            const musicFolder =
+                context.agentContext.playerService.getMusicFolder();
             const message = `Local player enabled. Music folder: ${musicFolder}`;
             debug(message);
             context.notify(AppAgentEvent.Info, chalk.green(message));
@@ -71,7 +75,7 @@ async function executeLocalPlayerAction(
     context: ActionContext<LocalPlayerActionContext>,
 ) {
     const playerService = context.sessionContext.agentContext.playerService;
-    
+
     if (!playerService) {
         return createActionResultFromError(
             "Local player not initialized. Use '@localPlayer on' to enable.",
@@ -81,75 +85,96 @@ async function executeLocalPlayerAction(
     try {
         switch (action.actionName) {
             case "playFile":
-                return handlePlayFile(playerService, action.parameters.fileName);
-            
+                return handlePlayFile(
+                    playerService,
+                    action.parameters.fileName,
+                );
+
             case "playFolder":
                 return handlePlayFolder(
-                    playerService, 
+                    playerService,
                     action.parameters?.folderPath,
                     action.parameters?.shuffle,
                 );
-            
+
             case "playFromQueue":
-                return handlePlayFromQueue(playerService, action.parameters.trackNumber);
-            
+                return handlePlayFromQueue(
+                    playerService,
+                    action.parameters.trackNumber,
+                );
+
             case "status":
                 return handleStatus(playerService);
-            
+
             case "pause":
                 return handlePause(playerService);
-            
+
             case "resume":
                 return handleResume(playerService);
-            
+
             case "stop":
                 return handleStop(playerService);
-            
+
             case "next":
                 return handleNext(playerService);
-            
+
             case "previous":
                 return handlePrevious(playerService);
-            
+
             case "shuffle":
                 return handleShuffle(playerService, action.parameters.on);
-            
+
             case "repeat":
                 return handleRepeat(playerService, action.parameters.mode);
-            
+
             case "setVolume":
                 return handleSetVolume(playerService, action.parameters.level);
-            
+
             case "changeVolume":
-                return handleChangeVolume(playerService, action.parameters.amount);
-            
+                return handleChangeVolume(
+                    playerService,
+                    action.parameters.amount,
+                );
+
             case "mute":
                 return handleMute(playerService);
-            
+
             case "unmute":
                 return handleUnmute(playerService);
-            
+
             case "listFiles":
-                return handleListFiles(playerService, action.parameters?.folderPath);
-            
+                return handleListFiles(
+                    playerService,
+                    action.parameters?.folderPath,
+                );
+
             case "searchFiles":
-                return handleSearchFiles(playerService, action.parameters.query);
-            
+                return handleSearchFiles(
+                    playerService,
+                    action.parameters.query,
+                );
+
             case "addToQueue":
-                return handleAddToQueue(playerService, action.parameters.fileName);
-            
+                return handleAddToQueue(
+                    playerService,
+                    action.parameters.fileName,
+                );
+
             case "clearQueue":
                 return handleClearQueue(playerService);
-            
+
             case "showQueue":
                 return handleShowQueue(playerService);
-            
+
             case "setMusicFolder":
-                return handleSetMusicFolder(playerService, action.parameters.folderPath);
-            
+                return handleSetMusicFolder(
+                    playerService,
+                    action.parameters.folderPath,
+                );
+
             case "showMusicFolder":
                 return handleShowMusicFolder(playerService);
-            
+
             default:
                 return createActionResultFromError(
                     `Unknown action: ${(action as any).actionName}`,
@@ -173,7 +198,11 @@ async function handlePlayFile(service: LocalPlayerService, fileName: string) {
     return createActionResultFromError(`Could not find or play: ${fileName}`);
 }
 
-async function handlePlayFolder(service: LocalPlayerService, folderPath?: string, shuffle?: boolean) {
+async function handlePlayFolder(
+    service: LocalPlayerService,
+    folderPath?: string,
+    shuffle?: boolean,
+) {
     const success = await service.playFolder(folderPath, shuffle || false);
     if (success) {
         const state = service.getState();
@@ -182,10 +211,15 @@ async function handlePlayFolder(service: LocalPlayerService, folderPath?: string
              <p>Now playing: <strong>${state.currentTrack?.name}</strong></p>`,
         );
     }
-    return createActionResultFromError("No audio files found in the specified folder");
+    return createActionResultFromError(
+        "No audio files found in the specified folder",
+    );
 }
 
-async function handlePlayFromQueue(service: LocalPlayerService, trackNumber: number) {
+async function handlePlayFromQueue(
+    service: LocalPlayerService,
+    trackNumber: number,
+) {
     const success = await service.playFromQueue(trackNumber);
     if (success) {
         const state = service.getState();
@@ -198,20 +232,20 @@ async function handlePlayFromQueue(service: LocalPlayerService, trackNumber: num
 
 function handleStatus(service: LocalPlayerService) {
     const state = service.getState();
-    
+
     let statusHtml = "<h3>🎵 Local Player Status</h3>";
-    
+
     if (state.currentTrack) {
         const playIcon = state.isPlaying ? "▶️" : state.isPaused ? "⏸️" : "⏹️";
         statusHtml += `<p>${playIcon} <strong>${state.currentTrack.name}</strong></p>`;
     } else {
         statusHtml += "<p>No track loaded</p>";
     }
-    
+
     statusHtml += `<p>Volume: ${state.volume}%${state.isMuted ? " (muted)" : ""}</p>`;
     statusHtml += `<p>Shuffle: ${state.shuffle ? "On" : "Off"} | Repeat: ${state.repeat}</p>`;
     statusHtml += `<p>Queue: ${state.queue.length} tracks</p>`;
-    
+
     return createActionResultFromHtmlDisplay(statusHtml);
 }
 
@@ -259,9 +293,17 @@ function handleShuffle(service: LocalPlayerService, on: boolean) {
     );
 }
 
-function handleRepeat(service: LocalPlayerService, mode: "off" | "one" | "all") {
+function handleRepeat(
+    service: LocalPlayerService,
+    mode: "off" | "one" | "all",
+) {
     service.setRepeat(mode);
-    const modeText = mode === "one" ? "Repeat One 🔂" : mode === "all" ? "Repeat All 🔁" : "Off";
+    const modeText =
+        mode === "one"
+            ? "Repeat One 🔂"
+            : mode === "all"
+              ? "Repeat All 🔁"
+              : "Off";
     return createActionResultFromHtmlDisplay(`<p>Repeat: ${modeText}</p>`);
 }
 
@@ -273,7 +315,9 @@ function handleSetVolume(service: LocalPlayerService, level: number) {
 function handleChangeVolume(service: LocalPlayerService, amount: number) {
     service.changeVolume(amount);
     const state = service.getState();
-    return createActionResultFromHtmlDisplay(`<p>🔊 Volume: ${state.volume}%</p>`);
+    return createActionResultFromHtmlDisplay(
+        `<p>🔊 Volume: ${state.volume}%</p>`,
+    );
 }
 
 function handleMute(service: LocalPlayerService) {
@@ -288,36 +332,40 @@ function handleUnmute(service: LocalPlayerService) {
 
 function handleListFiles(service: LocalPlayerService, folderPath?: string) {
     const files = service.listFiles(folderPath);
-    
+
     if (files.length === 0) {
         return createActionResultFromHtmlDisplay("<p>No audio files found</p>");
     }
-    
-    const fileListHtml = files.slice(0, 20).map((f, i) => 
-        `<li>${i + 1}. ${f.name}</li>`
-    ).join("");
-    
+
+    const fileListHtml = files
+        .slice(0, 20)
+        .map((f, i) => `<li>${i + 1}. ${f.name}</li>`)
+        .join("");
+
     let html = `<h3>📁 Audio Files (${files.length} total)</h3><ol>${fileListHtml}</ol>`;
     if (files.length > 20) {
         html += `<p><em>...and ${files.length - 20} more</em></p>`;
     }
-    
+
     return createActionResultFromHtmlDisplay(html);
 }
 
 function handleSearchFiles(service: LocalPlayerService, query: string) {
     const files = service.searchFiles(query);
-    
+
     if (files.length === 0) {
-        return createActionResultFromHtmlDisplay(`<p>No files found matching: ${query}</p>`);
+        return createActionResultFromHtmlDisplay(
+            `<p>No files found matching: ${query}</p>`,
+        );
     }
-    
-    const fileListHtml = files.slice(0, 20).map((f, i) => 
-        `<li>${i + 1}. ${f.name}</li>`
-    ).join("");
-    
+
+    const fileListHtml = files
+        .slice(0, 20)
+        .map((f, i) => `<li>${i + 1}. ${f.name}</li>`)
+        .join("");
+
     let html = `<h3>🔍 Search Results for "${query}" (${files.length} found)</h3><ol>${fileListHtml}</ol>`;
-    
+
     return createActionResultFromHtmlDisplay(html);
 }
 
@@ -340,21 +388,24 @@ function handleClearQueue(service: LocalPlayerService) {
 function handleShowQueue(service: LocalPlayerService) {
     const queue = service.getQueue();
     const state = service.getState();
-    
+
     if (queue.length === 0) {
         return createActionResultFromHtmlDisplay("<p>Queue is empty</p>");
     }
-    
-    const queueHtml = queue.slice(0, 20).map((track, i) => {
-        const current = i === state.currentIndex ? " ▶️" : "";
-        return `<li>${i + 1}. ${track.name}${current}</li>`;
-    }).join("");
-    
+
+    const queueHtml = queue
+        .slice(0, 20)
+        .map((track, i) => {
+            const current = i === state.currentIndex ? " ▶️" : "";
+            return `<li>${i + 1}. ${track.name}${current}</li>`;
+        })
+        .join("");
+
     let html = `<h3>📋 Playback Queue (${queue.length} tracks)</h3><ol>${queueHtml}</ol>`;
     if (queue.length > 20) {
         html += `<p><em>...and ${queue.length - 20} more</em></p>`;
     }
-    
+
     return createActionResultFromHtmlDisplay(html);
 }
 

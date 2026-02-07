@@ -24,7 +24,10 @@ import { LocalPlayerActionContext } from "./localPlayerHandlers.js";
 function getService(context: ActionContext<LocalPlayerActionContext>) {
     const service = context.sessionContext.agentContext.playerService;
     if (!service) {
-        displayError("Local player not initialized. Enable it with: @config localPlayer on", context);
+        displayError(
+            "Local player not initialized. Enable it with: @config localPlayer on",
+            context,
+        );
         return undefined;
     }
     return service;
@@ -33,24 +36,31 @@ function getService(context: ActionContext<LocalPlayerActionContext>) {
 // Status command handler
 class StatusCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show local player status";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const state = service.getState();
-        
+
         if (state.currentTrack) {
-            const status = state.isPlaying ? "▶️ Playing" : state.isPaused ? "⏸️ Paused" : "⏹️ Stopped";
+            const status = state.isPlaying
+                ? "▶️ Playing"
+                : state.isPaused
+                  ? "⏸️ Paused"
+                  : "⏹️ Stopped";
             displaySuccess(
                 `${status}: ${state.currentTrack.name}\n` +
-                `Volume: ${state.volume}%${state.isMuted ? " (muted)" : ""}\n` +
-                `Shuffle: ${state.shuffle ? "On" : "Off"} | Repeat: ${state.repeat}\n` +
-                `Queue: ${state.currentIndex + 1}/${state.queue.length} tracks`,
+                    `Volume: ${state.volume}%${state.isMuted ? " (muted)" : ""}\n` +
+                    `Shuffle: ${state.shuffle ? "On" : "Off"} | Repeat: ${state.repeat}\n` +
+                    `Queue: ${state.currentIndex + 1}/${state.queue.length} tracks`,
                 context,
             );
         } else {
-            displayWarn("No track loaded. Use '@localPlayer play' to start.", context);
+            displayWarn(
+                "No track loaded. Use '@localPlayer play' to start.",
+                context,
+            );
         }
     }
 }
@@ -59,7 +69,8 @@ class StatusCommandHandler implements CommandHandlerNoParams {
 const playParameters = {
     args: {
         file: {
-            description: "File name or path to play (optional - plays first file if not specified)",
+            description:
+                "File name or path to play (optional - plays first file if not specified)",
             optional: true,
         },
     },
@@ -76,12 +87,15 @@ const playHandler: CommandHandler = {
         if (!service) return;
 
         const fileName = params.args.file;
-        
+
         if (fileName) {
             const success = await service.playFile(fileName);
             if (success) {
                 const state = service.getState();
-                displaySuccess(`▶️ Playing: ${state.currentTrack?.name}`, context);
+                displaySuccess(
+                    `▶️ Playing: ${state.currentTrack?.name}`,
+                    context,
+                );
             } else {
                 displayError(`Could not find or play: ${fileName}`, context);
             }
@@ -90,17 +104,29 @@ const playHandler: CommandHandler = {
             const state = service.getState();
             if (state.isPaused) {
                 service.resume();
-                displaySuccess(`▶️ Resumed: ${state.currentTrack?.name}`, context);
+                displaySuccess(
+                    `▶️ Resumed: ${state.currentTrack?.name}`,
+                    context,
+                );
             } else if (state.queue.length > 0) {
                 await service.playFromQueue(state.currentIndex + 1);
-                displaySuccess(`▶️ Playing: ${service.getState().currentTrack?.name}`, context);
+                displaySuccess(
+                    `▶️ Playing: ${service.getState().currentTrack?.name}`,
+                    context,
+                );
             } else {
                 // Play first file from folder
                 const success = await service.playFolder();
                 if (success) {
-                    displaySuccess(`▶️ Playing: ${service.getState().currentTrack?.name}`, context);
+                    displaySuccess(
+                        `▶️ Playing: ${service.getState().currentTrack?.name}`,
+                        context,
+                    );
                 } else {
-                    displayWarn("No audio files found. Set music folder with: @localPlayer setfolder <path>", context);
+                    displayWarn(
+                        "No audio files found. Set music folder with: @localPlayer setfolder <path>",
+                        context,
+                    );
                 }
             }
         }
@@ -110,11 +136,11 @@ const playHandler: CommandHandler = {
 // Pause command
 class PauseCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Pause playback";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         service.pause();
         displaySuccess("⏸️ Paused", context);
     }
@@ -123,25 +149,28 @@ class PauseCommandHandler implements CommandHandlerNoParams {
 // Resume command
 class ResumeCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Resume playback";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         service.resume();
         const state = service.getState();
-        displaySuccess(`▶️ Resumed: ${state.currentTrack?.name || ""}`, context);
+        displaySuccess(
+            `▶️ Resumed: ${state.currentTrack?.name || ""}`,
+            context,
+        );
     }
 }
 
 // Stop command
 class StopCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Stop playback";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         service.stop();
         displaySuccess("⏹️ Stopped", context);
     }
@@ -150,11 +179,11 @@ class StopCommandHandler implements CommandHandlerNoParams {
 // Next command
 class NextCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Play next track";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const success = await service.next();
         if (success) {
             const state = service.getState();
@@ -168,11 +197,11 @@ class NextCommandHandler implements CommandHandlerNoParams {
 // Previous command
 class PrevCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Play previous track";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const success = await service.previous();
         if (success) {
             const state = service.getState();
@@ -186,11 +215,11 @@ class PrevCommandHandler implements CommandHandlerNoParams {
 // Folder command - show current folder
 class FolderCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show current music folder";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const folder = service.getMusicFolder();
         displayStatus(`📁 Music folder: ${folder}`, context);
     }
@@ -217,10 +246,13 @@ const setFolderHandler: CommandHandler = {
 
         const folderPath = params.args.path;
         const success = service.setMusicFolder(folderPath);
-        
+
         if (success) {
             const files = service.listFiles();
-            displaySuccess(`📁 Music folder set to: ${folderPath}\nFound ${files.length} audio files`, context);
+            displaySuccess(
+                `📁 Music folder set to: ${folderPath}\nFound ${files.length} audio files`,
+                context,
+            );
         } else {
             displayError(`Invalid folder path: ${folderPath}`, context);
         }
@@ -230,27 +262,28 @@ const setFolderHandler: CommandHandler = {
 // List command
 class ListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List audio files in music folder";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const files = service.listFiles();
-        
+
         if (files.length === 0) {
             displayWarn("No audio files found in music folder", context);
             return;
         }
-        
-        const fileList = files.slice(0, 20).map((f, i) => 
-            `${i + 1}. ${f.name}`
-        ).join("\n");
-        
+
+        const fileList = files
+            .slice(0, 20)
+            .map((f, i) => `${i + 1}. ${f.name}`)
+            .join("\n");
+
         let message = `🎵 Found ${files.length} audio files:\n${fileList}`;
         if (files.length > 20) {
             message += `\n...and ${files.length - 20} more`;
         }
-        
+
         displaySuccess(message, context);
     }
 }
@@ -258,29 +291,32 @@ class ListCommandHandler implements CommandHandlerNoParams {
 // Queue command
 class QueueCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show playback queue";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const queue = service.getQueue();
         const state = service.getState();
-        
+
         if (queue.length === 0) {
             displayWarn("Queue is empty", context);
             return;
         }
-        
-        const queueList = queue.slice(0, 20).map((track, i) => {
-            const current = i === state.currentIndex ? " ▶️" : "";
-            return `${i + 1}. ${track.name}${current}`;
-        }).join("\n");
-        
+
+        const queueList = queue
+            .slice(0, 20)
+            .map((track, i) => {
+                const current = i === state.currentIndex ? " ▶️" : "";
+                return `${i + 1}. ${track.name}${current}`;
+            })
+            .join("\n");
+
         let message = `📋 Queue (${queue.length} tracks):\n${queueList}`;
         if (queue.length > 20) {
             message += `\n...and ${queue.length - 20} more`;
         }
-        
+
         displaySuccess(message, context);
     }
 }
@@ -288,11 +324,11 @@ class QueueCommandHandler implements CommandHandlerNoParams {
 // Clear command
 class ClearCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Clear playback queue";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         service.clearQueue();
         displaySuccess("🗑️ Queue cleared", context);
     }
@@ -301,11 +337,11 @@ class ClearCommandHandler implements CommandHandlerNoParams {
 // Shuffle command
 class ShuffleCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Toggle shuffle mode";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const state = service.getState();
         service.setShuffle(!state.shuffle);
         displaySuccess(`🔀 Shuffle: ${!state.shuffle ? "On" : "Off"}`, context);
@@ -336,7 +372,7 @@ const volumeHandler: CommandHandler = {
             displayError("Volume must be a number between 0 and 100", context);
             return;
         }
-        
+
         service.setVolume(level);
         displaySuccess(`🔊 Volume: ${level}%`, context);
     },
@@ -345,11 +381,11 @@ const volumeHandler: CommandHandler = {
 // Mute command
 class MuteCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Toggle mute";
-    
+
     public async run(context: ActionContext<LocalPlayerActionContext>) {
         const service = getService(context);
         if (!service) return;
-        
+
         const state = service.getState();
         if (state.isMuted) {
             service.unmute();

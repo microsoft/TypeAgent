@@ -23,11 +23,13 @@ No external API keys required! The agent uses the system's built-in audio capabi
 ## Configuration
 
 Set your music folder using the command:
+
 ```
 @localPlayer folder set /path/to/music
 ```
 
 Or use natural language:
+
 ```
 set music folder to C:\Users\Me\Music
 ```
@@ -37,6 +39,7 @@ set music folder to C:\Users\Me\Music
 ### Enable the agent
 
 In the shell or interactive mode:
+
 ```
 @config localPlayer on
 ```
@@ -44,6 +47,7 @@ In the shell or interactive mode:
 ### Example commands
 
 **Play music:**
+
 ```
 play some music
 play song.mp3
@@ -51,6 +55,7 @@ play all songs in the folder
 ```
 
 **Control playback:**
+
 ```
 pause
 resume
@@ -60,6 +65,7 @@ previous track
 ```
 
 **Volume:**
+
 ```
 set volume to 50
 turn up the volume
@@ -67,6 +73,7 @@ mute
 ```
 
 **Queue management:**
+
 ```
 show the queue
 add rock song to queue
@@ -75,6 +82,7 @@ play the third track
 ```
 
 **Browse files:**
+
 ```
 list files
 search for beethoven
@@ -83,30 +91,30 @@ show music folder
 
 ## Available Actions
 
-| Action | Description |
-|--------|-------------|
-| `playFile` | Play a specific audio file |
-| `playFolder` | Play all audio files in a folder |
-| `playFromQueue` | Play a track from the queue by number |
-| `status` | Show current playback status |
-| `pause` | Pause playback |
-| `resume` | Resume playback |
-| `stop` | Stop playback |
-| `next` | Skip to next track |
-| `previous` | Go to previous track |
-| `shuffle` | Turn shuffle on/off |
-| `repeat` | Set repeat mode (off/one/all) |
-| `setVolume` | Set volume level (0-100) |
-| `changeVolume` | Adjust volume by amount |
-| `mute` | Mute audio |
-| `unmute` | Unmute audio |
-| `listFiles` | List audio files in folder |
-| `searchFiles` | Search for files by name |
-| `addToQueue` | Add file to playback queue |
-| `clearQueue` | Clear the queue |
-| `showQueue` | Display the queue |
-| `setMusicFolder` | Set default music folder |
-| `showMusicFolder` | Show current music folder |
+| Action            | Description                           |
+| ----------------- | ------------------------------------- |
+| `playFile`        | Play a specific audio file            |
+| `playFolder`      | Play all audio files in a folder      |
+| `playFromQueue`   | Play a track from the queue by number |
+| `status`          | Show current playback status          |
+| `pause`           | Pause playback                        |
+| `resume`          | Resume playback                       |
+| `stop`            | Stop playback                         |
+| `next`            | Skip to next track                    |
+| `previous`        | Go to previous track                  |
+| `shuffle`         | Turn shuffle on/off                   |
+| `repeat`          | Set repeat mode (off/one/all)         |
+| `setVolume`       | Set volume level (0-100)              |
+| `changeVolume`    | Adjust volume by amount               |
+| `mute`            | Mute audio                            |
+| `unmute`          | Unmute audio                          |
+| `listFiles`       | List audio files in folder            |
+| `searchFiles`     | Search for files by name              |
+| `addToQueue`      | Add file to playback queue            |
+| `clearQueue`      | Clear the queue                       |
+| `showQueue`       | Display the queue                     |
+| `setMusicFolder`  | Set default music folder              |
+| `showMusicFolder` | Show current music folder             |
 
 ## Supported Audio Formats
 

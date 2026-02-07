@@ -1,10 +1,10 @@
 {
-    "compilerOptions": {
-        "rootDir": ".",
-        "outDir": "../dist",
-        "composite": true
-    },
-    "include": ["./**/*.ts", "./**/*.mts", "./**/*.json"],
-    "exclude": ["../dist/**/*", "../node_modules/**/*"],
-    "extends": "../../../../tsconfig.base.json"
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../dist",
+    "composite": true
+  },
+  "include": ["./**/*.ts", "./**/*.mts", "./**/*.json"],
+  "exclude": ["../dist/**/*", "../node_modules/**/*"],
+  "extends": "../../../../tsconfig.base.json"
 }

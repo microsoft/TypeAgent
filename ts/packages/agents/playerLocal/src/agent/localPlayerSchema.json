@@ -1,6 +1,6 @@
 {
-    "schemaName": "LocalPlayerActions",
-    "fullSchemaType": "LocalPlayerActions",
-    "entityName": "LocalPlayerEntities",
-    "actionNamespace": "localPlayer"
+  "schemaName": "LocalPlayerActions",
+  "fullSchemaType": "LocalPlayerActions",
+  "entityName": "LocalPlayerEntities",
+  "actionNamespace": "localPlayer"
 }

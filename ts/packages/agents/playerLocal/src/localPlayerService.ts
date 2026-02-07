@@ -11,7 +11,15 @@ const debug = registerDebug("typeagent:localPlayer");
 const debugError = registerDebug("typeagent:localPlayer:error");
 
 // Supported audio file extensions
-const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".wma"];
+const AUDIO_EXTENSIONS = [
+    ".mp3",
+    ".wav",
+    ".ogg",
+    ".flac",
+    ".m4a",
+    ".aac",
+    ".wma",
+];
 
 export interface Track {
     name: string;
@@ -41,7 +49,7 @@ export class LocalPlayerService {
     constructor() {
         // Default music folder
         this.musicFolder = path.join(os.homedir(), "Music");
-        
+
         this.state = {
             isPlaying: false,
             isPaused: false,
@@ -60,7 +68,10 @@ export class LocalPlayerService {
     }
 
     public setMusicFolder(folderPath: string): boolean {
-        if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
+        if (
+            fs.existsSync(folderPath) &&
+            fs.statSync(folderPath).isDirectory()
+        ) {
             this.musicFolder = folderPath;
             debug(`Music folder set to: ${folderPath}`);
             return true;
@@ -103,13 +114,17 @@ export class LocalPlayerService {
     public searchFiles(query: string): Track[] {
         const allFiles = this.listFilesRecursive(this.musicFolder);
         const lowerQuery = query.toLowerCase();
-        
-        return allFiles.filter(track => 
-            track.name.toLowerCase().includes(lowerQuery)
+
+        return allFiles.filter((track) =>
+            track.name.toLowerCase().includes(lowerQuery),
         );
     }
 
-    private listFilesRecursive(folder: string, maxDepth: number = 3, currentDepth: number = 0): Track[] {
+    private listFilesRecursive(
+        folder: string,
+        maxDepth: number = 3,
+        currentDepth: number = 0,
+    ): Track[] {
         const tracks: Track[] = [];
 
         if (currentDepth >= maxDepth) {
@@ -118,12 +133,18 @@ export class LocalPlayerService {
 
         try {
             const entries = fs.readdirSync(folder, { withFileTypes: true });
-            
+
             for (const entry of entries) {
                 const fullPath = path.join(folder, entry.name);
-                
+
                 if (entry.isDirectory()) {
-                    tracks.push(...this.listFilesRecursive(fullPath, maxDepth, currentDepth + 1));
+                    tracks.push(
+                        ...this.listFilesRecursive(
+                            fullPath,
+                            maxDepth,
+                            currentDepth + 1,
+                        ),
+                    );
                 } else if (entry.isFile()) {
                     const ext = path.extname(entry.name).toLowerCase();
                     if (AUDIO_EXTENSIONS.includes(ext)) {
@@ -144,7 +165,7 @@ export class LocalPlayerService {
     public async playFile(fileName: string): Promise<boolean> {
         // Search for the file
         const tracks = this.searchFiles(fileName);
-        
+
         if (tracks.length === 0) {
             debugError(`No files found matching: ${fileName}`);
             return false;
@@ -160,21 +181,29 @@ export class LocalPlayerService {
 
         try {
             debug(`Playing: ${track.path}`);
-            
+
             if (process.platform === "win32") {
                 // Use Windows Media Player via PowerShell
-                this.playerProcess = spawn("powershell", [
-                    "-Command",
-                    "& { Add-Type -AssemblyName presentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open($args[0]); $player.Volume = [double]$args[1]; $player.Play(); Start-Sleep -Seconds 3600 }",
-                    track.path,
-                    String(this.state.volume / 100)
-                ], { stdio: "ignore" });
+                this.playerProcess = spawn(
+                    "powershell",
+                    [
+                        "-Command",
+                        "& { Add-Type -AssemblyName presentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open($args[0]); $player.Volume = [double]$args[1]; $player.Play(); Start-Sleep -Seconds 3600 }",
+                        track.path,
+                        String(this.state.volume / 100),
+                    ],
+                    { stdio: "ignore" },
+                );
             } else if (process.platform === "darwin") {
                 // macOS: use afplay
-                this.playerProcess = spawn("afplay", [track.path], { stdio: "ignore" });
+                this.playerProcess = spawn("afplay", [track.path], {
+                    stdio: "ignore",
+                });
             } else {
                 // Linux: use mpv or similar
-                this.playerProcess = spawn("mpv", ["--no-video", track.path], { stdio: "ignore" });
+                this.playerProcess = spawn("mpv", ["--no-video", track.path], {
+                    stdio: "ignore",
+                });
             }
 
             this.playerProcess.on("error", (error) => {
@@ -189,9 +218,11 @@ export class LocalPlayerService {
             this.state.isPlaying = true;
             this.state.isPaused = false;
             this.state.currentTrack = track;
-            
+
             // Find index in queue
-            const index = this.state.queue.findIndex(t => t.path === track.path);
+            const index = this.state.queue.findIndex(
+                (t) => t.path === track.path,
+            );
             if (index >= 0) {
                 this.state.currentIndex = index;
             }
@@ -205,11 +236,14 @@ export class LocalPlayerService {
 
     private handlePlaybackEnd(): void {
         this.state.isPlaying = false;
-        
+
         if (this.state.repeat === "one" && this.state.currentTrack) {
             // Repeat current track
             this.playTrack(this.state.currentTrack);
-        } else if (this.state.queue.length > 0 && this.state.currentIndex < this.state.queue.length - 1) {
+        } else if (
+            this.state.queue.length > 0 &&
+            this.state.currentIndex < this.state.queue.length - 1
+        ) {
             // Play next in queue
             this.next();
         } else if (this.state.repeat === "all" && this.state.queue.length > 0) {
@@ -272,7 +306,7 @@ export class LocalPlayerService {
         }
 
         let nextIndex = this.state.currentIndex + 1;
-        
+
         if (this.state.shuffle) {
             const queueLength = this.state.queue.length;
             if (queueLength > 1) {
@@ -305,7 +339,7 @@ export class LocalPlayerService {
         }
 
         let prevIndex = this.state.currentIndex - 1;
-        
+
         if (prevIndex < 0) {
             if (this.state.repeat === "all") {
                 prevIndex = this.state.queue.length - 1;
@@ -381,7 +415,7 @@ export class LocalPlayerService {
     public async playFromQueue(index: number): Promise<boolean> {
         // Convert from 1-based to 0-based index
         const zeroIndex = index - 1;
-        
+
         if (zeroIndex >= 0 && zeroIndex < this.state.queue.length) {
             this.state.currentIndex = zeroIndex;
             return await this.playTrack(this.state.queue[zeroIndex]);
@@ -389,9 +423,12 @@ export class LocalPlayerService {
         return false;
     }
 
-    public async playFolder(folderPath?: string, shuffle: boolean = false): Promise<boolean> {
+    public async playFolder(
+        folderPath?: string,
+        shuffle: boolean = false,
+    ): Promise<boolean> {
         const tracks = this.listFiles(folderPath);
-        
+
         if (tracks.length === 0) {
             return false;
         }
@@ -399,7 +436,7 @@ export class LocalPlayerService {
         this.state.queue = shuffle ? this.shuffleArray(tracks) : tracks;
         this.state.shuffle = shuffle;
         this.state.currentIndex = 0;
-        
+
         return await this.playTrack(this.state.queue[0]);
     }
 
