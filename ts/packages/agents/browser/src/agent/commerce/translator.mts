@@ -162,9 +162,12 @@ export class ECommerceSiteAgent<T extends object> {
             undefined,
             fastModelName,
         );
-        this.model = ai.createChatModel(apiSettings, undefined, undefined, [
-            "commerce",
-        ]);
+        this.model = ai.createChatModel(
+            apiSettings,
+            { temperature: 1 },
+            undefined,
+            ["commerce"],
+        );
         const validator = createTypeScriptJsonValidator<T>(
             this.schema,
             schemaName,
