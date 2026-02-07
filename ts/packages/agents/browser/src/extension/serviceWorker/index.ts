@@ -11,6 +11,7 @@ import { toggleSiteTranslator } from "./siteTranslator";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { getActiveTab } from "./tabManager";
 import { handleMessage } from "./messageHandlers";
+import { screenshotCoordinator } from "./screenshotCoordinator";
 
 import {
     isWebAgentMessage,
@@ -373,6 +374,9 @@ async function sendActionToTabIndex(action: any): Promise<string | undefined> {
 
 // Start initialization
 initialize();
+
+// Expose screenshotCoordinator globally for testing/debugging
+(globalThis as any).screenshotCoordinator = screenshotCoordinator;
 
 // Track recent navigation events for debouncing
 const recentNavigations = new Map<string, number>();

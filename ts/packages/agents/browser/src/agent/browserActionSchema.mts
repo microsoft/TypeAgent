@@ -28,7 +28,10 @@ export type BrowserActions =
     | SetDropdownValue
     | ClickOnElement
     | AwaitPageLoad
-    | GetHTML;
+    | GetHTML
+    | GetElementByDescription
+    | IsPageStateMatched
+    | QueryPageContent;
 
 export type WebSearchResult = string;
 export type BrowserEntities = WebPageMoniker | WebSearchResult;
@@ -284,5 +287,42 @@ export type GetHTML = {
         downloadAsFile?: boolean;
         extractText?: boolean;
         useTimestampIds?: boolean;
+    };
+};
+
+// Find an element on the page using natural language description.
+// Uses LLM to understand page structure and locate the element.
+// Prefer this over parsing raw HTML when you don't know the CSS selector.
+export type GetElementByDescription = {
+    actionName: "getElementByDescription";
+    parameters: {
+        // Natural language description of the element to find
+        elementDescription: string;
+
+        // Optional hint about element type to narrow search
+        // Values: "button", "input", "link", "heading", "text", etc.
+        elementType?: string;
+    };
+};
+
+// Verify if the current page state matches an expected condition.
+// Uses LLM to understand page semantics and compare to expectation.
+// Prefer this over parsing raw HTML for state verification.
+export type IsPageStateMatched = {
+    actionName: "isPageStateMatched";
+    parameters: {
+        // Expected page state description in natural language
+        expectedStateDescription: string;
+    };
+};
+
+// Query page content to answer a question using LLM.
+// Extracts information from the page without needing to parse HTML.
+// Prefer this over parsing raw HTML for data extraction.
+export type QueryPageContent = {
+    actionName: "queryPageContent";
+    parameters: {
+        // Question about page content in natural language
+        query: string;
     };
 };

@@ -298,6 +298,11 @@ export class PlanExecutor {
      * Build prompt for executing a step
      */
     private buildStepPrompt(step: PlanStep, context: ExecutionContext): string {
+        // Check if any action has UI changes (default to true if not specified)
+        const hasAnyUIChange = step.actions.some(
+            (action) => action.hasUIChange !== false,
+        );
+
         // Resolve variables in actions
         const resolvedActions = step.actions.map((action) => {
             const resolvedParams = { ...action.parameters };
@@ -316,6 +321,7 @@ export class PlanExecutor {
                 tool: action.tool,
                 parameters: resolvedParams,
                 rationale: action.rationale,
+                hasUIChange: action.hasUIChange,
             };
         });
 
@@ -350,15 +356,30 @@ ${i + 1}. **${action.tool}**(${JSON.stringify(action.parameters, null, 2)})
 
 # Expected Outcome
 
-After executing these actions, the page state should be:
-${JSON.stringify(step.predictedState, null, 2)}
+${
+    hasAnyUIChange
+        ? `After executing these actions, the page state should be:
+${JSON.stringify(step.predictedState, null, 2)}`
+        : `These actions are internal commands that do not change the page state (hasUIChange: false).
+No page validation is required - simply execute the actions and report completion.`
+}
 
 # Your Task
 
 Execute the actions above using the available MCP tools. After execution:
-1. Get the current URL (use getCurrentUrl or similar tool to verify the page state)
+${
+    hasAnyUIChange
+        ? `1. Get the current URL (use getCurrentUrl or similar tool to verify the page state)
 2. Report what happened
-3. Extract any requested output variables: ${step.outputVariables.map((v) => v.variableName).join(", ") || "None"}
+3. Extract any requested output variables: ${step.outputVariables.map((v) => v.variableName).join(", ") || "None"}`
+        : `1. Report completion status of the commands
+2. Extract any requested output variables: ${step.outputVariables.map((v) => v.variableName).join(", ") || "None"}
+
+Note: These are internal TypeAgent commands (like @config). They do not change the browser page, so:
+- DO NOT get page HTML or verify page state
+- DO NOT check for page elements or URL changes
+- Simply execute the command and report the result`
+}
 
 # CRITICAL INSTRUCTIONS
 
@@ -375,7 +396,7 @@ Execute the actions above using the available MCP tools. After execution:
 - DO NOT say "based on typical results" or similar - extract ACTUAL data or fail
 - Report only what you actually observed and extracted
 
-IMPORTANT: Always get the current URL after actions so we can verify the page state.
+${hasAnyUIChange ? "IMPORTANT: Always get the current URL after actions so we can verify the page state." : "IMPORTANT: These internal commands don't change the page - just execute and report completion."}
 
 Execute now:`;
     }
