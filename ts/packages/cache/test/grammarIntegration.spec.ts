@@ -22,6 +22,7 @@ import {
     compileGrammarToNFA,
     loadGrammarRules,
 } from "action-grammar";
+import { describeIf, hasTestKeys } from "test-lib";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -841,7 +842,10 @@ describe("Grammar Integration", () => {
         });
     });
 
-    describe("Grammar Generation via populateCache", () => {
+    describeIf(
+        "Grammar Generation via populateCache",
+        () => hasTestKeys(),
+        () => {
         it("should generate and add grammar rules from request/action pairs", async () => {
             const staticGrammarText = `@ <Start> = <play>
 @ <play> = play $(track:string) -> {
@@ -971,7 +975,7 @@ describe("Grammar Integration", () => {
                 console.error("Grammar generation error:", error.message);
                 throw error;
             }
-        }, 60000); // 60 second timeout for API call
+        }, 180000); // 3 minute timeout for API call (LLM can be slow)
 
         it("should handle grammar generation errors gracefully", async () => {
             // Test that populateCache handles errors gracefully (e.g., invalid schema path)
@@ -1006,7 +1010,8 @@ describe("Grammar Integration", () => {
                 expect(error).toBeDefined();
             }
         });
-    });
+    },
+    );
 
     describe("Grammar Merging - Comprehensive Tests", () => {
         it("should handle multi-token sequences correctly after merging", () => {
