@@ -2781,7 +2781,7 @@ async function handleWebsiteLibraryStats(
 }
 
 // ============================================================================
-// Browser Semantic Query Action Handlers (LLM-powered)
+// Browser Semantic Query Action Handlers
 // ============================================================================
 
 /**
@@ -2790,7 +2790,7 @@ async function handleWebsiteLibraryStats(
 async function getBrowserQuerySchemaContents(
     fileName: string,
 ): Promise<string> {
-    const packageRoot = path.join("..", "..", "..");
+    const packageRoot = path.join("..", "..");
     return await fs.promises.readFile(
         fileURLToPath(
             new URL(
@@ -2813,7 +2813,7 @@ function createBrowserQueryTranslator<T extends object>(
     const apiSettings = openai.azureApiSettingsFromEnv(
         openai.ModelType.Chat,
         undefined,
-        "GPT_4_O",
+        "GPT_5_2",
     );
     const model = openai.createChatModel(apiSettings, undefined, undefined, [
         "browser-query",

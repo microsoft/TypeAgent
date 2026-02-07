@@ -1006,7 +1006,7 @@ export async function handleSchemaDiscoveryAction(
     }
 
     const browser: BrowserConnector = context.agentContext.browserConnector;
-    const agent = await createDiscoveryPageTranslator("GPT_4_O");
+    const agent = await createDiscoveryPageTranslator("GPT_5_2");
 
     // Create entity collector and action context
     const entityCollector = new EntityCollector();

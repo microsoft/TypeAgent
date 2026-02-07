@@ -30,7 +30,7 @@ export type ElementDescriptionResult = {
     elementText?: string;
 
     // Element attributes as key-value pairs
-    elementAttributes?: Record<string, string>;
+    elementAttributes?: { [key: string]: string };
 
     // Reason why element was not found (if not found)
     notFoundReason?: string;
