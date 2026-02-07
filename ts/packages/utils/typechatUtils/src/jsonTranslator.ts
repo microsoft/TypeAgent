@@ -131,6 +131,7 @@ function getModelParams(
 
 export function enableJsonTranslatorStreaming<T extends object>(
     translator: TypeChatJsonTranslator<T>,
+    promptLogger?: PromptLogger,
 ): TypeChatJsonTranslatorWithStreaming<T> {
     const model = translator.model;
     if (!ai.supportsStreaming(model)) {
@@ -145,7 +146,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
                 prompt,
                 undefined,
                 undefined,
-                PromptLogger.getInstance().logModelRequest,
+                promptLogger?.logModelRequest,
             );
         }
         const { parser, usageCallback, actualPrompt } = modelParams;
@@ -154,7 +155,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
                 actualPrompt,
                 usageCallback,
                 undefined,
-                PromptLogger.getInstance().logModelRequest,
+                promptLogger?.logModelRequest,
             );
         }
         const chunks = [];
@@ -219,6 +220,7 @@ export type JsonTranslatorOptions<T extends object> = {
     validateInstance?: (instance: T) => Result<T>; // Optional
     instructions?: PromptSection[] | undefined; // Instructions before the per request preamble
     model?: string | undefined; // optional
+    promptLogger?: PromptLogger | undefined; // optional prompt logger for model requests
 };
 
 /**
@@ -289,7 +291,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
             prompt,
             usageCallback,
             jsonSchema,
-            PromptLogger.getInstance().logModelRequest,
+            options?.promptLogger?.logModelRequest,
         );
     };
 

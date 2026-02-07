@@ -25,7 +25,9 @@ import {
 } from "typeagent";
 import { PromptSection } from "typechat";
 import * as fs from "fs";
-import { PromptLogger } from "telemetry";
+import { createPromptLogger } from "telemetry";
+
+const promptLogger = createPromptLogger();
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -193,7 +195,7 @@ async function runPlayground(): Promise<void> {
             context,
             undefined,
             undefined,
-            PromptLogger.getInstance().logModelRequest,
+            promptLogger.logModelRequest,
         );
         if (chatResponse.success) {
             const responseText = chatResponse.data;

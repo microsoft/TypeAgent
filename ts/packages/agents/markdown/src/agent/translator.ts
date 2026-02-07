@@ -12,7 +12,9 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import registerDebug from "debug";
-import { PromptLogger } from "telemetry";
+import { createPromptLogger } from "telemetry";
+
+const promptLogger = createPromptLogger();
 
 import { MarkdownUpdateResult } from "./markdownOperationSchema.js";
 
@@ -179,7 +181,7 @@ export class MarkdownAgent<T extends object> {
                 streamingPrompt,
                 undefined,
                 undefined,
-                PromptLogger.getInstance().logModelRequest,
+                promptLogger.logModelRequest,
             );
 
             // Extract content from response

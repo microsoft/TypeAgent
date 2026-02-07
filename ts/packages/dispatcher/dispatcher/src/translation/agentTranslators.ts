@@ -38,6 +38,7 @@ import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { CompleteUsageStatsCallback } from "aiclient";
+import { PromptLogger } from "telemetry";
 
 export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
@@ -334,6 +335,7 @@ export function loadAgentJsonTranslator<
     options?: ComposeSchemaOptions,
     generateOptions?: GenerateSchemaOptions | null, // null means not generated
     model?: string,
+    promptLogger?: PromptLogger,
 ): TypeAgentTranslator<T> {
     const validator = createTypeAgentValidator<T>(
         actionConfigs,
@@ -344,7 +346,7 @@ export function loadAgentJsonTranslator<
     );
     // Collect schema name mapping.
     const schemaNameMap = collectSchemaName(actionConfigs, provider);
-    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model });
+    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model, promptLogger });
 }
 
 function createTypeAgentTranslator<
@@ -359,7 +361,10 @@ function createTypeAgentTranslator<
         validator,
         options,
     );
-    const streamingTranslator = enableJsonTranslatorStreaming(translator);
+    const streamingTranslator = enableJsonTranslatorStreaming(
+        translator,
+        options.promptLogger,
+    );
 
     // the request prompt is already expanded by the override replacement below
     // So just return the request as is.
@@ -430,6 +435,7 @@ export function createTypeAgentTranslatorForSelectedActions<
     provider: ActionConfigProvider,
     options?: ComposeSchemaOptions,
     model?: string,
+    promptLogger?: PromptLogger,
 ) {
     const validator = createActionSchemaJsonValidator<T>(
         composeSelectedActionSchema(
@@ -447,7 +453,7 @@ export function createTypeAgentTranslatorForSelectedActions<
         definitions,
         actionConfig,
     );
-    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model });
+    return createTypeAgentTranslator<T>(validator, schemaNameMap, { model, promptLogger });
 }
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema

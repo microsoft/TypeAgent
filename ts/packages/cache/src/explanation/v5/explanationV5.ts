@@ -81,7 +81,9 @@ import {
     PolitenessGeneralizer,
 } from "./politenessGeneralizationV5.js";
 import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js";
-import { PromptLogger } from "telemetry";
+import { createPromptLogger } from "telemetry";
+
+const promptLogger = createPromptLogger();
 
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
@@ -339,7 +341,7 @@ Emit the generated phrases and values as a JSON object of type ParameterVariatio
                         prompt,
                         undefined,
                         undefined,
-                        PromptLogger.getInstance().logModelRequest,
+                        promptLogger.logModelRequest,
                     );
                     if (result.success) {
                         const generatedAlternatives = JSON.parse(

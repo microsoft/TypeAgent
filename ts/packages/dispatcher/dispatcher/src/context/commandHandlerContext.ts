@@ -15,6 +15,9 @@ import {
     createDatabaseLoggerSink,
     CosmosContainerClientFactory,
     CosmosPartitionKeyBuilderFactory,
+    PromptLogger,
+    createPromptLogger,
+    PromptLoggerOptions,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -160,6 +163,7 @@ export type CommandHandlerContext = {
     streamingActionContext?: ActionContextWithClose | undefined;
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
+    promptLogger?: PromptLogger | undefined;
 
     instanceDirLock: (() => Promise<void>) | undefined;
 
@@ -292,25 +296,50 @@ async function getSession(
     return session;
 }
 
+function getCosmosFactories(): PromptLoggerOptions {
+    const cosmosConnectionString = process.env["COSMOSDB_CONNECTION_STRING"];
+    let cosmosContainerFactory: CosmosContainerClientFactory | undefined;
+    let cosmosPartitionKeyBuilderFactory:
+        | CosmosPartitionKeyBuilderFactory
+        | undefined;
+
+    if (cosmosConnectionString && cosmosConnectionString !== "") {
+        cosmosContainerFactory = async (endpoint, dbName, containerName) => {
+            const client = new CosmosClient({
+                endpoint,
+                aadCredentials: new DefaultAzureCredential(),
+            });
+            const container = client
+                .database(dbName)
+                .container(containerName);
+            return {
+                executeBulkOperations: (ops) =>
+                    container.items.executeBulkOperations(ops as any),
+            };
+        };
+
+        cosmosPartitionKeyBuilderFactory = () =>
+            new PartitionKeyBuilder() as unknown as CosmosPartitionKeyBuilder;
+    }
+
+    const result: PromptLoggerOptions = {};
+    if (cosmosContainerFactory !== undefined) {
+        result.cosmosContainerFactory = cosmosContainerFactory;
+    }
+    if (cosmosPartitionKeyBuilderFactory !== undefined) {
+        result.cosmosPartitionKeyBuilderFactory = cosmosPartitionKeyBuilderFactory;
+    }
+    return result;
+}
+
 function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     const debugLoggerSink = createDebugLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
 
-        const cosmosConnectionString = process.env["COSMOSDB_CONNECTION_STRING"];
-        let cosmosContainerFactory: CosmosContainerClientFactory | undefined;
-        let partitionKeyBuilderFactory: CosmosPartitionKeyBuilderFactory | undefined;
-
-        if (cosmosConnectionString && cosmosConnectionString !== "") {
-            cosmosContainerFactory = async (endpoint, dbName, containerName) => {
-                const client = new CosmosClient({ endpoint, aadCredentials: new DefaultAzureCredential() });
-                const container = client.database(dbName).container(containerName);
-                return { executeBulkOperations: (ops) => container.items.executeBulkOperations(ops as any) };
-            };
-
-            partitionKeyBuilderFactory = () => new PartitionKeyBuilder() as unknown as CosmosPartitionKeyBuilder;
-        }
+        const { cosmosContainerFactory, cosmosPartitionKeyBuilderFactory } =
+            getCosmosFactories();
 
         dbLoggerSink = createDatabaseLoggerSink({
             dbName: "telemetrydb",
@@ -325,7 +354,7 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
                 );
             },
             cosmosContainerFactory: cosmosContainerFactory,
-            cosmosPartitionKeyBuilderFactory: partitionKeyBuilderFactory,
+            cosmosPartitionKeyBuilderFactory: cosmosPartitionKeyBuilderFactory,
         });
     } catch (e) {
         clientIO.notify(
@@ -559,6 +588,7 @@ export async function initializeCommandHandlerContext(
             ),
             logger,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
+            promptLogger: createPromptLogger(getCosmosFactories()),
             batchMode: false,
             instanceDirLock,
             constructionProvider,

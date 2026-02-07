@@ -25,7 +25,11 @@ export {
     DatabaseLoggerSinkOptions,
 } from "./logger/databaseLoggerSink.js";
 export { createDebugLoggerSink } from "./logger/debugLoggerSink.js";
-export { PromptLogger } from "./logger/promptLogger.js";
+export {
+    PromptLogger,
+    PromptLoggerOptions,
+    createPromptLogger,
+} from "./logger/promptLogger.js";
 
 export * from "./stopWatch.js";
 

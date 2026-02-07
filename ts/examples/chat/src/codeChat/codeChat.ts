@@ -38,7 +38,9 @@ import {
     sampleFiles,
 } from "./common.js";
 import { createCommandTransformer } from "./commandTransformer.js";
-import { PromptLogger } from "telemetry";
+import { createPromptLogger } from "telemetry";
+
+const promptLogger = createPromptLogger();
 
 export async function runCodeChat(): Promise<void> {
     const model = openai.createChatModelDefault("codeChat");
@@ -386,7 +388,7 @@ export async function runCodeChat(): Promise<void> {
                 prompt,
                 undefined,
                 undefined,
-                PromptLogger.getInstance().logModelRequest,
+                promptLogger.logModelRequest,
             );
             if (result.success) {
                 io.writer.writeLine(result.data);
