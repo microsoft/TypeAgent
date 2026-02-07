@@ -175,9 +175,12 @@ export class SchemaDiscoveryAgent<T extends object> {
             undefined,
             fastModelName,
         );
-        this.model = ai.createChatModel(apiSettings, undefined, undefined, [
-            "schemaDiscovery",
-        ]);
+        this.model = ai.createChatModel(
+            apiSettings,
+            { temperature: 1 },
+            undefined,
+            ["schemaDiscovery"],
+        );
         const validator = createTypeScriptJsonValidator<T>(
             this.userActionsPoolSchema,
             schemaName,
