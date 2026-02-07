@@ -9,6 +9,7 @@ import { PlanGenerator } from "./planning/planGenerator.js";
 import { PlanExecutor } from "./planning/planExecutor.js";
 import { PlanSerializer } from "./planning/planSerializer.js";
 import { ExecutionPlan } from "./planning/types.js";
+import path from "path";
 
 /**
  * Task execution options
@@ -84,6 +85,11 @@ export class WebTaskAgent {
 
             tracer = new TraceCollector(traceOptions);
             await tracer.initialize();
+
+            // Set environment variable for MCP tools to access HTML directory
+            const htmlDir = path.join(tracer.getTraceDir(), "html");
+            process.env.TYPEAGENT_HTML_DIR = htmlDir;
+
             console.log(
                 `[Trace] Collecting traces to: ${tracer.getTraceDir()}`,
             );
@@ -418,6 +424,11 @@ export class WebTaskAgent {
 
             tracer = new TraceCollector(traceOptions);
             await tracer.initialize();
+
+            // Set environment variable for MCP tools to access HTML directory
+            const htmlDir = path.join(tracer.getTraceDir(), "html");
+            process.env.TYPEAGENT_HTML_DIR = htmlDir;
+
             console.log(
                 `[Trace] Collecting traces to: ${tracer.getTraceDir()}`,
             );
@@ -617,6 +628,7 @@ export type OpenWebPage = {
 };
 
 // Get the HTML content of the current page
+// ⚠️ USE AS LAST RESORT - Prefer semantic query actions (see below)
 // Returns HTML as text that you can read and analyze
 export type GetHTML = {
     actionName: "browser__getHTML";
@@ -670,28 +682,130 @@ export type BrowserAction =
     | ScrollUp;
 \`\`\`
 
+# ⭐ BROWSER SEMANTIC QUERY ACTIONS (PREFER THESE)
+
+You have access to semantic query actions that use LLM to understand page content.
+These are CORE BROWSER ACTIONS and are MUCH BETTER than parsing raw HTML.
+
+**Semantic Query Actions** (available for ALL sites via typeagent_action):
+
+1. **queryPageContent** - Extract ANY information from page ⭐ USE THIS FIRST
+   \`\`\`typescript
+   execute_command({
+     request: JSON.stringify({
+       tool: "typeagent_action",
+       parameters: {
+         agent: "browser",
+         action: "queryPageContent",
+         parameters: { query: "what is the product price?" },
+         naturalLanguage: "get product price"
+       }
+     })
+   })
+   // Returns: { answered: true, answerText: "$24.99", confidence: 0.9 }
+   \`\`\`
+   Examples:
+   - "how many items in stock?" → stock count
+   - "what is the product rating?" → rating value
+   - "is the item available?" → availability status
+   - "what is the total price?" → price
+
+2. **getElementByDescription** - Find elements without CSS selectors ⭐ USE BEFORE getHTML
+   \`\`\`typescript
+   execute_command({
+     request: JSON.stringify({
+       tool: "typeagent_action",
+       parameters: {
+         agent: "browser",
+         action: "getElementByDescription",
+         parameters: {
+           elementDescription: "Add to Cart button",
+           elementType: "button"
+         },
+         naturalLanguage: "find add to cart button"
+       }
+     })
+   })
+   // Returns: { found: true, elementCssSelector: "#add-to-cart", elementText: "Add to Cart" }
+   \`\`\`
+
+3. **isPageStateMatched** - Verify page state ⭐ USE FOR VALIDATION
+   \`\`\`typescript
+   execute_command({
+     request: JSON.stringify({
+       tool: "typeagent_action",
+       parameters: {
+         agent: "browser",
+         action: "isPageStateMatched",
+         parameters: { expectedStateDescription: "shopping cart page is displayed" },
+         naturalLanguage: "verify cart page"
+       }
+     })
+   })
+   // Returns: { matched: true, confidence: 0.95, explanation: "..." }
+   \`\`\`
+
 # Instructions
 
-1. **Prefer using the browser action tools defined above**
-   - Call with the exact actionName (e.g., "browser__openWebPage", "browser__getHTML")
-   - Provide required parameters as shown in the schema
-   - Natural language commands via execute_command are acceptable as a fallback
+1. **⭐ PREFER SEMANTIC QUERIES OVER RAW HTML**
+   - For ANY data extraction → Use queryPageContent FIRST
+   - To find elements → Use getElementByDescription FIRST
+   - To verify page state → Use isPageStateMatched
+   - Only use browser__getHTML as LAST RESORT if semantic queries fail
+   - Raw HTML is slower, harder to parse, and more fragile
 
-2. **Always retrieve and analyze HTML before extracting data**
-   - Call browser__getHTML() to retrieve the page HTML
-   - Use Read/Grep tools to analyze the HTML structure
-   - Extract data by parsing the HTML content
+2. **When to use each approach:**
+   - Extracting data (prices, text, counts) → queryPageContent
+   - Finding element selectors → getElementByDescription
+   - Verifying state after actions → isPageStateMatched
+   - Complex multi-element interactions → getHTML (last resort)
 
-3. **Example workflow for searching:**
+3. **Decision tree:**
+   a) Try queryPageContent for data extraction
+   b) If that fails (answered: false), try getElementByDescription
+   c) If that fails (found: false), then use browser__getHTML
+   d) For state validation, always use isPageStateMatched
+
+4. **Example workflow with semantic queries:**
+   a) browser__openWebPage({ site: "https://example.com" })
+   b) browser__awaitPageLoad()
+   c) execute_command({
+        request: JSON.stringify({
+          tool: "typeagent_action",
+          parameters: {
+            agent: "browser",
+            action: "getElementByDescription",
+            parameters: { elementDescription: "search input", elementType: "input" },
+            naturalLanguage: "find search box"
+          }
+        })
+      })
+      → Returns { found: true, elementCssSelector: "input[name='q']" }
+   d) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
+   e) browser__awaitPageLoad()
+   f) execute_command({
+        request: JSON.stringify({
+          tool: "typeagent_action",
+          parameters: {
+            agent: "browser",
+            action: "queryPageContent",
+            parameters: { query: "get titles and prices of first 5 products" },
+            naturalLanguage: "extract product list"
+          }
+        })
+      })
+      → Returns { answered: true, answerText: "[product data...]" }
+
+**Old workflow (ONLY if semantic queries fail):**
    a) browser__openWebPage({ site: "https://example.com" })
    b) browser__awaitPageLoad()
    c) browser__getHTML() → Returns HTML content
-   d) Analyze the HTML to find search input selector (e.g., "input[name='q']")
+   d) Use Grep/Read to manually parse HTML and find search input selector
    e) browser__clickOnElement({ cssSelector: "input[name='q']" })
    f) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
    g) browser__awaitPageLoad()
    h) browser__getHTML() → Returns search results HTML
-   i) Use Grep/Read to analyze HTML and extract product information
+   i) Use Grep/Read to manually parse HTML and extract product information
 
 ${this.getCategorySpecificGuidance(task.category)}
 

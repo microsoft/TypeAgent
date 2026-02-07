@@ -17,6 +17,7 @@ import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
 import { getTabHTMLFragments, CompressionMode } from "./capture";
+import { screenshotCoordinator } from "./screenshotCoordinator";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "aiclient";
 
@@ -305,14 +306,38 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
         },
 
-        search: async (query?: string): Promise<URL> => {
-            await chrome.search.query({
-                disposition: "NEW_TAB",
-                text: query,
-            });
+        search: async (
+            query?: string,
+            sites?: string[],
+            searchProvider?: any,
+            options?: { waitForPageLoad?: boolean; newTab?: boolean },
+        ): Promise<URL> => {
+            // Use the search provider URL template if provided
+            let searchUrl: string;
+            if (searchProvider?.url) {
+                searchUrl = searchProvider.url.replace(
+                    "%s",
+                    encodeURIComponent(query || ""),
+                );
+            } else {
+                // Default to Bing search
+                searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query || "")}`;
+            }
 
-            // todo return search provider URL
-            return new URL(`/?q=${query}`);
+            // If sites are specified, add site: operator to the query
+            if (sites && sites.length > 0) {
+                const siteQuery = sites.map((s) => `site:${s}`).join(" OR ");
+                const separator = searchUrl.includes("?") ? "&" : "?";
+                searchUrl =
+                    searchUrl +
+                    separator +
+                    `q=${encodeURIComponent(`${query} (${siteQuery})`)}`;
+            }
+
+            const disposition = options?.newTab ? "NEW_TAB" : "CURRENT_TAB";
+            await chrome.tabs.update({ url: searchUrl });
+
+            return new URL(searchUrl);
         },
         readPageContent: async () => {
             const targetTab = await getActiveTab();
@@ -343,8 +368,8 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         },
         captureScreenshot: async () => {
             const targetTab = await ensureActiveTab();
-            return chrome.tabs.captureVisibleTab(targetTab.windowId, {
-                quality: 100,
+            return screenshotCoordinator.captureScreenshot({
+                tabId: targetTab.id,
             });
         },
         getPageTextContent: async (): Promise<string> => {

@@ -109,7 +109,7 @@ export class BrowserConnector {
             new Promise((_, reject) =>
                 setTimeout(
                     () => reject(new Error("Screenshot capture timed out")),
-                    3000,
+                    10000, // Increased from 3s to 10s to allow for stream initialization
                 ),
             ),
         ]);

@@ -23,6 +23,7 @@ export type BuyProduct = {
     parameters: {
         // the original user request
         userRequest: string;
+        productName?: string;
     };
 };
 
