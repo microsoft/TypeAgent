@@ -12,7 +12,12 @@ import {
     LoggerSink,
     MultiSinkLogger,
     createDebugLoggerSink,
-    createMongoDBLoggerSink,
+    createDatabaseLoggerSink,
+    CosmosContainerClientFactory,
+    CosmosPartitionKeyBuilderFactory,
+    PromptLogger,
+    createPromptLogger,
+    PromptLoggerOptions,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -87,6 +92,9 @@ import {
     registerBuiltInEntities,
 } from "action-grammar";
 import fs from "node:fs";
+import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
+import { CosmosPartitionKeyBuilder } from "telemetry";
+import { DefaultAzureCredential } from "@azure/identity";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -155,6 +163,7 @@ export type CommandHandlerContext = {
     streamingActionContext?: ActionContextWithClose | undefined;
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
+    promptLogger?: PromptLogger | undefined;
 
     instanceDirLock: (() => Promise<void>) | undefined;
 
@@ -287,16 +296,54 @@ async function getSession(
     return session;
 }
 
+function getCosmosFactories(): PromptLoggerOptions {
+    const cosmosConnectionString = process.env["COSMOSDB_CONNECTION_STRING"];
+    let cosmosContainerFactory: CosmosContainerClientFactory | undefined;
+    let cosmosPartitionKeyBuilderFactory:
+        | CosmosPartitionKeyBuilderFactory
+        | undefined;
+
+    if (cosmosConnectionString && cosmosConnectionString !== "") {
+        cosmosContainerFactory = async (endpoint, dbName, containerName) => {
+            const client = new CosmosClient({
+                endpoint,
+                aadCredentials: new DefaultAzureCredential(),
+            });
+            const container = client.database(dbName).container(containerName);
+            return {
+                executeBulkOperations: (ops) =>
+                    container.items.executeBulkOperations(ops as any),
+            };
+        };
+
+        cosmosPartitionKeyBuilderFactory = () =>
+            new PartitionKeyBuilder() as unknown as CosmosPartitionKeyBuilder;
+    }
+
+    const result: PromptLoggerOptions = {};
+    if (cosmosContainerFactory !== undefined) {
+        result.cosmosContainerFactory = cosmosContainerFactory;
+    }
+    if (cosmosPartitionKeyBuilderFactory !== undefined) {
+        result.cosmosPartitionKeyBuilderFactory =
+            cosmosPartitionKeyBuilderFactory;
+    }
+    return result;
+}
+
 function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     const debugLoggerSink = createDebugLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
-        dbLoggerSink = createMongoDBLoggerSink(
-            "telemetrydb",
-            "dispatcherlogs",
-            isDbEnabled,
-            (e: string) => {
+        const { cosmosContainerFactory, cosmosPartitionKeyBuilderFactory } =
+            getCosmosFactories();
+
+        dbLoggerSink = createDatabaseLoggerSink({
+            dbName: "telemetrydb",
+            collectionName: "dispatcherlogs",
+            isEnabled: isDbEnabled,
+            onErrorDisable: (e: string) => {
                 clientIO.notify(
                     undefined,
                     AppAgentEvent.Warning,
@@ -304,7 +351,9 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
                     DispatcherName,
                 );
             },
-        );
+            cosmosContainerFactory: cosmosContainerFactory,
+            cosmosPartitionKeyBuilderFactory: cosmosPartitionKeyBuilderFactory,
+        });
     } catch (e) {
         clientIO.notify(
             undefined,
@@ -537,6 +586,7 @@ export async function initializeCommandHandlerContext(
             ),
             logger,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
+            promptLogger: createPromptLogger(getCosmosFactories()),
             batchMode: false,
             instanceDirLock,
             constructionProvider,

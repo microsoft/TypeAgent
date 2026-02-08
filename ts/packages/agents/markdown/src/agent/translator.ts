@@ -12,6 +12,9 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import registerDebug from "debug";
+import { createPromptLogger } from "telemetry";
+
+const promptLogger = createPromptLogger();
 
 import { MarkdownUpdateResult } from "./markdownOperationSchema.js";
 
@@ -174,7 +177,12 @@ export class MarkdownAgent<T extends object> {
             let accumulatedContent = "";
 
             // Use the ChatModel's complete method with proper parameters
-            const response = await this.model.complete(streamingPrompt);
+            const response = await this.model.complete(
+                streamingPrompt,
+                undefined,
+                undefined,
+                promptLogger.logModelRequest,
+            );
 
             // Extract content from response
             let content = "";

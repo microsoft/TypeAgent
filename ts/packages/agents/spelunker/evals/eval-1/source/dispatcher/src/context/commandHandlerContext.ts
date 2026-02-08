@@ -9,7 +9,7 @@ import {
     LoggerSink,
     MultiSinkLogger,
     createDebugLoggerSink,
-    createMongoDBLoggerSink,
+    createDatabaseLoggerSink,
     Profiler,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
@@ -189,11 +189,11 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
-        dbLoggerSink = createMongoDBLoggerSink(
-            "telemetrydb",
-            "dispatcherlogs",
-            isDbEnabled,
-            (e: string) => {
+        dbLoggerSink = createDatabaseLoggerSink({
+            dbName: "telemetrydb",
+            collectionName: "dispatcherlogs",
+            isEnabled: isDbEnabled,
+            onErrorDisable: (e: string) => {
                 clientIO.notify(
                     AppAgentEvent.Warning,
                     undefined,
@@ -201,7 +201,7 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
                     DispatcherName,
                 );
             },
-        );
+        });
     } catch (e) {
         clientIO.notify(
             AppAgentEvent.Warning,

@@ -67,6 +67,7 @@ export interface ChatModel extends TypeChatLanguageModel {
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
+        promptLogFn?: (msg: any) => void,
     ): Promise<Result<string>>;
 }
 
@@ -80,6 +81,7 @@ export interface ChatModelWithStreaming extends ChatModel {
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
+        promptLogFn?: (msg: any) => void,
     ): Promise<Result<AsyncIterableIterator<string>>>;
 }
 

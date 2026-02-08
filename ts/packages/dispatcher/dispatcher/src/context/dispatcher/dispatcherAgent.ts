@@ -172,7 +172,15 @@ async function clarifyWithLookup(
         agents.getActionConfig("dispatcher"),
     ];
     // TODO: cache this?
-    const translator = loadAgentJsonTranslator(actionConfigs, [], agents);
+    const translator = loadAgentJsonTranslator(
+        actionConfigs,
+        [],
+        agents,
+        undefined,
+        undefined,
+        undefined,
+        systemContext.promptLogger,
+    );
 
     const question = `What is ${action.parameters.reference}?`;
     const result = await translator.translate(question);
