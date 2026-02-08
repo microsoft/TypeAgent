@@ -399,16 +399,83 @@ async function executeReasoningWithTracing(
                 );
 
                 if (plan && planGenerator.validatePlan(plan)) {
-                    await planLibrary.savePlan(plan);
-                    debug(
-                        `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
+                    // Check for duplicate plans before saving
+                    const existingPlans = await planLibrary.findMatchingPlans(
+                        originalRequest,
+                        plan.intent,
                     );
 
-                    // Notify user that a plan was created
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n✓ Created reusable workflow plan: ${plan.description}`,
-                    });
+                    let isDuplicate = false;
+                    let duplicatePlanId: string | undefined;
+
+                    if (existingPlans.length > 0) {
+                        // Use PlanMatcher to check if this plan is essentially a duplicate
+                        const planMatcher = new PlanMatcher(planLibrary);
+
+                        for (const existingPlan of existingPlans) {
+                            // Check if existing plan is user-approved
+                            if (existingPlan.approval?.status === "approved") {
+                                debug(
+                                    `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
+                                );
+
+                                // Update usage of approved plan instead
+                                await planLibrary.updatePlanUsage(
+                                    existingPlan.planId,
+                                    true,
+                                    tracer.getTrace().metrics.duration,
+                                );
+
+                                isDuplicate = true;
+                                duplicatePlanId = existingPlan.planId;
+                                break;
+                            }
+
+                            // Check if the descriptions are very similar
+                            const similarity =
+                                await planMatcher.computeSimilarity(
+                                    plan.description,
+                                    existingPlan.description,
+                                );
+
+                            if (similarity >= 0.8) {
+                                isDuplicate = true;
+                                duplicatePlanId = existingPlan.planId;
+                                debug(
+                                    `Detected duplicate plan (similarity: ${similarity}): ${existingPlan.planId}`,
+                                );
+
+                                // Update the existing plan's usage count
+                                await planLibrary.updatePlanUsage(
+                                    existingPlan.planId,
+                                    true,
+                                    tracer.getTrace().metrics.duration,
+                                );
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isDuplicate) {
+                        debug(
+                            `Skipped creating duplicate plan, updated existing: ${duplicatePlanId}`,
+                        );
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Updated existing workflow plan usage (prevented duplicate)`,
+                        });
+                    } else {
+                        await planLibrary.savePlan(plan);
+                        debug(
+                            `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
+                        );
+
+                        // Notify user that a plan was created
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Created reusable workflow plan: ${plan.description}`,
+                        });
+                    }
                 }
             } catch (error) {
                 // Don't fail the request if plan generation fails
@@ -494,6 +561,14 @@ async function executeReasoningWithPlanning(
                     content: `\n✓ Workflow completed successfully`,
                 });
 
+                // Prompt for review if plan is pending
+                if (match.plan.approval?.status === "pending_review") {
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: `\n💡 This workflow is ready for review.`,
+                    });
+                }
+
                 return executionResult.finalOutput
                     ? createActionResultNoDisplay(executionResult.finalOutput)
                     : undefined;
@@ -518,6 +593,10 @@ async function executeReasoningWithPlanning(
             }
         } else {
             debug("No matching plan found, using reasoning");
+            displayStatus(
+                "No matching workflow found, using reasoning...",
+                context,
+            );
         }
     } catch (error) {
         debug("Plan matching/execution failed:", error);

@@ -62,19 +62,22 @@ export class PlanLibrary {
     }
 
     /**
-     * Find matching plans by intent or keywords
+     * Find matching plans by intent or keywords (with scores)
      */
-    async findMatchingPlans(
+    async findMatchingPlansWithScores(
         request: string,
         intent?: string,
-    ): Promise<WorkflowPlan[]> {
+    ): Promise<Array<{ plan: WorkflowPlan; score: number }>> {
         try {
             // Load index
             const index = await this.loadIndex();
 
             if (index.plans.length === 0) {
+                debug("No plans in index");
                 return [];
             }
+
+            debug(`Total plans in index: ${index.plans.length}`);
 
             // Filter by intent if provided
             let candidatePlans = intent
@@ -82,26 +85,54 @@ export class PlanLibrary {
                 : index.plans;
 
             if (candidatePlans.length === 0) {
+                debug(`No plans found with intent: ${intent}`);
                 return [];
             }
+
+            debug(
+                `Candidate plans after intent filter: ${candidatePlans.length}`,
+            );
 
             // Rank by keyword match and usage stats
             const ranked = this.rankPlans(candidatePlans, request);
 
-            // Load full plan data for top matches (up to 3)
-            const matches: WorkflowPlan[] = [];
+            debug(`Top 3 ranked plans:`);
+            for (let i = 0; i < Math.min(3, ranked.length); i++) {
+                const entry = ranked[i] as any;
+                debug(
+                    `  ${i + 1}. ${entry.planId} (${entry.intent}) - score: ${entry.score?.toFixed(3)}`,
+                );
+            }
+
+            // Load full plan data for top matches (up to 3) and include scores
+            const matches: Array<{ plan: WorkflowPlan; score: number }> = [];
             for (const entry of ranked.slice(0, 3)) {
                 const plan = await this.loadPlan(entry.planId);
                 if (plan) {
-                    matches.push(plan);
+                    matches.push({
+                        plan,
+                        score: (entry as any).score || 0,
+                    });
                 }
             }
 
+            debug(`Returning ${matches.length} candidate plans for validation`);
             return matches;
         } catch (error) {
             debug(`Failed to find matching plans:`, error);
             return [];
         }
+    }
+
+    /**
+     * Find matching plans by intent or keywords
+     */
+    async findMatchingPlans(
+        request: string,
+        intent?: string,
+    ): Promise<WorkflowPlan[]> {
+        const results = await this.findMatchingPlansWithScores(request, intent);
+        return results.map((r) => r.plan);
     }
 
     /**
@@ -116,6 +147,14 @@ export class PlanLibrary {
             const plan = await this.loadPlan(planId);
             if (!plan) return;
 
+            // Check if plan is user-approved (immutable structure)
+            if (plan.approval?.status === "approved") {
+                debug(
+                    `Plan ${planId} is user-approved, only updating usage stats`,
+                );
+            }
+
+            // Initialize usage if not exists
             if (!plan.usage) {
                 plan.usage = {
                     successCount: 0,
@@ -125,6 +164,15 @@ export class PlanLibrary {
                 };
             }
 
+            // Initialize approval if not exists
+            if (!plan.approval) {
+                plan.approval = {
+                    status: "auto",
+                    reviewHistory: [],
+                };
+            }
+
+            // Update usage stats
             if (success) {
                 plan.usage.successCount++;
             } else {
@@ -138,6 +186,16 @@ export class PlanLibrary {
             plan.usage.avgDuration =
                 (plan.usage.avgDuration * (totalExecutions - 1) + duration) /
                 totalExecutions;
+
+            // Mark for review after 3+ successful executions (if still auto)
+            if (
+                plan.approval.status === "auto" &&
+                plan.usage.successCount >= 3 &&
+                success
+            ) {
+                plan.approval.status = "pending_review";
+                debug(`Plan ${planId} marked for user review`);
+            }
 
             await this.savePlan(plan);
 
@@ -274,6 +332,7 @@ export class PlanLibrary {
                     : 0,
                 lastUsed: plan.usage?.lastUsed || plan.createdAt,
                 executionCount: totalExecutions,
+                approvalStatus: plan.approval?.status || "auto",
             });
 
             // Save updated index
@@ -322,6 +381,7 @@ export class PlanLibrary {
                     : 0,
                 lastUsed: plan.usage?.lastUsed || plan.createdAt,
                 executionCount: totalExecutions,
+                approvalStatus: plan.approval?.status || "auto",
             });
 
             // Save to instance storage
@@ -368,6 +428,7 @@ export class PlanLibrary {
 
         return text
             .toLowerCase()
+            .replace(/[^\w\s]/g, " ") // Remove punctuation
             .split(/\s+/)
             .filter((w) => w.length > 3 && !commonWords.has(w))
             .slice(0, 10);
@@ -383,6 +444,7 @@ export class PlanLibrary {
         const requestWords = new Set(
             request
                 .toLowerCase()
+                .replace(/[^\w\s]/g, " ") // Remove punctuation
                 .split(/\s+/)
                 .filter((w) => w.length > 3),
         );
@@ -406,11 +468,29 @@ export class PlanLibrary {
                     (1000 * 60 * 60 * 24);
                 const recencyScore = Math.exp(-daysSinceUse / 30); // 30-day half-life
 
-                // Combined score
+                // Approval boost
+                let approvalBoost = 0;
+                switch (plan.approvalStatus) {
+                    case "approved":
+                        approvalBoost = 0.3; // Significant boost for user-approved
+                        break;
+                    case "reviewed":
+                        approvalBoost = 0.1; // Small boost for reviewed
+                        break;
+                    case "pending_review":
+                        approvalBoost = 0.05; // Tiny boost for pending
+                        break;
+                    case "auto":
+                    default:
+                        approvalBoost = 0;
+                }
+
+                // Combined score (keyword: 40%, success: 25%, recency: 15%, approval: 20%)
                 const score =
-                    keywordScore * 0.5 +
-                    successWeight * 0.3 +
-                    recencyScore * 0.2;
+                    keywordScore * 0.4 +
+                    successWeight * 0.25 +
+                    recencyScore * 0.15 +
+                    approvalBoost;
 
                 return { ...plan, score };
             })
