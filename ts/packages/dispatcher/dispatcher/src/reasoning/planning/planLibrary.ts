@@ -62,19 +62,22 @@ export class PlanLibrary {
     }
 
     /**
-     * Find matching plans by intent or keywords
+     * Find matching plans by intent or keywords (with scores)
      */
-    async findMatchingPlans(
+    async findMatchingPlansWithScores(
         request: string,
         intent?: string,
-    ): Promise<WorkflowPlan[]> {
+    ): Promise<Array<{ plan: WorkflowPlan; score: number }>> {
         try {
             // Load index
             const index = await this.loadIndex();
 
             if (index.plans.length === 0) {
+                debug("No plans in index");
                 return [];
             }
+
+            debug(`Total plans in index: ${index.plans.length}`);
 
             // Filter by intent if provided
             let candidatePlans = intent
@@ -82,26 +85,52 @@ export class PlanLibrary {
                 : index.plans;
 
             if (candidatePlans.length === 0) {
+                debug(`No plans found with intent: ${intent}`);
                 return [];
             }
+
+            debug(`Candidate plans after intent filter: ${candidatePlans.length}`);
 
             // Rank by keyword match and usage stats
             const ranked = this.rankPlans(candidatePlans, request);
 
-            // Load full plan data for top matches (up to 3)
-            const matches: WorkflowPlan[] = [];
+            debug(`Top 3 ranked plans:`);
+            for (let i = 0; i < Math.min(3, ranked.length); i++) {
+                const entry = ranked[i] as any;
+                debug(
+                    `  ${i + 1}. ${entry.planId} (${entry.intent}) - score: ${entry.score?.toFixed(3)}`,
+                );
+            }
+
+            // Load full plan data for top matches (up to 3) and include scores
+            const matches: Array<{ plan: WorkflowPlan; score: number }> = [];
             for (const entry of ranked.slice(0, 3)) {
                 const plan = await this.loadPlan(entry.planId);
                 if (plan) {
-                    matches.push(plan);
+                    matches.push({
+                        plan,
+                        score: (entry as any).score || 0,
+                    });
                 }
             }
 
+            debug(`Returning ${matches.length} candidate plans for validation`);
             return matches;
         } catch (error) {
             debug(`Failed to find matching plans:`, error);
             return [];
         }
+    }
+
+    /**
+     * Find matching plans by intent or keywords
+     */
+    async findMatchingPlans(
+        request: string,
+        intent?: string,
+    ): Promise<WorkflowPlan[]> {
+        const results = await this.findMatchingPlansWithScores(request, intent);
+        return results.map((r) => r.plan);
     }
 
     /**
@@ -368,6 +397,7 @@ export class PlanLibrary {
 
         return text
             .toLowerCase()
+            .replace(/[^\w\s]/g, " ") // Remove punctuation
             .split(/\s+/)
             .filter((w) => w.length > 3 && !commonWords.has(w))
             .slice(0, 10);
@@ -383,6 +413,7 @@ export class PlanLibrary {
         const requestWords = new Set(
             request
                 .toLowerCase()
+                .replace(/[^\w\s]/g, " ") // Remove punctuation
                 .split(/\s+/)
                 .filter((w) => w.length > 3),
         );
