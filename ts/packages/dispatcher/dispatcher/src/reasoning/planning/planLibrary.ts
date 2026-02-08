@@ -89,7 +89,9 @@ export class PlanLibrary {
                 return [];
             }
 
-            debug(`Candidate plans after intent filter: ${candidatePlans.length}`);
+            debug(
+                `Candidate plans after intent filter: ${candidatePlans.length}`,
+            );
 
             // Rank by keyword match and usage stats
             const ranked = this.rankPlans(candidatePlans, request);
@@ -145,6 +147,14 @@ export class PlanLibrary {
             const plan = await this.loadPlan(planId);
             if (!plan) return;
 
+            // Check if plan is user-approved (immutable structure)
+            if (plan.approval?.status === "approved") {
+                debug(
+                    `Plan ${planId} is user-approved, only updating usage stats`,
+                );
+            }
+
+            // Initialize usage if not exists
             if (!plan.usage) {
                 plan.usage = {
                     successCount: 0,
@@ -154,6 +164,15 @@ export class PlanLibrary {
                 };
             }
 
+            // Initialize approval if not exists
+            if (!plan.approval) {
+                plan.approval = {
+                    status: "auto",
+                    reviewHistory: [],
+                };
+            }
+
+            // Update usage stats
             if (success) {
                 plan.usage.successCount++;
             } else {
@@ -167,6 +186,16 @@ export class PlanLibrary {
             plan.usage.avgDuration =
                 (plan.usage.avgDuration * (totalExecutions - 1) + duration) /
                 totalExecutions;
+
+            // Mark for review after 3+ successful executions (if still auto)
+            if (
+                plan.approval.status === "auto" &&
+                plan.usage.successCount >= 3 &&
+                success
+            ) {
+                plan.approval.status = "pending_review";
+                debug(`Plan ${planId} marked for user review`);
+            }
 
             await this.savePlan(plan);
 
@@ -303,6 +332,7 @@ export class PlanLibrary {
                     : 0,
                 lastUsed: plan.usage?.lastUsed || plan.createdAt,
                 executionCount: totalExecutions,
+                approvalStatus: plan.approval?.status || "auto",
             });
 
             // Save updated index
@@ -351,6 +381,7 @@ export class PlanLibrary {
                     : 0,
                 lastUsed: plan.usage?.lastUsed || plan.createdAt,
                 executionCount: totalExecutions,
+                approvalStatus: plan.approval?.status || "auto",
             });
 
             // Save to instance storage
@@ -437,11 +468,29 @@ export class PlanLibrary {
                     (1000 * 60 * 60 * 24);
                 const recencyScore = Math.exp(-daysSinceUse / 30); // 30-day half-life
 
-                // Combined score
+                // Approval boost
+                let approvalBoost = 0;
+                switch (plan.approvalStatus) {
+                    case "approved":
+                        approvalBoost = 0.3; // Significant boost for user-approved
+                        break;
+                    case "reviewed":
+                        approvalBoost = 0.1; // Small boost for reviewed
+                        break;
+                    case "pending_review":
+                        approvalBoost = 0.05; // Tiny boost for pending
+                        break;
+                    case "auto":
+                    default:
+                        approvalBoost = 0;
+                }
+
+                // Combined score (keyword: 40%, success: 25%, recency: 15%, approval: 20%)
                 const score =
-                    keywordScore * 0.5 +
-                    successWeight * 0.3 +
-                    recencyScore * 0.2;
+                    keywordScore * 0.4 +
+                    successWeight * 0.25 +
+                    recencyScore * 0.15 +
+                    approvalBoost;
 
                 return { ...plan, score };
             })

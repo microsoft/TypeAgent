@@ -413,11 +413,30 @@ async function executeReasoningWithTracing(
                         const planMatcher = new PlanMatcher(planLibrary);
 
                         for (const existingPlan of existingPlans) {
+                            // Check if existing plan is user-approved
+                            if (existingPlan.approval?.status === "approved") {
+                                debug(
+                                    `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
+                                );
+
+                                // Update usage of approved plan instead
+                                await planLibrary.updatePlanUsage(
+                                    existingPlan.planId,
+                                    true,
+                                    tracer.getTrace().metrics.duration,
+                                );
+
+                                isDuplicate = true;
+                                duplicatePlanId = existingPlan.planId;
+                                break;
+                            }
+
                             // Check if the descriptions are very similar
-                            const similarity = await planMatcher.computeSimilarity(
-                                plan.description,
-                                existingPlan.description,
-                            );
+                            const similarity =
+                                await planMatcher.computeSimilarity(
+                                    plan.description,
+                                    existingPlan.description,
+                                );
 
                             if (similarity >= 0.8) {
                                 isDuplicate = true;
@@ -542,6 +561,14 @@ async function executeReasoningWithPlanning(
                     content: `\n✓ Workflow completed successfully`,
                 });
 
+                // Prompt for review if plan is pending
+                if (match.plan.approval?.status === "pending_review") {
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: `\n💡 This workflow is ready for review.`,
+                    });
+                }
+
                 return executionResult.finalOutput
                     ? createActionResultNoDisplay(executionResult.finalOutput)
                     : undefined;
@@ -566,7 +593,10 @@ async function executeReasoningWithPlanning(
             }
         } else {
             debug("No matching plan found, using reasoning");
-            displayStatus("No matching workflow found, using reasoning...", context);
+            displayStatus(
+                "No matching workflow found, using reasoning...",
+                context,
+            );
         }
     } catch (error) {
         debug("Plan matching/execution failed:", error);
