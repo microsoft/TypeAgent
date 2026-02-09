@@ -14,7 +14,7 @@ import {
     runDesktopActions,
     setupDesktopActionContext,
 } from "./connector.js";
-import { DesktopActions } from "./actionsSchema.js";
+import { AllDesktopActions } from "./allActionsSchema.js";
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeDesktopContext,
@@ -50,7 +50,7 @@ async function executeDesktopAction(
     context: ActionContext<DesktopActionContext>,
 ) {
     const message = await runDesktopActions(
-        action as DesktopActions,
+        action as AllDesktopActions,
         context.sessionContext.agentContext,
         context.sessionContext.sessionStorage!,
     );
