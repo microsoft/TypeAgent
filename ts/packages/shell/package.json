@@ -88,7 +88,7 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^37.4.0",
-    "electron-builder": "^26.7.0",
+    "electron-builder": "^26.3.1",
     "electron-vite": "^4.0.1",
     "less": "^4.2.0",
     "rimraf": "^6.0.1",
