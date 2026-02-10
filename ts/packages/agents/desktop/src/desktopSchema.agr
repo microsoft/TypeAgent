@@ -14,15 +14,43 @@
           | <NetworkSettings>
           | <BrightnessControl>
 
-// ===== Program Launch/Close =====
-@ <LaunchProgram> = launch $(program:wildcard) -> { actionName: "launchProgram", parameters: { name: $(program) } }
-                  | open $(program:wildcard) -> { actionName: "launchProgram", parameters: { name: $(program) } }
-                  | start $(program:wildcard) -> { actionName: "launchProgram", parameters: { name: $(program) } }
-                  | run $(program:wildcard) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+// ===== Known Programs (for completions and priority matching) =====
+// These are matched with higher priority than wildcards
+@ <KnownProgram> = chrome
+                 | word
+                 | excel
+                 | powerpoint
+                 | outlook
+                 | edge
+                 | visual studio code
+                 | visual studio
+                 | paint 3d
+                 | paint
+                 | notepad
+                 | calculator
+                 | file explorer
+                 | control panel
+                 | task manager
+                 | cmd
+                 | powershell
+                 | snipping tool
+                 | magnifier
+                 | spotify
+                 | m365 copilot
 
-@ <CloseProgram> = close $(program:wildcard) -> { actionName: "closeProgram", parameters: { name: $(program) } }
-                 | quit $(program:wildcard) -> { actionName: "closeProgram", parameters: { name: $(program) } }
-                 | exit $(program:wildcard) -> { actionName: "closeProgram", parameters: { name: $(program) } }
+// Program is either a known program or any wildcard text
+@ <Program> = <KnownProgram>
+            | $(name:wildcard) -> $(name)
+
+// ===== Program Launch/Close =====
+@ <LaunchProgram> = launch $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+                  | open $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+                  | start $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+                  | run $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+
+@ <CloseProgram> = close $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
+                 | quit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
+                 | exit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
 
 // ===== Window Management =====
 @ <WindowManagement> = <MaximizeWindow>
@@ -30,18 +58,19 @@
                      | <SwitchToWindow>
                      | <TileWindows>
 
-@ <MaximizeWindow> = maximize $(program:wildcard) -> { actionName: "maximize", parameters: { name: $(program) } }
-                   | make $(program:wildcard) full screen -> { actionName: "maximize", parameters: { name: $(program) } }
+@ <MaximizeWindow> = maximize $(program:<Program>) -> { actionName: "maximize", parameters: { name: $(program) } }
+                   | make $(program:<Program>) full screen -> { actionName: "maximize", parameters: { name: $(program) } }
 
-@ <MinimizeWindow> = minimize $(program:wildcard) -> { actionName: "minimize", parameters: { name: $(program) } }
-                   | hide $(program:wildcard) -> { actionName: "minimize", parameters: { name: $(program) } }
+@ <MinimizeWindow> = minimize $(program:<Program>) -> { actionName: "minimize", parameters: { name: $(program) } }
+                   | hide $(program:<Program>) -> { actionName: "minimize", parameters: { name: $(program) } }
 
-@ <SwitchToWindow> = switch to $(program:wildcard) -> { actionName: "switchTo", parameters: { name: $(program) } }
-                   | focus (on)? $(program:wildcard) -> { actionName: "switchTo", parameters: { name: $(program) } }
-                   | go to $(program:wildcard) -> { actionName: "switchTo", parameters: { name: $(program) } }
+@ <SwitchToWindow> = switch to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
+                   | focus (on)? $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
+                   | go to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
 
-@ <TileWindows> = tile $(left:wildcard) and $(right:wildcard) -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
-                | put $(left:wildcard) on (the)? left and $(right:wildcard) on (the)? right -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
+@ <TileWindows> = tile $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
+                | put $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
+                | tile $(left:<Program>) and $(right:<Program>) -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
 
 // ===== Volume Control =====
 @ <VolumeControl> = set volume to $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: $(level) } }
@@ -71,8 +100,8 @@
 // ===== Desktop Management =====
 @ <DesktopManagement> = create (new)? desktop -> { actionName: "createDesktop", parameters: { names: [] } }
                       | create desktop $(name:wildcard) -> { actionName: "createDesktop", parameters: { names: [$(name)] } }
-                      | move $(program:wildcard) to desktop $(id:number) -> { actionName: "moveWindowToDesktop", parameters: { name: $(program), desktopId: $(id) } }
-                      | pin $(program:wildcard) (to all desktops)? -> { actionName: "pinWindow", parameters: { name: $(program) } }
+                      | move $(program:<Program>) to desktop $(id:number) -> { actionName: "moveWindowToDesktop", parameters: { name: $(program), desktopId: $(id) } }
+                      | pin $(program:<Program>) (to all desktops)? -> { actionName: "pinWindow", parameters: { name: $(program) } }
                       | switch to desktop $(id:number) -> { actionName: "switchDesktop", parameters: { desktopId: $(id) } }
                       | next desktop -> { actionName: "nextDesktop", parameters: {} }
                       | previous desktop -> { actionName: "previousDesktop", parameters: {} }

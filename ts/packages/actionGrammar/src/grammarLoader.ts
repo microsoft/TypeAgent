@@ -5,6 +5,7 @@ import { compileGrammar, GrammarCompileError } from "./grammarCompiler.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
 import { getLineCol } from "./utils.js";
+import { normalizeGrammar } from "./nfaCompiler.js";
 
 // REVIEW: start symbol should be configurable
 const start = "Start";
@@ -51,10 +52,13 @@ export function loadGrammarRules(
     }
 
     if (result.errors.length === 0) {
+        // Normalize the grammar (converts passthrough and single-literal rules to explicit form)
+        // This ensures both completion-based and NFA-based matchers work correctly
+        let grammar = normalizeGrammar(result.grammar);
+
         // Add entity declarations to the grammar
-        const grammar = result.grammar;
         if (parseResult.entities.length > 0) {
-            grammar.entities = parseResult.entities;
+            grammar = { ...grammar, entities: parseResult.entities };
         }
         return grammar;
     }

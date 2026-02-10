@@ -218,11 +218,28 @@ function createGrammarRule(
         }
     }
 
+    // Determine if this rule produces a value:
+    // 1. It has an explicit value expression (value !== undefined)
+    // 2. It has exactly one variable (implicit variable value)
+    // 3. It has exactly one non-empty string literal (NFA normalization will add -> "literal")
+    // 4. It has exactly one rule reference without variable (passthrough - NFA normalization will add capture)
+    const isSingleLiteral =
+        parts.length === 1 &&
+        parts[0].type === "string" &&
+        parts[0].value.length > 0;
+
+    const isPassthrough =
+        parts.length === 1 && parts[0].type === "rules" && !parts[0].variable;
+
     return {
         grammarRule: {
             parts,
             value,
         },
-        hasValue: value !== undefined || variableCount === 1,
+        hasValue:
+            value !== undefined ||
+            variableCount === 1 ||
+            isSingleLiteral ||
+            isPassthrough,
     };
 }
