@@ -16,7 +16,6 @@ export type LocalPlayerActions =
     | SetVolumeAction
     | ChangeVolumeAction
     | MuteAction
-    | UnmuteAction
     | ListFilesAction
     | SearchFilesAction
     | AddToQueueAction
@@ -122,14 +121,13 @@ export interface ChangeVolumeAction {
     };
 }
 
-// Mute audio
+// Mute or unmute audio
 export interface MuteAction {
     actionName: "mute";
-}
-
-// Unmute audio
-export interface UnmuteAction {
-    actionName: "unmute";
+    parameters: {
+        // true to mute, false to unmute
+        isMuted: boolean;
+    };
 }
 
 // List audio files in the music folder or a specified folder

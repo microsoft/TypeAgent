@@ -8,6 +8,7 @@ import {
     ActionContext,
     AppAgentEvent,
     TypeAgentAction,
+    Storage,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromHtmlDisplay,
@@ -23,6 +24,38 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:localPlayer");
 
+export const SETTINGS_FILE = "localPlayerSettings.json";
+
+export interface LocalPlayerSettings {
+    musicFolder?: string;
+}
+
+export async function loadSettings(
+    storage: Storage,
+): Promise<LocalPlayerSettings> {
+    try {
+        if (await storage.exists(SETTINGS_FILE)) {
+            const data = await storage.read(SETTINGS_FILE, "utf8");
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        debug(`Failed to load settings: ${e}`);
+    }
+    return {};
+}
+
+export async function saveSettings(
+    storage: Storage,
+    settings: LocalPlayerSettings,
+): Promise<void> {
+    try {
+        await storage.write(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+        debug(`Settings saved`);
+    } catch (e) {
+        debug(`Failed to save settings: ${e}`);
+    }
+}
+
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeLocalPlayerContext,
@@ -34,11 +67,13 @@ export function instantiate(): AppAgent {
 
 export type LocalPlayerActionContext = {
     playerService: LocalPlayerService | undefined;
+    storage: Storage | undefined;
 };
 
 async function initializeLocalPlayerContext(): Promise<LocalPlayerActionContext> {
     return {
         playerService: undefined,
+        storage: undefined,
     };
 }
 
@@ -52,6 +87,21 @@ async function updateLocalPlayerContext(
         }
         try {
             context.agentContext.playerService = getLocalPlayerService();
+
+            // Load persisted settings if sessionStorage is available
+            if (context.sessionStorage) {
+                context.agentContext.storage = context.sessionStorage;
+                const settings = await loadSettings(context.sessionStorage);
+                if (settings.musicFolder) {
+                    context.agentContext.playerService.setMusicFolder(
+                        settings.musicFolder,
+                    );
+                    debug(
+                        `Loaded music folder from settings: ${settings.musicFolder}`,
+                    );
+                }
+            }
+
             const musicFolder =
                 context.agentContext.playerService.getMusicFolder();
             const message = `Local player enabled. Music folder: ${musicFolder}`;
@@ -67,6 +117,7 @@ async function updateLocalPlayerContext(
             context.agentContext.playerService.stop();
             context.agentContext.playerService = undefined;
         }
+        context.agentContext.storage = undefined;
     }
 }
 
@@ -137,10 +188,7 @@ async function executeLocalPlayerAction(
                 );
 
             case "mute":
-                return handleMute(playerService);
-
-            case "unmute":
-                return handleUnmute(playerService);
+                return handleMute(playerService, action.parameters.isMuted);
 
             case "listFiles":
                 return handleListFiles(
@@ -170,6 +218,7 @@ async function executeLocalPlayerAction(
                 return handleSetMusicFolder(
                     playerService,
                     action.parameters.folderPath,
+                    context.sessionContext.agentContext.storage,
                 );
 
             case "showMusicFolder":
@@ -320,14 +369,14 @@ function handleChangeVolume(service: LocalPlayerService, amount: number) {
     );
 }
 
-function handleMute(service: LocalPlayerService) {
-    service.mute();
-    return createActionResultFromHtmlDisplay("<p>🔇 Muted</p>");
-}
-
-function handleUnmute(service: LocalPlayerService) {
-    service.unmute();
-    return createActionResultFromHtmlDisplay("<p>🔊 Unmuted</p>");
+function handleMute(service: LocalPlayerService, isMuted: boolean) {
+    if (isMuted) {
+        service.mute();
+        return createActionResultFromHtmlDisplay("<p>🔇 Muted</p>");
+    } else {
+        service.unmute();
+        return createActionResultFromHtmlDisplay("<p>🔊 Unmuted</p>");
+    }
 }
 
 function handleListFiles(service: LocalPlayerService, folderPath?: string) {
@@ -409,9 +458,19 @@ function handleShowQueue(service: LocalPlayerService) {
     return createActionResultFromHtmlDisplay(html);
 }
 
-function handleSetMusicFolder(service: LocalPlayerService, folderPath: string) {
+async function handleSetMusicFolder(
+    service: LocalPlayerService,
+    folderPath: string,
+    storage: Storage | undefined,
+) {
     const success = service.setMusicFolder(folderPath);
     if (success) {
+        // Persist the music folder setting
+        if (storage) {
+            const settings = await loadSettings(storage);
+            settings.musicFolder = folderPath;
+            await saveSettings(storage, settings);
+        }
         return createActionResultFromHtmlDisplay(
             `<p>📁 Music folder set to: <strong>${folderPath}</strong></p>`,
         );

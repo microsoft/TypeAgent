@@ -52,18 +52,20 @@
 
 @ <VolumeCommand> = <VolumeUp> | <VolumeDown> | <SetVolume>
 
-@ <VolumeUp> = (turn up | increase | raise) (the)? volume
+@ <LocalPlayerPrefix> = (local player | local music player | music player)?
+
+@ <VolumeUp> = <LocalPlayerPrefix> (turn up | increase | raise) (the)? volume
     -> { actionName: "changeVolume", parameters: { amount: 10 } }
 
-@ <VolumeDown> = (turn down | decrease | lower) (the)? volume
+@ <VolumeDown> = <LocalPlayerPrefix> (turn down | decrease | lower) (the)? volume
     -> { actionName: "changeVolume", parameters: { amount: -10 } }
 
-@ <SetVolume> = set volume (to)? $(n:number) (percent)?
+@ <SetVolume> = <LocalPlayerPrefix> set volume (to)? $(n:number) (percent)?
     -> { actionName: "setVolume", parameters: { level: $(n) } }
 
-@ <Mute> = mute (the)? (music | sound | audio)?   ->  { actionName: "mute" }
+@ <Mute> = mute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: true } }
 
-@ <Unmute> = unmute (the)? (music | sound | audio)?   ->  { actionName: "unmute" }
+@ <Unmute> = unmute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: false } }
 
 @ <ShowQueue> = (show | list | display) (the)? queue   ->  { actionName: "showQueue" }
 

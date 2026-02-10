@@ -120,16 +120,8 @@ export class LocalPlayerService {
         );
     }
 
-    private listFilesRecursive(
-        folder: string,
-        maxDepth: number = 3,
-        currentDepth: number = 0,
-    ): Track[] {
+    private listFilesRecursive(folder: string): Track[] {
         const tracks: Track[] = [];
-
-        if (currentDepth >= maxDepth) {
-            return tracks;
-        }
 
         try {
             const entries = fs.readdirSync(folder, { withFileTypes: true });
@@ -138,13 +130,7 @@ export class LocalPlayerService {
                 const fullPath = path.join(folder, entry.name);
 
                 if (entry.isDirectory()) {
-                    tracks.push(
-                        ...this.listFilesRecursive(
-                            fullPath,
-                            maxDepth,
-                            currentDepth + 1,
-                        ),
-                    );
+                    tracks.push(...this.listFilesRecursive(fullPath));
                 } else if (entry.isFile()) {
                     const ext = path.extname(entry.name).toLowerCase();
                     if (AUDIO_EXTENSIONS.includes(ext)) {

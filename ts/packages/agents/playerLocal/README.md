@@ -2,6 +2,8 @@
 
 A TypeAgent for playing local audio files without requiring any external service like Spotify.
 
+> **Note:** This agent's commands may collide with the `player` agent (Spotify). It is recommended to enable only one at a time. If you have both enabled, be explicit in your requests by saying "local player" or "music player" for this agent, or "Spotify" for the player agent, otherwise your intent may be routed to the wrong service.
+
 ## Features
 
 - **Play local audio files** - MP3, WAV, OGG, FLAC, M4A, AAC, WMA
