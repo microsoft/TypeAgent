@@ -53,3 +53,6 @@
     show seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: true } }
   | hide seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
   | display seconds in (system)? clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: true } }
+  | show only hours and minutes -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
+  | turn off seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
+  | disable seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
