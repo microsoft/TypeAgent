@@ -36,16 +36,20 @@ Run the application and send JSON commands via stdin:
 
 ### Command Reference
 
+#### Core Commands
+
 | Command | Parameter | Description |
 |---------|-----------|-------------|
 | `applyTheme` | Theme name | Applies a Windows theme |
 | `closeProgram` | Application name | Closes an application |
-| `connectWifi` | SSID | Connects to a Wi-Fi network by SSID |
+| `connectWifi` | `{"ssid": "name", "password": "pass"}` | Connects to a Wi-Fi network |
 | `createDesktop` | JSON array of names | Creates one or more virtual desktops |
-| `disconnectWifi` | | Disconnects from the current Wi-Fi network |
+| `disconnectWifi` | (none) | Disconnects from the current Wi-Fi network |
 | `launchProgram` | Application name | Opens an application (or raises if already running) |
 | `listAppNames` | (none) | Outputs installed applications as JSON |
+| `listResolutions` | (none) | Outputs available display resolutions as JSON |
 | `listThemes` | (none) | Outputs installed themes as JSON |
+| `listWifiNetworks` | (none) | Lists available Wi-Fi networks as JSON |
 | `maximize` | Application name | Maximizes the application window |
 | `minimize` | Application name | Minimizes the application window |
 | `moveWindowToDesktop` | `{"process": "app", "desktop": "name"}` | Moves a window to a specific virtual desktop |
@@ -55,16 +59,136 @@ Run the application and send JSON commands via stdin:
 | `previousDesktop` | (none) | Switches to the previous virtual desktop |
 | `quit` | (none) | Exits the application |
 | `restoreVolume` | (none) | Restores previously saved volume level |
-| `setAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
-| `setTextSize` | `100-225` | Sets system text scaling percentage |
 | `setScreenResolution` | `"WIDTHxHEIGHT"` or `{"width": W, "height": H}` | Sets the display resolution |
-| `listResolutions` | (none) | Outputs available display resolutions as JSON |
+| `setTextSize` | `100-225` | Sets system text scaling percentage |
+| `setThemeMode` | `"light"`, `"dark"`, `"toggle"`, or boolean | Sets light/dark mode |
 | `setWallpaper` | File path | Sets the desktop wallpaper |
 | `switchDesktop` | Index or name | Switches to a virtual desktop by index or name |
 | `switchTo` | Application name | Brings application window to foreground |
 | `tile` | `"app1,app2"` | Tiles two applications side-by-side |
+| `toggleAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
 | `toggleNotifications` | (none) | Toggles the Windows notification center |
 | `volume` | `0-100` | Sets system volume percentage |
+
+#### Settings Commands
+
+##### Network Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `BluetoothToggle` | `true`/`false` | Toggles Bluetooth on/off |
+| `enableWifi` | `true`/`false` | Enables or disables Wi-Fi |
+| `enableMeteredConnections` | `true`/`false` | Enables or disables metered connections |
+
+##### Display Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `AdjustScreenBrightness` | value | Adjusts screen brightness |
+| `EnableBlueLightFilterSchedule` | `true`/`false` | Enables or disables blue light filter schedule |
+| `adjustColorTemperature` | value | Adjusts color temperature |
+| `DisplayScaling` | value | Sets display scaling |
+| `AdjustScreenOrientation` | value | Adjusts screen orientation |
+| `DisplayResolutionAndAspectRatio` | value | Sets display resolution and aspect ratio |
+| `RotationLock` | `true`/`false` | Enables or disables rotation lock |
+
+##### Personalization Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `SystemThemeMode` | value | Sets the system theme mode |
+| `EnableTransparency` | `true`/`false` | Enables or disables transparency effects |
+| `ApplyColorToTitleBar` | `true`/`false` | Applies accent color to title bars |
+| `HighContrastTheme` | value | Sets high contrast theme |
+
+##### Taskbar Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `AutoHideTaskbar` | `true`/`false` | Auto-hides the taskbar |
+| `TaskbarAlignment` | value | Sets taskbar alignment |
+| `TaskViewVisibility` | `true`/`false` | Shows or hides Task View button |
+| `ToggleWidgetsButtonVisibility` | `true`/`false` | Shows or hides Widgets button |
+| `ShowBadgesOnTaskbar` | `true`/`false` | Shows or hides badges on taskbar |
+| `DisplayTaskbarOnAllMonitors` | `true`/`false` | Displays taskbar on all monitors |
+| `DisplaySecondsInSystrayClock` | `true`/`false` | Shows seconds in system tray clock |
+
+##### Mouse Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `MouseCursorSpeed` | value | Sets mouse cursor speed |
+| `MouseWheelScrollLines` | value | Sets mouse wheel scroll lines |
+| `setPrimaryMouseButton` | value | Sets primary mouse button (left/right) |
+| `EnhancePointerPrecision` | `true`/`false` | Enables or disables pointer precision |
+| `AdjustMousePointerSize` | value | Adjusts mouse pointer size |
+| `mousePointerCustomization` | value | Customizes mouse pointer |
+
+##### Touchpad Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `EnableTouchPad` | `true`/`false` | Enables or disables touchpad |
+| `TouchpadCursorSpeed` | value | Sets touchpad cursor speed |
+
+##### Privacy Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `ManageMicrophoneAccess` | `true`/`false` | Manages microphone access |
+| `ManageCameraAccess` | `true`/`false` | Manages camera access |
+| `ManageLocationAccess` | `true`/`false` | Manages location access |
+
+##### Power Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `BatterySaverActivationLevel` | value | Sets battery saver activation level |
+| `setPowerModePluggedIn` | value | Sets power mode when plugged in |
+| `SetPowerModeOnBattery` | value | Sets power mode on battery |
+
+##### Gaming Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `enableGameMode` | `true`/`false` | Enables or disables game mode |
+
+##### Accessibility Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `EnableNarratorAction` | `true`/`false` | Enables or disables Narrator |
+| `EnableMagnifier` | `true`/`false` | Enables or disables Magnifier |
+| `enableStickyKeys` | `true`/`false` | Enables or disables Sticky Keys |
+| `EnableFilterKeysAction` | `true`/`false` | Enables or disables Filter Keys |
+| `MonoAudioToggle` | `true`/`false` | Toggles mono audio |
+
+##### File Explorer Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `ShowFileExtensions` | `true`/`false` | Shows or hides file extensions |
+| `ShowHiddenAndSystemFiles` | `true`/`false` | Shows or hides hidden and system files |
+
+##### Time & Region Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `AutomaticTimeSettingAction` | `true`/`false` | Enables or disables automatic time setting |
+| `AutomaticDSTAdjustment` | `true`/`false` | Enables or disables automatic DST adjustment |
+
+##### Focus Assist Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `EnableQuietHours` | `true`/`false` | Enables or disables quiet hours |
+
+##### Multi-Monitor Settings
+
+| Command | Parameter | Description |
+|---------|-----------|-------------|
+| `RememberWindowLocations` | `true`/`false` | Remembers window locations per monitor |
+| `MinimizeWindowsOnMonitorDisconnectAction` | `true`/`false` | Minimizes windows when monitor disconnects |
 
 ### Examples
 
@@ -86,6 +210,16 @@ Tile notepad on the left and calculator on the right of the screen:
 Apply the 'dark' Windows theme:
 ```json
 {"applyTheme": "dark"} 
+```
+
+Set dark mode:
+```json
+{"setThemeMode": "dark"}
+```
+
+Toggle between light and dark mode:
+```json
+{"setThemeMode": "toggle"}
 ```
 
 Mute the system audio:
@@ -116,6 +250,11 @@ Enable airplane mode:
 Disable airplane mode:
 ```json
 {"toggleAirplaneMode": false}
+```
+
+List available Wi-Fi networks:
+```json
+{"listWifiNetworks": true}
 ```
 
 Connect to a Wi-Fi network:
@@ -153,9 +292,9 @@ Set display resolution using JSON object:
 AutoShell recognizes these friendly names (case-insensitive):
 
 - `chrome`, `edge`, `microsoft edge`
-- `word`, `winword`, `excel`, `powerpoint`, `outlook`
+- `word`, `winword`, `excel`, `powerpoint`, `power point`, `outlook`
 - `visual studio`, `visual studio code`
-- `notepad`, `paint`, `calculator`
+- `notepad`, `paint`, `paint 3d`, `calculator`
 - `file explorer`, `control panel`, `task manager`
 - `cmd`, `powershell`
 - `snipping tool`, `magnifier`
@@ -170,6 +309,8 @@ The application is structured as a partial class across multiple files:
 - `AutoShell.cs` - Main logic, application management, audio control
 - `AutoShell_Themes.cs` - Windows theme management
 - `AutoShell_Win32.cs` - Win32 API P/Invoke declarations
+- `AutoShell_Settings.cs` - Windows settings management
+- `UIAutomation.cs` - UI Automation helpers
 
 ## License
 
