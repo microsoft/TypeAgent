@@ -1,0 +1,28 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Desktop Personalization Settings Grammar
+// Transparency, title bar colors, high contrast themes
+
+@ <Start> = <EnableTransparency>
+          | <ApplyColorToTitleBar>
+          | <HighContrastTheme>
+
+@ <EnableTransparency> =
+    enable transparency -> { actionName: "EnableTransparency", parameters: { enable: true } }
+  | disable transparency -> { actionName: "EnableTransparency", parameters: { enable: false } }
+  | turn on transparency (effects)? -> { actionName: "EnableTransparency", parameters: { enable: true } }
+  | turn off transparency (effects)? -> { actionName: "EnableTransparency", parameters: { enable: false } }
+
+@ <ApplyColorToTitleBar> =
+    apply color to title bar -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: true } }
+  | show accent color on title bars -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: true } }
+  | enable title bar color -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: true } }
+  | disable title bar color -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: false } }
+  | remove title bar color -> { actionName: "ApplyColorToTitleBar", parameters: { enableColor: false } }
+
+@ <HighContrastTheme> =
+    enable high contrast -> { actionName: "HighContrastTheme", parameters: {} }
+  | turn on high contrast -> { actionName: "HighContrastTheme", parameters: {} }
+  | open high contrast (settings)? -> { actionName: "HighContrastTheme", parameters: {} }
+  | use high contrast (theme)? -> { actionName: "HighContrastTheme", parameters: {} }
