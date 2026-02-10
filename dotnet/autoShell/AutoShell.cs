@@ -473,12 +473,19 @@ internal partial class AutoShell
             }
             // set the window positions using the shellRect and making sure the windows are visible
             int halfwidth = (desktopRect.Right - desktopRect.Left) / 2;
+            int height = desktopRect.Bottom - desktopRect.Top;
             IntPtr HWND_TOP = IntPtr.Zero;
             uint showWindow = 0x40;
-            SetWindowPos(hWnd1, HWND_TOP, desktopRect.Left, desktopRect.Top, halfwidth, desktopRect.Bottom, showWindow);
+
+            // Restore windows first (in case they're maximized - SetWindowPos won't work on maximized windows)
+            uint SW_RESTORE = 9;
+            ShowWindow(hWnd1, SW_RESTORE);
+            ShowWindow(hWnd2, SW_RESTORE);
+
+            SetWindowPos(hWnd1, HWND_TOP, desktopRect.Left, desktopRect.Top, halfwidth, height, showWindow);
             SetForegroundWindow(hWnd1);
             Interaction.AppActivate(pid1);
-            SetWindowPos(hWnd2, HWND_TOP, desktopRect.Left + halfwidth, desktopRect.Top, halfwidth, desktopRect.Bottom, showWindow);
+            SetWindowPos(hWnd2, HWND_TOP, desktopRect.Left + halfwidth, desktopRect.Top, halfwidth, height, showWindow);
             SetForegroundWindow(hWnd2);
             Interaction.AppActivate(pid2);
         }
