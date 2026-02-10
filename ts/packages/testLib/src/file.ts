@@ -48,7 +48,7 @@ export function readTestJsonFile(filePath: string): any {
 
 export function ensureDir(folderPath: string): string {
     if (!fs.existsSync(folderPath)) {
-        fs.promises.mkdir(folderPath, { recursive: true });
+        fs.mkdirSync(folderPath, { recursive: true });
     }
     return folderPath;
 }

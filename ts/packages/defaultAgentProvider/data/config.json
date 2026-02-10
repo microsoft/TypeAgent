@@ -3,6 +3,9 @@
     "player": {
       "name": "music"
     },
+    "localPlayer": {
+      "name": "music-local"
+    },
     "calendar": {
       "name": "calendar"
     },

@@ -1,0 +1,6 @@
+{
+  "schemaName": "LocalPlayerActions",
+  "fullSchemaType": "LocalPlayerActions",
+  "entityName": "LocalPlayerEntities",
+  "actionNamespace": "localPlayer"
+}
