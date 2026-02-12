@@ -7,7 +7,7 @@ import registerDebug from "debug";
 import escapeMatch from "regexp.escape";
 import {
     Grammar,
-    GrammarRule,
+    GrammarPart,
     RulesPart,
     StringPart,
     VarNumberPart,
@@ -50,25 +50,27 @@ type ValueIdNode = {
     prev?: ValueIdNode | undefined;
 };
 
-type NestedMatchState = {
+type ParentMatchState = {
     name: string; // For debugging
-    rule: GrammarRule;
+    parts: GrammarPart[];
+    value: ValueNode | undefined; // the value to be assigned after finishing the nested rule.
     partIndex: number; // the part index after the nested rule.
     variable: string | undefined;
-    valueIds: ValueIdNode | undefined;
-    nested: NestedMatchState | undefined;
+    valueIds: ValueIdNode | undefined | null; // null means we don't need any value
+    parent: ParentMatchState | undefined;
 };
 type MatchState = {
     // Current context
     name: string; // For debugging
-    rule: GrammarRule;
+    parts: GrammarPart[];
+    value: ValueNode | undefined; // the value to be assigned after finishing the current rule if the rule has only one part.
     partIndex: number;
-    valueIds?: ValueIdNode | undefined;
+    valueIds?: ValueIdNode | undefined | null; // null means we don't need any value
 
     // Match state
     nextValueId: number;
     values?: MatchedValueNode | undefined;
-    nested?: NestedMatchState | undefined;
+    parent?: ParentMatchState | undefined;
 
     nestedLevel: number; // for debugging
 
@@ -76,7 +78,7 @@ type MatchState = {
     pendingWildcard?:
         | {
               readonly start: number;
-              readonly valueId: number;
+              readonly valueId: number | undefined;
           }
         | undefined;
 };
@@ -119,11 +121,14 @@ function createMatchedValue(
         wildcardPropertyNames.push(propertyName);
     }
 
-    let valueNode: MatchedValueNode | undefined = values;
-    while (valueNode !== undefined && valueNode.valueId !== valueId) {
-        valueNode = valueNode.prev;
+    let matchedValueNode: MatchedValueNode | undefined = values;
+    while (
+        matchedValueNode !== undefined &&
+        matchedValueNode.valueId !== valueId
+    ) {
+        matchedValueNode = matchedValueNode.prev;
     }
-    if (valueNode === undefined) {
+    if (matchedValueNode === undefined) {
         if (partialValueId !== undefined) {
             // Partial match, missing variable is ok
             return undefined;
@@ -133,7 +138,7 @@ function createMatchedValue(
         );
     }
 
-    const value = valueNode.value;
+    const value = matchedValueNode.value;
     if (typeof value === "object") {
         return createValue(
             value.node,
@@ -152,7 +157,7 @@ function createMatchedValue(
             stat.matchedValueCount++;
         }
 
-        if (valueNode.wildcard) {
+        if (matchedValueNode.wildcard) {
             if (typeof value !== "string") {
                 throw new Error(
                     `Internal error: Wildcard has non-string value for variable: ${name} id: ${valueId} property: ${propertyName}`,
@@ -243,7 +248,7 @@ function createValue(
                     return undefined;
                 }
                 throw new Error(
-                    `Internal error: No value for variable '${node.name}. Values: ${JSON.stringify(valueIds)}'`,
+                    `Internal error: No value for variable '${node.name}'. Values: ${JSON.stringify(valueIds)}'`,
                 );
             }
 
@@ -290,7 +295,9 @@ function captureWildcard(
 
     // Update current state
     state.pendingWildcard = undefined;
-    addValueWithId(state, valueId, wildcardStr, true);
+    if (valueId !== undefined) {
+        addValueWithId(state, valueId, wildcardStr, true);
+    }
     return true;
 }
 
@@ -299,8 +306,13 @@ function addValueId(
     name: string | undefined,
     wildcardTypeName?: string,
 ) {
+    const valueIds = state.valueIds;
+    if (valueIds === null) {
+        // No need to track values
+        return;
+    }
     const valueId = state.nextValueId++;
-    state.valueIds = { name, valueId, prev: state.valueIds, wildcardTypeName };
+    state.valueIds = { name, valueId, prev: valueIds, wildcardTypeName };
     return valueId;
 }
 
@@ -318,13 +330,11 @@ function addValueWithId(
     };
 }
 
-function addValue(
-    state: MatchState,
-    name: string | undefined,
-    matchedValue: MatchedValue,
-) {
+function addValue(state: MatchState, name: string, matchedValue: MatchedValue) {
     const valueId = addValueId(state, name);
-    addValueWithId(state, valueId, matchedValue, false);
+    if (valueId !== undefined) {
+        addValueWithId(state, valueId, matchedValue, false);
+    }
 }
 
 function nextNonSeparatorIndex(request: string, index: number) {
@@ -338,8 +348,8 @@ function nextNonSeparatorIndex(request: string, index: number) {
     return match === null ? index : index + match[0].length;
 }
 
-// Finalize the state to make capture the last wildcard if any
-// and make sure there are any trailing un-matched non-separator characters.
+// Finalize the state to capture the last wildcard if any
+// and make sure to reject any trailing un-matched non-separator characters.
 function finalizeState(state: MatchState, request: string) {
     const pendingWildcard = state.pendingWildcard;
     if (pendingWildcard !== undefined) {
@@ -353,7 +363,9 @@ function finalizeState(state: MatchState, request: string) {
         }
         state.pendingWildcard = undefined;
         state.index = request.length;
-        addValueWithId(state, pendingWildcard.valueId, value, true);
+        if (pendingWildcard.valueId !== undefined) {
+            addValueWithId(state, pendingWildcard.valueId, value, true);
+        }
     }
     if (state.index < request.length) {
         // Detect trailing separators
@@ -378,6 +390,12 @@ function finalizeMatch(
     request: string,
     results: GrammarMatchResult[],
 ) {
+    if (state.valueIds === null) {
+        throw new Error(
+            "Internal Error: state for finalizeMatch should not have valueIds be null",
+        );
+    }
+
     if (!finalizeState(state, request)) {
         return;
     }
@@ -395,7 +413,7 @@ function finalizeMatch(
     };
 
     matchResult.match = createValue(
-        state.rule.value,
+        state.value,
         state.valueIds,
         state.values,
         "",
@@ -407,32 +425,52 @@ function finalizeMatch(
 }
 
 function finalizeNestedRule(state: MatchState, partial: boolean = false) {
-    const nested = state.nested;
-    if (nested !== undefined) {
+    const parent = state.parent;
+    if (parent !== undefined) {
         debugMatch(state, `finished nested`);
 
         // Reuse state
-        const { valueIds, rule } = state;
+        const { valueIds, value: value } = state;
 
         state.nestedLevel--;
-        state.nested = nested.nested;
-        state.valueIds = nested.valueIds;
-        if (valueIds === undefined && rule.value === undefined) {
-            if (nested.variable && !partial) {
-                // Should be detected by the grammar compiler
-                throw new Error(
-                    `Internal error: No value assign to variable '${nested.variable}'`,
-                );
+        state.parent = parent.parent;
+
+        if (
+            // Only process values if the parent rule is tracking values
+            parent.valueIds !== null &&
+            (parent.variable !== undefined ||
+                parent.value !== undefined ||
+                parent.parts.length !== 1)
+        ) {
+            state.value = parent.value;
+            state.valueIds = parent.valueIds;
+            if (parent.variable !== undefined) {
+                if (valueIds === null) {
+                    throw new Error(
+                        "Internal Error: should not have valueIds be null when variable is defined",
+                    );
+                }
+
+                if (valueIds === undefined && value === undefined) {
+                    // Variable should have a value
+                    if (!partial) {
+                        // Should be detected by the grammar compiler
+                        throw new Error(
+                            `Internal error: No value assign to variable '${parent.variable}'`,
+                        );
+                    }
+                } else {
+                    addValue(state, parent.variable, {
+                        node: value,
+                        valueIds,
+                    });
+                }
             }
-        } else {
-            addValue(state, nested.variable, {
-                node: rule.value,
-                valueIds,
-            });
         }
-        state.name = nested.name;
-        state.rule = nested.rule;
-        state.partIndex = nested.partIndex;
+
+        state.name = parent.name;
+        state.parts = parent.parts;
+        state.partIndex = parent.partIndex;
         return true;
     }
 
@@ -616,8 +654,8 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
 
 function matchState(state: MatchState, request: string, pending: MatchState[]) {
     while (true) {
-        const { rule, partIndex } = state;
-        if (partIndex >= rule.parts.length) {
+        const { parts, partIndex } = state;
+        if (partIndex >= parts.length) {
             if (!finalizeNestedRule(state)) {
                 // Finish matching this state.
                 return true;
@@ -625,7 +663,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
             continue;
         }
 
-        const part = rule.parts[partIndex];
+        const part = parts[partIndex];
         debugMatch(
             state,
             `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
@@ -661,20 +699,33 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
             case "rules": {
                 const rules = part.rules;
                 debugMatch(state, `expanding ${rules.length} rules`);
-                const nested: NestedMatchState = {
+
+                // Save the current state to be restored after finishing the nested rule.
+                const parent: ParentMatchState = {
                     name: state.name,
                     variable: part.variable,
-                    rule: state.rule,
+                    parts: state.parts,
+                    value: state.value,
                     partIndex: state.partIndex + 1,
                     valueIds: state.valueIds,
-                    nested: state.nested,
+                    parent: state.parent,
                 };
+
+                // The nested rule needs to track values if the current rule is tracking value AND
+                // - the current part has variable
+                // - the current rule has not explicit value and only has one part (default)
+                const requireValue =
+                    state.valueIds !== null &&
+                    (part.variable !== undefined ||
+                        (state.value === undefined && parts.length === 1));
+
                 // Update the current state to consider the first nested rule.
                 state.name = getNestedStateName(state, part, 0);
-                state.rule = rules[0];
+                state.parts = rules[0].parts;
+                state.value = rules[0].value;
                 state.partIndex = 0;
-                state.valueIds = undefined;
-                state.nested = nested;
+                state.valueIds = requireValue ? undefined : null;
+                state.parent = parent;
                 state.nestedLevel++;
 
                 // queue up the other rules (backwards to search in the original order)
@@ -682,7 +733,8 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                     pending.push({
                         ...state,
                         name: getNestedStateName(state, part, i),
-                        rule: rules[i],
+                        parts: rules[i].parts,
+                        value: rules[i].value,
                     });
                 }
                 // continue the loop (without incrementing partIndex)
@@ -697,7 +749,8 @@ function initialMatchState(grammar: Grammar): MatchState[] {
     return grammar.rules
         .map((r, i) => ({
             name: `<Start>[${i}]`,
-            rule: r,
+            parts: r.parts,
+            value: r.value,
             partIndex: 0,
             index: 0,
             nextValueId: 0,
@@ -721,11 +774,17 @@ function getGrammarCompletionProperty(
     valueId: number,
 ): GrammarCompletionProperty | undefined {
     const temp = { ...state };
+    if (temp.valueIds === null) {
+        // valueId would have been undefined
+        throw new Error(
+            "Internal Error: state for getGrammarCompletionProperty should not have valueIds be null",
+        );
+    }
     const wildcardPropertyNames: string[] = [];
 
     while (finalizeNestedRule(temp, true)) {}
     const match = createValue(
-        temp.rule.value,
+        temp.value,
         temp.valueIds,
         temp.values,
         "",
@@ -786,7 +845,7 @@ export function matchGrammarCompletion(
                 continue;
             }
             // Completion with the current part
-            const nextPart = state.rule.parts[state.partIndex];
+            const nextPart = state.parts[state.partIndex];
 
             debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
             if (nextPart.type === "string") {
@@ -799,7 +858,10 @@ export function matchGrammarCompletion(
             // We can't finalize the state because of empty pending wildcard.
             // Return a completion property.
             const pendingWildcard = state.pendingWildcard;
-            if (pendingWildcard !== undefined) {
+            if (
+                pendingWildcard !== undefined &&
+                pendingWildcard.valueId !== undefined
+            ) {
                 debugCompletion("Completing wildcard part");
                 const completionProperty = getGrammarCompletionProperty(
                     state,

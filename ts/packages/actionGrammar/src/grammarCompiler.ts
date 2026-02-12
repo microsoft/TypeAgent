@@ -199,6 +199,13 @@ export function compileGrammar(
 
     const grammar = { rules: createNamedGrammarRules(context, start) };
 
+    if (context.ruleDefMap.get(start)?.hasValue !== true) {
+        context.errors.push({
+            message: `Start rule '<${start}>' does not produce a value.`,
+            definition: start,
+        });
+    }
+
     for (const [name, record] of context.ruleDefMap.entries()) {
         if (record.grammarRules === undefined) {
             context.warnings.push({
@@ -454,6 +461,12 @@ function createGrammarRule(
     // Validate that all variables referenced in the value are defined
     if (value !== undefined) {
         validateVariableReferences(context, value, availableVariables);
+    } else if (variableCount > 1) {
+        // warn about unused variables if there are more than 1 (since 1 variable rules can be used for simple extraction without value)
+        context.warnings.push({
+            message: `Rule with multiple variables and no explicit value expression doesn't have an implicit value. Add an explicit value expression or remove unused variables.`,
+            definition: context.currentDefinition,
+        });
     }
 
     return {
@@ -461,6 +474,9 @@ function createGrammarRule(
             parts,
             value,
         },
-        hasValue: value !== undefined || variableCount === 1,
+        hasValue:
+            value !== undefined ||
+            variableCount === 1 ||
+            (variableCount === 0 && parts.length === 1),
     };
 }

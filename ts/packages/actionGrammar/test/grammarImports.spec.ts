@@ -279,7 +279,7 @@ describe("Grammar Imports with File Loading", () => {
                 "lib/utils.agr": `@<UtilRule> = utility -> "util"`,
                 "main.agr": `
                                 @import { UtilRule } from "./lib/utils.agr"
-                                @<Start> = <UtilRule> rule
+                                @<Start> = <UtilRule> rule -> "result"
                             `,
             };
             const grammar = loadGrammarRules(
@@ -292,7 +292,7 @@ describe("Grammar Imports with File Loading", () => {
             expect(grammar).toBeDefined();
 
             // Test match functionality
-            expect(testMatch(grammar, "utility rule")).toEqual(["util"]);
+            expect(testMatch(grammar, "utility rule")).toEqual(["result"]);
         });
 
         it("should resolve paths relative to each referencing file at multiple levels", () => {
