@@ -171,7 +171,10 @@ async function validatePlayerWildcardMatch(
         case "playGenre":
             return false;
         case "playPlaylist":
-            return await validatePlayList(action.parameters.name, clientContext);
+            return await validatePlayList(
+                action.parameters.name,
+                clientContext,
+            );
     }
     return true;
 }
@@ -441,10 +444,10 @@ async function getPlayerActionCompletion(
         case "playGenre":
             break;
         case "playPlaylist":
-        if (propertyName === "parameters.name") {
-            playlist = true;
-        }
-        break;
+            if (propertyName === "parameters.name") {
+                playlist = true;
+            }
+            break;
         case "getPlaylist":
         case "deletePlaylist":
         case "addCurrentTrackToPlaylist":

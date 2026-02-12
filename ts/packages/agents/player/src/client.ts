@@ -903,9 +903,7 @@ async function playPlaylistAction(
         if (searchPlaylists && searchPlaylists.length > 0) {
             for (const pl of searchPlaylists) {
                 if (
-                    pl.name
-                        .toLowerCase()
-                        .includes(playlistName.toLowerCase())
+                    pl.name.toLowerCase().includes(playlistName.toLowerCase())
                 ) {
                     playlist = pl;
                     await followPlaylist(clientContext.service, playlist.id);
