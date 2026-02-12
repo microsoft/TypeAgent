@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IClientContext, getClientContext, handleCall } from "../client.js";
+import {
+    IClientContext,
+    getClientContext,
+    handleCall,
+    searchForPlaylists,
+} from "../client.js";
 import chalk from "chalk";
 import {
     AppAgent,
@@ -165,6 +170,8 @@ async function validatePlayerWildcardMatch(
             );
         case "playGenre":
             return false;
+        case "playPlaylist":
+            return await validatePlayList(action.parameters.name, clientContext);
     }
     return true;
 }
@@ -321,6 +328,39 @@ async function validateArtist(artistName: string, context: IClientContext) {
     return false;
 }
 
+async function validatePlayList(
+    playlistName: string,
+    context: IClientContext,
+): Promise<boolean> {
+    // Check user data for an exact match first
+    const userData = context.userData;
+    if (userData && userData.data) {
+        if (userData.data.playlists === undefined) {
+            await getPlaylistsFromUserData(context.service, userData.data);
+        }
+        if (userData.data.playlists) {
+            const lowerCaseName = playlistName.toLowerCase();
+            if (
+                userData.data.playlists.some((pl) =>
+                    pl.name.toLowerCase().includes(lowerCaseName),
+                )
+            ) {
+                return true;
+            }
+        }
+    }
+
+    // Fall back to searching Spotify
+    const playlists = await searchForPlaylists(playlistName, context);
+    if (playlists && playlists.length > 0) {
+        const lowerCaseName = playlistName.toLowerCase();
+        return playlists.some((pl) =>
+            pl.name.toLowerCase().includes(lowerCaseName),
+        );
+    }
+    return false;
+}
+
 async function getPlayerDynamicDisplay(
     type: DisplayType,
     displayId: string,
@@ -375,6 +415,7 @@ async function getPlayerActionCompletion(
     let track = false;
     let artist = false;
     let album = false;
+    let playlist = false;
     switch (action.actionName) {
         case "playTrack":
             if (propertyName === "parameters.trackName") {
@@ -399,6 +440,11 @@ async function getPlayerActionCompletion(
             break;
         case "playGenre":
             break;
+        case "playPlaylist":
+        if (propertyName === "parameters.name") {
+            playlist = true;
+        }
+        break;
         case "getPlaylist":
         case "deletePlaylist":
         case "addCurrentTrackToPlaylist":

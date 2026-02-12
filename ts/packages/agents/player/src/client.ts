@@ -13,6 +13,7 @@ import {
     PlayGenreAction,
     PlayRandomAction,
     PlayTrackAction,
+    PlayPlaylistAction,
     SearchTracksAction,
     SearchForPlaylistsAction,
     GetFromCurrentPlaylistListAction,
@@ -878,6 +879,61 @@ async function playGenreAction(
     return playTrackCollection(collection, clientContext);
 }
 
+async function playPlaylistAction(
+    clientContext: IClientContext,
+    action: PlayPlaylistAction,
+): Promise<ActionResult> {
+    const playlistName = action.parameters.name;
+    if (!clientContext.userData) {
+        return createErrorActionResult("No user data found");
+    }
+    const playlists = await getPlaylistsFromUserData(
+        clientContext.service,
+        clientContext.userData.data,
+    );
+    let playlist = playlists?.find((pl) =>
+        pl.name.toLowerCase().includes(playlistName.toLowerCase()),
+    );
+    if (!playlist) {
+        // Look for playlist through search
+        const searchPlaylists = await searchForPlaylists(
+            playlistName,
+            clientContext,
+        );
+        if (searchPlaylists && searchPlaylists.length > 0) {
+            for (const pl of searchPlaylists) {
+                if (
+                    pl.name
+                        .toLowerCase()
+                        .includes(playlistName.toLowerCase())
+                ) {
+                    playlist = pl;
+                    await followPlaylist(clientContext.service, playlist.id);
+                    await updatePlaylists(
+                        clientContext.service,
+                        clientContext.userData!.data,
+                    );
+                    break;
+                }
+            }
+        }
+    }
+    if (playlist) {
+        const playlistResponse = await getPlaylistTracks(
+            clientContext.service,
+            playlist.id,
+        );
+        if (playlistResponse) {
+            const collection = new PlaylistTrackCollection(
+                playlist,
+                playlistResponse.items.map((item) => item.track!),
+            );
+            return playTrackCollection(collection, clientContext);
+        }
+    }
+    return createNotFoundActionResult(`playlist ${playlistName}`);
+}
+
 async function resumeActionCall(clientContext: IClientContext) {
     const state = await getSelectedDevicePlaybackState(clientContext);
     if (!state) {
@@ -974,6 +1030,8 @@ export async function handleCall(
             return playArtistAction(clientContext, action);
         case "playGenre":
             return playGenreAction(clientContext, action);
+        case "playPlaylist":
+            return playPlaylistAction(clientContext, action);
         case "status": {
             await printStatus(clientContext);
             return htmlStatus(clientContext);

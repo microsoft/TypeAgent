@@ -33,7 +33,8 @@ export type PlayerActions =
     | AddCurrentTrackToPlaylistAction
     | AddToPlaylistFromCurrentTrackListAction
     | AddSongsToPlaylistAction
-    | GetQueueAction;
+    | GetQueueAction
+    | PlayPlaylistAction;
 
 export type PlayerEntities = MusicDevice;
 export type MusicDevice = string;
@@ -206,6 +207,7 @@ export interface SearchForPlaylistsAction {
         query: string;
     };
 }
+
 // list all playlists
 export interface ListPlaylistsAction {
     actionName: "listPlaylists";
@@ -302,3 +304,13 @@ export interface AddSongsToPlaylistAction {
 export interface GetQueueAction {
     actionName: "getQueue";
 }
+
+// play the named play list
+export interface PlayPlaylistAction {
+    actionName: "playPlaylist";
+    parameters: {
+        // name of playlist to play
+        name: string;
+    };
+}
+
