@@ -27,6 +27,7 @@ internal partial class AutoShell
     static Hashtable s_friendlyNameToPath = [];
     static Hashtable s_friendlyNameToId = [];
     static double s_savedVolumePct = 0.0;
+    static SortedList<string, string[]> s_sortedList;
 
     static IServiceProvider10 s_shell;
     static IVirtualDesktopManager s_virtualDesktopManager;
@@ -43,39 +44,41 @@ internal partial class AutoShell
     {
         // get current user name
         string userName = Environment.UserName;
-        SortedList<string, string> sortedList = new SortedList<string, string>
+        // known appication, path to executable, any env var for working directory
+        s_sortedList = new SortedList<string, string[]>
         {
-            { "chrome", "chrome.exe" },
-            { "power point", "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" },
-            { "powerpoint", "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" },
-            { "word", "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" },
-            { "winword", "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" },
-            { "excel", "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE" },
-            { "outlook", "C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE" },
-            { "visual studio", "devenv.exe" },
-            { "visual studio code", "C:\\Users\\" + userName + "\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe" },
-            { "edge", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" },
-            { "microsoft edge", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" },
-            { "notepad", "C:\\Windows\\System32\\notepad.exe" },
-            { "paint", "mspaint.exe" },
-            { "calculator", "calc.exe" },
-            { "file explorer", "C:\\Windows\\explorer.exe" },
-            { "control panel", "C:\\Windows\\System32\\control.exe" },
-            { "task manager", "C:\\Windows\\System32\\Taskmgr.exe" },
-            { "cmd", "C:\\Windows\\System32\\cmd.exe" },
-            { "powershell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" },
-            { "snipping tool", "C:\\Windows\\System32\\SnippingTool.exe" },
-            { "magnifier", "C:\\Windows\\System32\\Magnify.exe" },
-            { "paint 3d", "C:\\Program Files\\WindowsApps\\Microsoft.MSPaint_10.1807.18022.0_x64__8wekyb3d8bbwe\\"},
-            { "m365 copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
-            { "copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
-            { "spotify", "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.279.427.0_x64__zpdnekdrzrea0\\spotify.exe" },
+            { "chrome", new[] { "chrome.exe" } },
+            { "power point", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" } },
+            { "powerpoint", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" } },
+            { "word", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" } },
+            { "winword", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" } },
+            { "excel", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE" } },
+            { "outlook", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE" } },
+            { "visual studio", new[] { "devenv.exe" } },
+            { "visual studio code", new[] { "C:\\Users\\" + userName + "\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe" } },
+            { "edge", new[] { "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" } },
+            { "microsoft edge", new[] { "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" } },
+            { "notepad", new[] { "C:\\Windows\\System32\\notepad.exe" } },
+            { "paint", new[] { "mspaint.exe" } },
+            { "calculator", new[] { "calc.exe" } },
+            { "file explorer", new[] { "C:\\Windows\\explorer.exe" } },
+            { "control panel", new[] { "C:\\Windows\\System32\\control.exe" } },
+            { "task manager", new[] { "C:\\Windows\\System32\\Taskmgr.exe" } },
+            { "cmd", new[] { "C:\\Windows\\System32\\cmd.exe" } },
+            { "powershell", new[] { "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" } },
+            { "snipping tool", new[] { "C:\\Windows\\System32\\SnippingTool.exe" } },
+            { "magnifier", new[] { "C:\\Windows\\System32\\Magnify.exe" } },
+            { "paint 3d", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MSPaint_10.1807.18022.0_x64__8wekyb3d8bbwe\\" } },
+            { "m365 copilot", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" } },
+            { "copilot", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" } },
+            { "spotify", new[] { "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.278.418.0_x64__zpdnekdrzrea0\\spotify.exe" } },
+            { "github copilot", new[] { $"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\\.copilot-cli\\0.0.395\\copilot.exe", "GITHUB_COPILOT_ROOT_DIR" } }
         };
 
         // add the entries to the hashtable
-        foreach (var kvp in sortedList)
+        foreach (var kvp in s_sortedList)
         {
-            s_friendlyNameToPath.Add(kvp.Key, kvp.Value);
+            s_friendlyNameToPath.Add(kvp.Key, kvp.Value[0]);
         }
 
         var installedApps = GetAllInstalledAppsIds();
@@ -542,14 +545,28 @@ internal partial class AutoShell
             string path = (string)s_friendlyNameToPath[friendlyName.ToLowerInvariant()];
             if (path != null)
             {
+                ProcessStartInfo psi = new ProcessStartInfo()
+                {
+                    FileName = path,
+                    UseShellExecute = true
+                };
+
+                // do we have a specific startup directory for this application?
+                if (s_sortedList.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1)
+                {
+                    psi.WorkingDirectory = Environment.ExpandEnvironmentVariables("%" + value[1] + "%") ?? string.Empty;
+                }
+
                 try
                 {
-                    Process.Start(path);
+                    Process.Start(psi);
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
+                    psi.FileName = friendlyName;
+
                     // alternate start method
-                    Process.Start(friendlyName);
+                    Process.Start(psi);
                 }
             }
             else
