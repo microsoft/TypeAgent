@@ -68,11 +68,7 @@ export {
 } from "./indexBuilder.js";
 
 // Storage (SQLite + JSON persistence)
-export {
-    ChunkStore,
-    saveIndexState,
-    loadIndexState,
-} from "./storage.js";
+export { ChunkStore, saveIndexState, loadIndexState } from "./storage.js";
 
 // Answer generation (RAG)
 export {

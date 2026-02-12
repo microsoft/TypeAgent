@@ -200,10 +200,7 @@ class EmailIndexCommandHandler implements CommandHandlerNoParams {
             throw new Error("Email provider not initialized");
         }
         if (!provider.isAuthenticated()) {
-            displayWarn(
-                "Please log in first with '@email login'",
-                context,
-            );
+            displayWarn("Please log in first with '@email login'", context);
             return;
         }
 
@@ -283,9 +280,7 @@ async function updateEmailContext(
             context.agentContext.emailProvider = provider;
             context.agentContext.providerType =
                 provider.providerName as EmailProviderType;
-            debug(
-                `Email provider initialized: ${provider.providerName}`,
-            );
+            debug(`Email provider initialized: ${provider.providerName}`);
 
             // If already authenticated (token loaded from disk), kick off
             // forward sync in background to pick up new emails
@@ -360,8 +355,7 @@ async function handleEmailAction(
                     action.parameters.bcc,
                     emailProvider,
                 );
-                bcc_addrs =
-                    await emailProvider.resolveUserEmails(expandedBcc);
+                bcc_addrs = await emailProvider.resolveUserEmails(expandedBcc);
             }
 
             let genContent: string = "";
@@ -393,10 +387,7 @@ async function handleEmailAction(
                 genContent.length > 0
                     ? genContent
                     : (action.parameters.body ?? "");
-            emailBody = await resolveBodyPlaceholders(
-                emailBody,
-                emailProvider,
-            );
+            emailBody = await resolveBodyPlaceholders(emailBody, emailProvider);
 
             debug(chalk.green("Handling sendEmail action ..."));
             res = await emailProvider.sendEmail(
@@ -519,9 +510,7 @@ async function handleForwardOrReplyAction(
 }
 
 function formatMessageSummary(msg: EmailMessage): string {
-    const from = msg.from
-        ? `${msg.from.name || msg.from.address}`
-        : "Unknown";
+    const from = msg.from ? `${msg.from.name || msg.from.address}` : "Unknown";
     const read = msg.isRead ? "" : " [UNREAD]";
     const date = msg.receivedDateTime
         ? new Date(msg.receivedDateTime).toLocaleDateString()
@@ -598,7 +587,6 @@ async function generateOnlineAnswer(
         userName = user.displayName || undefined;
     } catch {}
 
-
     // Build synthetic SearchResult with position-based scoring
     // (provider already ranks by relevance — first result is best)
     const scoredChunks: ScoredChunkResult[] = chunks.map((c, i) => ({
@@ -656,8 +644,7 @@ async function handleFindEmailAction(
             msgRef.senders,
             emailProvider,
         );
-        const resolved =
-            await emailProvider.resolveUserEmails(expandedSenders);
+        const resolved = await emailProvider.resolveUserEmails(expandedSenders);
         if (resolved.length > 0) {
             searchQuery.sender = resolved[0];
         }
@@ -715,7 +702,11 @@ async function handleFindEmailAction(
 
     // Content query: online RAG — convert emails to chunks and generate answer
     if (msgRef.content) {
-        const answer = await generateOnlineAnswer(msgRef.content, messages, emailProvider);
+        const answer = await generateOnlineAnswer(
+            msgRef.content,
+            messages,
+            emailProvider,
+        );
         if (answer && answer.chunksUsed > 0) {
             return answer.answer;
         }
@@ -737,9 +728,7 @@ async function handleFindEmailAction(
 /**
  * Create a progress callback that sends notifications via SessionContext.
  */
-function makeNotifyProgress(
-    ctx: EmailActionContext,
-): IndexProgressCallback {
+function makeNotifyProgress(ctx: EmailActionContext): IndexProgressCallback {
     return (message: string) => {
         debug("index progress: %s", message);
         ctx.sessionContext?.notify(
@@ -823,7 +812,11 @@ async function runBackfillBatch(ctx: EmailActionContext): Promise<void> {
     const onProgress = makeNotifyProgress(ctx);
 
     try {
-        await ctx.kpIndex.backfillBatch(ctx.emailProvider, undefined, onProgress);
+        await ctx.kpIndex.backfillBatch(
+            ctx.emailProvider,
+            undefined,
+            onProgress,
+        );
     } catch (e: any) {
         debug("Backfill batch failed: %s", e.message);
     }

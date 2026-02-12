@@ -152,9 +152,7 @@ async function enrichBatchAgentSdk(
                 break;
             } else {
                 const errors =
-                    "errors" in message
-                        ? (message as any).errors
-                        : undefined;
+                    "errors" in message ? (message as any).errors : undefined;
                 throw new Error(
                     `LLM enrichment failed: ${errors?.join(", ") || "Unknown error"}`,
                 );
@@ -186,7 +184,9 @@ async function enrichBatch(
         } catch (e: any) {
             const msg = e?.message || String(e);
             debug("aiclient batch failed, switching to agent SDK: %s", msg);
-            onProgress?.(`OpenAI API failed: ${msg.substring(0, 100)}. Falling back to agent SDK...`);
+            onProgress?.(
+                `OpenAI API failed: ${msg.substring(0, 100)}. Falling back to agent SDK...`,
+            );
             chatModelAvailable = false;
             chatModel = undefined;
         }
@@ -212,7 +212,9 @@ function parseEnrichmentResponse(
     // Find the array
     const arrayStart = jsonText.indexOf("[");
     if (arrayStart === -1) {
-        debug("No JSON array in LLM response, falling back to identity entries");
+        debug(
+            "No JSON array in LLM response, falling back to identity entries",
+        );
         return keywords.map(fallbackEntry);
     }
 
@@ -341,7 +343,12 @@ export async function enrichVocabulary(
     for (let i = 0; i < keywords.length; i += batchSize) {
         const batch = keywords.slice(i, i + batchSize);
         const batchNum = Math.floor(i / batchSize) + 1;
-        debug("Processing batch %d/%d (%d terms)", batchNum, totalBatches, batch.length);
+        debug(
+            "Processing batch %d/%d (%d terms)",
+            batchNum,
+            totalBatches,
+            batch.length,
+        );
         onProgress?.(
             `Enriching vocabulary: batch ${batchNum}/${totalBatches} (${keywords.length} terms)...`,
         );
@@ -357,7 +364,11 @@ export async function enrichVocabulary(
             );
         } catch (e: any) {
             const errMsg = e?.message || String(e);
-            debug("Batch %d failed, using fallback entries: %s", batchNum, errMsg);
+            debug(
+                "Batch %d failed, using fallback entries: %s",
+                batchNum,
+                errMsg,
+            );
             onProgress?.(
                 `Batch ${batchNum}/${totalBatches} FAILED: ${errMsg} (using fallback entries)`,
             );
@@ -378,7 +389,10 @@ export async function enrichVocabulary(
         if (e.entityType) withEntity++;
         if (e.lemma !== e.term) withLemmaChange++;
     }
-    const avgRelated = allEntries.length > 0 ? (totalRelated / allEntries.length).toFixed(1) : "0";
+    const avgRelated =
+        allEntries.length > 0
+            ? (totalRelated / allEntries.length).toFixed(1)
+            : "0";
 
     debug(
         "Enrichment complete: %d entries in %dms (lemmaChanged=%d, withRelated=%d, avgRelated=%s, withEntity=%d)",

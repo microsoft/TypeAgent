@@ -115,7 +115,11 @@ function createTestEmails(): TestEmail[] {
         // Thread 4: Conference planning
         {
             from: "carol.jones@contoso.com",
-            to: ["alice.chen@contoso.com", "bob.smith@contoso.com", "david.park@contoso.com"],
+            to: [
+                "alice.chen@contoso.com",
+                "bob.smith@contoso.com",
+                "david.park@contoso.com",
+            ],
             subject: "KubeCon EU 2025 - Who's Going?",
             body: "Hey everyone, KubeCon Europe is happening in London this April. I think we should send a few people from the Atlas team since we're investing heavily in Kubernetes. The early bird tickets are $800 each. Bob, you should definitely go since you're leading the infrastructure migration. David, the observability track might be relevant for the monitoring improvements you mentioned.",
             timestamp: "2025-01-09T11:00:00Z",
@@ -123,7 +127,11 @@ function createTestEmails(): TestEmail[] {
         },
         {
             from: "bob.smith@contoso.com",
-            to: ["carol.jones@contoso.com", "alice.chen@contoso.com", "david.park@contoso.com"],
+            to: [
+                "carol.jones@contoso.com",
+                "alice.chen@contoso.com",
+                "david.park@contoso.com",
+            ],
             subject: "Re: KubeCon EU 2025 - Who's Going?",
             body: "I'm in! I'd love to attend the service mesh workshop and the session on running PostgreSQL on Kubernetes. Also, Kelsey Hightower is giving the keynote — that alone is worth the trip. London in April should be nice too. David, want to share a hotel to save on costs?",
             timestamp: "2025-01-09T11:45:00Z",
@@ -331,15 +339,26 @@ async function main() {
         console.log(`Q: ${q}`);
         try {
             const plan = await generateQueryPlan(q, model);
-            console.log(`  Plan: ${JSON.stringify(plan, null, 2).split("\n").join("\n  ")}`);
+            console.log(
+                `  Plan: ${JSON.stringify(plan, null, 2).split("\n").join("\n  ")}`,
+            );
 
             const searchResult = engine.execute(plan);
-            console.log(`  Results: ${searchResult.chunks.length} chunks (considered ${searchResult.totalConsidered})`);
-            console.log(`  Matched terms: ${searchResult.matchedTerms.join(", ")}`);
+            console.log(
+                `  Results: ${searchResult.chunks.length} chunks (considered ${searchResult.totalConsidered})`,
+            );
+            console.log(
+                `  Matched terms: ${searchResult.matchedTerms.join(", ")}`,
+            );
 
-            if (searchResult.expandedTerms && searchResult.expandedTerms.size > 0) {
+            if (
+                searchResult.expandedTerms &&
+                searchResult.expandedTerms.size > 0
+            ) {
                 for (const [term, expanded] of searchResult.expandedTerms) {
-                    console.log(`  Expanded "${term}" → [${expanded.join(", ")}]`);
+                    console.log(
+                        `  Expanded "${term}" → [${expanded.join(", ")}]`,
+                    );
                 }
             }
 
@@ -347,7 +366,9 @@ async function main() {
             for (const chunk of searchResult.chunks.slice(0, 3)) {
                 const text = chunks[chunk.chunkId]?.text ?? "";
                 const preview = text.substring(0, 120).replace(/\n/g, " ");
-                console.log(`  [${chunk.chunkId}] score=${chunk.score.toFixed(2)} ${preview}...`);
+                console.log(
+                    `  [${chunk.chunkId}] score=${chunk.score.toFixed(2)} ${preview}...`,
+                );
             }
 
             // Generate grounded answer from top chunks
@@ -365,8 +386,12 @@ async function main() {
                     },
                     { model },
                 );
-                console.log(`  ${answerResult.answer.split("\n").join("\n  ")}`);
-                console.log(`  (${answerResult.chunksUsed} chunks, ${answerResult.charsUsed} chars)`);
+                console.log(
+                    `  ${answerResult.answer.split("\n").join("\n  ")}`,
+                );
+                console.log(
+                    `  (${answerResult.chunksUsed} chunks, ${answerResult.charsUsed} chars)`,
+                );
             }
         } catch (e: any) {
             console.log(`  Error: ${e.message}`);
@@ -398,7 +423,10 @@ async function main() {
                 console.log(`Results: ${searchResult.chunks.length} chunks`);
                 console.log(`Matched: ${searchResult.matchedTerms.join(", ")}`);
 
-                if (searchResult.expandedTerms && searchResult.expandedTerms.size > 0) {
+                if (
+                    searchResult.expandedTerms &&
+                    searchResult.expandedTerms.size > 0
+                ) {
                     for (const [term, expanded] of searchResult.expandedTerms) {
                         console.log(`  "${term}" → [${expanded.join(", ")}]`);
                     }
@@ -407,9 +435,12 @@ async function main() {
                 for (const chunk of searchResult.chunks.slice(0, 5)) {
                     const text = chunks[chunk.chunkId]?.text ?? "";
                     const lines = text.split("\n");
-                    const subject = lines.find((l) => l.startsWith("Subject:")) ?? "";
+                    const subject =
+                        lines.find((l) => l.startsWith("Subject:")) ?? "";
                     const from = lines.find((l) => l.startsWith("From:")) ?? "";
-                    console.log(`  [${chunk.chunkId}] score=${chunk.score.toFixed(2)} ${from} | ${subject}`);
+                    console.log(
+                        `  [${chunk.chunkId}] score=${chunk.score.toFixed(2)} ${from} | ${subject}`,
+                    );
                 }
 
                 // Generate answer
@@ -428,7 +459,9 @@ async function main() {
                         { model },
                     );
                     console.log(answerResult.answer);
-                    console.log(`(${answerResult.chunksUsed} chunks, ${answerResult.charsUsed} chars)`);
+                    console.log(
+                        `(${answerResult.chunksUsed} chunks, ${answerResult.charsUsed} chars)`,
+                    );
                 }
             } catch (e: any) {
                 console.log(`Error: ${e.message}`);

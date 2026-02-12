@@ -332,9 +332,7 @@ export class EmailKpIndex {
 
         // Filter out emails we've already indexed (by message ID)
         const knownIds = this.getKnownMessageIds();
-        const newMessages = messages.filter(
-            (m) => m.id && !knownIds.has(m.id),
-        );
+        const newMessages = messages.filter((m) => m.id && !knownIds.has(m.id));
 
         if (newMessages.length === 0) {
             debug("absorbEmails: no new emails to index");
@@ -504,13 +502,21 @@ export class EmailKpIndex {
         const fetchMs = Date.now() - start;
 
         if (!messages || messages.length === 0) {
-            onProgress?.(`No new emails to index (${(fetchMs / 1000).toFixed(1)}s).`);
+            onProgress?.(
+                `No new emails to index (${(fetchMs / 1000).toFixed(1)}s).`,
+            );
             debug("syncForward: no new emails (%dms)", fetchMs);
             return undefined;
         }
 
-        onProgress?.(`Fetched ${messages.length} new email(s) in ${(fetchMs / 1000).toFixed(1)}s. Indexing...`);
-        debug("syncForward: %d new messages (%dms fetch)", messages.length, fetchMs);
+        onProgress?.(
+            `Fetched ${messages.length} new email(s) in ${(fetchMs / 1000).toFixed(1)}s. Indexing...`,
+        );
+        debug(
+            "syncForward: %d new messages (%dms fetch)",
+            messages.length,
+            fetchMs,
+        );
 
         const stats = await this.absorbEmails(messages);
         const totalMs = Date.now() - start;
@@ -520,7 +526,9 @@ export class EmailKpIndex {
                 `Indexed ${stats.newChunkCount} new email chunk(s) in ${(totalMs / 1000).toFixed(1)}s.`,
             );
         } else {
-            onProgress?.(`No new content to index (all duplicates, ${(totalMs / 1000).toFixed(1)}s).`);
+            onProgress?.(
+                `No new content to index (all duplicates, ${(totalMs / 1000).toFixed(1)}s).`,
+            );
         }
 
         return stats;
@@ -550,7 +558,10 @@ export class EmailKpIndex {
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - MAX_BACKFILL_AGE_DAYS);
             if (new Date(this.oldestIndexed) < cutoff) {
-                debug("backfillBatch: hit age limit (%d days)", MAX_BACKFILL_AGE_DAYS);
+                debug(
+                    "backfillBatch: hit age limit (%d days)",
+                    MAX_BACKFILL_AGE_DAYS,
+                );
                 onProgress?.("Backfill complete (age limit reached).");
                 return undefined;
             }
@@ -570,13 +581,21 @@ export class EmailKpIndex {
         const fetchMs = Date.now() - start;
 
         if (!messages || messages.length === 0) {
-            onProgress?.(`No older emails found. Backfill complete (${(fetchMs / 1000).toFixed(1)}s).`);
+            onProgress?.(
+                `No older emails found. Backfill complete (${(fetchMs / 1000).toFixed(1)}s).`,
+            );
             debug("backfillBatch: no older messages (%dms)", fetchMs);
             return undefined;
         }
 
-        onProgress?.(`Fetched ${messages.length} older email(s) in ${(fetchMs / 1000).toFixed(1)}s. Indexing...`);
-        debug("backfillBatch: %d older messages (%dms fetch)", messages.length, fetchMs);
+        onProgress?.(
+            `Fetched ${messages.length} older email(s) in ${(fetchMs / 1000).toFixed(1)}s. Indexing...`,
+        );
+        debug(
+            "backfillBatch: %d older messages (%dms fetch)",
+            messages.length,
+            fetchMs,
+        );
 
         const stats = await this.absorbEmails(messages);
         const totalMs = Date.now() - start;

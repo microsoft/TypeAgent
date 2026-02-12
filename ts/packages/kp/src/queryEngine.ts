@@ -53,9 +53,7 @@ export class QueryEngine {
         // Step 2: Time range / group filtering
         let groupCandidates: Set<number> | undefined;
         if (plan.timeRange) {
-            const groups = this.groupIndex.getGroupsInTimeRange(
-                plan.timeRange,
-            );
+            const groups = this.groupIndex.getGroupsInTimeRange(plan.timeRange);
             if (groups.length > 0) {
                 groupCandidates = this.groupIndex.getChunkIdsForGroups(
                     groups.map((g) => g.groupId),
@@ -71,16 +69,12 @@ export class QueryEngine {
             for (const gf of plan.groupFilters) {
                 let groups = this.groupIndex.getAllGroups();
                 if (gf.groupType) {
-                    groups = groups.filter(
-                        (g) => g.groupType === gf.groupType,
-                    );
+                    groups = groups.filter((g) => g.groupType === gf.groupType);
                 }
                 if (gf.label) {
                     const sub = gf.label.toLowerCase();
                     groups = groups.filter(
-                        (g) =>
-                            g.label &&
-                            g.label.toLowerCase().includes(sub),
+                        (g) => g.label && g.label.toLowerCase().includes(sub),
                     );
                 }
                 if (groups.length > 0) {
@@ -221,9 +215,7 @@ export class QueryEngine {
         };
     }
 
-    private applyMetadataFilters(
-        filters: MetadataFilter[],
-    ): Set<number> {
+    private applyMetadataFilters(filters: MetadataFilter[]): Set<number> {
         let result: Set<number> | undefined;
 
         for (const filter of filters) {

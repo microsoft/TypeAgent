@@ -146,13 +146,7 @@ const STOPWORDS = new Set([
 ]);
 
 /** Words excluded from proper noun detection */
-const EXCLUDED_PROPER = new Set([
-    "I",
-    "I'd",
-    "I'll",
-    "I'm",
-    "I've",
-]);
+const EXCLUDED_PROPER = new Set(["I", "I'd", "I'll", "I'm", "I've"]);
 
 export interface ExtractedKeyword {
     /** The keyword or phrase */

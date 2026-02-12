@@ -18,10 +18,7 @@
 
 import { TextChunk, ChunkGroup } from "./types.js";
 import { InvertedIndex } from "./invertedIndex.js";
-import {
-    extractKeywords,
-    ExtractedKeyword,
-} from "./keywordExtractor.js";
+import { extractKeywords, ExtractedKeyword } from "./keywordExtractor.js";
 import { Dictionary, RelatedTermsMap } from "./relatedTerms.js";
 import { MetadataIndex } from "./metadataIndex.js";
 import { GroupIndex } from "./groupIndex.js";

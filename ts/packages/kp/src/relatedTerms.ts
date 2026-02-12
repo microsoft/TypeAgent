@@ -104,7 +104,12 @@ export class RelatedTermsMap implements IRelatedTermsMap {
      * Add a bidirectional relationship: if A→B then also B→A.
      * Use for symmetric relations like synonyms and aliases.
      */
-    addBidirectional(termA: string, termB: string, relation: RelatedTerm["relation"], weight?: number): void {
+    addBidirectional(
+        termA: string,
+        termB: string,
+        relation: RelatedTerm["relation"],
+        weight?: number,
+    ): void {
         const relA: RelatedTerm = { term: termB, relation };
         const relB: RelatedTerm = { term: termA, relation };
         if (weight !== undefined) {
@@ -168,9 +173,7 @@ export class RelatedTermsMap implements IRelatedTermsMap {
                     );
                 } else {
                     // Directional: taylor_swift → person
-                    this.add(key, [
-                        { ...related, term: relatedLemma },
-                    ]);
+                    this.add(key, [{ ...related, term: relatedLemma }]);
                 }
             }
 

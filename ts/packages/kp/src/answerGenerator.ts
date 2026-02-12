@@ -148,7 +148,10 @@ export async function generateAnswer(
         try {
             responseText = await callLLMOpenAI(model, systemPrompt, userPrompt);
         } catch (e: any) {
-            debug("aiclient answer failed, falling back to agent SDK: %s", e?.message);
+            debug(
+                "aiclient answer failed, falling back to agent SDK: %s",
+                e?.message,
+            );
             answerModelAvailable = false;
             answerModel = undefined;
             responseText = await callLLMAgentSdk(
@@ -164,7 +167,8 @@ export async function generateAnswer(
     }
 
     if (!responseText) {
-        responseText = "Unable to generate an answer from the retrieved content.";
+        responseText =
+            "Unable to generate an answer from the retrieved content.";
     }
 
     return {

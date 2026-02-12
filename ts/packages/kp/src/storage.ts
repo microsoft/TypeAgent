@@ -177,10 +177,7 @@ const INDEX_STATE_FILENAME = "index_state.json";
 /**
  * Save the in-memory index state to a JSON file.
  */
-export function saveIndexState(
-    storagePath: string,
-    state: IndexState,
-): void {
+export function saveIndexState(storagePath: string, state: IndexState): void {
     if (!fs.existsSync(storagePath)) {
         fs.mkdirSync(storagePath, { recursive: true });
     }
@@ -193,9 +190,7 @@ export function saveIndexState(
  * Load the in-memory index state from a JSON file.
  * Returns undefined if the file doesn't exist.
  */
-export function loadIndexState(
-    storagePath: string,
-): IndexState | undefined {
+export function loadIndexState(storagePath: string): IndexState | undefined {
     const filePath = path.join(storagePath, INDEX_STATE_FILENAME);
     if (!fs.existsSync(filePath)) return undefined;
     const data = fs.readFileSync(filePath, "utf-8");
