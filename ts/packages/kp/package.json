@@ -1,39 +1,45 @@
 {
-  "name": "email",
+  "name": "kp",
   "version": "0.0.1",
   "private": true,
-  "description": "Email dispatcher agent",
+  "description": "Lightweight knowledge processor: keyword indexing with dictionary enrichment",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agents/email"
+    "directory": "ts/packages/kp"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./src/emailManifest.json",
-    "./agent/handlers": "./dist/emailActionHandler.js"
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
+  "bin": {
+    "kp-test": "./dist/testDriver.js"
   },
   "scripts": {
     "build": "npm run tsc",
+    "test:driver": "node dist/testDriver.js",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
-    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "tsc": "tsc -b"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
-    "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
-    "chalk": "^5.4.1",
+    "better-sqlite3": "12.2.0",
     "debug": "^4.4.0",
-    "graph-utils": "workspace:*",
-    "kp": "workspace:*",
-    "typeagent": "workspace:*"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
     "@types/debug": "^4.1.12",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
