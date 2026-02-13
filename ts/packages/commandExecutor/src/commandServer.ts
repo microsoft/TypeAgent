@@ -881,7 +881,7 @@ export class CommandServer {
                     "- Music & media: play songs, control playback\n" +
                     "- Lists & tasks: manage shopping lists, todo lists\n" +
                     "- Calendar: schedule events, view calendar\n" +
-                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n" +        
+                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n" +
                     "Parameters:\n" +
                     "- request: The command to execute\n" +
                     "- cacheCheck: (optional) Check cache before executing\n" +
@@ -889,7 +889,7 @@ export class CommandServer {
                     "Confirmation Flow:\n" +
                     "Some commands (like deleting sessions or clearing data) require user confirmation. " +
                     "If a command requires confirmation, the tool will return an error message indicating what needs to be confirmed. " +
-                    "Ask the user for confirmation, then retry the same command with confirmed=true if they approve.",                    
+                    "Ask the user for confirmation, then retry the same command with confirmed=true if they approve.",
             },
             async (request: ExecuteCommandRequest) =>
                 this.executeCommand(request),
