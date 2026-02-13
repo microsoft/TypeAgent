@@ -1217,7 +1217,7 @@ export async function handleCall(
                     );
                 }
             }
-            return createNotFoundActionResult(`playlist ${playlistName}`);
+            return createNotFoundActionResult(`Playlist ${playlistName}`);
         }
         case "getFromCurrentPlaylistList": {
             const getFromCurrentPlaylistListAction =
@@ -1403,7 +1403,7 @@ export async function handleCall(
             const name = action.parameters.name;
             const songs = action.parameters.songs;
 
-            let resultMessage = `playlist ${name} created`;
+            let resultMessage = `Playlist '${name}' created`;
             let uris: string[] = [];
 
             // If songs are specified, search for them first
@@ -1433,9 +1433,7 @@ export async function handleCall(
             );
 
             console.log(resultMessage);
-            return createActionResultFromTextDisplay(
-                chalk.magentaBright(resultMessage),
-            );
+            return createActionResultFromTextDisplay(resultMessage);
         }
         case "deletePlaylist": {
             const deletePlaylistAction = action as DeletePlaylistAction;
@@ -1459,11 +1457,11 @@ export async function handleCall(
                     clientContext.userData!.data,
                 );
                 return createActionResultFromTextDisplay(
-                    chalk.magentaBright(`playlist ${playlist.name} deleted`),
+                    `Playlist '${playlist.name}' deleted`,
                 );
             }
             return createErrorActionResult(
-                `playlist ${playlistName} not found`,
+                `Playlist '${playlistName}' not found`,
             );
         }
         case "addCurrentTrackToPlaylist": {
@@ -1483,7 +1481,7 @@ export async function handleCall(
             });
             if (!playlist) {
                 return createErrorActionResult(
-                    `playlist ${playlistName} not found`,
+                    `Playlist '${playlistName}' not found`,
                 );
             }
             const state = await getSelectedDevicePlaybackState(clientContext);
@@ -1520,7 +1518,7 @@ export async function handleCall(
             });
             if (!playlist) {
                 return createErrorActionResult(
-                    `playlist ${playlistName} not found`,
+                    `Playlist ${playlistName} not found`,
                 );
             }
             const trackList = clientContext.currentTrackList;
@@ -1566,7 +1564,7 @@ export async function handleCall(
             });
             if (!playlist) {
                 return createErrorActionResult(
-                    `playlist ${playlistName} not found`,
+                    `Playlist '${playlistName}' not found`,
                 );
             }
 
