@@ -470,6 +470,6 @@ async function getPlayerActionCompletion(
             return result;
     }
 
-    result.push(...getUserDataCompletions(userData.data, track, artist, album));
+    result.push(...getUserDataCompletions(userData.data, track, artist, album, playlist));
     return result;
 }
