@@ -14,13 +14,10 @@ import {
     parseGrammarRules,
 } from "./grammarRuleParser.js";
 
-export type LoadFileContentFunction = (
-    name: string,
-    base?: string,
-) => {
-    displayPath: string;
-    fullPath: string;
-    content: string;
+export type FileUtils = {
+    resolvePath: (name: string, ref?: string) => string;
+    displayPath: (fullPath: string) => string;
+    readContent: (fullPath: string) => string;
 };
 
 type DefinitionMap = Map<
@@ -58,21 +55,26 @@ type CompileContext = {
 };
 
 function createImportCompileContext(
-    loadFileContent: LoadFileContentFunction,
+    importUtils: FileUtils,
     grammarFileMap: Map<string, CompileContext>,
     referencingFileName: string,
     importStmt: ImportStatement,
 ): CompileContext {
-    const { displayPath, fullPath, content } = loadFileContent(
+    const fullPath = importUtils.resolvePath(
         importStmt.source,
         referencingFileName,
     );
+    if (grammarFileMap.has(fullPath)) {
+        return grammarFileMap.get(fullPath)!;
+    }
+    const content = importUtils.readContent(fullPath);
+    const displayPath = importUtils.displayPath(fullPath);
     const result = parseGrammarRules(displayPath, content);
     const importContext = createCompileContext(
         grammarFileMap,
         displayPath,
         fullPath,
-        loadFileContent,
+        importUtils,
         result.definitions,
         result.imports,
     );
@@ -83,7 +85,7 @@ function createCompileContext(
     grammarFileMap: Map<string, CompileContext>,
     displayPath: string,
     fullPath: string,
-    loadFileContent: LoadFileContentFunction | undefined,
+    fileUtils: FileUtils | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
 ): CompileContext {
@@ -97,11 +99,11 @@ function createCompileContext(
             // Determine if this is a type import (.ts) or grammar import (.agr)
             const isGrammarImport = importStmt.source.endsWith(".agr");
             if (isGrammarImport) {
-                if (loadFileContent === undefined) {
+                if (fileUtils === undefined) {
                     throw new Error(`Grammar file imports are not supported.`);
                 }
                 const importContext = createImportCompileContext(
-                    loadFileContent,
+                    fileUtils,
                     grammarFileMap,
                     fullPath,
                     importStmt,
@@ -169,7 +171,7 @@ function createCompileContext(
 export function compileGrammar(
     relativePath: string,
     fullPath: string,
-    loadFileContent: LoadFileContentFunction | undefined,
+    fileUtils: FileUtils | undefined,
     definitions: RuleDefinition[],
     start: string,
     imports?: ImportStatement[],
@@ -179,7 +181,7 @@ export function compileGrammar(
         grammarFileMap,
         relativePath,
         fullPath,
-        loadFileContent,
+        fileUtils,
         definitions,
         imports,
     );

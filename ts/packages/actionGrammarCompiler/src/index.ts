@@ -30,18 +30,21 @@ export default class Compile extends Command {
         const warnings: string[] = [];
         const grammar = loadGrammarRules(
             flags.input,
-            (name: string, base?: string) => {
-                const resolvedPath = base
-                    ? path.resolve(path.dirname(base), name)
-                    : path.resolve(name);
-                if (!fs.existsSync(resolvedPath)) {
-                    throw new Error(`File not found: ${resolvedPath}`);
-                }
-                return {
-                    displayPath: path.relative(process.cwd(), name),
-                    fullPath: resolvedPath,
-                    content: fs.readFileSync(resolvedPath, "utf-8"),
-                };
+            {
+                resolvePath: (name: string, ref?: string) => {
+                    return ref
+                        ? path.resolve(path.dirname(ref), name)
+                        : path.resolve(name);
+                },
+                readContent: (fullPath: string) => {
+                    if (!fs.existsSync(fullPath)) {
+                        throw new Error(`File not found: ${fullPath}`);
+                    }
+                    return fs.readFileSync(fullPath, "utf-8");
+                },
+                displayPath: (name: string) => {
+                    return path.relative(process.cwd(), name);
+                },
             },
             errors,
             warnings,

@@ -4,7 +4,7 @@
 import {
     compileGrammar,
     GrammarCompileError,
-    LoadFileContentFunction,
+    FileUtils,
 } from "./grammarCompiler.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
@@ -27,40 +27,39 @@ function convertCompileError(
 // Throw exception when error.
 export function loadGrammarRules(
     fileName: string,
-    contentOrLoadFileContent: string | LoadFileContentFunction,
+    contentOrFileUtils: string | FileUtils,
 ): Grammar;
 // Return undefined when error if errors array provided.
 export function loadGrammarRules(
     fileName: string,
-    contentOrLoadFileContent: string | LoadFileContentFunction,
+    contentOrFileUtils: string | FileUtils,
     errors: string[],
     warnings?: string[],
 ): Grammar | undefined;
 export function loadGrammarRules(
     fileName: string,
-    contentOrLoadFileContent: string | LoadFileContentFunction,
+    contentOrFileUtils: string | FileUtils,
     errors?: string[],
     warnings?: string[],
 ): Grammar | undefined {
     let displayPath, fullPath, content: string;
-    let loadFileContent: LoadFileContentFunction | undefined;
-    if (typeof contentOrLoadFileContent === "function") {
-        loadFileContent = contentOrLoadFileContent;
-        const loadResult = loadFileContent(fileName);
-        displayPath = loadResult.displayPath;
-        fullPath = loadResult.fullPath;
-        content = loadResult.content;
+    let fileUtils: FileUtils | undefined;
+    if (typeof contentOrFileUtils === "object") {
+        fileUtils = contentOrFileUtils;
+        fullPath = fileUtils.resolvePath(fileName);
+        content = fileUtils.readContent(fullPath);
+        displayPath = fileUtils.displayPath(fullPath);
     } else {
         displayPath = fileName;
         fullPath = fileName;
-        content = contentOrLoadFileContent;
+        content = contentOrFileUtils;
     }
 
     const parseResult = parseGrammarRules(displayPath, content);
     const result = compileGrammar(
         displayPath,
         fullPath,
-        loadFileContent,
+        fileUtils,
         parseResult.definitions,
         start,
         parseResult.imports,
