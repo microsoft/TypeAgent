@@ -38,6 +38,7 @@ export function loadGrammarRules(
 ): Grammar | undefined {
     const parseResult = parseGrammarRules(fileName, content);
     const result = compileGrammar(
+        fileName,
         parseResult.definitions,
         start,
         parseResult.imports,

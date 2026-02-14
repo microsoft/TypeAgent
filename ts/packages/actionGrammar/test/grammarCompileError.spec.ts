@@ -90,82 +90,6 @@ describe("Grammar Compiler", () => {
         });
     });
 
-    describe("Imports", () => {
-        it("Imported rule reference should not error", () => {
-            const grammarText = `
-            @import { ExternalRule } from "external.agr"
-
-            @<Start> = <ExternalRule> world
-        `;
-            const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
-            expect(errors.length).toBe(0);
-        });
-
-        it("Wildcard import allows any rule reference", () => {
-            const grammarText = `
-            @import * from "external.agr"
-
-            @<Start> = <AnyExternalRule> and <AnotherExternal>
-        `;
-            const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
-            expect(errors.length).toBe(0);
-        });
-
-        it("Multiple imports work together", () => {
-            const grammarText = `
-            @import { Rule1 } from "file1.agr"
-            @import { Rule2 } from "file2.agr"
-
-            @<Start> = <Rule1> <Rule2>
-        `;
-            const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
-            expect(errors.length).toBe(0);
-        });
-
-        it("Imported rule in variable reference", () => {
-            const grammarText = `
-            @import { ExternalRule } from "external.agr"
-
-            @<Start> = $(x:<ExternalRule>)
-        `;
-            const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
-            expect(errors.length).toBe(0);
-        });
-
-        it("Non-imported rule still errors", () => {
-            const grammarText = `
-            @import { ExternalRule } from "external.agr"
-
-            @<Start> = <ExternalRule> <UndefinedRule>
-        `;
-            const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
-            expect(errors.length).toBe(1);
-            expect(errors[0]).toContain(
-                "error: Missing rule definition for '<UndefinedRule>'",
-            );
-        });
-
-        it("Local definition overrides import", () => {
-            const grammarText = `
-            @import { LocalRule } from "external.agr"
-
-            @<Start> = <LocalRule>
-            @<LocalRule> = local definition
-        `;
-            const errors: string[] = [];
-            const warnings: string[] = [];
-            loadGrammarRules("test", grammarText, errors, warnings);
-            expect(errors.length).toBe(0);
-            // No warning about unused rule since it's referenced
-            expect(warnings.length).toBe(0);
-        });
-    });
-
     describe("Type Imports", () => {
         it("Imported type reference should not error", () => {
             const grammarText = `
@@ -224,20 +148,6 @@ describe("Grammar Compiler", () => {
             );
         });
 
-        it("Grammar imports do not affect type validation", () => {
-            const grammarText = `
-            @import { SomeRule } from "rules.agr"
-
-            @<Start> = $(x:SomeRule)
-        `;
-            const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
-            expect(errors.length).toBe(1);
-            expect(errors[0]).toContain(
-                "error: Undefined type 'SomeRule' in variable 'x'",
-            );
-        });
-
         it("Type imports do not affect rule validation", () => {
             const grammarText = `
             @import { SomeType } from "types.ts"
@@ -250,18 +160,6 @@ describe("Grammar Compiler", () => {
             expect(errors[0]).toContain(
                 "error: Missing rule definition for '<SomeType>'",
             );
-        });
-
-        it("Mixed grammar and type imports work independently", () => {
-            const grammarText = `
-            @import { RuleName } from "rules.agr"
-            @import { TypeName } from "types.ts"
-
-            @<Start> = <RuleName> $(x:TypeName)
-        `;
-            const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
-            expect(errors.length).toBe(0);
         });
     });
 });

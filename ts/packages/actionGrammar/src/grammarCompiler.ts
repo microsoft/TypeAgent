@@ -7,7 +7,14 @@ import {
     GrammarRule,
     StringPart,
 } from "./grammarTypes.js";
-import { Rule, RuleDefinition, ImportStatement } from "./grammarRuleParser.js";
+import {
+    Rule,
+    RuleDefinition,
+    ImportStatement,
+    parseGrammarRules,
+} from "./grammarRuleParser.js";
+import path from "node:path";
+import fs from "node:fs";
 
 type DefinitionMap = Map<
     string,
@@ -32,54 +39,89 @@ export type GrammarCompileError = {
 };
 
 type CompileContext = {
+    grammarFileMap: Map<string, CompileContext>;
+    fileName: string;
     ruleDefMap: DefinitionMap;
-    importedRuleNames: Set<string>; // Rule names imported from .agr files
+    importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     importedTypeNames: Set<string>; // Type names imported from .ts files
     currentDefinition?: string | undefined;
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
 };
 
-export function compileGrammar(
+function createCompileContext(
+    grammarFileMap: Map<string, CompileContext>,
+    fileName: string,
     definitions: RuleDefinition[],
-    start: string,
     imports?: ImportStatement[],
-): GrammarCompileResult {
+): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
     // Build separate sets of imported rule names and type names
-    const importedRuleNames = new Set<string>();
+    const importedRuleMap = new Map<string, CompileContext>();
     const importedTypeNames = new Set<string>();
     if (imports) {
         for (const importStmt of imports) {
             // Determine if this is a type import (.ts) or grammar import (.agr)
             const isGrammarImport = importStmt.source.endsWith(".agr");
-            const targetSet = isGrammarImport
-                ? importedRuleNames
-                : importedTypeNames;
+            if (isGrammarImport) {
+                const grammarFileName = path.resolve(
+                    path.dirname(fileName),
+                    importStmt.source,
+                );
+                const result = parseGrammarRules(
+                    fileName,
+                    fs.readFileSync(grammarFileName, "utf-8"),
+                );
+                const importContext = createCompileContext(
+                    grammarFileMap,
+                    grammarFileName,
+                    result.definitions,
+                    result.imports,
+                );
+                importedRuleMap.set(importStmt.source, importContext);
 
-            if (importStmt.names === "*") {
-                // For wildcard imports, we can't know all names at compile time
-                // They will be validated at runtime instead
-                // Mark with a special sentinel to indicate wildcard import
-                targetSet.add("*");
+                const ruleNames =
+                    importStmt.names === "*"
+                        ? importContext.ruleDefMap.keys()
+                        : importStmt.names;
+
+                for (const ruleName of ruleNames) {
+                    importedRuleMap.set(ruleName, importContext);
+                }
             } else {
-                for (const name of importStmt.names) {
-                    targetSet.add(name);
+                if (importStmt.names === "*") {
+                    // For wildcard imports, we can't know all names at compile time
+                    // They will be validated at runtime instead
+                    // Mark with a special sentinel to indicate wildcard import
+                    importedTypeNames.add("*");
+                } else {
+                    for (const name of importStmt.names) {
+                        importedTypeNames.add(name);
+                    }
                 }
             }
         }
     }
 
     const context: CompileContext = {
+        grammarFileMap,
+        fileName,
         ruleDefMap,
-        importedRuleNames,
+        importedRuleMap,
         importedTypeNames,
         errors: [],
         warnings: [],
     };
 
     for (const def of definitions) {
+        if (importedRuleMap.has(def.name)) {
+            context.errors.push({
+                message: `Rule '<${def.name}>' cannot be defined because it is imported from another grammar file.`,
+                definition: def.name,
+                pos: def.pos,
+            });
+        }
         const existing = ruleDefMap.get(def.name);
         if (existing === undefined) {
             ruleDefMap.set(def.name, {
@@ -92,9 +134,28 @@ export function compileGrammar(
             existing.rules.push(...def.rules);
         }
     }
+
+    grammarFileMap.set(fileName, context);
+    return context;
+}
+
+export function compileGrammar(
+    fileName: string,
+    definitions: RuleDefinition[],
+    start: string,
+    imports?: ImportStatement[],
+): GrammarCompileResult {
+    const grammarFileMap = new Map<string, CompileContext>();
+    const context = createCompileContext(
+        grammarFileMap,
+        fileName,
+        definitions,
+        imports,
+    );
+
     const grammar = { rules: createNamedGrammarRules(context, start) };
 
-    for (const [name, record] of ruleDefMap.entries()) {
+    for (const [name, record] of context.ruleDefMap.entries()) {
         if (record.grammarRules === undefined) {
             context.warnings.push({
                 message: `Rule '<${name}>' is defined but never used.`,
@@ -102,6 +163,7 @@ export function compileGrammar(
             });
         }
     }
+
     return {
         grammar,
         errors: context.errors,
@@ -118,25 +180,30 @@ const emptyRecord = {
 function createNamedGrammarRules(
     context: CompileContext,
     name: string,
-    pos?: number,
-    refVar?: string,
+    referencePosition?: number,
+    referenceVariable?: string,
+    referenceContext: CompileContext = context,
 ): GrammarRule[] {
     const record = context.ruleDefMap.get(name);
     if (record === undefined) {
         // Check if this rule name is imported from a grammar file
-        const isImported =
-            context.importedRuleNames.has(name) ||
-            context.importedRuleNames.has("*");
-
-        if (!isImported) {
-            context.errors.push({
+        const importedContext = context.importedRuleMap.get(name);
+        if (importedContext === undefined) {
+            referenceContext.errors.push({
                 message: `Missing rule definition for '<${name}>'`,
-                definition: context.currentDefinition,
-                pos,
+                definition: referenceContext.currentDefinition,
+                pos: referencePosition,
             });
+            context.ruleDefMap.set(name, emptyRecord);
+            return emptyRecord.grammarRules;
         }
-        context.ruleDefMap.set(name, emptyRecord);
-        return emptyRecord.grammarRules;
+        return createNamedGrammarRules(
+            importedContext,
+            name,
+            referencePosition,
+            referenceVariable,
+            referenceContext,
+        );
     }
     if (record.grammarRules === undefined) {
         const prev = context.currentDefinition;
@@ -150,10 +217,10 @@ function createNamedGrammarRules(
         context.currentDefinition = prev;
     }
 
-    if (refVar !== undefined && !record.hasValue) {
-        context.errors.push({
-            message: `Referenced rule '<${name}>' does not produce a value for variable '${refVar}'`,
-            definition: context.currentDefinition,
+    if (referenceVariable !== undefined && !record.hasValue) {
+        referenceContext.errors.push({
+            message: `Referenced rule '<${name}>' does not produce a value for variable '${referenceVariable}'`,
+            definition: referenceContext.currentDefinition,
             pos: record.pos,
         });
     }

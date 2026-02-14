@@ -765,7 +765,7 @@ class GrammarRuleParser {
                     definitions.push(this.parseRuleDefinition());
                     continue;
                 }
-                if (this.isAt("import")) {
+                if (this.isAt("import")) {                    
                     imports.push(this.parseImportStatement());
                     continue;
                 }
@@ -774,7 +774,7 @@ class GrammarRuleParser {
                 continue;
             }
             this.throwUnexpectedCharError(
-                "Expected 'entity' declaration, '@ import' statement, or '@' rule definition",
+                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
             );
         }
         return { entities, imports, definitions };

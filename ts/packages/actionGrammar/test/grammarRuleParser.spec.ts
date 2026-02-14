@@ -709,7 +709,7 @@ describe("Grammar Rule Parser", () => {
             expect(() =>
                 testParamGrammarRules("test.agr", grammar),
             ).toThrow(
-                "Expected 'entity' declaration, '@ import' statement, or '@' rule definition",
+                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
             );
         });
 
@@ -717,7 +717,7 @@ describe("Grammar Rule Parser", () => {
             const grammar = "@greeting = hello";
             expect(() =>
                 testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Expected 'entity' declaration, '@ import' statement, or '@' rule definition");
+            ).toThrow("Expected 'entity' declaration, '@import' statement, or '@' rule definition");
         });
 
         it("should throw error for missing equals sign", () => {
