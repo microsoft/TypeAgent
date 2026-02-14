@@ -35,10 +35,10 @@ describe("Grammar Imports with File Loading", () => {
         it("should import and use a simple rule from another file", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "greeting.agr": `@<Greeting> = hello | hi | hey -> "greeting"`,
+                "greeting.agr": `@<Greeting> = (hello | hi | hey) -> "greeting"`,
                 "main.agr": `
                     @import { Greeting } from "./greeting.agr"
-                    @<Start> = <Greeting> world -> { greeting: $(greeting), target: "world" }
+                    @<Start> = $(greeting:<Greeting>) world -> { greeting: $(greeting), target: "world" }
                 `,
             };
             const grammar = loadGrammarRules(
@@ -98,8 +98,8 @@ describe("Grammar Imports with File Loading", () => {
         it("should import from multiple files", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "greeting.agr": `@<Greeting> = hello | hi -> "greeting"`,
-                "farewell.agr": `@<Farewell> = goodbye | bye -> "farewell"`,
+                "greeting.agr": `@<Greeting> = (hello | hi) -> "greeting"`,
+                "farewell.agr": `@<Farewell> = (goodbye | bye) -> "farewell"`,
                 "main.agr": `
                                 @import { Greeting } from "./greeting.agr"
                                 @import { Farewell } from "./farewell.agr"
