@@ -397,7 +397,7 @@ describe("Grammar Imports with File Loading", () => {
             expect(errors[0]).toContain("Missing rule definition for '<Stop>'");
         });
 
-        it("should error when trying to redefine an imported rule", () => {
+        it("should error when trying to import a locally defined rule", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "rules.agr": `@<Action> = imported action -> "imported"`,
@@ -416,7 +416,7 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors.length).toBeGreaterThan(0);
             expect(errors[0]).toContain(
-                "cannot be defined because it is imported",
+                "cannot be imported because it is already defined",
             );
         });
 
@@ -730,6 +730,91 @@ describe("Grammar Imports with File Loading", () => {
             expect(testMatch(grammar, "my rule something")).toEqual([
                 { value: "something" },
             ]);
+        });
+    });
+
+    describe("Circular Dependency Handling", () => {
+        it("should support circular imports (A imports B, B imports A)", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "fileA.agr": `
+                    @import { RuleB } from "./fileB.agr"
+                    @<RuleA> = a <RuleB> -> "a"
+                    @<Start> = <RuleA>
+                `,
+                "fileB.agr": `
+                    @import { RuleA } from "./fileA.agr"
+                    @<RuleB> = b value -> "b"
+                `,
+            };
+
+            // Circular dependencies are now fully supported
+            const grammar = loadGrammarRules(
+                "fileA.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            // Should load successfully
+            expect(grammar).toBeDefined();
+            expect(errors).toEqual([]);
+
+            // Test that the grammar works correctly
+            expect(testMatch(grammar, "a b value")).toEqual(["a"]);
+        });
+
+        it("should detect self-import conflicts", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "fileA.agr": `
+                    @import { RuleA } from "./fileA.agr"
+                    @<RuleA> = a value -> "a"
+                    @<Start> = <RuleA>
+                `,
+            };
+
+            // Self-import of a locally defined rule should be detected as an error
+            loadGrammarRules(
+                "fileA.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            // Should have an error about importing a locally defined rule
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("cannot be imported because it is already defined");
+        });
+
+        it("should support three-way circular import (A→B→C→A)", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "fileA.agr": `
+                    @import { RuleB } from "./fileB.agr"
+                    @<RuleA> = a <RuleB> -> "a"
+                    @<Start> = <RuleA>
+                `,
+                "fileB.agr": `
+                    @import { RuleC } from "./fileC.agr"
+                    @<RuleB> = b <RuleC> -> "b"
+                `,
+                "fileC.agr": `
+                    @import { RuleA } from "./fileA.agr"
+                    @<RuleC> = c value -> "c"
+                `,
+            };
+
+            // Multi-file circular dependencies are fully supported
+            const grammar = loadGrammarRules(
+                "fileA.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(grammar).toBeDefined();
+            expect(errors).toEqual([]);
+
+            // Test that the grammar works correctly
+            expect(testMatch(grammar, "a b c value")).toEqual(["a"]);
         });
     });
 });

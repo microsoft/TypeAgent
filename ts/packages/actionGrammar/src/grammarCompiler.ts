@@ -94,6 +94,40 @@ function createCompileContext(
     // Build separate sets of imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
     const importedTypeNames = new Set<string>();
+
+    // Create the context early and add to the map BEFORE processing anything
+    // This prevents infinite recursion on circular dependencies
+    const context: CompileContext = {
+        grammarFileMap,
+        displayPath,
+        ruleDefMap,
+        importedRuleMap,
+        importedTypeNames,
+        errors: [],
+        warnings: [],
+    };
+
+    // Process definitions FIRST - this populates ruleDefMap
+    // This allows circular imports to work since our definitions are available
+    // when other files try to import from us
+    for (const def of definitions) {
+        const existing = ruleDefMap.get(def.name);
+        if (existing === undefined) {
+            ruleDefMap.set(def.name, {
+                rules: [...def.rules],
+                pos: def.pos,
+                // Set this to true to allow recursion to assume that it has value.
+                hasValue: true,
+            });
+        } else {
+            existing.rules.push(...def.rules);
+        }
+    }
+
+    // Add to map before processing so circular imports can be detected
+    grammarFileMap.set(fullPath, context);
+
+    // Process imports AFTER definitions - this populates importedRuleMap
     if (imports) {
         for (const importStmt of imports) {
             // Determine if this is a type import (.ts) or grammar import (.agr)
@@ -108,7 +142,6 @@ function createCompileContext(
                     fullPath,
                     importStmt,
                 );
-                importedRuleMap.set(importStmt.source, importContext);
 
                 const ruleNames =
                     importStmt.names === "*"
@@ -116,7 +149,16 @@ function createCompileContext(
                         : importStmt.names;
 
                 for (const ruleName of ruleNames) {
-                    importedRuleMap.set(ruleName, importContext);
+                    // Check if we're trying to import a rule that's already defined locally
+                    if (ruleDefMap.has(ruleName)) {
+                        context.errors.push({
+                            message: `Rule '<${ruleName}>' cannot be imported because it is already defined in this file.`,
+                            definition: ruleName,
+                            pos: importStmt.pos,
+                        });
+                    } else {
+                        importedRuleMap.set(ruleName, importContext);
+                    }
                 }
             } else {
                 if (importStmt.names === "*") {
@@ -133,38 +175,6 @@ function createCompileContext(
         }
     }
 
-    const context: CompileContext = {
-        grammarFileMap,
-        displayPath,
-        ruleDefMap,
-        importedRuleMap,
-        importedTypeNames,
-        errors: [],
-        warnings: [],
-    };
-
-    for (const def of definitions) {
-        if (importedRuleMap.has(def.name)) {
-            context.errors.push({
-                message: `Rule '<${def.name}>' cannot be defined because it is imported from another grammar file.`,
-                definition: def.name,
-                pos: def.pos,
-            });
-        }
-        const existing = ruleDefMap.get(def.name);
-        if (existing === undefined) {
-            ruleDefMap.set(def.name, {
-                rules: [...def.rules],
-                pos: def.pos,
-                // Set this to true to allow recursion to assume that it has value.
-                hasValue: true,
-            });
-        } else {
-            existing.rules.push(...def.rules);
-        }
-    }
-
-    grammarFileMap.set(fullPath, context);
     return context;
 }
 
