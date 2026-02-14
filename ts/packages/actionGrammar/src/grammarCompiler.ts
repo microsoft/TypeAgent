@@ -14,7 +14,7 @@ import {
     parseGrammarRules,
 } from "./grammarRuleParser.js";
 
-export type FileUtils = {
+export type FileLoader = {
     resolvePath: (name: string, ref?: string) => string;
     displayPath: (fullPath: string) => string;
     readContent: (fullPath: string) => string;
@@ -55,26 +55,26 @@ type CompileContext = {
 };
 
 function createImportCompileContext(
-    importUtils: FileUtils,
+    fileLoader: FileLoader,
     grammarFileMap: Map<string, CompileContext>,
     referencingFileName: string,
     importStmt: ImportStatement,
 ): CompileContext {
-    const fullPath = importUtils.resolvePath(
+    const fullPath = fileLoader.resolvePath(
         importStmt.source,
         referencingFileName,
     );
     if (grammarFileMap.has(fullPath)) {
         return grammarFileMap.get(fullPath)!;
     }
-    const content = importUtils.readContent(fullPath);
-    const displayPath = importUtils.displayPath(fullPath);
+    const content = fileLoader.readContent(fullPath);
+    const displayPath = fileLoader.displayPath(fullPath);
     const result = parseGrammarRules(displayPath, content);
     const importContext = createCompileContext(
         grammarFileMap,
         displayPath,
         fullPath,
-        importUtils,
+        fileLoader,
         result.definitions,
         result.imports,
     );
@@ -85,7 +85,7 @@ function createCompileContext(
     grammarFileMap: Map<string, CompileContext>,
     displayPath: string,
     fullPath: string,
-    fileUtils: FileUtils | undefined,
+    fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
 ): CompileContext {
@@ -171,7 +171,7 @@ function createCompileContext(
 export function compileGrammar(
     relativePath: string,
     fullPath: string,
-    fileUtils: FileUtils | undefined,
+    fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     start: string,
     imports?: ImportStatement[],

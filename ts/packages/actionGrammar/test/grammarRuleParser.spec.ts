@@ -706,116 +706,114 @@ describe("Grammar Rule Parser", () => {
     describe("Error Handling", () => {
         it("should throw error for missing @ at start of rule", () => {
             const grammar = "<greeting> = hello";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow(
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
             );
         });
 
         it("should throw error for malformed rule name", () => {
             const grammar = "@greeting = hello";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Expected 'entity' declaration, '@import' statement, or '@' rule definition");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
+            );
         });
 
         it("should throw error for missing equals sign", () => {
             const grammar = "@<greeting> hello";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("'=' expected");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "'=' expected",
+            );
         });
 
         it("should throw error for unterminated string literal", () => {
             const grammar = '@<rule> = test -> "unterminated';
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Unterminated string literal");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Unterminated string literal",
+            );
         });
 
         it("should throw error for unterminated variable", () => {
             const grammar = "@<rule> = $(name";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("')' expected");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "')' expected",
+            );
         });
 
         it("should throw error for unterminated group", () => {
             const grammar = "@<rule> = (hello";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("')' expected");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "')' expected",
+            );
         });
 
         it("should throw error for invalid escape sequence", () => {
             const grammar = '@<rule> = test -> "invalid\\';
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Missing escaped character.");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Missing escaped character.",
+            );
         });
 
         it("should throw error for invalid hex escape", () => {
             const grammar = '@<rule> = test -> "\\xZZ"';
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Invalid hex escape sequence");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Invalid hex escape sequence",
+            );
         });
 
         it("should throw error for invalid unicode escape", () => {
             const grammar = '@<rule> = test -> "\\uZZZZ"';
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Invalid Unicode escape sequence");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Invalid Unicode escape sequence",
+            );
         });
 
         it("should throw error for unterminated array", () => {
             const grammar = "@<rule> = test -> [1, 2";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Unexpected end of file in array value");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Unexpected end of file in array value",
+            );
         });
 
         it("should throw error for unterminated object", () => {
             const grammar = '@<rule> = test -> {type: "test"';
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Unexpected end of file in object value");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Unexpected end of file in object value",
+            );
         });
 
         it("should throw error for missing colon in object", () => {
             const grammar = '@<rule> = test -> {type "test"}';
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("':' expected");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "':' expected",
+            );
         });
 
         it("should throw error for invalid number", () => {
             const grammar = "@<rule> = test -> abc123";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Invalid literal");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Invalid literal",
+            );
         });
 
         it("should throw error for infinity values", () => {
             const grammar = "@<rule> = test -> Infinity";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Infinity values are not allowed");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Infinity values are not allowed",
+            );
         });
 
         it("should throw error for unescaped special characters", () => {
             const grammar = "@<rule> = hello-world";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Special character needs to be escaped");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Special character needs to be escaped",
+            );
         });
 
         it("should throw error for empty expression", () => {
             const grammar = "@<rule> = ";
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow("Empty expression");
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Empty expression",
+            );
         });
 
         it("should include line and column information in errors", () => {
@@ -823,9 +821,9 @@ describe("Grammar Rule Parser", () => {
                 @<valid> = hello
                 @invalid = world
             `;
-            expect(() =>
-                testParamGrammarRules("test.agr", grammar),
-            ).toThrow(/test\.agr:\d+:\d+:/);
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                /test\.agr:\d+:\d+:/,
+            );
         });
     });
 
@@ -847,10 +845,7 @@ describe("Grammar Rule Parser", () => {
                 }
             `;
 
-            const result = testParamGrammarRules(
-                "deeply-nested.agr",
-                grammar,
-            );
+            const result = testParamGrammarRules("deeply-nested.agr", grammar);
 
             const value = result[0].rules[0].value as any;
             expect(value.type).toBe("object");
@@ -889,10 +884,7 @@ describe("Grammar Rule Parser", () => {
                 }
             `;
 
-            const result = testParamGrammarRules(
-                "conversation.agr",
-                grammar,
-            );
+            const result = testParamGrammarRules("conversation.agr", grammar);
 
             expect(result).toHaveLength(3);
 

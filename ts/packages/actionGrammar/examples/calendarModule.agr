@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Entity declarations - these entities must be registered at runtime
-@ import { CalendarDate, Ordinal } from "Global.ts"
+entity CalendarDate, Ordinal;
 
 // CalendarDate - matches date-like strings
 // Note: The actual matching/conversion logic is in the TypeScript converter

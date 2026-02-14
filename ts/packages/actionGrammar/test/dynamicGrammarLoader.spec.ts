@@ -153,7 +153,9 @@ describe("Dynamic Grammar Loader", () => {
 
             expect(result.success).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);
-            expect(result.errors[0]).toContain("Undefined type 'UnknownDateType'");
+            expect(result.errors[0]).toContain(
+                "Undefined type 'UnknownDateType'",
+            );
         });
 
         it("should merge new rules into existing grammar", () => {

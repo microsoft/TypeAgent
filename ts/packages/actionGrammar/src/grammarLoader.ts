@@ -1,10 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { defaultFileLoader } from "./defaultFileLoader.js";
 import {
     compileGrammar,
     GrammarCompileError,
-    FileUtils,
+    FileLoader,
 } from "./grammarCompiler.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
@@ -27,32 +28,32 @@ function convertCompileError(
 // Throw exception when error.
 export function loadGrammarRules(
     fileName: string,
-    contentOrFileUtils: string | FileUtils,
+    contentOrLoader: string | FileLoader | undefined,
 ): Grammar;
 // Return undefined when error if errors array provided.
 export function loadGrammarRules(
     fileName: string,
-    contentOrFileUtils: string | FileUtils,
+    contentOrLoader: string | FileLoader | undefined,
     errors: string[],
     warnings?: string[],
 ): Grammar | undefined;
 export function loadGrammarRules(
     fileName: string,
-    contentOrFileUtils: string | FileUtils,
+    contentOrLoader: string | FileLoader = defaultFileLoader,
     errors?: string[],
     warnings?: string[],
 ): Grammar | undefined {
     let displayPath, fullPath, content: string;
-    let fileUtils: FileUtils | undefined;
-    if (typeof contentOrFileUtils === "object") {
-        fileUtils = contentOrFileUtils;
+    let fileUtils: FileLoader | undefined;
+    if (typeof contentOrLoader === "object") {
+        fileUtils = contentOrLoader;
         fullPath = fileUtils.resolvePath(fileName);
         content = fileUtils.readContent(fullPath);
         displayPath = fileUtils.displayPath(fullPath);
     } else {
         displayPath = fileName;
         fullPath = fileName;
-        content = contentOrFileUtils;
+        content = contentOrLoader;
     }
 
     const parseResult = parseGrammarRules(displayPath, content);

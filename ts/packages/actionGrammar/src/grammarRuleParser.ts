@@ -765,7 +765,7 @@ class GrammarRuleParser {
                     definitions.push(this.parseRuleDefinition());
                     continue;
                 }
-                if (this.isAt("import")) {                    
+                if (this.isAt("import")) {
                     imports.push(this.parseImportStatement());
                     continue;
                 }

@@ -3,9 +3,9 @@
 
 import path from "node:path";
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { FileUtils } from "../src/grammarCompiler.js";
+import { FileLoader } from "../src/grammarCompiler.js";
 
-function getFileUtils(grammarFiles: Record<string, string>): FileUtils {
+function getTestFileLoader(grammarFiles: Record<string, string>): FileLoader {
     return {
         resolvePath: (name: string, ref?: string) => {
             return ref
@@ -38,7 +38,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -64,7 +64,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -86,7 +86,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -106,7 +106,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -132,7 +132,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -155,7 +155,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -182,7 +182,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -209,7 +209,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -228,7 +228,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -254,7 +254,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -285,7 +285,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -306,7 +306,7 @@ describe("Grammar Imports with File Loading", () => {
             expect(() => {
                 loadGrammarRules(
                     "main.agr",
-                    getFileUtils(grammarFiles),
+                    getTestFileLoader(grammarFiles),
                     errors,
                 );
             }).toThrow();
@@ -321,7 +321,11 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Stop>
                             `,
             };
-            loadGrammarRules("main.agr", getFileUtils(grammarFiles), errors);
+            loadGrammarRules(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
 
             expect(errors.length).toBeGreaterThan(0);
             expect(errors[0]).toContain("Missing rule definition for '<Stop>'");
@@ -338,7 +342,11 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Action> = local action -> "local"
                             `,
             };
-            loadGrammarRules("main.agr", getFileUtils(grammarFiles), errors);
+            loadGrammarRules(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
 
             expect(errors.length).toBeGreaterThan(0);
             expect(errors[0]).toContain(
@@ -358,7 +366,7 @@ describe("Grammar Imports with File Loading", () => {
             expect(() => {
                 loadGrammarRules(
                     "main.agr",
-                    getFileUtils(grammarFiles),
+                    getTestFileLoader(grammarFiles),
                     errors,
                 );
             }).toThrow();
@@ -373,7 +381,7 @@ describe("Grammar Imports with File Loading", () => {
                             `,
             };
             try {
-                loadGrammarRules("main.agr", getFileUtils(grammarFiles));
+                loadGrammarRules("main.agr", getTestFileLoader(grammarFiles));
             } catch (e: any) {
                 // Error should reference the file with relative path from "/"
                 expect(e.message).toContain("lib/broken.agr");
@@ -394,7 +402,7 @@ describe("Grammar Imports with File Loading", () => {
 
             const result = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -428,7 +436,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -454,7 +462,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -481,7 +489,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -502,7 +510,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -526,7 +534,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -554,7 +562,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -574,7 +582,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
@@ -596,7 +604,7 @@ describe("Grammar Imports with File Loading", () => {
             };
             const grammar = loadGrammarRules(
                 "main.agr",
-                getFileUtils(grammarFiles),
+                getTestFileLoader(grammarFiles),
                 errors,
             );
 
