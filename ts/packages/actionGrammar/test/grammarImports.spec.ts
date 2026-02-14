@@ -4,6 +4,7 @@
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { FileLoader } from "../src/grammarCompiler.js";
 import { defaultFileLoader } from "../src/defaultFileLoader.js";
+import { matchGrammar } from "../src/grammarMatcher.js";
 
 function getTestFileLoader(grammarFiles: Record<string, string>): FileLoader {
     const fileMap = new Map(
@@ -23,6 +24,10 @@ function getTestFileLoader(grammarFiles: Record<string, string>): FileLoader {
             return content;
         },
     };
+}
+
+function testMatch(grammar: any, input: string) {
+    return matchGrammar(grammar, input)?.map((m) => m.match);
 }
 
 describe("Grammar Imports with File Loading", () => {
@@ -46,6 +51,17 @@ describe("Grammar Imports with File Loading", () => {
             expect(grammar).toBeDefined();
             expect(grammar?.rules).toBeDefined();
             expect(grammar?.rules.length).toBeGreaterThan(0);
+
+            // Test match functionality
+            expect(testMatch(grammar, "hello world")).toEqual([
+                { greeting: "greeting", target: "world" },
+            ]);
+            expect(testMatch(grammar, "hi world")).toEqual([
+                { greeting: "greeting", target: "world" },
+            ]);
+            expect(testMatch(grammar, "hey world")).toEqual([
+                { greeting: "greeting", target: "world" },
+            ]);
         });
 
         it("should import multiple rules from a single file", () => {
@@ -70,6 +86,13 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "play song")).toEqual([
+                { action: "play", track: "song" },
+            ]);
+            expect(testMatch(grammar, "pause")).toEqual([{ action: "pause" }]);
+            expect(testMatch(grammar, "stop")).toEqual([{ action: "stop" }]);
         });
 
         it("should import from multiple files", () => {
@@ -92,6 +115,12 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "hello")).toEqual(["greeting"]);
+            expect(testMatch(grammar, "hi")).toEqual(["greeting"]);
+            expect(testMatch(grammar, "goodbye")).toEqual(["farewell"]);
+            expect(testMatch(grammar, "bye")).toEqual(["farewell"]);
         });
 
         it("should use imported rule in a variable reference", () => {
@@ -112,6 +141,13 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "count to one")).toEqual([{ count: 1 }]);
+            expect(testMatch(grammar, "count to two")).toEqual([{ count: 2 }]);
+            expect(testMatch(grammar, "count to three")).toEqual([
+                { count: 3 },
+            ]);
         });
     });
 
@@ -138,6 +174,11 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "red")).toEqual(["red"]);
+            expect(testMatch(grammar, "blue")).toEqual(["blue"]);
+            expect(testMatch(grammar, "green")).toEqual(["green"]);
         });
 
         it("should allow any rule reference with wildcard import", () => {
@@ -161,6 +202,10 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "action one")).toEqual([1]);
+            expect(testMatch(grammar, "action two")).toEqual([2]);
         });
     });
 
@@ -188,6 +233,11 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "start middle base value")).toEqual([
+                "start",
+            ]);
         });
 
         it("should handle complex import chains", () => {
@@ -215,6 +265,11 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "level one level two level three")).toEqual(
+                [1],
+            );
         });
 
         it("should handle imports from subdirectories", () => {
@@ -234,6 +289,9 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "utility rule")).toEqual(["util"]);
         });
 
         it("should resolve paths relative to each referencing file at multiple levels", () => {
@@ -260,6 +318,9 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "start middle base")).toEqual(["start"]);
         });
 
         it("should resolve sibling and parent directory paths at multiple levels", () => {
@@ -291,6 +352,11 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "wrapper feature common")).toEqual([
+                "wrapper",
+            ]);
         });
     });
 
@@ -442,6 +508,17 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "the cat runs")).toEqual([
+                { subject: "subject", verb: "verb" },
+            ]);
+            expect(testMatch(grammar, "the dog jumps")).toEqual([
+                { subject: "subject", verb: "verb" },
+            ]);
+            expect(testMatch(grammar, "the bird flies")).toEqual([
+                { subject: "subject", verb: "verb" },
+            ]);
         });
 
         it("should handle mixing imported and local rules", () => {
@@ -468,6 +545,12 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "imported one")).toEqual([1]);
+            expect(testMatch(grammar, "imported two")).toEqual([2]);
+            expect(testMatch(grammar, "local one")).toEqual([3]);
+            expect(testMatch(grammar, "local two")).toEqual([4]);
         });
 
         it("should handle imported rules that produce values", () => {
@@ -495,6 +578,14 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "task mytask priority high status active")).toEqual(
+                [{ name: "mytask", priority: 1, status: "active" }],
+            );
+            expect(testMatch(grammar, "task project priority low status inactive")).toEqual(
+                [{ name: "project", priority: 3, status: "inactive" }],
+            );
         });
 
         it("should handle optional rule references in imported rules", () => {
@@ -516,6 +607,12 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "please run")).toEqual(["run"]);
+            expect(testMatch(grammar, "run")).toEqual(["run"]);
+            expect(testMatch(grammar, "run thank you")).toEqual(["run"]);
+            expect(testMatch(grammar, "please run thank you")).toEqual(["run"]);
         });
 
         it("should handle imported rules with multiple alternatives", () => {
@@ -540,6 +637,17 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "start nginx")).toEqual([
+                { action: "start", service: "nginx" },
+            ]);
+            expect(testMatch(grammar, "stop apache")).toEqual([
+                { action: "stop", service: "apache" },
+            ]);
+            expect(testMatch(grammar, "restart mysql")).toEqual([
+                { action: "restart", service: "mysql" },
+            ]);
         });
 
         it("should handle same file imported from multiple places", () => {
@@ -568,6 +676,10 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "module1 common")).toEqual(["m1"]);
+            expect(testMatch(grammar, "module2 common")).toEqual(["m2"]);
         });
     });
 
@@ -589,6 +701,9 @@ describe("Grammar Imports with File Loading", () => {
             // Type imports don't load actual files, just mark types as valid
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "value something")).toEqual(["something"]);
         });
 
         it("should distinguish between grammar imports and type imports", () => {
@@ -610,6 +725,11 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
+
+            // Test match functionality
+            expect(testMatch(grammar, "my rule something")).toEqual([
+                { value: "something" },
+            ]);
         });
     });
 });
