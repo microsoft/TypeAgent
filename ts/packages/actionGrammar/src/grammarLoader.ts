@@ -14,14 +14,13 @@ import { getLineCol } from "./utils.js";
 const start = "Start";
 
 function convertCompileError(
-    fileName: string,
     content: string,
     type: "error" | "warning",
     errors: GrammarCompileError[],
 ) {
     return errors.map((e) => {
         const lineCol = getLineCol(content, e.pos ?? 0);
-        return `${fileName}(${lineCol.line},${lineCol.col}): ${type}: ${e.message}${e.definition ? ` in definition '<${e.definition}>'` : ""}`;
+        return `${e.displayPath}(${lineCol.line},${lineCol.col}): ${type}: ${e.message}${e.definition ? ` in definition '<${e.definition}>'` : ""}`;
     });
 }
 
@@ -43,22 +42,23 @@ export function loadGrammarRules(
     errors?: string[],
     warnings?: string[],
 ): Grammar | undefined {
-    let relativePath, fullPath, content: string;
+    let displayPath, fullPath, content: string;
     let loadFileContent: LoadFileContentFunction | undefined;
     if (typeof contentOrLoadFileContent === "function") {
         loadFileContent = contentOrLoadFileContent;
         const loadResult = loadFileContent(fileName);
-        relativePath = loadResult.relativePath;
+        displayPath = loadResult.displayPath;
         fullPath = loadResult.fullPath;
         content = loadResult.content;
     } else {
-        relativePath = fileName;
+        displayPath = fileName;
         fullPath = fileName;
         content = contentOrLoadFileContent;
     }
 
-    const parseResult = parseGrammarRules(relativePath, content);
+    const parseResult = parseGrammarRules(displayPath, content);
     const result = compileGrammar(
+        displayPath,
         fullPath,
         loadFileContent,
         parseResult.definitions,
@@ -68,12 +68,7 @@ export function loadGrammarRules(
 
     if (result.warnings.length > 0 && warnings !== undefined) {
         warnings.push(
-            ...convertCompileError(
-                relativePath,
-                content,
-                "warning",
-                result.warnings,
-            ),
+            ...convertCompileError(content, "warning", result.warnings),
         );
     }
 
@@ -85,12 +80,7 @@ export function loadGrammarRules(
         }
         return grammar;
     }
-    const errorMessages = convertCompileError(
-        relativePath,
-        content,
-        "error",
-        result.errors,
-    );
+    const errorMessages = convertCompileError(content, "error", result.errors);
     if (errors) {
         errors.push(...errorMessages);
         return undefined;
@@ -98,7 +88,7 @@ export function loadGrammarRules(
 
     const errorStr = result.errors.length === 1 ? "error" : "errors";
     errorMessages.unshift(
-        `Error detected in grammar compilation '${relativePath}': ${result.errors.length} ${errorStr}.`,
+        `Error detected in grammar compilation '${displayPath}': ${result.errors.length} ${errorStr}.`,
     );
     throw new Error(errorMessages.join("\n"));
 }

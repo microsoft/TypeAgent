@@ -38,7 +38,7 @@ export default class Compile extends Command {
                     throw new Error(`File not found: ${resolvedPath}`);
                 }
                 return {
-                    relativePath: path.relative(process.cwd(), name),
+                    displayPath: path.relative(process.cwd(), name),
                     fullPath: resolvedPath,
                     content: fs.readFileSync(resolvedPath, "utf-8"),
                 };

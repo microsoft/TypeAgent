@@ -9,7 +9,7 @@ function getLoadFileContentFunction(
 ): (
     name: string,
     base?: string,
-) => { relativePath: string; fullPath: string; content: string } {
+) => { displayPath: string; fullPath: string; content: string } {
     return (name: string, base?: string) => {
         const resolvedPath = base
             ? path.resolve(path.dirname(base), name)
@@ -19,7 +19,7 @@ function getLoadFileContentFunction(
             throw new Error(`File not found: ${resolvedPath}`);
         }
         return {
-            relativePath: path.relative("/", resolvedPath),
+            displayPath: path.relative("/", resolvedPath),
             fullPath: resolvedPath,
             content,
         };
@@ -372,6 +372,53 @@ describe("Grammar Imports with File Loading", () => {
                 );
             }).toThrow();
         });
+
+        it("should refer to files using relative paths in error messages - parse error", () => {
+            const grammarFiles: Record<string, string> = {
+                "/lib/broken.agr": `@<Broken> = syntax error ->`,
+                "/main.agr": `
+                                @import { Broken } from "./lib/broken.agr"
+                                @<Start> = <Broken>
+                            `,
+            };
+            try {
+                loadGrammarRules(
+                    "main.agr",
+                    getLoadFileContentFunction(grammarFiles),
+                );
+            } catch (e: any) {
+                // Error should reference the file with relative path from "/"
+                expect(e.message).toContain("lib/broken.agr");
+                // Error should NOT contain absolute path
+                expect(e.message).not.toContain("/lib/broken.agr");
+            }
+        });
+
+        it("should refer to files using relative paths in error messages - compile error", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "/lib/broken.agr": `@<Broken> = $(x:UndefinedType)`,
+                "/main.agr": `
+                                @import { Broken } from "./lib/broken.agr"
+                                @<Start> = <Broken>
+                            `,
+            };
+
+            const result = loadGrammarRules(
+                "main.agr",
+                getLoadFileContentFunction(grammarFiles),
+                errors,
+            );
+
+            expect(result).toBeUndefined();
+            expect(errors.length).toBe(1);
+
+            const errorMessage = errors[0];
+            // Error should reference the file with relative path from "/"
+            expect(errorMessage).toContain("lib/broken.agr");
+            // Error should NOT contain absolute path
+            expect(errorMessage).not.toContain("/lib/broken.agr");
+        });
     });
 
     describe("Complex Scenarios", () => {
@@ -379,8 +426,8 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "/base.agr": `
-                                @<Subject> = cat | dog | bird -> $(subject)
-                                @<Verb> = runs | jumps | flies -> $(verb)
+                                @<Subject> = ( cat | dog | bird ) -> "subject"
+                                @<Verb> = ( runs | jumps | flies ) -> "verb"
                                 @<Sentence> = the $(subject:<Subject>) $(verb:<Verb>) -> {
                                     subject: $(subject),
                                     verb: $(verb)

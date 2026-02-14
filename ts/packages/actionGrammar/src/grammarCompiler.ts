@@ -18,7 +18,7 @@ export type LoadFileContentFunction = (
     name: string,
     base?: string,
 ) => {
-    relativePath: string;
+    displayPath: string;
     fullPath: string;
     content: string;
 };
@@ -41,24 +41,48 @@ type GrammarCompileResult = {
 
 export type GrammarCompileError = {
     message: string;
+    displayPath: string;
     definition?: string | undefined;
     pos?: number | undefined;
 };
 
 type CompileContext = {
     grammarFileMap: Map<string, CompileContext>;
-    fileName: string;
+    displayPath: string;
     ruleDefMap: DefinitionMap;
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     importedTypeNames: Set<string>; // Type names imported from .ts files
     currentDefinition?: string | undefined;
-    errors: GrammarCompileError[];
-    warnings: GrammarCompileError[];
+    errors: Omit<GrammarCompileError, "displayPath">[];
+    warnings: Omit<GrammarCompileError, "displayPath">[];
 };
+
+function createImportCompileContext(
+    loadFileContent: LoadFileContentFunction,
+    grammarFileMap: Map<string, CompileContext>,
+    referencingFileName: string,
+    importStmt: ImportStatement,
+): CompileContext {
+    const { displayPath, fullPath, content } = loadFileContent(
+        importStmt.source,
+        referencingFileName,
+    );
+    const result = parseGrammarRules(displayPath, content);
+    const importContext = createCompileContext(
+        grammarFileMap,
+        displayPath,
+        fullPath,
+        loadFileContent,
+        result.definitions,
+        result.imports,
+    );
+    return importContext;
+}
 
 function createCompileContext(
     grammarFileMap: Map<string, CompileContext>,
-    fileName: string,
+    displayPath: string,
+    fullPath: string,
     loadFileContent: LoadFileContentFunction | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
@@ -76,17 +100,11 @@ function createCompileContext(
                 if (loadFileContent === undefined) {
                     throw new Error(`Grammar file imports are not supported.`);
                 }
-                const { relativePath, fullPath, content } = loadFileContent(
-                    importStmt.source,
-                    fileName,
-                );
-                const result = parseGrammarRules(relativePath, content);
-                const importContext = createCompileContext(
+                const importContext = createImportCompileContext(
+                    loadFileContent,
                     grammarFileMap,
                     fullPath,
-                    loadFileContent,
-                    result.definitions,
-                    result.imports,
+                    importStmt,
                 );
                 importedRuleMap.set(importStmt.source, importContext);
 
@@ -115,7 +133,7 @@ function createCompileContext(
 
     const context: CompileContext = {
         grammarFileMap,
-        fileName,
+        displayPath,
         ruleDefMap,
         importedRuleMap,
         importedTypeNames,
@@ -144,12 +162,13 @@ function createCompileContext(
         }
     }
 
-    grammarFileMap.set(fileName, context);
+    grammarFileMap.set(fullPath, context);
     return context;
 }
 
 export function compileGrammar(
-    fileName: string,
+    relativePath: string,
+    fullPath: string,
     loadFileContent: LoadFileContentFunction | undefined,
     definitions: RuleDefinition[],
     start: string,
@@ -158,7 +177,8 @@ export function compileGrammar(
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
         grammarFileMap,
-        fileName,
+        relativePath,
+        fullPath,
         loadFileContent,
         definitions,
         imports,
@@ -175,10 +195,27 @@ export function compileGrammar(
         }
     }
 
+    const errors: GrammarCompileError[] = [];
+    const warnings: GrammarCompileError[] = [];
+    for (const [, compileContext] of context.grammarFileMap) {
+        errors.push(
+            ...compileContext.errors.map((e) => ({
+                ...e,
+                displayPath: compileContext.displayPath,
+            })),
+        );
+        warnings.push(
+            ...compileContext.warnings.map((w) => ({
+                ...w,
+                displayPath: compileContext.displayPath,
+            })),
+        );
+    }
+
     return {
         grammar,
-        errors: context.errors,
-        warnings: context.warnings,
+        errors,
+        warnings,
     };
 }
 
