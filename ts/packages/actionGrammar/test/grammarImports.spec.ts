@@ -592,7 +592,7 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "optional.agr": `
-                                @<Polite> = please $(action) (thank you)? -> $(action)
+                                @<Polite> = (please)? $(action) (thank you)? -> $(action)
                             `,
                 "main.agr": `
                                 @import { Polite } from "./optional.agr"
@@ -609,10 +609,22 @@ describe("Grammar Imports with File Loading", () => {
             expect(grammar).toBeDefined();
 
             // Test match functionality
-            expect(testMatch(grammar, "please run")).toEqual(["run"]);
+            expect(testMatch(grammar, "please run")).toEqual([
+                "run",
+                "please run", // REVIEW: avoid this in the possible result, even though it is possible valid?
+            ]);
             expect(testMatch(grammar, "run")).toEqual(["run"]);
-            expect(testMatch(grammar, "run thank you")).toEqual(["run"]);
-            expect(testMatch(grammar, "please run thank you")).toEqual(["run"]);
+            expect(testMatch(grammar, "run thank you")).toEqual([
+                "run",
+                "run thank you", // REVIEW: avoid this in the possible result, even though it is possible valid?
+            ]);
+            expect(testMatch(grammar, "please run thank you")).toEqual([
+                "run",
+                // REVIEW: avoid the "please run thank you" result, even though it is possible valid?
+                "run thank you",
+                "please run",
+                "please run thank you",
+            ]);
         });
 
         it("should handle imported rules with multiple alternatives", () => {
