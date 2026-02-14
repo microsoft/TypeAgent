@@ -236,6 +236,63 @@ describe("Grammar Imports with File Loading", () => {
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
         });
+
+        it("should resolve paths relative to each referencing file at multiple levels", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                // Deepest level: /dir1/dir2/base.agr
+                "/dir1/dir2/base.agr": `@<Base> = base -> "base"`,
+                // Middle level: /dir1/middle.agr imports from ./dir2/base.agr (relative to /dir1/)
+                "/dir1/middle.agr": `
+                                @import { Base } from "./dir2/base.agr"
+                                @<Middle> = middle <Base> -> "middle"
+                            `,
+                // Top level: /main.agr imports from ./dir1/middle.agr (relative to /)
+                "/main.agr": `
+                                @import { Middle } from "./dir1/middle.agr"
+                                @<Start> = start <Middle> -> "start"
+                            `,
+            };
+            const grammar = loadGrammarRules(
+                "main.agr",
+                getLoadFileContentFunction(grammarFiles),
+                errors,
+            );
+
+            expect(errors).toEqual([]);
+            expect(grammar).toBeDefined();
+        });
+
+        it("should resolve sibling and parent directory paths at multiple levels", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                // Shared utility in /shared/common.agr
+                "/shared/common.agr": `@<Common> = common -> "common"`,
+                // Module in /modules/sub/feature.agr imports from ../../shared/common.agr
+                "/modules/sub/feature.agr": `
+                                @import { Common } from "../../shared/common.agr"
+                                @<Feature> = feature <Common> -> "feature"
+                            `,
+                // Wrapper in /modules/wrapper.agr imports from ./sub/feature.agr
+                "/modules/wrapper.agr": `
+                                @import { Feature } from "./sub/feature.agr"
+                                @<Wrapper> = wrapper <Feature> -> "wrapper"
+                            `,
+                // Main imports from ./modules/wrapper.agr
+                "/main.agr": `
+                                @import { Wrapper } from "./modules/wrapper.agr"
+                                @<Start> = <Wrapper>
+                            `,
+            };
+            const grammar = loadGrammarRules(
+                "main.agr",
+                getLoadFileContentFunction(grammarFiles),
+                errors,
+            );
+
+            expect(errors).toEqual([]);
+            expect(grammar).toBeDefined();
+        });
     });
 
     describe("Error Cases", () => {
