@@ -267,9 +267,9 @@ describe("Grammar Imports with File Loading", () => {
             expect(grammar).toBeDefined();
 
             // Test match functionality
-            expect(testMatch(grammar, "level one level two level three")).toEqual(
-                [1],
-            );
+            expect(
+                testMatch(grammar, "level one level two level three"),
+            ).toEqual([1]);
         });
 
         it("should handle imports from subdirectories", () => {
@@ -580,19 +580,19 @@ describe("Grammar Imports with File Loading", () => {
             expect(grammar).toBeDefined();
 
             // Test match functionality
-            expect(testMatch(grammar, "task mytask priority high status active")).toEqual(
-                [{ name: "mytask", priority: 1, status: "active" }],
-            );
-            expect(testMatch(grammar, "task project priority low status inactive")).toEqual(
-                [{ name: "project", priority: 3, status: "inactive" }],
-            );
+            expect(
+                testMatch(grammar, "task mytask priority high status active"),
+            ).toEqual([{ name: "mytask", priority: 1, status: "active" }]);
+            expect(
+                testMatch(grammar, "task project priority low status inactive"),
+            ).toEqual([{ name: "project", priority: 3, status: "inactive" }]);
         });
 
         it("should handle optional rule references in imported rules", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "optional.agr": `
-                                @<Polite> = (please)? $(action) (thank you)? -> $(action)
+                                @<Polite> = please $(action) (thank you)? -> $(action)
                             `,
                 "main.agr": `
                                 @import { Polite } from "./optional.agr"
@@ -703,7 +703,9 @@ describe("Grammar Imports with File Loading", () => {
             expect(grammar).toBeDefined();
 
             // Test match functionality
-            expect(testMatch(grammar, "value something")).toEqual(["something"]);
+            expect(testMatch(grammar, "value something")).toEqual([
+                "something",
+            ]);
         });
 
         it("should distinguish between grammar imports and type imports", () => {
@@ -782,7 +784,9 @@ describe("Grammar Imports with File Loading", () => {
 
             // Should have an error about importing a locally defined rule
             expect(errors.length).toBeGreaterThan(0);
-            expect(errors[0]).toContain("cannot be imported because it is already defined");
+            expect(errors[0]).toContain(
+                "cannot be imported because it is already defined",
+            );
         });
 
         it("should support three-way circular import (A→B→C→A)", () => {
