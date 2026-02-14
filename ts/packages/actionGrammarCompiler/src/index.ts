@@ -26,13 +26,23 @@ export default class Compile extends Command {
     async run(): Promise<void> {
         const { flags } = await this.parse(Compile);
 
-        const name = path.basename(flags.input);
-
         const errors: string[] = [];
         const warnings: string[] = [];
         const grammar = loadGrammarRules(
-            name,
-            fs.readFileSync(flags.input, "utf-8"),
+            flags.input,
+            (name: string, base?: string) => {
+                const resolvedPath = base
+                    ? path.resolve(path.dirname(base), name)
+                    : path.resolve(name);
+                if (!fs.existsSync(resolvedPath)) {
+                    throw new Error(`File not found: ${resolvedPath}`);
+                }
+                return {
+                    relativePath: path.relative(process.cwd(), name),
+                    fullPath: resolvedPath,
+                    content: fs.readFileSync(resolvedPath, "utf-8"),
+                };
+            },
             errors,
             warnings,
         );

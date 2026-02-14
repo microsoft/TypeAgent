@@ -13,8 +13,15 @@ import {
     ImportStatement,
     parseGrammarRules,
 } from "./grammarRuleParser.js";
-import path from "node:path";
-import fs from "node:fs";
+
+export type LoadFileContentFunction = (
+    name: string,
+    base?: string,
+) => {
+    relativePath: string;
+    fullPath: string;
+    content: string;
+};
 
 type DefinitionMap = Map<
     string,
@@ -52,6 +59,7 @@ type CompileContext = {
 function createCompileContext(
     grammarFileMap: Map<string, CompileContext>,
     fileName: string,
+    loadFileContent: LoadFileContentFunction | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
 ): CompileContext {
@@ -65,17 +73,18 @@ function createCompileContext(
             // Determine if this is a type import (.ts) or grammar import (.agr)
             const isGrammarImport = importStmt.source.endsWith(".agr");
             if (isGrammarImport) {
-                const grammarFileName = path.resolve(
-                    path.dirname(fileName),
+                if (loadFileContent === undefined) {
+                    throw new Error(`Grammar file imports are not supported.`);
+                }
+                const { relativePath, fullPath, content } = loadFileContent(
                     importStmt.source,
-                );
-                const result = parseGrammarRules(
                     fileName,
-                    fs.readFileSync(grammarFileName, "utf-8"),
                 );
+                const result = parseGrammarRules(relativePath, content);
                 const importContext = createCompileContext(
                     grammarFileMap,
-                    grammarFileName,
+                    fullPath,
+                    loadFileContent,
                     result.definitions,
                     result.imports,
                 );
@@ -141,6 +150,7 @@ function createCompileContext(
 
 export function compileGrammar(
     fileName: string,
+    loadFileContent: LoadFileContentFunction | undefined,
     definitions: RuleDefinition[],
     start: string,
     imports?: ImportStatement[],
@@ -149,6 +159,7 @@ export function compileGrammar(
     const context = createCompileContext(
         grammarFileMap,
         fileName,
+        loadFileContent,
         definitions,
         imports,
     );
