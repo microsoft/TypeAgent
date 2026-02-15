@@ -369,15 +369,17 @@ export class LocalPlayerService {
         try {
             debug(`Playing: ${track.path}`);
 
+            // Compute effective volume (0 when muted)
+            const effectiveVolume = this.getEffectiveVolume();
+
             if (process.platform === "win32") {
                 // Use Windows Media Player via PowerShell
                 const escapedPath = track.path.replace(/'/g, "''");
-                const volume = this.state.volume / 100;
                 const psScript =
                     `Add-Type -AssemblyName PresentationCore; ` +
                     `$player = New-Object System.Windows.Media.MediaPlayer; ` +
                     `$player.Open([Uri]'${escapedPath}'); ` +
-                    `$player.Volume = [double]${volume}; ` +
+                    `$player.Volume = [double]${effectiveVolume}; ` +
                     `$player.Play(); ` +
                     `Start-Sleep -Seconds 3600`;
 
@@ -407,8 +409,7 @@ export class LocalPlayerService {
                     return false;
                 }
 
-                const volume = this.state.volume / 100;
-                const args = player.buildArgs(track.path, volume);
+                const args = player.buildArgs(track.path, effectiveVolume);
 
                 debug(
                     `Using ${player.name}: ${player.command} ${args.join(" ")}`,
@@ -573,10 +574,31 @@ export class LocalPlayerService {
         return await this.playTrack(this.state.queue[prevIndex]);
     }
 
+    /**
+     * Get the effective volume (0.0–1.0), respecting the mute state.
+     */
+    private getEffectiveVolume(): number {
+        if (this.state.isMuted) {
+            return 0;
+        }
+        return this.state.volume / 100;
+    }
+
+    /**
+     * If a track is currently playing, restart playback so the new
+     * volume / mute state takes effect immediately.
+     */
+    private applyVolumeChange(): void {
+        if (this.state.isPlaying && this.state.currentTrack) {
+            debug("Restarting playback to apply volume change");
+            this.playTrack(this.state.currentTrack);
+        }
+    }
+
     public setVolume(level: number): boolean {
         this.state.volume = Math.max(0, Math.min(100, level));
         debug(`Volume set to: ${this.state.volume}`);
-        // Note: Changing volume during playback requires player-specific implementation
+        this.applyVolumeChange();
         return true;
     }
 
@@ -587,12 +609,14 @@ export class LocalPlayerService {
     public mute(): boolean {
         this.state.isMuted = true;
         debug("Muted");
+        this.applyVolumeChange();
         return true;
     }
 
     public unmute(): boolean {
         this.state.isMuted = false;
         debug("Unmuted");
+        this.applyVolumeChange();
         return true;
     }
 
