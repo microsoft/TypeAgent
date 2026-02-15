@@ -170,15 +170,30 @@ export class LocalPlayerService {
 
             if (process.platform === "win32") {
                 // Use Windows Media Player via PowerShell
+                const escapedPath = track.path.replace(/'/g, "''");
+                const volume = this.state.volume / 100;
+                const psScript =
+                    `Add-Type -AssemblyName PresentationCore; ` +
+                    `$player = New-Object System.Windows.Media.MediaPlayer; ` +
+                    `$player.Open([Uri]'${escapedPath}'); ` +
+                    `$player.Volume = [double]${volume}; ` +
+                    `$player.Play(); ` +
+                    `Start-Sleep -Seconds 3600`;
+
                 this.playerProcess = spawn(
                     "powershell",
                     [
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-ExecutionPolicy",
+                        "Bypass",
                         "-Command",
-                        "& { Add-Type -AssemblyName presentationCore; $player = New-Object System.Windows.Media.MediaPlayer; $player.Open($args[0]); $player.Volume = [double]$args[1]; $player.Play(); Start-Sleep -Seconds 3600 }",
-                        track.path,
-                        String(this.state.volume / 100),
+                        psScript,
                     ],
-                    { stdio: "ignore" },
+                    {
+                        stdio: ["ignore", "ignore", "ignore"],
+                        shell: false,
+                    },
                 );
             } else if (process.platform === "darwin") {
                 // macOS: use afplay
