@@ -77,7 +77,7 @@
     "jsonpath": "^1.2.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
-    "markdown-it": "^14.1.0",
+    "markdown-it": "^14.1.1",
     "pdfjs-dist": "^5.3.31",
     "prismjs": "^1.30.0",
     "puppeteer": "^23.8.0",
