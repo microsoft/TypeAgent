@@ -22,11 +22,7 @@ const MACOS_PLAYERS: MediaPlayerDef[] = [
     {
         name: "afplay",
         command: "afplay",
-        buildArgs: (filePath, volume) => [
-            "-v",
-            String(volume),
-            filePath,
-        ],
+        buildArgs: (filePath, volume) => ["-v", String(volume), filePath],
         supportsPauseResume: true, // supports SIGSTOP/SIGCONT
     },
     {
@@ -499,10 +495,7 @@ export class LocalPlayerService {
 
     public resume(): boolean {
         if (this.state.isPaused && this.state.currentTrack) {
-            if (
-                this.playerProcess &&
-                this.activePlayer?.supportsPauseResume
-            ) {
+            if (this.playerProcess && this.activePlayer?.supportsPauseResume) {
                 // macOS/Linux: SIGCONT resumes a suspended process
                 this.playerProcess.kill("SIGCONT");
             } else {
