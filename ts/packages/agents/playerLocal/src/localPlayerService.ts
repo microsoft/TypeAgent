@@ -4,11 +4,164 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, execSync, ChildProcess } from "child_process";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:localPlayer");
 const debugError = registerDebug("typeagent:localPlayer:error");
+
+// Media player definitions per platform
+interface MediaPlayerDef {
+    name: string;
+    command: string;
+    buildArgs: (filePath: string, volume: number) => string[];
+    supportsPauseResume: boolean;
+}
+
+const MACOS_PLAYERS: MediaPlayerDef[] = [
+    {
+        name: "afplay",
+        command: "afplay",
+        buildArgs: (filePath, volume) => [
+            "-v",
+            String(volume),
+            filePath,
+        ],
+        supportsPauseResume: true, // supports SIGSTOP/SIGCONT
+    },
+    {
+        name: "mpv",
+        command: "mpv",
+        buildArgs: (filePath, volume) => [
+            "--no-video",
+            `--volume=${Math.round(volume * 100)}`,
+            filePath,
+        ],
+        supportsPauseResume: true,
+    },
+    {
+        name: "ffplay",
+        command: "ffplay",
+        buildArgs: (filePath, volume) => [
+            "-nodisp",
+            "-autoexit",
+            "-volume",
+            String(Math.round(volume * 100)),
+            filePath,
+        ],
+        supportsPauseResume: true,
+    },
+    {
+        name: "VLC",
+        command: "/Applications/VLC.app/Contents/MacOS/VLC",
+        buildArgs: (filePath, volume) => [
+            "--intf",
+            "dummy",
+            "--play-and-exit",
+            `--gain=${volume}`,
+            filePath,
+        ],
+        supportsPauseResume: true,
+    },
+];
+
+const LINUX_PLAYERS: MediaPlayerDef[] = [
+    {
+        name: "mpv",
+        command: "mpv",
+        buildArgs: (filePath, volume) => [
+            "--no-video",
+            `--volume=${Math.round(volume * 100)}`,
+            filePath,
+        ],
+        supportsPauseResume: true,
+    },
+    {
+        name: "ffplay",
+        command: "ffplay",
+        buildArgs: (filePath, volume) => [
+            "-nodisp",
+            "-autoexit",
+            "-volume",
+            String(Math.round(volume * 100)),
+            filePath,
+        ],
+        supportsPauseResume: true,
+    },
+    {
+        name: "vlc",
+        command: "cvlc",
+        buildArgs: (filePath, volume) => [
+            "--play-and-exit",
+            `--gain=${volume}`,
+            filePath,
+        ],
+        supportsPauseResume: true,
+    },
+    {
+        name: "aplay",
+        command: "aplay",
+        buildArgs: (filePath) => [filePath],
+        supportsPauseResume: true, // supports SIGSTOP/SIGCONT
+    },
+    {
+        name: "paplay",
+        command: "paplay",
+        buildArgs: (filePath) => [filePath],
+        supportsPauseResume: false,
+    },
+];
+
+/**
+ * Check if a command is available on the system.
+ */
+function isCommandAvailable(command: string): boolean {
+    try {
+        const checkCmd =
+            process.platform === "win32"
+                ? `where ${command}`
+                : `which ${command}`;
+        execSync(checkCmd, { stdio: "ignore" });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Find the first available media player for the current platform.
+ * Results are cached after the first call.
+ */
+let cachedPlayer: MediaPlayerDef | null | undefined;
+function findAvailablePlayer(): MediaPlayerDef | null {
+    if (cachedPlayer !== undefined) {
+        return cachedPlayer;
+    }
+
+    const candidates =
+        process.platform === "darwin" ? MACOS_PLAYERS : LINUX_PLAYERS;
+
+    for (const player of candidates) {
+        // For absolute paths (e.g. VLC on macOS), check if the file exists
+        if (player.command.startsWith("/")) {
+            if (fs.existsSync(player.command)) {
+                debug(`Found media player: ${player.name} (${player.command})`);
+                cachedPlayer = player;
+                return player;
+            }
+        } else if (isCommandAvailable(player.command)) {
+            debug(`Found media player: ${player.name}`);
+            cachedPlayer = player;
+            return player;
+        }
+    }
+
+    debugError(
+        `No supported media player found. Tried: ${candidates.map((p) => p.name).join(", ")}`,
+    );
+    cachedPlayer = null;
+    return null;
+}
 
 // Supported audio file extensions
 const AUDIO_EXTENSIONS = [
@@ -41,14 +194,66 @@ export interface PlaybackState {
     queue: Track[];
 }
 
+/**
+ * Determine the default music folder for the current platform.
+ *
+ * - Windows / macOS: ~/Music (the OS convention)
+ * - Linux: Reads XDG_MUSIC_DIR from the environment or ~/.config/user-dirs.dirs,
+ *   falling back to ~/Music if neither is set or the directory doesn't exist.
+ */
+function getDefaultMusicFolder(): string {
+    const fallback = path.join(os.homedir(), "Music");
+
+    if (process.platform !== "linux") {
+        // Windows and macOS both use ~/Music by convention
+        return fallback;
+    }
+
+    // 1. Check the XDG_MUSIC_DIR environment variable
+    const xdgEnv = process.env.XDG_MUSIC_DIR;
+    if (xdgEnv) {
+        const resolved = xdgEnv.replace(/^\$HOME/, os.homedir());
+        if (fs.existsSync(resolved)) {
+            debug(`Using XDG_MUSIC_DIR: ${resolved}`);
+            return resolved;
+        }
+    }
+
+    // 2. Parse ~/.config/user-dirs.dirs
+    const userDirsPath = path.join(
+        process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"),
+        "user-dirs.dirs",
+    );
+    try {
+        if (fs.existsSync(userDirsPath)) {
+            const content = fs.readFileSync(userDirsPath, "utf8");
+            const match = content.match(
+                /^XDG_MUSIC_DIR\s*=\s*"?([^"\n]+)"?\s*$/m,
+            );
+            if (match) {
+                const dir = match[1].replace(/^\$HOME/, os.homedir());
+                if (fs.existsSync(dir)) {
+                    debug(`Using music dir from user-dirs.dirs: ${dir}`);
+                    return dir;
+                }
+            }
+        }
+    } catch (e) {
+        debug(`Failed to read user-dirs.dirs: ${e}`);
+    }
+
+    return fallback;
+}
+
 export class LocalPlayerService {
     private state: PlaybackState;
     private musicFolder: string;
     private playerProcess: ChildProcess | null = null;
+    private activePlayer: MediaPlayerDef | null = null;
 
     constructor() {
-        // Default music folder
-        this.musicFolder = path.join(os.homedir(), "Music");
+        // Default music folder (platform-aware)
+        this.musicFolder = getDefaultMusicFolder();
 
         this.state = {
             isPlaying: false,
@@ -195,16 +400,29 @@ export class LocalPlayerService {
                         shell: false,
                     },
                 );
-            } else if (process.platform === "darwin") {
-                // macOS: use afplay
-                this.playerProcess = spawn("afplay", [track.path], {
-                    stdio: "ignore",
-                });
+                this.activePlayer = null;
             } else {
-                // Linux: use mpv or similar
-                this.playerProcess = spawn("mpv", ["--no-video", track.path], {
-                    stdio: "ignore",
+                // macOS / Linux: find an available media player
+                const player = findAvailablePlayer();
+                if (!player) {
+                    debugError(
+                        "No media player available. Install mpv, ffplay, or vlc.",
+                    );
+                    return false;
+                }
+
+                const volume = this.state.volume / 100;
+                const args = player.buildArgs(track.path, volume);
+
+                debug(
+                    `Using ${player.name}: ${player.command} ${args.join(" ")}`,
+                );
+
+                this.playerProcess = spawn(player.command, args, {
+                    stdio: ["ignore", "ignore", "ignore"],
+                    shell: false,
                 });
+                this.activePlayer = player;
             }
 
             this.playerProcess.on("error", (error) => {
@@ -256,11 +474,20 @@ export class LocalPlayerService {
 
     public pause(): boolean {
         if (this.playerProcess && this.state.isPlaying) {
-            // Note: Simple pause isn't supported by all players
-            // For a real implementation, use a library with better control
             if (process.platform === "win32") {
-                // Send Ctrl+C to pause (not ideal)
+                // Windows: kill and restart on resume (no SIGSTOP support)
+                this.playerProcess.kill();
+                this.playerProcess = null;
+            } else if (
+                this.activePlayer &&
+                this.activePlayer.supportsPauseResume
+            ) {
+                // macOS/Linux: SIGSTOP suspends the player process
                 this.playerProcess.kill("SIGSTOP");
+            } else {
+                // Player doesn't support pause; kill and restart on resume
+                this.playerProcess.kill();
+                this.playerProcess = null;
             }
             this.state.isPaused = true;
             this.state.isPlaying = false;
@@ -272,14 +499,14 @@ export class LocalPlayerService {
 
     public resume(): boolean {
         if (this.state.isPaused && this.state.currentTrack) {
-            if (!this.playerProcess) {
-                // No active player process; restart playback
-                this.playTrack(this.state.currentTrack);
-            } else if (process.platform !== "win32") {
-                // On non-Windows platforms, attempt to continue the existing process
+            if (
+                this.playerProcess &&
+                this.activePlayer?.supportsPauseResume
+            ) {
+                // macOS/Linux: SIGCONT resumes a suspended process
                 this.playerProcess.kill("SIGCONT");
             } else {
-                // On Windows, SIGCONT isn't supported; restart playback instead
+                // No active process or no pause/resume support; restart playback
                 this.playTrack(this.state.currentTrack);
             }
             this.state.isPaused = false;
