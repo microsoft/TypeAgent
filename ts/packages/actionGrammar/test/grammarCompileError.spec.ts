@@ -89,4 +89,77 @@ describe("Grammar Compiler", () => {
             );
         });
     });
+
+    describe("Type Imports", () => {
+        it("Imported type reference should not error", () => {
+            const grammarText = `
+            @import { CustomType } from "types.ts"
+
+            @<Start> = $(value:CustomType)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(0);
+        });
+
+        it("Wildcard type import allows any type reference", () => {
+            const grammarText = `
+            @import * from "types.ts"
+
+            @<Start> = $(x:CustomType) and $(y:AnotherType)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(0);
+        });
+
+        it("Multiple type imports work together", () => {
+            const grammarText = `
+            @import { Type1 } from "file1.ts"
+            @import { Type2 } from "file2.ts"
+
+            @<Start> = $(x:Type1) $(y:Type2)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(0);
+        });
+
+        it("Built-in types do not require imports", () => {
+            const grammarText = `
+            @<Start> = $(x:string) $(y:number) $(z:wildcard)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(0);
+        });
+
+        it("Non-imported type errors", () => {
+            const grammarText = `
+            @import { CustomType } from "types.ts"
+
+            @<Start> = $(x:CustomType) $(y:UndefinedType)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Undefined type 'UndefinedType' in variable 'y'",
+            );
+        });
+
+        it("Type imports do not affect rule validation", () => {
+            const grammarText = `
+            @import { SomeType } from "types.ts"
+
+            @<Start> = <SomeType>
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Missing rule definition for '<SomeType>'",
+            );
+        });
+    });
 });

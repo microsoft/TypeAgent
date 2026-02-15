@@ -7,7 +7,11 @@ import { getLineCol } from "./utils.js";
 const debugParse = registerDebug("typeagent:grammar:parse");
 /**
  * The grammar for cache grammar files is defined as follows (in BNF and regular expressions):
- *   <AgentCacheGrammar> ::= <RuleDefinition>*
+ *   <AgentCacheGrammar> ::= (<EntityDeclaration> | <ImportStatement> | <RuleDefinition>)*
+ *   <EntityDeclaration> ::= "entity" <Identifier> ("," <Identifier>)* ";"
+ *   <ImportStatement> ::= "@import" (<ImportAll> | <ImportNames>) "from" <StringLiteral>
+ *   <ImportAll> ::= "*"
+ *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
  *   <RuleDefinition> ::= "@" <RuleName> "=" <Rules>
  *   <Rules> ::= <Rule> ( "|" <Rule> )*
  *   <Rule> ::= <Expression> ( "->" <Value> )?
@@ -120,9 +124,17 @@ export type RuleDefinition = {
     pos?: number | undefined;
 };
 
-// Grammar Parse Result (includes entity declarations)
+// Import types
+export type ImportStatement = {
+    names: string[] | "*"; // Specific names or * for all
+    source: string; // File path or module name
+    pos?: number | undefined;
+};
+
+// Grammar Parse Result (includes entity declarations and imports)
 export type GrammarParseResult = {
     entities: string[]; // Entity types this grammar depends on
+    imports: ImportStatement[]; // Import statements
     definitions: RuleDefinition[];
 };
 
@@ -210,8 +222,9 @@ class GrammarRuleParser {
         while (this.curr < content.length && isIdContinue(content[this.curr])) {
             this.curr++;
         }
+        const end = this.curr; // Capture end position before skipping whitespace
         this.skipWhitespace();
-        return content.substring(start, this.curr);
+        return content.substring(start, end);
     }
 
     private parseEscapedChar() {
@@ -591,7 +604,6 @@ class GrammarRuleParser {
     }
 
     private parseRuleDefinition(): RuleDefinition {
-        this.consume("@", "start of rule");
         const pos = this.pos;
         const name = this.parseRuleName();
         this.consume("=", "after rule identifier");
@@ -674,21 +686,97 @@ class GrammarRuleParser {
         return entities;
     }
 
+    private parseImportStatement(): ImportStatement {
+        // @import { Name1, Name2 } from "file"
+        // @import * from "file"
+        this.skipWhitespace(6); // skip "import"
+        const pos = this.pos;
+
+        let names: string[] | "*";
+
+        if (this.isAt("*")) {
+            // import all
+            names = "*";
+            this.skipWhitespace(1);
+        } else if (this.isAt("{")) {
+            // granular import
+            this.skipWhitespace(1);
+            names = [];
+
+            while (true) {
+                if (this.isAtEnd()) {
+                    this.throwError(
+                        "Unexpected end of file in import statement.",
+                    );
+                }
+
+                if (this.isAt("}")) {
+                    this.skipWhitespace(1);
+                    break;
+                }
+
+                if (names.length > 0) {
+                    this.consume(",", "between import names");
+                }
+
+                const name = this.parseId("import name");
+                names.push(name);
+            }
+
+            if (names.length === 0) {
+                this.throwError(
+                    "Import statement must have at least one name.",
+                );
+            }
+        } else {
+            this.throwUnexpectedCharError(
+                "Expected '{' or '*' after '@import'",
+            );
+        }
+
+        // Parse "from"
+        if (!this.isAt("from")) {
+            this.throwUnexpectedCharError(
+                "Expected 'from' keyword in import statement",
+            );
+        }
+        this.skipWhitespace(4); // skip "from"
+
+        // Parse source string
+        if (!this.isAt('"') && !this.isAt("'")) {
+            this.throwUnexpectedCharError(
+                "Expected string literal for import source",
+            );
+        }
+        const source = this.parseStringLiteral();
+
+        return { names, source, pos };
+    }
+
     public parse(): GrammarParseResult {
         const entities: string[] = [];
+        const imports: ImportStatement[] = [];
         const definitions: RuleDefinition[] = [];
         this.skipWhitespace();
         while (!this.isAtEnd()) {
-            if (this.isAt("entity")) {
+            if (this.isAt("@")) {
+                this.skipWhitespace(1);
+                if (this.isAt("<")) {
+                    definitions.push(this.parseRuleDefinition());
+                    continue;
+                }
+                if (this.isAt("import")) {
+                    imports.push(this.parseImportStatement());
+                    continue;
+                }
+            } else if (this.isAt("entity")) {
                 entities.push(...this.parseEntityDeclaration());
-            } else if (this.isAt("@")) {
-                definitions.push(this.parseRuleDefinition());
-            } else {
-                this.throwUnexpectedCharError(
-                    "Expected 'entity' declaration or '@' rule definition",
-                );
+                continue;
             }
+            this.throwUnexpectedCharError(
+                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
+            );
         }
-        return { entities, definitions };
+        return { entities, imports, definitions };
     }
 }

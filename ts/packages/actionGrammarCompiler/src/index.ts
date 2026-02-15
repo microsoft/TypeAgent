@@ -26,13 +26,11 @@ export default class Compile extends Command {
     async run(): Promise<void> {
         const { flags } = await this.parse(Compile);
 
-        const name = path.basename(flags.input);
-
         const errors: string[] = [];
         const warnings: string[] = [];
         const grammar = loadGrammarRules(
-            name,
-            fs.readFileSync(flags.input, "utf-8"),
+            flags.input,
+            undefined,
             errors,
             warnings,
         );
