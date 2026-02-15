@@ -709,9 +709,9 @@ export async function setVolume(
 
 function getUrlWithParams(urlString: string, queryParams: Record<string, any>) {
     // Use encodeURIComponent for standard URL percent-encoding instead of
-    // URLSearchParams which uses application/x-www-form-urlencoded (encodes
-    // spaces as '+' and over-encodes characters like ()!). Spotify's API
-    // expects standard percent-encoding.
+    // URLSearchParams, which uses application/x-www-form-urlencoded semantics
+    // (encoding spaces as '+' rather than '%20'). Spotify's API expects spaces
+    // to be percent-encoded as '%20'.
     const parts: string[] = [];
     for (const [key, value] of Object.entries(queryParams)) {
         if (value !== undefined && value !== null) {
