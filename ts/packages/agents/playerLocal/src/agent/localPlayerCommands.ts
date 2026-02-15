@@ -18,7 +18,11 @@ import {
     displayWarn,
     displayError,
 } from "@typeagent/agent-sdk/helpers/display";
-import { LocalPlayerActionContext } from "./localPlayerHandlers.js";
+import {
+    LocalPlayerActionContext,
+    loadSettings,
+    saveSettings,
+} from "./localPlayerHandlers.js";
 
 // Helper to get service with error handling
 function getService(context: ActionContext<LocalPlayerActionContext>) {
@@ -248,6 +252,14 @@ const setFolderHandler: CommandHandler = {
         const success = service.setMusicFolder(folderPath);
 
         if (success) {
+            // Persist the music folder setting
+            const storage = context.sessionContext.agentContext.storage;
+            if (storage) {
+                const settings = await loadSettings(storage);
+                settings.musicFolder = folderPath;
+                await saveSettings(storage, settings);
+            }
+
             const files = service.listFiles();
             displaySuccess(
                 `📁 Music folder set to: ${folderPath}\nFound ${files.length} audio files`,
