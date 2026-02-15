@@ -71,6 +71,18 @@ describe("Grammar Compiler", () => {
                 "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
             );
         });
+
+        it("Undefined variable reference in value expression", () => {
+            const grammarText = `
+            @<Start> = $(name) plays music -> { player: $(name), action: $(undefinedVar) }
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Variable 'undefinedVar' is referenced in the value but not defined in the rule",
+            );
+        });
     });
     describe("Warning", () => {
         it("Unused", () => {
