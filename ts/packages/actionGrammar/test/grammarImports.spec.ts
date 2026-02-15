@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import path from "node:path";
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { FileLoader } from "../src/grammarCompiler.js";
 import { defaultFileLoader } from "../src/defaultFileLoader.js";
@@ -449,10 +450,11 @@ describe("Grammar Imports with File Loading", () => {
             try {
                 loadGrammarRules("main.agr", getTestFileLoader(grammarFiles));
             } catch (e: any) {
-                // Error should reference the file with relative path from "/"
-                expect(e.message).toContain("lib/broken.agr");
-                // Error should NOT contain absolute path
-                expect(e.message).not.toContain("/lib/broken.agr");
+                // Error should reference the file with relative path (platform-specific separators)
+                const expectedPath = path.join("lib", "broken.agr");
+                expect(e.message).toContain(expectedPath);
+                // Error should NOT contain absolute path (starting with path separator)
+                expect(e.message).not.toContain(path.sep + expectedPath);
             }
         });
 
@@ -476,10 +478,11 @@ describe("Grammar Imports with File Loading", () => {
             expect(errors.length).toBe(1);
 
             const errorMessage = errors[0];
-            // Error should reference the file with relative path from "/"
-            expect(errorMessage).toContain("lib/broken.agr");
-            // Error should NOT contain absolute path
-            expect(errorMessage).not.toContain("/lib/broken.agr");
+            // Error should reference the file with relative path (platform-specific separators)
+            const expectedPath = path.join("lib", "broken.agr");
+            expect(errorMessage).toContain(expectedPath);
+            // Error should NOT contain absolute path (starting with path separator)
+            expect(errorMessage).not.toContain(path.sep + expectedPath);
         });
     });
 
