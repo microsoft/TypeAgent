@@ -360,7 +360,15 @@ function createGrammarRule(
             }
             case "variable": {
                 variableCount++;
-                const { name, typeName, ruleReference, ruleRefPos } = expr;
+                const { name, typeName, ruleReference, ruleRefPos, pos } = expr;
+                // Check for duplicate variable definition
+                if (availableVariables.has(name)) {
+                    context.errors.push({
+                        message: `Variable '${name}' is already defined in this rule`,
+                        definition: context.currentDefinition,
+                        pos,
+                    });
+                }
                 availableVariables.add(name);
                 if (ruleReference) {
                     const rules = createNamedGrammarRules(

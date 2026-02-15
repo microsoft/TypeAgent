@@ -83,6 +83,94 @@ describe("Grammar Compiler", () => {
                 "error: Variable 'undefinedVar' is referenced in the value but not defined in the rule",
             );
         });
+
+        it("Duplicate variable definition in same rule", () => {
+            const grammarText = `
+            @<Start> = $(name) plays $(name)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Variable 'name' is already defined in this rule",
+            );
+        });
+
+        it("Duplicate variable with different types", () => {
+            const grammarText = `
+            @<Start> = $(x:string) and $(x:number)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Variable 'x' is already defined in this rule",
+            );
+        });
+
+        it("Duplicate variable with rule reference", () => {
+            const grammarText = `
+            @<Start> = $(action:<Action>) $(action:<Action>)
+            @<Action> = play -> "play"
+                      | pause -> "pause"
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Variable 'action' is already defined in this rule",
+            );
+        });
+
+        it("Multiple duplicate variables in same rule", () => {
+            const grammarText = `
+            @<Start> = $(x) $(y) $(x) $(y)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(2);
+            expect(errors[0]).toContain(
+                "error: Variable 'x' is already defined in this rule",
+            );
+            expect(errors[1]).toContain(
+                "error: Variable 'y' is already defined in this rule",
+            );
+        });
+
+        it("Variables in nested inline rules have separate scope", () => {
+            const grammarText = `
+            @<Start> = $(x) (and $(x))
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            // Nested inline rules have their own scope, so no error expected
+            expect(errors.length).toBe(0);
+        });
+
+        it("Same variable in different rules should not error", () => {
+            const grammarText = `
+            @<Start> = <Rule1> | <Rule2>
+            @<Rule1> = play $(name) -> { name: $(name) }
+            @<Rule1> = stop $(name) -> { name: $(name) }
+            @<Rule2> = resume $(name) -> { name: $(name) }
+                | pause $(name) -> { name: $(name) }
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(0);
+        });
+
+        it("Duplicate variable with optional modifier", () => {
+            const grammarText = `
+            @<Start> = $(name)? $(name)
+        `;
+            const errors: string[] = [];
+            loadGrammarRules("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Variable 'name' is already defined in this rule",
+            );
+        });
     });
     describe("Warning", () => {
         it("Unused", () => {
