@@ -132,6 +132,14 @@ async function initializeDispatcher(
             newDispatcher = await connectDispatcher(
                 clientIO,
                 `ws://localhost:${connect}`,
+                undefined,
+                () => {
+                    dialog.showErrorBox(
+                        "Disconnected",
+                        "The connection to the dispatcher was lost.",
+                    );
+                    app.quit();
+                },
             );
             debugShellInit(
                 "Connected to remote dispatcher",

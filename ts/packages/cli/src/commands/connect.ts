@@ -43,6 +43,11 @@ export default class Connect extends Command {
             const dispatcher = await connectDispatcher(
                 clientIO,
                 `ws://localhost:${flags.port}`,
+                undefined,
+                () => {
+                    console.error("Disconnected from dispatcher");
+                    process.exit(1);
+                },
             );
             try {
                 let processed = false;
