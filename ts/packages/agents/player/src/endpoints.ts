@@ -373,6 +373,7 @@ export async function getArtistTopTracks(service: SpotifyService, id: string) {
     return fetchGet<SpotifyApi.ArtistsTopTracksResponse>(
         service,
         `https://api.spotify.com/v1/artists/${encodeURIComponent(id)}/top-tracks`,
+        { market: "US" },
     );
 }
 
@@ -707,8 +708,17 @@ export async function setVolume(
 }
 
 function getUrlWithParams(urlString: string, queryParams: Record<string, any>) {
-    const params = new URLSearchParams(queryParams);
-    const url = new URL(urlString);
-    url.search = params.toString();
-    return url.toString();
+    // Use encodeURIComponent for standard URL percent-encoding instead of
+    // URLSearchParams which uses application/x-www-form-urlencoded (encodes
+    // spaces as '+' and over-encodes characters like ()!). Spotify's API
+    // expects standard percent-encoding.
+    const parts: string[] = [];
+    for (const [key, value] of Object.entries(queryParams)) {
+        if (value !== undefined && value !== null) {
+            parts.push(
+                `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`,
+            );
+        }
+    }
+    return parts.length > 0 ? `${urlString}?${parts.join("&")}` : urlString;
 }

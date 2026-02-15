@@ -514,7 +514,7 @@ export async function searchTracks(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: 50,
+        limit: 10,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -530,7 +530,7 @@ export async function searchForPlaylists(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "playlist",
-        limit: 20,
+        limit: 10,
         offset: 0,
     };
     const data = await search(query, context.service);
