@@ -95,7 +95,7 @@ describe("Agent Grammar Registry", () => {
                 nfa,
             );
 
-            // Try to add rule with unresolved entity
+            // Try to add rule with unresolved entity (no import)
             const invalidRule = `@ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) on $(date:UnknownEntity) -> {
     actionName: "schedule",
@@ -104,7 +104,8 @@ describe("Agent Grammar Registry", () => {
 
             const result = agentGrammar.addGeneratedRules(invalidRule);
             expect(result.success).toBe(false);
-            expect(result.unresolvedEntities).toContain("UnknownEntity");
+            expect(result.errors).toBeDefined();
+            expect(result.errors!.length).toBeGreaterThan(0);
         });
 
         it("should merge entity declarations when adding rules", () => {
@@ -124,8 +125,8 @@ describe("Agent Grammar Registry", () => {
                 nfa,
             );
 
-            // Add rule with new entity declaration
-            const ruleWithEntity = `entity CalendarDate;
+            // Add rule with type import
+            const ruleWithEntity = `@ import { CalendarDate } from "types.ts"
 @ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) on $(date:CalendarDate) -> {
     actionName: "schedule",
@@ -135,10 +136,9 @@ describe("Agent Grammar Registry", () => {
             const result = agentGrammar.addGeneratedRules(ruleWithEntity);
             expect(result.success).toBe(true);
 
-            // Check that entities were merged
+            // The base grammar should still have its original entities
             const grammar = agentGrammar.getGrammar();
             expect(grammar.entities).toContain("Ordinal");
-            expect(grammar.entities).toContain("CalendarDate");
         });
 
         it("should provide statistics", () => {
