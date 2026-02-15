@@ -12,6 +12,7 @@ import {
     RuleDefinition,
     ImportStatement,
     parseGrammarRules,
+    ValueNode,
 } from "./grammarRuleParser.js";
 
 export type FileLoader = {
@@ -237,6 +238,43 @@ const emptyRecord = {
     grammarRules: [],
     hasValue: true, // Pretend to have value to avoid cascading errors
 };
+
+/**
+ * Validate variable references in a ValueNode while traversing the structure
+ */
+function validateVariableReferences(
+    context: CompileContext,
+    valueNode: ValueNode,
+    availableVariables: Set<string>,
+): void {
+    switch (valueNode.type) {
+        case "variable":
+            if (!availableVariables.has(valueNode.name)) {
+                context.errors.push({
+                    message: `Variable '${valueNode.name}' is referenced in the value but not defined in the rule`,
+                    definition: context.currentDefinition,
+                });
+            }
+            break;
+        case "object":
+            for (const key in valueNode.value) {
+                validateVariableReferences(
+                    context,
+                    valueNode.value[key],
+                    availableVariables,
+                );
+            }
+            break;
+        case "array":
+            for (const item of valueNode.value) {
+                validateVariableReferences(context, item, availableVariables);
+            }
+            break;
+        case "literal":
+            // No variables in literals
+            break;
+    }
+}
 function createNamedGrammarRules(
     context: CompileContext,
     name: string,
@@ -307,6 +345,7 @@ function createGrammarRule(
 ): { grammarRule: GrammarRule; hasValue: boolean } {
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
+    const availableVariables = new Set<string>();
     let variableCount = 0;
     for (const expr of expressions) {
         switch (expr.type) {
@@ -322,6 +361,7 @@ function createGrammarRule(
             case "variable": {
                 variableCount++;
                 const { name, typeName, ruleReference, ruleRefPos } = expr;
+                availableVariables.add(name);
                 if (ruleReference) {
                     const rules = createNamedGrammarRules(
                         context,
@@ -401,6 +441,11 @@ function createGrammarRule(
                     `Internal Error: Unknown expression type ${(expr as any).type}`,
                 );
         }
+    }
+
+    // Validate that all variables referenced in the value are defined
+    if (value !== undefined) {
+        validateVariableReferences(context, value, availableVariables);
     }
 
     return {
