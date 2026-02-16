@@ -278,9 +278,7 @@ export const CalendarTime: EntityConverter<string> = createConverter(
  * Supports: "10-11pm", "2pm to 3pm", "9am-10am", "1-2pm", "2pm-3pm"
  * Returns undefined end for single times
  */
-function parseTimeRange(
-    rangeStr: string,
-):
+function parseTimeRange(rangeStr: string):
     | {
           start: { hours: number; minutes: number };
           end?: { hours: number; minutes: number };

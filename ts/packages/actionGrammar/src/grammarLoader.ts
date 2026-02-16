@@ -78,9 +78,16 @@ export function loadGrammarRules(
         // This ensures both completion-based and NFA-based matchers work correctly
         let grammar = normalizeGrammar(result.grammar);
 
-        // Add entity declarations to the grammar
-        if (parseResult.entities.length > 0) {
-            grammar = { ...grammar, entities: parseResult.entities };
+        // Add entity declarations to the grammar.
+        // This includes both explicit "entity Foo;" declarations and
+        // types imported from .ts files that are used as variable types.
+        // The latter bridges @import with the entity validation system.
+        const allEntities = [
+            ...parseResult.entities,
+            ...result.usedImportedTypes,
+        ];
+        if (allEntities.length > 0) {
+            grammar = { ...grammar, entities: allEntities };
         }
         return grammar;
     }

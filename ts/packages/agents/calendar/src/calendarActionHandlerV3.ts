@@ -73,11 +73,16 @@ export class CalendarClientLoginCommandHandler
             return;
         }
 
-        displayStatus(`Logging into ${providerType || "calendar"} service...`, context);
+        displayStatus(
+            `Logging into ${providerType || "calendar"} service...`,
+            context,
+        );
 
-        const success = await provider.login((userCode, verificationUri, message) => {
-            displayStatus(message, context);
-        });
+        const success = await provider.login(
+            (userCode, verificationUri, message) => {
+                displayStatus(message, context);
+            },
+        );
 
         if (success) {
             const user = await provider.getUser();
@@ -114,7 +119,8 @@ export class CalendarClientLogoutCommandHandler
 
 // Google auth command handler - completes OAuth flow with authorization code
 export class GoogleAuthCommandHandler implements CommandHandler {
-    public readonly description = "Complete Google Calendar OAuth flow with authorization code";
+    public readonly description =
+        "Complete Google Calendar OAuth flow with authorization code";
     public readonly parameters = {
         args: {
             code: {
@@ -228,19 +234,23 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             if (provider) {
                 context.agentContext.calendarProvider = provider;
-                context.agentContext.providerType = provider.providerName as CalendarProviderType;
+                context.agentContext.providerType =
+                    provider.providerName as CalendarProviderType;
 
                 // For backward compatibility, also set the legacy calendarClient
                 // if we're using Microsoft Graph
                 if (provider.providerName === "microsoft") {
                     const msProvider = provider as any;
                     if (msProvider.getUnderlyingClient) {
-                        context.agentContext.calendarClient = msProvider.getUnderlyingClient();
+                        context.agentContext.calendarClient =
+                            msProvider.getUnderlyingClient();
                     }
                 }
 
                 console.log(
-                    chalk.cyan(`[Calendar] Using ${provider.providerName} calendar provider`),
+                    chalk.cyan(
+                        `[Calendar] Using ${provider.providerName} calendar provider`,
+                    ),
                 );
             } else {
                 const availableProviders = getAvailableProviders();
@@ -308,15 +318,9 @@ export class CalendarActionHandlerV3 implements AppAgent {
                     provider,
                 );
             case "findTodaysEvents":
-                return await this.handleFindTodaysEvents(
-                    context,
-                    provider,
-                );
+                return await this.handleFindTodaysEvents(context, provider);
             case "findThisWeeksEvents":
-                return await this.handleFindThisWeeksEvents(
-                    context,
-                    provider,
-                );
+                return await this.handleFindThisWeeksEvents(context, provider);
             default:
                 console.log(
                     chalk.red(
@@ -423,9 +427,10 @@ export class CalendarActionHandlerV3 implements AppAgent {
                     minute: "2-digit",
                 });
                 // Show time range if end time differs from start + 1 hour (explicit end time was specified)
-                const timeDisplay = endHour !== undefined
-                    ? `${startTimeStr} - ${endTimeStr}`
-                    : startTimeStr;
+                const timeDisplay =
+                    endHour !== undefined
+                        ? `${startTimeStr} - ${endTimeStr}`
+                        : startTimeStr;
                 return createActionResultFromHtmlDisplay(
                     `<p>✓ Event created: <strong>${description}</strong> on ${dateStr} at ${timeDisplay}</p>`,
                 );
@@ -510,7 +515,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
     private parseTimeRange(
         timeStr: string,
-    ): { start: { hours: number; minutes: number }; end: { hours: number; minutes: number } } | undefined {
+    ):
+        | {
+              start: { hours: number; minutes: number };
+              end: { hours: number; minutes: number };
+          }
+        | undefined {
         let lower = timeStr.toLowerCase().trim();
 
         // Strip "from" prefix if present: "from 1 to 2pm" -> "1 to 2pm"
@@ -603,7 +613,9 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 if (queryString) {
                     // Parse the query string to extract dates
                     // Format: "startdatetime=...&enddatetime=..."
-                    const params = new URLSearchParams(queryString.toLowerCase());
+                    const params = new URLSearchParams(
+                        queryString.toLowerCase(),
+                    );
                     const startDateTime = params.get("startdatetime");
                     const endDateTime = params.get("enddatetime");
                     if (startDateTime && endDateTime) {
@@ -684,7 +696,9 @@ export class CalendarActionHandlerV3 implements AppAgent {
             const participantEmail = emails[0] || participant;
 
             // Add participant to the event
-            const success = await provider.addParticipants(event.id, [participantEmail]);
+            const success = await provider.addParticipants(event.id, [
+                participantEmail,
+            ]);
 
             if (success) {
                 return createActionResultFromHtmlDisplay(
